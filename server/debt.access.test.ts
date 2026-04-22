@@ -89,6 +89,8 @@ describe("debt router access control", () => {
     }
   });
 
+  // TiDB can take several seconds for the 42k-row aggregation on a cold
+  // connection, so we raise the timeout to 15s for this one integration test.
   it("allows Super Admin to query the debt summary (returns shape)", async () => {
     const group = mkGroup(true);
     const user = mkUser(group);
@@ -106,5 +108,5 @@ describe("debt router access control", () => {
     expect(out.summary).toHaveProperty("collected");
     expect(out.summary).toHaveProperty("gap");
     expect(out.summary).toHaveProperty("rate");
-  });
+  }, 15000);
 });

@@ -11,6 +11,7 @@ import { buildClientFromEnv, PartnerClient, PartnerApiError } from "../api/partn
 import {
   mapContractListItem,
   mapContractDetailOverrides,
+  mapCustomerProfile,
   mapInstallment,
   mapPayment,
   type CustomerListItem,
@@ -246,7 +247,7 @@ async function syncContracts(
   client: PartnerClient,
   section: SectionKey,
   partnersById: Map<string, PartnerListItem>,
-  _customersById: Map<string, CustomerListItem>,
+  customersById: Map<string, CustomerListItem>,
 ): Promise<number> {
   const log = await insertSyncLog({
     section,
@@ -274,6 +275,13 @@ async function syncContracts(
             row.partnerProvince = partner.partner_province ?? null;
             row.partnerStatus =
               partner.partner_status === "active" ? "ใช้งาน" : partner.partner_status ?? null;
+          }
+          // Enrich with customer profile (name, national id, age, address, ...)
+          // The contract list endpoint only exposes customer_id, so we merge
+          // the full profile from the already-fetched customer map.
+          const customer = customersById.get(String(it.customer_id));
+          if (customer) {
+            Object.assign(row, mapCustomerProfile(customer));
           }
           buffer.push(row);
         }

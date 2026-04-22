@@ -153,14 +153,53 @@ export function mapContractDetailOverrides(
 }
 
 /* -------------------------------------------------------------------------- */
-/* Customers — join by customer_id to fill age column.                         */
+/* Customers — join by customer_id to enrich contract rows with member info.  */
 /* -------------------------------------------------------------------------- */
 
 export type CustomerListItem = {
   customer_id: number | string;
-  age_years?: number;
+  customer_code?: string;
   full_name?: string;
+  nationality?: string;
+  id_document_no?: string;
+  gender?: string;
+  age_years?: number;
+  occupation_title?: string;
+  monthly_income?: number | string;
+  workplace_name?: string;
+  mobile_phone?: string;
+  idcard_district?: string;
+  idcard_province?: string;
+  current_district?: string;
+  current_province?: string;
+  work_district?: string;
+  work_province?: string;
 };
+
+/**
+ * Turn a customer list item into the subset of contract columns it fills.
+ * The contract list endpoint does not carry member data, so we merge this
+ * on top of `mapContractListItem` when the `customer_id` is known.
+ */
+export function mapCustomerProfile(cust: CustomerListItem) {
+  return {
+    customerName: cust.full_name ?? null,
+    nationality: cust.nationality ?? null,
+    citizenId: cust.id_document_no ?? null,
+    gender: cust.gender ?? null,
+    age: toInt(cust.age_years),
+    occupation: cust.occupation_title ?? null,
+    salary: toNumStr(cust.monthly_income),
+    workplace: cust.workplace_name ?? null,
+    phone: cust.mobile_phone ?? null,
+    idDistrict: cust.idcard_district ?? null,
+    idProvince: cust.idcard_province ?? null,
+    addrDistrict: cust.current_district ?? null,
+    addrProvince: cust.current_province ?? null,
+    workDistrict: cust.work_district ?? null,
+    workProvince: cust.work_province ?? null,
+  };
+}
 
 /* -------------------------------------------------------------------------- */
 /* Partners — used for province / active status on contract rows.             */
