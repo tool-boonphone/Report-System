@@ -559,6 +559,31 @@ export async function listDebtTarget(params: { section: SectionKey }) {
           interest = 0;
           fee = 0;
           penalty = 0;
+        } else {
+          // Boonphone displays principal+interest scaled so that
+          // principal + interest + fee + penalty = total amount.
+          // The raw `principal_due` / `interest_due` in installments.raw_json
+          // represents only the *base* split (excluding amortization of
+          // accrued interest); the visible split on the Boonphone admin UI
+          // is rescaled to fill the remainder after fee + penalty.
+          // Example (contract 4092 period 1):
+          //   raw principal_due = 1360, interest_due = 1768, fee = 100
+          //   total amount       = 4486
+          //   target principal+interest = 4486 - 100 - 0 = 4386
+          //   scale = 4386 / (1360 + 1768) = 1.4022
+          //   displayed principal = 1360 * 1.4022 ≈ 1907  ✓
+          //   displayed interest  = 1768 * 1.4022 ≈ 2479  ✓
+          const piRaw = rawPrincipal + rawInterest;
+          const target = amount - fee - penalty;
+          if (piRaw > 0.01 && target > 0.01) {
+            const scale = target / piRaw;
+            const scaledPrincipal = Math.round(rawPrincipal * scale * 100) / 100;
+            // Use subtraction to keep the sum exact (avoids 0.01 rounding
+            // drift between principal+interest+fee and amount).
+            const scaledInterest = Math.round((target - scaledPrincipal) * 100) / 100;
+            principal = scaledPrincipal;
+            interest = scaledInterest;
+          }
         }
 
         // Delta vs baseline — only for periods whose amount got reduced

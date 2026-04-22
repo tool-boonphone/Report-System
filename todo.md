@@ -132,7 +132,7 @@
 - [x] เพิ่ม unit tests สำหรับ allocation rule (overpaid/close) และ collected-tab multi-payment mapping (debt.target-shape, debt.export)
 - [x] (superseded) ลอจิก overpaid allocation ใน `debt.listTarget` — ใช้ annotation แทนการคำนวณซ้ำ
 - [x] (superseded) ลอจิกปิดค่างวด — flag `isClosed` + annotation "ปิดค่างวดแล้ว"
-- [ ] Logic หนี้เสีย: แสดงยอดขายซากที่งวดล่าสุด (แยกออกจาก Phase 9e — ยังไม่มีเคสหนี้เสียใน DB ปัจจุบัน — defer ไว้จนกว่ามีข้อมูล)
+- [~] Logic หนี้เสีย: แสดงยอดขายซากที่งวดล่าสุด — DEFERRED: ยังไม่มีเคส `bad_debt_amount > 0` ใน DB (query ตรวจแล้ว) จะเปิดเมื่อมีข้อมูลจริงเพื่อยืนยันรูปแบบ
 - [x] ปรับสีและรูปแบบตาราง (tabs น้ำเงิน/แดง, header งวดมีแบ็คกราวน์ดสี, badge สถานะ 10 สี, annotation overpaid/closed เน้นสีเขียว/ฟ้า)
 
 ### Phase 9e — Overpaid allocation: verify source-of-truth before computing
@@ -168,5 +168,12 @@ Task list:
 - [x] UI: งวด paid-in-full ที่ไม่ใช่ close → แสดงยอดเต็ม (ไม่มี "ปิดค่างวดแล้ว") — ไม่มี italic gray (ใช้ UI logic เดิมที่ render ตาม `isClosed` — backend fix ทำให้ isClosed=false สำหรับ paid-in-full → UI แสดงค่า amount เต็มโดยอัตโนมัติ)
 - [x] UI: งวด post-close → literal "ปิดค่างวดแล้ว" + bg เทาอ่อน + text เทา italic (reused from Phase 9f — ไม่ได้แก้ UI รอบนี้เพราะทำเสร็จแล้ว)
 - [x] Tests: ครอบ (a) paid-in-full no-close → ยอดเต็ม (baseline-restoration test ใหม่), (c) post-close → zero+closed (test เดิม). 
-- [ ] Test (b): เพิ่ม targeted test สำหรับ contract ที่มี overpaid carry (เช่น ext=1496 หรือ 1517): งวดถัดไปต้อง amount < baseline, overpaidApplied > 0
-- [ ] Commit + push + save checkpoint
+- [x] Test (b): เพิ่ม targeted test `listDebtTarget — overpaid carry surfaces correctly` ยืนยันว่า contract 1496/1517 มี amount < baseline และ overpaidApplied > 0 ในงวดถัดไป (ผ่านแล้ว)
+- [x] Commit + push + save checkpoint (commit `f82caab`, checkpoint `f82caab9`)
+
+### Phase 9h — Fix principal/interest split mismatch (contract 4092 reference)
+- [x] Inspect installments.raw_json for contract ext that maps to CT0426-RBR002-4092-01 — พบว่า API ส่ง `principal_due=1360` / `interest_due=1768` ซึ่งเป็น base split (ก่อน rescale)
+- [x] Update listDebtTarget mapping: เพิ่ม scaling formula `scale = (amount - fee - penalty) / (principal_due + interest_due)` แล้วคูณกลับเข้า principal/interest เพื่อให้ผลรวมเท่ากับ amount (เหมือน Boonphone admin UI)
+- [x] Add regression test ใน `server/debt.target-shape.test.ts` — pin principal≈1907, interest≈2479, fee=100 สำหรับ CT0426-RBR002-4092-01 period 1 + invariant `principal+interest+fee+penalty ≈ amount` กับทุกงวด non-closed
+- [x] Verify: รัน full test suite (37 passed / 1 skipped) → ทุก contract ที่มีข้อมูลผ่าน invariant
+- [x] Commit + push + save checkpoint

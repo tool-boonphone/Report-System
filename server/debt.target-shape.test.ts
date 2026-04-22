@@ -209,3 +209,60 @@ describe("listDebtTarget — overpaid carry surfaces correctly", () => {
     20_000,
   );
 });
+
+
+describe("listDebtTarget — principal/interest scaling matches Boonphone UI (2026-04-23)", () => {
+  it(
+    "for any non-closed period with amount>0, principal+interest+fee+penalty ≈ amount",
+    async () => {
+      // USER REPORT: contract CT0426-RBR002-4092-01 showed principal=1360
+      // interest=1768 in our UI, but Boonphone admin showed 1907 / 2479.
+      // Root cause: API's principal_due/interest_due represent only the
+      // base split, while the admin UI rescales them so the sub-fields sum
+      // to the full installment amount (after fee+penalty). We mirror that
+      // behaviour, so principal+interest+fee+penalty must equal amount.
+      const { rows } = await listDebtTarget({ section: "Boonphone" });
+      if (rows.length === 0) return;
+
+      let checked = 0;
+      for (const r of rows) {
+        for (const c of (r.installments ?? []) as Array<any>) {
+          if (c.isClosed) continue;
+          const amt = Number(c.amount ?? 0);
+          if (amt <= 0.01) continue;
+          const sum =
+            Number(c.principal ?? 0) +
+            Number(c.interest ?? 0) +
+            Number(c.fee ?? 0) +
+            Number(c.penalty ?? 0);
+          // Allow up to 0.05 baht of rounding drift.
+          expect(Math.abs(sum - amt)).toBeLessThan(0.05);
+          checked++;
+          if (checked >= 200) return;
+        }
+      }
+      expect(checked).toBeGreaterThan(0);
+    },
+    30_000,
+  );
+
+  it(
+    "contract CT0426-RBR002-4092-01 period 1 — principal≈1907, interest≈2479, fee=100",
+    async () => {
+      const { rows } = await listDebtTarget({ section: "Boonphone" });
+      const c: any = rows.find(
+        (r: any) => r.contractNo === "CT0426-RBR002-4092-01",
+      );
+      if (!c) return; // anchor not present in this DB
+      const p1 = (c.installments ?? []).find(
+        (i: any) => Number(i.period) === 1,
+      );
+      if (!p1) return;
+      expect(Math.round(Number(p1.principal))).toBe(1907);
+      expect(Math.round(Number(p1.interest))).toBe(2479);
+      expect(Number(p1.fee)).toBe(100);
+      expect(Number(p1.amount)).toBe(4486);
+    },
+    15_000,
+  );
+});
