@@ -2,6 +2,7 @@ import { z } from "zod";
 import { requirePermission, router } from "../_core/trpc";
 import {
   listContracts,
+  listAllContracts,
   listContractFilterOptions,
   type ContractFilters,
   type ContractSort,
@@ -56,6 +57,16 @@ export const contractsRouter = router({
         pageSize: input.pageSize,
       }),
     ),
+
+  /**
+   * Return ALL contracts for a section, used by the virtual-scroll table that
+   * replaced pagination. Filter/sort happens on the client for snappy UX.
+   * Payload is ~4 MB for Boonphone (3.5k rows); well within what a modern
+   * browser handles and far below what a 5-min cached query costs.
+   */
+  listAll: requirePermission("contract", "view")
+    .input(z.object({ section: sectionInput }))
+    .query(({ input }) => listAllContracts({ section: input.section })),
 
   filterOptions: requirePermission("contract", "view")
     .input(z.object({ section: sectionInput }))

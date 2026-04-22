@@ -92,4 +92,42 @@ describe("contracts router access control", () => {
     expect(out).toHaveProperty("debtTypes");
     expect(out).toHaveProperty("partnerCodes");
   });
+
+  it("listAll enforces the same view permission as list", async () => {
+    // Covers the virtual-scroll endpoint that bypasses pagination on purpose:
+    // we must not accidentally make it public just because it returns a flat
+    // array. Unauthenticated -> UNAUTHORIZED; authenticated w/o permission ->
+    // FORBIDDEN; Super Admin -> returns an array.
+    const anonCtx: TrpcContext = { ...mkReqRes(), user: null, appUser: null };
+    await expect(
+      appRouter
+        .createCaller(anonCtx)
+        .contracts.listAll({ section: "Boonphone" }),
+    ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+
+    const group = mkGroup({ isSuperAdmin: false });
+    const noPerm = mkUser(group, [{ menuCode: "contract", canView: false }]);
+    const noPermCtx: TrpcContext = {
+      ...mkReqRes(),
+      user: null,
+      appUser: noPerm,
+    };
+    try {
+      await appRouter
+        .createCaller(noPermCtx)
+        .contracts.listAll({ section: "Boonphone" });
+      throw new Error("Should have thrown");
+    } catch (err) {
+      expect(err).toBeInstanceOf(TRPCError);
+      expect((err as TRPCError).code).toBe("FORBIDDEN");
+    }
+
+    const adminGroup = mkGroup({ isSuperAdmin: true });
+    const admin = mkUser(adminGroup);
+    const adminCtx: TrpcContext = { ...mkReqRes(), user: null, appUser: admin };
+    const rows = await appRouter
+      .createCaller(adminCtx)
+      .contracts.listAll({ section: "Boonphone" });
+    expect(Array.isArray(rows)).toBe(true);
+  });
 });

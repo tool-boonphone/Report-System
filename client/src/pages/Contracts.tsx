@@ -4,7 +4,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Sheet,
   SheetContent,
@@ -17,14 +23,9 @@ import { useNavActions } from "@/contexts/NavActionsContext";
 import { useSection } from "@/contexts/SectionContext";
 import { useAppAuth } from "@/hooks/useAppAuth";
 import { trpc } from "@/lib/trpc";
-import { keepPreviousData } from "@tanstack/react-query";
+import { CONTRACT_COLUMNS, type ContractColumnKey } from "@shared/const";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import {
-  CONTRACT_COLUMNS,
-  type ContractColumnKey,
-} from "@shared/const";
-import {
-  ChevronLeft,
-  ChevronRight,
   Download,
   Filter as FilterIcon,
   RefreshCcw,
@@ -54,6 +55,23 @@ const EMPTY_FILTERS: Filters = {
   dateTo: "",
 };
 
+type SortField =
+  | "contractNo"
+  | "submitDate"
+  | "approveDate"
+  | "status"
+  | "customerName"
+  | "partnerCode";
+
+const SORTABLE_FIELDS: ReadonlyArray<SortField> = [
+  "contractNo",
+  "submitDate",
+  "approveDate",
+  "status",
+  "customerName",
+  "partnerCode",
+];
+
 /** Format a cell value according to its column type. */
 function formatCell(key: ContractColumnKey, row: any, seq: number): string {
   if (key === "seq") return String(seq);
@@ -63,7 +81,10 @@ function formatCell(key: ContractColumnKey, row: any, seq: number): string {
   if (col?.type === "money") {
     const n = typeof v === "string" ? Number(v) : (v as number);
     if (!Number.isFinite(n)) return String(v);
-    return n.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return n.toLocaleString("th-TH", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
   }
   if (col?.type === "number") {
     const n = typeof v === "string" ? Number(v) : (v as number);
@@ -73,6 +94,12 @@ function formatCell(key: ContractColumnKey, row: any, seq: number): string {
   return String(v);
 }
 
+/** Case-insensitive substring match that also handles null/undefined cells. */
+function includes(haystack: unknown, needle: string) {
+  if (haystack == null) return false;
+  return String(haystack).toLowerCase().includes(needle);
+}
+
 export default function Contracts() {
   const { section } = useSection();
   const { setActions } = useNavActions();
@@ -80,57 +107,88 @@ export default function Contracts() {
   const canExport = can("contract", "export");
 
   // ----- State -----
-  const [page, setPage] = useState(1);
-  const [pageSize] = useState(50);
-  const [sortField, setSortField] = useState<
-    "contractNo" | "submitDate" | "approveDate" | "status" | "customerName" | "partnerCode"
-  >("approveDate");
+  const [sortField, setSortField] = useState<SortField>("approveDate");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
-
   const [draft, setDraft] = useState<Filters>(EMPTY_FILTERS);
   const [applied, setApplied] = useState<Filters>(EMPTY_FILTERS);
   const [filterSheetOpen, setFilterSheetOpen] = useState(false);
 
-  // When the section changes, reset pagination and applied filters.
+  // Reset filters when section changes
   useEffect(() => {
-    setPage(1);
     setDraft(EMPTY_FILTERS);
     setApplied(EMPTY_FILTERS);
   }, [section]);
 
-  // ----- Queries -----
-  const listInput = useMemo(
-    () => ({
-      section: section!,
-      page,
-      pageSize,
-      sort: { field: sortField, dir: sortDir },
-      filters: {
-        search: applied.search || undefined,
-        status: applied.status || undefined,
-        debtType: applied.debtType || undefined,
-        partnerCode: applied.partnerCode || undefined,
-        dateField: applied.dateField,
-        dateFrom: applied.dateFrom || undefined,
-        dateTo: applied.dateTo || undefined,
-      },
-    }),
-    [section, page, pageSize, sortField, sortDir, applied],
+  // ----- One-shot fetch of all rows for the section -----
+  // Payload is ~4 MB for Boonphone (3.5k rows, no rawJson). tRPC caches this
+  // for `staleTime` so re-entering the page is instant. Filtering/sorting
+  // happen on the client below so the virtual scroller stays silky.
+  const listQuery = trpc.contracts.listAll.useQuery(
+    { section: section! },
+    { staleTime: 60_000, enabled: Boolean(section) },
   );
-
-  const listQuery = trpc.contracts.list.useQuery(listInput, {
-    placeholderData: keepPreviousData,
-    staleTime: 30_000,
-    enabled: Boolean(section),
-  });
   const optionsQuery = trpc.contracts.filterOptions.useQuery(
     { section: section! },
     { staleTime: 5 * 60_000, enabled: Boolean(section) },
   );
 
-  const totalRows = listQuery.data?.total ?? 0;
-  const totalPages = Math.max(1, Math.ceil(totalRows / pageSize));
-  const rows = listQuery.data?.rows ?? [];
+  const allRows = listQuery.data ?? [];
+
+  // ----- Client-side filtering + sorting -----
+  const filteredRows = useMemo(() => {
+    const f = applied;
+    const q = f.search.trim().toLowerCase();
+    const dateFrom = f.dateFrom || "";
+    const dateTo = f.dateTo || "";
+
+    let rows = allRows.filter((r: any) => {
+      if (f.status && r.status !== f.status) return false;
+      if (f.debtType && r.debtType !== f.debtType) return false;
+      if (f.partnerCode && r.partnerCode !== f.partnerCode) return false;
+      if (dateFrom || dateTo) {
+        const dateVal =
+          f.dateField === "approveDate" ? r.approveDate : r.submitDate;
+        const d = dateVal ? String(dateVal).slice(0, 10) : "";
+        if (dateFrom && (!d || d < dateFrom)) return false;
+        if (dateTo && (!d || d > dateTo)) return false;
+      }
+      if (q) {
+        if (
+          !(
+            includes(r.contractNo, q) ||
+            includes(r.customerName, q) ||
+            includes(r.partnerCode, q) ||
+            includes(r.phone, q) ||
+            includes(r.imei, q) ||
+            includes(r.serialNo, q) ||
+            includes(r.citizenId, q)
+          )
+        ) {
+          return false;
+        }
+      }
+      return true;
+    });
+
+    // Sort in-place copy so we don't mutate the cache.
+    rows = [...rows].sort((a: any, b: any) => {
+      const av = a[sortField];
+      const bv = b[sortField];
+      if (av == null && bv == null) return 0;
+      if (av == null) return sortDir === "asc" ? -1 : 1;
+      if (bv == null) return sortDir === "asc" ? 1 : -1;
+      // Numeric-friendly comparison when both look numeric, else localeCompare
+      const an = typeof av === "number" ? av : Number(av);
+      const bn = typeof bv === "number" ? bv : Number(bv);
+      if (Number.isFinite(an) && Number.isFinite(bn) && an !== bn) {
+        return sortDir === "asc" ? an - bn : bn - an;
+      }
+      const cmp = String(av).localeCompare(String(bv), "th");
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+
+    return rows;
+  }, [allRows, applied, sortField, sortDir]);
 
   // ----- Derived UI -----
   const activeFilterCount = useMemo(() => {
@@ -143,7 +201,7 @@ export default function Contracts() {
     return n;
   }, [applied]);
 
-  // ----- Export (streams the full filtered dataset) -----
+  // ----- Export (streams the full filtered dataset via server) -----
   const handleExport = async () => {
     if (!section) return;
     const params = new URLSearchParams({ section });
@@ -163,7 +221,9 @@ export default function Contracts() {
         credentials: "include",
       });
       if (!resp.ok) {
-        const { message } = await resp.json().catch(() => ({ message: "Export failed" }));
+        const { message } = await resp
+          .json()
+          .catch(() => ({ message: "Export failed" }));
         toast.error(message, { id: toastId });
         return;
       }
@@ -186,8 +246,6 @@ export default function Contracts() {
   };
 
   // ----- Register TopNav actions -----
-  // Use a stable ref to the latest handler so the effect doesn't re-run
-  // every time applied/section state changes (which would remount the node).
   const exportRef = useRef(handleExport);
   exportRef.current = handleExport;
 
@@ -212,27 +270,44 @@ export default function Contracts() {
   }, [setActions, canExport]);
 
   // ----- Sorting toggle -----
-  const toggleSort = (field: typeof sortField) => {
+  const toggleSort = (field: SortField) => {
     if (sortField === field) {
       setSortDir((d) => (d === "asc" ? "desc" : "asc"));
     } else {
       setSortField(field);
       setSortDir("asc");
     }
-    setPage(1);
   };
 
   const applyFilters = () => {
     setApplied(draft);
-    setPage(1);
     setFilterSheetOpen(false);
   };
 
   const resetFilters = () => {
     setDraft(EMPTY_FILTERS);
     setApplied(EMPTY_FILTERS);
-    setPage(1);
   };
+
+  // ----- Virtualizer -----
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const ROW_HEIGHT = 36; // px — matches `py-2 text-[13px]` line height
+  const rowVirtualizer = useVirtualizer({
+    count: filteredRows.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => ROW_HEIGHT,
+    overscan: 12,
+  });
+
+  const virtualRows = rowVirtualizer.getVirtualItems();
+  const totalSize = rowVirtualizer.getTotalSize();
+  const paddingTop = virtualRows.length ? virtualRows[0].start : 0;
+  const paddingBottom = virtualRows.length
+    ? totalSize - virtualRows[virtualRows.length - 1].end
+    : 0;
+
+  const totalAllRows = allRows.length;
+  const totalFilteredRows = filteredRows.length;
 
   // ----- Render -----
   return (
@@ -243,10 +318,12 @@ export default function Contracts() {
           <div className="relative flex-1 min-w-0">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <Input
-              placeholder="ค้นหา: เลขสัญญา / ชื่อลูกค้า / พาร์ทเนอร์ / โทร / IMEI"
+              placeholder="ค้นหา: เลขสัญญา / ชื่อลูกค้า / พาร์ทเนอร์ / โทร / IMEI / Serial / เลขบัตร"
               className="pl-9 bg-white"
               value={draft.search}
-              onChange={(e) => setDraft((d) => ({ ...d, search: e.target.value }))}
+              onChange={(e) =>
+                setDraft((d) => ({ ...d, search: e.target.value }))
+              }
               onKeyDown={(e) => {
                 if (e.key === "Enter") applyFilters();
               }}
@@ -276,7 +353,10 @@ export default function Contracts() {
                     <Select
                       value={draft.status || "__all__"}
                       onValueChange={(v) =>
-                        setDraft((d) => ({ ...d, status: v === "__all__" ? "" : v }))
+                        setDraft((d) => ({
+                          ...d,
+                          status: v === "__all__" ? "" : v,
+                        }))
                       }
                     >
                       <SelectTrigger className="mt-1">
@@ -297,7 +377,10 @@ export default function Contracts() {
                     <Select
                       value={draft.debtType || "__all__"}
                       onValueChange={(v) =>
-                        setDraft((d) => ({ ...d, debtType: v === "__all__" ? "" : v }))
+                        setDraft((d) => ({
+                          ...d,
+                          debtType: v === "__all__" ? "" : v,
+                        }))
                       }
                     >
                       <SelectTrigger className="mt-1">
@@ -352,8 +435,12 @@ export default function Contracts() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="approveDate">วันอนุมัติสัญญา</SelectItem>
-                        <SelectItem value="submitDate">วันยื่นสินเชื่อ</SelectItem>
+                        <SelectItem value="approveDate">
+                          วันอนุมัติสัญญา
+                        </SelectItem>
+                        <SelectItem value="submitDate">
+                          วันยื่นสินเชื่อ
+                        </SelectItem>
                       </SelectContent>
                     </Select>
                     <div className="grid grid-cols-2 gap-2 mt-2">
@@ -390,7 +477,7 @@ export default function Contracts() {
               variant="outline"
               className="bg-white"
               onClick={() => listQuery.refetch()}
-              title="โหลดหน้านี้ใหม่"
+              title="โหลดข้อมูลใหม่"
             >
               <RefreshCcw
                 className={`w-4 h-4 ${listQuery.isFetching ? "animate-spin" : ""}`}
@@ -412,7 +499,9 @@ export default function Contracts() {
               <Badge variant="secondary">ประเภทหนี้: {applied.debtType}</Badge>
             )}
             {applied.partnerCode && (
-              <Badge variant="secondary">พาร์ทเนอร์: {applied.partnerCode}</Badge>
+              <Badge variant="secondary">
+                พาร์ทเนอร์: {applied.partnerCode}
+              </Badge>
             )}
             {(applied.dateFrom || applied.dateTo) && (
               <Badge variant="secondary">
@@ -423,24 +512,56 @@ export default function Contracts() {
           </div>
         )}
 
-        {/* Table */}
+        {/* Row counter */}
+        <div className="mb-2 text-sm text-gray-600">
+          {listQuery.isLoading ? (
+            <span className="inline-flex items-center gap-2 text-gray-500">
+              <Spinner /> กำลังโหลดข้อมูลทั้งหมด…
+            </span>
+          ) : (
+            <>
+              แสดง{" "}
+              <span className="font-medium text-gray-900">
+                {totalFilteredRows.toLocaleString("th-TH")}
+              </span>{" "}
+              จาก{" "}
+              <span className="font-medium text-gray-900">
+                {totalAllRows.toLocaleString("th-TH")}
+              </span>{" "}
+              แถว
+              {totalFilteredRows < totalAllRows && (
+                <span className="text-gray-400"> (กรองอยู่)</span>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* Virtualized table */}
         <div className="relative bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
-          <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-200px)]">
+          <div
+            ref={scrollRef}
+            className="overflow-x-auto overflow-y-auto"
+            style={{ maxHeight: "calc(100vh - 220px)" }}
+          >
             <table className="min-w-full text-[13px]">
               <thead className="bg-gray-50 sticky top-0 z-10">
                 <tr className="text-gray-700">
                   {CONTRACT_COLUMNS.map((col) => {
-                    const sortable = (
-                      ["contractNo", "submitDate", "approveDate", "status", "customerName", "partnerCode"] as const
-                    ).includes(col.key as any);
-                    const isActive = sortField === (col.key as any);
+                    const sortable = SORTABLE_FIELDS.includes(
+                      col.key as SortField,
+                    );
+                    const isActive = sortField === (col.key as SortField);
                     return (
                       <th
                         key={col.key}
                         className={`px-3 py-2 text-left whitespace-nowrap font-medium border-b border-gray-200 ${
                           sortable ? "cursor-pointer hover:bg-gray-100" : ""
                         }`}
-                        onClick={sortable ? () => toggleSort(col.key as any) : undefined}
+                        onClick={
+                          sortable
+                            ? () => toggleSort(col.key as SortField)
+                            : undefined
+                        }
                       >
                         <span>{col.label}</span>
                         {sortable && isActive && (
@@ -464,7 +585,7 @@ export default function Contracts() {
                     </td>
                   </tr>
                 )}
-                {!listQuery.isLoading && rows.length === 0 && (
+                {!listQuery.isLoading && filteredRows.length === 0 && (
                   <tr>
                     <td
                       colSpan={CONTRACT_COLUMNS.length}
@@ -474,12 +595,22 @@ export default function Contracts() {
                     </td>
                   </tr>
                 )}
-                {rows.map((row, idx) => {
-                  const seq = (page - 1) * pageSize + idx + 1;
+
+                {/* Top spacer to account for skipped rows above viewport */}
+                {paddingTop > 0 && (
+                  <tr style={{ height: paddingTop }} aria-hidden="true">
+                    <td colSpan={CONTRACT_COLUMNS.length} />
+                  </tr>
+                )}
+
+                {virtualRows.map((virtualRow) => {
+                  const row: any = filteredRows[virtualRow.index];
+                  const seq = virtualRow.index + 1;
                   return (
                     <tr
                       key={row.id}
                       className="border-b border-gray-100 hover:bg-blue-50/30"
+                      style={{ height: ROW_HEIGHT }}
                     >
                       {CONTRACT_COLUMNS.map((col) => (
                         <td
@@ -496,55 +627,15 @@ export default function Contracts() {
                     </tr>
                   );
                 })}
+
+                {/* Bottom spacer for rows below viewport */}
+                {paddingBottom > 0 && (
+                  <tr style={{ height: paddingBottom }} aria-hidden="true">
+                    <td colSpan={CONTRACT_COLUMNS.length} />
+                  </tr>
+                )}
               </tbody>
             </table>
-          </div>
-        </div>
-
-        {/* Pagination */}
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mt-3 text-sm text-gray-600">
-          <div>
-            ทั้งหมด <span className="font-medium text-gray-900">{totalRows.toLocaleString("th-TH")}</span> แถว
-            {" • "}
-            หน้า <span className="font-medium text-gray-900">{page}</span> / {totalPages}
-          </div>
-          <div className="flex items-center gap-1">
-            <Button
-              size="sm"
-              variant="outline"
-              className="bg-white"
-              disabled={page <= 1 || listQuery.isFetching}
-              onClick={() => setPage(1)}
-            >
-              หน้าแรก
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="bg-white"
-              disabled={page <= 1 || listQuery.isFetching}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="bg-white"
-              disabled={page >= totalPages || listQuery.isFetching}
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            >
-              <ChevronRight className="w-4 h-4" />
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="bg-white"
-              disabled={page >= totalPages || listQuery.isFetching}
-              onClick={() => setPage(totalPages)}
-            >
-              หน้าสุดท้าย
-            </Button>
           </div>
         </div>
       </div>

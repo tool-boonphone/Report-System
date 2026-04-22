@@ -82,6 +82,73 @@ function resolveOrder(sort: ContractSort | undefined) {
   }
 }
 
+/**
+ * Return ALL contracts for a section without pagination, projected to the
+ * columns we actually render on the table. This intentionally omits the
+ * `rawJson` column because it nearly doubles payload size (~2.4 MB) without
+ * being shown to the user. The client-side virtual scroller in
+ * `pages/Contracts.tsx` consumes this and handles search/filter/sort on the
+ * browser for a snappy "no pagination" feel.
+ */
+export async function listAllContracts(params: {
+  section: SectionKey;
+}): Promise<Array<Omit<Contract, "rawJson">>> {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db
+    .select({
+      id: contracts.id,
+      section: contracts.section,
+      externalId: contracts.externalId,
+      contractNo: contracts.contractNo,
+      submitDate: contracts.submitDate,
+      approveDate: contracts.approveDate,
+      partnerCode: contracts.partnerCode,
+      partnerName: contracts.partnerName,
+      partnerProvince: contracts.partnerProvince,
+      partnerStatus: contracts.partnerStatus,
+      channel: contracts.channel,
+      status: contracts.status,
+      debtType: contracts.debtType,
+      promotionName: contracts.promotionName,
+      device: contracts.device,
+      productType: contracts.productType,
+      model: contracts.model,
+      imei: contracts.imei,
+      serialNo: contracts.serialNo,
+      sellPrice: contracts.sellPrice,
+      deviceStatus: contracts.deviceStatus,
+      downPayment: contracts.downPayment,
+      financeAmount: contracts.financeAmount,
+      commissionNet: contracts.commissionNet,
+      installmentCount: contracts.installmentCount,
+      multiplier: contracts.multiplier,
+      installmentAmount: contracts.installmentAmount,
+      paymentDay: contracts.paymentDay,
+      paidInstallments: contracts.paidInstallments,
+      customerName: contracts.customerName,
+      nationality: contracts.nationality,
+      citizenId: contracts.citizenId,
+      gender: contracts.gender,
+      age: contracts.age,
+      occupation: contracts.occupation,
+      salary: contracts.salary,
+      workplace: contracts.workplace,
+      phone: contracts.phone,
+      idDistrict: contracts.idDistrict,
+      idProvince: contracts.idProvince,
+      addrDistrict: contracts.addrDistrict,
+      addrProvince: contracts.addrProvince,
+      workDistrict: contracts.workDistrict,
+      workProvince: contracts.workProvince,
+      syncedAt: contracts.syncedAt,
+    })
+    .from(contracts)
+    .where(eq(contracts.section, params.section))
+    .orderBy(desc(contracts.approveDate));
+  return rows as Array<Omit<Contract, "rawJson">>;
+}
+
 export async function listContracts(params: {
   section: SectionKey;
   filters?: ContractFilters;
