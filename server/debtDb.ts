@@ -384,36 +384,79 @@ export async function listDebtTarget(params: { section: SectionKey }) {
     });
   }
 
-  // --- Find the highest period number that the customer already CLOSED via
-  //     a lump-sum `close_installment_amount` payment. Any period AFTER this
-  //     number is guaranteed to be closed and should be rendered as
-  //     "ปิดค่างวดแล้ว" with zeroed amounts. The period that received the
-  //     close-out itself keeps the normal amount (per user feedback).
+  // --- Detect "ปิดค่างวด" (customer settles ALL remaining periods at once).
   //
-  //     Boonphone's receipt_no encodes the period at the trailing "-N"
-  //     suffix, so we use that as the source of truth instead of relying
-  //     on `installments.amount` becoming zero (which doesn't happen for
-  //     future periods on closed contracts).
+  // Boonphone's signal for a real close-contract event is the receipt_no
+  // prefix `TXRTC` (C = Close). Regular per-period receipts start with
+  // `TXRT` and encode the period at the trailing "-N" suffix; close-out
+  // receipts drop the suffix and come as a burst of N rows on the same
+  // paid_at (one per remaining period).
+  //
+  // NOTE: a positive `close_installment_amount` alone does NOT indicate a
+  // close-contract — it just means "this payment settles the current
+  // period in full" (every full-period payment has it). See
+  // scripts/audit-close-definition.ts for the DB audit showing all 2,534
+  // `close_installment_amount > 0` rows have ratio 1.00 vs baseline.
+  //
+  // For each contract that has at least one `TXRTC` receipt, we want
+  // `closeStartsAtPeriod` = first period that should render as
+  // "ปิดค่างวดแล้ว". That is (max period paid BEFORE the close-out) + 1,
+  // so the period the customer paid at the close-contract moment itself
+  // keeps its real amount and only strictly-later periods get zeroed.
   const closedByContract = new Map<string, number>();
-  const closeRowsRaw = await db.execute(sql`
+  const rawCloseData = await db.execute(sql`
     SELECT contract_external_id,
-           JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.receipt_no')) AS receipt_no
+           JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.receipt_no')) AS receipt_no,
+           paid_at
       FROM ${paymentTransactions}
      WHERE ${paymentTransactions.section} = ${params.section}
-       AND CAST(JSON_EXTRACT(raw_json, '$.close_installment_amount') AS DECIMAL(18,2)) > 0
+       AND JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.receipt_no')) IS NOT NULL
   `);
-  const closeRows: any[] = (closeRowsRaw as any)[0] ?? closeRowsRaw;
-  for (const pr of closeRows) {
+  const allPayRows: any[] = (rawCloseData as any)[0] ?? rawCloseData;
+
+  // Pass 1: group by contract, split into (normalPaidPeriods, closeContractDates).
+  const normalPeriodsByContract = new Map<string, Set<number>>();
+  const closeDatesByContract = new Map<string, Date[]>();
+  for (const pr of allPayRows) {
     const key = String(pr.contract_external_id ?? "");
     if (!key) continue;
-    // Period is the number after the final '-' in receipt_no, e.g.
-    // "TXRT0226-NBI001-0012-01-3" -> 3.
-    const m = /-(\d+)$/.exec(String(pr.receipt_no ?? ""));
-    if (!m) continue;
-    const period = Number(m[1]);
-    if (!Number.isFinite(period) || period <= 0) continue;
-    const prev = closedByContract.get(key) ?? 0;
-    if (period > prev) closedByContract.set(key, period);
+    const receipt = String(pr.receipt_no ?? "");
+    if (receipt.startsWith("TXRTC")) {
+      const dt = pr.paid_at ? new Date(pr.paid_at) : null;
+      if (dt && !isNaN(dt.getTime())) {
+        const list = closeDatesByContract.get(key) ?? [];
+        list.push(dt);
+        closeDatesByContract.set(key, list);
+      }
+    } else {
+      // Regular single-period payment: period is the trailing -N suffix.
+      const m = /-(\d+)$/.exec(receipt);
+      if (!m) continue;
+      const period = Number(m[1]);
+      if (!Number.isFinite(period) || period <= 0) continue;
+      const set = normalPeriodsByContract.get(key) ?? new Set<number>();
+      set.add(period);
+      normalPeriodsByContract.set(key, set);
+    }
+  }
+
+  // Pass 2: for every contract with a TXRTC payment, derive the highest
+  // normal period paid BEFORE the earliest close-contract date.
+  for (const [key, dates] of Array.from(closeDatesByContract.entries())) {
+    const earliestClose = dates.reduce((a: Date, b: Date) => (a < b ? a : b));
+    // We treat all normal payments for this contract as "before close" for
+    // now — regular payments that happen after a close-contract event are
+    // extremely rare in practice and would only push the closing period
+    // higher, which is the safe direction (fewer rows incorrectly zeroed).
+    const normals = normalPeriodsByContract.get(key);
+    const maxNormalPeriod = normals && normals.size > 0
+      ? Math.max(...Array.from(normals))
+      : 0;
+    // Periods <= maxNormalPeriod keep their amounts; periods >
+    // maxNormalPeriod are the ones the customer settled at the
+    // close-contract moment and should render as "ปิดค่างวดแล้ว".
+    closedByContract.set(key, maxNormalPeriod);
+    void earliestClose; // currently unused but kept for future refinement
   }
 
   const today = new Date();
@@ -454,7 +497,28 @@ export async function listDebtTarget(params: { section: SectionKey }) {
     // "ปิดค่างวดแล้ว" with zero amounts.
     const maxClosedPeriod = closedByContract.get(extId) ?? 0;
 
-    // Build installment schedule straight from the API fields.
+    // Build installment schedule.
+    //
+    // USER RULE (2026-04-23):
+    //   ଇ Past/current periods must ALWAYS show the baseline amount — even
+    //     after the customer has fully paid them. The collections team uses
+    //     this report as "ยอดตั้งเก็บ" for the month, not "ยอดค้างชำระ".
+    //   ଇ EXCEPTION: if a previous period generated an overpaid carry that
+    //     got applied to THIS period, the API already reduced `amount`
+    //     (e.g. baseline 4097 → amount 3944 when 153 was carried). We
+    //     keep the reduced amount so the real outstanding is shown, and
+    //     surface the delta via `overpaidApplied` for UI annotation.
+    //   ଇ POST-CLOSE: periods strictly AFTER `maxClosedPeriod` render as
+    //     "ปิดค่างวดแล้ว" with zero amounts.
+    //
+    // API observation (see scripts/audit-overpaid-carry.mjs):
+    //   ଇ Boonphone sets `amount = 0` for the period where the customer
+    //     paid in full AND also generated an overpaid carry (i.e. the
+    //     overpaid is booked against that very period's row). Before the
+    //     carry appears, the period would simply have amount=baseline and
+    //     paid_amount=baseline. So when we see `amount=0, paid>0` outside
+    //     of post-close, we restore baseline so the operator still sees the
+    //     full monthly target.
     const baseInstallments = list
       .map((r) => {
         const rawAmount = Number(r.amount ?? 0);
@@ -465,28 +529,44 @@ export async function listDebtTarget(params: { section: SectionKey }) {
         const paid = Number(r.paid_amount ?? 0);
         const periodNo = r.period != null ? Number(r.period) : 0;
 
-        // --- Closed-out rule (user-specified):
-        //
-        //   If the customer made a close-out payment for period K, then
-        //   periods K+1..N are considered closed — they should render as
-        //   "ปิดค่างวดแล้ว" with zero amounts so the collections team
-        //   never tries to collect them again. Periods <= K keep their
-        //   normal figures (the close-out period itself still shows a
-        //   real amount because the operator actually paid it).
         const isClosed = maxClosedPeriod > 0 && periodNo > maxClosedPeriod;
 
-        // Zero out future closed periods, keep other periods intact.
-        const amount = isClosed ? 0 : rawAmount;
-        const principal = isClosed ? 0 : rawPrincipal;
-        const interest = isClosed ? 0 : rawInterest;
-        const fee = isClosed ? 0 : rawFee;
-        const penalty = isClosed ? 0 : rawPenalty;
+        // --- Compute display amount (non-closed periods) ---
+        let amount = rawAmount;
+        let principal = rawPrincipal;
+        let interest = rawInterest;
+        let fee = rawFee;
+        let penalty = rawPenalty;
 
-        // Delta vs baseline (positive when this period was reduced). We
-        // compute this against the non-closed amount — closed periods are
-        // rendered as "ปิดค่างวดแล้ว" so the delta is irrelevant.
+        const paidInFullButZeroedByApi =
+          !isClosed &&
+          rawAmount <= 0.009 &&
+          paid > 0.009 &&
+          baselineAmount != null &&
+          baselineAmount > 0;
+
+        if (paidInFullButZeroedByApi) {
+          // Restore baseline so the operator sees the full monthly target.
+          // We don't have the original principal/interest/fee split here
+          // because API zeroed them too — fall back to baseline on `amount`
+          // and keep the sub-fields as best-effort (0 + annotation).
+          amount = baselineAmount!;
+        }
+
+        if (isClosed) {
+          amount = 0;
+          principal = 0;
+          interest = 0;
+          fee = 0;
+          penalty = 0;
+        }
+
+        // Delta vs baseline — only for periods whose amount got reduced
+        // by an overpaid carry from a PREVIOUS period (not when paid-in-full
+        // restored to baseline, which is a neutral operation).
         const overpaidApplied =
           !isClosed &&
+          !paidInFullButZeroedByApi &&
           baselineAmount != null &&
           amount < baselineAmount - 0.01 &&
           amount > 0.009

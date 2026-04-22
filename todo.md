@@ -152,4 +152,21 @@
 - [x] Backend: redefined `isClosed` via `close_installment_amount > 0` + receipt_no suffix; marks only periods > maxClosedPeriod; zeroes principal/interest/fee/amount for closed periods
 - [x] UI amount cell: shows literal "ปิดค่างวดแล้ว" text; italic gray color; light-gray background on all 4 money cells of closed periods
 - [x] Added boundary-rule test in `server/debt.target-shape.test.ts` (closed cells form a contiguous suffix + all money fields zero)
+- [x] Commit + push + save checkpoint (commit `e3e346f`, checkpoint `e3e346f9`)
+
+### Phase 9g — เป้าเก็บหนี้: always show baseline for past/current periods (user rule 2026-04-23)
+
+ผู้ใช้ยืนยันเงื่อนไขใหม่:
+- งวดที่ผ่านมาแล้ว/งวดปัจจุบัน → `ยอดหนี้รวม` = ยอดเต็มจริง (baseline) **ไม่ใช่ amount จาก API** — แม้จะจ่ายครบแล้วก็ตาม เพื่อให้ฝ่ายเก็บหนี้เห็นยอดตั้งต้นของเดือน
+- ยกเว้นมี overpaid จากงวดก่อน → ยอดหักได้ตามลำดับ
+- "ปิดค่างวด" = จ่ายยอด**ทุกงวดที่เหลือ**ในคราวเดียว → งวดที่จ่ายปิดแสดงยอดปกติ, งวด**ถัดไปจนถึงงวดสุดท้าย**แสดง "ปิดค่างวดแล้ว" + 0
+
+Task list:
+- [x] Audit: ยืนยันว่าเคสที่ API ส่ง `amount=0` แบ่งออกเป็น (a) paid-in-full งวดเดียว (ควรแสดง baseline) กับ (b) post-close (ควรแสดง "ปิดค่างวดแล้ว") โดยดูจาก `close_installment_amount` + `receipt_no` suffix
+- [x] Backend ใน `listDebtTarget` — actual implementation: **restore baseline** เมื่อ `amount=0 && paid>0 && !isClosed` (เคสที่ API zero ตอนจ่ายครบ); **trust API amount** เมื่อ API ลดยอดเองจาก overpaid carry; **zero out + isClosed=true** สำหรับงวด > maxClosedPeriod — ไม่ได้ implement manual compute-from-baseline carry-forward เพราะ API ทำให้แล้ว
+- [x] Backend: เก็บ `overpaidApplied` สำหรับแสดง annotation `(-หักชำระเกิน: xxx)` ถ้ามี carry จากงวดก่อน
+- [x] UI: งวด paid-in-full ที่ไม่ใช่ close → แสดงยอดเต็ม (ไม่มี "ปิดค่างวดแล้ว") — ไม่มี italic gray (ใช้ UI logic เดิมที่ render ตาม `isClosed` — backend fix ทำให้ isClosed=false สำหรับ paid-in-full → UI แสดงค่า amount เต็มโดยอัตโนมัติ)
+- [x] UI: งวด post-close → literal "ปิดค่างวดแล้ว" + bg เทาอ่อน + text เทา italic (reused from Phase 9f — ไม่ได้แก้ UI รอบนี้เพราะทำเสร็จแล้ว)
+- [x] Tests: ครอบ (a) paid-in-full no-close → ยอดเต็ม (baseline-restoration test ใหม่), (c) post-close → zero+closed (test เดิม). 
+- [ ] Test (b): เพิ่ม targeted test สำหรับ contract ที่มี overpaid carry (เช่น ext=1496 หรือ 1517): งวดถัดไปต้อง amount < baseline, overpaidApplied > 0
 - [ ] Commit + push + save checkpoint
