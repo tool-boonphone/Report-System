@@ -300,7 +300,80 @@ type InstRawRow = {
   installment_status_code: string | null;
 };
 
-type PayRawRow = {
+/**
+ * Assign installment period + sub-row (splitIndex) + close/bad-debt flags
+ * to each raw payment row. Exported for unit testing; consumers inside
+ * listDebtCollected import it too.
+ *
+ * 1) Sorts payments by (paid_at, payment_id)
+ * 2) Walks through scheduled installments in order; each payment
+ *    "fills" the current installment by its principal+interest+fee
+ *    (i.e. close_installment_amount when present).
+ * 3) When the current installment is fully paid (or `close_installment_amount`
+ *    is large enough to cover several installments), advance the cursor.
+ * 4) `splitIndex` counts payments per period (0 = primary, 1 = 2nd, …)
+ * 5) `isCloseRow` is true ONLY when receipt_no starts with "TXRTC"
+ *    (Boonphone close-contract settlement). A positive
+ *    `close_installment_amount` alone is NOT sufficient — every regular
+ *    full-period payment also carries that field.
+ * 6) `isBadDebtRow` is true when bad_debt_amount > 0; the payment is
+ *    forced onto the LAST installment period.
+ */
+export function assignPayPeriods(
+  payments: PayRawRow[],
+  installmentList: Array<{ period: number | null; amount: number }>,
+): Array<PayRawRow & { splitIndex: number; isCloseRow: boolean; isBadDebtRow: boolean }> {
+  if (!payments.length) return [];
+  const schedule = installmentList
+    .filter((i) => i.period != null)
+    .map((i) => ({ period: i.period as number, amount: Number(i.amount) || 0 }))
+    .sort((a, b) => a.period - b.period);
+
+  let cursor = 0;
+  let coveredCurrent = 0;
+  const periodSeen = new Map<number, number>();
+  const out: Array<PayRawRow & { splitIndex: number; isCloseRow: boolean; isBadDebtRow: boolean }> = [];
+
+  const sorted = [...payments].sort((a, b) => {
+    const at = a.paid_at ?? "";
+    const bt = b.paid_at ?? "";
+    if (at !== bt) return at.localeCompare(bt);
+    return (a.payment_id ?? 0) - (b.payment_id ?? 0);
+  });
+
+  for (const p of sorted) {
+    if ((p.bad_debt_amount ?? 0) > 0) {
+      const lastPeriod = schedule.length
+        ? schedule[schedule.length - 1].period
+        : 1;
+      const splitIdx = periodSeen.get(lastPeriod) ?? 0;
+      periodSeen.set(lastPeriod, splitIdx + 1);
+      out.push({ ...p, period: lastPeriod, splitIndex: splitIdx, isCloseRow: false, isBadDebtRow: true });
+      continue;
+    }
+
+    const period = schedule[cursor]?.period ?? null;
+    const splitIdx = period != null ? (periodSeen.get(period) ?? 0) : 0;
+    if (period != null) periodSeen.set(period, splitIdx + 1);
+
+    const receipt = String(p.receipt_no ?? "");
+    const isCloseRow = receipt.startsWith("TXRTC");
+
+    out.push({ ...p, period, splitIndex: splitIdx, isCloseRow, isBadDebtRow: false });
+
+    const consumed = Number(p.principal_paid ?? 0) +
+      Number(p.interest_paid ?? 0) +
+      Number(p.fee_paid ?? 0);
+    coveredCurrent += consumed;
+    while (cursor < schedule.length - 1 && coveredCurrent >= schedule[cursor].amount - 0.5) {
+      coveredCurrent -= schedule[cursor].amount;
+      cursor += 1;
+    }
+  }
+  return out;
+}
+
+export type PayRawRow = {
   contract_external_id: string;
   period: number | null; // derived from receipt_no suffix or order
   paid_at: string | null;
@@ -820,80 +893,10 @@ export async function listDebtCollected(params: { section: SectionKey }) {
     });
   }
 
-  /**
-   * Derive installment period (1..N) for each payment by:
-   *   1) Sorting payments by (paid_at, payment_id)
-   *   2) Walking through scheduled installments in order; each payment
-   *      "fills" the current installment by its principal+interest+fee
-   *      (i.e. close_installment_amount when present).
-   *   3) When the current installment is fully paid (or `close_installment_amount`
-   *      is large enough to cover several installments), advance the cursor.
-   * The result: each payment is tagged with the installment period it
-   * primarily belongs to, plus a `splitIndex` (0 = primary row, >0 = sub-row).
-   */
-  function assignPeriods(
-    payments: PayRawRow[],
-    installmentList: Array<{ period: number | null; amount: number }>,
-  ): Array<PayRawRow & { splitIndex: number; isCloseRow: boolean; isBadDebtRow: boolean }> {
-    if (!payments.length) return [];
-    const schedule = installmentList
-      .filter((i) => i.period != null)
-      .map((i) => ({ period: i.period as number, amount: Number(i.amount) || 0 }))
-      .sort((a, b) => a.period - b.period);
-
-    let cursor = 0; // index into schedule
-    let coveredCurrent = 0; // amount applied to schedule[cursor]
-    const periodSeen = new Map<number, number>(); // period -> count of payments
-    const out: Array<PayRawRow & { splitIndex: number; isCloseRow: boolean; isBadDebtRow: boolean }> = [];
-
-    const sorted = [...payments].sort((a, b) => {
-      const at = a.paid_at ?? "";
-      const bt = b.paid_at ?? "";
-      if (at !== bt) return at.localeCompare(bt);
-      return (a.payment_id ?? 0) - (b.payment_id ?? 0);
-    });
-
-    for (const p of sorted) {
-      // Bad-debt row: API marks bad_debt_amount > 0 → goes on the LAST installment.
-      if ((p.bad_debt_amount ?? 0) > 0) {
-        const lastPeriod = schedule.length
-          ? schedule[schedule.length - 1].period
-          : 1;
-        const splitIdx = periodSeen.get(lastPeriod) ?? 0;
-        periodSeen.set(lastPeriod, splitIdx + 1);
-        out.push({ ...p, period: lastPeriod, splitIndex: splitIdx, isCloseRow: false, isBadDebtRow: true });
-        continue;
-      }
-
-      // Determine which installment this payment belongs to.
-      const period = schedule[cursor]?.period ?? null;
-      const splitIdx = period != null ? (periodSeen.get(period) ?? 0) : 0;
-      if (period != null) periodSeen.set(period, splitIdx + 1);
-
-      // "close-row" detection: payment covers more than one installment
-      // (close_installment_amount > current installment amount * 1.5 → spans extra).
-      const closeAmt = p.close_installment_amount ?? 0;
-      const currentAmt = schedule[cursor]?.amount ?? 0;
-      const isCloseRow = closeAmt > currentAmt * 1.5 && currentAmt > 0;
-
-      out.push({ ...p, period, splitIndex: splitIdx, isCloseRow, isBadDebtRow: false });
-
-      // Advance cursor: each payment burns through its allocated amount.
-      const consumed = Number(p.principal_paid ?? 0) +
-        Number(p.interest_paid ?? 0) +
-        Number(p.fee_paid ?? 0);
-      coveredCurrent += consumed;
-      while (cursor < schedule.length - 1 && coveredCurrent >= schedule[cursor].amount - 0.5) {
-        coveredCurrent -= schedule[cursor].amount;
-        cursor += 1;
-      }
-    }
-    return out;
-  }
-
+  // Per-contract walk (uses the exported assignPayPeriods helper above).
   const rows = baseRows.map((c) => {
     const rawPayments = payByContract.get(c.contractExternalId) ?? [];
-    const tagged = assignPeriods(
+    const tagged = assignPayPeriods(
       rawPayments,
       c.installments.map((i: { period: number | null; amount: number | string }) => ({ period: i.period, amount: Number(i.amount) || 0 })),
     );

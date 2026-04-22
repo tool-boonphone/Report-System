@@ -223,3 +223,42 @@ Task list:
 - [x] Backend `listDebtTarget`: เก็บ `paidAtsByContract` ตอนวนลูป payments (zero extra query), แล้วเรียก helper สำหรับสัญญา `หนี้เสีย` ทับ suspendedAt → ใช้ต่อทุก cell
 - [x] Fixture-backed unit test — 7 เคส ใน `server/debt.badDebtDate.test.ts` (null suspendedAt, no payments, all-before, latest-after, mixed null, strict-equality, ISO datetime sort)
 - [x] รัน suite 48/48 ผ่าน (1 skipped); commit + push + checkpoint
+
+### Phase 9j-ter (CLOSED — Decision C) — ไม่ใช้วันที่ระงับสัญญาจริงจาก API เพราะยังไม่มีใน endpoint ที่ document
+
+บริบทจาก user (2026-04-23):
+- ระบบ Boonphone มีแท็บ "การติดตามค่างวด" เก็บประวัติการติดตาม
+- ตัวอย่าง ธัญธร มหาดไทย (CT0226-UTT002-1265-01): การติดตามครั้งที่ 4 (21 เม.ย. 2569) = "ต้องการระงับสัญญา"
+- วันที่จริงของการระงับ = วันที่ของ follow-up entry ที่ตัวเลือก "ต้องการระงับสัญญา" ถูกกด
+- ตอนนี้ระบบใช้ due_date ของงวดแรกที่เป็น "ระงับสัญญา" ซึ่งเป็นแค่ approximation
+
+Task list:
+- [x] ตรวจ Postman collection + DB schema — ไม่มี endpoint "การติดตามค่างวด" ใน collection; installments.raw_json มีแค่ฟิลด์ `suspended_at` / `bad_debt_at` แต่ค่าเป็น null ทั้งหมด (รวมถึง CT0226-UTT002-1265-01 ของธัญธร)
+- [x] **Decision C**: ยอมรัป approximation — ใช้ due_date ของงวดแรกที่เป็น "ระงับสัญญา" เป็น suspendedAt ตามที่ระบบทำไว้แล้วใน Phase 9j
+- [x] ไม่ต้องแก้โค้ด; ไม่ต้อง commit ใหม่
+- [ ] **Deferred**: ตอนเริ่มงาน Fastfone365 ให้ตรวจซ้ำว่า API Fastfone ส่ง suspended_at/bad_debt_at จริงหรือไม่
+
+### Phase 9L (TODO) — แก้ 5 ประเด็นในแท็บยอดเก็บหนี้ + สำรวจ pattern การปิดยอด
+
+Reported by user (2026-04-23, ref มณีรัตน์ ช่วยบำรุง / สุวิทย์ เทศเขียว / เอกลักษณ์ ดวงกำ):
+
+Issues:
+1. "ปิดค่างวด" แสดงผิด: มณีรัตน์จ่าย 1,000 บาท แต่ระบบไปใส่ในช่อง "ปิดค่างวด" ทั้งที่กฎตกลงกันว่าปิดค่างวด = ปิดทั้งสัญญาเท่านั้น
+2. คอลัมน์ "งวดที่" ของการชำระครั้งที่ 2, 3, ... ให้แสดงเป็น `N-M` (เช่น 2-1, 2-2) แทน "—"
+3. ลบสีแดง/ตัวเอียงของยอดชำระครั้งที่ 2, 3, ... — ใช้ style เดียวกับครั้งแรก
+4. คอลัมน์เงินต้น/ดอกเบี้ย/ค่าดำเนินการ/ฯลฯ ของงวดก่อนหน้า + งวดปัจจุบัน: ถ้าไม่มียอด ให้แสดง "0" สีเทาเอียง ไม่ปล่อยว่าง
+5. คอลัมน์ "ส่วนลด" แสดงตัวเลขไม่ครบ (อาจถูกตัดความกว้างหรือ field ไม่ map)
+
+Question:
+- ทำไมการปิดยอดลงงวดไม่เหมือนกันระหว่างสัญญา:
+  - สุวิทย์ เทศเขียว: บันทึกทุกงวดยกเว้นงวด 11
+  - เอกลักษณ์ ดวงกำ: บันทึกที่งวด 12 ทีเดียว (งวด 2-11 ว่าง)
+
+Task list:
+- [x] สำรวจ DB: dump payments + installments ของทั้ง 3 สัญญา; หา receipt_no patterns + เปรียบเทียบกับ close-contract heuristic ปัจจุบัน (`TXRTC*`) — ยืนยันว่า `close_installment_amount` เป็น field ที่ API ส่งมากับ payment ปกติทุกครั้ง ไม่สามารถใช้ชี้ขาด close-contract ได้
+- [x] Backend: ปรับเงื่อนไข isCloseRow ให้เช็ค `receipt_no.startsWith("TXRTC")` เท่านั้น (แยก assignPayPeriods ออกเป็น module-level export เพื่อให้ unit test ได้)
+- [x] Backend: discount + penalty mapping ยังคงอ่านจาก raw_json ตรงๆ (discount_amount / penalty_paid) — field มีอยู่แล้ว, ปัญหาอยู่ที่ frontend ที่เคยเช็ค truthy แล้วว่างเปล่า
+- [x] Frontend DebtReport.tsx: label `N-M` (period-splitIndex+1), ลบ `text-amber-700 italic` จาก sub-rows, แสดง `0` grey-italic เมื่อ pay ไม่มีค่า/เป็น 0, discount แสดงค่าเสมอ
+- [x] Regression tests: 6 cases ใน `server/debt.collected-shape.test.ts` — pin มณีรัตน์ (no isCloseRow on partial 1000), TXRTC → isCloseRow=true, splitIndex progression, bad-debt routing
+- [x] Full test suite: 54/55 passed (1 skipped = Fastfone365 creds)
+- [ ] Commit + push + save checkpoint

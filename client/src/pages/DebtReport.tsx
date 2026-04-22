@@ -744,7 +744,9 @@ export default function DebtReport() {
                                 if (pay) {
                                   switch (gc.key) {
                                     case "period":
-                                      v = li === 0 ? periodNo : "—";
+                                      // Always show the receipt's sequence per period.
+                                      // First payment of period P → "P-1", second → "P-2", etc.
+                                      v = `${periodNo}-${(pay.splitIndex ?? 0) + 1}`;
                                       break;
                                     case "paidAt":
                                       v = fmtDate(pay.paidAt);
@@ -759,45 +761,42 @@ export default function DebtReport() {
                                       v = fmtMoney(pay.fee);
                                       break;
                                     case "penalty":
-                                      v = pay.penalty ? fmtMoney(pay.penalty) : "";
+                                      v = fmtMoney(pay.penalty || 0);
                                       break;
                                     case "unlockFee":
-                                      v = pay.unlockFee
-                                        ? fmtMoney(pay.unlockFee)
-                                        : "";
+                                      v = fmtMoney(pay.unlockFee || 0);
                                       break;
                                     case "discount":
-                                      v = pay.discount
-                                        ? fmtMoney(pay.discount)
-                                        : "";
+                                      v = fmtMoney(pay.discount || 0);
                                       break;
                                     case "overpaid":
-                                      v = pay.overpaid
-                                        ? fmtMoney(pay.overpaid)
-                                        : "";
+                                      v = fmtMoney(pay.overpaid || 0);
                                       break;
                                     case "closeInstallmentAmount":
                                       v = pay.isCloseRow
                                         ? fmtMoney(pay.closeInstallmentAmount)
-                                        : "";
+                                        : fmtMoney(0);
                                       break;
                                     case "badDebt":
-                                      v = pay.badDebt
-                                        ? fmtMoney(pay.badDebt)
-                                        : "";
+                                      v = fmtMoney(pay.badDebt || 0);
                                       break;
                                     case "total":
                                       v = fmtMoney(pay.total);
                                       break;
                                   }
                                 }
+                                // Grey-italic zero when cell is empty/zero so every
+                                // row has a value, but visually muted.
+                                const isZeroish =
+                                  pay && (v === fmtMoney(0) || v === "0" || v === "0.00");
+                                const isEmptyCell = !pay;
                                 return (
                                   <div
                                     key={`c-${vr.index}-${i}-${gc.key}-${li}`}
-                                    className={`px-2 truncate ${
-                                      li === 0
-                                        ? "py-2"
-                                        : "py-1.5 text-amber-700 italic"
+                                    className={`px-2 truncate py-2 ${
+                                      isEmptyCell || isZeroish
+                                        ? "text-gray-400 italic"
+                                        : ""
                                     }`}
                                     style={{
                                       height:
