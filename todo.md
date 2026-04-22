@@ -276,3 +276,11 @@ Task list:
 - [x] Frontend DebtReport.tsx — ทุกเซลล์ของแถว isCloseRow มี bg `#fff1f2` (rose-50) + text-rose-700 + เส้นซ้าย 4px rose-400 ที่คอลัมน์แรกของ group
 - [x] Regression tests: 4 เคสใหม่ (สุวิทย์ 12/12, เอกลักษณ์ 1+11=12, clamp-at-last, มณีรัตน์ partial) — รวม 58/59 tests ผ่าน
 - [x] Commit + push + checkpoint (commit 71fbef8)
+
+### Phase 9N (TODO) — Color theme + grey inactive periods
+
+- [x] Tab เป้าเก็บหนี้: amber-600 (button, header bg amber-700, sub-header amber-50/100 alternating, text amber-900)
+- [x] Tab ยอดเก็บหนี้: emerald-600 (button, header bg emerald-700, sub-header emerald-50, text emerald-900)
+- [x] TXRTC highlight ยังคงเป็น rose-50/rose-400 (ไม่เปลี่ยน)
+- [x] ยอดเก็บหนี้: isInactivePeriod logic (periodNo > instCount || (suspended && noPay)) → bg gray-100 + text-gray-400 italic, tooltip บอกเหตุผล
+- [x] Commit + push + checkpoint

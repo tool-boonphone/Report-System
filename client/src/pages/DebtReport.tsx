@@ -396,7 +396,7 @@ export default function DebtReport() {
               variant={tab === "target" ? "default" : "outline"}
               className={
                 tab === "target"
-                  ? "bg-indigo-600 hover:bg-indigo-700 text-white border-indigo-600"
+                  ? "bg-amber-600 hover:bg-amber-700 text-white border-amber-600"
                   : "bg-gray-200 hover:bg-gray-300 text-gray-600 border-gray-200"
               }
               onClick={() => setTab("target")}
@@ -408,7 +408,7 @@ export default function DebtReport() {
               variant={tab === "collected" ? "default" : "outline"}
               className={
                 tab === "collected"
-                  ? "bg-rose-600 hover:bg-rose-700 text-white border-rose-600"
+                  ? "bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-600"
                   : "bg-gray-200 hover:bg-gray-300 text-gray-600 border-gray-200"
               }
               onClick={() => setTab("collected")}
@@ -484,7 +484,8 @@ export default function DebtReport() {
                         width: GROUP_WIDTH,
                         height: 28,
                         background:
-                          tab === "target" ? "#4f46e5" : "#e11d48",
+                          // amber-700 for target, emerald-700 for collected
+                          tab === "target" ? "#b45309" : "#047857",
                       }}
                     >
                       ข้อมูลชำระงวดที่ {i + 1}
@@ -511,13 +512,15 @@ export default function DebtReport() {
                       // Alternating tint per reference (indigo-50 / indigo-100 for target,
                       // rose-50 flat for collected).
                       const subBg =
+                        // target: amber-50 / amber-100 alternating; collected: emerald-50 flat
                         tab === "target"
                           ? i % 2 === 0
-                            ? "#eef2ff"
-                            : "#e0e7ff"
-                          : "#fff1f2";
+                            ? "#fffbeb" // amber-50
+                            : "#fef3c7" // amber-100
+                          : "#ecfdf5"; // emerald-50
                       const subColor =
-                        tab === "target" ? "#312e81" : "#881337";
+                        // amber-900 for target, emerald-900 for collected
+                        tab === "target" ? "#78350f" : "#064e3b";
                       return (
                         <div
                           key={`h-${i}-${gc.key}`}
@@ -723,6 +726,23 @@ export default function DebtReport() {
                         }
                         // ---------- Collected tab ----------
                         const pays = paymentsByPeriod.get(periodNo) ?? [];
+
+                        // Phase 9N: "inactive period" in collected tab.
+                        // A period is inactive (grey out) when:
+                        //   1. periodNo > installmentCount — the contract has
+                        //      fewer periods than the table's maxPeriods, so
+                        //      this column doesn't apply to this contract.
+                        //   2. The contract is suspended or bad-debt AND the
+                        //      period has no payment recorded — no need to
+                        //      collect, show as grey placeholder.
+                        const instCount = r.installmentCount ?? maxPeriods;
+                        const contractSuspended =
+                          r.debtStatus === "ระงับสัญญา" ||
+                          r.debtStatus === "หนี้เสีย";
+                        const isInactivePeriod =
+                          periodNo > instCount ||
+                          (contractSuspended && pays.length === 0);
+
                         // Vertical stack: one cell per group sub-column,
                         // with N inner lines for N split payments.
                         return groupCols.map((gc, gcIdx) => {
@@ -736,6 +756,8 @@ export default function DebtReport() {
                                   (gc as any).align === "right"
                                     ? "right"
                                     : "left",
+                                // Grey background for inactive periods
+                                background: isInactivePeriod ? "#f3f4f6" : undefined,
                               }}
                             >
                               {Array.from({ length: lineCount }, (_, li) => {
@@ -795,21 +817,35 @@ export default function DebtReport() {
                                 const isZeroish =
                                   pay && (v === fmtMoney(0) || v === "0" || v === "0.00");
                                 const isEmptyCell = !pay;
-                                const textClass = isCloseCell
-                                  ? "text-rose-700"
-                                  : isEmptyCell || isZeroish
-                                    ? "text-gray-400 italic"
-                                    : "";
-                                const closeBg = isCloseCell
-                                  ? "#fff1f2" // rose-50
-                                  : undefined;
-                                // Left-accent border only on the first
-                                // column of the group so the rose block
-                                // reads as a single "chunk" per row.
-                                const closeBorder =
-                                  isCloseCell && gcIdx === 0
-                                    ? "4px solid #fb7185" // rose-400
-                                    : undefined;
+
+                                // Phase 9N: inactive period overrides all
+                                // other styling — grey text, no close highlight.
+                                let textClass: string;
+                                let cellBg: string | undefined;
+                                let cellBorderLeft: string | undefined;
+                                if (isInactivePeriod) {
+                                  textClass = "text-gray-400 italic";
+                                  cellBg = undefined; // parent div already grey
+                                  cellBorderLeft = undefined;
+                                } else if (isCloseCell) {
+                                  textClass = "text-rose-700";
+                                  cellBg = "#fff1f2"; // rose-50
+                                  // Left-accent border only on the first
+                                  // column of the group so the rose block
+                                  // reads as a single "chunk" per row.
+                                  cellBorderLeft =
+                                    gcIdx === 0
+                                      ? "4px solid #fb7185" // rose-400
+                                      : undefined;
+                                } else {
+                                  textClass =
+                                    isEmptyCell || isZeroish
+                                      ? "text-gray-400 italic"
+                                      : "";
+                                  cellBg = undefined;
+                                  cellBorderLeft = undefined;
+                                }
+
                                 return (
                                   <div
                                     key={`c-${vr.index}-${i}-${gc.key}-${li}`}
@@ -819,11 +855,15 @@ export default function DebtReport() {
                                         li === 0 ? ROW_HEIGHT : SUB_ROW_HEIGHT,
                                       lineHeight:
                                         li === 0 ? `${ROW_HEIGHT - 16}px` : `${SUB_ROW_HEIGHT - 12}px`,
-                                      background: closeBg,
-                                      borderLeft: closeBorder,
+                                      background: cellBg,
+                                      borderLeft: cellBorderLeft,
                                     }}
                                     title={
-                                      pay?.remark ?? pay?.receiptNo ?? undefined
+                                      isInactivePeriod
+                                        ? (periodNo > instCount
+                                            ? "ไม่มีงวดนี้ในสัญญา"
+                                            : "ระงับ/หนี้เสีย")
+                                        : (pay?.remark ?? pay?.receiptNo ?? undefined)
                                     }
                                   >
                                     {v}
