@@ -28,6 +28,8 @@ import {
 import type { SectionKey, SyncTrigger } from "../../shared/const";
 
 const OVERALL_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes ceiling per section
+// A sync row older than this with status=in_progress is treated as abandoned.
+const STALE_INPROGRESS_MS = OVERALL_TIMEOUT_MS + 5 * 60 * 1000;
 
 type LockMap = Record<string, { startedAt: number; triggeredBy: SyncTrigger } | null>;
 const _locks: LockMap = { Boonphone: null, Fastfone365: null };
@@ -40,6 +42,39 @@ export function isSyncRunning(section: SectionKey): boolean {
   return _locks[section] !== null;
 }
 
+/**
+ * Cross-process DB lock check: looks for another sync run with entity='all' for
+ * the same section that is still in_progress and was started recently. Because
+ * `sync_logs` lives in shared MySQL, every process (dev server scheduler,
+ * manual trigger, one-off script) sees the same state.
+ */
+async function isSectionLockedInDb(section: SectionKey): Promise<boolean> {
+  try {
+    const { getDb } = await import("../db");
+    const { syncLogs } = await import("../../drizzle/schema");
+    const { and, eq, gt } = await import("drizzle-orm");
+    const db = await getDb();
+    if (!db) return false;
+    const threshold = new Date(Date.now() - STALE_INPROGRESS_MS);
+    const rows = await db
+      .select({ id: syncLogs.id })
+      .from(syncLogs)
+      .where(
+        and(
+          eq(syncLogs.section, section),
+          eq(syncLogs.entity, "all"),
+          eq(syncLogs.status, "in_progress"),
+          gt(syncLogs.startedAt, threshold),
+        ),
+      )
+      .limit(1);
+    return rows.length > 0;
+  } catch {
+    // If the lock check itself fails, don't block the sync — fail open.
+    return false;
+  }
+}
+
 /** Run one full sync for a section. Returns a summary. */
 export async function runSectionSync(
   section: SectionKey,
@@ -50,6 +85,13 @@ export async function runSectionSync(
       ok: false,
       rowCount: 0,
       message: `[${section}] sync already in progress`,
+    };
+  }
+  if (await isSectionLockedInDb(section)) {
+    return {
+      ok: false,
+      rowCount: 0,
+      message: `[${section}] sync already in progress (another process)`,
     };
   }
   const client = buildClientFromEnv(section);

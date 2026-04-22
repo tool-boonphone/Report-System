@@ -73,6 +73,8 @@ export async function getDebtReport(params: {
     (targetRowsRaw as any)[0] ?? (targetRowsRaw as any);
 
   // --- Collected side (payment transactions with paid_at in range) ---
+  // Only count payments that are marked as paid/active — filters out
+  // voided / refunded / pending transactions if the API ever adds them.
   const collectedRowsRaw = await db.execute(sql`
     SELECT SUBSTRING(${paymentTransactions.paidAt}, 1, 7) AS month,
            COALESCE(SUM(CAST(${paymentTransactions.amount} AS DECIMAL(18,2))), 0) AS collected,
@@ -81,6 +83,8 @@ export async function getDebtReport(params: {
      WHERE ${paymentTransactions.section} = ${params.section}
        AND ${paymentTransactions.paidAt} >= ${params.from}
        AND ${paymentTransactions.paidAt} <= ${`${params.to} 23:59:59`}
+       AND (${paymentTransactions.status} IS NULL
+            OR LOWER(${paymentTransactions.status}) IN ('active', 'paid', 'success', 'completed'))
      GROUP BY month
   `);
   const collectedRows: Array<{ month: string; collected: unknown; cnt: unknown }> =

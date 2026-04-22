@@ -31,29 +31,30 @@
 
 ## Phase 3 — API Sync Engine
 
-- [ ] Backend client สำหรับ Boonphone API (login, contract, installments, payment, partner, customer)
-- [ ] Backend client สำหรับ Fastfone365 API (เหมือนกัน)
-- [ ] Sync Engine พร้อม `_isSyncing` lock
-- [ ] Cron Job sync ทุก 1 ชั่วโมง (08:00–19:00 Mon–Sat)
-- [ ] Manual Sync (Background) + toast แจ้งเตือนเมื่อเสร็จ
-- [ ] แสดง "ข้อมูล ณ วันที่/เวลา" ใน Header + Relative time badge
+- [x] Backend client สำหรับ Boonphone API (login, contract, installments, payment, partner, customer)
+- [~] Backend client สำหรับ Fastfone365 API — client พร้อมแล้ว รอ credentials ที่ถูกต้อง
+- [x] Sync Engine พร้อม `_isSyncing` lock
+- [x] Cron Job sync ทุก 1 ชั่วโมง (08:00–19:00 Mon–Sat)
+- [x] Manual Sync (Background) + toast แจ้งเตือนเมื่อเสร็จ
+- [x] แสดง "ข้อมูล ณ วันที่/เวลา" ใน Header + Relative time badge
 
 ## Phase 4 — Contract Report (ข้อมูลสัญญา)
 
-- [ ] ตาราง 41 คอลัมน์ตามไฟล์ Ex-Super_Report
-- [ ] Sticky Header (Table)
-- [ ] Pagination (Offset/Limit)
-- [ ] Search (เลขที่สัญญา + ชื่อลูกค้า)
-- [ ] Filter (วันที่, สถานะ, พาร์ทเนอร์, ฯลฯ)
-- [ ] Export Excel ตามสิทธิ์
-- [ ] Permission-guarded actions
+- [x] ตาราง 41 คอลัมน์ตามไฟล์ Ex-Super_Report
+- [x] Sticky Header (Table) + horizontal scroll บนมือถือ
+- [x] Pagination (Offset/Limit) 50/หน้า
+- [x] Search (เลขที่สัญญา + ชื่อลูกค้า + พาร์ทเนอร์ + โทร/IMEI/Serial/บัตร ปช.)
+- [x] Filter (สถานะ, ประเภทหนี้, รหัสพาร์ทเนอร์, ช่วงวันที่)
+- [x] Export Excel ตามสิทธิ์ (stream ด้วย ExcelJS)
+- [x] Permission-guarded actions (contract.view / contract.export)
 
 ## Phase 5 — Debt Report (รายงานหนี้)
 
-- [ ] Tab "เป้าเก็บหนี้" — สรุปจาก installments ที่ถึงกำหนดชำระ
-- [ ] Tab "ยอดเก็บหนี้" — สรุปจาก payment transactions
-- [ ] กรองตามวัน/เดือน/ปี + พาร์ทเนอร์
-- [ ] Export Excel
+- [x] แสดง เป้าเก็บหนี้ (จาก installments ที่ครบกำหนดชำระ) ตามช่วงวันที่
+- [x] แสดง ยอดเก็บหนี้ (จาก payment_transactions ที่ status = paid)
+- [x] Summary Cards + รายเดือน + Top Overdue list
+- [x] Export Excel (แยกจากข้อมูลสัญญา)
+- [x] Permission-guarded actions (debt_report.view / debt_report.export)
 
 ## Phase 6 — Delivery
 
