@@ -1,39 +1,48 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
-import { Route, Switch } from "wouter";
+import { Redirect, Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
-import Home from "./pages/Home";
+import { SectionProvider } from "./contexts/SectionContext";
+import { NavActionsProvider } from "./contexts/NavActionsContext";
+import Login from "./pages/Login";
+import SelectSection from "./pages/SelectSection";
+import ChangePassword from "./pages/ChangePassword";
+import Contracts from "./pages/Contracts";
+import DebtReport from "./pages/DebtReport";
+import UsersSettings from "./pages/settings/Users";
+import GroupsSettings from "./pages/settings/Groups";
 
 function Router() {
-  // make sure to consider if you need authentication for certain routes
   return (
     <Switch>
-      <Route path={"/"} component={Home} />
-      <Route path={"/404"} component={NotFound} />
-      {/* Final fallback route */}
+      <Route path="/" component={() => <Redirect to="/contracts" />} />
+      <Route path="/login" component={Login} />
+      <Route path="/select-section" component={SelectSection} />
+      <Route path="/change-password" component={ChangePassword} />
+      <Route path="/contracts" component={Contracts} />
+      <Route path="/debt-report" component={DebtReport} />
+      <Route path="/settings/users" component={UsersSettings} />
+      <Route path="/settings/groups" component={GroupsSettings} />
+      <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>
   );
 }
 
-// NOTE: About Theme
-// - First choose a default theme according to your design style (dark or light bg), than change color palette in index.css
-//   to keep consistent foreground/background color across components
-// - If you want to make theme switchable, pass `switchable` ThemeProvider and use `useTheme` hook
-
 function App() {
   return (
     <ErrorBoundary>
-      <ThemeProvider
-        defaultTheme="light"
-        // switchable
-      >
-        <TooltipProvider>
-          <Toaster />
-          <Router />
-        </TooltipProvider>
+      <ThemeProvider defaultTheme="light">
+        <SectionProvider>
+          <NavActionsProvider>
+            <TooltipProvider>
+              <Toaster richColors position="top-right" />
+              <Router />
+            </TooltipProvider>
+          </NavActionsProvider>
+        </SectionProvider>
       </ThemeProvider>
     </ErrorBoundary>
   );

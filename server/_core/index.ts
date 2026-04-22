@@ -6,6 +6,8 @@ import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
 import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
+import { seedSuperAdmin } from "../authDb";
+import { startScheduler } from "../sync/scheduler";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 
@@ -58,8 +60,18 @@ async function startServer() {
     console.log(`Port ${preferredPort} is busy, using port ${port} instead`);
   }
 
-  server.listen(port, () => {
+  server.listen(port, async () => {
     console.log(`Server running on http://localhost:${port}/`);
+    try {
+      await seedSuperAdmin();
+    } catch (err) {
+      console.error("[startup] seedSuperAdmin failed:", err);
+    }
+    try {
+      await startScheduler();
+    } catch (err) {
+      console.error("[startup] startScheduler failed:", err);
+    }
   });
 }
 
