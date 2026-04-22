@@ -293,4 +293,4 @@ Task list:
 - [x] Frontend เป้าเก็บหนี้: isArrears=true → bg-amber-100 + text-amber-800 + font-bold
 - [x] Frontend ยอดเก็บหนี้: penalty=red-600, overpaid=emerald-700 font-bold, badDebt=red-700 font-bold, total=font-bold, 0.00 ใน TXRTC row=rose-300 italic
 - [x] Regression tests: 61/62 pass (3 เคสใหม่: isArrears บนทุกเซลล์, unlockFee >= 0, isArrears=false เมื่อจ่ายครบ)
-- [ ] Commit + push + checkpoint
+- [x] Commit + push + checkpoint (commit dc82bbb)
