@@ -361,13 +361,47 @@ export function assignPayPeriods(
 
     out.push({ ...p, period, splitIndex: splitIdx, isCloseRow, isBadDebtRow: false });
 
-    const consumed = Number(p.principal_paid ?? 0) +
-      Number(p.interest_paid ?? 0) +
-      Number(p.fee_paid ?? 0);
-    coveredCurrent += consumed;
-    while (cursor < schedule.length - 1 && coveredCurrent >= schedule[cursor].amount - 0.5) {
-      coveredCurrent -= schedule[cursor].amount;
-      cursor += 1;
+    // Cursor advancement.
+    //
+    // Business rule (Phase 9M, 2026-04-23):
+    //   TXRTC (close-contract) receipts — each receipt represents exactly
+    //   ONE installment period (Boonphone API emits N receipts for N
+    //   remaining periods, sometimes with the same paid_at). So we
+    //   unconditionally advance the cursor by one per TXRTC receipt.
+    //   This is the ONLY reliable rule because principal/interest/fee
+    //   fields are often null on TXRTC close-out rows (and even
+    //   `amount` is zero on the discount-only tail rows).
+    //
+    //   Regular TXRT payments — we still use the amount-based walk so
+    //   that partial payments of the same period stay on that period.
+    if (isCloseRow) {
+      if (cursor < schedule.length - 1) {
+        cursor += 1;
+        coveredCurrent = 0;
+      }
+    } else {
+      // Prefer principal+interest+fee when present; fall back to
+      // close_installment_amount, then raw amount. Any of these tells us
+      // "how much of the current installment did this payment burn".
+      const pif =
+        Number(p.principal_paid ?? 0) +
+        Number(p.interest_paid ?? 0) +
+        Number(p.fee_paid ?? 0);
+      const consumed =
+        pif > 0
+          ? pif
+          : Number(p.close_installment_amount ?? 0) > 0
+            ? Number(p.close_installment_amount)
+            : Number(p.total_paid_amount ?? 0);
+      coveredCurrent += consumed;
+      while (
+        cursor < schedule.length - 1 &&
+        schedule[cursor].amount > 0 &&
+        coveredCurrent >= schedule[cursor].amount - 0.5
+      ) {
+        coveredCurrent -= schedule[cursor].amount;
+        cursor += 1;
+      }
     }
   }
   return out;

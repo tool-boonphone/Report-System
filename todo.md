@@ -262,3 +262,17 @@ Task list:
 - [x] Regression tests: 6 cases ใน `server/debt.collected-shape.test.ts` — pin มณีรัตน์ (no isCloseRow on partial 1000), TXRTC → isCloseRow=true, splitIndex progression, bad-debt routing
 - [x] Full test suite: 54/55 passed (1 skipped = Fastfone365 creds)
 - [x] Commit + push + save checkpoint
+
+### Phase 9M (TODO) — TXRTC per-period display + pink highlight
+
+Reported by user (2026-04-23 continuation of 9L):
+- ต้องการให้ยอดปิดค่างวด/ปิดสัญญาแสดงครบทุกงวดที่เหลือ (ไม่ว่าจะงวดไหน) วันที่ใช้ paid_at จริง
+- ส่วนลด (discount) ของ TXRTC อยู่ที่งวดสุดท้ายไล่ขึ้น (business rule)
+- Highlight แถวที่เป็น TXRTC ด้วยสีพื้น rose-50 + border-l-4 rose-400
+
+Task list:
+- [x] Audit DB: สุวิทย์ 12 TXRTC (1 ใบ/งวด), เอกลักษณ์ 1 TXRT + 11 TXRTC (1 ใบ/งวดที่เหลือ), มณีรัตน์ partial 3 ใบ (ไม่มี TXRTC) — พบว่า principal/interest/fee เป็น null ใน TXRTC ทำให้ cursor-walk เดิมไม่เลื่อน
+- [x] Fix `assignPayPeriods` — แยก cursor logic: TXRTC → advance +1 เสมอต่อ 1 ใบ (clamp ที่งวดสุดท้าย), regular TXRT → amount-based ด้วย fallback จาก pif ไป close_installment ไป total
+- [x] Frontend DebtReport.tsx — ทุกเซลล์ของแถว isCloseRow มี bg `#fff1f2` (rose-50) + text-rose-700 + เส้นซ้าย 4px rose-400 ที่คอลัมน์แรกของ group
+- [x] Regression tests: 4 เคสใหม่ (สุวิทย์ 12/12, เอกลักษณ์ 1+11=12, clamp-at-last, มณีรัตน์ partial) — รวม 58/59 tests ผ่าน
+- [ ] Commit + push + checkpoint

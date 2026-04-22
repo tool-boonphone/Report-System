@@ -725,7 +725,7 @@ export default function DebtReport() {
                         const pays = paymentsByPeriod.get(periodNo) ?? [];
                         // Vertical stack: one cell per group sub-column,
                         // with N inner lines for N split payments.
-                        return groupCols.map((gc) => {
+                        return groupCols.map((gc, gcIdx) => {
                           return (
                             <div
                               key={`c-${vr.index}-${i}-${gc.key}`}
@@ -741,6 +741,11 @@ export default function DebtReport() {
                               {Array.from({ length: lineCount }, (_, li) => {
                                 const pay = pays[li];
                                 let v: any = "";
+                                // Phase 9M: highlight close-contract payment
+                                // rows with pink background + left accent
+                                // on the first ("period") column of each
+                                // group.
+                                const isCloseCell = !!pay && pay.isCloseRow;
                                 if (pay) {
                                   switch (gc.key) {
                                     case "period":
@@ -790,19 +795,32 @@ export default function DebtReport() {
                                 const isZeroish =
                                   pay && (v === fmtMoney(0) || v === "0" || v === "0.00");
                                 const isEmptyCell = !pay;
+                                const textClass = isCloseCell
+                                  ? "text-rose-700"
+                                  : isEmptyCell || isZeroish
+                                    ? "text-gray-400 italic"
+                                    : "";
+                                const closeBg = isCloseCell
+                                  ? "#fff1f2" // rose-50
+                                  : undefined;
+                                // Left-accent border only on the first
+                                // column of the group so the rose block
+                                // reads as a single "chunk" per row.
+                                const closeBorder =
+                                  isCloseCell && gcIdx === 0
+                                    ? "4px solid #fb7185" // rose-400
+                                    : undefined;
                                 return (
                                   <div
                                     key={`c-${vr.index}-${i}-${gc.key}-${li}`}
-                                    className={`px-2 truncate py-2 ${
-                                      isEmptyCell || isZeroish
-                                        ? "text-gray-400 italic"
-                                        : ""
-                                    }`}
+                                    className={`px-2 truncate py-2 ${textClass}`}
                                     style={{
                                       height:
                                         li === 0 ? ROW_HEIGHT : SUB_ROW_HEIGHT,
                                       lineHeight:
                                         li === 0 ? `${ROW_HEIGHT - 16}px` : `${SUB_ROW_HEIGHT - 12}px`,
+                                      background: closeBg,
+                                      borderLeft: closeBorder,
                                     }}
                                     title={
                                       pay?.remark ?? pay?.receiptNo ?? undefined
