@@ -261,4 +261,4 @@ Task list:
 - [x] Frontend DebtReport.tsx: label `N-M` (period-splitIndex+1), ลบ `text-amber-700 italic` จาก sub-rows, แสดง `0` grey-italic เมื่อ pay ไม่มีค่า/เป็น 0, discount แสดงค่าเสมอ
 - [x] Regression tests: 6 cases ใน `server/debt.collected-shape.test.ts` — pin มณีรัตน์ (no isCloseRow on partial 1000), TXRTC → isCloseRow=true, splitIndex progression, bad-debt routing
 - [x] Full test suite: 54/55 passed (1 skipped = Fastfone365 creds)
-- [ ] Commit + push + save checkpoint
+- [x] Commit + push + save checkpoint
