@@ -295,6 +295,27 @@ async function syncContracts(
     if (buffer.length) {
       rowCount += await upsertContracts(buffer);
     }
+
+    // --- IMEI / Serial backfill ---------------------------------------------
+    // The list endpoint does not return IMEI/serial; those only appear in the
+    // detail endpoint under `contract.product`. We therefore collect the set
+    // of contract IDs we just upserted and call `contract?action=detail&id=X`
+    // with bounded concurrency to merge the two extra columns.
+    try {
+      const enriched = await enrichContractsWithDeviceIds(
+        client,
+        section,
+      );
+      rowCount += enriched;
+    } catch (err: any) {
+      // Backfill failure must NOT abort the whole contracts sync; we already
+      // have the list-level columns. Log and continue.
+      console.warn(
+        `[sync] ${section} imei/serial backfill skipped:`,
+        err?.message ?? err,
+      );
+    }
+
     await finishSyncLog({ id: log.id, status: "success", rowCount });
     return rowCount;
   } catch (err: any) {
@@ -393,6 +414,94 @@ async function syncPayments(
     });
     throw err;
   }
+}
+
+/**
+ * Fetch `contract?action=detail&id=X` for every Boonphone/Fastfone365 contract
+ * that still has a null/empty `imei` in our DB and upsert just the imei +
+ * serial columns. Uses a small worker pool to respect partner rate limits.
+ *
+ * Kept deliberately simple: we only request detail for rows missing the
+ * device identifiers, so a second full-sync after this one is a no-op and
+ * all subsequent syncs only touch newly added contracts.
+ */
+async function enrichContractsWithDeviceIds(
+  client: PartnerClient,
+  section: SectionKey,
+): Promise<number> {
+  const { getDb } = await import("../db");
+  const { contracts } = await import("../../drizzle/schema");
+  const { and, eq, or, isNull, sql } = await import("drizzle-orm");
+  const db = await getDb();
+  if (!db) return 0;
+
+  const targets = await db
+    .select({ externalId: contracts.externalId })
+    .from(contracts)
+    .where(
+      and(
+        eq(contracts.section, section),
+        or(isNull(contracts.imei), eq(contracts.imei, "")),
+      ),
+    );
+  if (targets.length === 0) return 0;
+
+  const CONCURRENCY = 5;
+  const FLUSH_EVERY = 200;
+  const updates: Array<{ section: SectionKey; externalId: string; imei: string | null; serialNo: string | null }> = [];
+  let flushed = 0;
+
+  async function flush() {
+    if (updates.length === 0) return;
+    // Use raw SQL UPDATE ... WHERE: we only want to patch 2 columns, not
+    // re-run the full 40-column upsert path.
+    const batch = updates.splice(0, updates.length);
+    for (const row of batch) {
+      await db!
+        .update(contracts)
+        .set({
+          imei: row.imei,
+          serialNo: row.serialNo,
+          syncedAt: sql`CURRENT_TIMESTAMP`,
+        })
+        .where(
+          and(
+            eq(contracts.section, row.section),
+            eq(contracts.externalId, row.externalId),
+          ),
+        );
+    }
+    flushed += batch.length;
+  }
+
+  let idx = 0;
+  async function worker() {
+    while (idx < targets.length) {
+      const my = idx++;
+      const extId = targets[my].externalId;
+      try {
+        const data: any = await client.get("contract", {
+          action: "detail",
+          id: extId,
+        });
+        const product = data?.contract?.product ?? {};
+        const imei = product.imei ? String(product.imei) : null;
+        const serial = product.serial_no ? String(product.serial_no) : null;
+        // Skip if the API has no data either — avoids a pointless UPDATE.
+        if (imei || serial) {
+          updates.push({ section, externalId: extId, imei, serialNo: serial });
+        }
+        if (updates.length >= FLUSH_EVERY) await flush();
+      } catch {
+        // swallow per-row errors; continue with next
+      }
+    }
+  }
+  await Promise.all(
+    Array.from({ length: CONCURRENCY }, () => worker()),
+  );
+  await flush();
+  return flushed;
 }
 
 // Re-export mapper for tests
