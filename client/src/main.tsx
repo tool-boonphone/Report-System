@@ -29,10 +29,23 @@ queryClient.getQueryCache().subscribe(event => {
   }
 });
 
+/**
+ * Errors that are part of normal UX (invalid password, etc.) should NOT be
+ * logged as console errors — the mutating page already surfaces them inline.
+ * Everything else still hits console.error so we can investigate real bugs.
+ */
+const EXPECTED_MUTATION_ERRORS = new Set<string>([
+  "ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง",
+  "รหัสผ่านปัจจุบันไม่ถูกต้อง",
+]);
+
 queryClient.getMutationCache().subscribe(event => {
   if (event.type === "updated" && event.action.type === "error") {
     const error = event.mutation.state.error;
     redirectToLoginIfUnauthorized(error);
+    if (error instanceof TRPCClientError && EXPECTED_MUTATION_ERRORS.has(error.message)) {
+      return;
+    }
     console.error("[API Mutation Error]", error);
   }
 });

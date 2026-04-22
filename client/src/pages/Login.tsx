@@ -2,18 +2,26 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { trpc } from "@/lib/trpc";
-import { Eye, EyeOff, Loader2, LogIn } from "lucide-react";
-import { FormEvent, useState, useEffect } from "react";
+import { AlertCircle, Eye, EyeOff, Loader2, LogIn } from "lucide-react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
 import { useAppAuth } from "@/hooks/useAppAuth";
 
+/**
+ * Login page
+ * - Inline error banner แทน toast เพื่อให้ผู้ใช้เห็นบริบทชัดเจนและไม่รบกวนหน้าอื่น
+ * - เคลียร์ password + focus กลับเมื่อ login ไม่สำเร็จ เพื่อให้กดลองใหม่สะดวก
+ * - Toast success เฉพาะตอน login สำเร็จ
+ */
 export default function Login() {
   const [, navigate] = useLocation();
   const { isAuthenticated, isLoading, refresh } = useAppAuth();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPwd, setShowPwd] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
 
   const loginMutation = trpc.auth.login.useMutation();
 
@@ -25,13 +33,18 @@ export default function Login() {
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
+    setErrorMsg(null);
     try {
       await loginMutation.mutateAsync({ username: username.trim(), password });
       toast.success("เข้าสู่ระบบสำเร็จ");
       await refresh();
       navigate("/select-section", { replace: true });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "เข้าสู่ระบบไม่สำเร็จ");
+      const msg = err instanceof Error ? err.message : "เข้าสู่ระบบไม่สำเร็จ";
+      setErrorMsg(msg);
+      setPassword("");
+      // Delay focus a tick so React commits the state change first
+      setTimeout(() => passwordRef.current?.focus(), 0);
     }
   }
 
@@ -49,7 +62,7 @@ export default function Login() {
             </p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4" noValidate>
             <div className="space-y-1.5">
               <Label htmlFor="username" className="text-sm text-gray-700">
                 ชื่อผู้ใช้งาน
@@ -58,7 +71,10 @@ export default function Login() {
                 id="username"
                 autoComplete="username"
                 value={username}
-                onChange={(e) => setUsername(e.target.value)}
+                onChange={(e) => {
+                  setUsername(e.target.value);
+                  if (errorMsg) setErrorMsg(null);
+                }}
                 required
                 autoFocus
                 placeholder="เช่น Sadmin"
@@ -71,10 +87,14 @@ export default function Login() {
               <div className="relative">
                 <Input
                   id="password"
+                  ref={passwordRef}
                   type={showPwd ? "text" : "password"}
                   autoComplete="current-password"
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    if (errorMsg) setErrorMsg(null);
+                  }}
                   required
                   className="pr-10"
                 />
@@ -88,6 +108,16 @@ export default function Login() {
                 </button>
               </div>
             </div>
+
+            {errorMsg && (
+              <div
+                role="alert"
+                className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+              >
+                <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+                <span>{errorMsg}</span>
+              </div>
+            )}
 
             <Button
               type="submit"
