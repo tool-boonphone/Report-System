@@ -407,6 +407,7 @@ export async function listDebtTarget(params: { section: SectionKey }) {
   const rawCloseData = await db.execute(sql`
     SELECT contract_external_id,
            JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.receipt_no')) AS receipt_no,
+           CAST(JSON_EXTRACT(raw_json, '$.overpaid_amount') AS DECIMAL(18,2)) AS overpaid_amount,
            paid_at
       FROM ${paymentTransactions}
      WHERE ${paymentTransactions.section} = ${params.section}
@@ -415,8 +416,11 @@ export async function listDebtTarget(params: { section: SectionKey }) {
   const allPayRows: any[] = (rawCloseData as any)[0] ?? rawCloseData;
 
   // Pass 1: group by contract, split into (normalPaidPeriods, closeContractDates).
+  // Also track overpaid_amount per period to derive overpaidApplied for the NEXT period.
   const normalPeriodsByContract = new Map<string, Set<number>>();
   const closeDatesByContract = new Map<string, Date[]>();
+  const overpaidByContractPeriod = new Map<string, Map<number, number>>();
+
   for (const pr of allPayRows) {
     const key = String(pr.contract_external_id ?? "");
     if (!key) continue;
@@ -437,6 +441,17 @@ export async function listDebtTarget(params: { section: SectionKey }) {
       const set = normalPeriodsByContract.get(key) ?? new Set<number>();
       set.add(period);
       normalPeriodsByContract.set(key, set);
+
+      // Track overpaid amount for this period
+      const overpaid = Number(pr.overpaid_amount ?? 0);
+      if (overpaid > 0) {
+        let periodMap = overpaidByContractPeriod.get(key);
+        if (!periodMap) {
+          periodMap = new Map<number, number>();
+          overpaidByContractPeriod.set(key, periodMap);
+        }
+        periodMap.set(period, (periodMap.get(period) ?? 0) + overpaid);
+      }
     }
   }
 
@@ -586,17 +601,17 @@ export async function listDebtTarget(params: { section: SectionKey }) {
           }
         }
 
-        // Delta vs baseline — only for periods whose amount got reduced
-        // by an overpaid carry from a PREVIOUS period (not when paid-in-full
-        // restored to baseline, which is a neutral operation).
-        const overpaidApplied =
-          !isClosed &&
-          !paidInFullButZeroedByApi &&
-          baselineAmount != null &&
-          amount < baselineAmount - 0.01 &&
-          amount > 0.009
-            ? Math.round((baselineAmount - amount) * 100) / 100
-            : 0;
+        // overpaidApplied: The amount carried over from the PREVIOUS period's overpayment.
+        // We look up the sum of `overpaid_amount` from payments that closed period (P-1).
+        // This avoids false positives where `amount < baseline` due to other reasons
+        // (like API-side discounts or penalty adjustments).
+        let overpaidApplied = 0;
+        if (!isClosed && !paidInFullButZeroedByApi && periodNo > 1) {
+          const periodMap = overpaidByContractPeriod.get(extId);
+          if (periodMap) {
+            overpaidApplied = periodMap.get(periodNo - 1) ?? 0;
+          }
+        }
 
         return {
           period: r.period ?? null,

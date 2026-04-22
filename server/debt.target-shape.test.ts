@@ -196,7 +196,11 @@ describe("listDebtTarget — overpaid carry surfaces correctly", () => {
         // Period 2 should have amount < baseline (API carry).
         expect(inst2.baselineAmount).toBeGreaterThan(0);
         expect(inst2.amount).toBeLessThan(inst2.baselineAmount);
-        // overpaidApplied must match the delta (within 1 baht tolerance).
+        // overpaidApplied must match the actual overpaid_amount carried
+        // from the previous period's payment (anchors: 153 for 1496, 200 for 1517).
+        // For these particular contracts, the previous-period overpaid happens
+        // to equal (baseline - amount) of period 2, but we no longer derive it
+        // that way — we read it from the payment row.
         expect(inst2.overpaidApplied).toBeGreaterThan(0);
         expect(
           Math.abs(inst2.overpaidApplied - (inst2.baselineAmount - inst2.amount)),
@@ -205,6 +209,26 @@ describe("listDebtTarget — overpaid carry surfaces correctly", () => {
       }
       // If none of the anchors exist in DB yet, this assertion is a no-op.
       if (checked === 0) return;
+    },
+    20_000,
+  );
+
+  it(
+    "does not flag false-positive overpaid when amount < baseline for other reasons",
+    async () => {
+      // Anchor: contract 2187 (สุทธิดา จงใจ).
+      // Period 1 has baseline=6985, but API amount=6235.
+      // The customer only paid 1000, so there is NO overpaid carry.
+      // Previously, the heuristic `baseline - amount` incorrectly flagged
+      // 750 as overpaidApplied. It must now be 0.
+      const { rows } = await listDebtTarget({ section: "Boonphone" });
+      const c = rows.find((r) => r.contractExternalId === "2187");
+      if (!c) return;
+      const inst1 = (c.installments ?? []).find((x: any) => x.period === 1);
+      if (!inst1) return;
+      expect(inst1.baselineAmount).toBe(6985);
+      expect(inst1.amount).toBe(6235);
+      expect(inst1.overpaidApplied).toBe(0); // NO false positive
     },
     20_000,
   );

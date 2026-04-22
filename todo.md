@@ -177,3 +177,9 @@ Task list:
 - [x] Add regression test ใน `server/debt.target-shape.test.ts` — pin principal≈1907, interest≈2479, fee=100 สำหรับ CT0426-RBR002-4092-01 period 1 + invariant `principal+interest+fee+penalty ≈ amount` กับทุกงวด non-closed
 - [x] Verify: รัน full test suite (37 passed / 1 skipped) → ทุก contract ที่มีข้อมูลผ่าน invariant
 - [x] Commit + push + save checkpoint
+
+### Phase 9i (DONE) — Fix incorrect overpaid annotation on partial payments
+- [x] Investigate contract "สุทธิดา จงใจ" (paid 1000, installment 6985) showing "-หักชำระเกิน 750" on period 1 — พบว่า API ส่ง amount=6235 (ลดลง 750 จาก baseline 6985) แต่ไม่ได้เกิดจาก overpaid carry (overpaid_amount=0)
+- [x] Fix `overpaidApplied` logic in `listDebtTarget` — เปลี่ยนจากใช้ `baseline - amount` มาเป็นการ sum `overpaid_amount` จาก payment ของงวดก่อนหน้า (P-1)
+- [x] Add regression test for partial payment case — เพิ่มเคส false-positive ของ สุทธิดา จงใจ ใน `server/debt.target-shape.test.ts`
+- [x] Commit + push + save checkpoint
