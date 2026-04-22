@@ -250,6 +250,41 @@ type ContractRowLite = {
   contractStatus: string | null;
 };
 
+/**
+ * Pure helper: derive the bad-debt date for a contract.
+ *
+ * Business rule (user, 2026-04-23):
+ *   "วันที่รับยอดสุดท้ายตอนที่ยังเป็นระงับสัญญาอยู่นั่นแหละคือวันที่ถูกบันทึกว่าเป็นหนี้เสีย"
+ *
+ * Inputs:
+ *   payments      — payments of the contract; each carries `paid_at`
+ *   suspendedAt   — ISO date/datetime the contract became suspended
+ *                   (first suspended installment's due_date)
+ *
+ * Rule:
+ *   Pick the LATEST `paid_at` whose value is strictly greater than
+ *   `suspendedAt`. If no payment qualifies, fall back to `suspendedAt`.
+ *
+ * Exported so it can be unit-tested without touching the DB.
+ */
+export function deriveBadDebtDate(
+  payments: Array<{ paid_at: string | null }>,
+  suspendedAt: string | null,
+): string | null {
+  if (!suspendedAt) return null;
+  const threshold = suspendedAt;
+  let latest: string | null = null;
+  for (const p of payments) {
+    const t = p.paid_at ?? null;
+    if (!t) continue;
+    // Compare as ISO strings. MySQL DATETIME and DATE strings are ISO-sortable.
+    if (t > threshold && (latest == null || t > latest)) {
+      latest = t;
+    }
+  }
+  return latest ?? suspendedAt;
+}
+
 type InstRawRow = {
   contract_external_id: string;
   period: number | null;
@@ -424,10 +459,17 @@ export async function listDebtTarget(params: { section: SectionKey }) {
   const normalPeriodsByContract = new Map<string, Set<number>>();
   const closeDatesByContract = new Map<string, Date[]>();
   const overpaidByContractPeriod = new Map<string, Map<number, number>>();
+  // For bad-debt date derivation: every payment's paid_at per contract.
+  const paidAtsByContract = new Map<string, string[]>();
 
   for (const pr of allPayRows) {
     const key = String(pr.contract_external_id ?? "");
     if (!key) continue;
+    if (pr.paid_at) {
+      const arr = paidAtsByContract.get(key) ?? [];
+      arr.push(String(pr.paid_at));
+      paidAtsByContract.set(key, arr);
+    }
     const receipt = String(pr.receipt_no ?? "");
     if (receipt.startsWith("TXRTC")) {
       const dt = pr.paid_at ? new Date(pr.paid_at) : null;
@@ -538,6 +580,17 @@ export async function listDebtTarget(params: { section: SectionKey }) {
       if (firstSuspended?.period) {
         suspendedFromPeriod = Number(firstSuspended.period);
         suspendedAt = firstSuspended.due_date ?? null;
+      }
+      // For bad-debt contracts, the effective “status-change date” is
+      // the LAST payment that arrived while the contract was still in
+      // ระงับสัญญา (i.e. after `suspendedAt`). Falls back to
+      // `suspendedAt` when no such payment exists.
+      if (isContractBadDebt && suspendedAt) {
+        const paidAts = paidAtsByContract.get(extId) ?? [];
+        suspendedAt = deriveBadDebtDate(
+          paidAts.map((t) => ({ paid_at: t })),
+          suspendedAt,
+        );
       }
     }
 

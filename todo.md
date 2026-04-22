@@ -197,7 +197,7 @@ Task list:
 - [x] Backend `listDebtTarget`: เพิ่ม `isSuspended`, `suspendLabel`, `suspendedAt` ต่อ cell; เซลล์ที่ suspended zero money fields ทั้งหมด; สัญญาสถานะ หนี้เสีย → label เป็น "หนี้เสีย" แทน
 - [x] Frontend `DebtReport.tsx`: render label + suspendedAt ในคอลัมน์ amount/วันที่ (reuse closed-cell styling: bg gray-100 + italic gray-400)
 - [x] Regression tests: เพิ่ม 3 เคส (suspended shape + non-suspended sanity + หนี้เสีย forward-compat); แก้ baseline-restoration invariant ให้ยกเว้น isSuspended; suite 41/41 ผ่าน
-- [ ] Commit + push + save checkpoint
+- [x] Commit + push + save checkpoint (commit 48cf0a0 → GitHub `tool-boonphone/Report-System`, checkpoint 48cf0a08)
 
 ### Phase 9k (NEW, TODO) — บันทึกยอดจำหน่ายเครื่องของสัญญาหนี้เสีย (feature ใหม่ นอกหน้าเป้าเก็บหนี้)
 
@@ -211,3 +211,15 @@ Task list:
 - [ ] ออกแบบหน้า/แท็บใหม่: "สรุปกำไร/ขาดทุนจากหนี้เสีย" (ไม่ใช่ในหน้าเป้าเก็บหนี้)
 - [ ] สูตรคำนวณกำไร/ขาดทุน: (ยอดที่เก็บได้ทั้งหมด รวมยอดขายเครื่อง) − (ต้นทุน/ยอดจัดไฟแนนซ์ที่เหลือ) = กำไร/ขาดทุน
 - [ ] Export Excel และ UI แสดงยอดขายเครื่องเป็นคอลัมน์แยก
+
+### Phase 9j-bis (DONE) — วันที่หนี้เสีย = วันที่ payment สุดท้ายระหว่างยังระงับ
+
+Business rule เพิ่มเติมจาก user (2026-04-23):
+- "วันที่รับยอดสุดท้ายตอนที่ยังเป็นระงับสัญญาอยู่นั่นแหละคือวันที่ถูกบันทึกว่าเป็นหนี้เสีย"
+- = วันที่ payment ล่าสุดที่เกิดหลัง due_date ของงวดแรกที่ถูกมาร์ค 'ระงับสัญญา' จนถึงตอนที่สถานะเปลี่ยนเป็น 'หนี้เสีย'
+
+Task list:
+- [x] Backend: เพิ่ม pure helper `deriveBadDebtDate(payments, suspendedAt)` (ใช้ strict > เปรียบเทียบ ISO strings; fallback เป็น suspendedAt)
+- [x] Backend `listDebtTarget`: เก็บ `paidAtsByContract` ตอนวนลูป payments (zero extra query), แล้วเรียก helper สำหรับสัญญา `หนี้เสีย` ทับ suspendedAt → ใช้ต่อทุก cell
+- [x] Fixture-backed unit test — 7 เคส ใน `server/debt.badDebtDate.test.ts` (null suspendedAt, no payments, all-before, latest-after, mixed null, strict-equality, ISO datetime sort)
+- [x] รัน suite 48/48 ผ่าน (1 skipped); commit + push + checkpoint
