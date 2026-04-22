@@ -94,6 +94,8 @@ type InstallmentCell = {
   interest: number;
   fee: number;
   penalty: number;
+  /** ค่าปลดล็อก (unlock fee) for this period. */
+  unlockFee?: number;
   amount: number;
   paid: number;
   /** Baseline per-contract installment amount (from contracts.installment_amount). */
@@ -108,6 +110,8 @@ type InstallmentCell = {
   suspendLabel?: string | null;
   /** YYYY-MM-DD that the contract changed to suspended/bad-debt. */
   suspendedAt?: string | null;
+  /** True when this period's displayed amounts include carry-forward from unpaid prior periods. */
+  isArrears?: boolean;
 };
 
 type PaymentCell = {
@@ -684,6 +688,7 @@ export default function DebtReport() {
                                 }
                               }
                             }
+                            const isArrears = !dimmed && !!inst?.isArrears;
                             const baseStyle: Record<string, string | number> = {
                               width: gc.width,
                               textAlign:
@@ -695,6 +700,12 @@ export default function DebtReport() {
                               baseStyle.background = "#f3f4f6"; // gray-100
                               baseStyle.color = "#9ca3af"; // gray-400
                               baseStyle.fontStyle = "italic";
+                            } else if (isArrears) {
+                              // Arrears carry: amber-100 bg + amber-800 bold text
+                              // to signal "this amount includes unpaid from prior periods"
+                              baseStyle.background = "#fef3c7"; // amber-100
+                              baseStyle.color = "#92400e"; // amber-800
+                              baseStyle.fontWeight = "700";
                             }
                             const tooltip = suspended
                               ? suspendLabel
@@ -828,20 +839,42 @@ export default function DebtReport() {
                                   cellBg = undefined; // parent div already grey
                                   cellBorderLeft = undefined;
                                 } else if (isCloseCell) {
-                                  textClass = "text-rose-700";
+                                  // TXRTC close row: rose-50 bg + rose-700 text
+                                  // 0.00 values use rose-300 italic (faded)
+                                  const isZeroInClose = isZeroish;
+                                  textClass = isZeroInClose
+                                    ? "text-rose-300 italic"
+                                    : "text-rose-700";
                                   cellBg = "#fff1f2"; // rose-50
-                                  // Left-accent border only on the first
-                                  // column of the group so the rose block
-                                  // reads as a single "chunk" per row.
                                   cellBorderLeft =
                                     gcIdx === 0
                                       ? "4px solid #fb7185" // rose-400
                                       : undefined;
                                 } else {
-                                  textClass =
-                                    isEmptyCell || isZeroish
-                                      ? "text-gray-400 italic"
-                                      : "";
+                                  // Per-field styling rules:
+                                  //   penalty  → red text
+                                  //   overpaid → green bold
+                                  //   badDebt  → red bold
+                                  //   total    → bold
+                                  //   zero/empty → grey italic
+                                  if (pay && !isZeroish) {
+                                    if (gc.key === "penalty" && (pay.penalty ?? 0) > 0) {
+                                      textClass = "text-red-600";
+                                    } else if (gc.key === "overpaid" && (pay.overpaid ?? 0) > 0) {
+                                      textClass = "text-emerald-600 font-bold";
+                                    } else if (gc.key === "badDebt" && (pay.badDebt ?? 0) > 0) {
+                                      textClass = "text-red-700 font-bold";
+                                    } else if (gc.key === "total") {
+                                      textClass = "font-bold";
+                                    } else {
+                                      textClass = "";
+                                    }
+                                  } else {
+                                    textClass =
+                                      isEmptyCell || isZeroish
+                                        ? "text-gray-400 italic"
+                                        : "";
+                                  }
                                   cellBg = undefined;
                                   cellBorderLeft = undefined;
                                 }

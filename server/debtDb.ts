@@ -296,6 +296,7 @@ type InstRawRow = {
   interest_due: number | null;
   fee_due: number | null;
   penalty_due: number | null;
+  unlock_fee_due: number | null;
   /** Per-period status code extracted from raw_json.installment_status_code. */
   installment_status_code: string | null;
 };
@@ -503,7 +504,8 @@ export async function listDebtTarget(params: { section: SectionKey }) {
            CAST(JSON_EXTRACT(raw_json, '$.principal_due') AS DECIMAL(18,2)) AS principal_due,
            CAST(JSON_EXTRACT(raw_json, '$.interest_due')  AS DECIMAL(18,2)) AS interest_due,
            CAST(JSON_EXTRACT(raw_json, '$.fee_due')       AS DECIMAL(18,2)) AS fee_due,
-           CAST(JSON_EXTRACT(raw_json, '$.penalty_due')   AS DECIMAL(18,2)) AS penalty_due,
+           CAST(JSON_EXTRACT(raw_json, '$.penalty_due')    AS DECIMAL(18,2)) AS penalty_due,
+           CAST(JSON_EXTRACT(raw_json, '$.unlock_fee_due')  AS DECIMAL(18,2)) AS unlock_fee_due,
            JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.installment_status_code')) AS installment_status_code
       FROM ${installments}
      WHERE ${installments.section} = ${params.section}
@@ -526,6 +528,7 @@ export async function listDebtTarget(params: { section: SectionKey }) {
       interest_due: r.interest_due != null ? Number(r.interest_due) : null,
       fee_due: r.fee_due != null ? Number(r.fee_due) : null,
       penalty_due: r.penalty_due != null ? Number(r.penalty_due) : null,
+      unlock_fee_due: r.unlock_fee_due != null ? Number(r.unlock_fee_due) : null,
       installment_status_code: r.installment_status_code ?? null,
     });
   }
@@ -730,6 +733,7 @@ export async function listDebtTarget(params: { section: SectionKey }) {
         const rawInterest = Number(r.interest_due ?? 0);
         const rawFee = Number(r.fee_due ?? 0);
         const rawPenalty = Number(r.penalty_due ?? 0);
+        const rawUnlockFee = Number(r.unlock_fee_due ?? 0);
         const paid = Number(r.paid_amount ?? 0);
         const periodNo = r.period != null ? Number(r.period) : 0;
 
@@ -748,6 +752,7 @@ export async function listDebtTarget(params: { section: SectionKey }) {
         let interest = rawInterest;
         let fee = rawFee;
         let penalty = rawPenalty;
+        let unlockFee = rawUnlockFee;
 
         const paidInFullButZeroedByApi =
           !isClosed &&
@@ -770,6 +775,7 @@ export async function listDebtTarget(params: { section: SectionKey }) {
           interest = 0;
           fee = 0;
           penalty = 0;
+          unlockFee = 0;
         } else {
           // Boonphone displays principal+interest scaled so that
           // principal + interest + fee + penalty = total amount.
@@ -816,6 +822,7 @@ export async function listDebtTarget(params: { section: SectionKey }) {
           interest,
           fee,
           penalty,
+          unlockFee,
           amount,
           paid,
           baselineAmount: baselineAmount ?? 0,
@@ -828,9 +835,109 @@ export async function listDebtTarget(params: { section: SectionKey }) {
           isSuspended,
           suspendLabel: isSuspended ? suspendLabel : null,
           suspendedAt: isSuspended ? suspendedAt : null,
+          // isArrears: computed below after the map, via a second pass
+          isArrears: false, // placeholder — overwritten in arrears pass
         };
       })
       .sort((a, b) => (a.period ?? 0) - (b.period ?? 0));
+
+    // --- Cumulative arrears pass ---
+    // Walk periods in order. For each period, accumulate the unpaid balance
+    // from previous periods (due - paid per sub-field). When a TXRTC close
+    // event happened before this period, reset the carry to zero.
+    // A period is flagged `isArrears = true` when any carry-in > 0.
+    //
+    // Business rules (2026-04-23):
+    //   1. Carry = (principal_due - principal_paid) + (interest_due - interest_paid)
+    //              + (fee_due - fee_paid) + (penalty_due - penalty_paid)
+    //              + (unlock_fee_due - unlock_fee_paid)  from all prior periods.
+    //   2. TXRTC close-out resets carry to 0 (customer settled everything).
+    //   3. Closed/suspended periods are skipped (amount already 0).
+    //   4. The carry is added into each sub-field of the CURRENT period so
+    //      the operator sees the real cumulative amount to collect.
+    {
+      // Build per-period paid breakdown from the payments query we already have.
+      // We need principal_paid / interest_paid / fee_paid / penalty_paid /
+      // unlock_fee_paid per period for this contract.
+      // These come from the payment_transactions query (payByContract) which is
+      // only available in listDebtCollected. Here in listDebtTarget we only have
+      // installments.paid_amount (total). So we use the simpler approach:
+      //   carry_total = sum(amount - paid_amount) for periods 1..P-1 that are unpaid.
+      // We then distribute the carry proportionally across sub-fields using the
+      // current period's own sub-field ratios as weights.
+      let carryPrincipal = 0;
+      let carryInterest = 0;
+      let carryFee = 0;
+      let carryPenalty = 0;
+      let carryUnlockFee = 0;
+
+      for (const inst of baseInstallments) {
+        const p = inst.period ?? 0;
+        // Reset carry if this period is at or after a TXRTC close-out.
+        // maxClosedPeriod = last normal period before the close-out.
+        // Periods <= maxClosedPeriod are normal; the close-out itself
+        // settles everything from maxClosedPeriod+1 onward.
+        if (maxClosedPeriod > 0 && p === maxClosedPeriod + 1) {
+          carryPrincipal = 0;
+          carryInterest = 0;
+          carryFee = 0;
+          carryPenalty = 0;
+          carryUnlockFee = 0;
+        }
+
+        const hasCarry =
+          carryPrincipal > 0.005 ||
+          carryInterest > 0.005 ||
+          carryFee > 0.005 ||
+          carryPenalty > 0.005 ||
+          carryUnlockFee > 0.005;
+
+        if (hasCarry && !inst.isClosed && !inst.isSuspended) {
+          inst.principal += carryPrincipal;
+          inst.interest += carryInterest;
+          inst.fee += carryFee;
+          inst.penalty += carryPenalty;
+          inst.unlockFee += carryUnlockFee;
+          inst.amount += carryPrincipal + carryInterest + carryFee + carryPenalty + carryUnlockFee;
+          inst.isArrears = true;
+        }
+
+        // Accumulate unpaid balance from this period into carry for next.
+        // Use the raw sub-fields from the installment row (before carry was added)
+        // so we don't double-count.
+        if (!inst.isClosed && !inst.isSuspended) {
+          // paid_amount is the total paid for this period from the API.
+          const paidTotal = inst.paid;
+          // Distribute paid proportionally across sub-fields.
+          const dueTotal =
+            (inst.principal - carryPrincipal) +
+            (inst.interest - carryInterest) +
+            (inst.fee - carryFee) +
+            (inst.penalty - carryPenalty) +
+            (inst.unlockFee - carryUnlockFee);
+          if (dueTotal > 0.005) {
+            const ratio = Math.max(0, Math.min(1, paidTotal / dueTotal));
+            const basePrincipal = inst.principal - carryPrincipal;
+            const baseInterest = inst.interest - carryInterest;
+            const baseFee = inst.fee - carryFee;
+            const basePenalty = inst.penalty - carryPenalty;
+            const baseUnlockFee = inst.unlockFee - carryUnlockFee;
+            const unpaidPrincipal = Math.max(0, basePrincipal * (1 - ratio));
+            const unpaidInterest = Math.max(0, baseInterest * (1 - ratio));
+            const unpaidFee = Math.max(0, baseFee * (1 - ratio));
+            const unpaidPenalty = Math.max(0, basePenalty * (1 - ratio));
+            const unpaidUnlockFee = Math.max(0, baseUnlockFee * (1 - ratio));
+            carryPrincipal += unpaidPrincipal;
+            carryInterest += unpaidInterest;
+            carryFee += unpaidFee;
+            carryPenalty += unpaidPenalty;
+            carryUnlockFee += unpaidUnlockFee;
+          } else {
+            // dueTotal is 0 (e.g. API zeroed the period) - no new carry.
+          }
+        }
+      }
+    }
 
     return {
       contractExternalId: extId,

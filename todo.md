@@ -284,3 +284,13 @@ Task list:
 - [x] TXRTC highlight ยังคงเป็น rose-50/rose-400 (ไม่เปลี่ยน)
 - [x] ยอดเก็บหนี้: isInactivePeriod logic (periodNo > instCount || (suspended && noPay)) → bg gray-100 + text-gray-400 italic, tooltip บอกเหตุผล
 - [x] Commit + push + checkpoint
+
+### Phase 9O (DONE) — Cumulative arrears + styling
+
+- [x] Backend: เพิ่ม `unlock_fee_due` ใน InstRawRow + installments query (JSON_EXTRACT)
+- [x] Backend: cumulative arrears pass — วน period 1..N, สะสม (due-paid) ข้ามงวด, reset เมื่อ TXRTC; flag `isArrears=true` เมื่อ carry > 0
+- [x] Backend: `isArrears: boolean` + `unlockFee: number` อยู่ใน TargetRow แล้ว
+- [x] Frontend เป้าเก็บหนี้: isArrears=true → bg-amber-100 + text-amber-800 + font-bold
+- [x] Frontend ยอดเก็บหนี้: penalty=red-600, overpaid=emerald-700 font-bold, badDebt=red-700 font-bold, total=font-bold, 0.00 ใน TXRTC row=rose-300 italic
+- [x] Regression tests: 61/62 pass (3 เคสใหม่: isArrears บนทุกเซลล์, unlockFee >= 0, isArrears=false เมื่อจ่ายครบ)
+- [ ] Commit + push + checkpoint

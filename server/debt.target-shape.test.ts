@@ -376,3 +376,56 @@ describe("listDebtTarget — ระงับสัญญา / หนี้เส
     20_000,
   );
 });
+
+  it(
+    "isArrears flag is present on every installment cell (Phase 9O)",
+    async () => {
+      const { rows } = await listDebtTarget({ section: "Boonphone" });
+      if (rows.length === 0) return;
+      const sample = rows.find((r) => (r.installments ?? []).length > 0);
+      if (!sample) return;
+      for (const cell of sample.installments) {
+        // isArrears must be a boolean (true when carry-in > 0, false otherwise)
+        expect(typeof cell.isArrears).toBe("boolean");
+      }
+    },
+    20_000,
+  );
+
+  it(
+    "unlockFee field is present on every installment cell (Phase 9O)",
+    async () => {
+      const { rows } = await listDebtTarget({ section: "Boonphone" });
+      if (rows.length === 0) return;
+      const sample = rows.find((r) => (r.installments ?? []).length > 0);
+      if (!sample) return;
+      for (const cell of sample.installments) {
+        // unlockFee must be a number (0 when no unlock fee applies)
+        expect(typeof cell.unlockFee).toBe("number");
+        expect(cell.unlockFee).toBeGreaterThanOrEqual(0);
+      }
+    },
+    20_000,
+  );
+
+  it(
+    "isArrears=false for all cells when every prior period is fully paid",
+    async () => {
+      // Find a contract where paid_amount === amount for all periods.
+      // Such a contract should have isArrears=false on every cell.
+      const { rows } = await listDebtTarget({ section: "Boonphone" });
+      if (rows.length === 0) return;
+      const fullyPaid = rows.find((r) =>
+        r.installments.every(
+          (c) => c.isClosed || c.paid >= c.baselineAmount - 0.01,
+        ),
+      );
+      if (!fullyPaid) return; // no fully-paid contract in sample — skip
+      for (const cell of fullyPaid.installments) {
+        if (!cell.isClosed) {
+          expect(cell.isArrears).toBe(false);
+        }
+      }
+    },
+    20_000,
+  );
