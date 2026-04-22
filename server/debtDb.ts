@@ -384,6 +384,38 @@ export async function listDebtTarget(params: { section: SectionKey }) {
     });
   }
 
+  // --- Find the highest period number that the customer already CLOSED via
+  //     a lump-sum `close_installment_amount` payment. Any period AFTER this
+  //     number is guaranteed to be closed and should be rendered as
+  //     "ปิดค่างวดแล้ว" with zeroed amounts. The period that received the
+  //     close-out itself keeps the normal amount (per user feedback).
+  //
+  //     Boonphone's receipt_no encodes the period at the trailing "-N"
+  //     suffix, so we use that as the source of truth instead of relying
+  //     on `installments.amount` becoming zero (which doesn't happen for
+  //     future periods on closed contracts).
+  const closedByContract = new Map<string, number>();
+  const closeRowsRaw = await db.execute(sql`
+    SELECT contract_external_id,
+           JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.receipt_no')) AS receipt_no
+      FROM ${paymentTransactions}
+     WHERE ${paymentTransactions.section} = ${params.section}
+       AND CAST(JSON_EXTRACT(raw_json, '$.close_installment_amount') AS DECIMAL(18,2)) > 0
+  `);
+  const closeRows: any[] = (closeRowsRaw as any)[0] ?? closeRowsRaw;
+  for (const pr of closeRows) {
+    const key = String(pr.contract_external_id ?? "");
+    if (!key) continue;
+    // Period is the number after the final '-' in receipt_no, e.g.
+    // "TXRT0226-NBI001-0012-01-3" -> 3.
+    const m = /-(\d+)$/.exec(String(pr.receipt_no ?? ""));
+    if (!m) continue;
+    const period = Number(m[1]);
+    if (!Number.isFinite(period) || period <= 0) continue;
+    const prev = closedByContract.get(key) ?? 0;
+    if (period > prev) closedByContract.set(key, period);
+  }
+
   const today = new Date();
 
   // --- TRUST-API MODEL ---
@@ -417,29 +449,49 @@ export async function listDebtTarget(params: { section: SectionKey }) {
     const baselineAmount =
       c.installment_amount != null ? Number(c.installment_amount) : null;
 
+    // Highest period that the customer CLOSED via a lump-sum payment.
+    // Periods strictly greater than this are the ones to render as
+    // "ปิดค่างวดแล้ว" with zero amounts.
+    const maxClosedPeriod = closedByContract.get(extId) ?? 0;
+
     // Build installment schedule straight from the API fields.
     const baseInstallments = list
       .map((r) => {
-        const amount = Number(r.amount ?? 0);
-        const principal = Number(r.principal_due ?? 0);
-        const interest = Number(r.interest_due ?? 0);
-        const fee = Number(r.fee_due ?? 0);
-        const penalty = Number(r.penalty_due ?? 0);
+        const rawAmount = Number(r.amount ?? 0);
+        const rawPrincipal = Number(r.principal_due ?? 0);
+        const rawInterest = Number(r.interest_due ?? 0);
+        const rawFee = Number(r.fee_due ?? 0);
+        const rawPenalty = Number(r.penalty_due ?? 0);
         const paid = Number(r.paid_amount ?? 0);
+        const periodNo = r.period != null ? Number(r.period) : 0;
 
-        // Delta vs baseline (positive when this period was reduced).
+        // --- Closed-out rule (user-specified):
+        //
+        //   If the customer made a close-out payment for period K, then
+        //   periods K+1..N are considered closed — they should render as
+        //   "ปิดค่างวดแล้ว" with zero amounts so the collections team
+        //   never tries to collect them again. Periods <= K keep their
+        //   normal figures (the close-out period itself still shows a
+        //   real amount because the operator actually paid it).
+        const isClosed = maxClosedPeriod > 0 && periodNo > maxClosedPeriod;
+
+        // Zero out future closed periods, keep other periods intact.
+        const amount = isClosed ? 0 : rawAmount;
+        const principal = isClosed ? 0 : rawPrincipal;
+        const interest = isClosed ? 0 : rawInterest;
+        const fee = isClosed ? 0 : rawFee;
+        const penalty = isClosed ? 0 : rawPenalty;
+
+        // Delta vs baseline (positive when this period was reduced). We
+        // compute this against the non-closed amount — closed periods are
+        // rendered as "ปิดค่างวดแล้ว" so the delta is irrelevant.
         const overpaidApplied =
-          baselineAmount != null && amount < baselineAmount - 0.01
+          !isClosed &&
+          baselineAmount != null &&
+          amount < baselineAmount - 0.01 &&
+          amount > 0.009
             ? Math.round((baselineAmount - amount) * 100) / 100
             : 0;
-
-        // "ปิดค่างวดแล้ว": API reports amount = 0 for a period that would
-        // normally carry a non-zero baseline. We do NOT require `paid == 0`
-        // because Boonphone closes a period by zeroing its remaining due
-        // regardless of whether the period itself received a partial
-        // payment previously.
-        const isClosed =
-          baselineAmount != null && baselineAmount > 0 && amount <= 0.009;
 
         return {
           period: r.period ?? null,

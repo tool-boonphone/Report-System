@@ -77,7 +77,6 @@ export default function Login() {
                 }}
                 required
                 autoFocus
-                placeholder="เช่น Sadmin"
               />
             </div>
             <div className="space-y-1.5">

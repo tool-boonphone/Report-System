@@ -127,14 +127,13 @@
   - **Backend**: ไม่ต้องคำนวณยอดชำระเกิน/ปิดยอด/หนี้เสียเอง เพราะ API Boonphone คำนวณและส่งมาให้ตรงๆ ใน payment record แล้ว (เช่น `overpaid_amount`, `close_installment_amount`)
   - **Backend**: จับคู่ payment กับงวด (period) โดยใช้ `receipt_no` suffix (เช่น `-1`, `-2`)
   - **Frontend**: แก้ `DebtReport.tsx` ให้รองรับการชำระหลายครั้งต่องวด (sub-row "- แบ่งชำระ -") โดยคำนวณ `rowLineCount` เพื่อขยายความสูงของแถว (virtual scroll) ให้พอดีกับจำนวน payment ที่มากที่สุดในงวดใดงวดหนึ่งของสัญญานั้น
-  - **Export**: แก้ `exportExcel.ts` ให้รองรับ 12 คอลัมน์ใหม่ และแยกแถว Excel สำหรับ payment ที่แบ่งชำระ (แถวแรกมีข้อมูลสัญญา แถวถัดไปเขียน "- แบ่งชำระ -")
-- [ ] ปรับ `debt.listTarget` ให้หักยอด `overpaid_amount` ของงวดก่อนหน้าออกจากค่าดำเนินการ→ดอกเบี้ย→เงินต้นของงวดถัดไป
-- [ ] ปรับ `debt.listTarget` ให้เมื่อมี `close_installment_amount` แบบปิดยอดแล้ว งวดถัดไปแสดงเป้าเป็น 0
-- [ ] เพิ่ม unit tests สำหรับ allocation rule (overpaid/close) และ collected-tab multi-payment mapping
-- [ ] ลอจิก overpaid allocation ใน `debt.listTarget`: หัก overpaid งวด N ออกจากงวด N+1 ตามลำดับ ค่าดำเนินการ→ดอกเบี้ย→เงินต้น, แสดง "ยอดหนี้รวม (-หักชำระเกิน)"
-- [ ] ลอจิกปิดค่างวด: เมื่อมี `close_installment_amount` → งวดถัดไปแสดง `0.00 (ปิดค่างวดแล้ว)`
-- [ ] Logic หนี้เสีย: แสดงยอดขายซากที่งวดล่าสุด
-- [ ] ปรับสีและรูปแบบตารางให้ตรง reference (tabs น้ำเงิน/แดง, header งวดมีแบ็คกราวด์สี, badge สถานะ 10 สี, ตัวเลข overpaid/closed/bad-debt/หัก เน้นสีพิเศษ)
+  - **Export**: แก้ `exportExcel.ts` ให้รองรับ 12 คอลัมน์ใหม่ และแยกแถว Excel สำหรับ payment ที่แบ่งชำระ (แถวแรกมีข้อมูลสัญญา แถวถัดไปเขียน "- แบ่งชำระ -")- [x] (superseded by Phase 9e) ปรับ `debt.listTarget` ให้หักยอด overpaid งวดก่อนหน้า — พิสูจน์แล้วว่า API หักให้ใน `installments.amount` อยู่แล้ว (trust-API)
+- [x] (superseded by Phase 9e) ปรับ `debt.listTarget` เมื่อปิดยอด — ใช้ `amount = 0` จาก API + flag `isClosed`
+- [x] เพิ่ม unit tests สำหรับ allocation rule (overpaid/close) และ collected-tab multi-payment mapping (debt.target-shape, debt.export)
+- [x] (superseded) ลอจิก overpaid allocation ใน `debt.listTarget` — ใช้ annotation แทนการคำนวณซ้ำ
+- [x] (superseded) ลอจิกปิดค่างวด — flag `isClosed` + annotation "ปิดค่างวดแล้ว"
+- [ ] Logic หนี้เสีย: แสดงยอดขายซากที่งวดล่าสุด (แยกออกจาก Phase 9e — ยังไม่มีเคสหนี้เสียใน DB ปัจจุบัน — defer ไว้จนกว่ามีข้อมูล)
+- [x] ปรับสีและรูปแบบตาราง (tabs น้ำเงิน/แดง, header งวดมีแบ็คกราวน์ดสี, badge สถานะ 10 สี, annotation overpaid/closed เน้นสีเขียว/ฟ้า)
 
 ### Phase 9e — Overpaid allocation: verify source-of-truth before computing
 - [x] Query DB: หาสัญญาตัวอย่างที่มี `overpaid_amount > 0` แล้วเทียบ `installments.amount` ของงวดถัดไป vs งวดก่อนหน้า (และ vs `contracts.installment_amount`)
@@ -145,4 +144,12 @@
 - [x] อัปเดต UI: annotation "(-หักชำระเกิน: xxx)" เมื่อ amount < baseline, แสดง "0.00 / ปิดค่างวดแล้ว" เมื่อ amount=0 แต่ baseline>0
 - [x] ปรับสีและรูปแบบตารางให้ตรง reference boonphone.co.th/mm.html (tabs, group header, status badge)
 - [x] Unit tests ผ่าน (`server/debt.target-shape.test.ts`) + แก้ export naming bug (`perInstallment` → `installmentAmount`)
-- [ ] Commit + push + checkpoint
+- [x] Commit + push + checkpoint (commit `b2a4daf`, checkpoint `b2a4dafb`)
+
+### Phase 9f — UX polish (user feedback 2026-04-23)
+- [x] Login: removed placeholder text from username field
+- [x] DebtReport table: replaced `truncate` with `whitespace-nowrap`; widened contractNo to 195px and customerName to 210px
+- [x] Backend: redefined `isClosed` via `close_installment_amount > 0` + receipt_no suffix; marks only periods > maxClosedPeriod; zeroes principal/interest/fee/amount for closed periods
+- [x] UI amount cell: shows literal "ปิดค่างวดแล้ว" text; italic gray color; light-gray background on all 4 money cells of closed periods
+- [x] Added boundary-rule test in `server/debt.target-shape.test.ts` (closed cells form a contiguous suffix + all money fields zero)
+- [ ] Commit + push + save checkpoint

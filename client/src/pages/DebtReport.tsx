@@ -334,8 +334,8 @@ export default function DebtReport() {
   // Column widths (px) for the left-fixed block.
   const LEFT_COLS = [
     { key: "approveDate", label: "วันที่อนุมัติ", width: 110 },
-    { key: "contractNo", label: "เลขที่สัญญา", width: 160 },
-    { key: "customerName", label: "ชื่อ-นามสกุล", width: 180 },
+    { key: "contractNo", label: "เลขที่สัญญา", width: 195 },
+    { key: "customerName", label: "ชื่อ-นามสกุล", width: 260 },
     { key: "phone", label: "เบอร์โทร", width: 110 },
     { key: "totalAmount", label: "ยอดผ่อนรวม", width: 110, align: "right" },
     { key: "installmentCount", label: "งวดผ่อน", width: 70, align: "right" },
@@ -490,7 +490,7 @@ export default function DebtReport() {
                   {LEFT_COLS.map((c) => (
                     <div
                       key={c.key}
-                      className="px-2 py-2 border-r truncate"
+                      className="px-2 py-2 border-r whitespace-nowrap"
                       style={{
                         width: c.width,
                         textAlign:
@@ -515,7 +515,7 @@ export default function DebtReport() {
                       return (
                         <div
                           key={`h-${i}-${gc.key}`}
-                          className="px-2 py-2 border-r truncate"
+                          className="px-2 py-2 border-r whitespace-nowrap"
                           style={{
                             width: gc.width,
                             textAlign:
@@ -559,27 +559,30 @@ export default function DebtReport() {
                       className="flex border-b text-[12px] hover:bg-slate-50"
                       style={{ height: rowH }}
                     >
-                      {/* Left fixed columns */}
+                      {/* Left fixed columns — no `truncate`: show full text,
+                          especially for long contract numbers. */}
                       <div
-                        className="px-2 py-2 border-r truncate"
+                        className="px-2 py-2 border-r whitespace-nowrap"
                         style={{ width: LEFT_COLS[0].width }}
                       >
                         {fmtDate(r.approveDate)}
                       </div>
                       <div
-                        className="px-2 py-2 border-r truncate"
+                        className="px-2 py-2 border-r whitespace-nowrap"
                         style={{ width: LEFT_COLS[1].width }}
+                        title={r.contractNo ?? undefined}
                       >
                         {r.contractNo ?? "-"}
                       </div>
                       <div
-                        className="px-2 py-2 border-r truncate"
+                        className="px-2 py-2 border-r whitespace-nowrap"
                         style={{ width: LEFT_COLS[2].width }}
+                        title={r.customerName ?? undefined}
                       >
                         {r.customerName ?? "-"}
                       </div>
                       <div
-                        className="px-2 py-2 border-r truncate"
+                        className="px-2 py-2 border-r whitespace-nowrap"
                         style={{ width: LEFT_COLS[3].width }}
                       >
                         {r.phone ?? "-"}
@@ -626,30 +629,35 @@ export default function DebtReport() {
                         const periodNo = i + 1;
                         if (tab === "target") {
                           const inst = r.installments[i];
+                          const closed = !!inst?.isClosed;
                           return groupCols.map((gc) => {
                             let v: any = "";
                             let annotation: string | null = null;
                             let annotationClass = "";
                             if (inst) {
-                              if (gc.key === "period") v = inst.period ?? periodNo;
-                              else if (gc.key === "dueDate")
+                              if (gc.key === "period") {
+                                // Period number stays visible on closed rows too;
+                                // operator still needs to know the period index.
+                                v = inst.period ?? periodNo;
+                              } else if (gc.key === "dueDate") {
+                                // Due date is rendered normally; italic+gray is
+                                // applied below when `closed` is true so the
+                                // operator sees the period was already closed.
                                 v = fmtDate(inst.dueDate);
-                              else if (gc.key === "principal")
-                                v = fmtMoney(inst.principal);
-                              else if (gc.key === "interest")
-                                v = fmtMoney(inst.interest);
-                              else if (gc.key === "fee") {
-                                v = fmtMoney(inst.fee);
+                              } else if (gc.key === "principal") {
+                                // For closed periods we render a literal
+                                // zero (italic gray) — the total cell carries
+                                // the descriptive "ปิดค่างวดแล้ว" text.
+                                v = closed ? "0" : fmtMoney(inst.principal);
+                              } else if (gc.key === "interest") {
+                                v = closed ? "0" : fmtMoney(inst.interest);
+                              } else if (gc.key === "fee") {
+                                v = closed ? "0" : fmtMoney(inst.fee);
                               } else if (gc.key === "amount") {
-                                // Per-period total = principal + interest +
-                                // fee. Annotate this cell (not `fee`) because
-                                // that matches the reference table and the
-                                // annotation is semantically about the
-                                // period's total, not the fee line.
-                                if (inst.isClosed) {
-                                  v = "0.00";
-                                  annotation = "ปิดค่างวดแล้ว";
-                                  annotationClass = "text-sky-600 font-semibold";
+                                if (closed) {
+                                  // Per user feedback: show the text directly
+                                  // in the total column instead of "0.00".
+                                  v = "ปิดค่างวดแล้ว";
                                 } else {
                                   v = fmtMoney(inst.amount);
                                   if (
@@ -662,18 +670,37 @@ export default function DebtReport() {
                                 }
                               }
                             }
+                            // Styling rules for closed cells (user request):
+                            //   - light gray BG on the ENTIRE period group
+                            //   - date / zero values rendered as gray italic
+                            //   - amount column keeps the literal text
+                            //     "ปิดค่างวดแล้ว" in gray italic
+                            const baseStyle: Record<string, string | number> = {
+                              width: gc.width,
+                              textAlign:
+                                (gc as any).align === "right"
+                                  ? "right"
+                                  : "left",
+                            };
+                            if (closed) {
+                              baseStyle.background = "#f3f4f6"; // gray-100
+                              baseStyle.color = "#9ca3af"; // gray-400
+                              baseStyle.fontStyle = "italic";
+                            }
                             return (
                               <div
                                 key={`c-${vr.index}-${i}-${gc.key}`}
-                                className="px-2 py-2 border-r truncate tabular-nums"
-                                style={{
-                                  width: gc.width,
-                                  textAlign:
-                                    (gc as any).align === "right"
-                                      ? "right"
-                                      : "left",
-                                }}
-                                title={annotation ?? undefined}
+                                className={
+                                  closed
+                                    ? "px-2 py-2 border-r whitespace-nowrap"
+                                    : "px-2 py-2 border-r whitespace-nowrap tabular-nums"
+                                }
+                                style={baseStyle}
+                                title={
+                                  closed
+                                    ? "ปิดค่างวดแล้ว"
+                                    : (annotation ?? undefined)
+                                }
                               >
                                 <div>{v}</div>
                                 {annotation && (
