@@ -158,6 +158,7 @@ describe("listDebtTarget — baseline-restoration rule (2026-04-23)", () => {
         for (const c of r.installments ?? []) {
           if (
             !c.isClosed &&
+            !c.isSuspended &&
             c.baselineAmount > 0 &&
             c.paid > 0.01 &&
             c.amount <= 0.01
@@ -288,5 +289,90 @@ describe("listDebtTarget — principal/interest scaling matches Boonphone UI (20
       expect(Number(p1.amount)).toBe(4486);
     },
     15_000,
+  );
+});
+
+
+describe("listDebtTarget — ระงับสัญญา / หนี้เสีย exclusion (2026-04-23)", () => {
+  it(
+    "suspended contracts: from the first suspended period, money fields are zero and suspendLabel is set",
+    async () => {
+      // USER RULE: contract.status='ระงับสัญญา' → หา period แรกที่
+      // installment_status_code='ระงับสัญญา' → periods >= that period แสดง
+      // suspendLabel + suspendedAt + เงินต้น/ดอกเบี้ย/ค่าดำเนินการ/amount = 0.
+      const { rows } = await listDebtTarget({ section: "Boonphone" });
+      if (rows.length < 10) return;
+
+      // At least one suspended row must exist (60 ระงับสัญญา ใน DB ปัจจุบัน).
+      const suspendedRow = rows.find(
+        (r: any) =>
+          r.debtStatus === "ระงับสัญญา" &&
+          (r.installments ?? []).some((c: any) => c.isSuspended === true),
+      );
+      expect(suspendedRow).toBeTruthy();
+      if (!suspendedRow) return;
+
+      const insts = (suspendedRow.installments ?? []).slice().sort(
+        (a: any, b: any) => (a.period ?? 0) - (b.period ?? 0),
+      );
+      // Suspended cells must form a contiguous suffix (like closed cells).
+      let firstSuspendedPeriod = Number.POSITIVE_INFINITY;
+      let lastNonSuspendedPeriod = 0;
+      for (const c of insts) {
+        const p = Number(c.period ?? 0);
+        if (c.isSuspended) {
+          if (p < firstSuspendedPeriod) firstSuspendedPeriod = p;
+        } else if (p > lastNonSuspendedPeriod) {
+          lastNonSuspendedPeriod = p;
+        }
+      }
+      expect(firstSuspendedPeriod).toBeGreaterThan(lastNonSuspendedPeriod);
+
+      // Suspended cells must zero every money field and carry the label.
+      for (const c of insts) {
+        if (!c.isSuspended) continue;
+        expect(c.amount).toBeLessThanOrEqual(0.01);
+        expect(c.principal).toBeLessThanOrEqual(0.01);
+        expect(c.interest).toBeLessThanOrEqual(0.01);
+        expect(c.fee).toBeLessThanOrEqual(0.01);
+        expect(c.suspendLabel).toBe("ระงับสัญญา");
+        expect(typeof c.suspendedAt === "string").toBe(true);
+      }
+    },
+    20_000,
+  );
+
+  it(
+    "non-suspended contracts do not carry suspendLabel",
+    async () => {
+      const { rows } = await listDebtTarget({ section: "Boonphone" });
+      if (rows.length < 10) return;
+      const normal = rows.find((r: any) => r.debtStatus !== "ระงับสัญญา" && r.debtStatus !== "หนี้เสีย");
+      if (!normal) return;
+      for (const c of normal.installments ?? []) {
+        expect(!!c.isSuspended).toBe(false);
+        expect(c.suspendLabel ?? null).toBeNull();
+      }
+    },
+    20_000,
+  );
+
+  it(
+    "bad-debt contracts would relabel all formerly-suspended periods as หนี้เสีย (forward-compat)",
+    async () => {
+      // DB currently has no หนี้เสีย contracts, but the logic must be
+      // symmetric with ระงับสัญญา when one appears. If any do exist, every
+      // suspended cell must carry label 'หนี้เสีย' instead of 'ระงับสัญญา'.
+      const { rows } = await listDebtTarget({ section: "Boonphone" });
+      const badDebt = rows.find((r: any) => r.debtStatus === "หนี้เสีย");
+      if (!badDebt) return; // no anchor yet — skip
+      const hasAnySuspended = (badDebt.installments ?? []).some((c: any) => c.isSuspended);
+      expect(hasAnySuspended).toBe(true);
+      for (const c of badDebt.installments ?? []) {
+        if (!c.isSuspended) continue;
+        expect(c.suspendLabel).toBe("หนี้เสีย");
+      }
+    },
+    20_000,
   );
 });

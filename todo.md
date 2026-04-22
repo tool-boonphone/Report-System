@@ -183,3 +183,31 @@ Task list:
 - [x] Fix `overpaidApplied` logic in `listDebtTarget` — เปลี่ยนจากใช้ `baseline - amount` มาเป็นการ sum `overpaid_amount` จาก payment ของงวดก่อนหน้า (P-1)
 - [x] Add regression test for partial payment case — เพิ่มเคส false-positive ของ สุทธิดา จงใจ ใน `server/debt.target-shape.test.ts`
 - [x] Commit + push + save checkpoint
+
+### Phase 9j (DONE) — ระงับสัญญา / หนี้เสีย: exclude from collection targets (user rule 2026-04-23)
+
+กฎใหม่ของผู้ใช้:
+- **ระงับสัญญา**: หาเดือน (งวด) ที่สถานะเปลี่ยนเป็นระงับสัญญา → งวดถัดไปเป็นต้นไป `เงินต้น/ดอกเบี้ย/ค่าดำเนินการ = 0` และ `ยอดหนี้รวม = "ระงับสัญญา"` ใช้วันที่ที่ระงับเป็นวันที่แสดงในคอลัมน์วันที่
+- **หนี้เสีย**: ไม่สนใจงวด — override ทับทุกงวดที่เคยเป็น "ระงับสัญญา" ให้เป็น "หนี้เสีย" ทั้งหมด + วันที่หนี้เสีย
+- UI pattern เดียวกับ "สิ้นสุดสัญญา" (italic gray, light gray bg)
+- เหตุผล: ยอดสองสถานะนี้ต้องไม่ถูกนับรวมเข้าเป้าเก็บหนี้
+
+Task list:
+- [x] Audit DB: พบว่า raw_json ไม่มี suspend_date/bad_debt_date แต่ installments.raw_json มี `installment_status_code` ต่องวด → ใช้ due_date ของ period แรกที่เป็น 'ระงับสัญญา' เป็น suspendedAt; DB ปัจจุบันมี 60 สัญญาระงับ, 0 สัญญาหนี้เสีย
+- [x] Backend `listDebtTarget`: เพิ่ม `isSuspended`, `suspendLabel`, `suspendedAt` ต่อ cell; เซลล์ที่ suspended zero money fields ทั้งหมด; สัญญาสถานะ หนี้เสีย → label เป็น "หนี้เสีย" แทน
+- [x] Frontend `DebtReport.tsx`: render label + suspendedAt ในคอลัมน์ amount/วันที่ (reuse closed-cell styling: bg gray-100 + italic gray-400)
+- [x] Regression tests: เพิ่ม 3 เคส (suspended shape + non-suspended sanity + หนี้เสีย forward-compat); แก้ baseline-restoration invariant ให้ยกเว้น isSuspended; suite 41/41 ผ่าน
+- [ ] Commit + push + save checkpoint
+
+### Phase 9k (NEW, TODO) — บันทึกยอดจำหน่ายเครื่องของสัญญาหนี้เสีย (feature ใหม่ นอกหน้าเป้าเก็บหนี้)
+
+บริบทจาก user (2026-04-23):
+- เมื่อเครื่องของสัญญาที่ "ระงับสัญญา" ถูกนำไปจำหน่าย จะมี "ยอดขายเครื่อง" บันทึกเข้ามาในสัญญานั้นช่วงที่ยังเป็นระงับสัญญา
+- เมื่อบันทึกยอดนี้แล้ว สถานะจะถูกเปลี่ยนจาก "ระงับสัญญา" → "หนี้เสีย"
+- ยอดนี้ใช้สำหรับคำนวณกำไร/ขาดทุนของสัญญาที่จบด้วยการขายเครื่อง
+
+Task list:
+- [ ] สำรวจใน DB/API ว่ามี field ไหนเก็บ "ยอดขายเครื่อง" สำหรับสัญญาหนี้เสีย (payment type พิเศษ? raw_json fields?)
+- [ ] ออกแบบหน้า/แท็บใหม่: "สรุปกำไร/ขาดทุนจากหนี้เสีย" (ไม่ใช่ในหน้าเป้าเก็บหนี้)
+- [ ] สูตรคำนวณกำไร/ขาดทุน: (ยอดที่เก็บได้ทั้งหมด รวมยอดขายเครื่อง) − (ต้นทุน/ยอดจัดไฟแนนซ์ที่เหลือ) = กำไร/ขาดทุน
+- [ ] Export Excel และ UI แสดงยอดขายเครื่องเป็นคอลัมน์แยก

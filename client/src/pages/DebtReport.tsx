@@ -102,6 +102,12 @@ type InstallmentCell = {
   overpaidApplied: number;
   /** True when the period is reported as already closed (amount=0 with baseline>0). */
   isClosed: boolean;
+  /** True when the period is ระงับสัญญา or หนี้เสีย. */
+  isSuspended?: boolean;
+  /** Label to render: "ระงับสัญญา" or "หนี้เสีย" (null when !isSuspended). */
+  suspendLabel?: string | null;
+  /** YYYY-MM-DD that the contract changed to suspended/bad-debt. */
+  suspendedAt?: string | null;
 };
 
 type PaymentCell = {
@@ -630,33 +636,38 @@ export default function DebtReport() {
                         if (tab === "target") {
                           const inst = r.installments[i];
                           const closed = !!inst?.isClosed;
+                          const suspended = !!inst?.isSuspended;
+                          const suspendLabel = inst?.suspendLabel ?? "ระงับสัญญา";
+                          // Grey-out applies to both closed AND suspended cells.
+                          const dimmed = closed || suspended;
                           return groupCols.map((gc) => {
                             let v: any = "";
                             let annotation: string | null = null;
                             let annotationClass = "";
                             if (inst) {
                               if (gc.key === "period") {
-                                // Period number stays visible on closed rows too;
-                                // operator still needs to know the period index.
+                                // Period number stays visible on closed/suspended rows too.
                                 v = inst.period ?? periodNo;
                               } else if (gc.key === "dueDate") {
-                                // Due date is rendered normally; italic+gray is
-                                // applied below when `closed` is true so the
-                                // operator sees the period was already closed.
-                                v = fmtDate(inst.dueDate);
+                                // For suspended/bad-debt: show the status-change date
+                                // (suspendedAt) instead of the scheduled due date —
+                                // user rule 2026-04-23.
+                                if (suspended && inst.suspendedAt) {
+                                  v = fmtDate(inst.suspendedAt);
+                                } else {
+                                  v = fmtDate(inst.dueDate);
+                                }
                               } else if (gc.key === "principal") {
-                                // For closed periods we render a literal
-                                // zero (italic gray) — the total cell carries
-                                // the descriptive "ปิดค่างวดแล้ว" text.
-                                v = closed ? "0" : fmtMoney(inst.principal);
+                                v = dimmed ? "0" : fmtMoney(inst.principal);
                               } else if (gc.key === "interest") {
-                                v = closed ? "0" : fmtMoney(inst.interest);
+                                v = dimmed ? "0" : fmtMoney(inst.interest);
                               } else if (gc.key === "fee") {
-                                v = closed ? "0" : fmtMoney(inst.fee);
+                                v = dimmed ? "0" : fmtMoney(inst.fee);
                               } else if (gc.key === "amount") {
-                                if (closed) {
-                                  // Per user feedback: show the text directly
-                                  // in the total column instead of "0.00".
+                                if (suspended) {
+                                  // แสดงลาเบลสถานะในคอลัมน์ยอดรวม
+                                  v = suspendLabel;
+                                } else if (closed) {
                                   v = "ปิดค่างวดแล้ว";
                                 } else {
                                   v = fmtMoney(inst.amount);
@@ -670,11 +681,6 @@ export default function DebtReport() {
                                 }
                               }
                             }
-                            // Styling rules for closed cells (user request):
-                            //   - light gray BG on the ENTIRE period group
-                            //   - date / zero values rendered as gray italic
-                            //   - amount column keeps the literal text
-                            //     "ปิดค่างวดแล้ว" in gray italic
                             const baseStyle: Record<string, string | number> = {
                               width: gc.width,
                               textAlign:
@@ -682,25 +688,26 @@ export default function DebtReport() {
                                   ? "right"
                                   : "left",
                             };
-                            if (closed) {
+                            if (dimmed) {
                               baseStyle.background = "#f3f4f6"; // gray-100
                               baseStyle.color = "#9ca3af"; // gray-400
                               baseStyle.fontStyle = "italic";
                             }
+                            const tooltip = suspended
+                              ? suspendLabel
+                              : closed
+                              ? "ปิดค่างวดแล้ว"
+                              : (annotation ?? undefined);
                             return (
                               <div
                                 key={`c-${vr.index}-${i}-${gc.key}`}
                                 className={
-                                  closed
+                                  dimmed
                                     ? "px-2 py-2 border-r whitespace-nowrap"
                                     : "px-2 py-2 border-r whitespace-nowrap tabular-nums"
                                 }
                                 style={baseStyle}
-                                title={
-                                  closed
-                                    ? "ปิดค่างวดแล้ว"
-                                    : (annotation ?? undefined)
-                                }
+                                title={tooltip}
                               >
                                 <div>{v}</div>
                                 {annotation && (

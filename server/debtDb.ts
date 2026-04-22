@@ -261,6 +261,8 @@ type InstRawRow = {
   interest_due: number | null;
   fee_due: number | null;
   penalty_due: number | null;
+  /** Per-period status code extracted from raw_json.installment_status_code. */
+  installment_status_code: string | null;
 };
 
 type PayRawRow = {
@@ -359,7 +361,8 @@ export async function listDebtTarget(params: { section: SectionKey }) {
            CAST(JSON_EXTRACT(raw_json, '$.principal_due') AS DECIMAL(18,2)) AS principal_due,
            CAST(JSON_EXTRACT(raw_json, '$.interest_due')  AS DECIMAL(18,2)) AS interest_due,
            CAST(JSON_EXTRACT(raw_json, '$.fee_due')       AS DECIMAL(18,2)) AS fee_due,
-           CAST(JSON_EXTRACT(raw_json, '$.penalty_due')   AS DECIMAL(18,2)) AS penalty_due
+           CAST(JSON_EXTRACT(raw_json, '$.penalty_due')   AS DECIMAL(18,2)) AS penalty_due,
+           JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.installment_status_code')) AS installment_status_code
       FROM ${installments}
      WHERE ${installments.section} = ${params.section}
      ORDER BY contract_external_id, period
@@ -381,6 +384,7 @@ export async function listDebtTarget(params: { section: SectionKey }) {
       interest_due: r.interest_due != null ? Number(r.interest_due) : null,
       fee_due: r.fee_due != null ? Number(r.fee_due) : null,
       penalty_due: r.penalty_due != null ? Number(r.penalty_due) : null,
+      installment_status_code: r.installment_status_code ?? null,
     });
   }
 
@@ -512,6 +516,31 @@ export async function listDebtTarget(params: { section: SectionKey }) {
     // "ปิดค่างวดแล้ว" with zero amounts.
     const maxClosedPeriod = closedByContract.get(extId) ?? 0;
 
+    // --- USER RULE (2026-04-23): ระงับสัญญา / หนี้เสีย ---
+    // เมื่อ contract.status = "ระงับสัญญา": หา period แรกที่ installment_status_code='ระงับสัญญา'
+    // → periods >= that period ต้องแสดงเป็น "ระงับสัญญา" + ใช้ due_date ของ period นั้นเป็น suspendedAt
+    // เมื่อ contract.status = "หนี้เสีย": ใช้รูปแบบเดียวกับระงับสัญญา แต่เปลี่ยนป้ายเป็น "หนี้เสีย"
+    //   (per-period: override ทุก period ที่ installment_status_code เป็น ระงับสัญญา/หนี้เสีย)
+    // ทั้งสองสถานะ: money fields = 0, ไม่นับเข้าเป้าเก็บหนี้
+    const contractStatus = c.status ?? null;
+    const isContractSuspended = contractStatus === "ระงับสัญญา";
+    const isContractBadDebt = contractStatus === "หนี้เสีย";
+    let suspendedFromPeriod = 0; // > 0 → periods >= this render as suspended
+    let suspendedAt: string | null = null;
+    if (isContractSuspended || isContractBadDebt) {
+      const firstSuspended = list
+        .filter(
+          (r) =>
+            r.installment_status_code === "ระงับสัญญา" ||
+            r.installment_status_code === "หนี้เสีย",
+        )
+        .sort((a, b) => (a.period ?? 0) - (b.period ?? 0))[0];
+      if (firstSuspended?.period) {
+        suspendedFromPeriod = Number(firstSuspended.period);
+        suspendedAt = firstSuspended.due_date ?? null;
+      }
+    }
+
     // Build installment schedule.
     //
     // USER RULE (2026-04-23):
@@ -545,6 +574,13 @@ export async function listDebtTarget(params: { section: SectionKey }) {
         const periodNo = r.period != null ? Number(r.period) : 0;
 
         const isClosed = maxClosedPeriod > 0 && periodNo > maxClosedPeriod;
+        // Per-period suspended flag: period is >= the first suspended period.
+        // Bad-debt contract → re-use the same flag but surface a different label.
+        const isSuspended =
+          !isClosed &&
+          suspendedFromPeriod > 0 &&
+          periodNo >= suspendedFromPeriod;
+        const suspendLabel = isContractBadDebt ? "หนี้เสีย" : "ระงับสัญญา";
 
         // --- Compute display amount (non-closed periods) ---
         let amount = rawAmount;
@@ -568,7 +604,7 @@ export async function listDebtTarget(params: { section: SectionKey }) {
           amount = baselineAmount!;
         }
 
-        if (isClosed) {
+        if (isClosed || isSuspended) {
           amount = 0;
           principal = 0;
           interest = 0;
@@ -629,6 +665,9 @@ export async function listDebtTarget(params: { section: SectionKey }) {
           interestDeducted: 0,
           feeDeducted: 0,
           isClosed,
+          isSuspended,
+          suspendLabel: isSuspended ? suspendLabel : null,
+          suspendedAt: isSuspended ? suspendedAt : null,
         };
       })
       .sort((a, b) => (a.period ?? 0) - (b.period ?? 0));
