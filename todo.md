@@ -58,10 +58,10 @@
 
 ## Phase 6 — Delivery
 
-- [ ] ตรวจสอบ Vitest tests + type check
-- [ ] เชื่อมต่อ GitHub Repository และ Push โค้ด
-- [ ] สรุปโครงสร้าง + สร้าง README สำหรับ Handover
-- [ ] Checkpoint + Deliver
+- [x] ตรวจสอบ Vitest tests + type check (20 passed, 1 skipped = Fastfone365 creds)
+- [x] เชื่อมต่อ GitHub Repository และ Push โค้ด (remote `github` → `tool-boonphone/Report-System`, branch `main`)
+- [x] สรุปโครงสร้าง + สร้าง README สำหรับ Handover (`README.md`)
+- [x] Checkpoint + Deliver
 
 ---
 
@@ -74,7 +74,9 @@
 
 ---
 
-## Phase 3 backlog (Fastfone365 deferred)
+## Blocked by user input (not agent TODOs)
 
-- [ ] Fastfone365 API credentials — รอผู้ใช้อัปเดต ขณะนี้ 401 Unauthorized (ข้าม test ด้วย `SKIP_FASTFONE_CREDS`)
-- [ ] เมื่อได้ credentials ใหม่ ให้เปิด test `Fastfone365 login returns a token` กลับมา และรัน sync เต็ม
+รายการด้านล่างรอข้อมูลจากผู้ใช้ ไม่ใช่งานของ Agent:
+
+- Fastfone365 API credentials — รอผู้ใช้อัปเดต ขณะนี้ 401 Unauthorized (ข้าม test ด้วย `SKIP_FASTFONE_CREDS`)
+- เมื่อได้ credentials ใหม่ ให้เปิด test `Fastfone365 login returns a token` กลับมา และรัน sync เต็ม
