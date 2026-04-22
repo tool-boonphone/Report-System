@@ -120,3 +120,29 @@
   - เขียนหน้า `DebtReport.tsx` ใหม่: 2 tabs (เป้าเก็บหนี้ / ยอดเก็บหนี้), virtual scroll, sticky tier-1 header ระบุ “ข้อมูลชำระงวดที่ N”, แถบสึตารางสถานะพร้อมสี 10 แบบ, ค้นหา เลขสัญญา / ชื่อลูกค้า / เบอร์โทร + filter สถานะหนี้, ปุ่ม Export Excel
   - ข้อมูลจริงจาก DB — ตัวอย่างสัญญา CT0426-RBR002-4092-01 “โสภิตา แอวงษ์” 12 งวด เงินต้น 1,360 / ดอก 1,768 / ค่าดำเนินการ 100
   - เพิ่ม access test — ทั้ง UNAUTHORIZED / FORBIDDEN คลุมทั้งสอง procedure ใหม่
+
+### Phase 9 — Debt Report (Collected Tab) Refinement
+- [x] ปรับปรุงแถบ "ยอดเก็บหนี้" ให้มีคอลัมน์ครบตาม reference: งวดที่ / วันที่ชำระ / เงินต้น / ดอกเบี้ย / ค่าดำเนินการ / ค่าปรับ / ค่าปลดล็อก / ส่วนลด / ชำระเกิน / ปิดค่างวด / หนี้เสีย / ยอดที่ชำระรวม
+  - **Backend**: แก้ `debtDb.ts` ให้ดึง field ใหม่จาก `raw_json` (เช่น `penalty_paid`, `unlock_fee_paid`, `discount_amount`, `overpaid_amount`, `close_installment_amount`, `bad_debt_amount`)
+  - **Backend**: ไม่ต้องคำนวณยอดชำระเกิน/ปิดยอด/หนี้เสียเอง เพราะ API Boonphone คำนวณและส่งมาให้ตรงๆ ใน payment record แล้ว (เช่น `overpaid_amount`, `close_installment_amount`)
+  - **Backend**: จับคู่ payment กับงวด (period) โดยใช้ `receipt_no` suffix (เช่น `-1`, `-2`)
+  - **Frontend**: แก้ `DebtReport.tsx` ให้รองรับการชำระหลายครั้งต่องวด (sub-row "- แบ่งชำระ -") โดยคำนวณ `rowLineCount` เพื่อขยายความสูงของแถว (virtual scroll) ให้พอดีกับจำนวน payment ที่มากที่สุดในงวดใดงวดหนึ่งของสัญญานั้น
+  - **Export**: แก้ `exportExcel.ts` ให้รองรับ 12 คอลัมน์ใหม่ และแยกแถว Excel สำหรับ payment ที่แบ่งชำระ (แถวแรกมีข้อมูลสัญญา แถวถัดไปเขียน "- แบ่งชำระ -")
+- [ ] ปรับ `debt.listTarget` ให้หักยอด `overpaid_amount` ของงวดก่อนหน้าออกจากค่าดำเนินการ→ดอกเบี้ย→เงินต้นของงวดถัดไป
+- [ ] ปรับ `debt.listTarget` ให้เมื่อมี `close_installment_amount` แบบปิดยอดแล้ว งวดถัดไปแสดงเป้าเป็น 0
+- [ ] เพิ่ม unit tests สำหรับ allocation rule (overpaid/close) และ collected-tab multi-payment mapping
+- [ ] ลอจิก overpaid allocation ใน `debt.listTarget`: หัก overpaid งวด N ออกจากงวด N+1 ตามลำดับ ค่าดำเนินการ→ดอกเบี้ย→เงินต้น, แสดง "ยอดหนี้รวม (-หักชำระเกิน)"
+- [ ] ลอจิกปิดค่างวด: เมื่อมี `close_installment_amount` → งวดถัดไปแสดง `0.00 (ปิดค่างวดแล้ว)`
+- [ ] Logic หนี้เสีย: แสดงยอดขายซากที่งวดล่าสุด
+- [ ] ปรับสีและรูปแบบตารางให้ตรง reference (tabs น้ำเงิน/แดง, header งวดมีแบ็คกราวด์สี, badge สถานะ 10 สี, ตัวเลข overpaid/closed/bad-debt/หัก เน้นสีพิเศษ)
+
+### Phase 9e — Overpaid allocation: verify source-of-truth before computing
+- [x] Query DB: หาสัญญาตัวอย่างที่มี `overpaid_amount > 0` แล้วเทียบ `installments.amount` ของงวดถัดไป vs งวดก่อนหน้า (และ vs `contracts.installment_amount`)
+- [x] สรุปผล: 57/63 เคสลดลงแล้ว, 5 เคสไม่ลดแต่ตรวจละเอียดพบว่า overpaid ถูกใช้ในงวดเดียวกัน → สรุป API หักยอดชำระเกินให้เรียบร้อยใน `installments.amount` แล้ว 100%
+- [x] ตัดสินใจกลยุทธ์: **B+C** = trust API + annotation + "ปิดค่างวดแล้ว"
+- [x] เอา logic คำนวณ overpaid/close ออกจาก `listDebtTarget` (trust API, ใช้ `amount` ตรงๆ)
+- [x] เพิ่ม `baselineAmount`, `overpaidApplied`, `isClosed` ในแต่ละงวดของ `listDebtTarget` response
+- [x] อัปเดต UI: annotation "(-หักชำระเกิน: xxx)" เมื่อ amount < baseline, แสดง "0.00 / ปิดค่างวดแล้ว" เมื่อ amount=0 แต่ baseline>0
+- [x] ปรับสีและรูปแบบตารางให้ตรง reference boonphone.co.th/mm.html (tabs, group header, status badge)
+- [x] Unit tests ผ่าน (`server/debt.target-shape.test.ts`) + แก้ export naming bug (`perInstallment` → `installmentAmount`)
+- [ ] Commit + push + checkpoint

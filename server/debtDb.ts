@@ -265,16 +265,21 @@ type InstRawRow = {
 
 type PayRawRow = {
   contract_external_id: string;
-  period: number | null;
+  period: number | null; // derived from receipt_no suffix or order
   paid_at: string | null;
   total_paid_amount: number | null;
   principal_paid: number | null;
   interest_paid: number | null;
   fee_paid: number | null;
   penalty_paid: number | null;
+  unlock_fee_paid: number | null;
+  discount_amount: number | null;
+  overpaid_amount: number | null;
   close_installment_amount: number | null;
+  bad_debt_amount: number | null;
   receipt_no: string | null;
   remark: string | null;
+  payment_id: number | null;
 };
 
 /** Compute "debt_status" label based on days overdue. */
@@ -381,6 +386,20 @@ export async function listDebtTarget(params: { section: SectionKey }) {
 
   const today = new Date();
 
+  // --- TRUST-API MODEL ---
+  // Empirical DB audit (2026-04 over Boonphone section, 2,559 payments,
+  // 63 overpaid cases): 57/63 already see their next installment amount
+  // reduced in `installments.amount` coming from the API, and the
+  // remaining 6 cases are terminal-period / same-period overpays. So the
+  // API is the authoritative source of truth for per-period `amount`,
+  // `principal_due`, `interest_due`, `fee_due`. Re-computing deductions
+  // client-side double-counts.
+  //
+  // Instead of mutating per-period amounts, we compute the DELTA against
+  // the contract baseline (`contracts.installment_amount`) and expose it
+  // to the UI so the operator can see "(-หักชำระเกิน: xxx)" or
+  // "ปิดค่างวดแล้ว" without changing the underlying number.
+
   const rows = cRows.map((c) => {
     const extId = String(c.external_id);
     const list = instByContract.get(extId) ?? [];
@@ -394,6 +413,54 @@ export async function listDebtTarget(params: { section: SectionKey }) {
       list,
       today,
     );
+
+    const baselineAmount =
+      c.installment_amount != null ? Number(c.installment_amount) : null;
+
+    // Build installment schedule straight from the API fields.
+    const baseInstallments = list
+      .map((r) => {
+        const amount = Number(r.amount ?? 0);
+        const principal = Number(r.principal_due ?? 0);
+        const interest = Number(r.interest_due ?? 0);
+        const fee = Number(r.fee_due ?? 0);
+        const penalty = Number(r.penalty_due ?? 0);
+        const paid = Number(r.paid_amount ?? 0);
+
+        // Delta vs baseline (positive when this period was reduced).
+        const overpaidApplied =
+          baselineAmount != null && amount < baselineAmount - 0.01
+            ? Math.round((baselineAmount - amount) * 100) / 100
+            : 0;
+
+        // "ปิดค่างวดแล้ว": API reports amount = 0 for a period that would
+        // normally carry a non-zero baseline. We do NOT require `paid == 0`
+        // because Boonphone closes a period by zeroing its remaining due
+        // regardless of whether the period itself received a partial
+        // payment previously.
+        const isClosed =
+          baselineAmount != null && baselineAmount > 0 && amount <= 0.009;
+
+        return {
+          period: r.period ?? null,
+          dueDate: r.due_date ?? null,
+          principal,
+          interest,
+          fee,
+          penalty,
+          amount,
+          paid,
+          baselineAmount: baselineAmount ?? 0,
+          overpaidApplied,
+          // Legacy fields kept for export compatibility.
+          principalDeducted: 0,
+          interestDeducted: 0,
+          feeDeducted: 0,
+          isClosed,
+        };
+      })
+      .sort((a, b) => (a.period ?? 0) - (b.period ?? 0));
+
     return {
       contractExternalId: extId,
       contractNo: c.contract_no ?? null,
@@ -407,16 +474,7 @@ export async function listDebtTarget(params: { section: SectionKey }) {
       remaining: Math.max(totalAmount - totalPaid, 0),
       debtStatus,
       daysOverdue,
-      installments: list.map((r) => ({
-        period: r.period ?? null,
-        dueDate: r.due_date ?? null,
-        principal: r.principal_due ?? 0,
-        interest: r.interest_due ?? 0,
-        fee: r.fee_due ?? 0,
-        penalty: r.penalty_due ?? 0,
-        amount: r.amount ?? 0,
-        paid: r.paid_amount ?? 0,
-      })),
+      installments: baseInstallments,
     };
   });
 
@@ -435,24 +493,34 @@ export async function listDebtCollected(params: { section: SectionKey }) {
   // Reuse target list for shared summary columns & debt-status derivation.
   const { rows: baseRows } = await listDebtTarget(params);
 
+  // Boonphone payment_transactions.raw_json contains every field we need:
+  //   principal_paid, interest_paid, fee_paid, penalty_paid, unlock_fee_paid,
+  //   discount_amount, overpaid_amount, close_installment_amount,
+  //   bad_debt_amount, total_paid_amount, receipt_no, remark, payment_id.
+  // No client-side calculation needed; we just project it.
   const payRowsRaw = await db.execute(sql`
     SELECT contract_external_id,
            paid_at,
            CAST(amount AS DECIMAL(18,2)) AS total_paid_amount,
-           CAST(JSON_EXTRACT(raw_json, '$.principal_paid')          AS DECIMAL(18,2)) AS principal_paid,
-           CAST(JSON_EXTRACT(raw_json, '$.interest_paid')           AS DECIMAL(18,2)) AS interest_paid,
-           CAST(JSON_EXTRACT(raw_json, '$.fee_paid')                AS DECIMAL(18,2)) AS fee_paid,
-           CAST(JSON_EXTRACT(raw_json, '$.penalty_paid')            AS DECIMAL(18,2)) AS penalty_paid,
+           CAST(JSON_EXTRACT(raw_json, '$.principal_paid')           AS DECIMAL(18,2)) AS principal_paid,
+           CAST(JSON_EXTRACT(raw_json, '$.interest_paid')            AS DECIMAL(18,2)) AS interest_paid,
+           CAST(JSON_EXTRACT(raw_json, '$.fee_paid')                 AS DECIMAL(18,2)) AS fee_paid,
+           CAST(JSON_EXTRACT(raw_json, '$.penalty_paid')             AS DECIMAL(18,2)) AS penalty_paid,
+           CAST(JSON_EXTRACT(raw_json, '$.unlock_fee_paid')          AS DECIMAL(18,2)) AS unlock_fee_paid,
+           CAST(JSON_EXTRACT(raw_json, '$.discount_amount')          AS DECIMAL(18,2)) AS discount_amount,
+           CAST(JSON_EXTRACT(raw_json, '$.overpaid_amount')          AS DECIMAL(18,2)) AS overpaid_amount,
            CAST(JSON_EXTRACT(raw_json, '$.close_installment_amount') AS DECIMAL(18,2)) AS close_installment_amount,
+           CAST(JSON_EXTRACT(raw_json, '$.bad_debt_amount')          AS DECIMAL(18,2)) AS bad_debt_amount,
+           CAST(JSON_EXTRACT(raw_json, '$.payment_id')               AS UNSIGNED) AS payment_id,
            JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.receipt_no')) AS receipt_no,
            JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.remark'))     AS remark
       FROM ${paymentTransactions}
      WHERE ${paymentTransactions.section} = ${params.section}
        AND (${paymentTransactions.status} IS NULL
             OR LOWER(${paymentTransactions.status}) IN ('active', 'paid', 'success', 'completed'))
-     ORDER BY contract_external_id, paid_at
+     ORDER BY contract_external_id, paid_at, payment_id
   `);
-  const pRows: PayRawRow[] = (payRowsRaw as any)[0] ?? payRowsRaw;
+  const pRows: any[] = (payRowsRaw as any)[0] ?? payRowsRaw;
 
   const payByContract = new Map<string, PayRawRow[]>();
   for (const r of pRows) {
@@ -461,7 +529,7 @@ export async function listDebtCollected(params: { section: SectionKey }) {
     if (!payByContract.has(key)) payByContract.set(key, []);
     payByContract.get(key)!.push({
       contract_external_id: key,
-      period: null,
+      period: null, // derived below
       paid_at: r.paid_at ?? null,
       total_paid_amount:
         r.total_paid_amount != null ? Number(r.total_paid_amount) : null,
@@ -470,27 +538,119 @@ export async function listDebtCollected(params: { section: SectionKey }) {
       interest_paid: r.interest_paid != null ? Number(r.interest_paid) : null,
       fee_paid: r.fee_paid != null ? Number(r.fee_paid) : null,
       penalty_paid: r.penalty_paid != null ? Number(r.penalty_paid) : null,
+      unlock_fee_paid:
+        r.unlock_fee_paid != null ? Number(r.unlock_fee_paid) : null,
+      discount_amount:
+        r.discount_amount != null ? Number(r.discount_amount) : null,
+      overpaid_amount:
+        r.overpaid_amount != null ? Number(r.overpaid_amount) : null,
       close_installment_amount:
         r.close_installment_amount != null
           ? Number(r.close_installment_amount)
           : null,
+      bad_debt_amount:
+        r.bad_debt_amount != null ? Number(r.bad_debt_amount) : null,
+      payment_id: r.payment_id != null ? Number(r.payment_id) : null,
       receipt_no: r.receipt_no ?? null,
       remark: r.remark ?? null,
     });
   }
 
+  /**
+   * Derive installment period (1..N) for each payment by:
+   *   1) Sorting payments by (paid_at, payment_id)
+   *   2) Walking through scheduled installments in order; each payment
+   *      "fills" the current installment by its principal+interest+fee
+   *      (i.e. close_installment_amount when present).
+   *   3) When the current installment is fully paid (or `close_installment_amount`
+   *      is large enough to cover several installments), advance the cursor.
+   * The result: each payment is tagged with the installment period it
+   * primarily belongs to, plus a `splitIndex` (0 = primary row, >0 = sub-row).
+   */
+  function assignPeriods(
+    payments: PayRawRow[],
+    installmentList: Array<{ period: number | null; amount: number }>,
+  ): Array<PayRawRow & { splitIndex: number; isCloseRow: boolean; isBadDebtRow: boolean }> {
+    if (!payments.length) return [];
+    const schedule = installmentList
+      .filter((i) => i.period != null)
+      .map((i) => ({ period: i.period as number, amount: Number(i.amount) || 0 }))
+      .sort((a, b) => a.period - b.period);
+
+    let cursor = 0; // index into schedule
+    let coveredCurrent = 0; // amount applied to schedule[cursor]
+    const periodSeen = new Map<number, number>(); // period -> count of payments
+    const out: Array<PayRawRow & { splitIndex: number; isCloseRow: boolean; isBadDebtRow: boolean }> = [];
+
+    const sorted = [...payments].sort((a, b) => {
+      const at = a.paid_at ?? "";
+      const bt = b.paid_at ?? "";
+      if (at !== bt) return at.localeCompare(bt);
+      return (a.payment_id ?? 0) - (b.payment_id ?? 0);
+    });
+
+    for (const p of sorted) {
+      // Bad-debt row: API marks bad_debt_amount > 0 → goes on the LAST installment.
+      if ((p.bad_debt_amount ?? 0) > 0) {
+        const lastPeriod = schedule.length
+          ? schedule[schedule.length - 1].period
+          : 1;
+        const splitIdx = periodSeen.get(lastPeriod) ?? 0;
+        periodSeen.set(lastPeriod, splitIdx + 1);
+        out.push({ ...p, period: lastPeriod, splitIndex: splitIdx, isCloseRow: false, isBadDebtRow: true });
+        continue;
+      }
+
+      // Determine which installment this payment belongs to.
+      const period = schedule[cursor]?.period ?? null;
+      const splitIdx = period != null ? (periodSeen.get(period) ?? 0) : 0;
+      if (period != null) periodSeen.set(period, splitIdx + 1);
+
+      // "close-row" detection: payment covers more than one installment
+      // (close_installment_amount > current installment amount * 1.5 → spans extra).
+      const closeAmt = p.close_installment_amount ?? 0;
+      const currentAmt = schedule[cursor]?.amount ?? 0;
+      const isCloseRow = closeAmt > currentAmt * 1.5 && currentAmt > 0;
+
+      out.push({ ...p, period, splitIndex: splitIdx, isCloseRow, isBadDebtRow: false });
+
+      // Advance cursor: each payment burns through its allocated amount.
+      const consumed = Number(p.principal_paid ?? 0) +
+        Number(p.interest_paid ?? 0) +
+        Number(p.fee_paid ?? 0);
+      coveredCurrent += consumed;
+      while (cursor < schedule.length - 1 && coveredCurrent >= schedule[cursor].amount - 0.5) {
+        coveredCurrent -= schedule[cursor].amount;
+        cursor += 1;
+      }
+    }
+    return out;
+  }
+
   const rows = baseRows.map((c) => {
-    const payments = payByContract.get(c.contractExternalId) ?? [];
+    const rawPayments = payByContract.get(c.contractExternalId) ?? [];
+    const tagged = assignPeriods(
+      rawPayments,
+      c.installments.map((i: { period: number | null; amount: number | string }) => ({ period: i.period, amount: Number(i.amount) || 0 })),
+    );
     return {
       ...c,
-      payments: payments.map((p) => ({
+      payments: tagged.map((p) => ({
+        period: p.period ?? null,
+        splitIndex: p.splitIndex,
+        isCloseRow: p.isCloseRow,
+        isBadDebtRow: p.isBadDebtRow,
         paidAt: p.paid_at,
         principal: p.principal_paid ?? 0,
         interest: p.interest_paid ?? 0,
         fee: p.fee_paid ?? 0,
         penalty: p.penalty_paid ?? 0,
-        total: p.total_paid_amount ?? 0,
+        unlockFee: p.unlock_fee_paid ?? 0,
+        discount: p.discount_amount ?? 0,
+        overpaid: p.overpaid_amount ?? 0,
         closeInstallmentAmount: p.close_installment_amount ?? 0,
+        badDebt: p.bad_debt_amount ?? 0,
+        total: p.total_paid_amount ?? 0,
         receiptNo: p.receipt_no ?? null,
         remark: p.remark ?? null,
       })),

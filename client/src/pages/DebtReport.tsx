@@ -56,23 +56,28 @@ function fmtDate(d: string | null | undefined) {
 
 /** Mapping: status label → Tailwind classes for the colored pill badge. */
 function statusPillClasses(status: string): string {
+  // Colors taken from boonphone.co.th/mm.html reference palette.
   switch (status) {
     case "ปกติ":
-      return "bg-green-100 text-green-700 border-green-200";
+      return "bg-green-100 text-green-800 border-green-300";
     case "เกิน 1-7":
+      return "bg-yellow-100 text-yellow-900 border-yellow-300";
     case "เกิน 8-14":
+      return "bg-amber-200 text-amber-900 border-amber-400";
     case "เกิน 15-30":
-      return "bg-yellow-100 text-yellow-800 border-yellow-200";
+      return "bg-orange-200 text-orange-900 border-orange-400";
     case "เกิน 31-60":
+      return "bg-red-200 text-red-900 border-red-400";
     case "เกิน 61-90":
+      return "bg-red-300 text-red-900 border-red-500";
     case "เกิน >90":
-      return "bg-red-100 text-red-700 border-red-200";
+      return "bg-rose-700 text-white border-rose-800";
     case "ระงับสัญญา":
-      return "bg-red-200 text-red-800 border-red-300";
+      return "bg-gray-800 text-white border-gray-900";
     case "สิ้นสุดสัญญา":
-      return "bg-blue-100 text-blue-700 border-blue-200";
+      return "bg-blue-100 text-blue-800 border-blue-300";
     case "หนี้เสีย":
-      return "bg-gray-200 text-gray-800 border-gray-300";
+      return "bg-gray-700 text-white border-gray-800";
     default:
       return "bg-gray-100 text-gray-700 border-gray-200";
   }
@@ -91,16 +96,32 @@ type InstallmentCell = {
   penalty: number;
   amount: number;
   paid: number;
+  /** Baseline per-contract installment amount (from contracts.installment_amount). */
+  baselineAmount: number;
+  /** Delta vs baseline: > 0 when API deducted overpaid from this period. */
+  overpaidApplied: number;
+  /** True when the period is reported as already closed (amount=0 with baseline>0). */
+  isClosed: boolean;
 };
 
 type PaymentCell = {
+  /** Installment period (1..N) this payment was applied to. */
+  period: number | null;
+  /** 0 = primary row, >0 = sub-row "- แบ่งชำระ -". */
+  splitIndex: number;
+  isCloseRow: boolean;
+  isBadDebtRow: boolean;
   paidAt: string | null;
   principal: number;
   interest: number;
   fee: number;
   penalty: number;
-  total: number;
+  unlockFee: number;
+  discount: number;
+  overpaid: number;
   closeInstallmentAmount: number;
+  badDebt: number;
+  total: number;
   receiptNo: string | null;
   remark: string | null;
 };
@@ -182,6 +203,43 @@ export default function DebtReport() {
     return Math.min(max, 36);
   }, [filteredRows]);
 
+  /* ---- Per-row sub-rows: collected-tab payments grouped per period ---- */
+  /** For collected tab, count max sub-rows per period across all rows so we
+   * know how many cells the matrix needs in each group column. */
+  // Currently unused at the matrix level (each row sizes itself), kept for
+  // potential future use such as a global splitDepth-aware header.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+   const _splitDepth = useMemo(() => {
+    if (tab !== "collected") return new Map<number, number>();
+    const m = new Map<number, number>();
+    for (const r of filteredRows as CollectedRow[]) {
+      const perPeriod = new Map<number, number>();
+      for (const p of r.payments ?? []) {
+        if (p.period == null) continue;
+        perPeriod.set(p.period, (perPeriod.get(p.period) ?? 0) + 1);
+      }
+      perPeriod.forEach((v, k) => {
+        if (v > (m.get(k) ?? 0)) m.set(k, v);
+      });
+    }
+    return m;
+  }, [filteredRows, tab]);
+
+  /** Per row "line count" = max number of sub-rows that any of its periods has. */
+  function rowLineCount(r: CollectedRow): number {
+    if (tab !== "collected") return 1;
+    let max = 1;
+    const perPeriod = new Map<number, number>();
+    for (const p of r.payments ?? []) {
+      if (p.period == null) continue;
+      perPeriod.set(p.period, (perPeriod.get(p.period) ?? 0) + 1);
+    }
+    perPeriod.forEach((v) => {
+      if (v > max) max = v;
+    });
+    return max;
+  }
+
   /* ---- TopNav actions (sync + export) ---- */
   useEffect(() => {
     const handleExport = async () => {
@@ -241,10 +299,18 @@ export default function DebtReport() {
   /* ---- Virtual scroll ---- */
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const ROW_HEIGHT = 40;
+  const SUB_ROW_HEIGHT = 32;
+  // collected tab rows can have multiple sub-rows for split payments;
+  // give the virtualizer an estimate per row for accurate scrollbar.
   const rowVirtualizer = useVirtualizer({
     count: filteredRows.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => ROW_HEIGHT,
+    estimateSize: (i) => {
+      if (tab !== "collected") return ROW_HEIGHT;
+      const r = filteredRows[i] as CollectedRow;
+      const lines = rowLineCount(r);
+      return ROW_HEIGHT + (lines - 1) * SUB_ROW_HEIGHT;
+    },
     overscan: 10,
   });
   const virtualRows = rowVirtualizer.getVirtualItems();
@@ -283,6 +349,7 @@ export default function DebtReport() {
     { key: "daysOverdue", label: "เกินกำหนด", width: 90, align: "right" },
   ] as const;
 
+  // Per-period group sub-columns (mirrors reference layout exactly).
   const groupCols =
     tab === "target"
       ? [
@@ -291,13 +358,22 @@ export default function DebtReport() {
           { key: "principal", label: "เงินต้น", width: 90, align: "right" },
           { key: "interest", label: "ดอกเบี้ย", width: 90, align: "right" },
           { key: "fee", label: "ค่าดำเนินการ", width: 95, align: "right" },
+          { key: "amount", label: "ยอดหนี้รวม", width: 115, align: "right" },
         ]
       : [
-          { key: "paidAt", label: "วันที่ชำระ", width: 105 },
-          { key: "principal", label: "เงินต้น", width: 90, align: "right" },
-          { key: "interest", label: "ดอกเบี้ย", width: 90, align: "right" },
-          { key: "fee", label: "ค่าธรรมเนียม", width: 95, align: "right" },
-          { key: "total", label: "รวมที่ชำระ", width: 95, align: "right" },
+          // 12 columns per period as required by reference
+          { key: "period", label: "งวดที่", width: 55 },
+          { key: "paidAt", label: "วันที่ชำระ", width: 100 },
+          { key: "principal", label: "เงินต้น", width: 80, align: "right" },
+          { key: "interest", label: "ดอกเบี้ย", width: 80, align: "right" },
+          { key: "fee", label: "ค่าดำเนินการ", width: 95, align: "right" },
+          { key: "penalty", label: "ค่าปรับ", width: 70, align: "right" },
+          { key: "unlockFee", label: "ค่าปลดล็อก", width: 80, align: "right" },
+          { key: "discount", label: "ส่วนลด", width: 70, align: "right" },
+          { key: "overpaid", label: "ชำระเกิน", width: 80, align: "right" },
+          { key: "closeInstallmentAmount", label: "ปิดค่างวด", width: 85, align: "right" },
+          { key: "badDebt", label: "หนี้เสีย", width: 80, align: "right" },
+          { key: "total", label: "ยอดที่ชำระรวม", width: 100, align: "right" },
         ];
 
   const GROUP_WIDTH = groupCols.reduce((s, c) => s + c.width, 0);
@@ -314,8 +390,8 @@ export default function DebtReport() {
               variant={tab === "target" ? "default" : "outline"}
               className={
                 tab === "target"
-                  ? "bg-violet-600 hover:bg-violet-700 text-white"
-                  : "bg-white"
+                  ? "bg-indigo-600 hover:bg-indigo-700 text-white border-indigo-600"
+                  : "bg-gray-200 hover:bg-gray-300 text-gray-600 border-gray-200"
               }
               onClick={() => setTab("target")}
             >
@@ -326,8 +402,8 @@ export default function DebtReport() {
               variant={tab === "collected" ? "default" : "outline"}
               className={
                 tab === "collected"
-                  ? "bg-amber-500 hover:bg-amber-600 text-white"
-                  : "bg-white"
+                  ? "bg-rose-600 hover:bg-rose-700 text-white border-rose-600"
+                  : "bg-gray-200 hover:bg-gray-300 text-gray-600 border-gray-200"
               }
               onClick={() => setTab("collected")}
             >
@@ -402,7 +478,7 @@ export default function DebtReport() {
                         width: GROUP_WIDTH,
                         height: 28,
                         background:
-                          tab === "target" ? "#4f46e5" : "#f59e0b",
+                          tab === "target" ? "#4f46e5" : "#e11d48",
                       }}
                     >
                       ข้อมูลชำระงวดที่ {i + 1}
@@ -425,19 +501,33 @@ export default function DebtReport() {
                     </div>
                   ))}
                   {Array.from({ length: maxPeriods }, (_, i) =>
-                    groupCols.map((gc) => (
-                      <div
-                        key={`h-${i}-${gc.key}`}
-                        className="px-2 py-2 border-r truncate bg-slate-50"
-                        style={{
-                          width: gc.width,
-                          textAlign:
-                            (gc as any).align === "right" ? "right" : "left",
-                        }}
-                      >
-                        {gc.label}
-                      </div>
-                    )),
+                    groupCols.map((gc) => {
+                      // Alternating tint per reference (indigo-50 / indigo-100 for target,
+                      // rose-50 flat for collected).
+                      const subBg =
+                        tab === "target"
+                          ? i % 2 === 0
+                            ? "#eef2ff"
+                            : "#e0e7ff"
+                          : "#fff1f2";
+                      const subColor =
+                        tab === "target" ? "#312e81" : "#881337";
+                      return (
+                        <div
+                          key={`h-${i}-${gc.key}`}
+                          className="px-2 py-2 border-r truncate"
+                          style={{
+                            width: gc.width,
+                            textAlign:
+                              (gc as any).align === "right" ? "right" : "left",
+                            background: subBg,
+                            color: subColor,
+                          }}
+                        >
+                          {gc.label}
+                        </div>
+                      );
+                    }),
                   )}
                 </div>
               </div>
@@ -446,11 +536,28 @@ export default function DebtReport() {
               <div style={{ paddingTop, paddingBottom }}>
                 {virtualRows.map((vr) => {
                   const r = filteredRows[vr.index];
+                  // For collected tab, compute sub-row count to size the row.
+                  const lineCount =
+                    tab === "collected"
+                      ? rowLineCount(r as CollectedRow)
+                      : 1;
+                  const rowH =
+                    ROW_HEIGHT + (lineCount - 1) * SUB_ROW_HEIGHT;
+                  // Build per-period payments map for collected tab
+                  const paymentsByPeriod = new Map<number, PaymentCell[]>();
+                  if (tab === "collected") {
+                    for (const p of (r as CollectedRow).payments ?? []) {
+                      if (p.period == null) continue;
+                      if (!paymentsByPeriod.has(p.period))
+                        paymentsByPeriod.set(p.period, []);
+                      paymentsByPeriod.get(p.period)!.push(p);
+                    }
+                  }
                   return (
                     <div
                       key={vr.key}
                       className="flex border-b text-[12px] hover:bg-slate-50"
-                      style={{ height: ROW_HEIGHT }}
+                      style={{ height: rowH }}
                     >
                       {/* Left fixed columns */}
                       <div
@@ -516,20 +623,44 @@ export default function DebtReport() {
                       </div>
                       {/* Repeating groups */}
                       {Array.from({ length: maxPeriods }, (_, i) => {
+                        const periodNo = i + 1;
                         if (tab === "target") {
                           const inst = r.installments[i];
                           return groupCols.map((gc) => {
                             let v: any = "";
+                            let annotation: string | null = null;
+                            let annotationClass = "";
                             if (inst) {
-                              if (gc.key === "period") v = inst.period ?? i + 1;
+                              if (gc.key === "period") v = inst.period ?? periodNo;
                               else if (gc.key === "dueDate")
                                 v = fmtDate(inst.dueDate);
                               else if (gc.key === "principal")
                                 v = fmtMoney(inst.principal);
                               else if (gc.key === "interest")
                                 v = fmtMoney(inst.interest);
-                              else if (gc.key === "fee")
+                              else if (gc.key === "fee") {
                                 v = fmtMoney(inst.fee);
+                              } else if (gc.key === "amount") {
+                                // Per-period total = principal + interest +
+                                // fee. Annotate this cell (not `fee`) because
+                                // that matches the reference table and the
+                                // annotation is semantically about the
+                                // period's total, not the fee line.
+                                if (inst.isClosed) {
+                                  v = "0.00";
+                                  annotation = "ปิดค่างวดแล้ว";
+                                  annotationClass = "text-sky-600 font-semibold";
+                                } else {
+                                  v = fmtMoney(inst.amount);
+                                  if (
+                                    inst.overpaidApplied > 0.009 &&
+                                    inst.baselineAmount > inst.amount + 0.009
+                                  ) {
+                                    annotation = `(-หักชำระเกิน: ${fmtMoney(inst.overpaidApplied)})`;
+                                    annotationClass = "text-emerald-600 font-semibold";
+                                  }
+                                }
+                              }
                             }
                             return (
                               <div
@@ -542,45 +673,115 @@ export default function DebtReport() {
                                       ? "right"
                                       : "left",
                                 }}
+                                title={annotation ?? undefined}
                               >
-                                {v}
-                              </div>
-                            );
-                          });
-                        } else {
-                          // collected tab → payment at index i
-                          const cr = r as CollectedRow;
-                          const pay = cr.payments[i];
-                          return groupCols.map((gc) => {
-                            let v: any = "";
-                            if (pay) {
-                              if (gc.key === "paidAt") v = fmtDate(pay.paidAt);
-                              else if (gc.key === "principal")
-                                v = fmtMoney(pay.principal);
-                              else if (gc.key === "interest")
-                                v = fmtMoney(pay.interest);
-                              else if (gc.key === "fee")
-                                v = fmtMoney(pay.fee);
-                              else if (gc.key === "total")
-                                v = fmtMoney(pay.total);
-                            }
-                            return (
-                              <div
-                                key={`c-${vr.index}-${i}-${gc.key}`}
-                                className="px-2 py-2 border-r truncate tabular-nums"
-                                style={{
-                                  width: gc.width,
-                                  textAlign:
-                                    (gc as any).align === "right"
-                                      ? "right"
-                                      : "left",
-                                }}
-                              >
-                                {v}
+                                <div>{v}</div>
+                                {annotation && (
+                                  <div
+                                    className={`text-[10px] leading-tight ${annotationClass}`}
+                                  >
+                                    {annotation}
+                                  </div>
+                                )}
                               </div>
                             );
                           });
                         }
+                        // ---------- Collected tab ----------
+                        const pays = paymentsByPeriod.get(periodNo) ?? [];
+                        // Vertical stack: one cell per group sub-column,
+                        // with N inner lines for N split payments.
+                        return groupCols.map((gc) => {
+                          return (
+                            <div
+                              key={`c-${vr.index}-${i}-${gc.key}`}
+                              className="border-r tabular-nums"
+                              style={{
+                                width: gc.width,
+                                textAlign:
+                                  (gc as any).align === "right"
+                                    ? "right"
+                                    : "left",
+                              }}
+                            >
+                              {Array.from({ length: lineCount }, (_, li) => {
+                                const pay = pays[li];
+                                let v: any = "";
+                                if (pay) {
+                                  switch (gc.key) {
+                                    case "period":
+                                      v = li === 0 ? periodNo : "—";
+                                      break;
+                                    case "paidAt":
+                                      v = fmtDate(pay.paidAt);
+                                      break;
+                                    case "principal":
+                                      v = fmtMoney(pay.principal);
+                                      break;
+                                    case "interest":
+                                      v = fmtMoney(pay.interest);
+                                      break;
+                                    case "fee":
+                                      v = fmtMoney(pay.fee);
+                                      break;
+                                    case "penalty":
+                                      v = pay.penalty ? fmtMoney(pay.penalty) : "";
+                                      break;
+                                    case "unlockFee":
+                                      v = pay.unlockFee
+                                        ? fmtMoney(pay.unlockFee)
+                                        : "";
+                                      break;
+                                    case "discount":
+                                      v = pay.discount
+                                        ? fmtMoney(pay.discount)
+                                        : "";
+                                      break;
+                                    case "overpaid":
+                                      v = pay.overpaid
+                                        ? fmtMoney(pay.overpaid)
+                                        : "";
+                                      break;
+                                    case "closeInstallmentAmount":
+                                      v = pay.isCloseRow
+                                        ? fmtMoney(pay.closeInstallmentAmount)
+                                        : "";
+                                      break;
+                                    case "badDebt":
+                                      v = pay.badDebt
+                                        ? fmtMoney(pay.badDebt)
+                                        : "";
+                                      break;
+                                    case "total":
+                                      v = fmtMoney(pay.total);
+                                      break;
+                                  }
+                                }
+                                return (
+                                  <div
+                                    key={`c-${vr.index}-${i}-${gc.key}-${li}`}
+                                    className={`px-2 truncate ${
+                                      li === 0
+                                        ? "py-2"
+                                        : "py-1.5 text-amber-700 italic"
+                                    }`}
+                                    style={{
+                                      height:
+                                        li === 0 ? ROW_HEIGHT : SUB_ROW_HEIGHT,
+                                      lineHeight:
+                                        li === 0 ? `${ROW_HEIGHT - 16}px` : `${SUB_ROW_HEIGHT - 12}px`,
+                                    }}
+                                    title={
+                                      pay?.remark ?? pay?.receiptNo ?? undefined
+                                    }
+                                  >
+                                    {v}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          );
+                        });
                       })}
                     </div>
                   );

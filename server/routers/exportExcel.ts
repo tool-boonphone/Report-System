@@ -233,11 +233,20 @@ export async function handleDebtExport(req: Request, res: Response) {
     let maxPeriods = 0;
     for (const r of filtered as any[]) {
       const arr = variant === "target" ? r.installments : r.payments;
-      if (Array.isArray(arr) && arr.length > maxPeriods) maxPeriods = arr.length;
+      if (Array.isArray(arr)) {
+        if (variant === "target") {
+          if (arr.length > maxPeriods) maxPeriods = arr.length;
+        } else {
+          // For collected, payments are flat; find max period
+          for (const p of arr) {
+            if (p.period != null && p.period > maxPeriods) maxPeriods = p.period;
+          }
+        }
+      }
     }
     maxPeriods = Math.min(maxPeriods, 36);
 
-    // Build column list: left fixed + per-period group (5 subcolumns each).
+    // Build column list: left fixed + per-period group.
     const perGroup =
       variant === "target"
         ? [
@@ -246,13 +255,21 @@ export async function handleDebtExport(req: Request, res: Response) {
             { key: "principal", header: "เงินต้น", width: 12 },
             { key: "interest", header: "ดอกเบี้ย", width: 12 },
             { key: "fee", header: "ค่าดำเนินการ", width: 12 },
+            { key: "amount", header: "ยอดหนี้รวม", width: 18 },
           ]
         : [
+            { key: "period", header: "งวดที่", width: 8 },
             { key: "paidAt", header: "วันที่ชำระ", width: 14 },
             { key: "principal", header: "เงินต้น", width: 12 },
             { key: "interest", header: "ดอกเบี้ย", width: 12 },
             { key: "fee", header: "ค่าดำเนินการ", width: 12 },
             { key: "penalty", header: "ค่าปรับ", width: 10 },
+            { key: "unlockFee", header: "ค่าปลดล็อก", width: 10 },
+            { key: "discount", header: "ส่วนลด", width: 10 },
+            { key: "overpaid", header: "ชำระเกิน", width: 10 },
+            { key: "closeInstallmentAmount", header: "ปิดค่างวด", width: 12 },
+            { key: "badDebt", header: "หนี้เสีย", width: 10 },
+            { key: "total", header: "ยอดที่ชำระรวม", width: 14 },
           ];
 
     const cols: Array<{ header: string; key: string; width: number }> = [
@@ -276,7 +293,7 @@ export async function handleDebtExport(req: Request, res: Response) {
     let seq = 0;
     for (const r of filtered as any[]) {
       seq += 1;
-      const rec: Record<string, string | number> = {
+      const baseRec: Record<string, string | number> = {
         seq,
         approveDate: r.approveDate ?? "",
         contractNo: r.contractNo ?? "",
@@ -284,31 +301,82 @@ export async function handleDebtExport(req: Request, res: Response) {
         phone: r.phone ?? "",
         totalAmount: Number(r.totalAmount ?? 0),
         installmentCount: Number(r.installmentCount ?? 0),
-        perInstallment: Number(r.perInstallment ?? 0),
+        perInstallment: Number(r.installmentAmount ?? 0),
         debtStatus: r.debtStatus ?? "",
         daysOverdue: Number(r.daysOverdue ?? 0),
       };
-      const arr = variant === "target" ? r.installments : r.payments;
-      if (Array.isArray(arr)) {
-        for (let i = 0; i < Math.min(arr.length, maxPeriods); i += 1) {
-          const item = arr[i];
-          const p = i + 1;
-          if (variant === "target") {
+
+      if (variant === "target") {
+        const rec = { ...baseRec };
+        const arr = r.installments;
+        if (Array.isArray(arr)) {
+          for (let i = 0; i < Math.min(arr.length, maxPeriods); i += 1) {
+            const item = arr[i];
+            const p = i + 1;
             rec[`p${p}_period`] = Number(item.period ?? p);
             rec[`p${p}_dueDate`] = item.dueDate ?? "";
             rec[`p${p}_principal`] = Number(item.principal ?? 0);
             rec[`p${p}_interest`] = Number(item.interest ?? 0);
             rec[`p${p}_fee`] = Number(item.fee ?? 0);
-          } else {
-            rec[`p${p}_paidAt`] = item.paidAt ?? "";
-            rec[`p${p}_principal`] = Number(item.principal ?? 0);
-            rec[`p${p}_interest`] = Number(item.interest ?? 0);
-            rec[`p${p}_fee`] = Number(item.fee ?? 0);
-            rec[`p${p}_penalty`] = Number(item.penalty ?? 0);
+            // Annotate the total column (matches UI): closed / overpaid applied.
+            let amountCell: string | number = Number(item.amount ?? 0);
+            if (item.isClosed) {
+              amountCell = "0 (ปิดค่างวดแล้ว)";
+            } else if (Number(item.overpaidApplied ?? 0) > 0.009) {
+              amountCell = `${Number(item.amount ?? 0).toFixed(2)} (-หักชำระเกิน ${Number(item.overpaidApplied).toFixed(2)})`;
+            }
+            rec[`p${p}_amount`] = amountCell;
           }
         }
+        ws.addRow(rec).commit();
+      } else {
+        // Collected variant: payments can be split.
+        // We group payments by period, find the max split depth for this row,
+        // and emit multiple Excel rows if a period has multiple payments.
+        const arr = r.payments;
+        const byPeriod = new Map<number, any[]>();
+        if (Array.isArray(arr)) {
+          for (const p of arr) {
+            if (p.period == null) continue;
+            if (!byPeriod.has(p.period)) byPeriod.set(p.period, []);
+            byPeriod.get(p.period)!.push(p);
+          }
+        }
+        let lines = 1;
+        byPeriod.forEach((pays) => {
+          if (pays.length > lines) lines = pays.length;
+        });
+
+        for (let li = 0; li < lines; li += 1) {
+          const rec: Record<string, string | number> = {};
+          // Only the first line gets the left-side contract info
+          if (li === 0) {
+            Object.assign(rec, baseRec);
+          } else {
+            rec.customerName = "- แบ่งชำระ -";
+          }
+
+          for (let p = 1; p <= maxPeriods; p += 1) {
+            const pays = byPeriod.get(p) ?? [];
+            const item = pays[li];
+            if (item) {
+              rec[`p${p}_period`] = li === 0 ? p : "—";
+              rec[`p${p}_paidAt`] = item.paidAt ?? "";
+              rec[`p${p}_principal`] = Number(item.principal ?? 0);
+              rec[`p${p}_interest`] = Number(item.interest ?? 0);
+              rec[`p${p}_fee`] = Number(item.fee ?? 0);
+              rec[`p${p}_penalty`] = Number(item.penalty ?? 0);
+              rec[`p${p}_unlockFee`] = Number(item.unlockFee ?? 0);
+              rec[`p${p}_discount`] = Number(item.discount ?? 0);
+              rec[`p${p}_overpaid`] = Number(item.overpaid ?? 0);
+              rec[`p${p}_closeInstallmentAmount`] = item.isCloseRow ? Number(item.closeInstallmentAmount ?? 0) : 0;
+              rec[`p${p}_badDebt`] = Number(item.badDebt ?? 0);
+              rec[`p${p}_total`] = Number(item.total ?? 0);
+            }
+          }
+          ws.addRow(rec).commit();
+        }
       }
-      ws.addRow(rec).commit();
     }
 
     ws.commit();
