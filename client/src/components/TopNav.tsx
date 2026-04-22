@@ -4,30 +4,38 @@ import { useSection } from "@/contexts/SectionContext";
 import { useAppAuth } from "@/hooks/useAppAuth";
 import { cn } from "@/lib/utils";
 import {
+  Banknote,
   ChevronDown,
+  FileText,
   KeyRound,
   LogOut,
   Menu as MenuIcon,
-  Users,
+  Settings,
   Shield,
-  FileText,
-  Banknote,
+  Users,
   X,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { Link, useLocation } from "wouter";
 import { toast } from "sonner";
+import { Link, useLocation } from "wouter";
+
+type MenuCode = "contract" | "debt_report" | "settings_users" | "settings_groups";
 
 type NavItem = {
   label: string;
   path: string;
   icon: typeof FileText;
-  menuCode: "contract" | "debt_report" | "settings_users" | "settings_groups";
+  menuCode: MenuCode;
 };
 
-const NAV_ITEMS: NavItem[] = [
+// Primary navigation: always shown on the TopNav itself.
+const MAIN_NAV: NavItem[] = [
   { label: "ข้อมูลสัญญา", path: "/contracts", icon: FileText, menuCode: "contract" },
   { label: "รายงานหนี้", path: "/debt-report", icon: Banknote, menuCode: "debt_report" },
+];
+
+// Settings sub-menu: collapsed under the Settings icon button.
+const SETTINGS_NAV: NavItem[] = [
   { label: "จัดการผู้ใช้งาน", path: "/settings/users", icon: Users, menuCode: "settings_users" },
   { label: "จัดการสิทธิ์", path: "/settings/groups", icon: Shield, menuCode: "settings_groups" },
 ];
@@ -40,21 +48,36 @@ export function TopNav() {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [sectionMenuOpen, setSectionMenuOpen] = useState(false);
+  const [settingsMenuOpen, setSettingsMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const sectionMenuRef = useRef<HTMLDivElement>(null);
+  const settingsMenuRef = useRef<HTMLDivElement>(null);
 
-  // close menus on outside click
+  // Close any open pop-over menu when clicking outside of it.
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (!userMenuRef.current?.contains(e.target as Node)) setUserMenuOpen(false);
       if (!sectionMenuRef.current?.contains(e.target as Node))
         setSectionMenuOpen(false);
+      if (!settingsMenuRef.current?.contains(e.target as Node))
+        setSettingsMenuOpen(false);
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  const visibleNav = NAV_ITEMS.filter((item) => can(item.menuCode, "view"));
+  // Close settings dropdown whenever the active route changes so the
+  // menu doesn't stay open after navigating to one of its sub-items.
+  useEffect(() => {
+    setSettingsMenuOpen(false);
+  }, [location]);
+
+  const visibleMain = MAIN_NAV.filter((item) => can(item.menuCode, "view"));
+  const visibleSettings = SETTINGS_NAV.filter((item) => can(item.menuCode, "view"));
+
+  const settingsActive = visibleSettings.some((item) =>
+    location.startsWith(item.path),
+  );
 
   const handleLogout = async () => {
     try {
@@ -123,9 +146,9 @@ export function TopNav() {
               </div>
             )}
 
-            {/* Desktop nav links */}
+            {/* Desktop nav links (main only — settings lives on the right) */}
             <div className="hidden lg:flex items-center gap-1">
-              {visibleNav.map((item) => {
+              {visibleMain.map((item) => {
                 const isActive = location.startsWith(item.path);
                 return (
                   <Link
@@ -145,9 +168,58 @@ export function TopNav() {
             </div>
           </div>
 
-          {/* Right: injected actions + user */}
+          {/* Right: injected actions + settings + user */}
           <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
             <div className="hidden md:flex items-center gap-2">{actions}</div>
+
+            {/* Settings dropdown: placed right after page-injected actions
+                (typically a Refresh/Export cluster from each page). */}
+            {visibleSettings.length > 0 && (
+              <div ref={settingsMenuRef} className="relative hidden md:block">
+                <button
+                  onClick={() => setSettingsMenuOpen((v) => !v)}
+                  aria-label="ตั้งค่า"
+                  title="ตั้งค่า"
+                  className={cn(
+                    "h-9 w-9 inline-flex items-center justify-center rounded-lg border transition-colors",
+                    settingsActive || settingsMenuOpen
+                      ? "bg-blue-50 border-blue-200 text-blue-700"
+                      : "bg-white border-gray-200 text-gray-600 hover:bg-gray-100 hover:text-gray-900",
+                  )}
+                >
+                  <Settings className="w-4 h-4" />
+                </button>
+                {settingsMenuOpen && (
+                  <div className="absolute top-full right-0 mt-1 w-56 bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-50">
+                    <div className="px-3 py-2 border-b border-gray-100">
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                        ตั้งค่า
+                      </p>
+                    </div>
+                    {visibleSettings.map((item) => {
+                      const Icon = item.icon;
+                      const isActive = location.startsWith(item.path);
+                      return (
+                        <Link
+                          key={item.path}
+                          href={item.path}
+                          onClick={() => setSettingsMenuOpen(false)}
+                          className={cn(
+                            "flex items-center gap-2 px-3 py-2 text-sm",
+                            isActive
+                              ? "bg-blue-50 text-blue-700"
+                              : "text-gray-700 hover:bg-gray-50",
+                          )}
+                        >
+                          <Icon className="w-4 h-4" />
+                          {item.label}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
 
             {me && (
               <div ref={userMenuRef} className="relative">
@@ -211,7 +283,7 @@ export function TopNav() {
           />
           <aside className="fixed left-0 top-14 bottom-0 w-64 bg-white border-r border-gray-200 z-40 lg:hidden overflow-y-auto">
             <nav className="p-3 space-y-1">
-              {visibleNav.map((item) => {
+              {visibleMain.map((item) => {
                 const Icon = item.icon;
                 const isActive = location.startsWith(item.path);
                 return (
@@ -231,6 +303,39 @@ export function TopNav() {
                   </Link>
                 );
               })}
+
+              {/* Settings section header, shown only if the user has
+                  permission to access at least one settings page. */}
+              {visibleSettings.length > 0 && (
+                <>
+                  <div className="pt-3 pb-1 px-3">
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
+                      <Settings className="w-3.5 h-3.5" />
+                      ตั้งค่า
+                    </p>
+                  </div>
+                  {visibleSettings.map((item) => {
+                    const Icon = item.icon;
+                    const isActive = location.startsWith(item.path);
+                    return (
+                      <Link
+                        key={item.path}
+                        href={item.path}
+                        onClick={() => setMobileMenuOpen(false)}
+                        className={cn(
+                          "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium",
+                          isActive
+                            ? "bg-blue-50 text-blue-700"
+                            : "text-gray-700 hover:bg-gray-100",
+                        )}
+                      >
+                        <Icon className="w-4 h-4" />
+                        {item.label}
+                      </Link>
+                    );
+                  })}
+                </>
+              )}
             </nav>
           </aside>
         </>
