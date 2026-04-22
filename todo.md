@@ -275,4 +275,4 @@ Task list:
 - [x] Fix `assignPayPeriods` — แยก cursor logic: TXRTC → advance +1 เสมอต่อ 1 ใบ (clamp ที่งวดสุดท้าย), regular TXRT → amount-based ด้วย fallback จาก pif ไป close_installment ไป total
 - [x] Frontend DebtReport.tsx — ทุกเซลล์ของแถว isCloseRow มี bg `#fff1f2` (rose-50) + text-rose-700 + เส้นซ้าย 4px rose-400 ที่คอลัมน์แรกของ group
 - [x] Regression tests: 4 เคสใหม่ (สุวิทย์ 12/12, เอกลักษณ์ 1+11=12, clamp-at-last, มณีรัตน์ partial) — รวม 58/59 tests ผ่าน
-- [ ] Commit + push + checkpoint
+- [x] Commit + push + checkpoint (commit 71fbef8)
