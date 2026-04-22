@@ -226,3 +226,276 @@ export async function getOverdueTopList(params: {
     };
   });
 }
+
+/* ============================================================================
+ * Per-contract lists for the new two-tab debt report (target / collected).
+ *
+ * The UI mirrors boonphone.co.th/mm.html:
+ *   - Each contract = 1 row (summary columns on the left)
+ *   - Per-installment "groups" repeat horizontally (งวดที่ 1..N)
+ *
+ * Status label ("debt_status") is derived from the worst-overdue unpaid
+ * installment of the contract as of today. If contract.status is a terminal
+ * value (ระงับสัญญา / สิ้นสุดสัญญา / หนี้เสีย), that wins.
+ * ============================================================================ */
+
+type ContractRowLite = {
+  externalId: string;
+  contractNo: string | null;
+  approveDate: string | null;
+  customerName: string | null;
+  phone: string | null;
+  installmentCount: number | null;
+  installmentAmount: number | null;
+  contractStatus: string | null;
+};
+
+type InstRawRow = {
+  contract_external_id: string;
+  period: number | null;
+  due_date: string | null;
+  amount: number | null;
+  paid_amount: number | null;
+  inst_status: string | null;
+  principal_due: number | null;
+  interest_due: number | null;
+  fee_due: number | null;
+  penalty_due: number | null;
+};
+
+type PayRawRow = {
+  contract_external_id: string;
+  period: number | null;
+  paid_at: string | null;
+  total_paid_amount: number | null;
+  principal_paid: number | null;
+  interest_paid: number | null;
+  fee_paid: number | null;
+  penalty_paid: number | null;
+  close_installment_amount: number | null;
+  receipt_no: string | null;
+  remark: string | null;
+};
+
+/** Compute "debt_status" label based on days overdue. */
+function bucketFromDays(days: number): string {
+  if (days <= 0) return "ปกติ";
+  if (days <= 7) return "เกิน 1-7";
+  if (days <= 14) return "เกิน 8-14";
+  if (days <= 30) return "เกิน 15-30";
+  if (days <= 60) return "เกิน 31-60";
+  if (days <= 90) return "เกิน 61-90";
+  return "เกิน >90";
+}
+
+const TERMINAL_STATUSES = new Set([
+  "ระงับสัญญา",
+  "สิ้นสุดสัญญา",
+  "หนี้เสีย",
+]);
+
+function deriveDebtStatus(
+  contractStatus: string | null,
+  installmentsForContract: InstRawRow[],
+  today: Date,
+): { label: string; daysOverdue: number } {
+  if (contractStatus && TERMINAL_STATUSES.has(contractStatus)) {
+    return { label: contractStatus, daysOverdue: 0 };
+  }
+  let maxDays = 0;
+  for (const it of installmentsForContract) {
+    if (!it.due_date) continue;
+    const dueMs = Date.parse(`${it.due_date}T00:00:00`);
+    if (Number.isNaN(dueMs)) continue;
+    const paid = Number(it.paid_amount ?? 0);
+    const amt = Number(it.amount ?? 0);
+    // Treat installment as unpaid when the status is not "เสร็จสมบูรณ์" / "ชำระครบ"
+    // and paid_amount < amount.
+    const outstanding = amt - paid;
+    if (outstanding <= 0.001) continue;
+    const days = Math.floor((today.getTime() - dueMs) / (1000 * 60 * 60 * 24));
+    if (days > maxDays) maxDays = days;
+  }
+  return { label: bucketFromDays(maxDays), daysOverdue: maxDays };
+}
+
+/**
+ * Return the dataset used by the "เป้าเก็บหนี้" tab.
+ * One entry per contract with `installments[]` describing the scheduled
+ * principal / interest / fee / penalty for each period.
+ */
+export async function listDebtTarget(params: { section: SectionKey }) {
+  const db = await getDb();
+  if (!db) return { rows: [] as any[] };
+
+  // --- Load contract headers (trimmed — no rawJson) ---
+  const contractRowsRaw = await db.execute(sql`
+    SELECT external_id,
+           contract_no,
+           approve_date,
+           customer_name,
+           phone,
+           installment_count,
+           installment_amount,
+           status
+      FROM ${contracts}
+     WHERE ${contracts.section} = ${params.section}
+  `);
+  const cRows: Array<any> = (contractRowsRaw as any)[0] ?? contractRowsRaw;
+
+  // --- Load installments with sub-fields extracted from raw_json once ---
+  const instRowsRaw = await db.execute(sql`
+    SELECT contract_external_id,
+           period,
+           due_date,
+           CAST(amount AS DECIMAL(18,2))       AS amount,
+           CAST(paid_amount AS DECIMAL(18,2))  AS paid_amount,
+           status AS inst_status,
+           CAST(JSON_EXTRACT(raw_json, '$.principal_due') AS DECIMAL(18,2)) AS principal_due,
+           CAST(JSON_EXTRACT(raw_json, '$.interest_due')  AS DECIMAL(18,2)) AS interest_due,
+           CAST(JSON_EXTRACT(raw_json, '$.fee_due')       AS DECIMAL(18,2)) AS fee_due,
+           CAST(JSON_EXTRACT(raw_json, '$.penalty_due')   AS DECIMAL(18,2)) AS penalty_due
+      FROM ${installments}
+     WHERE ${installments.section} = ${params.section}
+     ORDER BY contract_external_id, period
+  `);
+  const iRows: InstRawRow[] = (instRowsRaw as any)[0] ?? instRowsRaw;
+
+  const instByContract = new Map<string, InstRawRow[]>();
+  for (const r of iRows) {
+    const key = String(r.contract_external_id);
+    if (!instByContract.has(key)) instByContract.set(key, []);
+    instByContract.get(key)!.push({
+      contract_external_id: key,
+      period: r.period != null ? Number(r.period) : null,
+      due_date: r.due_date ?? null,
+      amount: r.amount != null ? Number(r.amount) : null,
+      paid_amount: r.paid_amount != null ? Number(r.paid_amount) : null,
+      inst_status: r.inst_status ?? null,
+      principal_due: r.principal_due != null ? Number(r.principal_due) : null,
+      interest_due: r.interest_due != null ? Number(r.interest_due) : null,
+      fee_due: r.fee_due != null ? Number(r.fee_due) : null,
+      penalty_due: r.penalty_due != null ? Number(r.penalty_due) : null,
+    });
+  }
+
+  const today = new Date();
+
+  const rows = cRows.map((c) => {
+    const extId = String(c.external_id);
+    const list = instByContract.get(extId) ?? [];
+    const totalPaid = list.reduce(
+      (s, r) => s + Number(r.paid_amount ?? 0),
+      0,
+    );
+    const totalAmount = list.reduce((s, r) => s + Number(r.amount ?? 0), 0);
+    const { label: debtStatus, daysOverdue } = deriveDebtStatus(
+      c.status ?? null,
+      list,
+      today,
+    );
+    return {
+      contractExternalId: extId,
+      contractNo: c.contract_no ?? null,
+      approveDate: c.approve_date ?? null,
+      customerName: c.customer_name ?? null,
+      phone: c.phone ?? null,
+      installmentCount: c.installment_count != null ? Number(c.installment_count) : list.length,
+      installmentAmount: c.installment_amount != null ? Number(c.installment_amount) : null,
+      totalAmount,
+      totalPaid,
+      remaining: Math.max(totalAmount - totalPaid, 0),
+      debtStatus,
+      daysOverdue,
+      installments: list.map((r) => ({
+        period: r.period ?? null,
+        dueDate: r.due_date ?? null,
+        principal: r.principal_due ?? 0,
+        interest: r.interest_due ?? 0,
+        fee: r.fee_due ?? 0,
+        penalty: r.penalty_due ?? 0,
+        amount: r.amount ?? 0,
+        paid: r.paid_amount ?? 0,
+      })),
+    };
+  });
+
+  return { rows };
+}
+
+/**
+ * Return the dataset used by the "ยอดเก็บหนี้" tab.
+ * One entry per contract + array of actual payments grouped by the
+ * installment period they closed (`close_installment_amount` / derived).
+ */
+export async function listDebtCollected(params: { section: SectionKey }) {
+  const db = await getDb();
+  if (!db) return { rows: [] as any[] };
+
+  // Reuse target list for shared summary columns & debt-status derivation.
+  const { rows: baseRows } = await listDebtTarget(params);
+
+  const payRowsRaw = await db.execute(sql`
+    SELECT contract_external_id,
+           paid_at,
+           CAST(amount AS DECIMAL(18,2)) AS total_paid_amount,
+           CAST(JSON_EXTRACT(raw_json, '$.principal_paid')          AS DECIMAL(18,2)) AS principal_paid,
+           CAST(JSON_EXTRACT(raw_json, '$.interest_paid')           AS DECIMAL(18,2)) AS interest_paid,
+           CAST(JSON_EXTRACT(raw_json, '$.fee_paid')                AS DECIMAL(18,2)) AS fee_paid,
+           CAST(JSON_EXTRACT(raw_json, '$.penalty_paid')            AS DECIMAL(18,2)) AS penalty_paid,
+           CAST(JSON_EXTRACT(raw_json, '$.close_installment_amount') AS DECIMAL(18,2)) AS close_installment_amount,
+           JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.receipt_no')) AS receipt_no,
+           JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.remark'))     AS remark
+      FROM ${paymentTransactions}
+     WHERE ${paymentTransactions.section} = ${params.section}
+       AND (${paymentTransactions.status} IS NULL
+            OR LOWER(${paymentTransactions.status}) IN ('active', 'paid', 'success', 'completed'))
+     ORDER BY contract_external_id, paid_at
+  `);
+  const pRows: PayRawRow[] = (payRowsRaw as any)[0] ?? payRowsRaw;
+
+  const payByContract = new Map<string, PayRawRow[]>();
+  for (const r of pRows) {
+    const key = String(r.contract_external_id ?? "");
+    if (!key) continue;
+    if (!payByContract.has(key)) payByContract.set(key, []);
+    payByContract.get(key)!.push({
+      contract_external_id: key,
+      period: null,
+      paid_at: r.paid_at ?? null,
+      total_paid_amount:
+        r.total_paid_amount != null ? Number(r.total_paid_amount) : null,
+      principal_paid:
+        r.principal_paid != null ? Number(r.principal_paid) : null,
+      interest_paid: r.interest_paid != null ? Number(r.interest_paid) : null,
+      fee_paid: r.fee_paid != null ? Number(r.fee_paid) : null,
+      penalty_paid: r.penalty_paid != null ? Number(r.penalty_paid) : null,
+      close_installment_amount:
+        r.close_installment_amount != null
+          ? Number(r.close_installment_amount)
+          : null,
+      receipt_no: r.receipt_no ?? null,
+      remark: r.remark ?? null,
+    });
+  }
+
+  const rows = baseRows.map((c) => {
+    const payments = payByContract.get(c.contractExternalId) ?? [];
+    return {
+      ...c,
+      payments: payments.map((p) => ({
+        paidAt: p.paid_at,
+        principal: p.principal_paid ?? 0,
+        interest: p.interest_paid ?? 0,
+        fee: p.fee_paid ?? 0,
+        penalty: p.penalty_paid ?? 0,
+        total: p.total_paid_amount ?? 0,
+        closeInstallmentAmount: p.close_installment_amount ?? 0,
+        receiptNo: p.receipt_no ?? null,
+        remark: p.remark ?? null,
+      })),
+    };
+  });
+
+  return { rows };
+}

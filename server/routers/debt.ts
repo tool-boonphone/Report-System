@@ -1,14 +1,20 @@
 /**
  * Debt-report router.
- *   - summary           : รวมทั้งช่วง + แยกรายเดือน
- *   - overdueTop        : สัญญาค้างชำระสูงสุด (ณ วันที่)
+ *   - summary      : รวมทั้งช่วง + แยกรายเดือน (เก็บไว้เผื่อ backward compatibility)
+ *   - overdueTop   : สัญญาค้างชำระสูงสุด
+ *   - listTarget   : “เป้าเก็บหนี้” — ตารางรายงานต่อสัญญาของงวดตาม schedule จาก installments
+ *   - listCollected: “ยอดเก็บหนี้” — ตารางรายงานต่อสัญญาจากการชำระจริง (payment_transactions)
  *
- * ทุก procedure ถูกป้องกันด้วย permissionProcedure('debt', 'canView')
- * เพื่อให้ตรงกับหน้าจัดการกลุ่มสิทธิ์ (menu = 'debt').
+ * ทุก procedure ถูกป้องกันด้วย permissionProcedure('debt_report', 'view').
  */
 import { z } from "zod";
 import { requirePermission, router } from "../_core/trpc";
-import { getDebtReport, getOverdueTopList } from "../debtDb";
+import {
+  getDebtReport,
+  getOverdueTopList,
+  listDebtCollected,
+  listDebtTarget,
+} from "../debtDb";
 import { SECTIONS } from "../../shared/const";
 
 const debtViewProcedure = requirePermission("debt_report", "view");
@@ -40,5 +46,17 @@ export const debtRouter = router({
     )
     .query(async ({ input }) => {
       return getOverdueTopList(input);
+    }),
+
+  listTarget: debtViewProcedure
+    .input(z.object({ section: SectionEnum }))
+    .query(async ({ input }) => {
+      return listDebtTarget(input);
+    }),
+
+  listCollected: debtViewProcedure
+    .input(z.object({ section: SectionEnum }))
+    .query(async ({ input }) => {
+      return listDebtCollected(input);
     }),
 });

@@ -68,6 +68,27 @@ describe("exportExcel access control", () => {
     expect(read().statusCode).toBe(401);
   });
 
+  it("debt export: rejects with 400 when variant is not target|collected", async () => {
+    const authDb = await import("./authDb");
+    const mockUser: any = {
+      id: 99,
+      username: "Sadmin",
+      isActive: true,
+      group: { id: 1, name: "Super Admin", isSuperAdmin: true },
+      permissions: [],
+    };
+    vi.spyOn(authDb, "getUserFromSession").mockResolvedValueOnce(mockUser);
+    vi.spyOn(authDb, "checkPermission").mockReturnValueOnce(true);
+
+    const { res, read } = fakeRes();
+    await handleDebtExport(
+      fakeReq("report_session=ok", { section: "Boonphone", variant: "bogus" }),
+      res,
+    );
+    expect(read().statusCode).toBe(400);
+    expect(read().body[0]?.message ?? "").toMatch(/variant/);
+  });
+
   it("debt export: rejects with 400 when section is invalid (after auth is stubbed)", async () => {
     // Stub getUserFromSession + checkPermission so we reach the section check.
     const authDb = await import("./authDb");

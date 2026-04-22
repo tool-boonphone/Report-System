@@ -19,6 +19,7 @@ import {
   type ContractFilters,
   type ContractSort,
 } from "../contractsDb";
+import { listDebtTarget, listDebtCollected } from "../debtDb";
 
 function parseCookies(header: string | undefined): Record<string, string> {
   if (!header) return {};
@@ -35,7 +36,6 @@ function cellValue(key: ContractColumnKey, row: any, seq: number) {
   if (key === "seq") return seq;
   const v = row[key];
   if (v === null || v === undefined) return "";
-  // Drizzle returns DECIMAL as string; convert to number so Excel can format it.
   const meta = CONTRACT_COLUMNS.find((c) => c.key === key);
   if (meta?.type === "money" || meta?.type === "number") {
     const n = typeof v === "string" ? Number(v) : v;
@@ -46,7 +46,6 @@ function cellValue(key: ContractColumnKey, row: any, seq: number) {
 
 export async function handleContractsExport(req: Request, res: Response) {
   try {
-    // 1. Auth from session cookie
     const sid = parseCookies(req.headers.cookie)[APP_SESSION_COOKIE];
     const appUser = sid ? await getUserFromSession(sid) : null;
     if (!appUser) {
@@ -58,7 +57,6 @@ export async function handleContractsExport(req: Request, res: Response) {
       return;
     }
 
-    // 2. Inputs
     const sectionRaw = String(req.query.section ?? "");
     if (!SECTIONS.includes(sectionRaw as SectionKey)) {
       res.status(400).json({ message: "ต้องระบุ section" });
@@ -87,7 +85,6 @@ export async function handleContractsExport(req: Request, res: Response) {
       dir: (req.query.sortDir as any) ?? undefined,
     };
 
-    // 3. Stream XLSX
     const fileName = `contracts_${section}_${new Date()
       .toISOString()
       .slice(0, 19)
@@ -137,16 +134,33 @@ export async function handleContractsExport(req: Request, res: Response) {
   }
 }
 
-
 /* ----------------------------------------------------------------------- */
 /*  Debt report export                                                      */
 /* ----------------------------------------------------------------------- */
 
-import { getDebtReport } from "../debtDb";
+// Left-side columns shared by both variants (matches DebtReport.tsx UI).
+const DEBT_LEFT_COLUMNS: Array<{ key: string; header: string; width: number }> =
+  [
+    { key: "seq", header: "#", width: 6 },
+    { key: "approveDate", header: "วันที่อนุมัติ", width: 14 },
+    { key: "contractNo", header: "เลขที่สัญญา", width: 22 },
+    { key: "customerName", header: "ชื่อ-นามสกุล", width: 22 },
+    { key: "phone", header: "เบอร์โทร", width: 14 },
+    { key: "totalAmount", header: "ยอดผ่อนรวม", width: 16 },
+    { key: "installmentCount", header: "งวดผ่อน", width: 10 },
+    { key: "perInstallment", header: "ผ่อนงวดละ", width: 14 },
+    { key: "debtStatus", header: "สถานะหนี้", width: 14 },
+    { key: "daysOverdue", header: "เกินกำหนด (วัน)", width: 14 },
+  ];
+
+function matchesSearch(hay: string | null | undefined, needle: string) {
+  if (!needle) return true;
+  const h = (hay ?? "").toLowerCase();
+  return h.includes(needle.toLowerCase());
+}
 
 export async function handleDebtExport(req: Request, res: Response) {
   try {
-    // 1. Auth + permission
     const sid = parseCookies(req.headers.cookie)[APP_SESSION_COOKIE];
     const appUser = sid ? await getUserFromSession(sid) : null;
     if (!appUser) {
@@ -158,24 +172,51 @@ export async function handleDebtExport(req: Request, res: Response) {
       return;
     }
 
-    // 2. Inputs
     const sectionRaw = String(req.query.section ?? "");
     if (!SECTIONS.includes(sectionRaw as SectionKey)) {
       res.status(400).json({ message: "ต้องระบุ section" });
       return;
     }
     const section = sectionRaw as SectionKey;
-    const from = String(req.query.from ?? "");
-    const to = String(req.query.to ?? "");
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
-      res.status(400).json({ message: "from/to ต้องเป็นรูปแบบ YYYY-MM-DD" });
+
+    const variantRaw = String(req.query.variant ?? "target");
+    if (variantRaw !== "target" && variantRaw !== "collected") {
+      res.status(400).json({ message: "variant ต้องเป็น target หรือ collected" });
       return;
     }
+    const variant = variantRaw as "target" | "collected";
 
-    // 3. Build workbook in memory (monthly data is small, hundreds of rows at most)
-    const { summary, monthly } = await getDebtReport({ section, from, to });
+    const search = req.query.search ? String(req.query.search).trim() : "";
+    const statusFilter = req.query.status ? String(req.query.status) : "";
 
-    const fileName = `debt_report_${section}_${from}_to_${to}.xlsx`;
+    // 1. Load all rows for the selected variant (DB has ~3.5k contracts — safe).
+    let rows: any[];
+    if (variant === "target") {
+      const r = await listDebtTarget({ section });
+      rows = r.rows;
+    } else {
+      const r = await listDebtCollected({ section });
+      rows = r.rows;
+    }
+
+    // 2. Apply same filters as the UI.
+    const filtered = (rows as any[]).filter((r) => {
+      if (statusFilter && r.debtStatus !== statusFilter) return false;
+      if (search) {
+        return (
+          matchesSearch(r.contractNo, search) ||
+          matchesSearch(r.customerName, search) ||
+          matchesSearch(r.phone, search)
+        );
+      }
+      return true;
+    });
+
+    // 3. Build worksheet.
+    const fileName = `debt_${variant}_${section}_${new Date()
+      .toISOString()
+      .slice(0, 19)
+      .replace(/[:T]/g, "-")}.xlsx`;
     res.setHeader(
       "Content-Type",
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -186,44 +227,89 @@ export async function handleDebtExport(req: Request, res: Response) {
     );
 
     const wb = new ExcelJS.stream.xlsx.WorkbookWriter({ stream: res });
-    const ws = wb.addWorksheet("รายงานหนี้");
+    const ws = wb.addWorksheet(variant === "target" ? "เป้าเก็บหนี้" : "ยอดเก็บหนี้");
 
-    ws.columns = [
-      { header: "เดือน", key: "month", width: 12 },
-      { header: "เป้าเก็บหนี้ (บาท)", key: "target", width: 18 },
-      { header: "งวดครบกำหนด", key: "targetCount", width: 14 },
-      { header: "ยอดเก็บหนี้ (บาท)", key: "collected", width: 18 },
-      { header: "จำนวนธุรกรรม", key: "collectedCount", width: 14 },
-      { header: "ส่วนต่าง (บาท)", key: "gap", width: 16 },
-      { header: "อัตราจัดเก็บ (%)", key: "rate", width: 16 },
+    // Determine how many installment groups we need (cap at 36 like UI).
+    let maxPeriods = 0;
+    for (const r of filtered as any[]) {
+      const arr = variant === "target" ? r.installments : r.payments;
+      if (Array.isArray(arr) && arr.length > maxPeriods) maxPeriods = arr.length;
+    }
+    maxPeriods = Math.min(maxPeriods, 36);
+
+    // Build column list: left fixed + per-period group (5 subcolumns each).
+    const perGroup =
+      variant === "target"
+        ? [
+            { key: "period", header: "งวดที่", width: 8 },
+            { key: "dueDate", header: "วันที่ต้องชำระ", width: 14 },
+            { key: "principal", header: "เงินต้น", width: 12 },
+            { key: "interest", header: "ดอกเบี้ย", width: 12 },
+            { key: "fee", header: "ค่าดำเนินการ", width: 12 },
+          ]
+        : [
+            { key: "paidAt", header: "วันที่ชำระ", width: 14 },
+            { key: "principal", header: "เงินต้น", width: 12 },
+            { key: "interest", header: "ดอกเบี้ย", width: 12 },
+            { key: "fee", header: "ค่าดำเนินการ", width: 12 },
+            { key: "penalty", header: "ค่าปรับ", width: 10 },
+          ];
+
+    const cols: Array<{ header: string; key: string; width: number }> = [
+      ...DEBT_LEFT_COLUMNS,
     ];
+    for (let p = 1; p <= maxPeriods; p += 1) {
+      for (const g of perGroup) {
+        cols.push({
+          header: `งวดที่ ${p} - ${g.header}`,
+          key: `p${p}_${g.key}`,
+          width: g.width,
+        });
+      }
+    }
+    ws.columns = cols;
     ws.getRow(1).font = { bold: true };
     ws.getRow(1).alignment = { vertical: "middle", horizontal: "center" };
     ws.getRow(1).commit();
 
-    for (const r of monthly) {
-      ws.addRow({
-        month: r.month,
-        target: Number(r.target),
-        targetCount: Number(r.targetCount),
-        collected: Number(r.collected),
-        collectedCount: Number(r.collectedCount),
-        gap: Number(r.gap),
-        rate: Number((r.rate * 100).toFixed(2)),
-      }).commit();
+    // 4. Stream rows.
+    let seq = 0;
+    for (const r of filtered as any[]) {
+      seq += 1;
+      const rec: Record<string, string | number> = {
+        seq,
+        approveDate: r.approveDate ?? "",
+        contractNo: r.contractNo ?? "",
+        customerName: r.customerName ?? "",
+        phone: r.phone ?? "",
+        totalAmount: Number(r.totalAmount ?? 0),
+        installmentCount: Number(r.installmentCount ?? 0),
+        perInstallment: Number(r.perInstallment ?? 0),
+        debtStatus: r.debtStatus ?? "",
+        daysOverdue: Number(r.daysOverdue ?? 0),
+      };
+      const arr = variant === "target" ? r.installments : r.payments;
+      if (Array.isArray(arr)) {
+        for (let i = 0; i < Math.min(arr.length, maxPeriods); i += 1) {
+          const item = arr[i];
+          const p = i + 1;
+          if (variant === "target") {
+            rec[`p${p}_period`] = Number(item.period ?? p);
+            rec[`p${p}_dueDate`] = item.dueDate ?? "";
+            rec[`p${p}_principal`] = Number(item.principal ?? 0);
+            rec[`p${p}_interest`] = Number(item.interest ?? 0);
+            rec[`p${p}_fee`] = Number(item.fee ?? 0);
+          } else {
+            rec[`p${p}_paidAt`] = item.paidAt ?? "";
+            rec[`p${p}_principal`] = Number(item.principal ?? 0);
+            rec[`p${p}_interest`] = Number(item.interest ?? 0);
+            rec[`p${p}_fee`] = Number(item.fee ?? 0);
+            rec[`p${p}_penalty`] = Number(item.penalty ?? 0);
+          }
+        }
+      }
+      ws.addRow(rec).commit();
     }
-
-    // Summary footer
-    ws.addRow({}).commit();
-    ws.addRow({
-      month: "รวมทั้งช่วง",
-      target: Number(summary.target),
-      targetCount: Number(summary.targetCount),
-      collected: Number(summary.collected),
-      collectedCount: Number(summary.collectedCount),
-      gap: Number(summary.gap),
-      rate: Number((summary.rate * 100).toFixed(2)),
-    }).commit();
 
     ws.commit();
     await wb.commit();

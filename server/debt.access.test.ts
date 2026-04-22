@@ -89,6 +89,35 @@ describe("debt router access control", () => {
     }
   });
 
+  it("listTarget and listCollected enforce the same view permission", async () => {
+    // Unauthenticated
+    {
+      const ctx: TrpcContext = { ...mkReqRes(), user: null, appUser: null };
+      const caller = appRouter.createCaller(ctx);
+      await expect(
+        caller.debt.listTarget({ section: "Boonphone" }),
+      ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+      await expect(
+        caller.debt.listCollected({ section: "Boonphone" }),
+      ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    }
+    // Logged-in but no permission
+    {
+      const group = mkGroup(false);
+      const user = mkUser(group, [
+        { menuCode: "debt_report", canView: false },
+      ]);
+      const ctx: TrpcContext = { ...mkReqRes(), user: null, appUser: user };
+      const caller = appRouter.createCaller(ctx);
+      await expect(
+        caller.debt.listTarget({ section: "Boonphone" }),
+      ).rejects.toMatchObject({ code: "FORBIDDEN" });
+      await expect(
+        caller.debt.listCollected({ section: "Boonphone" }),
+      ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    }
+  });
+
   // TiDB can take several seconds for the 42k-row aggregation on a cold
   // connection, so we raise the timeout to 15s for this one integration test.
   it("allows Super Admin to query the debt summary (returns shape)", async () => {
