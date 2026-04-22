@@ -114,27 +114,43 @@ export class PartnerClient {
       url.searchParams.set(k, String(v));
     }
 
-    const attempt = async (allowRefresh: boolean): Promise<T> => {
-      const token = await this.getToken();
-      const res = await this.rawFetch(url.toString(), {
-        method: "GET",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const body = (await res.json().catch(() => ({}))) as ApiEnvelope<T>;
-      if (res.status === 401 && allowRefresh) {
-        this.token = null;
-        return attempt(false);
+    // Up to 4 attempts total (1 + 3 retries). Delays: 1s, 3s, 9s.
+    const delays = [1000, 3000, 9000];
+    let lastErr: unknown = null;
+    for (let attemptIdx = 0; attemptIdx <= delays.length; attemptIdx++) {
+      try {
+        const token = await this.getToken();
+        const res = await this.rawFetch(url.toString(), {
+          method: "GET",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const body = (await res.json().catch(() => ({}))) as ApiEnvelope<T>;
+        if (res.status === 401 && attemptIdx === 0) {
+          // Token might have rotated server-side — invalidate and try once more.
+          this.token = null;
+          continue;
+        }
+        if (!res.ok || body?.success === false) {
+          const err = new PartnerApiError(
+            res.status,
+            body,
+            `[${this.cfg.section}] GET ${path} failed: ${body?.message ?? res.statusText}`,
+          );
+          // Retry only on 5xx / 429. 4xx are usually permanent.
+          if (res.status < 500 && res.status !== 429) throw err;
+          lastErr = err;
+        } else {
+          return body.data as T;
+        }
+      } catch (err: any) {
+        // Network/abort errors: retry.
+        lastErr = err;
       }
-      if (!res.ok || body?.success === false) {
-        throw new PartnerApiError(
-          res.status,
-          body,
-          `[${this.cfg.section}] GET ${path} failed: ${body?.message ?? res.statusText}`,
-        );
-      }
-      return body.data as T;
-    };
-    return attempt(true);
+      const delay = delays[attemptIdx];
+      if (delay === undefined) break;
+      await new Promise((r) => setTimeout(r, delay));
+    }
+    throw lastErr ?? new Error(`[${this.cfg.section}] GET ${path} failed`);
   }
 
   /** Follow pagination until `has_next` is false. Calls `onPage` for each page. */

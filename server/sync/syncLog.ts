@@ -104,3 +104,26 @@ export async function listSyncLogs(section?: SectionKey, limit = 50) {
     .limit(limit);
   return cond ? await q.where(cond) : await q;
 }
+
+/**
+ * Returns the most recent attempt's timestamp for a section where the status
+ * was "error". Used by the scheduler to cool off sections whose credentials
+ * are invalid (prevents noisy login-fail loops on every restart).
+ */
+export async function getLastErrorAt(params: {
+  section: SectionKey;
+}): Promise<Date | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db
+    .select({
+      startedAt: syncLogs.startedAt,
+      status: syncLogs.status,
+    })
+    .from(syncLogs)
+    .where(eq(syncLogs.section, params.section))
+    .orderBy(desc(syncLogs.startedAt))
+    .limit(1);
+  const last = rows[0];
+  return last && last.status === "error" ? last.startedAt : null;
+}

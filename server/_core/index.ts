@@ -7,6 +7,7 @@ import { registerOAuthRoutes } from "./oauth";
 import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
 import { seedSuperAdmin } from "../authDb";
+import { handleContractsExport, handleDebtExport } from "../routers/exportExcel";
 import { startScheduler } from "../sync/scheduler";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
@@ -38,6 +39,9 @@ async function startServer() {
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
   registerStorageProxy(app);
   registerOAuthRoutes(app);
+  // Excel export (streams large files so it's outside of tRPC)
+  app.get("/api/export/contracts", handleContractsExport);
+  app.get("/api/export/debt", handleDebtExport);
   // tRPC API
   app.use(
     "/api/trpc",

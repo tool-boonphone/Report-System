@@ -8,7 +8,14 @@
 import type { SectionKey } from "../../shared/const";
 import { SECTIONS } from "../../shared/const";
 import { runSectionSync, isSyncRunning } from "./runner";
-import { getLastSyncedAt } from "./syncLog";
+import { getLastSyncedAt, getLastErrorAt } from "./syncLog";
+import { buildClientFromEnv } from "../api/partnerClient";
+
+/** Returns true if both base URL + credentials are present for the section. */
+function isSectionConfigured(section: SectionKey): boolean {
+  const client = buildClientFromEnv(section);
+  return Boolean(client && client.isConfigured());
+}
 
 const START_HOUR = 8;
 const END_HOUR = 19; // inclusive: 08,09,...,19
@@ -39,6 +46,7 @@ async function tick() {
   const slot = currentSlot(now);
 
   for (const section of SECTIONS as readonly SectionKey[]) {
+    if (!isSectionConfigured(section)) continue; // skip unconfigured sections
     const tag = `${section}::${slot}`;
     if (_lastTick[section] === slot) continue;
     if (isSyncRunning(section)) continue;
@@ -67,6 +75,18 @@ export async function startScheduler() {
   const now = new Date();
   if (isWithinBusinessHours(now)) {
     for (const section of SECTIONS as readonly SectionKey[]) {
+      if (!isSectionConfigured(section)) {
+        console.log(`[scheduler] ${section} skipped (no credentials configured)`);
+        continue;
+      }
+      // Cool-off: if the previous attempt errored within the last hour, skip.
+      const lastErr = await getLastErrorAt({ section });
+      if (lastErr && now.getTime() - lastErr.getTime() < 60 * 60 * 1000) {
+        console.log(
+          `[scheduler] ${section} skipped (recent error at ${lastErr.toISOString()})`,
+        );
+        continue;
+      }
       const last = await getLastSyncedAt({ section });
       if (!last || now.getTime() - last.getTime() > 60 * 60 * 1000) {
         if (!isSyncRunning(section)) {
