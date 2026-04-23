@@ -681,7 +681,7 @@ export default function Contracts() {
           <div
             ref={scrollRef}
             className="overflow-x-auto overflow-y-auto"
-            style={{ maxHeight: "calc(100vh - 280px)" }}
+            style={{ maxHeight: "calc(100vh - 280px)", height: filteredRows.length > 0 ? Math.min(filteredRows.length * 36 + 40, window.innerHeight - 280) : undefined }}
           >
             <table className="min-w-full text-[13px]">
               <thead className="bg-gray-50 sticky top-0 z-10">

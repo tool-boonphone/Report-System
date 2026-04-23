@@ -523,7 +523,8 @@ export default function DebtReport() {
         discount += p.discount ?? 0;
         overpaid += p.overpaid ?? 0;
         badDebt += p.badDebt ?? 0;
-        total += p.total ?? 0;
+        // ยอดที่ชำระรวม = เงินที่เก็บเข้ามาจริงๆ (ไม่รวมส่วนลด)
+        total += (p.principal ?? 0) + (p.interest ?? 0) + (p.fee ?? 0) + (p.penalty ?? 0) + (p.unlockFee ?? 0);
       }
     }
     return { principal, interest, fee, penalty, unlockFee, discount, overpaid, badDebt, total };
@@ -732,7 +733,6 @@ export default function DebtReport() {
               />
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <StatusMultiSelect selected={statusFilter} onChange={setStatusFilter} />
               <MultiSelectFilter
                 label="เดือน-ปีที่อนุมัติ"
                 selected={approveDateFilter}
@@ -747,15 +747,14 @@ export default function DebtReport() {
                 options={dueDateOptions}
                 placeholder="ทุกเดือน-ปีที่ต้องชำระ"
               />
-              {tab === "collected" && (
-                <MultiSelectFilter
-                  label="ประเภทเครื่อง"
-                  selected={productTypeFilter}
-                  onChange={setProductTypeFilter}
-                  options={productTypeOptions}
-                  placeholder="ทุกประเภทเครื่อง"
-                />
-              )}
+              <StatusMultiSelect selected={statusFilter} onChange={setStatusFilter} />
+              <MultiSelectFilter
+                label="ประเภทเครื่อง"
+                selected={productTypeFilter}
+                onChange={setProductTypeFilter}
+                options={productTypeOptions}
+                placeholder="ทุกประเภทเครื่อง"
+              />
               {tab === "target" && (
                 <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-md px-3 py-1.5">
                   <Switch id="principal-only" checked={principalOnly} onCheckedChange={setPrincipalOnly} />
@@ -764,10 +763,10 @@ export default function DebtReport() {
                   </label>
                 </div>
               )}
-              {(approveDateFilter.size > 0 || dueDateFilter.size > 0 || productTypeFilter.size > 0) && (
+              {(statusFilter.size > 0 || approveDateFilter.size > 0 || dueDateFilter.size > 0 || productTypeFilter.size > 0) && (
                 <button
                   type="button"
-                  onClick={() => { setApproveDateFilter(new Set()); setDueDateFilter(new Set()); setProductTypeFilter(new Set()); }}
+                  onClick={() => { setStatusFilter(new Set()); setApproveDateFilter(new Set()); setDueDateFilter(new Set()); setProductTypeFilter(new Set()); }}
                   className="text-xs text-gray-400 hover:text-red-500 underline"
                 >
                   ล้างฟิลเตอร์
