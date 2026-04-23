@@ -16,7 +16,7 @@ import { useSection } from "@/contexts/SectionContext";
 import { useAppAuth } from "@/hooks/useAppAuth";
 import { trpc } from "@/lib/trpc";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { Coins, Download, Search, Target } from "lucide-react";
+import { Coins, Download, Pin, PinOff, Search, Target } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -176,6 +176,16 @@ export default function DebtReport() {
   const [statusFilter, setStatusFilter] = useState<string>("");
   // Switch: true = เฉพาะเงินต้น (แสดง penalty/unlockFee = 0 ทุกงวด), false = รวมค่าปรับ+ค่าปลดล็อก
   const [principalOnly, setPrincipalOnly] = useState(true);
+  // Pinned columns: set of LEFT_COLS keys that are sticky-left
+  const [pinnedCols, setPinnedCols] = useState<Set<string>>(new Set());
+  const togglePin = (key: string) => {
+    setPinnedCols((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
 
   // One-shot load per tab. Query disables itself when user lacks permission.
   const targetQuery = trpc.debt.listTarget.useQuery(
@@ -396,6 +406,15 @@ export default function DebtReport() {
 
   const GROUP_WIDTH = groupCols.reduce((s, c) => s + c.width, 0);
   const LEFT_WIDTH = LEFT_COLS.reduce((s, c) => s + c.width, 0);
+  // Compute sticky left offset for a given column key
+  const getStickyLeft = (key: string): number => {
+    let offset = 0;
+    for (const lc of LEFT_COLS) {
+      if (lc.key === key) break;
+      if (pinnedCols.has(lc.key)) offset += lc.width;
+    }
+    return offset;
+  };
 
   return (
     <AppShell>
@@ -520,19 +539,42 @@ export default function DebtReport() {
                 </div>
                 {/* Tier 2: left columns + sub-columns of each group */}
                 <div className="flex border-b bg-slate-50 text-[12px] font-semibold text-slate-700">
-                  {LEFT_COLS.map((c) => (
-                    <div
-                      key={c.key}
-                      className="px-2 py-2 border-r whitespace-nowrap"
-                      style={{
-                        width: c.width,
-                        textAlign:
-                          (c as any).align === "right" ? "right" : "left",
-                      }}
-                    >
-                      {c.label}
-                    </div>
-                  ))}
+                  {LEFT_COLS.map((c) => {
+                    const isPinned = pinnedCols.has(c.key);
+                    return (
+                      <div
+                        key={c.key}
+                        className="px-2 py-1.5 border-r whitespace-nowrap"
+                        style={{
+                          width: c.width,
+                          textAlign: (c as any).align === "right" ? "right" : "left",
+                          position: isPinned ? "sticky" : undefined,
+                          left: isPinned ? (() => {
+                            // compute left offset = sum of widths of all pinned cols before this one
+                            let offset = 0;
+                            for (const lc of LEFT_COLS) {
+                              if (lc.key === c.key) break;
+                              if (pinnedCols.has(lc.key)) offset += lc.width;
+                            }
+                            return offset;
+                          })() : undefined,
+                          zIndex: isPinned ? 30 : undefined,
+                          background: isPinned ? "#dbeafe" : undefined,
+                        }}
+                      >
+                        <div className="flex items-center gap-1 justify-between">
+                          <span>{c.label}</span>
+                          <button
+                            onClick={() => togglePin(c.key)}
+                            title={isPinned ? "ยกเลิก sticky" : "ตรึงคอลัมน์นี้"}
+                            className={"flex-shrink-0 rounded p-0.5 " + (isPinned ? "text-blue-600 hover:text-blue-800" : "text-gray-300 hover:text-gray-600")}
+                          >
+                            {isPinned ? <Pin className="w-3 h-3" /> : <PinOff className="w-3 h-3" />}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
                   {Array.from({ length: maxPeriods }, (_, i) =>
                     groupCols.map((gc) => {
                       // Alternating tint per reference (indigo-50 / indigo-100 for target,
@@ -598,51 +640,99 @@ export default function DebtReport() {
                           especially for long contract numbers. */}
                       <div
                         className="px-2 py-2 border-r whitespace-nowrap"
-                        style={{ width: LEFT_COLS[0].width }}
+                        style={{
+                          width: LEFT_COLS[0].width,
+                          position: pinnedCols.has("approveDate") ? "sticky" : undefined,
+                          left: pinnedCols.has("approveDate") ? getStickyLeft("approveDate") : undefined,
+                          zIndex: pinnedCols.has("approveDate") ? 10 : undefined,
+                          background: pinnedCols.has("approveDate") ? "#eff6ff" : undefined,
+                        }}
                       >
                         {fmtDate(r.approveDate)}
                       </div>
                       <div
                         className="px-2 py-2 border-r whitespace-nowrap"
-                        style={{ width: LEFT_COLS[1].width }}
+                        style={{
+                          width: LEFT_COLS[1].width,
+                          position: pinnedCols.has("contractNo") ? "sticky" : undefined,
+                          left: pinnedCols.has("contractNo") ? getStickyLeft("contractNo") : undefined,
+                          zIndex: pinnedCols.has("contractNo") ? 10 : undefined,
+                          background: pinnedCols.has("contractNo") ? "#eff6ff" : undefined,
+                        }}
                         title={r.contractNo ?? undefined}
                       >
                         {r.contractNo ?? "-"}
                       </div>
                       <div
                         className="px-2 py-2 border-r whitespace-nowrap"
-                        style={{ width: LEFT_COLS[2].width }}
+                        style={{
+                          width: LEFT_COLS[2].width,
+                          position: pinnedCols.has("customerName") ? "sticky" : undefined,
+                          left: pinnedCols.has("customerName") ? getStickyLeft("customerName") : undefined,
+                          zIndex: pinnedCols.has("customerName") ? 10 : undefined,
+                          background: pinnedCols.has("customerName") ? "#eff6ff" : undefined,
+                        }}
                         title={r.customerName ?? undefined}
                       >
                         {r.customerName ?? "-"}
                       </div>
                       <div
                         className="px-2 py-2 border-r whitespace-nowrap"
-                        style={{ width: LEFT_COLS[3].width }}
+                        style={{
+                          width: LEFT_COLS[3].width,
+                          position: pinnedCols.has("phone") ? "sticky" : undefined,
+                          left: pinnedCols.has("phone") ? getStickyLeft("phone") : undefined,
+                          zIndex: pinnedCols.has("phone") ? 10 : undefined,
+                          background: pinnedCols.has("phone") ? "#eff6ff" : undefined,
+                        }}
                       >
                         {r.phone ?? "-"}
                       </div>
                       <div
                         className="px-2 py-2 border-r text-right tabular-nums"
-                        style={{ width: LEFT_COLS[4].width }}
+                        style={{
+                          width: LEFT_COLS[4].width,
+                          position: pinnedCols.has("totalAmount") ? "sticky" : undefined,
+                          left: pinnedCols.has("totalAmount") ? getStickyLeft("totalAmount") : undefined,
+                          zIndex: pinnedCols.has("totalAmount") ? 10 : undefined,
+                          background: pinnedCols.has("totalAmount") ? "#eff6ff" : undefined,
+                        }}
                       >
                         {fmtMoney(r.totalAmount)}
                       </div>
                       <div
                         className="px-2 py-2 border-r text-right tabular-nums"
-                        style={{ width: LEFT_COLS[5].width }}
+                        style={{
+                          width: LEFT_COLS[5].width,
+                          position: pinnedCols.has("installmentCount") ? "sticky" : undefined,
+                          left: pinnedCols.has("installmentCount") ? getStickyLeft("installmentCount") : undefined,
+                          zIndex: pinnedCols.has("installmentCount") ? 10 : undefined,
+                          background: pinnedCols.has("installmentCount") ? "#eff6ff" : undefined,
+                        }}
                       >
                         {r.installmentCount ?? "-"}
                       </div>
                       <div
                         className="px-2 py-2 border-r text-right tabular-nums"
-                        style={{ width: LEFT_COLS[6].width }}
+                        style={{
+                          width: LEFT_COLS[6].width,
+                          position: pinnedCols.has("installmentAmount") ? "sticky" : undefined,
+                          left: pinnedCols.has("installmentAmount") ? getStickyLeft("installmentAmount") : undefined,
+                          zIndex: pinnedCols.has("installmentAmount") ? 10 : undefined,
+                          background: pinnedCols.has("installmentAmount") ? "#eff6ff" : undefined,
+                        }}
                       >
                         {fmtMoney(r.installmentAmount)}
                       </div>
                       <div
                         className="px-2 py-1.5 border-r"
-                        style={{ width: LEFT_COLS[7].width }}
+                        style={{
+                          width: LEFT_COLS[7].width,
+                          position: pinnedCols.has("debtStatus") ? "sticky" : undefined,
+                          left: pinnedCols.has("debtStatus") ? getStickyLeft("debtStatus") : undefined,
+                          zIndex: pinnedCols.has("debtStatus") ? 10 : undefined,
+                          background: pinnedCols.has("debtStatus") ? "#eff6ff" : undefined,
+                        }}
                       >
                         <Badge
                           variant="outline"
@@ -655,7 +745,13 @@ export default function DebtReport() {
                       </div>
                       <div
                         className="px-2 py-2 border-r text-right tabular-nums"
-                        style={{ width: LEFT_COLS[8].width }}
+                        style={{
+                          width: LEFT_COLS[8].width,
+                          position: pinnedCols.has("daysOverdue") ? "sticky" : undefined,
+                          left: pinnedCols.has("daysOverdue") ? getStickyLeft("daysOverdue") : undefined,
+                          zIndex: pinnedCols.has("daysOverdue") ? 10 : undefined,
+                          background: pinnedCols.has("daysOverdue") ? "#eff6ff" : undefined,
+                        }}
                       >
                         {r.daysOverdue > 0 ? r.daysOverdue : 0}
                       </div>
