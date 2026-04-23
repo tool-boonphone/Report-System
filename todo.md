@@ -444,3 +444,7 @@ Task list:
 - [x] P17-3: เปลี่ยน auto sync schedule จาก hourly (08:00-19:00) เป็นวันละครั้ง เวลา 06:00 น. (ทั้ง Boonphone และ Fastfone)
 - [x] P17-4: เพิ่ม progress bar % + elapsed time + estimated remaining time แทนปุ่มรีเฟรชขณะ sync กำลังทำงาน
 - [x] P17-5: เพิ่มไอคอนหน้าเมนู ข้อมูลสัญญา และ รายงานหนี้ ใน Sidebar navigation
+
+### Phase 12 — Bug Fix: Installment Date Ordering (DONE)
+- [x] P12-2: แก้ไข fixOutOfOrderDueDates() ใน debtDb.ts — เปลี่ยน anchor strategy จาก "smallest due_date = anchor ของ period นั้น" เป็น "smallest due_date = anchor ของ period 1 เสมอ" แล้ว rebuild ทุก period = anchor + (period-1) months — ทำให้ CT0226-SRI005-1183-01 งวด 1 แสดง 2026-04-05 (เม.ย.) แทน 2026-03-05 (มี.ค.) และงวด 10 แสดง 2027-01-05 (ม.ค.) แทน 2026-12-05 (ธ.ค.)
+- [x] Tests: 63/64 pass + TypeScript: 0 errors + commit + push + checkpoint

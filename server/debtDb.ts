@@ -470,28 +470,30 @@ function fixOutOfOrderDueDates(list: InstRawRow[]): InstRawRow[] {
   }
   if (!dueDayOfMonth) return list; // cannot infer day — leave as-is
 
-  // Rebuild due_dates: for each period, expected due_date = (period-1) months
-  // after the anchor month of period 2 minus 1 month.
-  // Simpler: find the earliest valid due_date among all periods, then assign
-  // each period a due_date = anchor + (period - anchorPeriod) months.
-  let anchorPeriod: number | null = null;
+  // Anchor strategy: find the SMALLEST valid due_date in the list and treat it
+  // as the due_date for period 1.  Then rebuild every period as:
+  //   period N due_date = anchor + (N - 1) months
+  //
+  // This handles the Boonphone API bug where multiple periods may have wrong
+  // years (e.g. period 1 = 2027-01-05 and period 10 = 2026-12-05 when the
+  // correct sequence should start at 2026-04-05).
   let anchorDate: Date | null = null;
+
   for (const row of sorted) {
-    if (!row.due_date || row.period == null) continue;
+    if (!row.due_date) continue;
     const d = new Date(`${row.due_date}T00:00:00`);
     if (isNaN(d.getTime())) continue;
-    // Use the smallest due_date as anchor (most likely correct)
     if (!anchorDate || d < anchorDate) {
       anchorDate = d;
-      anchorPeriod = row.period;
     }
   }
-  if (!anchorDate || anchorPeriod == null) return list;
+
+  if (!anchorDate) return list;
 
   return sorted.map((row) => {
     if (row.period == null || !row.due_date) return row;
     const expected = new Date(anchorDate!);
-    expected.setMonth(expected.getMonth() + (row.period - anchorPeriod!));
+    expected.setMonth(expected.getMonth() + (row.period - 1));
     expected.setDate(dueDayOfMonth!);
     const expectedStr = expected.toISOString().slice(0, 10);
     if (row.due_date !== expectedStr) {
