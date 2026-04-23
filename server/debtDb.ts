@@ -488,7 +488,8 @@ export async function listDebtTarget(params: { section: SectionKey }) {
            installment_count,
            installment_amount,
            CAST(finance_amount AS DECIMAL(18,2)) AS finance_amount,
-           status
+           status,
+           product_type
       FROM ${contracts}
      WHERE ${contracts.section} = ${params.section}
   `);
@@ -1026,6 +1027,7 @@ export async function listDebtTarget(params: { section: SectionKey }) {
       approveDate: c.approve_date ?? null,
       customerName: c.customer_name ?? null,
       phone: c.phone ?? null,
+      productType: c.product_type ?? null,
       installmentCount: c.installment_count != null ? Number(c.installment_count) : list.length,
       installmentAmount: c.installment_amount != null ? Number(c.installment_amount) : null,
       totalAmount,

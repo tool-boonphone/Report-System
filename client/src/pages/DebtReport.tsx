@@ -3,15 +3,47 @@ import { AppShell } from "@/components/AppShell";
 import { SyncStatusBar } from "@/components/SyncStatusBar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import { Input } from "@/components/ui/input";
-
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Spinner } from "@/components/ui/spinner";
 import { useNavActions } from "@/contexts/NavActionsContext";
 import { useSection } from "@/contexts/SectionContext";
 import { useAppAuth } from "@/hooks/useAppAuth";
 import { trpc } from "@/lib/trpc";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { Coins, Download, Pin, PinOff, Search, Target } from "lucide-react";
+import {
+  BadgeDollarSign,
+  Banknote,
+  Check,
+  ChevronsUpDown,
+  CircleDollarSign,
+  Coins,
+  Download,
+  Gavel,
+  LockOpen,
+  Percent,
+  Pin,
+  PinOff,
+  Search,
+  Smartphone,
+  Tag,
+  Target,
+  TrendingDown,
+  TrendingUp,
+  Wallet,
+} from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -142,6 +174,7 @@ type TargetRow = {
   approveDate: string | null;
   customerName: string | null;
   phone: string | null;
+  productType: string | null;
   installmentCount: number | null;
   installmentAmount: number | null;
   totalAmount: number;
@@ -232,6 +265,84 @@ function StatusMultiSelect({
   );
 }
 
+/** Generic multi-select filter using Popover + Command pattern */
+function MultiSelectFilter({
+  label,
+  selected,
+  onChange,
+  options,
+  placeholder = "ทั้งหมด",
+}: {
+  label: string;
+  selected: Set<string>;
+  onChange: (v: Set<string>) => void;
+  options: string[];
+  placeholder?: string;
+}) {
+  const [open, setOpen] = React.useState(false);
+  const toggle = (s: string) => {
+    const next = new Set(selected);
+    if (next.has(s)) next.delete(s);
+    else next.add(s);
+    onChange(next);
+  };
+  const labelText =
+    selected.size === 0
+      ? placeholder
+      : selected.size === 1
+        ? Array.from(selected)[0]
+        : `${selected.size} รายการ`;
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className={`flex items-center gap-1.5 h-9 px-3 py-2 rounded-md border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[140px] justify-between ${
+            selected.size > 0
+              ? "border-indigo-400 bg-indigo-50 text-indigo-800 font-medium"
+              : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
+          }`}
+        >
+          <span className="truncate">{labelText}</span>
+          <ChevronsUpDown className="w-3.5 h-3.5 flex-shrink-0 text-gray-400" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-60 p-0" align="start">
+        <Command>
+          <CommandInput placeholder={`ค้นหา ${label}...`} className="h-8 text-sm" />
+          <CommandList>
+            <CommandEmpty>ไม่พบตัวเลือก</CommandEmpty>
+            <CommandGroup>
+              <CommandItem
+                value="__all__"
+                onSelect={() => { onChange(new Set()); setOpen(false); }}
+              >
+                <Check className={`mr-2 h-3.5 w-3.5 ${selected.size === 0 ? "opacity-100 text-indigo-600" : "opacity-0"}`} />
+                <span className={selected.size === 0 ? "text-indigo-600 font-medium" : "text-gray-500"}>
+                  {placeholder}
+                </span>
+              </CommandItem>
+              {options.map((opt) => (
+                <CommandItem
+                  key={opt}
+                  value={opt}
+                  onSelect={(v) => {
+                    const original = options.find((o) => o.toLowerCase() === v) ?? v;
+                    toggle(original);
+                  }}
+                >
+                  <Check className={`mr-2 h-3.5 w-3.5 ${selected.has(opt) ? "opacity-100 text-indigo-600" : "opacity-0"}`} />
+                  {opt}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 export default function DebtReport() {
   const { can } = useAppAuth();
   const { section } = useSection();
@@ -243,6 +354,10 @@ export default function DebtReport() {
   const [tab, setTab] = useState<"target" | "collected">("target");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
+  // New filters: month-year approve date, month-year due date, product type
+  const [approveDateFilter, setApproveDateFilter] = useState<Set<string>>(new Set());
+  const [dueDateFilter, setDueDateFilter] = useState<Set<string>>(new Set());
+  const [productTypeFilter, setProductTypeFilter] = useState<Set<string>>(new Set());
   // Switch: true = เฉพาะเงินต้น (แสดง penalty/unlockFee = 0 ทุกงวด), false = รวมค่าปรับ+ค่าปลดล็อก
   const [principalOnly, setPrincipalOnly] = useState(true);
   // Pinned columns: set of LEFT_COLS keys that are sticky-left
@@ -275,11 +390,50 @@ export default function DebtReport() {
       ? (targetQuery.data?.rows as TargetRow[])
       : (collectedQuery.data?.rows as CollectedRow[])) ?? [];
 
+  /* ---- Dynamic filter options (derived from ALL active rows, not filtered) ---- */
+  const approveDateOptions = useMemo(() => {
+    const s = new Set<string>();
+    for (const r of activeRows) {
+      if (r.approveDate) s.add(r.approveDate.slice(0, 7));
+    }
+    return Array.from(s).sort().reverse();
+  }, [activeRows]);
+
+  const dueDateOptions = useMemo(() => {
+    const s = new Set<string>();
+    for (const r of activeRows) {
+      for (const inst of r.installments) {
+        if (inst.dueDate) s.add(inst.dueDate.slice(0, 7));
+      }
+    }
+    return Array.from(s).sort().reverse();
+  }, [activeRows]);
+
+  const productTypeOptions = useMemo(() => {
+    const s = new Set<string>();
+    for (const r of activeRows) {
+      if (r.productType) s.add(r.productType);
+    }
+    return Array.from(s).sort();
+  }, [activeRows]);
+
   /* ---- Filter (client-side) ---- */
   const filteredRows = useMemo(() => {
     const q = search.trim().toLowerCase();
     return activeRows.filter((r) => {
       if (statusFilter.size > 0 && !statusFilter.has(r.debtStatus)) return false;
+      if (productTypeFilter.size > 0 && !productTypeFilter.has(r.productType ?? "")) return false;
+      if (approveDateFilter.size > 0) {
+        const ym = r.approveDate ? r.approveDate.slice(0, 7) : "";
+        if (!approveDateFilter.has(ym)) return false;
+      }
+      if (dueDateFilter.size > 0) {
+        // Row passes if ANY installment's due_date month is in the filter
+        const hasMatch = r.installments.some(
+          (inst) => inst.dueDate && dueDateFilter.has(inst.dueDate.slice(0, 7))
+        );
+        if (!hasMatch) return false;
+      }
       if (!q) return true;
       return (
         (r.contractNo ?? "").toLowerCase().includes(q) ||
@@ -287,7 +441,7 @@ export default function DebtReport() {
         (r.phone ?? "").toLowerCase().includes(q)
       );
     });
-  }, [activeRows, search, statusFilter]);
+  }, [activeRows, search, statusFilter, approveDateFilter, dueDateFilter, productTypeFilter]);
 
   /* ---- Max periods for the repeating group block ---- */
   const maxPeriods = useMemo(() => {
@@ -336,6 +490,44 @@ export default function DebtReport() {
     });
     return max;
   }
+
+  /* ---- Summary totals (computed from filteredRows, respects all filters) ---- */
+  const targetSummary = useMemo(() => {
+    if (tab !== "target") return null;
+    let principal = 0, interest = 0, fee = 0, penalty = 0, unlockFee = 0, total = 0;
+    for (const r of filteredRows) {
+      for (const inst of r.installments) {
+        if (inst.isClosed || inst.isSuspended) continue;
+        principal += inst.principal ?? 0;
+        interest += inst.interest ?? 0;
+        fee += inst.fee ?? 0;
+        penalty += principalOnly ? 0 : (inst.penalty ?? 0);
+        unlockFee += principalOnly ? 0 : (inst.unlockFee ?? 0);
+      }
+    }
+    total = principal + interest + fee + penalty + unlockFee;
+    return { principal, interest, fee, penalty, unlockFee, total };
+  }, [filteredRows, tab, principalOnly]);
+
+  const collectedSummary = useMemo(() => {
+    if (tab !== "collected") return null;
+    let principal = 0, interest = 0, fee = 0, penalty = 0, unlockFee = 0;
+    let discount = 0, overpaid = 0, badDebt = 0, total = 0;
+    for (const r of filteredRows as CollectedRow[]) {
+      for (const p of r.payments ?? []) {
+        principal += p.principal ?? 0;
+        interest += p.interest ?? 0;
+        fee += p.fee ?? 0;
+        penalty += p.penalty ?? 0;
+        unlockFee += p.unlockFee ?? 0;
+        discount += p.discount ?? 0;
+        overpaid += p.overpaid ?? 0;
+        badDebt += p.badDebt ?? 0;
+        total += p.total ?? 0;
+      }
+    }
+    return { principal, interest, fee, penalty, unlockFee, discount, overpaid, badDebt, total };
+  }, [filteredRows, tab]);
 
   /* ---- TopNav actions (sync + export) ---- */
   // Export handler (used inline in toolbar)
@@ -419,22 +611,31 @@ export default function DebtReport() {
   }
 
   // Column widths (px) for the left-fixed block.
-  const LEFT_COLS = [
-    { key: "approveDate", label: "วันที่อนุมัติ", width: 110 },
-    { key: "contractNo", label: "เลขที่สัญญา", width: 195 },
-    { key: "customerName", label: "ชื่อ-นามสกุล", width: 260 },
-    { key: "phone", label: "เบอร์โทร", width: 110 },
-    { key: "totalAmount", label: "ยอดผ่อนรวม", width: 110, align: "right" },
-    { key: "installmentCount", label: "งวดผ่อน", width: 70, align: "right" },
-    {
-      key: "installmentAmount",
-      label: "ผ่อนงวดละ",
-      width: 100,
-      align: "right",
-    },
-    { key: "debtStatus", label: "สถานะหนี้", width: 110 },
-    { key: "daysOverdue", label: "เกินกำหนด", width: 90, align: "right" },
-  ] as const;
+  // For collected tab, add productType column.
+  const LEFT_COLS = tab === "collected"
+    ? [
+        { key: "approveDate", label: "วันที่อนุมัติ", width: 110 },
+        { key: "contractNo", label: "เลขที่สัญญา", width: 195 },
+        { key: "customerName", label: "ชื่อ-นามสกุล", width: 260 },
+        { key: "phone", label: "เบอร์โทร", width: 110 },
+        { key: "productType", label: "ประเภทเครื่อง", width: 110 },
+        { key: "totalAmount", label: "ยอดผ่อนรวม", width: 110, align: "right" },
+        { key: "installmentCount", label: "งวดผ่อน", width: 70, align: "right" },
+        { key: "installmentAmount", label: "ผ่อนงวดละ", width: 100, align: "right" },
+        { key: "debtStatus", label: "สถานะหนี้", width: 110 },
+        { key: "daysOverdue", label: "เกินกำหนด", width: 90, align: "right" },
+      ] as const
+    : [
+        { key: "approveDate", label: "วันที่อนุมัติ", width: 110 },
+        { key: "contractNo", label: "เลขที่สัญญา", width: 195 },
+        { key: "customerName", label: "ชื่อ-นามสกุล", width: 260 },
+        { key: "phone", label: "เบอร์โทร", width: 110 },
+        { key: "totalAmount", label: "ยอดผ่อนรวม", width: 110, align: "right" },
+        { key: "installmentCount", label: "งวดผ่อน", width: 70, align: "right" },
+        { key: "installmentAmount", label: "ผ่อนงวดละ", width: 100, align: "right" },
+        { key: "debtStatus", label: "สถานะหนี้", width: 110 },
+        { key: "daysOverdue", label: "เกินกำหนด", width: 90, align: "right" },
+      ] as const;
 
   // Per-period group sub-columns (mirrors reference layout exactly).
   const groupCols =
@@ -518,8 +719,8 @@ export default function DebtReport() {
           )}
         </div>
 
-        {/* Toolbar */}
-        <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-3 mb-3">
+        {/* Toolbar Row 1: Search + Status + PrincipalOnly */}
+        <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-3 mb-2">
           <div className="relative flex-1 min-w-0">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <Input
@@ -529,23 +730,12 @@ export default function DebtReport() {
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
-          <div className="flex items-center gap-2">
-            {/* Multi-select status filter */}
-            <StatusMultiSelect
-              selected={statusFilter}
-              onChange={setStatusFilter}
-            />
+          <div className="flex flex-wrap items-center gap-2">
+            <StatusMultiSelect selected={statusFilter} onChange={setStatusFilter} />
             {tab === "target" && (
               <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-md px-3 py-1.5">
-                <Switch
-                  id="principal-only"
-                  checked={principalOnly}
-                  onCheckedChange={setPrincipalOnly}
-                />
-                <label
-                  htmlFor="principal-only"
-                  className="text-xs text-gray-600 cursor-pointer select-none whitespace-nowrap"
-                >
+                <Switch id="principal-only" checked={principalOnly} onCheckedChange={setPrincipalOnly} />
+                <label htmlFor="principal-only" className="text-xs text-gray-600 cursor-pointer select-none whitespace-nowrap">
                   เฉพาะเงินต้น
                 </label>
               </div>
@@ -553,12 +743,123 @@ export default function DebtReport() {
           </div>
         </div>
 
-        {/* Summary line */}
-        <div className="text-xs text-gray-500 mb-2">
-          ทั้งหมด {activeRows.length.toLocaleString("th-TH")} สัญญา · แสดง{" "}
-          {filteredRows.length.toLocaleString("th-TH")} รายการ ·{" "}
-          {tab === "target" ? "ข้อมูลเป้าเก็บหนี้" : "ข้อมูลยอดเก็บหนี้"} ของงวดที่{" "}
-          1–{maxPeriods || "-"}
+        {/* Toolbar Row 2: Month-year + product type filters */}
+        <div className="flex flex-wrap items-center gap-2 mb-2">
+          <MultiSelectFilter
+            label="เดือน-ปีที่อนุมัติ"
+            selected={approveDateFilter}
+            onChange={setApproveDateFilter}
+            options={approveDateOptions}
+            placeholder="ทุกเดือน-ปีที่อนุมัติ"
+          />
+          <MultiSelectFilter
+            label="เดือน-ปีที่ต้องชำระ"
+            selected={dueDateFilter}
+            onChange={setDueDateFilter}
+            options={dueDateOptions}
+            placeholder="ทุกเดือน-ปีที่ต้องชำระ"
+          />
+          {tab === "collected" && (
+            <MultiSelectFilter
+              label="ประเภทเครื่อง"
+              selected={productTypeFilter}
+              onChange={setProductTypeFilter}
+              options={productTypeOptions}
+              placeholder="ทุกประเภทเครื่อง"
+            />
+          )}
+          {(approveDateFilter.size > 0 || dueDateFilter.size > 0 || productTypeFilter.size > 0) && (
+            <button
+              type="button"
+              onClick={() => { setApproveDateFilter(new Set()); setDueDateFilter(new Set()); setProductTypeFilter(new Set()); }}
+              className="text-xs text-gray-400 hover:text-red-500 underline"
+            >
+              ล้างฟิลเตอร์ทั้งหมด
+            </button>
+          )}
+        </div>
+
+        {/* Summary line + Summary Badges */}
+        <div className="flex flex-wrap items-start justify-between gap-2 mb-2">
+          <div className="text-xs text-gray-500 self-center">
+            ทั้งหมด {activeRows.length.toLocaleString("th-TH")} สัญญา · แสดง{" "}
+            {filteredRows.length.toLocaleString("th-TH")} รายการ ·{" "}
+            {tab === "target" ? "ข้อมูลเป้าเก็บหนี้" : "ข้อมูลยอดเก็บหนี้"} ของงวดที่{" "}
+            1–{maxPeriods || "-"}
+          </div>
+          {/* Summary Badges */}
+          {tab === "target" && targetSummary && (
+            <div className="flex flex-wrap gap-1.5">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-blue-50 text-blue-700 border border-blue-200">
+                <Banknote className="w-3 h-3" />
+                เงินต้น: {fmtMoney(targetSummary.principal)}
+              </span>
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-purple-50 text-purple-700 border border-purple-200">
+                <Percent className="w-3 h-3" />
+                ดอกเบี้ย: {fmtMoney(targetSummary.interest)}
+              </span>
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-cyan-50 text-cyan-700 border border-cyan-200">
+                <CircleDollarSign className="w-3 h-3" />
+                ค่าดำเนินการ: {fmtMoney(targetSummary.fee)}
+              </span>
+              {!principalOnly && (
+                <>
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-red-50 text-red-700 border border-red-200">
+                    <Gavel className="w-3 h-3" />
+                    ค่าปรับ: {fmtMoney(targetSummary.penalty)}
+                  </span>
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-orange-50 text-orange-700 border border-orange-200">
+                    <LockOpen className="w-3 h-3" />
+                    ค่าปลดล็อก: {fmtMoney(targetSummary.unlockFee)}
+                  </span>
+                </>
+              )}
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                <Target className="w-3 h-3" />
+                ยอดหนี้รวม: {fmtMoney(targetSummary.total)}
+              </span>
+            </div>
+          )}
+          {tab === "collected" && collectedSummary && (
+            <div className="flex flex-wrap gap-1.5">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-blue-50 text-blue-700 border border-blue-200">
+                <Banknote className="w-3 h-3" />
+                เงินต้น: {fmtMoney(collectedSummary.principal)}
+              </span>
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-purple-50 text-purple-700 border border-purple-200">
+                <Percent className="w-3 h-3" />
+                ดอกเบี้ย: {fmtMoney(collectedSummary.interest)}
+              </span>
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-cyan-50 text-cyan-700 border border-cyan-200">
+                <CircleDollarSign className="w-3 h-3" />
+                ค่าดำเนินการ: {fmtMoney(collectedSummary.fee)}
+              </span>
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-red-50 text-red-700 border border-red-200">
+                <Gavel className="w-3 h-3" />
+                ค่าปรับ: {fmtMoney(collectedSummary.penalty)}
+              </span>
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-orange-50 text-orange-700 border border-orange-200">
+                <LockOpen className="w-3 h-3" />
+                ค่าปลดล็อก: {fmtMoney(collectedSummary.unlockFee)}
+              </span>
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-teal-50 text-teal-700 border border-teal-200">
+                <Tag className="w-3 h-3" />
+                ส่วนลด: {fmtMoney(collectedSummary.discount)}
+              </span>
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+                <TrendingUp className="w-3 h-3" />
+                ชำระเกิน: {fmtMoney(collectedSummary.overpaid)}
+              </span>
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-gray-100 text-gray-700 border border-gray-300">
+                <TrendingDown className="w-3 h-3" />
+                หนี้เสีย: {fmtMoney(collectedSummary.badDebt)}
+              </span>
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                <Wallet className="w-3 h-3" />
+                ยอดที่ชำระรวม: {fmtMoney(collectedSummary.total)}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Table */}
@@ -693,10 +994,10 @@ export default function DebtReport() {
                   return (
                     <div
                       key={vr.key}
-                      className={`flex border-b text-[12px] transition-colors cursor-default ${
+                      className={`flex border-b text-[12px] transition-colors cursor-default relative ${
                         hoveredRow === vr.index
-                          ? "bg-blue-50 shadow-[inset_3px_0_0_0_#3b82f6]"
-                          : "hover:bg-blue-50/40"
+                          ? "shadow-[inset_4px_0_0_0_#2563eb,inset_0_-1px_0_0_#93c5fd,0_-1px_0_0_#93c5fd]"
+                          : ""
                       }`}
                       style={{ height: rowH }}
                       onMouseEnter={() => setHoveredRow(vr.index)}
@@ -754,10 +1055,28 @@ export default function DebtReport() {
                       >
                         {r.phone ?? "-"}
                       </div>
+                      {/* productType column — only in collected tab (LEFT_COLS[4] = productType when collected) */}
+                      {tab === "collected" && (
+                        <div
+                          className="px-2 py-2 border-r whitespace-nowrap"
+                          style={{
+                            width: 110,
+                            position: pinnedCols.has("productType") ? "sticky" : undefined,
+                            left: pinnedCols.has("productType") ? getStickyLeft("productType") : undefined,
+                            zIndex: pinnedCols.has("productType") ? 10 : undefined,
+                            background: pinnedCols.has("productType") ? "#eff6ff" : undefined,
+                          }}
+                        >
+                          <span className="inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-700">
+                            <Smartphone className="w-3 h-3" />
+                            {r.productType ?? "-"}
+                          </span>
+                        </div>
+                      )}
                       <div
                         className="px-2 py-2 border-r text-right tabular-nums"
                         style={{
-                          width: LEFT_COLS[4].width,
+                          width: tab === "collected" ? LEFT_COLS[5].width : LEFT_COLS[4].width,
                           position: pinnedCols.has("totalAmount") ? "sticky" : undefined,
                           left: pinnedCols.has("totalAmount") ? getStickyLeft("totalAmount") : undefined,
                           zIndex: pinnedCols.has("totalAmount") ? 10 : undefined,
@@ -769,7 +1088,7 @@ export default function DebtReport() {
                       <div
                         className="px-2 py-2 border-r text-right tabular-nums"
                         style={{
-                          width: LEFT_COLS[5].width,
+                          width: (LEFT_COLS as unknown as {key:string;width:number}[]).find((c) => c.key === "installmentCount")?.width ?? 70,
                           position: pinnedCols.has("installmentCount") ? "sticky" : undefined,
                           left: pinnedCols.has("installmentCount") ? getStickyLeft("installmentCount") : undefined,
                           zIndex: pinnedCols.has("installmentCount") ? 10 : undefined,
@@ -781,7 +1100,7 @@ export default function DebtReport() {
                       <div
                         className="px-2 py-2 border-r text-right tabular-nums"
                         style={{
-                          width: LEFT_COLS[6].width,
+                          width: (LEFT_COLS as unknown as {key:string;width:number}[]).find((c) => c.key === "installmentAmount")?.width ?? 100,
                           position: pinnedCols.has("installmentAmount") ? "sticky" : undefined,
                           left: pinnedCols.has("installmentAmount") ? getStickyLeft("installmentAmount") : undefined,
                           zIndex: pinnedCols.has("installmentAmount") ? 10 : undefined,
@@ -793,7 +1112,7 @@ export default function DebtReport() {
                       <div
                         className="px-2 py-1.5 border-r"
                         style={{
-                          width: LEFT_COLS[7].width,
+                          width: (LEFT_COLS as unknown as {key:string;width:number}[]).find((c) => c.key === "debtStatus")?.width ?? 110,
                           position: pinnedCols.has("debtStatus") ? "sticky" : undefined,
                           left: pinnedCols.has("debtStatus") ? getStickyLeft("debtStatus") : undefined,
                           zIndex: pinnedCols.has("debtStatus") ? 10 : undefined,
@@ -812,7 +1131,7 @@ export default function DebtReport() {
                       <div
                         className="px-2 py-2 border-r text-right tabular-nums"
                         style={{
-                          width: LEFT_COLS[8].width,
+                          width: (LEFT_COLS as unknown as {key:string;width:number}[]).find((c) => c.key === "daysOverdue")?.width ?? 90,
                           position: pinnedCols.has("daysOverdue") ? "sticky" : undefined,
                           left: pinnedCols.has("daysOverdue") ? getStickyLeft("daysOverdue") : undefined,
                           zIndex: pinnedCols.has("daysOverdue") ? 10 : undefined,
