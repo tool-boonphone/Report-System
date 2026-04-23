@@ -259,7 +259,7 @@ export default function UsersSettings() {
               </thead>
               <tbody>
                 {(users.data ?? []).map((u) => (
-                  <tr key={u.id} className="border-b border-gray-100">
+                  <tr key={u.id} className="border-b border-gray-100 transition-colors hover:bg-blue-50 hover:shadow-[inset_3px_0_0_0_#3b82f6] cursor-default">
                     <td className="px-4 py-2.5 font-medium text-gray-800">
                       {u.username}
                     </td>

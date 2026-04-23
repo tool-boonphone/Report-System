@@ -311,8 +311,8 @@ export default function GroupsSettings() {
                         <tr
                           key={menu}
                           className={
-                            "border-b border-gray-100 last:border-0" +
-                            (isSectionSwitch ? " bg-blue-50" : "")
+                            "border-b border-gray-100 last:border-0 transition-colors cursor-default" +
+                            (isSectionSwitch ? " bg-blue-50 hover:bg-blue-100" : " hover:bg-blue-50 hover:shadow-[inset_3px_0_0_0_#3b82f6]")
                           }
                         >
                           <td className="px-3 py-2 text-gray-800 font-medium">

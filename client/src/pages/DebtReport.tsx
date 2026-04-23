@@ -247,6 +247,7 @@ export default function DebtReport() {
   const [principalOnly, setPrincipalOnly] = useState(true);
   // Pinned columns: set of LEFT_COLS keys that are sticky-left
   const [pinnedCols, setPinnedCols] = useState<Set<string>>(new Set());
+  const [hoveredRow, setHoveredRow] = useState<number | null>(null);
   const togglePin = (key: string) => {
     setPinnedCols((prev) => {
       const next = new Set(prev);
@@ -692,8 +693,14 @@ export default function DebtReport() {
                   return (
                     <div
                       key={vr.key}
-                      className="flex border-b text-[12px] hover:bg-slate-50"
+                      className={`flex border-b text-[12px] transition-colors cursor-default ${
+                        hoveredRow === vr.index
+                          ? "bg-blue-50 shadow-[inset_3px_0_0_0_#3b82f6]"
+                          : "hover:bg-blue-50/40"
+                      }`}
                       style={{ height: rowH }}
+                      onMouseEnter={() => setHoveredRow(vr.index)}
+                      onMouseLeave={() => setHoveredRow(null)}
                     >
                       {/* Left fixed columns — no `truncate`: show full text,
                           especially for long contract numbers. */}
