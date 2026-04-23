@@ -335,7 +335,7 @@ Task list:
 - [x] TypeScript 0 errors + tests 63/64 pass + commit c815d75 + push + checkpoint
 
 ### Phase 9Z — isArrears งวดปัจจุบัน + penalty carry + isClosed display fix
-- [ ] debtDb.ts: isArrears = เฉพาะงวดปัจจุบัน (dueDate ใกล้ที่สุดที่ยังไม่จ่ายครบ) เท่านั้น
-- [ ] debtDb.ts: penalty ในงวดปัจจุบัน = รวมค่าปรับคงค้างทุกงวดที่ผ่านมา (sum of all penalty_due)
-- [ ] DebtReport.tsx: isClosed display = สีเทา + ตัวเอียง + 0 ทุก column + "ปิดค่างวดแล้ว" ที่ยอดหนี้รวม (เหมือน isSuspended)
-- [ ] TypeScript 0 errors + tests + commit + push + checkpoint
+- [x] debtDb.ts: isArrears = เฉพาะงวดปัจจุบัน (dueDate ใกล้ที่สุดที่ยังไม่จ่ายครบ) เท่านั้น
+- [x] debtDb.ts: penalty ในงวดปัจจุบัน = รวมค่าปรับคงค้างทุกงวดที่ผ่านมา (sum of all penalty_due ที่ dueDate <= today)
+- [x] DebtReport.tsx: isClosed display = สีเทา + ตัวเอียง + 0 ทุก column + "ปิดค่างวดแล้ว" ที่ยอดหนี้รวม (เหมือน isSuspended)
+- [x] TypeScript 0 errors + tests 63/64 pass + commit 3f48248 + push + checkpoint
