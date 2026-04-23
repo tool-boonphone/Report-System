@@ -18,7 +18,6 @@ import { trpc } from "@/lib/trpc";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Coins, Download, Search, Target } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 
 /* -------------------------------------------------------------------- */
@@ -170,10 +169,6 @@ export default function DebtReport() {
   const [tab, setTab] = useState<"target" | "collected">("target");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("");
-  /** เมื่อ true = ตั้งหนี้เฉพาะเงินต้น (penalty/unlockFee แสดงเป็น 0) */
-  // principalOnly=false → รวมค่าปรับ+ค่าปลดล็อกในยอดหนี้รวม (default)
-  // principalOnly=true  → ยอดหนี้รวม = เงินต้น+ดอกเบี้ย+ค่าดำเนินการ เท่านั้น
-  const [principalOnly, setPrincipalOnly] = useState(false);
 
   // One-shot load per tab. Query disables itself when user lacks permission.
   const targetQuery = trpc.debt.listTarget.useQuery(
@@ -373,12 +368,10 @@ export default function DebtReport() {
           { key: "principal", label: "เงินต้น", width: 90, align: "right" },
           { key: "interest", label: "ดอกเบี้ย", width: 90, align: "right" },
           { key: "fee", label: "ค่าดำเนินการ", width: 95, align: "right" },
-          { key: "penalty", label: "ค่าปรับ", width: 80, align: "right" },
-          { key: "unlockFee", label: "ค่าปลดล็อก", width: 90, align: "right" },
           { key: "amount", label: "ยอดหนี้รวม", width: 115, align: "right" },
         ]
       : [
-          // 11 columns per period (closeInstallmentAmount hidden — Phase 9Q)
+          // 12 columns per period as required by reference
           { key: "period", label: "งวดที่", width: 55 },
           { key: "paidAt", label: "วันที่ชำระ", width: 100 },
           { key: "principal", label: "เงินต้น", width: 80, align: "right" },
@@ -388,6 +381,7 @@ export default function DebtReport() {
           { key: "unlockFee", label: "ค่าปลดล็อก", width: 80, align: "right" },
           { key: "discount", label: "ส่วนลด", width: 70, align: "right" },
           { key: "overpaid", label: "ชำระเกิน", width: 80, align: "right" },
+          { key: "closeInstallmentAmount", label: "ปิดค่างวด", width: 85, align: "right" },
           { key: "badDebt", label: "หนี้เสีย", width: 80, align: "right" },
           { key: "total", label: "ยอดที่ชำระรวม", width: 100, align: "right" },
         ];
@@ -456,19 +450,6 @@ export default function DebtReport() {
               ))}
             </SelectContent>
           </Select>
-          {/* principalOnly toggle — เฉพาะ target tab */}
-          {tab === "target" && (
-            <label className="flex items-center gap-2 cursor-pointer select-none whitespace-nowrap">
-              <Switch
-                checked={!principalOnly}
-                onCheckedChange={(v) => setPrincipalOnly(!v)}
-                className="data-[state=checked]:bg-amber-600"
-              />
-              <span className="text-sm text-amber-800 font-medium">
-                {principalOnly ? "เฉพาะเงินต้น" : "รวมค่าปรับ+ค่าปลดล็อก"}
-              </span>
-            </label>
-          )}
         </div>
 
         {/* Summary line */}
@@ -495,9 +476,8 @@ export default function DebtReport() {
               <div className="sticky top-0 z-20 bg-white">
                 {/* Tier 1: group header over installment columns */}
                 <div className="flex border-b bg-slate-100 text-[12px] font-semibold text-slate-700">
-                  {/* Left fixed area */}
                   <div
-                    className="bg-slate-100 border-r flex items-center"
+                    className="bg-slate-100 border-r"
                     style={{ width: LEFT_WIDTH, height: 28 }}
                   />
                   {Array.from({ length: maxPeriods }, (_, i) => (
@@ -690,11 +670,6 @@ export default function DebtReport() {
                                 v = dimmed ? "0" : fmtMoney(inst.interest);
                               } else if (gc.key === "fee") {
                                 v = dimmed ? "0" : fmtMoney(inst.fee);
-                              } else if (gc.key === "penalty") {
-                                // principalOnly toggle: show 0 when checked
-                                v = dimmed ? "0" : fmtMoney(principalOnly ? 0 : (inst.penalty ?? 0));
-                              } else if (gc.key === "unlockFee") {
-                                v = dimmed ? "0" : fmtMoney(principalOnly ? 0 : (inst.unlockFee ?? 0));
                               } else if (gc.key === "amount") {
                                 if (suspended) {
                                   // แสดงลาเบลสถานะในคอลัมน์ยอดรวม
@@ -702,14 +677,7 @@ export default function DebtReport() {
                                 } else if (closed) {
                                   v = "ปิดค่างวดแล้ว";
                                 } else {
-                                  // ยอดหนี้รวม: ใช้ inst.amount จาก API โดยตรง
-                                  // (API คำนวณ principal+interest+fee+penalty+unlockFee ให้แล้ว)
-                                  // principalOnly=true → หัก penalty+unlockFee ออก
-                                  const fullAmt = inst.amount;
-                                  const totalAmt = principalOnly
-                                    ? fullAmt - (inst.penalty ?? 0) - (inst.unlockFee ?? 0)
-                                    : fullAmt;
-                                  v = fmtMoney(totalAmt);
+                                  v = fmtMoney(inst.amount);
                                   if (
                                     inst.overpaidApplied > 0.009 &&
                                     inst.baselineAmount > inst.amount + 0.009
@@ -841,6 +809,11 @@ export default function DebtReport() {
                                       break;
                                     case "overpaid":
                                       v = fmtMoney(pay.overpaid || 0);
+                                      break;
+                                    case "closeInstallmentAmount":
+                                      v = pay.isCloseRow
+                                        ? fmtMoney(pay.closeInstallmentAmount)
+                                        : fmtMoney(0);
                                       break;
                                     case "badDebt":
                                       v = fmtMoney(pay.badDebt || 0);
