@@ -113,6 +113,8 @@ type InstallmentCell = {
   suspendedAt?: string | null;
   /** True when this period's displayed amounts include carry-forward from unpaid prior periods. */
   isArrears?: boolean;
+  /** True when this is the current (first unpaid past/current) period — sky-50 BG highlight. */
+  isCurrentPeriod?: boolean;
 };
 
 type PaymentCell = {
@@ -726,6 +728,7 @@ export default function DebtReport() {
                               }
                             }
                             const isArrears = !dimmed && !!inst?.isArrears;
+                            const isCurrentPeriod = !dimmed && !!inst?.isCurrentPeriod;
                             const baseStyle: Record<string, string | number> = {
                               width: gc.width,
                               textAlign:
@@ -743,6 +746,10 @@ export default function DebtReport() {
                               baseStyle.background = "#fef3c7"; // amber-100
                               baseStyle.color = "#92400e"; // amber-800
                               baseStyle.fontWeight = "700";
+                            } else if (isCurrentPeriod) {
+                              // Current period: sky-50 BG to make it easy to spot
+                              // without needing to read the due date column.
+                              baseStyle.background = "#f0f9ff"; // sky-50
                             }
                             const tooltip = suspended
                               ? suspendLabel

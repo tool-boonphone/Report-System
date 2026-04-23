@@ -353,3 +353,7 @@ Task list:
 - [x] debtDb.ts: ดอกเบี้ย = ยอดงวดจริง - เงินต้น - 100 (รับส่วนที่เหลือ)
 - [x] debtDb.ts: ค่าปรับงวดปัจจุบัน = penalty_due ของงวดนี้ + ค่าปรับค้างสะสมจากงวดก่อนหน้าทั้งหมด
 - [x] TypeScript 0 errors + tests + commit + push + checkpoint
+
+### Phase 9AE — Highlight งวดปัจจุบันในตารางเป้าเก็บหนี้
+- [x] DebtReport.tsx: งวดปัจจุบัน (isCurrentPeriod=true) ใช้ BG sky-50 (#f0f9ff) เพื่อให้เห็นชัดว่าตรงไหนคืองวดนี้
+- [x] TypeScript 0 errors + tests 63/64 pass + commit + push + checkpoint

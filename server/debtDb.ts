@@ -926,6 +926,8 @@ export async function listDebtTarget(params: { section: SectionKey }) {
           suspendedAt: isSuspended ? suspendedAt : null,
           // isArrears: true when any *_due field > 0 (API-based, no carry pass needed)
           isArrears: (r as any)._hasArrears === true,
+          // isCurrentPeriod: will be set to true for the current period in the arrears pass below
+          isCurrentPeriod: false,
         };
       })
       .sort((a, b) => (a.period ?? 0) - (b.period ?? 0));
@@ -998,6 +1000,8 @@ export async function listDebtTarget(params: { section: SectionKey }) {
           ? baseNet
           : (currentPeriod.baselineAmount > 0.009 ? currentPeriod.baselineAmount : baseNet);
         currentPeriod.amount = effectiveBase + totalPenalty + totalUnlockFee;
+        // Mark this as the current period for UI highlighting
+        currentPeriod.isCurrentPeriod = true;
       }
     }
 
