@@ -842,22 +842,17 @@ export async function listDebtTarget(params: { section: SectionKey }) {
           }
 
           // Step 2: Apply overpaid deduction from previous period
-          // ยอดชำระเกินจากงวดก่อนหน้ามาหักงวดนี้ตามสัดส่วน principal:interest
+          // สูตร (Phase 9AD): carry หักจากเงินต้นก่อน ถ้าเงินต้นหมดแล้วค่อยหักดอกเบี้ย
+          // ค่าดำเนินการ = 100 คงที่เสมอ ไม่ถูกหัก
           let effectivePrincipal = basePrincipal;
           let effectiveInterest = baseInterest;
-          let effectiveFee = baseFee;
+          const effectiveFee = baseFee; // ค่าดำเนินการ = 100 เสมอ
           if (overpaidApplied > 0.009) {
-            const effectiveBaseline = Math.max(0, baseline - overpaidApplied);
-            if (baseline > 0.009) {
-              const ratio = effectiveBaseline / baseline;
-              effectivePrincipal = Math.max(0, basePrincipal * ratio);
-              effectiveInterest  = Math.max(0, baseInterest  * ratio);
-              effectiveFee       = Math.max(0, baseFee       * ratio);
-            } else {
-              effectivePrincipal = 0;
-              effectiveInterest  = 0;
-              effectiveFee       = 0;
-            }
+            // หักจากเงินต้นก่อน
+            effectivePrincipal = Math.max(0, basePrincipal - overpaidApplied);
+            // ถ้า overpaid เกินเงินต้น ให้หักส่วนที่เหลือจากดอกเบี้ย
+            const remainingCarry = Math.max(0, overpaidApplied - basePrincipal);
+            effectiveInterest  = Math.max(0, baseInterest - remainingCarry);
           }
 
           // Step 3: penalty/unlockFee from API *_due
@@ -886,18 +881,13 @@ export async function listDebtTarget(params: { section: SectionKey }) {
 
             // Scale formula sub-fields to fit netBaseline
             // Bug fix (Phase 9AB): round to integers after scaling to avoid decimal display
-            const formulaTotal = effectivePrincipal + effectiveInterest + effectiveFee;
-            if (formulaTotal > 0.009 && netBaseline > 0.009) {
-              const scale = netBaseline / formulaTotal;
-              // Round principal and fee to integers; let interest absorb the remainder
-              principal = Math.round(effectivePrincipal * scale);
-              fee       = Math.round(effectiveFee       * scale);
-              interest  = Math.max(0, Math.round(netBaseline) - principal - fee);
-            } else {
-              principal = Math.round(effectivePrincipal);
-              interest  = Math.round(effectiveInterest);
-              fee       = Math.round(effectiveFee);
-            }
+            // สูตร (Phase 9AD):
+            //   ค่าดำเนินการ = 100 เสมอ
+            //   เงินต้น = effectivePrincipal (คงที่ หัก overpaid แล้วใน Step 2)
+            //   ดอกเบี้ย = ยอดงวดจริง - เงินต้น - 100 (รับส่วนที่เหลือ)
+            fee       = baseFee; // 100 เสมอ
+            principal = Math.round(effectivePrincipal);
+            interest  = Math.max(0, Math.round(netBaseline) - principal - fee);
 
             amount = apiAmount != null
               ? apiAmount  // use API amount directly

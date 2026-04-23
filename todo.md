@@ -346,3 +346,10 @@ Task list:
 - [ ] debtDb.ts/DebtReport.tsx: penalty/unlockFee แสดงเฉพาะงวดปัจจุบัน งวดอนาคต = 0
 - [ ] DebtReport.tsx: สิ้นสุดสัญญา — งวดที่ผ่านมาแล้ว (dueDate < today) ต้องเป็นสีเทา 0 เหมือน isSuspended
 - [ ] TypeScript 0 errors + tests + commit + push + checkpoint
+
+### Phase 9AD — สูตรค่าดำเนินการ/เงินต้น/ดอกเบี้ย + ค่าปรับสะสม
+- [x] debtDb.ts: ค่าดำเนินการ = 100 เสมอ (ไม่ scale ตาม ratio)
+- [x] debtDb.ts: เงินต้น = ceil(finance/periods) คงที่ — overpaid carry หักจากเงินต้นก่อน ถ้าหมดแล้วค่อยหักดอกเบี้ย
+- [x] debtDb.ts: ดอกเบี้ย = ยอดงวดจริง - เงินต้น - 100 (รับส่วนที่เหลือ)
+- [x] debtDb.ts: ค่าปรับงวดปัจจุบัน = penalty_due ของงวดนี้ + ค่าปรับค้างสะสมจากงวดก่อนหน้าทั้งหมด
+- [x] TypeScript 0 errors + tests + commit + push + checkpoint
