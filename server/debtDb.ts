@@ -874,19 +874,26 @@ export async function listDebtTarget(params: { section: SectionKey }) {
 
         // overpaidApplied:: ยอดชำระเกินจากงวดก่อนหน้า (P-1) ที่นำมาหักงวดนี้
         // Bug fix (Phase 9AB): overpaidApplied is sourced from raw_json.overpaid_amount
-        // of the PREVIOUS period's payment row. This value is only non-zero when the
-        // API explicitly books an overpaid carry (e.g. paid 4250 against a 4097 baseline).
-        // When the previous period is paidInFullButZeroedByApi (amount=0, paid=baseline),
-        // the API has ALREADY baked any carry into the current period's `amount` field,
-        // so we must NOT apply an additional overpaidApplied deduction here.
-        // The overpaidByContractPeriod map is populated from raw_json.overpaid_amount
-        // which is null for paidInFullButZeroedByApi periods, so the carry will be 0
-        // naturally — but we also guard explicitly with !paidInFullButZeroedByApi.
+        // of the PREVIOUS period's payment row.
+        //
+        // Phase 9AF fix: Two sub-cases for useBaselineDisplay:
+        //   A) paidInFullWithReducedAmount: API already reduced amount (e.g. 4097→3944).
+        //      → Do NOT apply overpaidApplied again (would double-deduct).
+        //   B) paidInFullButZeroedByApi: API zeroed amount because customer paid in full.
+        //      → If previous period had overpaid, we MUST still apply the carry-forward
+        //        because the API did NOT reduce the next period's amount in this case.
+        //        Example: CT0226-SNI001-0978-01 period 1 overpaid=1010, period 2 amount=0
+        //        (zeroed by API after payment), so we must show baseline-1010=980.
         let overpaidApplied = 0;
-        if (!isClosed && !useBaselineDisplay && periodNo > 1) {
-          const periodMap = overpaidByContractPeriod.get(extId);
-          if (periodMap) {
-            overpaidApplied = periodMap.get(periodNo - 1) ?? 0;
+        if (!isClosed && periodNo > 1) {
+          // Skip carry-forward only when API already reduced the amount (paidInFullWithReducedAmount)
+          // For paidInFullButZeroedByApi, we still apply carry so baseline display is reduced.
+          const skipCarry = paidInFullWithReducedAmount;
+          if (!skipCarry) {
+            const periodMap = overpaidByContractPeriod.get(extId);
+            if (periodMap) {
+              overpaidApplied = periodMap.get(periodNo - 1) ?? 0;
+            }
           }
         }
 
@@ -963,6 +970,19 @@ export async function listDebtTarget(params: { section: SectionKey }) {
             interest  = baseInterest;
             fee       = baseFee;
             amount    = baseline;
+            // Phase 9AF: For paidInFullButZeroedByApi (NOT paidInFullWithReducedAmount),
+            // the API did NOT reduce the next period's amount, so we must apply overpaidApplied
+            // to show the correct reduced baseline. Example: period 2 baseline=1990, overpaid
+            // carry from period 1=1010 → display 980 (not 1990).
+            if (paidInFullButZeroedByApi && overpaidApplied > 0.009) {
+              // Apply carry: deduct from principal first, then interest
+              const effPrincipal = Math.max(0, basePrincipal - overpaidApplied);
+              const remaining = Math.max(0, overpaidApplied - basePrincipal);
+              const effInterest = Math.max(0, baseInterest - remaining);
+              principal = Math.round(effPrincipal);
+              interest  = Math.round(effInterest);
+              amount    = principal + interest + fee;
+            }
           } else {
             // Use API amount as source of truth (it already includes penalty+unlockFee)
             // Derive principal/interest/fee from formula scaled to fit (amount - penalty - unlockFee)
