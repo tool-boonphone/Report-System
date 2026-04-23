@@ -708,14 +708,17 @@ export default function DebtReport() {
                                 } else if (closed) {
                                   v = "ปิดค่างวดแล้ว";
                                 } else {
-                                  // inst.amount จาก API รวม penalty+unlockFee อยู่แล้ว
-                                  // Bug 2 fix (Phase 9AA): principalOnly applies to ALL periods
-                                  // (including past). Deduct penalty+unlockFee from amount when switch=ON.
+                                  // Phase 9AF: amount = principal+interest+fee always as base.
+                                  // When principalOnly=ON → show base only (no penalty/unlockFee).
+                                  // When principalOnly=OFF → add penalty+unlockFee on top.
                                   const penalty = inst.penalty ?? 0;
                                   const unlockFee = inst.unlockFee ?? 0;
+                                  // base = inst.amount already has penalty/unlockFee baked in
+                                  // (from debtDb arrears pass). Strip them out to get the base.
+                                  const baseAmount = Math.max(0, inst.amount - penalty - unlockFee);
                                   const displayAmount = principalOnly
-                                      ? Math.max(0, inst.amount - penalty - unlockFee)
-                                      : inst.amount;
+                                      ? baseAmount
+                                      : inst.amount; // full amount incl. penalty+unlockFee
                                   v = fmtMoney(displayAmount);
                                   if (
                                     inst.overpaidApplied > 0.009 &&

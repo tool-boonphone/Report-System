@@ -357,3 +357,8 @@ Task list:
 ### Phase 9AE — Highlight งวดปัจจุบันในตารางเป้าเก็บหนี้
 - [x] DebtReport.tsx: งวดปัจจุบัน (isCurrentPeriod=true) ใช้ BG sky-50 (#f0f9ff) เพื่อให้เห็นชัดว่าตรงไหนคืองวดนี้
 - [x] TypeScript 0 errors + tests 63/64 pass + commit + push + checkpoint
+
+### Phase 9AF — แก้ยอดหนี้รวมตาม Switch เฉพาะเงินต้น
+- [x] DebtReport.tsx: เปิด เฉพาะเงินต้น → ยอดหนี้รวม = principal+interest+fee (ไม่รวม penalty/unlockFee)
+- [x] DebtReport.tsx: ปิด เฉพาะเงินต้น → ยอดหนี้รวม = principal+interest+fee+penalty+unlockFee (รวมค่าปรับ)
+- [x] TypeScript 0 errors + tests 63/64 pass + commit + push + checkpoint
