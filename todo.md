@@ -314,3 +314,7 @@ Task list:
 - [x] Export target Excel: เพิ่ม penalty + unlockFee columns
 - [x] Export collected Excel: ซ่อน closeInstallmentAmount column
 - [x] Tests + commit + push + checkpoint
+
+### Phase 9V — Switch เฉพาะเงินต้น: past periods คงค่าจริงเสมอ
+- [ ] Frontend target tab: Switch มีผลเฉพาะงวดปัจจุบัน+อนาคต (dueDate >= today); งวดที่ผ่านมาแล้วแสดงค่าจริงเสมอ (penalty/unlockFee/amount ไม่ถูก override)
+- [ ] TypeScript 0 errors + commit + push + checkpoint

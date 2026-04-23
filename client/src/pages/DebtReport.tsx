@@ -170,8 +170,10 @@ export default function DebtReport() {
   const [tab, setTab] = useState<"target" | "collected">("target");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("");
-  // Switch: true = เฉพาะเงินต้น (แสดง penalty/unlockFee = 0), false = รวมค่าปรับ+ค่าปลดล็อก
+  // Switch: true = เฉพาะเงินต้น (แสดง penalty/unlockFee = 0 เฉพาะงวดปัจจุบัน+อนาคต), false = รวมค่าปรับ+ค่าปลดล็อก
   const [principalOnly, setPrincipalOnly] = useState(true);
+  // Today's date string (YYYY-MM-DD) — stable reference for past/current/future detection
+  const todayStr = useMemo(() => new Date().toISOString().slice(0, 10), []);
 
   // One-shot load per tab. Query disables itself when user lacks permission.
   const targetQuery = trpc.debt.listTarget.useQuery(
@@ -692,11 +694,15 @@ export default function DebtReport() {
                               } else if (gc.key === "fee") {
                                 v = dimmed ? "0" : fmtMoney(inst.fee);
                               } else if (gc.key === "penalty") {
-                                // principalOnly=true → แสดง 0 (ตั้งหนี้เฉพาะเงินต้น)
-                                // principalOnly=false → แสดงค่าจริง (ถ้ามี)
-                                v = dimmed ? "0" : fmtMoney(principalOnly ? 0 : (inst.penalty ?? 0));
+                                // งวดที่ผ่านมาแล้ว (dueDate < today): แสดงค่าจริงเสมอ (ตั้งหนี้ไปแล้ว ดูย้อนหลังได้)
+                                // งวดปัจจุบัน+อนาคต (dueDate >= today): principalOnly=true → 0, false → ค่าจริง
+                                const isPast = !!inst.dueDate && inst.dueDate < todayStr;
+                                const applySwitch = principalOnly && !isPast;
+                                v = dimmed ? "0" : fmtMoney(applySwitch ? 0 : (inst.penalty ?? 0));
                               } else if (gc.key === "unlockFee") {
-                                v = dimmed ? "0" : fmtMoney(principalOnly ? 0 : (inst.unlockFee ?? 0));
+                                const isPast = !!inst.dueDate && inst.dueDate < todayStr;
+                                const applySwitch = principalOnly && !isPast;
+                                v = dimmed ? "0" : fmtMoney(applySwitch ? 0 : (inst.unlockFee ?? 0));
                               } else if (gc.key === "amount") {
                                 if (suspended) {
                                   // แสดงลาเบลสถานะในคอลัมน์ยอดรวม
@@ -705,13 +711,15 @@ export default function DebtReport() {
                                   v = "ปิดค่างวดแล้ว";
                                 } else {
                                   // inst.amount จาก API รวม penalty+unlockFee อยู่แล้ว
-                                  // principalOnly=true: ตัด penalty+unlockFee ออก → แสดงเฉพาะเงินต้น+ดอก+ค่าดำเนินการ
-                                  // principalOnly=false: ใช้ inst.amount ตรงๆ (รวมทุกอย่างแล้ว)
+                                  // งวดที่ผ่านมาแล้ว: ใช้ inst.amount ตรงๆ เสมอ
+                                  // งวดปัจจุบัน+อนาคต + principalOnly=true: ตัด penalty+unlockFee ออก
+                                  const isPast = !!inst.dueDate && inst.dueDate < todayStr;
                                   const penalty = inst.penalty ?? 0;
                                   const unlockFee = inst.unlockFee ?? 0;
-                                  const displayAmount = principalOnly
-                                    ? Math.max(0, inst.amount - penalty - unlockFee)
-                                    : inst.amount;
+                                  const displayAmount =
+                                    principalOnly && !isPast
+                                      ? Math.max(0, inst.amount - penalty - unlockFee)
+                                      : inst.amount;
                                   v = fmtMoney(displayAmount);
                                   if (
                                     inst.overpaidApplied > 0.009 &&
