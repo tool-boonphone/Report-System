@@ -318,3 +318,14 @@ Task list:
 ### Phase 9V — Switch เฉพาะเงินต้น: past periods คงค่าจริงเสมอ
 - [x] Frontend target tab: Switch มีผลเฉพาะงวดปัจจุบัน+อนาคต (dueDate >= today); งวดที่ผ่านมาแล้วแสดงค่าจริงเสมอ (penalty/unlockFee/amount ไม่ถูก override)
 - [x] TypeScript 0 errors + commit + push + checkpoint
+
+### Phase 9W — แก้ arrears carry: fee/unlockFee ไม่สะสมข้ามงวด
+- [ ] debtDb.ts: arrears carry pass — ลบ carryFee และ carryUnlockFee ออก (fee=100 ตายตัว, unlockFee=1000 ตายตัว ต่องวด ไม่สะสม)
+- [ ] carry เพิ่มเฉพาะ principal + interest + penalty เท่านั้น
+- [ ] ปรับ dueTotal/ratio calculation ให้ไม่รวม fee/unlockFee ใน carry
+- [ ] TypeScript 0 errors + tests + commit + push + checkpoint
+
+### Phase 9X — ใช้ค่าค้างชำระจาก API โดยตรง (principal_due, interest_due, fee_due, penalty_due, unlock_fee_due)
+- [ ] debtDb.ts: ลบ carry calculation ออก ใช้ฟิลด์ *_due จาก raw_json แทน (isArrears = total_due_amount > 0)
+- [ ] ตรวจสอบว่า raw_json ถูก parse และ map ไปยัง inst.principal, inst.interest, inst.fee, inst.penalty, inst.unlockFee, inst.amount ถูกต้อง
+- [ ] TypeScript 0 errors + tests + commit + push + checkpoint

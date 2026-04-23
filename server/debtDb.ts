@@ -762,12 +762,13 @@ export async function listDebtTarget(params: { section: SectionKey }) {
           baselineAmount != null &&
           baselineAmount > 0;
 
-        if (paidInFullButZeroedByApi) {
-          // Restore baseline so the operator sees the full monthly target.
-          // We don't have the original principal/interest/fee split here
-          // because API zeroed them too — fall back to baseline on `amount`
-          // and keep the sub-fields as best-effort (0 + annotation).
-          amount = baselineAmount!;
+        // overpaidApplied:: ยอดชำระเกินจากงวดก่อนหน้า (P-1) ที่นำมาหักงวดนี้
+        let overpaidApplied = 0;
+        if (!isClosed && !paidInFullButZeroedByApi && periodNo > 1) {
+          const periodMap = overpaidByContractPeriod.get(extId);
+          if (periodMap) {
+            overpaidApplied = periodMap.get(periodNo - 1) ?? 0;
+          }
         }
 
         if (isClosed || isSuspended) {
@@ -778,43 +779,98 @@ export async function listDebtTarget(params: { section: SectionKey }) {
           penalty = 0;
           unlockFee = 0;
         } else {
-          // --- Formula-based principal/interest (Phase 9T) ---
-          // สูตร:
-          //   basePrincipal = ceil(finance_amount / installment_count)
-          //   baseInterest  = baseline_amount - basePrincipal - fee
-          //   (ค่าปรับ/ค่าปลดล็อก ไม่ถูกแบ่งเป็น principal/interest)
+          // --- Phase 9X: Formula-based principal/interest + overpaid deduction + API penalty/unlockFee ---
           //
-          // งวดที่มีค้างสะสม (isArrears): carry จะถูกบวกเพิ่มใน arrears pass
-          // ด้านล่าง ดังนั้น principal/interest ที่ set ที่นี่คือ baseline เท่านั้น
+          // principal/interest/fee คำนวณจากสูตร:
+          //   basePrincipal = ceil(finance_amount / installment_count)
+          //   baseFee       = 100 (ตายตัวต่องวด)
+          //   baseInterest  = baseline_amount - basePrincipal - baseFee
+          //
+          // ถ้างวดก่อนหน้าจ่ายเกิน (overpaidApplied > 0) ให้หักออกจากยอดงวดนี้:
+          //   effectiveBaseline = max(0, baseline - overpaidApplied)
+          //   แล้วปรับ principal/interest ตามสัดส่วน
+          //
+          // penalty/unlockFee ดึงจาก API *_due โดยตรง
+          //
+          // isArrears = มี penalty_due > 0 หรือ unlock_fee_due > 0
+
           const financeAmt = c.finance_amount != null ? Number(c.finance_amount) : 0;
           const periods = c.installment_count != null ? Number(c.installment_count) : 0;
           const baseline = baselineAmount ?? 0;
-          if (financeAmt > 0 && periods > 0) {
-            // ceil(finance / periods) — ปัดขึ้นเสมอ
-            const basePrincipal = Math.ceil(financeAmt / periods);
-            const baseFee = rawFee > 0 ? rawFee : 100;
-            const baseInterest = Math.max(0, baseline - basePrincipal - baseFee);
-            principal = basePrincipal;
-            interest = baseInterest;
-            fee = baseFee;
-          } else {
-            // Fallback: ถ้าไม่มีข้อมูล finance_amount ใช้ค่าจาก API
-            principal = rawPrincipal;
-            interest = rawInterest;
-            fee = rawFee;
-          }
-        }
 
-        // overpaidApplied: The amount carried over from the PREVIOUS period's overpayment.
-        // We look up the sum of `overpaid_amount` from payments that closed period (P-1).
-        // This avoids false positives where `amount < baseline` due to other reasons
-        // (like API-side discounts or penalty adjustments).
-        let overpaidApplied = 0;
-        if (!isClosed && !paidInFullButZeroedByApi && periodNo > 1) {
-          const periodMap = overpaidByContractPeriod.get(extId);
-          if (periodMap) {
-            overpaidApplied = periodMap.get(periodNo - 1) ?? 0;
+          // Step 1: Compute formula baseline sub-fields
+          let basePrincipal: number;
+          let baseFee: number;
+          let baseInterest: number;
+          if (financeAmt > 0 && periods > 0) {
+            basePrincipal = Math.ceil(financeAmt / periods);
+            baseFee = 100;
+            baseInterest = Math.max(0, baseline - basePrincipal - baseFee);
+          } else {
+            // Fallback: ใช้ค่าจาก API *_due
+            basePrincipal = rawPrincipal;
+            baseFee = rawFee > 0 ? rawFee : 100;
+            baseInterest = rawInterest;
           }
+
+          // Step 2: Apply overpaid deduction from previous period
+          // ยอดชำระเกินจากงวดก่อนหน้ามาหักงวดนี้ตามสัดส่วน principal:interest
+          let effectivePrincipal = basePrincipal;
+          let effectiveInterest = baseInterest;
+          let effectiveFee = baseFee;
+          if (overpaidApplied > 0.009) {
+            const effectiveBaseline = Math.max(0, baseline - overpaidApplied);
+            if (baseline > 0.009) {
+              const ratio = effectiveBaseline / baseline;
+              effectivePrincipal = Math.max(0, basePrincipal * ratio);
+              effectiveInterest  = Math.max(0, baseInterest  * ratio);
+              effectiveFee       = Math.max(0, baseFee       * ratio);
+            } else {
+              effectivePrincipal = 0;
+              effectiveInterest  = 0;
+              effectiveFee       = 0;
+            }
+          }
+
+          // Step 3: penalty/unlockFee from API *_due
+          penalty   = rawPenalty;   // penalty_due
+          unlockFee = rawUnlockFee; // unlock_fee_due
+
+          // Step 4: Determine final amount and scale sub-fields to fit
+          if (paidInFullButZeroedByApi) {
+            // Paid in full but API zeroed amount: restore baseline
+            principal = basePrincipal;
+            interest  = baseInterest;
+            fee       = baseFee;
+            amount    = baseline;
+          } else {
+            // Use API amount as source of truth (it already includes penalty+unlockFee)
+            // Derive principal/interest/fee from formula scaled to fit (amount - penalty - unlockFee)
+            const apiAmount = rawAmount > 0.009 ? rawAmount : null;
+            const baselineForCalc = apiAmount != null ? apiAmount : baseline;
+            const netBaseline = Math.max(0, baselineForCalc - penalty - unlockFee);
+
+            // Scale formula sub-fields to fit netBaseline
+            const formulaTotal = effectivePrincipal + effectiveInterest + effectiveFee;
+            if (formulaTotal > 0.009 && netBaseline > 0.009) {
+              const scale = netBaseline / formulaTotal;
+              principal = effectivePrincipal * scale;
+              interest  = effectiveInterest  * scale;
+              fee       = effectiveFee       * scale;
+            } else {
+              principal = effectivePrincipal;
+              interest  = effectiveInterest;
+              fee       = effectiveFee;
+            }
+
+            amount = apiAmount != null
+              ? apiAmount  // use API amount directly
+              : principal + interest + fee + penalty + unlockFee;
+          }
+
+          // isArrears = มีค่าปรับหรือค่าปลดล็อก
+          const hasArrears = rawPenalty > 0.005 || rawUnlockFee > 0.005;
+          (r as any)._hasArrears = hasArrears;
         }
 
         return {
@@ -837,95 +893,34 @@ export async function listDebtTarget(params: { section: SectionKey }) {
           isSuspended,
           suspendLabel: isSuspended ? suspendLabel : null,
           suspendedAt: isSuspended ? suspendedAt : null,
-          // isArrears: computed below after the map, via a second pass
-          isArrears: false, // placeholder — overwritten in arrears pass
+          // isArrears: true when any *_due field > 0 (API-based, no carry pass needed)
+          isArrears: (r as any)._hasArrears === true,
         };
       })
       .sort((a, b) => (a.period ?? 0) - (b.period ?? 0));
 
-    // --- Cumulative arrears pass ---
-    // Walk periods in order. Accumulate unpaid balance (due - paid) from
-    // PAST and CURRENT periods only (dueDate <= today). Future periods
-    // (dueDate > today) receive carry = 0 and keep their original amounts.
-    //
-    // Business rules (2026-04-23 rev2):
-    //   1. Carry = sum of (due - paid) for each sub-field across periods
-    //      whose dueDate <= today.
-    //   2. TXRTC close-out resets carry to 0 (customer settled everything).
-    //   3. Closed/suspended periods are skipped.
-    //   4. Future periods (dueDate > today) are NOT modified - carry is not
-    //      applied and their unpaid balance is NOT added to carry.
-    //   5. isArrears = true only when carry-in > 0 on a past/current period.
+    // --- Arrears pass (Phase 9X) ---
+    // isArrears is set from API *_due fields (penalty/unlockFee) in the map above.
+    // Additionally: if a past/current period has partial payment (paid > 0 but < amount),
+    // the NEXT past/current period must also be flagged isArrears=true.
     {
       const todayMs = Date.now();
-      let carryPrincipal = 0;
-      let carryInterest = 0;
-      let carryFee = 0;
-      let carryPenalty = 0;
-      let carryUnlockFee = 0;
-
-      for (const inst of baseInstallments) {
-        const p = inst.period ?? 0;
-
-        // Reset carry if this period is at or after a TXRTC close-out.
-        if (maxClosedPeriod > 0 && p === maxClosedPeriod + 1) {
-          carryPrincipal = 0;
-          carryInterest = 0;
-          carryFee = 0;
-          carryPenalty = 0;
-          carryUnlockFee = 0;
+      for (let i = 0; i < baseInstallments.length - 1; i++) {
+        const cur = baseInstallments[i];
+        const next = baseInstallments[i + 1];
+        if (!cur.dueDate || !next.dueDate) continue;
+        const curDueMs = Date.parse(`${cur.dueDate}T00:00:00`);
+        const nextDueMs = Date.parse(`${next.dueDate}T00:00:00`);
+        // Both must be past/current periods
+        if (curDueMs > todayMs || nextDueMs > todayMs) continue;
+        if (cur.isClosed || cur.isSuspended) continue;
+        if (next.isClosed || next.isSuspended) continue;
+        // Partial payment on current period
+        const paid = Number(cur.paid ?? 0);
+        const amount = Number(cur.amount ?? 0);
+        if (paid > 0.01 && paid < amount - 0.5) {
+          next.isArrears = true;
         }
-
-        // Determine if this period is past or current (dueDate <= today).
-        const dueDateMs = inst.dueDate
-          ? Date.parse(`${inst.dueDate}T00:00:00`)
-          : 0;
-        const isPastOrCurrent = dueDateMs > 0 && dueDateMs <= todayMs;
-
-        if (isPastOrCurrent && !inst.isClosed && !inst.isSuspended) {
-          // Apply carry-in to this period.
-          const hasCarry =
-            carryPrincipal > 0.005 ||
-            carryInterest > 0.005 ||
-            carryFee > 0.005 ||
-            carryPenalty > 0.005 ||
-            carryUnlockFee > 0.005;
-
-          if (hasCarry) {
-            inst.principal += carryPrincipal;
-            inst.interest += carryInterest;
-            inst.fee += carryFee;
-            inst.penalty += carryPenalty;
-            inst.unlockFee += carryUnlockFee;
-            inst.amount += carryPrincipal + carryInterest + carryFee + carryPenalty + carryUnlockFee;
-            inst.isArrears = true;
-          }
-
-          // Accumulate unpaid balance from this period into carry for next.
-          const paidTotal = inst.paid;
-          const dueTotal =
-            (inst.principal - carryPrincipal) +
-            (inst.interest - carryInterest) +
-            (inst.fee - carryFee) +
-            (inst.penalty - carryPenalty) +
-            (inst.unlockFee - carryUnlockFee);
-          if (dueTotal > 0.005) {
-            const ratio = Math.max(0, Math.min(1, paidTotal / dueTotal));
-            const basePrincipal = inst.principal - carryPrincipal;
-            const baseInterest = inst.interest - carryInterest;
-            const baseFee = inst.fee - carryFee;
-            const basePenalty = inst.penalty - carryPenalty;
-            const baseUnlockFee = inst.unlockFee - carryUnlockFee;
-            carryPrincipal += Math.max(0, basePrincipal * (1 - ratio));
-            carryInterest += Math.max(0, baseInterest * (1 - ratio));
-            carryFee += Math.max(0, baseFee * (1 - ratio));
-            carryPenalty += Math.max(0, basePenalty * (1 - ratio));
-            carryUnlockFee += Math.max(0, baseUnlockFee * (1 - ratio));
-          }
-          // If dueTotal is 0 (API zeroed the period) - no new carry.
-        }
-        // Future periods (isPastOrCurrent = false): skip carry application
-        // and skip carry accumulation. Their amounts stay as-is.
       }
     }
 
