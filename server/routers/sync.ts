@@ -35,14 +35,28 @@ export const syncRouter = router({
 
   /** Current in-memory lock status for each section. */
   status: appProcedure.query(async () => {
+    const bpInfo = getSyncStatus("Boonphone");
+    const ffInfo = getSyncStatus("Fastfone365");
     return {
       Boonphone: {
         running: isSyncRunning("Boonphone"),
-        info: getSyncStatus("Boonphone"),
+        info: bpInfo,
+        // Convenience fields for progress bar
+        startedAt: bpInfo?.startedAt ?? null,
+        progress: bpInfo?.progress ?? null,
+        currentStage: bpInfo?.currentStage ?? null,
+        stageIndex: bpInfo?.stageIndex ?? null,
+        totalStages: bpInfo?.totalStages ?? null,
       },
       Fastfone365: {
         running: isSyncRunning("Fastfone365"),
-        info: getSyncStatus("Fastfone365"),
+        info: ffInfo,
+        // Convenience fields for progress bar
+        startedAt: ffInfo?.startedAt ?? null,
+        progress: ffInfo?.progress ?? null,
+        currentStage: ffInfo?.currentStage ?? null,
+        stageIndex: ffInfo?.stageIndex ?? null,
+        totalStages: ffInfo?.totalStages ?? null,
       },
       active: await getRunningSyncs(),
     };

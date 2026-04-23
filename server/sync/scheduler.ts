@@ -1,8 +1,7 @@
 /**
- * Simple in-process scheduler — runs every hour on the hour between 08:00
- * and 19:00 (inclusive), Monday through Saturday. We keep it small: the
- * process checks once a minute; when hour/day matches and we haven't already
- * synced this hour, it kicks off a run for each configured section.
+ * Simple in-process scheduler — runs once a day at 06:00 every day.
+ * The process checks once a minute; when hour matches 06 and we haven't
+ * already synced today, it kicks off a run for each configured section.
  */
 
 import type { SectionKey } from "../../shared/const";
@@ -17,33 +16,28 @@ function isSectionConfigured(section: SectionKey): boolean {
   return Boolean(client && client.isConfigured());
 }
 
-const START_HOUR = 8;
-const END_HOUR = 19; // inclusive: 08,09,...,19
+const SYNC_HOUR = 6; // 06:00 daily
 
 let _timer: NodeJS.Timeout | null = null;
-let _lastTick: Record<string, string> = {}; // `${section}-${YYYY-MM-DD-HH}`
+let _lastTick: Record<string, string> = {}; // `${section}-${YYYY-MM-DD}`
 
-function currentSlot(d = new Date()): string {
+function currentDaySlot(d = new Date()): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
-  const h = String(d.getHours()).padStart(2, "0");
-  return `${y}-${m}-${day}-${h}`;
+  return `${y}-${m}-${day}`;
 }
 
-function isWithinBusinessHours(d = new Date()): boolean {
-  const dow = d.getDay(); // 0 Sun .. 6 Sat
-  if (dow === 0) return false; // Sunday off
-  const hr = d.getHours();
-  return hr >= START_HOUR && hr <= END_HOUR;
+function isSyncTime(d = new Date()): boolean {
+  return d.getHours() === SYNC_HOUR;
 }
 
 /** One tick — called once a minute. */
 async function tick() {
   const now = new Date();
-  if (!isWithinBusinessHours(now)) return;
+  if (!isSyncTime(now)) return;
   if (now.getMinutes() !== 0) return; // only at :00
-  const slot = currentSlot(now);
+  const slot = currentDaySlot(now);
 
   for (const section of SECTIONS as readonly SectionKey[]) {
     if (!isSectionConfigured(section)) continue; // skip unconfigured sections
@@ -51,7 +45,7 @@ async function tick() {
     if (_lastTick[section] === slot) continue;
     if (isSyncRunning(section)) continue;
     _lastTick[section] = slot;
-    console.log(`[scheduler] ${tag} triggering cron sync`);
+    console.log(`[scheduler] ${tag} triggering daily cron sync`);
     runSectionSync(section, "cron").catch((err) =>
       console.error(`[scheduler] ${tag} failed:`, err),
     );
@@ -65,30 +59,32 @@ async function tick() {
  */
 export async function startScheduler() {
   if (_timer) return;
-  console.log("[scheduler] started (Mon-Sat 08:00-19:00 hourly)");
+  console.log("[scheduler] started (daily at 06:00)");
   _timer = setInterval(() => {
     tick().catch((err) => console.error("[scheduler] tick error:", err));
   }, 60_000);
 
-  // Missed-sync recovery: if we are inside business hours and the last
-  // successful sync for a section is older than 1h, kick one immediately.
+  // Missed-sync recovery: if today's sync hasn't run yet (last sync older than
+  // 23h) and we're past 06:00, kick one immediately on startup.
   const now = new Date();
-  if (isWithinBusinessHours(now)) {
+  const pastSyncHour = now.getHours() >= SYNC_HOUR;
+  if (pastSyncHour) {
     for (const section of SECTIONS as readonly SectionKey[]) {
       if (!isSectionConfigured(section)) {
         console.log(`[scheduler] ${section} skipped (no credentials configured)`);
         continue;
       }
-      // Cool-off: if the previous attempt errored within the last hour, skip.
+      // Cool-off: if the previous attempt errored within the last 30 min, skip.
       const lastErr = await getLastErrorAt({ section });
-      if (lastErr && now.getTime() - lastErr.getTime() < 60 * 60 * 1000) {
+      if (lastErr && now.getTime() - lastErr.getTime() < 30 * 60 * 1000) {
         console.log(
           `[scheduler] ${section} skipped (recent error at ${lastErr.toISOString()})`,
         );
         continue;
       }
       const last = await getLastSyncedAt({ section });
-      if (!last || now.getTime() - last.getTime() > 60 * 60 * 1000) {
+      const oneDayMs = 23 * 60 * 60 * 1000; // 23h threshold
+      if (!last || now.getTime() - last.getTime() > oneDayMs) {
         if (!isSyncRunning(section)) {
           console.log(`[scheduler] missed-sync catch-up for ${section}`);
           runSectionSync(section, "startup").catch(() => {});

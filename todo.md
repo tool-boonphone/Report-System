@@ -436,3 +436,11 @@ Task list:
 - [x] P16-4: แก้ bug วันที่ต้องชำระงวดที่ 1 ในเป้าเก็บหนี้แสดงผิด — แก้ไขแล้วใน P16-5 (fixOutOfOrderDueDates)
 - [x] P16-5: เพิ่ม fixOutOfOrderDueDates() helper ใน debtDb.ts — fix due_date ผิดลำดับ in-memory (CT0226-SRI005-1183-01 p1: 2027-01-05 → 2026-03-05 ✓) ไม่แก้ DB ดังนั้น sync ใหม่ไม่ทับ
 - [x] P16-6: แก้ bug เป้าเก็บหนี้ — paidInFullButZeroedByApi ยัง apply overpaidApplied carry-forward ได้ (CT0226-SNI001-0978-01 งวด 2 แสดง 980.00 ✓)
+
+## Phase 17 — UI/UX Fixes
+
+- [x] P17-1: ลด padding ด้านล่างตารางในหน้าข้อมูลสัญญาให้เท่ากับหน้าอื่นๆ
+- [x] P17-2: แก้ z-index เส้นกรอบ hover ให้อยู่บนสุดเสมอ (ไม่ถูก BG ของแถวอื่นทับ)
+- [x] P17-3: เปลี่ยน auto sync schedule จาก hourly (08:00-19:00) เป็นวันละครั้ง เวลา 06:00 น. (ทั้ง Boonphone และ Fastfone)
+- [x] P17-4: เพิ่ม progress bar % + elapsed time + estimated remaining time แทนปุ่มรีเฟรชขณะ sync กำลังทำงาน
+- [x] P17-5: เพิ่มไอคอนหน้าเมนู ข้อมูลสัญญา และ รายงานหนี้ ใน Sidebar navigation

@@ -32,11 +32,52 @@ const OVERALL_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes ceiling per section
 // A sync row older than this with status=in_progress is treated as abandoned.
 const STALE_INPROGRESS_MS = OVERALL_TIMEOUT_MS + 5 * 60 * 1000;
 
-type LockMap = Record<string, { startedAt: number; triggeredBy: SyncTrigger } | null>;
+/** Stages in order — used to compute progress %. */
+export const SYNC_STAGES = [
+  "partners",
+  "customers",
+  "contracts",
+  "installments",
+  "payments",
+] as const;
+export type SyncStage = (typeof SYNC_STAGES)[number];
+
+export interface SyncLockInfo {
+  startedAt: number;
+  triggeredBy: SyncTrigger;
+  /** 0-100 */
+  progress: number;
+  /** Human-readable current stage name */
+  currentStage: string;
+  /** Index of current stage (0-based) */
+  stageIndex: number;
+  /** Total number of stages */
+  totalStages: number;
+}
+
+type LockMap = Record<string, SyncLockInfo | null>;
 const _locks: LockMap = { Boonphone: null, Fastfone365: null };
 
-export function getSyncStatus(section: SectionKey) {
+export function getSyncStatus(section: SectionKey): SyncLockInfo | null {
   return _locks[section];
+}
+
+/** Update progress for a running sync. */
+function setStage(section: SectionKey, stageIndex: number) {
+  const lock = _locks[section];
+  if (!lock) return;
+  const totalStages = SYNC_STAGES.length;
+  // progress: stage 0 starts at 5%, each stage adds (90/totalStages)%
+  // stage 0=partners: 5%, 1=customers: 23%, 2=contracts: 41%, 3=installments: 59%, 4=payments: 77%
+  // After all stages done: 100%
+  const progress = Math.round(5 + (stageIndex / totalStages) * 90);
+  _locks[section] = {
+    ...lock,
+    progress,
+    stageIndex,
+    currentStage: SYNC_STAGES[stageIndex] ?? "finishing",
+    totalStages,
+  };
 }
 
 export function isSyncRunning(section: SectionKey): boolean {
@@ -103,7 +144,14 @@ export async function runSectionSync(
       message: `[${section}] API credentials are not configured`,
     };
   }
-  _locks[section] = { startedAt: Date.now(), triggeredBy };
+  _locks[section] = {
+    startedAt: Date.now(),
+    triggeredBy,
+    progress: 0,
+    currentStage: "เริ่มต้น",
+    stageIndex: -1,
+    totalStages: SYNC_STAGES.length,
+  };
   try {
     const work = doSync(client, section, triggeredBy);
     const timeout = new Promise<never>((_, rej) =>
@@ -132,12 +180,15 @@ async function doSync(
   let overallRows = 0;
   try {
     // 1) Partners — for province + status columns. Lightweight, sync in full.
+    setStage(section, 0);
     const partnersById = await syncPartners(client, section);
 
     // 2) Customers — for "age". Cache map to enrich contract rows.
+    setStage(section, 1);
     const customersById = await syncCustomers(client, section);
 
     // 3) Contracts — list + detail enrichment.
+    setStage(section, 2);
     const contractRows = await syncContracts(
       client,
       section,
@@ -147,10 +198,12 @@ async function doSync(
     overallRows += contractRows;
 
     // 4) Installments
+    setStage(section, 3);
     const instRows = await syncInstallments(client, section);
     overallRows += instRows;
 
     // 5) Payment Transactions
+    setStage(section, 4);
     const payRows = await syncPayments(client, section);
     overallRows += payRows;
 

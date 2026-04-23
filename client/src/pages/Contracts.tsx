@@ -498,7 +498,7 @@ export default function Contracts() {
   // ----- Render -----
   return (
     <AppShell>
-      <div className="w-full px-3 md:px-5 py-4">
+      <div className="w-full px-3 md:px-5 py-3">
         {/* Toolbar: search + refresh + export */}
         <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-3 mb-3">
           <div className="relative flex-1 min-w-0">
@@ -751,7 +751,7 @@ export default function Contracts() {
                       key={row.id}
                       className={`border-b border-gray-100 transition-colors cursor-default ${
                         isHovered
-                          ? "bg-blue-50 shadow-[inset_3px_0_0_0_#3b82f6]"
+                          ? "bg-blue-50 shadow-[inset_3px_0_0_0_#3b82f6] relative z-10"
                           : "hover:bg-blue-50/40"
                       }`}
                       style={{ height: ROW_HEIGHT }}
