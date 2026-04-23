@@ -868,8 +868,13 @@ export async function listDebtTarget(params: { section: SectionKey }) {
               : principal + interest + fee + penalty + unlockFee;
           }
 
-          // isArrears = มีค่าปรับหรือค่าปลดล็อก
-          const hasArrears = rawPenalty > 0.005 || rawUnlockFee > 0.005;
+          // isArrears = มีค่าปรับหรือค่าปลดล็อก **เฉพาะงวดที่ผ่านมาแล้ว/ปัจจุบัน** (dueDate <= today)
+          // งวดอนาคต: API อาจส่ง unlock_fee_due > 0 มาด้วย แต่ยังไม่ถึงกำหนดจึงไม่นับเป็นค้างชำระ
+          const todayForArrears = new Date();
+          todayForArrears.setHours(0, 0, 0, 0);
+          const dueDateMs = r.due_date ? Date.parse(`${r.due_date}T00:00:00`) : 0;
+          const isPastOrCurrent = dueDateMs <= todayForArrears.getTime();
+          const hasArrears = isPastOrCurrent && (rawPenalty > 0.005 || rawUnlockFee > 0.005);
           (r as any)._hasArrears = hasArrears;
         }
 
