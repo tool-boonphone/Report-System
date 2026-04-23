@@ -732,6 +732,10 @@ export default function DebtReport() {
                             }
                             const isArrears = !dimmed && !!inst?.isArrears;
                             const isCurrentPeriod = !dimmed && !!inst?.isCurrentPeriod;
+                            // Phase 9AI: future period = dueDate > today (not closed/suspended)
+                            const todayStr = new Date().toISOString().slice(0, 10);
+                            const isFuturePeriod = !dimmed && !isArrears && !isCurrentPeriod &&
+                              !!inst?.dueDate && inst.dueDate > todayStr;
                             const baseStyle: Record<string, string | number> = {
                               width: gc.width,
                               textAlign:
@@ -753,6 +757,9 @@ export default function DebtReport() {
                               // Current period: sky-50 BG to make it easy to spot
                               // without needing to read the due date column.
                               baseStyle.background = "#f0f9ff"; // sky-50
+                            } else if (isFuturePeriod) {
+                              // Phase 9AI: future periods dimmed with gray text
+                              baseStyle.color = "#9ca3af"; // gray-400
                             }
                             const tooltip = suspended
                               ? suspendLabel
@@ -908,8 +915,8 @@ export default function DebtReport() {
                                     if (gc.key === "penalty" && (pay.penalty ?? 0) > 0) {
                                       textClass = "text-red-600";
                                     } else if (gc.key === "unlockFee" && (pay.unlockFee ?? 0) > 0) {
-                                      // Phase 9AG: ค่าปลดล็อก → สีส้ม ตัวหนา
-                                      textClass = "text-orange-600 font-bold";
+                                      // Phase 9AI: ค่าปลดล็อก → สีฟ้า ไม่ตัวหนา
+                                      textClass = "text-blue-500";
                                     } else if (gc.key === "discount" && (pay.discount ?? 0) > 0) {
                                       // Phase 9AG: ส่วนลด → สีเขียวอมฟ้า (teal)
                                       textClass = "text-teal-600";

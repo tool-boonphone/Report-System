@@ -373,3 +373,8 @@ Task list:
 - [x] ตรวจสอบว่า inst.amount ของงวดที่ไม่ใช่ currentPeriod รวม penalty/unlockFee ไว้หรือไม่
 - [x] เพิ่ม netAmount (principal+interest+fee) ใน backend และ frontend ใช้ netAmount แทนการหัก penalty จาก amount
 - [x] TypeScript 0 errors + commit + push + checkpoint
+
+### Phase 9AI — Style งวดอนาคต + ค่าปลดล็อก
+- [ ] DebtReport.tsx: งวดที่ยังไม่ถึงกำหนด (future period) → ตัวหนังสือสีเทา (text-gray-400)
+- [ ] DebtReport.tsx: ค่าปลดล็อก (unlockFee > 0) → เปลี่ยนจาก orange-bold เป็น text-blue-500 ไม่ตัวหนา
+- [ ] TypeScript 0 errors + commit + push + checkpoint
