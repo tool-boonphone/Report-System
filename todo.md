@@ -382,3 +382,7 @@ Task list:
 ### Phase 9AJ — แก้ยอดหนี้รวม principalOnly=OFF
 - [x] DebtReport.tsx: principalOnly=OFF → ยอดหนี้รวม = netAmount + penalty + unlockFee
 - [x] TypeScript 0 errors + commit d56c42d + push + checkpoint
+
+### Phase 9AK — แก้ระงับสัญญา row styling
+- [ ] DebtReport.tsx: isSuspended rows ต้องแสดง gray background และ "ระงับสัญญา" ในช่องยอดหนี้รวม
+- [ ] TypeScript 0 errors + commit + push + checkpoint

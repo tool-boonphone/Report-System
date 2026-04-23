@@ -691,6 +691,15 @@ export async function listDebtTarget(params: { section: SectionKey }) {
       if (firstSuspended?.period) {
         suspendedFromPeriod = Number(firstSuspended.period);
         suspendedAt = firstSuspended.due_date ?? null;
+      } else {
+        // Phase 9AK fallback: contract.status = "ระงับสัญญา" but no installment
+        // has installment_status_code = "ระงับสัญญา" (API sends "\u0e22ังไม่ถึงกำหนด" etc.).
+        // In this case, treat ALL periods as suspended starting from period 1.
+        const firstPeriod = list.sort((a, b) => (a.period ?? 0) - (b.period ?? 0))[0];
+        if (firstPeriod) {
+          suspendedFromPeriod = 1;
+          suspendedAt = firstPeriod.due_date ?? null;
+        }
       }
       // For bad-debt contracts, the effective “status-change date” is
       // the LAST payment that arrived while the contract was still in
