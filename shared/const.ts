@@ -18,6 +18,7 @@ export type SectionKey = (typeof SECTIONS)[number];
 
 /** Menu codes used by group permissions. */
 export const MENU_CODES = [
+  "section_switch", // การสลับ Section (ไว้บนสุด)
   "contract", // ข้อมูลสัญญา
   "debt_report", // รายงานหนี้
   "settings_users", // ตั้งค่า > จัดการผู้ใช้งาน
@@ -26,6 +27,7 @@ export const MENU_CODES = [
 export type MenuCode = (typeof MENU_CODES)[number];
 
 export const MENU_LABELS: Record<MenuCode, string> = {
+  section_switch: "การสลับ Section",
   contract: "ข้อมูลสัญญา",
   debt_report: "รายงานหนี้",
   settings_users: "จัดการผู้ใช้งาน",

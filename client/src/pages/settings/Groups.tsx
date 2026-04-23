@@ -235,16 +235,37 @@ export default function GroupsSettings() {
                     const perm = g.permissions.find(
                       (p) => p.menuCode === menu,
                     );
+                    // section_switch: only canView matters (whether user can switch section)
+                    const isSectionSwitch = menu === "section_switch";
                     return (
-                      <tr key={menu} className="border-b border-gray-100 last:border-0">
-                        <td className="px-3 py-2 text-gray-800">
+                      <tr
+                        key={menu}
+                        className={
+                          "border-b border-gray-100 last:border-0" +
+                          (isSectionSwitch ? " bg-blue-50" : "")
+                        }
+                      >
+                        <td className="px-3 py-2 text-gray-800 font-medium">
                           {MENU_LABELS[menu]}
+                          {isSectionSwitch && (
+                            <span className="ml-2 text-[10px] text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded font-normal">
+                              เฉพาะ ดู
+                            </span>
+                          )}
                         </td>
                         {PERMISSION_ACTIONS.map((a) => {
                           const field = actionField(a);
                           const checked = perm
                             ? (perm[field] as boolean)
                             : false;
+                          // For section_switch, only show canView; others are disabled/hidden
+                          if (isSectionSwitch && a !== "view") {
+                            return (
+                              <td key={a} className="px-3 py-2 text-center">
+                                <span className="text-gray-200">—</span>
+                              </td>
+                            );
+                          }
                           return (
                             <td key={a} className="px-3 py-2 text-center">
                               <Checkbox

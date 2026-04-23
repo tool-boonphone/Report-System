@@ -72,6 +72,7 @@ export function TopNav() {
     setSettingsMenuOpen(false);
   }, [location]);
 
+  const canSwitchSection = can("section_switch", "view");
   const visibleMain = MAIN_NAV.filter((item) => can(item.menuCode, "view"));
   const visibleSettings = SETTINGS_NAV.filter((item) => can(item.menuCode, "view"));
 
@@ -120,8 +121,8 @@ export function TopNav() {
             {section && (
               <div ref={sectionMenuRef} className="relative flex-shrink-0">
                 <button
-                  onClick={() => setSectionMenuOpen((v) => !v)}
-                  className="flex items-center gap-2 py-1 pr-2 pl-1 rounded-lg hover:bg-gray-100"
+                  onClick={() => canSwitchSection && setSectionMenuOpen((v) => !v)}
+                  className={"flex items-center gap-2 py-1 pr-2 pl-1 rounded-lg" + (canSwitchSection ? " hover:bg-gray-100 cursor-pointer" : " cursor-default")}
                 >
                   <img
                     src={BRAND_LOGOS[section]}
@@ -131,9 +132,9 @@ export function TopNav() {
                   <span className="hidden sm:inline text-sm font-semibold text-gray-800">
                     {section}
                   </span>
-                  <ChevronDown className="w-3 h-3 text-gray-400" />
+                  {canSwitchSection && <ChevronDown className="w-3 h-3 text-gray-400" />}
                 </button>
-                {sectionMenuOpen && (
+                {sectionMenuOpen && canSwitchSection && (
                   <div className="absolute top-full left-0 mt-1 w-44 bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-50">
                     <button
                       onClick={handleChangeSection}
