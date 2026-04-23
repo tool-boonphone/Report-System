@@ -339,3 +339,10 @@ Task list:
 - [x] debtDb.ts: penalty ในงวดปัจจุบัน = รวมค่าปรับคงค้างทุกงวดที่ผ่านมา (sum of all penalty_due ที่ dueDate <= today)
 - [x] DebtReport.tsx: isClosed display = สีเทา + ตัวเอียง + 0 ทุก column + "ปิดค่างวดแล้ว" ที่ยอดหนี้รวม (เหมือน isSuspended)
 - [x] TypeScript 0 errors + tests 63/64 pass + commit 3f48248 + push + checkpoint
+
+### Phase 9AA — แก้ 4 จุด: isArrears + Switch + penalty future + isClosed
+- [ ] debtDb.ts: isArrears = มียอดค้างจากงวดก่อนเท่านั้น (ไม่ใช่ค่าปรับของงวดตัวเอง) — ต้องนิยาม "ค้างจากงวดก่อน" ให้ชัดเจน
+- [ ] DebtReport.tsx: Switch เฉพาะเงินต้น=เปิด → penalty/unlockFee = 0 ทุกงวด (ไม่มีข้อยกเว้น)
+- [ ] debtDb.ts/DebtReport.tsx: penalty/unlockFee แสดงเฉพาะงวดปัจจุบัน งวดอนาคต = 0
+- [ ] DebtReport.tsx: สิ้นสุดสัญญา — งวดที่ผ่านมาแล้ว (dueDate < today) ต้องเป็นสีเทา 0 เหมือน isSuspended
+- [ ] TypeScript 0 errors + tests + commit + push + checkpoint

@@ -459,16 +459,20 @@ describe("listDebtTarget — arrears carry: past/current only (Phase 9P)", () =>
   );
 
   it(
-    "Phase 9Z: isArrears=true only on the first unpaid past/current period (current period)",
+    "Phase 9Z + Bug1 fix: isArrears=true on currentPeriod ONLY when prior periods have penalty carry",
     async () => {
-      // Phase 9Z rule: isArrears is set ONLY on the "current period" =
-      // the first (lowest period no) past/current period that is not fully paid.
-      // All other periods (past paid, future) must have isArrears=false.
+      // Updated rule (Phase 9AA Bug1 fix):
+      //   isArrears is set ONLY on the "current period" (first unpaid past/current period)
+      //   AND only when there are PRIOR periods (period < currentPeriod.period) that
+      //   have penalty > 0 (carry from previous overdue periods).
+      //   If currentPeriod is period 1 (no prior periods with penalty), isArrears = false.
+      //   All other periods must always have isArrears=false.
       const { rows } = await listDebtTarget({ section: "Boonphone" });
       if (rows.length < 5) return;
 
       const todayMs = Date.now();
-      let checked = 0;
+      let checkedWithCarry = 0;
+      let checkedWithoutCarry = 0;
       for (const r of rows) {
         const insts = ((r.installments ?? []) as Array<any>)
           .filter((c) => c.dueDate && !c.isClosed && !c.isSuspended)
@@ -484,18 +488,34 @@ describe("listDebtTarget — arrears carry: past/current only (Phase 9P)", () =>
         });
         if (currentPeriodIdx === -1) continue; // no unpaid past period
 
-        // The current period must have isArrears=true
-        expect(insts[currentPeriodIdx].isArrears).toBe(true);
+        // Check if there are prior periods (before currentPeriod) with penalty carry
+        const hasPriorPenaltyCarry = insts.some((inst, idx) => {
+          if (idx >= currentPeriodIdx) return false; // skip current and after
+          const dueMs = Date.parse(`${inst.dueDate}T00:00:00`);
+          if (dueMs > todayMs) return false;
+          return Number(inst.penalty ?? 0) > 0.005 || Number(inst.unlockFee ?? 0) > 0.005;
+        });
+
+        if (hasPriorPenaltyCarry) {
+          // Current period MUST have isArrears=true (carry from prior periods)
+          expect(insts[currentPeriodIdx].isArrears).toBe(true);
+          checkedWithCarry++;
+        } else {
+          // No prior penalty carry → currentPeriod must have isArrears=false
+          expect(insts[currentPeriodIdx].isArrears).toBe(false);
+          checkedWithoutCarry++;
+        }
+
         // All other periods must have isArrears=false
         for (let i = 0; i < insts.length; i++) {
           if (i === currentPeriodIdx) continue;
           expect(insts[i].isArrears).toBe(false);
         }
-        checked++;
-        if (checked >= 5) break; // check first 5 contracts with arrears
+
+        if (checkedWithCarry >= 3 && checkedWithoutCarry >= 3) break;
       }
       // If no contract with unpaid past period found, skip gracefully.
-      if (checked === 0) return;
+      if (checkedWithCarry === 0 && checkedWithoutCarry === 0) return;
     },
     30_000,
   );

@@ -738,7 +738,10 @@ export async function listDebtTarget(params: { section: SectionKey }) {
         const paid = Number(r.paid_amount ?? 0);
         const periodNo = r.period != null ? Number(r.period) : 0;
 
-        const isClosed = maxClosedPeriod > 0 && periodNo > maxClosedPeriod;
+        // Bug 4 fix (Phase 9AA): use closedByContract.has() so contracts with
+        // only TXRTC receipts (maxNormalPeriod=0) are also detected correctly.
+        // When maxNormalPeriod=0, period > 0 is always true for any real period.
+        const isClosed = closedByContract.has(extId) && periodNo > maxClosedPeriod;
         // Per-period suspended flag: period is >= the first suspended period.
         // Bad-debt contract → re-use the same flag but surface a different label.
         const isSuspended =
@@ -833,8 +836,13 @@ export async function listDebtTarget(params: { section: SectionKey }) {
           }
 
           // Step 3: penalty/unlockFee from API *_due
-          penalty   = rawPenalty;   // penalty_due
-          unlockFee = rawUnlockFee; // unlock_fee_due
+          // Bug 3 fix (Phase 9AA): future periods (dueDate > today) must show 0
+          // for penalty/unlockFee — API may send non-zero values for future periods
+          // but they are not yet overdue charges.
+          const dueDateForPenalty = r.due_date ? Date.parse(`${r.due_date}T00:00:00`) : 0;
+          const isFuturePeriod = dueDateForPenalty > today.getTime();
+          penalty   = isFuturePeriod ? 0 : rawPenalty;   // penalty_due
+          unlockFee = isFuturePeriod ? 0 : rawUnlockFee; // unlock_fee_due
 
           // Step 4: Determine final amount and scale sub-fields to fit
           if (paidInFullButZeroedByApi) {
@@ -931,24 +939,37 @@ export async function listDebtTarget(params: { section: SectionKey }) {
         return paid < amount - 0.5; // not fully paid
       });
       if (currentPeriod) {
-        // Sum penalty from all past/current periods (dueDate <= today)
-        const totalPenalty = baseInstallments.reduce((sum, inst) => {
+        const currentPeriodNo = Number(currentPeriod.period ?? 0);
+        // Sum penalty from all past/current periods BEFORE currentPeriod (dueDate <= today)
+        // Bug 1 fix (Phase 9AA): only count penalty from PRIOR periods, not currentPeriod itself.
+        // This prevents period 1 from being flagged as isArrears when it only has its own penalty_due.
+        const priorPenalty = baseInstallments.reduce((sum, inst) => {
           if (inst.isClosed || inst.isSuspended) return sum;
           if (!inst.dueDate) return sum;
           const dueMs = Date.parse(`${inst.dueDate}T00:00:00`);
           if (dueMs > todayMs) return sum;
+          if (Number(inst.period ?? 0) >= currentPeriodNo) return sum; // skip current+future
           return sum + Number(inst.penalty ?? 0);
         }, 0);
-        // Max unlockFee from all past/current periods (ค่าปลดล็อกไม่ทบ)
-        const totalUnlockFee = baseInstallments.reduce((max, inst) => {
+        // Max unlockFee from all prior past/current periods (ค่าปลดล็อกไม่ทบ)
+        const priorUnlockFee = baseInstallments.reduce((max, inst) => {
           if (inst.isClosed || inst.isSuspended) return max;
           if (!inst.dueDate) return max;
           const dueMs = Date.parse(`${inst.dueDate}T00:00:00`);
           if (dueMs > todayMs) return max;
+          if (Number(inst.period ?? 0) >= currentPeriodNo) return max; // skip current+future
           return Math.max(max, Number(inst.unlockFee ?? 0));
         }, 0);
-        // Update current period: set isArrears + accumulated penalty/unlockFee
-        currentPeriod.isArrears = true;
+        // isArrears = true only when there are PRIOR periods with penalty/unlockFee
+        // (i.e. carry from previous periods). If currentPeriod is period 1 with no
+        // prior periods, isArrears = false even if it has its own penalty_due.
+        const hasCarryFromPrior = priorPenalty > 0.005 || priorUnlockFee > 0.005;
+        currentPeriod.isArrears = hasCarryFromPrior;
+        // Total penalty = prior carry + currentPeriod's own penalty_due
+        const ownPenalty = Number(currentPeriod.penalty ?? 0);
+        const ownUnlockFee = Number(currentPeriod.unlockFee ?? 0);
+        const totalPenalty = priorPenalty + ownPenalty;
+        const totalUnlockFee = Math.max(priorUnlockFee, ownUnlockFee);
         currentPeriod.penalty = totalPenalty;
         currentPeriod.unlockFee = totalUnlockFee;
         // Recalculate amount for current period to include accumulated charges
