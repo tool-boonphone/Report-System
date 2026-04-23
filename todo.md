@@ -322,6 +322,6 @@ Task list:
 
 ### Phase 9S — แก้ยอดหนี้รวมให้ตรงกับผ่อนงวดละ
 
-- [ ] วิเคราะห์: ยอดหนี้รวม ≠ ผ่อนงวดละ (เช่น 3,968 ≠ 2,968) — หาสาเหตุ
-- [ ] แก้สูตร: ยอดหนี้รวมควรใช้ inst.amount จาก API (ซึ่งถูกต้องอยู่แล้ว) ไม่ใช่คำนวณจาก principal+interest+fee ใหม่
-- [ ] commit + push + checkpoint
+- [x] วิเคราะห์: penalty ถูกนับซ้ำใน Phase 9R (บวก penalty เข้าไปอีกทั้งที่ API รวมไว้ใน amount แล้ว)
+- [x] แก้สูตร: ยอดหนี้รวมใช้ inst.amount จาก API โดยตรง; principalOnly=true → หัก penalty+unlockFee ออก
+- [x] commit 455671c + push + checkpoint
