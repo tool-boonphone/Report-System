@@ -907,9 +907,16 @@ export default function DebtReport() {
                                   if (pay && !isZeroish) {
                                     if (gc.key === "penalty" && (pay.penalty ?? 0) > 0) {
                                       textClass = "text-red-600";
+                                    } else if (gc.key === "unlockFee" && (pay.unlockFee ?? 0) > 0) {
+                                      // Phase 9AG: ค่าปลดล็อก → สีส้ม ตัวหนา
+                                      textClass = "text-orange-600 font-bold";
+                                    } else if (gc.key === "discount" && (pay.discount ?? 0) > 0) {
+                                      // Phase 9AG: ส่วนลด → สีแดง ตัวเอียง
+                                      textClass = "text-red-600 italic";
                                     } else if (gc.key === "overpaid" && (pay.overpaid ?? 0) > 0) {
                                       textClass = "text-emerald-600 font-bold";
                                     } else if (gc.key === "badDebt" && (pay.badDebt ?? 0) > 0) {
+                                      // Phase 9AG: หนี้เสีย → สีแดง ตัวหนา
                                       textClass = "text-red-700 font-bold";
                                     } else if (gc.key === "total") {
                                       textClass = "font-bold";

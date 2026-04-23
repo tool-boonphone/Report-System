@@ -362,3 +362,9 @@ Task list:
 - [x] DebtReport.tsx: เปิด เฉพาะเงินต้น → ยอดหนี้รวม = principal+interest+fee (ไม่รวม penalty/unlockFee)
 - [x] DebtReport.tsx: ปิด เฉพาะเงินต้น → ยอดหนี้รวม = principal+interest+fee+penalty+unlockFee (รวมค่าปรับ)
 - [x] TypeScript 0 errors + tests 63/64 pass + commit + push + checkpoint
+
+### Phase 9AG — Style ยอดเก็บหนี้: ค่าปลดล็อก/ส่วนลด/หนี้เสีย
+- [x] DebtReport.tsx (collected tab): ค่าปลดล็อก (unlockFee > 0) → สีส้ม (text-orange-600) ตัวหนา
+- [x] DebtReport.tsx (collected tab): ส่วนลด (discount > 0) → สีแดง (text-red-600) ตัวเอียง
+- [x] DebtReport.tsx (collected tab): หนี้เสีย (badDebt > 0) → สีแดง (text-red-700) ตัวหนา
+- [x] TypeScript 0 errors + commit + push + checkpoint
