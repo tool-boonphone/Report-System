@@ -3,6 +3,7 @@ import { useNavActions } from "@/contexts/NavActionsContext";
 import { useSection } from "@/contexts/SectionContext";
 import { useAppAuth } from "@/hooks/useAppAuth";
 import { cn } from "@/lib/utils";
+import { SECTIONS } from "@shared/const";
 import {
   Banknote,
   ChevronDown,
@@ -42,7 +43,7 @@ const SETTINGS_NAV: NavItem[] = [
 
 export function TopNav() {
   const { me, can, logout } = useAppAuth();
-  const { section, clearSection } = useSection();
+  const { section, setSection, clearSection } = useSection();
   const { actions } = useNavActions();
   const [location, navigate] = useLocation();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -91,6 +92,12 @@ export function TopNav() {
     }
   };
 
+  const handleSwitchToSection = (target: typeof SECTIONS[number]) => {
+    setSectionMenuOpen(false);
+    setMobileMenuOpen(false);
+    setSection(target);
+    navigate("/contracts");
+  };
   const handleChangeSection = () => {
     setSectionMenuOpen(false);
     setMobileMenuOpen(false);
@@ -135,13 +142,24 @@ export function TopNav() {
                   {canSwitchSection && <ChevronDown className="w-3 h-3 text-gray-400" />}
                 </button>
                 {sectionMenuOpen && canSwitchSection && (
-                  <div className="absolute top-full left-0 mt-1 w-44 bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-50">
-                    <button
-                      onClick={handleChangeSection}
-                      className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                    >
+                  <div className="absolute top-full left-0 mt-1 w-52 bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-50">
+                    <div className="px-3 py-1.5 text-[10px] font-semibold text-gray-400 uppercase tracking-wide border-b border-gray-100">
                       สลับ Section
-                    </button>
+                    </div>
+                    {SECTIONS.filter((s) => s !== section).map((s) => (
+                      <button
+                        key={s}
+                        onClick={() => handleSwitchToSection(s)}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                      >
+                        <img
+                          src={BRAND_LOGOS[s]}
+                          alt={s}
+                          className="w-7 h-7 rounded-md object-contain bg-white border border-gray-200"
+                        />
+                        <span className="font-medium">{s}</span>
+                      </button>
+                    ))}
                   </div>
                 )}
               </div>
