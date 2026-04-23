@@ -299,4 +299,4 @@ Task list:
 
 - [x] Backend debtDb.ts: arrears carry pass สะสมเฉพาะงวดที่ `dueDate <= today` (past+current), งวดอนาคต carry=0 ไม่ทบ
 - [x] Regression tests: 2 เคสใหม่ — future periods isArrears=false, partial-paid past period → next period isArrears=true — 63/64 pass
-- [ ] Commit + push + checkpoint
+- [x] Commit + push + checkpoint (commit 9a84698)
