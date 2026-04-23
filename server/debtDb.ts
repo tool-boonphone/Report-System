@@ -962,16 +962,20 @@ export async function listDebtTarget(params: { section: SectionKey }) {
       for (const inst of baseInstallments) {
         inst.isArrears = false;
       }
-      // Find the "current period": first unpaid past/current period (lowest period no)
-      const currentPeriod = baseInstallments.find((inst) => {
-        if (inst.isClosed || inst.isSuspended) return false;
-        if (!inst.dueDate) return false;
-        const dueMs = Date.parse(`${inst.dueDate}T00:00:00`);
-        if (dueMs > todayMs) return false; // future period
-        const paid = Number(inst.paid ?? 0);
-        const amount = Number(inst.amount ?? 0);
-        return paid < amount - 0.5; // not fully paid
-      });
+      // Find the "current period": the LATEST (highest period no) past/current period
+      // that is not closed/suspended.
+      // Phase 14 fix: previously used .find() which returned the FIRST (lowest) unpaid period,
+      // causing the highlight to stay on period 1 even when period 2 due_date had already passed.
+      // Now we pick the period with the highest period number among all past/current periods,
+      // regardless of paid status. Overdue earlier periods are shown as-is (no special highlight).
+      const currentPeriod = baseInstallments
+        .filter((inst) => {
+          if (inst.isClosed || inst.isSuspended) return false;
+          if (!inst.dueDate) return false;
+          const dueMs = Date.parse(`${inst.dueDate}T00:00:00`);
+          return dueMs <= todayMs; // past or today (not future)
+        })
+        .sort((a, b) => Number(b.period ?? 0) - Number(a.period ?? 0))[0] ?? null;
       if (currentPeriod) {
         const currentPeriodNo = Number(currentPeriod.period ?? 0);
         // Sum penalty from all past/current periods BEFORE currentPeriod (dueDate <= today)

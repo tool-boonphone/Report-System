@@ -719,64 +719,62 @@ export default function DebtReport() {
           )}
         </div>
 
-        {/* Toolbar Row 1: Search + Status + PrincipalOnly */}
-        <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-3 mb-2">
-          <div className="relative flex-1 min-w-0">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <Input
-              placeholder="ค้นหา: เลขที่สัญญา / ชื่อลูกค้า / เบอร์โทร"
-              className="pl-9 bg-white"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
+        {/* Toolbar Row 1: Search + Status + Month-year + PrincipalOnly */}
+        <div className="flex flex-col gap-2 mb-2">
+          <div className="flex flex-col md:flex-row md:items-center gap-2">
+            <div className="relative flex-1 min-w-0">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <Input
+                placeholder="ค้นหา: เลขที่สัญญา / ชื่อลูกค้า / เบอร์โทร"
+                className="pl-9 bg-white"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusMultiSelect selected={statusFilter} onChange={setStatusFilter} />
+              <MultiSelectFilter
+                label="เดือน-ปีที่อนุมัติ"
+                selected={approveDateFilter}
+                onChange={setApproveDateFilter}
+                options={approveDateOptions}
+                placeholder="ทุกเดือน-ปีที่อนุมัติ"
+              />
+              <MultiSelectFilter
+                label="เดือน-ปีที่ต้องชำระ"
+                selected={dueDateFilter}
+                onChange={setDueDateFilter}
+                options={dueDateOptions}
+                placeholder="ทุกเดือน-ปีที่ต้องชำระ"
+              />
+              {tab === "collected" && (
+                <MultiSelectFilter
+                  label="ประเภทเครื่อง"
+                  selected={productTypeFilter}
+                  onChange={setProductTypeFilter}
+                  options={productTypeOptions}
+                  placeholder="ทุกประเภทเครื่อง"
+                />
+              )}
+              {tab === "target" && (
+                <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-md px-3 py-1.5">
+                  <Switch id="principal-only" checked={principalOnly} onCheckedChange={setPrincipalOnly} />
+                  <label htmlFor="principal-only" className="text-xs text-gray-600 cursor-pointer select-none whitespace-nowrap">
+                    เฉพาะเงินต้น
+                  </label>
+                </div>
+              )}
+              {(approveDateFilter.size > 0 || dueDateFilter.size > 0 || productTypeFilter.size > 0) && (
+                <button
+                  type="button"
+                  onClick={() => { setApproveDateFilter(new Set()); setDueDateFilter(new Set()); setProductTypeFilter(new Set()); }}
+                  className="text-xs text-gray-400 hover:text-red-500 underline"
+                >
+                  ล้างฟิลเตอร์
+                </button>
+              )}
+            </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <StatusMultiSelect selected={statusFilter} onChange={setStatusFilter} />
-            {tab === "target" && (
-              <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-md px-3 py-1.5">
-                <Switch id="principal-only" checked={principalOnly} onCheckedChange={setPrincipalOnly} />
-                <label htmlFor="principal-only" className="text-xs text-gray-600 cursor-pointer select-none whitespace-nowrap">
-                  เฉพาะเงินต้น
-                </label>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Toolbar Row 2: Month-year + product type filters */}
-        <div className="flex flex-wrap items-center gap-2 mb-2">
-          <MultiSelectFilter
-            label="เดือน-ปีที่อนุมัติ"
-            selected={approveDateFilter}
-            onChange={setApproveDateFilter}
-            options={approveDateOptions}
-            placeholder="ทุกเดือน-ปีที่อนุมัติ"
-          />
-          <MultiSelectFilter
-            label="เดือน-ปีที่ต้องชำระ"
-            selected={dueDateFilter}
-            onChange={setDueDateFilter}
-            options={dueDateOptions}
-            placeholder="ทุกเดือน-ปีที่ต้องชำระ"
-          />
-          {tab === "collected" && (
-            <MultiSelectFilter
-              label="ประเภทเครื่อง"
-              selected={productTypeFilter}
-              onChange={setProductTypeFilter}
-              options={productTypeOptions}
-              placeholder="ทุกประเภทเครื่อง"
-            />
-          )}
-          {(approveDateFilter.size > 0 || dueDateFilter.size > 0 || productTypeFilter.size > 0) && (
-            <button
-              type="button"
-              onClick={() => { setApproveDateFilter(new Set()); setDueDateFilter(new Set()); setProductTypeFilter(new Set()); }}
-              className="text-xs text-gray-400 hover:text-red-500 underline"
-            >
-              ล้างฟิลเตอร์ทั้งหมด
-            </button>
-          )}
         </div>
 
         {/* Summary line + Summary Badges */}
