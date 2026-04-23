@@ -433,3 +433,5 @@ Task list:
 - [ ] P16-1: แก้ไข bug เป้าเก็บหนี้ไม่แสดงยอดชำระเกิน (overpaid carry-forward) จากงวดก่อนหน้าในงวดถัดไป เช่น งวดที่ 1 ชำระเกิน 1,010 แต่งวดที่ 2 ไม่แสดงว่ามียอดชำระเกินมาหักออก
 - [x] P16-2: แก้ Summary Badge ยอดที่ชำระรวม ให้ใช้ p.total (total_paid_amount จาก API) แทนสูตรคำนวณเอง — รวม overpaid ด้วย ไม่รวม discount
 - [x] P16-3: ตรวจสอบค่าดำเนินการใน payment transactions — debtDb.ts ส่ง fee_paid_amount จาก API มาแล้วถูกต้อง (TX2 fee=80 คือค่าจริงจาก API ไม่ใช่ bug)
+- [ ] P16-4: แก้ bug วันที่ต้องชำระงวดที่ 1 ในเป้าเก็บหนี้แสดงผิด (เช่น CT0226-SRI005-1183-01 แสดง 2027-01-05 แทนวันที่จริงของงวดที่ 1)
+- [x] P16-5: เพิ่ม fixOutOfOrderDueDates() helper ใน debtDb.ts — fix due_date ผิดลำดับ in-memory (CT0226-SRI005-1183-01 p1: 2027-01-05 → 2026-03-05 ✓) ไม่แก้ DB ดังนั้น sync ใหม่ไม่ทับ

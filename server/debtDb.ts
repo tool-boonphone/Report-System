@@ -427,6 +427,80 @@ export type PayRawRow = {
   payment_id: number | null;
 };
 
+/**
+ * Fix installments whose due_date is out-of-order relative to adjacent periods.
+ *
+ * Boonphone API occasionally sends a wrong due_date for a period (e.g. period 1
+ * gets 2027-01-05 while period 2 is 2026-04-05).  This helper detects any
+ * period N where due_date > due_date of period N+1 and recalculates it from
+ * the due-day-of-month inferred from the nearest correct neighbour.
+ *
+ * The fix is applied in-memory only — the DB row is not modified, so the
+ * correction is re-applied automatically on every query without being wiped by
+ * future syncs.
+ */
+function fixOutOfOrderDueDates(list: InstRawRow[]): InstRawRow[] {
+  if (list.length < 2) return list;
+  // Work on a sorted copy (ascending period)
+  const sorted = [...list].sort((a, b) => (a.period ?? 0) - (b.period ?? 0));
+
+  // Find the first pair where period N > period N+1
+  let hasOutOfOrder = false;
+  for (let i = 0; i < sorted.length - 1; i++) {
+    const curr = sorted[i].due_date;
+    const next = sorted[i + 1].due_date;
+    if (curr && next && curr > next) {
+      hasOutOfOrder = true;
+      break;
+    }
+  }
+  if (!hasOutOfOrder) return list; // fast-path: nothing to fix
+
+  // Derive due-day-of-month from the first "good" period (period 2 or later)
+  // by looking for a period whose due_date is in ascending order with its successor.
+  let dueDayOfMonth: number | null = null;
+  for (let i = 1; i < sorted.length; i++) {
+    const d = sorted[i].due_date;
+    if (!d) continue;
+    const parsed = new Date(`${d}T00:00:00`);
+    if (!isNaN(parsed.getTime())) {
+      dueDayOfMonth = parsed.getDate();
+      break;
+    }
+  }
+  if (!dueDayOfMonth) return list; // cannot infer day — leave as-is
+
+  // Rebuild due_dates: for each period, expected due_date = (period-1) months
+  // after the anchor month of period 2 minus 1 month.
+  // Simpler: find the earliest valid due_date among all periods, then assign
+  // each period a due_date = anchor + (period - anchorPeriod) months.
+  let anchorPeriod: number | null = null;
+  let anchorDate: Date | null = null;
+  for (const row of sorted) {
+    if (!row.due_date || row.period == null) continue;
+    const d = new Date(`${row.due_date}T00:00:00`);
+    if (isNaN(d.getTime())) continue;
+    // Use the smallest due_date as anchor (most likely correct)
+    if (!anchorDate || d < anchorDate) {
+      anchorDate = d;
+      anchorPeriod = row.period;
+    }
+  }
+  if (!anchorDate || anchorPeriod == null) return list;
+
+  return sorted.map((row) => {
+    if (row.period == null || !row.due_date) return row;
+    const expected = new Date(anchorDate!);
+    expected.setMonth(expected.getMonth() + (row.period - anchorPeriod!));
+    expected.setDate(dueDayOfMonth!);
+    const expectedStr = expected.toISOString().slice(0, 10);
+    if (row.due_date !== expectedStr) {
+      return { ...row, due_date: expectedStr };
+    }
+    return row;
+  });
+}
+
 /** Compute "debt_status" label based on days overdue. */
 function bucketFromDays(days: number): string {
   if (days <= 0) return "ปกติ";
@@ -533,6 +607,13 @@ export async function listDebtTarget(params: { section: SectionKey }) {
       unlock_fee_due: r.unlock_fee_due != null ? Number(r.unlock_fee_due) : null,
       installment_status_code: r.installment_status_code ?? null,
     });
+  }
+
+  // --- Fix out-of-order due_dates (Boonphone API bug) ---
+  // Apply in-memory correction for any contract whose installments have a
+  // period N with due_date > period N+1.  This is idempotent and safe.
+  for (const [key, list] of Array.from(instByContract.entries())) {
+    instByContract.set(key, fixOutOfOrderDueDates(list));
   }
 
   // --- Detect "ปิดค่างวด" (customer settles ALL remaining periods at once).
