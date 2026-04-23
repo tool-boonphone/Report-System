@@ -766,6 +766,15 @@ export async function listDebtTarget(params: { section: SectionKey }) {
           baselineAmount > 0;
 
         // overpaidApplied:: ยอดชำระเกินจากงวดก่อนหน้า (P-1) ที่นำมาหักงวดนี้
+        // Bug fix (Phase 9AB): overpaidApplied is sourced from raw_json.overpaid_amount
+        // of the PREVIOUS period's payment row. This value is only non-zero when the
+        // API explicitly books an overpaid carry (e.g. paid 4250 against a 4097 baseline).
+        // When the previous period is paidInFullButZeroedByApi (amount=0, paid=baseline),
+        // the API has ALREADY baked any carry into the current period's `amount` field,
+        // so we must NOT apply an additional overpaidApplied deduction here.
+        // The overpaidByContractPeriod map is populated from raw_json.overpaid_amount
+        // which is null for paidInFullButZeroedByApi periods, so the carry will be 0
+        // naturally — but we also guard explicitly with !paidInFullButZeroedByApi.
         let overpaidApplied = 0;
         if (!isClosed && !paidInFullButZeroedByApi && periodNo > 1) {
           const periodMap = overpaidByContractPeriod.get(extId);
@@ -847,6 +856,7 @@ export async function listDebtTarget(params: { section: SectionKey }) {
           // Step 4: Determine final amount and scale sub-fields to fit
           if (paidInFullButZeroedByApi) {
             // Paid in full but API zeroed amount: restore baseline
+            // Use integer values (no scaling needed — baseline sub-fields are already integers)
             principal = basePrincipal;
             interest  = baseInterest;
             fee       = baseFee;
@@ -859,16 +869,18 @@ export async function listDebtTarget(params: { section: SectionKey }) {
             const netBaseline = Math.max(0, baselineForCalc - penalty - unlockFee);
 
             // Scale formula sub-fields to fit netBaseline
+            // Bug fix (Phase 9AB): round to integers after scaling to avoid decimal display
             const formulaTotal = effectivePrincipal + effectiveInterest + effectiveFee;
             if (formulaTotal > 0.009 && netBaseline > 0.009) {
               const scale = netBaseline / formulaTotal;
-              principal = effectivePrincipal * scale;
-              interest  = effectiveInterest  * scale;
-              fee       = effectiveFee       * scale;
+              // Round principal and fee to integers; let interest absorb the remainder
+              principal = Math.round(effectivePrincipal * scale);
+              fee       = Math.round(effectiveFee       * scale);
+              interest  = Math.max(0, Math.round(netBaseline) - principal - fee);
             } else {
-              principal = effectivePrincipal;
-              interest  = effectiveInterest;
-              fee       = effectiveFee;
+              principal = Math.round(effectivePrincipal);
+              interest  = Math.round(effectiveInterest);
+              fee       = Math.round(effectiveFee);
             }
 
             amount = apiAmount != null
@@ -973,8 +985,13 @@ export async function listDebtTarget(params: { section: SectionKey }) {
         currentPeriod.penalty = totalPenalty;
         currentPeriod.unlockFee = totalUnlockFee;
         // Recalculate amount for current period to include accumulated charges
+        // Bug fix (Phase 9AB): when baseNet=0 (API sent amount=0 for an unpaid period),
+        // fall back to baselineAmount so the total is not just penalty alone.
         const baseNet = currentPeriod.principal + currentPeriod.interest + currentPeriod.fee;
-        currentPeriod.amount = baseNet + totalPenalty + totalUnlockFee;
+        const effectiveBase = baseNet > 0.009
+          ? baseNet
+          : (currentPeriod.baselineAmount > 0.009 ? currentPeriod.baselineAmount : baseNet);
+        currentPeriod.amount = effectiveBase + totalPenalty + totalUnlockFee;
       }
     }
 
