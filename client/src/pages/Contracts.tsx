@@ -402,7 +402,7 @@ export default function Contracts() {
   // ----- Render -----
   return (
     <AppShell>
-      <div className="max-w-[1600px] mx-auto px-3 md:px-5 py-4">
+      <div className="w-full px-3 md:px-5 py-4">
         {/* Toolbar: search + refresh + export */}
         <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-3 mb-3">
           <div className="relative flex-1 min-w-0">
