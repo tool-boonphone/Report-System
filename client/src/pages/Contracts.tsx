@@ -253,21 +253,10 @@ export default function Contracts() {
     setActions(
       <div className="flex items-center gap-2">
         <SyncStatusBar />
-        {canExport && (
-          <Button
-            size="sm"
-            variant="outline"
-            className="bg-white"
-            onClick={() => exportRef.current()}
-          >
-            <Download className="w-4 h-4 mr-1.5" />
-            Export
-          </Button>
-        )}
       </div>,
     );
     return () => setActions(null);
-  }, [setActions, canExport]);
+  }, [setActions]);
 
   // ----- Sorting toggle -----
   const toggleSort = (field: SortField) => {
@@ -483,6 +472,15 @@ export default function Contracts() {
                 className={`w-4 h-4 ${listQuery.isFetching ? "animate-spin" : ""}`}
               />
             </Button>
+            {canExport && (
+              <Button
+                className="bg-green-600 hover:bg-green-700 text-white"
+                onClick={() => exportRef.current()}
+              >
+                <Download className="w-4 h-4 mr-1.5" />
+                Export Excel
+              </Button>
+            )}
           </div>
         </div>
 
