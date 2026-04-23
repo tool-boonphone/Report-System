@@ -913,6 +913,10 @@ export async function listDebtTarget(params: { section: SectionKey }) {
           penalty,
           unlockFee,
           amount,
+          // Phase 9AH: netAmount = principal+interest+fee only (no penalty/unlockFee).
+          // Frontend uses this for principalOnly display so it never needs to subtract
+          // penalty from amount (which may or may not include penalty depending on period).
+          netAmount: principal + interest + fee,
           paid,
           baselineAmount: baselineAmount ?? 0,
           overpaidApplied,
@@ -1000,6 +1004,8 @@ export async function listDebtTarget(params: { section: SectionKey }) {
           ? baseNet
           : (currentPeriod.baselineAmount > 0.009 ? currentPeriod.baselineAmount : baseNet);
         currentPeriod.amount = effectiveBase + totalPenalty + totalUnlockFee;
+        // Phase 9AH: keep netAmount in sync (netAmount = principal+interest+fee, no penalty)
+        currentPeriod.netAmount = effectiveBase;
         // Mark this as the current period for UI highlighting
         currentPeriod.isCurrentPeriod = true;
       }

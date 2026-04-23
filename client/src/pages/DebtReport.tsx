@@ -115,6 +115,8 @@ type InstallmentCell = {
   isArrears?: boolean;
   /** True when this is the current (first unpaid past/current) period — sky-50 BG highlight. */
   isCurrentPeriod?: boolean;
+  /** Phase 9AH: principal+interest+fee only (no penalty/unlockFee). Used for principalOnly display. */
+  netAmount?: number;
 };
 
 type PaymentCell = {
@@ -708,16 +710,14 @@ export default function DebtReport() {
                                 } else if (closed) {
                                   v = "ปิดค่างวดแล้ว";
                                 } else {
-                                  // Phase 9AF: amount = principal+interest+fee always as base.
-                                  // When principalOnly=ON → show base only (no penalty/unlockFee).
-                                  // When principalOnly=OFF → add penalty+unlockFee on top.
-                                  const penalty = inst.penalty ?? 0;
-                                  const unlockFee = inst.unlockFee ?? 0;
-                                  // base = inst.amount already has penalty/unlockFee baked in
-                                  // (from debtDb arrears pass). Strip them out to get the base.
-                                  const baseAmount = Math.max(0, inst.amount - penalty - unlockFee);
+                                  // Phase 9AH: use inst.netAmount (= principal+interest+fee)
+                                  // for principalOnly=ON. This avoids the bug where
+                                  // amount - penalty gave wrong results because inst.amount
+                                  // may or may not include penalty depending on the period.
+                                  // For principalOnly=OFF → use inst.amount (full amount).
+                                  const netAmt = inst.netAmount ?? (inst.principal + inst.interest + inst.fee);
                                   const displayAmount = principalOnly
-                                      ? baseAmount
+                                      ? netAmt
                                       : inst.amount; // full amount incl. penalty+unlockFee
                                   v = fmtMoney(displayAmount);
                                   if (

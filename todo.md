@@ -368,3 +368,8 @@ Task list:
 - [x] DebtReport.tsx (collected tab): ส่วนลด (discount > 0) → สีเขียวอมฟ้า (text-teal-600) ไม่เอียง
 - [x] DebtReport.tsx (collected tab): หนี้เสีย (badDebt > 0) → สีแดง (text-red-700) ตัวหนา
 - [x] TypeScript 0 errors + commit + push + checkpoint
+
+### Phase 9AH — แก้ยอดหนี้รวมงวดที่มีค่าปรับค้างจากงวดก่อน
+- [x] ตรวจสอบว่า inst.amount ของงวดที่ไม่ใช่ currentPeriod รวม penalty/unlockFee ไว้หรือไม่
+- [x] เพิ่ม netAmount (principal+interest+fee) ใน backend และ frontend ใช้ netAmount แทนการหัก penalty จาก amount
+- [x] TypeScript 0 errors + commit + push + checkpoint
