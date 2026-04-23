@@ -911,8 +911,8 @@ export default function DebtReport() {
                                       // Phase 9AG: ค่าปลดล็อก → สีส้ม ตัวหนา
                                       textClass = "text-orange-600 font-bold";
                                     } else if (gc.key === "discount" && (pay.discount ?? 0) > 0) {
-                                      // Phase 9AG: ส่วนลด → สีแดง ตัวเอียง
-                                      textClass = "text-red-600 italic";
+                                      // Phase 9AG: ส่วนลด → สีเขียวอมฟ้า (teal)
+                                      textClass = "text-teal-600";
                                     } else if (gc.key === "overpaid" && (pay.overpaid ?? 0) > 0) {
                                       textClass = "text-emerald-600 font-bold";
                                     } else if (gc.key === "badDebt" && (pay.badDebt ?? 0) > 0) {

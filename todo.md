@@ -365,6 +365,6 @@ Task list:
 
 ### Phase 9AG — Style ยอดเก็บหนี้: ค่าปลดล็อก/ส่วนลด/หนี้เสีย
 - [x] DebtReport.tsx (collected tab): ค่าปลดล็อก (unlockFee > 0) → สีส้ม (text-orange-600) ตัวหนา
-- [x] DebtReport.tsx (collected tab): ส่วนลด (discount > 0) → สีแดง (text-red-600) ตัวเอียง
+- [x] DebtReport.tsx (collected tab): ส่วนลด (discount > 0) → สีเขียวอมฟ้า (text-teal-600) ไม่เอียง
 - [x] DebtReport.tsx (collected tab): หนี้เสีย (badDebt > 0) → สีแดง (text-red-700) ตัวหนา
 - [x] TypeScript 0 errors + commit + push + checkpoint
