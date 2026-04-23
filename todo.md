@@ -384,5 +384,5 @@ Task list:
 - [x] TypeScript 0 errors + commit d56c42d + push + checkpoint
 
 ### Phase 9AK — แก้ระงับสัญญา row styling
-- [ ] DebtReport.tsx: isSuspended rows ต้องแสดง gray background และ "ระงับสัญญา" ในช่องยอดหนี้รวม
-- [ ] TypeScript 0 errors + commit + push + checkpoint
+- [x] debtDb.ts: Phase 9AK fallback — contract.status=ระงับสัญญา แต่ไม่มี installment ที่ status_code=ระงับสัญญา → treat ทุก period เป็น suspended จาก period 1
+- [x] TypeScript 0 errors + commit 2db4443 + push + checkpoint
