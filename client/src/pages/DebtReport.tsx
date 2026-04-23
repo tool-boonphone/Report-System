@@ -337,60 +337,50 @@ export default function DebtReport() {
   }
 
   /* ---- TopNav actions (sync + export) ---- */
-  useEffect(() => {
-    const handleExport = async () => {
-      if (!section) return;
-      const params = new URLSearchParams({ section, variant: tab });
-      if (search) params.set("search", search);
-      if (statusFilter.size > 0) params.set("status", Array.from(statusFilter).join(","));
-      const toastId = toast.loading("กำลังเตรียมไฟล์ Excel…");
-      try {
-        const resp = await fetch(`/api/export/debt?${params.toString()}`, {
-          credentials: "include",
-        });
-        if (!resp.ok) {
-          const { message } = await resp
-            .json()
-            .catch(() => ({ message: "Export failed" }));
-          toast.error(message, { id: toastId });
-          return;
-        }
-        const blob = await resp.blob();
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `debt_${tab}_${section}_${new Date()
-          .toISOString()
-          .slice(0, 19)
-          .replace(/[:T]/g, "-")}.xlsx`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        URL.revokeObjectURL(url);
-        toast.success("ดาวน์โหลดสำเร็จ", { id: toastId });
-      } catch (err) {
-        toast.error((err as Error).message ?? "Export failed", { id: toastId });
+  // Export handler (used inline in toolbar)
+  const handleExport = React.useCallback(async () => {
+    if (!section) return;
+    const params = new URLSearchParams({ section, variant: tab });
+    if (search) params.set("search", search);
+    if (statusFilter.size > 0) params.set("status", Array.from(statusFilter).join(","));
+    const toastId = toast.loading("กำลังเตรียมไฟล์ Excel…");
+    try {
+      const resp = await fetch(`/api/export/debt?${params.toString()}`, {
+        credentials: "include",
+      });
+      if (!resp.ok) {
+        const { message } = await resp
+          .json()
+          .catch(() => ({ message: "Export failed" }));
+        toast.error(message, { id: toastId });
+        return;
       }
-    };
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `debt_${tab}_${section}_${new Date()
+        .toISOString()
+        .slice(0, 19)
+        .replace(/[:T]/g, "-")}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast.success("ดาวน์โหลดสำเร็จ", { id: toastId });
+    } catch (err) {
+      toast.error((err as Error).message ?? "Export failed", { id: toastId });
+    }
+  }, [section, tab, search, statusFilter]);
 
+  useEffect(() => {
     setActions(
       <div className="flex items-center gap-2">
         <SyncStatusBar />
-        {canExport && (
-          <Button
-            size="sm"
-            variant="outline"
-            className="bg-white"
-            onClick={handleExport}
-          >
-            <Download className="w-4 h-4 mr-1.5" />
-            ดาวน์โหลดไฟล์
-          </Button>
-        )}
       </div>,
     );
     return () => setActions(null);
-  }, [setActions, canExport, section, tab, search, statusFilter]);
+  }, [setActions]);
 
   /* ---- Virtual scroll ---- */
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -488,32 +478,43 @@ export default function DebtReport() {
   return (
     <AppShell>
       <div className="max-w-[1600px] mx-auto px-3 md:px-5 py-4">
-        {/* Tabs (moved to left, replacing title) */}
-        <div className="flex items-center gap-2 mb-3">
-          <Button
-            variant={tab === "target" ? "default" : "outline"}
-            className={
-              tab === "target"
-                ? "bg-amber-600 hover:bg-amber-700 text-white border-amber-600"
-                : "bg-gray-200 hover:bg-gray-300 text-gray-600 border-gray-200"
-            }
-            onClick={() => setTab("target")}
-          >
-            <Target className="w-4 h-4 mr-1.5" />
-            เป้าเก็บหนี้
-          </Button>
-          <Button
-            variant={tab === "collected" ? "default" : "outline"}
-            className={
-              tab === "collected"
-                ? "bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-600"
-                : "bg-gray-200 hover:bg-gray-300 text-gray-600 border-gray-200"
-            }
-            onClick={() => setTab("collected")}
-          >
-            <Coins className="w-4 h-4 mr-1.5" />
-            ยอดเก็บหนี้
-          </Button>
+        {/* Tabs (moved to left, replacing title) + Export Excel on right */}
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <div className="flex items-center gap-2">
+            <Button
+              variant={tab === "target" ? "default" : "outline"}
+              className={
+                tab === "target"
+                  ? "bg-amber-600 hover:bg-amber-700 text-white border-amber-600"
+                  : "bg-gray-200 hover:bg-gray-300 text-gray-600 border-gray-200"
+              }
+              onClick={() => setTab("target")}
+            >
+              <Target className="w-4 h-4 mr-1.5" />
+              เป้าเก็บหนี้
+            </Button>
+            <Button
+              variant={tab === "collected" ? "default" : "outline"}
+              className={
+                tab === "collected"
+                  ? "bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-600"
+                  : "bg-gray-200 hover:bg-gray-300 text-gray-600 border-gray-200"
+              }
+              onClick={() => setTab("collected")}
+            >
+              <Coins className="w-4 h-4 mr-1.5" />
+              ยอดเก็บหนี้
+            </Button>
+          </div>
+          {canExport && (
+            <Button
+              className="bg-green-600 hover:bg-green-700 text-white"
+              onClick={handleExport}
+            >
+              <Download className="w-4 h-4 mr-1.5" />
+              Export Excel
+            </Button>
+          )}
         </div>
 
         {/* Toolbar */}
