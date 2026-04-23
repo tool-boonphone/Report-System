@@ -758,12 +758,28 @@ export async function listDebtTarget(params: { section: SectionKey }) {
         let penalty = rawPenalty;
         let unlockFee = rawUnlockFee;
 
+        // Case A: API sent amount=0 but paid>0 (classic zeroed-by-api case)
         const paidInFullButZeroedByApi =
           !isClosed &&
           rawAmount <= 0.009 &&
           paid > 0.009 &&
           baselineAmount != null &&
           baselineAmount > 0;
+        // Case B (Phase 9AC): API sent amount < baseline AND paid >= amount
+        // (customer paid the reduced amount in full, but we should display baseline
+        // so the collections team sees the full monthly target, not the reduced amount).
+        // Example: baseline=2830, API amount=350 (penalty only), paid=2830
+        // → netBaseline = max(0, 350-350) = 0 → sub-fields all zero → wrong.
+        // Fix: treat as paidInFull and restore baseline sub-fields.
+        const paidInFullWithReducedAmount =
+          !isClosed &&
+          !paidInFullButZeroedByApi &&
+          rawAmount > 0.009 &&
+          baselineAmount != null &&
+          baselineAmount > 0 &&
+          rawAmount < baselineAmount - 0.5 && // API amount is significantly less than baseline
+          paid >= rawAmount - 0.5;            // customer paid the reduced amount in full
+        const useBaselineDisplay = paidInFullButZeroedByApi || paidInFullWithReducedAmount;
 
         // overpaidApplied:: ยอดชำระเกินจากงวดก่อนหน้า (P-1) ที่นำมาหักงวดนี้
         // Bug fix (Phase 9AB): overpaidApplied is sourced from raw_json.overpaid_amount
@@ -776,7 +792,7 @@ export async function listDebtTarget(params: { section: SectionKey }) {
         // which is null for paidInFullButZeroedByApi periods, so the carry will be 0
         // naturally — but we also guard explicitly with !paidInFullButZeroedByApi.
         let overpaidApplied = 0;
-        if (!isClosed && !paidInFullButZeroedByApi && periodNo > 1) {
+        if (!isClosed && !useBaselineDisplay && periodNo > 1) {
           const periodMap = overpaidByContractPeriod.get(extId);
           if (periodMap) {
             overpaidApplied = periodMap.get(periodNo - 1) ?? 0;
@@ -854,8 +870,8 @@ export async function listDebtTarget(params: { section: SectionKey }) {
           unlockFee = isFuturePeriod ? 0 : rawUnlockFee; // unlock_fee_due
 
           // Step 4: Determine final amount and scale sub-fields to fit
-          if (paidInFullButZeroedByApi) {
-            // Paid in full but API zeroed amount: restore baseline
+          if (useBaselineDisplay) {
+            // Paid in full (API zeroed amount OR API sent reduced amount): restore baseline
             // Use integer values (no scaling needed — baseline sub-fields are already integers)
             principal = basePrincipal;
             interest  = baseInterest;
