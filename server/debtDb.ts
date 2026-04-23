@@ -842,29 +842,20 @@ export async function listDebtTarget(params: { section: SectionKey }) {
       .sort((a, b) => (a.period ?? 0) - (b.period ?? 0));
 
     // --- Cumulative arrears pass ---
-    // Walk periods in order. For each period, accumulate the unpaid balance
-    // from previous periods (due - paid per sub-field). When a TXRTC close
-    // event happened before this period, reset the carry to zero.
-    // A period is flagged `isArrears = true` when any carry-in > 0.
+    // Walk periods in order. Accumulate unpaid balance (due - paid) from
+    // PAST and CURRENT periods only (dueDate <= today). Future periods
+    // (dueDate > today) receive carry = 0 and keep their original amounts.
     //
-    // Business rules (2026-04-23):
-    //   1. Carry = (principal_due - principal_paid) + (interest_due - interest_paid)
-    //              + (fee_due - fee_paid) + (penalty_due - penalty_paid)
-    //              + (unlock_fee_due - unlock_fee_paid)  from all prior periods.
+    // Business rules (2026-04-23 rev2):
+    //   1. Carry = sum of (due - paid) for each sub-field across periods
+    //      whose dueDate <= today.
     //   2. TXRTC close-out resets carry to 0 (customer settled everything).
-    //   3. Closed/suspended periods are skipped (amount already 0).
-    //   4. The carry is added into each sub-field of the CURRENT period so
-    //      the operator sees the real cumulative amount to collect.
+    //   3. Closed/suspended periods are skipped.
+    //   4. Future periods (dueDate > today) are NOT modified - carry is not
+    //      applied and their unpaid balance is NOT added to carry.
+    //   5. isArrears = true only when carry-in > 0 on a past/current period.
     {
-      // Build per-period paid breakdown from the payments query we already have.
-      // We need principal_paid / interest_paid / fee_paid / penalty_paid /
-      // unlock_fee_paid per period for this contract.
-      // These come from the payment_transactions query (payByContract) which is
-      // only available in listDebtCollected. Here in listDebtTarget we only have
-      // installments.paid_amount (total). So we use the simpler approach:
-      //   carry_total = sum(amount - paid_amount) for periods 1..P-1 that are unpaid.
-      // We then distribute the carry proportionally across sub-fields using the
-      // current period's own sub-field ratios as weights.
+      const todayMs = Date.now();
       let carryPrincipal = 0;
       let carryInterest = 0;
       let carryFee = 0;
@@ -873,10 +864,8 @@ export async function listDebtTarget(params: { section: SectionKey }) {
 
       for (const inst of baseInstallments) {
         const p = inst.period ?? 0;
+
         // Reset carry if this period is at or after a TXRTC close-out.
-        // maxClosedPeriod = last normal period before the close-out.
-        // Periods <= maxClosedPeriod are normal; the close-out itself
-        // settles everything from maxClosedPeriod+1 onward.
         if (maxClosedPeriod > 0 && p === maxClosedPeriod + 1) {
           carryPrincipal = 0;
           carryInterest = 0;
@@ -885,30 +874,33 @@ export async function listDebtTarget(params: { section: SectionKey }) {
           carryUnlockFee = 0;
         }
 
-        const hasCarry =
-          carryPrincipal > 0.005 ||
-          carryInterest > 0.005 ||
-          carryFee > 0.005 ||
-          carryPenalty > 0.005 ||
-          carryUnlockFee > 0.005;
+        // Determine if this period is past or current (dueDate <= today).
+        const dueDateMs = inst.dueDate
+          ? Date.parse(`${inst.dueDate}T00:00:00`)
+          : 0;
+        const isPastOrCurrent = dueDateMs > 0 && dueDateMs <= todayMs;
 
-        if (hasCarry && !inst.isClosed && !inst.isSuspended) {
-          inst.principal += carryPrincipal;
-          inst.interest += carryInterest;
-          inst.fee += carryFee;
-          inst.penalty += carryPenalty;
-          inst.unlockFee += carryUnlockFee;
-          inst.amount += carryPrincipal + carryInterest + carryFee + carryPenalty + carryUnlockFee;
-          inst.isArrears = true;
-        }
+        if (isPastOrCurrent && !inst.isClosed && !inst.isSuspended) {
+          // Apply carry-in to this period.
+          const hasCarry =
+            carryPrincipal > 0.005 ||
+            carryInterest > 0.005 ||
+            carryFee > 0.005 ||
+            carryPenalty > 0.005 ||
+            carryUnlockFee > 0.005;
 
-        // Accumulate unpaid balance from this period into carry for next.
-        // Use the raw sub-fields from the installment row (before carry was added)
-        // so we don't double-count.
-        if (!inst.isClosed && !inst.isSuspended) {
-          // paid_amount is the total paid for this period from the API.
+          if (hasCarry) {
+            inst.principal += carryPrincipal;
+            inst.interest += carryInterest;
+            inst.fee += carryFee;
+            inst.penalty += carryPenalty;
+            inst.unlockFee += carryUnlockFee;
+            inst.amount += carryPrincipal + carryInterest + carryFee + carryPenalty + carryUnlockFee;
+            inst.isArrears = true;
+          }
+
+          // Accumulate unpaid balance from this period into carry for next.
           const paidTotal = inst.paid;
-          // Distribute paid proportionally across sub-fields.
           const dueTotal =
             (inst.principal - carryPrincipal) +
             (inst.interest - carryInterest) +
@@ -922,20 +914,16 @@ export async function listDebtTarget(params: { section: SectionKey }) {
             const baseFee = inst.fee - carryFee;
             const basePenalty = inst.penalty - carryPenalty;
             const baseUnlockFee = inst.unlockFee - carryUnlockFee;
-            const unpaidPrincipal = Math.max(0, basePrincipal * (1 - ratio));
-            const unpaidInterest = Math.max(0, baseInterest * (1 - ratio));
-            const unpaidFee = Math.max(0, baseFee * (1 - ratio));
-            const unpaidPenalty = Math.max(0, basePenalty * (1 - ratio));
-            const unpaidUnlockFee = Math.max(0, baseUnlockFee * (1 - ratio));
-            carryPrincipal += unpaidPrincipal;
-            carryInterest += unpaidInterest;
-            carryFee += unpaidFee;
-            carryPenalty += unpaidPenalty;
-            carryUnlockFee += unpaidUnlockFee;
-          } else {
-            // dueTotal is 0 (e.g. API zeroed the period) - no new carry.
+            carryPrincipal += Math.max(0, basePrincipal * (1 - ratio));
+            carryInterest += Math.max(0, baseInterest * (1 - ratio));
+            carryFee += Math.max(0, baseFee * (1 - ratio));
+            carryPenalty += Math.max(0, basePenalty * (1 - ratio));
+            carryUnlockFee += Math.max(0, baseUnlockFee * (1 - ratio));
           }
+          // If dueTotal is 0 (API zeroed the period) - no new carry.
         }
+        // Future periods (isPastOrCurrent = false): skip carry application
+        // and skip carry accumulation. Their amounts stay as-is.
       }
     }
 

@@ -429,3 +429,75 @@ describe("listDebtTarget — ระงับสัญญา / หนี้เส
     },
     20_000,
   );
+
+describe("listDebtTarget — arrears carry: past/current only (Phase 9P)", () => {
+  it(
+    "future periods (dueDate > today) must NOT have isArrears=true",
+    async () => {
+      // Business rule (2026-04-23 rev2): carry accumulates only for periods
+      // whose dueDate <= today. Future periods keep their original amounts
+      // and must have isArrears=false regardless of prior unpaid balance.
+      const { rows } = await listDebtTarget({ section: "Boonphone" });
+      if (rows.length === 0) return;
+
+      const todayMs = Date.now();
+      let checkedFuture = 0;
+      for (const r of rows) {
+        for (const c of (r.installments ?? []) as Array<any>) {
+          if (!c.dueDate) continue;
+          const dueDateMs = Date.parse(`${c.dueDate}T00:00:00`);
+          if (dueDateMs > todayMs) {
+            // Future period — must NOT carry arrears.
+            expect(c.isArrears).toBe(false);
+            checkedFuture++;
+            if (checkedFuture >= 100) return; // enough samples
+          }
+        }
+      }
+    },
+    30_000,
+  );
+
+  it(
+    "past/current periods with partial payment must have isArrears=true on the NEXT past/current period",
+    async () => {
+      // Find a contract where at least one past period has paid < amount (partial).
+      // The following past/current period must have isArrears=true.
+      const { rows } = await listDebtTarget({ section: "Boonphone" });
+      if (rows.length < 5) return;
+
+      const todayMs = Date.now();
+      let found = false;
+      outer: for (const r of rows) {
+        const insts = ((r.installments ?? []) as Array<any>)
+          .filter((c) => c.dueDate)
+          .sort((a, b) => (a.period ?? 0) - (b.period ?? 0));
+
+        for (let i = 0; i < insts.length - 1; i++) {
+          const cur = insts[i];
+          const next = insts[i + 1];
+          const curDueMs = Date.parse(`${cur.dueDate}T00:00:00`);
+          const nextDueMs = Date.parse(`${next.dueDate}T00:00:00`);
+
+          // Both must be past/current periods.
+          if (curDueMs > todayMs || nextDueMs > todayMs) continue;
+          if (cur.isClosed || cur.isSuspended) continue;
+          if (next.isClosed || next.isSuspended) continue;
+
+          // Current period partially paid (paid > 0 but < amount - 0.5).
+          const paid = Number(cur.paid ?? 0);
+          const amount = Number(cur.amount ?? 0);
+          if (paid > 0.01 && paid < amount - 0.5) {
+            // Next period should have isArrears=true.
+            expect(next.isArrears).toBe(true);
+            found = true;
+            break outer;
+          }
+        }
+      }
+      // If no partial-payment contract found, skip gracefully.
+      if (!found) return;
+    },
+    30_000,
+  );
+});
