@@ -302,6 +302,6 @@ Task list:
 - [x] Commit + push + checkpoint (commit 9a84698)
 
 ### Phase 9T — แก้ principal/interest (กำจัดเศษทศนิยม)
-- [ ] แก้ debtDb.ts: เปลี่ยนจาก scale factor → ใช้สูตร principal=ceil(finance/periods), interest=amount-principal-fee
-- [ ] ต้องดึง finance_amount + installment_count จาก contracts table มาใช้ใน query
-- [ ] Tests + commit + push + checkpoint
+- [x] แก้ debtDb.ts: เปลี่ยนจาก scale factor → ใช้สูตร principal=ceil(finance/periods), interest=baseline-principal-fee
+- [x] ดึง finance_amount จาก contracts table มาใช้ใน query
+- [x] Tests 63/64 pass + commit 24f520d + push + checkpoint
