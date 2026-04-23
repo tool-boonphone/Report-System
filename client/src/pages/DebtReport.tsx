@@ -523,8 +523,8 @@ export default function DebtReport() {
         discount += p.discount ?? 0;
         overpaid += p.overpaid ?? 0;
         badDebt += p.badDebt ?? 0;
-        // ยอดที่ชำระรวม = เงินที่เก็บเข้ามาจริงๆ (ไม่รวมส่วนลด)
-        total += (p.principal ?? 0) + (p.interest ?? 0) + (p.fee ?? 0) + (p.penalty ?? 0) + (p.unlockFee ?? 0);
+        // ยอดที่ชำระรวม = total_paid_amount จาก API (รวม overpaid ด้วย ไม่รวม discount)
+        total += p.total ?? 0;
       }
     }
     return { principal, interest, fee, penalty, unlockFee, discount, overpaid, badDebt, total };
