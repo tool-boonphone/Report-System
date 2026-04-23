@@ -1,6 +1,5 @@
 import { AppShell } from "@/components/AppShell";
 import { SyncStatusBar } from "@/components/SyncStatusBar";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -36,11 +35,28 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
+// ─── Filter state ─────────────────────────────────────────────────────────────
 type Filters = {
   search: string;
+  // categorical
   status: string;
   debtType: string;
   partnerCode: string;
+  partnerProvince: string;
+  partnerStatus: string;
+  channel: string;
+  nationality: string;
+  gender: string;
+  occupation: string;
+  idProvince: string;
+  addrProvince: string;
+  workProvince: string;
+  promotionName: string;
+  device: string;
+  productType: string;
+  model: string;
+  deviceStatus: string;
+  // date range
   dateField: "submitDate" | "approveDate";
   dateFrom: string;
   dateTo: string;
@@ -51,9 +67,65 @@ const EMPTY_FILTERS: Filters = {
   status: "",
   debtType: "",
   partnerCode: "",
+  partnerProvince: "",
+  partnerStatus: "",
+  channel: "",
+  nationality: "",
+  gender: "",
+  occupation: "",
+  idProvince: "",
+  addrProvince: "",
+  workProvince: "",
+  promotionName: "",
+  device: "",
+  productType: "",
+  model: "",
+  deviceStatus: "",
   dateField: "approveDate",
   dateFrom: "",
   dateTo: "",
+};
+
+// Categorical filter keys (used for cascading logic)
+const CAT_KEYS: Array<keyof Omit<Filters, "search" | "dateField" | "dateFrom" | "dateTo">> = [
+  "status",
+  "debtType",
+  "partnerCode",
+  "partnerProvince",
+  "partnerStatus",
+  "channel",
+  "nationality",
+  "gender",
+  "occupation",
+  "idProvince",
+  "addrProvince",
+  "workProvince",
+  "promotionName",
+  "device",
+  "productType",
+  "model",
+  "deviceStatus",
+];
+
+// Label mapping for categorical filters
+const CAT_LABELS: Record<string, string> = {
+  status: "สถานะสัญญา",
+  debtType: "ประเภทหนี้",
+  partnerCode: "รหัสพาร์ทเนอร์",
+  partnerProvince: "จังหวัดพาร์ทเนอร์",
+  partnerStatus: "สถานะพาร์ทเนอร์",
+  channel: "ช่องทาง",
+  nationality: "สัญชาติ",
+  gender: "เพศ",
+  occupation: "ตำแหน่งงาน",
+  idProvince: "จังหวัด (ตามบัตร ปชช.)",
+  addrProvince: "จังหวัด (ที่อยู่ปัจจุบัน)",
+  workProvince: "จังหวัด (ที่ทำงาน)",
+  promotionName: "Promotion ID",
+  device: "Device",
+  productType: "ประเภทสินค้า",
+  model: "รุ่น",
+  deviceStatus: "สถานะอุปกรณ์",
 };
 
 type SortField =
@@ -196,6 +268,7 @@ export default function Contracts() {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [filterOpen, setFilterOpen] = useState(false);
+  const [hoveredRow, setHoveredRow] = useState<number | null>(null);
 
   // Reset filters when section changes
   useEffect(() => {
@@ -210,37 +283,55 @@ export default function Contracts() {
 
   const allRows = listQuery.data ?? [];
 
-  // ----- Cascading dynamic options (rowsExcluding pattern) -----
+  // ─── Cascading dynamic options ────────────────────────────────────────────
+  // For each categorical key, compute available options by applying ALL OTHER
+  // active filters (+ date range + search) — so options shrink as user selects.
   const dynamicOptions = useMemo(() => {
-    const rowsExcluding = (excludeKey: keyof Filters) =>
-      allRows.filter((r: any) => {
-        if (excludeKey !== "status" && filters.status && r.status !== filters.status) return false;
-        if (excludeKey !== "debtType" && filters.debtType && r.debtType !== filters.debtType) return false;
-        if (excludeKey !== "partnerCode" && filters.partnerCode && r.partnerCode !== filters.partnerCode) return false;
-        if (excludeKey !== "dateFrom" && excludeKey !== "dateTo") {
-          const dateFrom = filters.dateFrom || "";
-          const dateTo = filters.dateTo || "";
-          if (dateFrom || dateTo) {
-            const dateVal =
-              filters.dateField === "approveDate" ? (r as any).approveDate : (r as any).submitDate;
-            const d = dateVal ? String(dateVal).slice(0, 10) : "";
-            if (dateFrom && (!d || d < dateFrom)) return false;
-            if (dateTo && (!d || d > dateTo)) return false;
-          }
-        }
-        return true;
-      });
-
-    const setFrom = (subset: any[], key: string) =>
-      Array.from(new Set(subset.map((r) => String(r[key]))))
-        .filter(Boolean)
-        .sort();
-
-    return {
-      statuses: setFrom(rowsExcluding("status"), "status"),
-      debtTypes: setFrom(rowsExcluding("debtType"), "debtType"),
-      partnerCodes: setFrom(rowsExcluding("partnerCode"), "partnerCode"),
+    // Helper: does a row pass all filters EXCEPT the one we're computing options for?
+    const rowPassesExcept = (r: any, excludeKey: string) => {
+      // search
+      const q = filters.search.trim().toLowerCase();
+      if (q) {
+        if (
+          !(
+            includes(r.contractNo, q) ||
+            includes(r.customerName, q) ||
+            includes(r.partnerCode, q) ||
+            includes(r.phone, q) ||
+            includes(r.imei, q) ||
+            includes(r.serialNo, q) ||
+            includes(r.citizenId, q)
+          )
+        )
+          return false;
+      }
+      // categorical filters
+      for (const key of CAT_KEYS) {
+        if (key === excludeKey) continue;
+        const fv = filters[key as keyof Filters] as string;
+        if (fv && r[key] !== fv) return false;
+      }
+      // date range
+      const dateFrom = filters.dateFrom || "";
+      const dateTo = filters.dateTo || "";
+      if (dateFrom || dateTo) {
+        const dateVal =
+          filters.dateField === "approveDate" ? r.approveDate : r.submitDate;
+        const d = dateVal ? String(dateVal).slice(0, 10) : "";
+        if (dateFrom && (!d || d < dateFrom)) return false;
+        if (dateTo && (!d || d > dateTo)) return false;
+      }
+      return true;
     };
+
+    const result: Record<string, string[]> = {};
+    for (const key of CAT_KEYS) {
+      const subset = allRows.filter((r: any) => rowPassesExcept(r, key));
+      result[key] = Array.from(new Set(subset.map((r: any) => String(r[key]))))
+        .filter((v) => v && v !== "null" && v !== "undefined")
+        .sort();
+    }
+    return result;
   }, [allRows, filters]);
 
   // ----- Client-side filtering + sorting -----
@@ -251,9 +342,12 @@ export default function Contracts() {
     const dateTo = f.dateTo || "";
 
     let rows = allRows.filter((r: any) => {
-      if (f.status && r.status !== f.status) return false;
-      if (f.debtType && r.debtType !== f.debtType) return false;
-      if (f.partnerCode && r.partnerCode !== f.partnerCode) return false;
+      // categorical
+      for (const key of CAT_KEYS) {
+        const fv = f[key as keyof Filters] as string;
+        if (fv && r[key] !== fv) return false;
+      }
+      // date range
       if (dateFrom || dateTo) {
         const dateVal =
           f.dateField === "approveDate" ? r.approveDate : r.submitDate;
@@ -261,6 +355,7 @@ export default function Contracts() {
         if (dateFrom && (!d || d < dateFrom)) return false;
         if (dateTo && (!d || d > dateTo)) return false;
       }
+      // full-text search
       if (q) {
         if (
           !(
@@ -301,9 +396,9 @@ export default function Contracts() {
   const activeFilterCount = useMemo(() => {
     let n = 0;
     if (filters.search) n++;
-    if (filters.status) n++;
-    if (filters.debtType) n++;
-    if (filters.partnerCode) n++;
+    for (const key of CAT_KEYS) {
+      if (filters[key as keyof Filters]) n++;
+    }
     if (filters.dateFrom || filters.dateTo) n++;
     return n;
   }, [filters]);
@@ -313,9 +408,10 @@ export default function Contracts() {
     if (!section) return;
     const params = new URLSearchParams({ section });
     if (filters.search) params.set("search", filters.search);
-    if (filters.status) params.set("status", filters.status);
-    if (filters.debtType) params.set("debtType", filters.debtType);
-    if (filters.partnerCode) params.set("partnerCode", filters.partnerCode);
+    for (const key of CAT_KEYS) {
+      const fv = filters[key as keyof Filters] as string;
+      if (fv) params.set(key, fv);
+    }
     if (filters.dateField) params.set("dateField", filters.dateField);
     if (filters.dateFrom) params.set("dateFrom", filters.dateFrom);
     if (filters.dateTo) params.set("dateTo", filters.dateTo);
@@ -473,25 +569,17 @@ export default function Contracts() {
           {/* Body: filter controls */}
           {filterOpen && (
             <div className="border-t border-gray-100 p-4">
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-                <ComboboxFilter
-                  label="สถานะสัญญา"
-                  value={filters.status}
-                  onChange={(v) => setFilter("status", v)}
-                  options={dynamicOptions.statuses}
-                />
-                <ComboboxFilter
-                  label="ประเภทหนี้"
-                  value={filters.debtType}
-                  onChange={(v) => setFilter("debtType", v)}
-                  options={dynamicOptions.debtTypes}
-                />
-                <ComboboxFilter
-                  label="รหัสพาร์ทเนอร์"
-                  value={filters.partnerCode}
-                  onChange={(v) => setFilter("partnerCode", v)}
-                  options={dynamicOptions.partnerCodes}
-                />
+              {/* Row 1: core categorical filters */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                {CAT_KEYS.map((key) => (
+                  <ComboboxFilter
+                    key={key}
+                    label={CAT_LABELS[key] ?? key}
+                    value={filters[key as keyof Filters] as string}
+                    onChange={(v) => setFilter(key as keyof Filters, v as any)}
+                    options={dynamicOptions[key] ?? []}
+                  />
+                ))}
                 {/* Date field selector */}
                 <div className="flex flex-col gap-1 min-w-0">
                   <label className="text-xs font-medium text-gray-500">
@@ -657,11 +745,18 @@ export default function Contracts() {
                 {virtualRows.map((virtualRow) => {
                   const row: any = filteredRows[virtualRow.index];
                   const seq = virtualRow.index + 1;
+                  const isHovered = hoveredRow === virtualRow.index;
                   return (
                     <tr
                       key={row.id}
-                      className="border-b border-gray-100 hover:bg-blue-50/30"
+                      className={`border-b border-gray-100 transition-colors cursor-default ${
+                        isHovered
+                          ? "bg-blue-50 shadow-[inset_3px_0_0_0_#3b82f6]"
+                          : "hover:bg-blue-50/40"
+                      }`}
                       style={{ height: ROW_HEIGHT }}
+                      onMouseEnter={() => setHoveredRow(virtualRow.index)}
+                      onMouseLeave={() => setHoveredRow(null)}
                     >
                       {CONTRACT_COLUMNS.map((col) => (
                         <td
