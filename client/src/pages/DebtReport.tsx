@@ -710,15 +710,13 @@ export default function DebtReport() {
                                 } else if (closed) {
                                   v = "ปิดค่างวดแล้ว";
                                 } else {
-                                  // Phase 9AH: use inst.netAmount (= principal+interest+fee)
-                                  // for principalOnly=ON. This avoids the bug where
-                                  // amount - penalty gave wrong results because inst.amount
-                                  // may or may not include penalty depending on the period.
-                                  // For principalOnly=OFF → use inst.amount (full amount).
+                                  // Phase 9AJ: always build displayAmount from components
+                                  // to ensure penalty/unlockFee from arrears pass are included.
+                                  // inst.amount may not reflect accumulated penalty (API value).
                                   const netAmt = inst.netAmount ?? (inst.principal + inst.interest + inst.fee);
-                                  const displayAmount = principalOnly
-                                      ? netAmt
-                                      : inst.amount; // full amount incl. penalty+unlockFee
+                                  const penaltyAmt = principalOnly ? 0 : (inst.penalty ?? 0);
+                                  const unlockAmt = principalOnly ? 0 : (inst.unlockFee ?? 0);
+                                  const displayAmount = netAmt + penaltyAmt + unlockAmt;
                                   v = fmtMoney(displayAmount);
                                   if (
                                     inst.overpaidApplied > 0.009 &&
