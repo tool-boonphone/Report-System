@@ -25,9 +25,26 @@ export default function SelectSection() {
     );
   }
 
+  // Compute allowed sections for this user's group
+  // Empty allowedSections = all sections allowed
+  const rawAllowed = me?.group?.allowedSections ?? "";
+  const allowedSections: SectionKey[] = rawAllowed
+    ? (rawAllowed.split(",").map((s) => s.trim()).filter((s) => SECTIONS.includes(s as SectionKey)) as SectionKey[])
+    : [...SECTIONS];
+
   function handlePick(s: SectionKey) {
     setSection(s);
     navigate("/contracts", { replace: true });
+  }
+
+  // If user has access to only 1 section, auto-navigate there
+  if (allowedSections.length === 1) {
+    handlePick(allowedSections[0]);
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+      </div>
+    );
   }
 
   return (
@@ -46,7 +63,7 @@ export default function SelectSection() {
         </div>
 
         <div className="grid sm:grid-cols-2 gap-4">
-          {SECTIONS.map((s) => (
+          {allowedSections.map((s) => (
             <button
               key={s}
               onClick={() => handlePick(s)}

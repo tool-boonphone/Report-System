@@ -81,6 +81,12 @@ export function TopNav() {
     location.startsWith(item.path),
   );
 
+  // Compute sections this user can switch to (based on group allowedSections)
+  const rawAllowed = (me?.group as { allowedSections?: string } | undefined)?.allowedSections ?? "";
+  const allowedSectionsList: typeof SECTIONS[number][] = rawAllowed
+    ? (rawAllowed.split(",").map((s) => s.trim()).filter((s) => SECTIONS.includes(s as typeof SECTIONS[number])) as typeof SECTIONS[number][])
+    : [...SECTIONS];
+
   const handleLogout = async () => {
     try {
       await logout();
@@ -146,7 +152,7 @@ export function TopNav() {
                     <div className="px-3 py-1.5 text-[10px] font-semibold text-gray-400 uppercase tracking-wide border-b border-gray-100">
                       สลับ Section
                     </div>
-                    {SECTIONS.filter((s) => s !== section).map((s) => (
+                    {allowedSectionsList.filter((s) => s !== section).map((s) => (
                       <button
                         key={s}
                         onClick={() => handleSwitchToSection(s)}

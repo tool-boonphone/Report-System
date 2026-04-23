@@ -44,6 +44,8 @@ export const authRouter = router({
         id: ctx.appUser.group.id,
         name: ctx.appUser.group.name,
         isSuperAdmin: ctx.appUser.group.isSuperAdmin,
+        // comma-separated allowed sections, empty = all sections allowed
+        allowedSections: ctx.appUser.group.allowedSections ?? "",
       },
       permissions: ctx.appUser.permissions.map((p) => ({
         menuCode: p.menuCode,

@@ -43,6 +43,9 @@ export const appGroups = mysqlTable(
     name: varchar("name", { length: 64 }).notNull(),
     description: varchar("description", { length: 255 }),
     isSuperAdmin: boolean("is_super_admin").notNull().default(false),
+    // Comma-separated allowed sections e.g. "Boonphone,Fastfone365"
+    // Empty string = all sections allowed (used for Super Admin / backward compat)
+    allowedSections: varchar("allowed_sections", { length: 255 }).notNull().default(""),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
   },

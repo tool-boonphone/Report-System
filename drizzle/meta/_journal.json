@@ -15,6 +15,13 @@
       "when": 1776862417883,
       "tag": "0001_soft_captain_universe",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1776959819768,
+      "tag": "0002_petite_charles_xavier",
+      "breakpoints": true
     }
   ]
 }

@@ -1,0 +1,1 @@
+ALTER TABLE `app_groups` ADD `allowed_sections` varchar(255) DEFAULT '' NOT NULL;

@@ -75,6 +75,7 @@ export const adminRouter = router({
       z.object({
         name: z.string().min(1).max(64),
         description: z.string().optional().nullable(),
+        allowedSections: z.string().optional(), // comma-separated e.g. "Boonphone,Fastfone365"
       }),
     )
     .mutation(async ({ input }) => {
@@ -88,6 +89,7 @@ export const adminRouter = router({
         id: z.number().int().positive(),
         name: z.string().min(1).max(64).optional(),
         description: z.string().nullable().optional(),
+        allowedSections: z.string().optional(), // comma-separated, empty = all
       }),
     )
     .mutation(async ({ input }) => {

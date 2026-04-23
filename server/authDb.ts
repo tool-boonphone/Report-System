@@ -316,6 +316,7 @@ export async function listGroupsWithPermissions() {
 export async function createGroup(input: {
   name: string;
   description?: string | null;
+  allowedSections?: string;
 }) {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
@@ -323,6 +324,7 @@ export async function createGroup(input: {
     name: input.name,
     description: input.description ?? null,
     isSuperAdmin: false,
+    allowedSections: input.allowedSections ?? "",
   });
   const id = Number((res as { insertId: number }).insertId);
 
@@ -338,7 +340,7 @@ export async function createGroup(input: {
 
 export async function updateGroup(
   id: number,
-  patch: { name?: string; description?: string | null },
+  patch: { name?: string; description?: string | null; allowedSections?: string },
 ) {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
