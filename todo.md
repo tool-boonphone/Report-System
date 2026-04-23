@@ -312,3 +312,10 @@ Task list:
 - [x] Export target: เพิ่ม penalty + unlockFee columns ใน Excel
 - [x] Export collected: ซ่อน closeInstallmentAmount ออกจาก Excel
 - [x] Regression tests (63/64 pass) + commit d1b2c13 + push + checkpoint
+
+### Phase 9R — ย้าย toggle เฉพาะเงินต้น + ปรับสูตรยอดหนี้รวม
+
+- [ ] ย้าย toggle ออกจาก tier-1 header → ไปไว้ใต้ Select สถานะหนี้ (toolbar area) เปลี่ยนเป็น Switch component, default = true (เปิด = รวมค่าปรับ+ค่าปลดล็อก)
+- [ ] ปรับ logic: เมื่อ principalOnly=false (เปิด) → amount = principal+interest+fee+penalty+unlockFee; เมื่อ principalOnly=true (ปิด) → amount = principal+interest+fee เท่านั้น
+- [ ] ลบ Checkbox ออกจาก tier-1 header ของตาราง
+- [ ] commit + push + checkpoint

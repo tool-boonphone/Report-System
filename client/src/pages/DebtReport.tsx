@@ -18,7 +18,7 @@ import { trpc } from "@/lib/trpc";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Coins, Download, Search, Target } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 
 /* -------------------------------------------------------------------- */
@@ -171,6 +171,8 @@ export default function DebtReport() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("");
   /** เมื่อ true = ตั้งหนี้เฉพาะเงินต้น (penalty/unlockFee แสดงเป็น 0) */
+  // principalOnly=false → รวมค่าปรับ+ค่าปลดล็อกในยอดหนี้รวม (default)
+  // principalOnly=true  → ยอดหนี้รวม = เงินต้น+ดอกเบี้ย+ค่าดำเนินการ เท่านั้น
   const [principalOnly, setPrincipalOnly] = useState(false);
 
   // One-shot load per tab. Query disables itself when user lacks permission.
@@ -454,6 +456,19 @@ export default function DebtReport() {
               ))}
             </SelectContent>
           </Select>
+          {/* principalOnly toggle — เฉพาะ target tab */}
+          {tab === "target" && (
+            <label className="flex items-center gap-2 cursor-pointer select-none whitespace-nowrap">
+              <Switch
+                checked={!principalOnly}
+                onCheckedChange={(v) => setPrincipalOnly(!v)}
+                className="data-[state=checked]:bg-amber-600"
+              />
+              <span className="text-sm text-amber-800 font-medium">
+                {principalOnly ? "เฉพาะเงินต้น" : "รวมค่าปรับ+ค่าปลดล็อก"}
+              </span>
+            </label>
+          )}
         </div>
 
         {/* Summary line */}
@@ -480,22 +495,11 @@ export default function DebtReport() {
               <div className="sticky top-0 z-20 bg-white">
                 {/* Tier 1: group header over installment columns */}
                 <div className="flex border-b bg-slate-100 text-[12px] font-semibold text-slate-700">
-                  {/* Left fixed area: show principalOnly toggle when tab=target */}
+                  {/* Left fixed area */}
                   <div
                     className="bg-slate-100 border-r flex items-center"
                     style={{ width: LEFT_WIDTH, height: 28 }}
-                  >
-                    {tab === "target" && (
-                      <label className="flex items-center gap-1.5 px-2 cursor-pointer select-none text-amber-800 text-[11px] font-medium">
-                        <Checkbox
-                          checked={principalOnly}
-                          onCheckedChange={(v) => setPrincipalOnly(!!v)}
-                          className="w-3.5 h-3.5"
-                        />
-                        เฉพาะเงินต้น
-                      </label>
-                    )}
-                  </div>
+                  />
                   {Array.from({ length: maxPeriods }, (_, i) => (
                     <div
                       key={`gh-${i}`}
@@ -698,7 +702,14 @@ export default function DebtReport() {
                                 } else if (closed) {
                                   v = "ปิดค่างวดแล้ว";
                                 } else {
-                                  v = fmtMoney(inst.amount);
+                                  // คำนวณยอดหนี้รวมตาม toggle:
+                                  // principalOnly=true  → เงินต้น+ดอกเบี้ย+ค่าดำเนินการ
+                                  // principalOnly=false → รวมค่าปรับ+ค่าปลดล็อกด้วย
+                                  const baseAmt = inst.principal + inst.interest + inst.fee;
+                                  const totalAmt = principalOnly
+                                    ? baseAmt
+                                    : baseAmt + (inst.penalty ?? 0) + (inst.unlockFee ?? 0);
+                                  v = fmtMoney(totalAmt);
                                   if (
                                     inst.overpaidApplied > 0.009 &&
                                     inst.baselineAmount > inst.amount + 0.009
