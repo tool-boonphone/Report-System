@@ -702,13 +702,13 @@ export default function DebtReport() {
                                 } else if (closed) {
                                   v = "ปิดค่างวดแล้ว";
                                 } else {
-                                  // คำนวณยอดหนี้รวมตาม toggle:
-                                  // principalOnly=true  → เงินต้น+ดอกเบี้ย+ค่าดำเนินการ
-                                  // principalOnly=false → รวมค่าปรับ+ค่าปลดล็อกด้วย
-                                  const baseAmt = inst.principal + inst.interest + inst.fee;
+                                  // ยอดหนี้รวม: ใช้ inst.amount จาก API โดยตรง
+                                  // (API คำนวณ principal+interest+fee+penalty+unlockFee ให้แล้ว)
+                                  // principalOnly=true → หัก penalty+unlockFee ออก
+                                  const fullAmt = inst.amount;
                                   const totalAmt = principalOnly
-                                    ? baseAmt
-                                    : baseAmt + (inst.penalty ?? 0) + (inst.unlockFee ?? 0);
+                                    ? fullAmt - (inst.penalty ?? 0) - (inst.unlockFee ?? 0)
+                                    : fullAmt;
                                   v = fmtMoney(totalAmt);
                                   if (
                                     inst.overpaidApplied > 0.009 &&

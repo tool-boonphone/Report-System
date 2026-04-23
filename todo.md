@@ -319,3 +319,9 @@ Task list:
 - [x] ปรับ logic: เมื่อ principalOnly=false (เปิด) → amount = principal+interest+fee+penalty+unlockFee; เมื่อ principalOnly=true (ปิด) → amount = principal+interest+fee เท่านั้น
 - [x] ลบ Checkbox ออกจาก tier-1 header ของตาราง
 - [x] commit 71081ab + push + checkpoint
+
+### Phase 9S — แก้ยอดหนี้รวมให้ตรงกับผ่อนงวดละ
+
+- [ ] วิเคราะห์: ยอดหนี้รวม ≠ ผ่อนงวดละ (เช่น 3,968 ≠ 2,968) — หาสาเหตุ
+- [ ] แก้สูตร: ยอดหนี้รวมควรใช้ inst.amount จาก API (ซึ่งถูกต้องอยู่แล้ว) ไม่ใช่คำนวณจาก principal+interest+fee ใหม่
+- [ ] commit + push + checkpoint
