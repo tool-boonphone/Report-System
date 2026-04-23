@@ -2,22 +2,20 @@ import { AppShell } from "@/components/AppShell";
 import { SyncStatusBar } from "@/components/SyncStatusBar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet";
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Spinner } from "@/components/ui/spinner";
 import { useNavActions } from "@/contexts/NavActionsContext";
 import { useSection } from "@/contexts/SectionContext";
@@ -26,6 +24,9 @@ import { trpc } from "@/lib/trpc";
 import { CONTRACT_COLUMNS, type ContractColumnKey } from "@shared/const";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
+  Check,
+  ChevronDown,
+  ChevronsUpDown,
   Download,
   Filter as FilterIcon,
   RefreshCcw,
@@ -100,6 +101,90 @@ function includes(haystack: unknown, needle: string) {
   return String(haystack).toLowerCase().includes(needle);
 }
 
+/** ComboboxFilter: searchable dropdown with active state styling */
+function ComboboxFilter({
+  label,
+  value,
+  onChange,
+  options,
+  placeholder = "ทั้งหมด",
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: string[];
+  placeholder?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="flex flex-col gap-1 min-w-0">
+      <label className="text-xs font-medium text-gray-500 truncate">
+        {label}
+      </label>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <button
+            className={`w-full px-2.5 py-1.5 text-sm border rounded-lg text-left flex items-center justify-between gap-1 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-400 ${
+              value
+                ? "border-indigo-400 bg-indigo-50 text-indigo-800 font-medium"
+                : "border-gray-200 bg-white text-gray-500 hover:border-gray-300"
+            }`}
+          >
+            <span className="truncate">{value || placeholder}</span>
+            <ChevronsUpDown className="w-3.5 h-3.5 flex-shrink-0 text-gray-400" />
+          </button>
+        </PopoverTrigger>
+        <PopoverContent className="w-56 p-0" align="start">
+          <Command>
+            <CommandInput
+              placeholder="พิมพ์ค้นหา..."
+              className="h-8 text-sm"
+            />
+            <CommandList>
+              <CommandEmpty>ไม่พบตัวเลือก</CommandEmpty>
+              <CommandGroup>
+                <CommandItem
+                  value="__all__"
+                  onSelect={() => {
+                    onChange("");
+                    setOpen(false);
+                  }}
+                >
+                  <Check
+                    className={`mr-2 h-3.5 w-3.5 ${!value ? "opacity-100 text-indigo-600" : "opacity-0"}`}
+                  />
+                  <span
+                    className={!value ? "text-indigo-600 font-medium" : "text-gray-500"}
+                  >
+                    {placeholder}
+                  </span>
+                </CommandItem>
+                {options.map((opt) => (
+                  <CommandItem
+                    key={opt}
+                    value={opt}
+                    onSelect={(v) => {
+                      const original =
+                        options.find((o) => o.toLowerCase() === v) ?? v;
+                      onChange(value === original ? "" : original);
+                      setOpen(false);
+                    }}
+                  >
+                    <Check
+                      className={`mr-2 h-3.5 w-3.5 ${value === opt ? "opacity-100 text-indigo-600" : "opacity-0"}`}
+                    />
+                    {opt}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
+    </div>
+  );
+}
+
 export default function Contracts() {
   const { section } = useSection();
   const { setActions } = useNavActions();
@@ -109,34 +194,58 @@ export default function Contracts() {
   // ----- State -----
   const [sortField, setSortField] = useState<SortField>("approveDate");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
-  const [draft, setDraft] = useState<Filters>(EMPTY_FILTERS);
-  const [applied, setApplied] = useState<Filters>(EMPTY_FILTERS);
-  const [filterSheetOpen, setFilterSheetOpen] = useState(false);
+  const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
+  const [filterOpen, setFilterOpen] = useState(false);
 
   // Reset filters when section changes
   useEffect(() => {
-    setDraft(EMPTY_FILTERS);
-    setApplied(EMPTY_FILTERS);
+    setFilters(EMPTY_FILTERS);
   }, [section]);
 
   // ----- One-shot fetch of all rows for the section -----
-  // Payload is ~4 MB for Boonphone (3.5k rows, no rawJson). tRPC caches this
-  // for `staleTime` so re-entering the page is instant. Filtering/sorting
-  // happen on the client below so the virtual scroller stays silky.
   const listQuery = trpc.contracts.listAll.useQuery(
     { section: section! },
     { staleTime: 60_000, enabled: Boolean(section) },
   );
-  const optionsQuery = trpc.contracts.filterOptions.useQuery(
-    { section: section! },
-    { staleTime: 5 * 60_000, enabled: Boolean(section) },
-  );
 
   const allRows = listQuery.data ?? [];
 
+  // ----- Cascading dynamic options (rowsExcluding pattern) -----
+  const dynamicOptions = useMemo(() => {
+    const rowsExcluding = (excludeKey: keyof Filters) =>
+      allRows.filter((r: any) => {
+        if (excludeKey !== "status" && filters.status && r.status !== filters.status) return false;
+        if (excludeKey !== "debtType" && filters.debtType && r.debtType !== filters.debtType) return false;
+        if (excludeKey !== "partnerCode" && filters.partnerCode && r.partnerCode !== filters.partnerCode) return false;
+        if (excludeKey !== "dateFrom" && excludeKey !== "dateTo") {
+          const dateFrom = filters.dateFrom || "";
+          const dateTo = filters.dateTo || "";
+          if (dateFrom || dateTo) {
+            const dateVal =
+              filters.dateField === "approveDate" ? (r as any).approveDate : (r as any).submitDate;
+            const d = dateVal ? String(dateVal).slice(0, 10) : "";
+            if (dateFrom && (!d || d < dateFrom)) return false;
+            if (dateTo && (!d || d > dateTo)) return false;
+          }
+        }
+        return true;
+      });
+
+    const setFrom = (subset: any[], key: string) =>
+      Array.from(new Set(subset.map((r) => String(r[key]))))
+        .filter(Boolean)
+        .sort();
+
+    return {
+      statuses: setFrom(rowsExcluding("status"), "status"),
+      debtTypes: setFrom(rowsExcluding("debtType"), "debtType"),
+      partnerCodes: setFrom(rowsExcluding("partnerCode"), "partnerCode"),
+    };
+  }, [allRows, filters]);
+
   // ----- Client-side filtering + sorting -----
   const filteredRows = useMemo(() => {
-    const f = applied;
+    const f = filters;
     const q = f.search.trim().toLowerCase();
     const dateFrom = f.dateFrom || "";
     const dateTo = f.dateTo || "";
@@ -170,14 +279,12 @@ export default function Contracts() {
       return true;
     });
 
-    // Sort in-place copy so we don't mutate the cache.
     rows = [...rows].sort((a: any, b: any) => {
       const av = a[sortField];
       const bv = b[sortField];
       if (av == null && bv == null) return 0;
       if (av == null) return sortDir === "asc" ? -1 : 1;
       if (bv == null) return sortDir === "asc" ? 1 : -1;
-      // Numeric-friendly comparison when both look numeric, else localeCompare
       const an = typeof av === "number" ? av : Number(av);
       const bn = typeof bv === "number" ? bv : Number(bv);
       if (Number.isFinite(an) && Number.isFinite(bn) && an !== bn) {
@@ -188,30 +295,30 @@ export default function Contracts() {
     });
 
     return rows;
-  }, [allRows, applied, sortField, sortDir]);
+  }, [allRows, filters, sortField, sortDir]);
 
   // ----- Derived UI -----
   const activeFilterCount = useMemo(() => {
     let n = 0;
-    if (applied.search) n++;
-    if (applied.status) n++;
-    if (applied.debtType) n++;
-    if (applied.partnerCode) n++;
-    if (applied.dateFrom || applied.dateTo) n++;
+    if (filters.search) n++;
+    if (filters.status) n++;
+    if (filters.debtType) n++;
+    if (filters.partnerCode) n++;
+    if (filters.dateFrom || filters.dateTo) n++;
     return n;
-  }, [applied]);
+  }, [filters]);
 
-  // ----- Export (streams the full filtered dataset via server) -----
+  // ----- Export -----
   const handleExport = async () => {
     if (!section) return;
     const params = new URLSearchParams({ section });
-    if (applied.search) params.set("search", applied.search);
-    if (applied.status) params.set("status", applied.status);
-    if (applied.debtType) params.set("debtType", applied.debtType);
-    if (applied.partnerCode) params.set("partnerCode", applied.partnerCode);
-    if (applied.dateField) params.set("dateField", applied.dateField);
-    if (applied.dateFrom) params.set("dateFrom", applied.dateFrom);
-    if (applied.dateTo) params.set("dateTo", applied.dateTo);
+    if (filters.search) params.set("search", filters.search);
+    if (filters.status) params.set("status", filters.status);
+    if (filters.debtType) params.set("debtType", filters.debtType);
+    if (filters.partnerCode) params.set("partnerCode", filters.partnerCode);
+    if (filters.dateField) params.set("dateField", filters.dateField);
+    if (filters.dateFrom) params.set("dateFrom", filters.dateFrom);
+    if (filters.dateTo) params.set("dateTo", filters.dateTo);
     params.set("sortField", sortField);
     params.set("sortDir", sortDir);
 
@@ -268,19 +375,13 @@ export default function Contracts() {
     }
   };
 
-  const applyFilters = () => {
-    setApplied(draft);
-    setFilterSheetOpen(false);
-  };
-
-  const resetFilters = () => {
-    setDraft(EMPTY_FILTERS);
-    setApplied(EMPTY_FILTERS);
+  const setFilter = <K extends keyof Filters>(key: K, value: Filters[K]) => {
+    setFilters((f) => ({ ...f, [key]: value }));
   };
 
   // ----- Virtualizer -----
   const scrollRef = useRef<HTMLDivElement | null>(null);
-  const ROW_HEIGHT = 36; // px — matches `py-2 text-[13px]` line height
+  const ROW_HEIGHT = 36;
   const rowVirtualizer = useVirtualizer({
     count: filteredRows.length,
     getScrollElement: () => scrollRef.current,
@@ -302,166 +403,19 @@ export default function Contracts() {
   return (
     <AppShell>
       <div className="max-w-[1600px] mx-auto px-3 md:px-5 py-4">
-        {/* Toolbar */}
+        {/* Toolbar: search + refresh + export */}
         <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-3 mb-3">
           <div className="relative flex-1 min-w-0">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <Input
               placeholder="ค้นหา: เลขสัญญา / ชื่อลูกค้า / พาร์ทเนอร์ / โทร / IMEI / Serial / เลขบัตร"
               className="pl-9 bg-white"
-              value={draft.search}
-              onChange={(e) =>
-                setDraft((d) => ({ ...d, search: e.target.value }))
-              }
-              onKeyDown={(e) => {
-                if (e.key === "Enter") applyFilters();
-              }}
+              value={filters.search}
+              onChange={(e) => setFilter("search", e.target.value)}
             />
           </div>
 
           <div className="flex items-center gap-2">
-            <Sheet open={filterSheetOpen} onOpenChange={setFilterSheetOpen}>
-              <SheetTrigger asChild>
-                <Button variant="outline" className="bg-white">
-                  <FilterIcon className="w-4 h-4 mr-1.5" />
-                  ตัวกรอง
-                  {activeFilterCount > 0 && (
-                    <Badge className="ml-1.5 bg-blue-600 hover:bg-blue-600">
-                      {activeFilterCount}
-                    </Badge>
-                  )}
-                </Button>
-              </SheetTrigger>
-              <SheetContent className="w-full sm:max-w-md overflow-y-auto">
-                <SheetHeader>
-                  <SheetTitle>ตัวกรองข้อมูลสัญญา</SheetTitle>
-                </SheetHeader>
-                <div className="space-y-4 mt-4">
-                  <div>
-                    <Label>สถานะสัญญา</Label>
-                    <Select
-                      value={draft.status || "__all__"}
-                      onValueChange={(v) =>
-                        setDraft((d) => ({
-                          ...d,
-                          status: v === "__all__" ? "" : v,
-                        }))
-                      }
-                    >
-                      <SelectTrigger className="mt-1">
-                        <SelectValue placeholder="ทั้งหมด" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__all__">ทั้งหมด</SelectItem>
-                        {(optionsQuery.data?.statuses ?? []).map((s) => (
-                          <SelectItem key={s} value={s}>
-                            {s}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label>ประเภทหนี้</Label>
-                    <Select
-                      value={draft.debtType || "__all__"}
-                      onValueChange={(v) =>
-                        setDraft((d) => ({
-                          ...d,
-                          debtType: v === "__all__" ? "" : v,
-                        }))
-                      }
-                    >
-                      <SelectTrigger className="mt-1">
-                        <SelectValue placeholder="ทั้งหมด" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__all__">ทั้งหมด</SelectItem>
-                        {(optionsQuery.data?.debtTypes ?? []).map((s) => (
-                          <SelectItem key={s} value={s}>
-                            {s}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label>รหัสพาร์ทเนอร์</Label>
-                    <Select
-                      value={draft.partnerCode || "__all__"}
-                      onValueChange={(v) =>
-                        setDraft((d) => ({
-                          ...d,
-                          partnerCode: v === "__all__" ? "" : v,
-                        }))
-                      }
-                    >
-                      <SelectTrigger className="mt-1">
-                        <SelectValue placeholder="ทั้งหมด" />
-                      </SelectTrigger>
-                      <SelectContent className="max-h-72">
-                        <SelectItem value="__all__">ทั้งหมด</SelectItem>
-                        {(optionsQuery.data?.partnerCodes ?? []).map((s) => (
-                          <SelectItem key={s} value={s}>
-                            {s}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="border-t pt-4">
-                    <Label>ช่วงวันที่</Label>
-                    <Select
-                      value={draft.dateField}
-                      onValueChange={(v) =>
-                        setDraft((d) => ({
-                          ...d,
-                          dateField: v as Filters["dateField"],
-                        }))
-                      }
-                    >
-                      <SelectTrigger className="mt-1">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="approveDate">
-                          วันอนุมัติสัญญา
-                        </SelectItem>
-                        <SelectItem value="submitDate">
-                          วันยื่นสินเชื่อ
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <div className="grid grid-cols-2 gap-2 mt-2">
-                      <Input
-                        type="date"
-                        value={draft.dateFrom}
-                        onChange={(e) =>
-                          setDraft((d) => ({ ...d, dateFrom: e.target.value }))
-                        }
-                      />
-                      <Input
-                        type="date"
-                        value={draft.dateTo}
-                        onChange={(e) =>
-                          setDraft((d) => ({ ...d, dateTo: e.target.value }))
-                        }
-                      />
-                    </div>
-                  </div>
-                  <div className="flex gap-2 pt-2">
-                    <Button onClick={applyFilters} className="flex-1">
-                      ใช้ตัวกรอง
-                    </Button>
-                    <Button variant="outline" onClick={resetFilters}>
-                      <X className="w-4 h-4 mr-1" />
-                      ล้าง
-                    </Button>
-                  </div>
-                </div>
-              </SheetContent>
-            </Sheet>
-
             <Button
               variant="outline"
               className="bg-white"
@@ -484,31 +438,131 @@ export default function Contracts() {
           </div>
         </div>
 
-        {/* Applied filter chips */}
-        {activeFilterCount > 0 && (
-          <div className="flex flex-wrap gap-1.5 mb-3 text-xs">
-            {applied.search && (
-              <Badge variant="secondary">ค้นหา: {applied.search}</Badge>
-            )}
-            {applied.status && (
-              <Badge variant="secondary">สถานะ: {applied.status}</Badge>
-            )}
-            {applied.debtType && (
-              <Badge variant="secondary">ประเภทหนี้: {applied.debtType}</Badge>
-            )}
-            {applied.partnerCode && (
-              <Badge variant="secondary">
-                พาร์ทเนอร์: {applied.partnerCode}
-              </Badge>
-            )}
-            {(applied.dateFrom || applied.dateTo) && (
-              <Badge variant="secondary">
-                {applied.dateField === "approveDate" ? "อนุมัติ" : "ยื่น"}:{" "}
-                {applied.dateFrom || "…"} → {applied.dateTo || "…"}
-              </Badge>
-            )}
+        {/* Collapsible filter panel */}
+        <div className="bg-white border border-gray-200 rounded-xl mb-3">
+          {/* Header: toggle + clear */}
+          <div className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-gray-700">
+            <button
+              onClick={() => setFilterOpen((v) => !v)}
+              className="flex items-center gap-2 hover:text-indigo-600 transition-colors"
+            >
+              <FilterIcon className="w-4 h-4 text-gray-400" />
+              <span>ตัวกรองข้อมูล</span>
+              {activeFilterCount > 0 && (
+                <span className="inline-flex items-center justify-center w-5 h-5 text-xs font-bold text-white bg-indigo-600 rounded-full">
+                  {activeFilterCount}
+                </span>
+              )}
+            </button>
+            <div className="flex items-center gap-3">
+              {activeFilterCount > 0 && (
+                <button
+                  onClick={() => setFilters(EMPTY_FILTERS)}
+                  className="inline-flex items-center gap-1 text-xs text-red-500 hover:text-red-700 font-medium"
+                >
+                  <X className="w-3 h-3" />
+                  ล้างทั้งหมด
+                </button>
+              )}
+              <ChevronDown
+                className={`w-4 h-4 text-gray-400 transition-transform ${filterOpen ? "rotate-180" : ""}`}
+              />
+            </div>
           </div>
-        )}
+
+          {/* Body: filter controls */}
+          {filterOpen && (
+            <div className="border-t border-gray-100 p-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                <ComboboxFilter
+                  label="สถานะสัญญา"
+                  value={filters.status}
+                  onChange={(v) => setFilter("status", v)}
+                  options={dynamicOptions.statuses}
+                />
+                <ComboboxFilter
+                  label="ประเภทหนี้"
+                  value={filters.debtType}
+                  onChange={(v) => setFilter("debtType", v)}
+                  options={dynamicOptions.debtTypes}
+                />
+                <ComboboxFilter
+                  label="รหัสพาร์ทเนอร์"
+                  value={filters.partnerCode}
+                  onChange={(v) => setFilter("partnerCode", v)}
+                  options={dynamicOptions.partnerCodes}
+                />
+                {/* Date field selector */}
+                <div className="flex flex-col gap-1 min-w-0">
+                  <label className="text-xs font-medium text-gray-500">
+                    ช่วงวันที่
+                  </label>
+                  <select
+                    value={filters.dateField}
+                    onChange={(e) =>
+                      setFilter(
+                        "dateField",
+                        e.target.value as Filters["dateField"],
+                      )
+                    }
+                    className="h-[34px] rounded-lg border border-gray-200 bg-white px-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                  >
+                    <option value="approveDate">วันอนุมัติสัญญา</option>
+                    <option value="submitDate">วันยื่นสินเชื่อ</option>
+                  </select>
+                </div>
+              </div>
+              {/* Date range row */}
+              <div className="mt-3 pt-3 border-t border-dashed border-gray-200">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-semibold text-indigo-600 tracking-wide uppercase whitespace-nowrap">
+                    {filters.dateField === "approveDate"
+                      ? "วันอนุมัติ"
+                      : "วันยื่น"}
+                  </span>
+                  <Input
+                    type="date"
+                    value={filters.dateFrom}
+                    onChange={(e) => setFilter("dateFrom", e.target.value)}
+                    className={`h-8 text-sm w-auto ${
+                      filters.dateFrom
+                        ? "border-indigo-400 bg-indigo-50 text-indigo-800"
+                        : ""
+                    }`}
+                  />
+                  <span className="text-xs text-gray-400">ถึง</span>
+                  <Input
+                    type="date"
+                    value={filters.dateTo}
+                    onChange={(e) => setFilter("dateTo", e.target.value)}
+                    className={`h-8 text-sm w-auto ${
+                      filters.dateTo
+                        ? "border-indigo-400 bg-indigo-50 text-indigo-800"
+                        : ""
+                    }`}
+                  />
+                  {(filters.dateFrom || filters.dateTo) && (
+                    <button
+                      onClick={() =>
+                        setFilters((f) => ({
+                          ...f,
+                          dateFrom: "",
+                          dateTo: "",
+                        }))
+                      }
+                      className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-indigo-50 border border-indigo-200 text-xs text-indigo-700 font-medium"
+                    >
+                      <span>
+                        {filters.dateFrom || "…"} → {filters.dateTo || "…"}
+                      </span>
+                      <X className="w-3 h-3 text-indigo-400 hover:text-indigo-700" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
 
         {/* Row counter */}
         <div className="mb-2 text-sm text-gray-600">
@@ -539,7 +593,7 @@ export default function Contracts() {
           <div
             ref={scrollRef}
             className="overflow-x-auto overflow-y-auto"
-            style={{ maxHeight: "calc(100vh - 220px)" }}
+            style={{ maxHeight: "calc(100vh - 280px)" }}
           >
             <table className="min-w-full text-[13px]">
               <thead className="bg-gray-50 sticky top-0 z-10">
@@ -594,7 +648,6 @@ export default function Contracts() {
                   </tr>
                 )}
 
-                {/* Top spacer to account for skipped rows above viewport */}
                 {paddingTop > 0 && (
                   <tr style={{ height: paddingTop }} aria-hidden="true">
                     <td colSpan={CONTRACT_COLUMNS.length} />
@@ -626,7 +679,6 @@ export default function Contracts() {
                   );
                 })}
 
-                {/* Bottom spacer for rows below viewport */}
                 {paddingBottom > 0 && (
                   <tr style={{ height: paddingBottom }} aria-hidden="true">
                     <td colSpan={CONTRACT_COLUMNS.length} />
