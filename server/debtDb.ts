@@ -487,6 +487,7 @@ export async function listDebtTarget(params: { section: SectionKey }) {
            phone,
            installment_count,
            installment_amount,
+           CAST(finance_amount AS DECIMAL(18,2)) AS finance_amount,
            status
       FROM ${contracts}
      WHERE ${contracts.section} = ${params.section}
@@ -777,29 +778,30 @@ export async function listDebtTarget(params: { section: SectionKey }) {
           penalty = 0;
           unlockFee = 0;
         } else {
-          // Boonphone displays principal+interest scaled so that
-          // principal + interest + fee + penalty = total amount.
-          // The raw `principal_due` / `interest_due` in installments.raw_json
-          // represents only the *base* split (excluding amortization of
-          // accrued interest); the visible split on the Boonphone admin UI
-          // is rescaled to fill the remainder after fee + penalty.
-          // Example (contract 4092 period 1):
-          //   raw principal_due = 1360, interest_due = 1768, fee = 100
-          //   total amount       = 4486
-          //   target principal+interest = 4486 - 100 - 0 = 4386
-          //   scale = 4386 / (1360 + 1768) = 1.4022
-          //   displayed principal = 1360 * 1.4022 ≈ 1907  ✓
-          //   displayed interest  = 1768 * 1.4022 ≈ 2479  ✓
-          const piRaw = rawPrincipal + rawInterest;
-          const target = amount - fee - penalty;
-          if (piRaw > 0.01 && target > 0.01) {
-            const scale = target / piRaw;
-            const scaledPrincipal = Math.round(rawPrincipal * scale * 100) / 100;
-            // Use subtraction to keep the sum exact (avoids 0.01 rounding
-            // drift between principal+interest+fee and amount).
-            const scaledInterest = Math.round((target - scaledPrincipal) * 100) / 100;
-            principal = scaledPrincipal;
-            interest = scaledInterest;
+          // --- Formula-based principal/interest (Phase 9T) ---
+          // สูตร:
+          //   basePrincipal = ceil(finance_amount / installment_count)
+          //   baseInterest  = baseline_amount - basePrincipal - fee
+          //   (ค่าปรับ/ค่าปลดล็อก ไม่ถูกแบ่งเป็น principal/interest)
+          //
+          // งวดที่มีค้างสะสม (isArrears): carry จะถูกบวกเพิ่มใน arrears pass
+          // ด้านล่าง ดังนั้น principal/interest ที่ set ที่นี่คือ baseline เท่านั้น
+          const financeAmt = c.finance_amount != null ? Number(c.finance_amount) : 0;
+          const periods = c.installment_count != null ? Number(c.installment_count) : 0;
+          const baseline = baselineAmount ?? 0;
+          if (financeAmt > 0 && periods > 0) {
+            // ceil(finance / periods) — ปัดขึ้นเสมอ
+            const basePrincipal = Math.ceil(financeAmt / periods);
+            const baseFee = rawFee > 0 ? rawFee : 100;
+            const baseInterest = Math.max(0, baseline - basePrincipal - baseFee);
+            principal = basePrincipal;
+            interest = baseInterest;
+            fee = baseFee;
+          } else {
+            // Fallback: ถ้าไม่มีข้อมูล finance_amount ใช้ค่าจาก API
+            principal = rawPrincipal;
+            interest = rawInterest;
+            fee = rawFee;
           }
         }
 

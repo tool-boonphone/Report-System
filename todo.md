@@ -300,3 +300,8 @@ Task list:
 - [x] Backend debtDb.ts: arrears carry pass สะสมเฉพาะงวดที่ `dueDate <= today` (past+current), งวดอนาคต carry=0 ไม่ทบ
 - [x] Regression tests: 2 เคสใหม่ — future periods isArrears=false, partial-paid past period → next period isArrears=true — 63/64 pass
 - [x] Commit + push + checkpoint (commit 9a84698)
+
+### Phase 9T — แก้ principal/interest (กำจัดเศษทศนิยม)
+- [ ] แก้ debtDb.ts: เปลี่ยนจาก scale factor → ใช้สูตร principal=ceil(finance/periods), interest=amount-principal-fee
+- [ ] ต้องดึง finance_amount + installment_count จาก contracts table มาใช้ใน query
+- [ ] Tests + commit + push + checkpoint
