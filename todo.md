@@ -305,3 +305,12 @@ Task list:
 - [x] แก้ debtDb.ts: เปลี่ยนจาก scale factor → ใช้สูตร principal=ceil(finance/periods), interest=baseline-principal-fee
 - [x] ดึง finance_amount จาก contracts table มาใช้ใน query
 - [x] Tests 63/64 pass + commit 24f520d + push + checkpoint
+
+### Phase 9U — ค่าปรับ/ค่าปลดล็อก + Switch + ซ่อนปิดค่างวด
+- [x] Frontend target tab: เพิ่มคอลัมน์ค่าปรับ + ค่าปลดล็อก ใน groupCols
+- [x] Frontend target tab: เพิ่ม Switch "เฉพาะเงินต้น" ใต้ Select สถานะหนี้ (ขวาบนตาราง), default=เปิด (แสดง 0), ปิด=แสดงค่าจริง
+- [x] Frontend target tab: ยอดหนี้รวม = amount (baseline) เมื่อ switch เปิด; = amount+penalty+unlockFee เมื่อ switch ปิด (ถ้ามี)
+- [x] Frontend collected tab: ซ่อนคอลัมน์ "ปิดค่างวด" (closeInstallmentAmount) ออกจาก groupCols + cell renderer
+- [x] Export target Excel: เพิ่ม penalty + unlockFee columns
+- [x] Export collected Excel: ซ่อน closeInstallmentAmount column
+- [x] Tests + commit + push + checkpoint

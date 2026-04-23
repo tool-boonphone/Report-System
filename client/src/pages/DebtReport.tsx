@@ -17,6 +17,7 @@ import { useAppAuth } from "@/hooks/useAppAuth";
 import { trpc } from "@/lib/trpc";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Coins, Download, Search, Target } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -169,6 +170,8 @@ export default function DebtReport() {
   const [tab, setTab] = useState<"target" | "collected">("target");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("");
+  // Switch: true = เฉพาะเงินต้น (แสดง penalty/unlockFee = 0), false = รวมค่าปรับ+ค่าปลดล็อก
+  const [principalOnly, setPrincipalOnly] = useState(true);
 
   // One-shot load per tab. Query disables itself when user lacks permission.
   const targetQuery = trpc.debt.listTarget.useQuery(
@@ -368,10 +371,12 @@ export default function DebtReport() {
           { key: "principal", label: "เงินต้น", width: 90, align: "right" },
           { key: "interest", label: "ดอกเบี้ย", width: 90, align: "right" },
           { key: "fee", label: "ค่าดำเนินการ", width: 95, align: "right" },
+          { key: "penalty", label: "ค่าปรับ", width: 80, align: "right" },
+          { key: "unlockFee", label: "ค่าปลดล็อก", width: 90, align: "right" },
           { key: "amount", label: "ยอดหนี้รวม", width: 115, align: "right" },
         ]
       : [
-          // 12 columns per period as required by reference
+          // collected tab: ซ่อน closeInstallmentAmount (ซ้ำซ้อนกับ principal+interest+fee)
           { key: "period", label: "งวดที่", width: 55 },
           { key: "paidAt", label: "วันที่ชำระ", width: 100 },
           { key: "principal", label: "เงินต้น", width: 80, align: "right" },
@@ -381,7 +386,6 @@ export default function DebtReport() {
           { key: "unlockFee", label: "ค่าปลดล็อก", width: 80, align: "right" },
           { key: "discount", label: "ส่วนลด", width: 70, align: "right" },
           { key: "overpaid", label: "ชำระเกิน", width: 80, align: "right" },
-          { key: "closeInstallmentAmount", label: "ปิดค่างวด", width: 85, align: "right" },
           { key: "badDebt", label: "หนี้เสีย", width: 80, align: "right" },
           { key: "total", label: "ยอดที่ชำระรวม", width: 100, align: "right" },
         ];
@@ -434,22 +438,39 @@ export default function DebtReport() {
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
-          <Select
-            value={statusFilter || "__all__"}
-            onValueChange={(v) => setStatusFilter(v === "__all__" ? "" : v)}
-          >
-            <SelectTrigger className="w-[180px] bg-white">
-              <SelectValue placeholder="ทุกสถานะหนี้" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__all__">ทุกสถานะหนี้</SelectItem>
-              {DEBT_STATUSES.map((s) => (
-                <SelectItem key={s} value={s}>
-                  {s}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="flex flex-col gap-1.5">
+            <Select
+              value={statusFilter || "__all__"}
+              onValueChange={(v) => setStatusFilter(v === "__all__" ? "" : v)}
+            >
+              <SelectTrigger className="w-[180px] bg-white">
+                <SelectValue placeholder="ทุกสถานะหนี้" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">ทุกสถานะหนี้</SelectItem>
+                {DEBT_STATUSES.map((s) => (
+                  <SelectItem key={s} value={s}>
+                    {s}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {tab === "target" && (
+              <div className="flex items-center gap-2 px-1">
+                <Switch
+                  id="principal-only"
+                  checked={principalOnly}
+                  onCheckedChange={setPrincipalOnly}
+                />
+                <label
+                  htmlFor="principal-only"
+                  className="text-xs text-gray-600 cursor-pointer select-none"
+                >
+                  {principalOnly ? "เฉพาะเงินต้น" : "รวมค่าปรับ+ค่าปลดล็อก"}
+                </label>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Summary line */}
@@ -670,6 +691,12 @@ export default function DebtReport() {
                                 v = dimmed ? "0" : fmtMoney(inst.interest);
                               } else if (gc.key === "fee") {
                                 v = dimmed ? "0" : fmtMoney(inst.fee);
+                              } else if (gc.key === "penalty") {
+                                // principalOnly=true → แสดง 0 (ตั้งหนี้เฉพาะเงินต้น)
+                                // principalOnly=false → แสดงค่าจริง (ถ้ามี)
+                                v = dimmed ? "0" : fmtMoney(principalOnly ? 0 : (inst.penalty || 0));
+                              } else if (gc.key === "unlockFee") {
+                                v = dimmed ? "0" : fmtMoney(principalOnly ? 0 : (inst.unlockFee || 0));
                               } else if (gc.key === "amount") {
                                 if (suspended) {
                                   // แสดงลาเบลสถานะในคอลัมน์ยอดรวม
@@ -677,7 +704,11 @@ export default function DebtReport() {
                                 } else if (closed) {
                                   v = "ปิดค่างวดแล้ว";
                                 } else {
-                                  v = fmtMoney(inst.amount);
+                                  // ยอดหนี้รวม: ถ้า principalOnly=false ให้บวก penalty+unlockFee เข้าไปด้วย
+                                  const extraFees = principalOnly
+                                    ? 0
+                                    : (inst.penalty || 0) + (inst.unlockFee || 0);
+                                  v = fmtMoney(inst.amount + extraFees);
                                   if (
                                     inst.overpaidApplied > 0.009 &&
                                     inst.baselineAmount > inst.amount + 0.009

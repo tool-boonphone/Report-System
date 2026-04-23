@@ -255,6 +255,8 @@ export async function handleDebtExport(req: Request, res: Response) {
             { key: "principal", header: "เงินต้น", width: 12 },
             { key: "interest", header: "ดอกเบี้ย", width: 12 },
             { key: "fee", header: "ค่าดำเนินการ", width: 12 },
+            { key: "penalty", header: "ค่าปรับ", width: 10 },
+            { key: "unlockFee", header: "ค่าปลดล็อก", width: 12 },
             { key: "amount", header: "ยอดหนี้รวม", width: 18 },
           ]
         : [
@@ -267,7 +269,6 @@ export async function handleDebtExport(req: Request, res: Response) {
             { key: "unlockFee", header: "ค่าปลดล็อก", width: 10 },
             { key: "discount", header: "ส่วนลด", width: 10 },
             { key: "overpaid", header: "ชำระเกิน", width: 10 },
-            { key: "closeInstallmentAmount", header: "ปิดค่างวด", width: 12 },
             { key: "badDebt", header: "หนี้เสีย", width: 10 },
             { key: "total", header: "ยอดที่ชำระรวม", width: 14 },
           ];
@@ -318,6 +319,8 @@ export async function handleDebtExport(req: Request, res: Response) {
             rec[`p${p}_principal`] = Number(item.principal ?? 0);
             rec[`p${p}_interest`] = Number(item.interest ?? 0);
             rec[`p${p}_fee`] = Number(item.fee ?? 0);
+            rec[`p${p}_penalty`] = Number(item.penalty ?? 0);
+            rec[`p${p}_unlockFee`] = Number(item.unlockFee ?? 0);
             // Annotate the total column (matches UI): closed / overpaid applied.
             let amountCell: string | number = Number(item.amount ?? 0);
             if (item.isClosed) {
@@ -369,7 +372,6 @@ export async function handleDebtExport(req: Request, res: Response) {
               rec[`p${p}_unlockFee`] = Number(item.unlockFee ?? 0);
               rec[`p${p}_discount`] = Number(item.discount ?? 0);
               rec[`p${p}_overpaid`] = Number(item.overpaid ?? 0);
-              rec[`p${p}_closeInstallmentAmount`] = item.isCloseRow ? Number(item.closeInstallmentAmount ?? 0) : 0;
               rec[`p${p}_badDebt`] = Number(item.badDebt ?? 0);
               rec[`p${p}_total`] = Number(item.total ?? 0);
             }
