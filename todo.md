@@ -380,5 +380,5 @@ Task list:
 - [x] TypeScript 0 errors + commit 608026c + push + checkpoint
 
 ### Phase 9AJ — แก้ยอดหนี้รวม principalOnly=OFF
-- [ ] DebtReport.tsx: principalOnly=OFF → ยอดหนี้รวม = netAmount + penalty + unlockFee (ไม่ใช่ inst.amount ซึ่งอาจไม่รวม penalty ที่ถูก recalculate ใน arrears pass)
-- [ ] TypeScript 0 errors + commit + push + checkpoint
+- [x] DebtReport.tsx: principalOnly=OFF → ยอดหนี้รวม = netAmount + penalty + unlockFee
+- [x] TypeScript 0 errors + commit d56c42d + push + checkpoint
