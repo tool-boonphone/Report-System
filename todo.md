@@ -311,4 +311,4 @@ Task list:
 - [x] Frontend ยอดเก็บหนี้: ซ่อนคอลัมน์ "ปิดค่างวด" (closeInstallmentAmount) ออกจาก groupCols + cell renderer
 - [x] Export target: เพิ่ม penalty + unlockFee columns ใน Excel
 - [x] Export collected: ซ่อน closeInstallmentAmount ออกจาก Excel
-- [ ] Regression tests + commit + push + checkpoint
+- [x] Regression tests (63/64 pass) + commit d1b2c13 + push + checkpoint
