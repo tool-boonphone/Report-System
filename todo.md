@@ -375,6 +375,6 @@ Task list:
 - [x] TypeScript 0 errors + commit + push + checkpoint
 
 ### Phase 9AI — Style งวดอนาคต + ค่าปลดล็อก
-- [ ] DebtReport.tsx: งวดที่ยังไม่ถึงกำหนด (future period) → ตัวหนังสือสีเทา (text-gray-400)
-- [ ] DebtReport.tsx: ค่าปลดล็อก (unlockFee > 0) → เปลี่ยนจาก orange-bold เป็น text-blue-500 ไม่ตัวหนา
-- [ ] TypeScript 0 errors + commit + push + checkpoint
+- [x] DebtReport.tsx: งวดที่ยังไม่ถึงกำหนด (future period) → ตัวหนังสือสีเทา (gray-400)
+- [x] DebtReport.tsx: ค่าปลดล็อก (unlockFee > 0) → text-blue-500 ไม่ตัวหนา
+- [x] TypeScript 0 errors + commit 608026c + push + checkpoint
