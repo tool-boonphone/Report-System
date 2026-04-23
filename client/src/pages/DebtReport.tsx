@@ -400,35 +400,32 @@ export default function DebtReport() {
   return (
     <AppShell>
       <div className="max-w-[1600px] mx-auto px-3 md:px-5 py-4">
-        {/* Title + Tabs */}
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mb-3">
-          <h1 className="text-xl font-semibold">รายงานหนี้</h1>
-          <div className="flex items-center gap-2">
-            <Button
-              variant={tab === "target" ? "default" : "outline"}
-              className={
-                tab === "target"
-                  ? "bg-amber-600 hover:bg-amber-700 text-white border-amber-600"
-                  : "bg-gray-200 hover:bg-gray-300 text-gray-600 border-gray-200"
-              }
-              onClick={() => setTab("target")}
-            >
-              <Target className="w-4 h-4 mr-1.5" />
-              เป้าเก็บหนี้
-            </Button>
-            <Button
-              variant={tab === "collected" ? "default" : "outline"}
-              className={
-                tab === "collected"
-                  ? "bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-600"
-                  : "bg-gray-200 hover:bg-gray-300 text-gray-600 border-gray-200"
-              }
-              onClick={() => setTab("collected")}
-            >
-              <Coins className="w-4 h-4 mr-1.5" />
-              ยอดเก็บหนี้
-            </Button>
-          </div>
+        {/* Tabs (moved to left, replacing title) */}
+        <div className="flex items-center gap-2 mb-3">
+          <Button
+            variant={tab === "target" ? "default" : "outline"}
+            className={
+              tab === "target"
+                ? "bg-amber-600 hover:bg-amber-700 text-white border-amber-600"
+                : "bg-gray-200 hover:bg-gray-300 text-gray-600 border-gray-200"
+            }
+            onClick={() => setTab("target")}
+          >
+            <Target className="w-4 h-4 mr-1.5" />
+            เป้าเก็บหนี้
+          </Button>
+          <Button
+            variant={tab === "collected" ? "default" : "outline"}
+            className={
+              tab === "collected"
+                ? "bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-600"
+                : "bg-gray-200 hover:bg-gray-300 text-gray-600 border-gray-200"
+            }
+            onClick={() => setTab("collected")}
+          >
+            <Coins className="w-4 h-4 mr-1.5" />
+            ยอดเก็บหนี้
+          </Button>
         </div>
 
         {/* Toolbar */}
