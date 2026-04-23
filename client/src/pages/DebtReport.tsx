@@ -1,15 +1,10 @@
+import React from "react";
 import { AppShell } from "@/components/AppShell";
 import { SyncStatusBar } from "@/components/SyncStatusBar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+
 import { Spinner } from "@/components/ui/spinner";
 import { useNavActions } from "@/contexts/NavActionsContext";
 import { useSection } from "@/contexts/SectionContext";
@@ -163,6 +158,80 @@ type CollectedRow = TargetRow & { payments: PaymentCell[] };
 /* Page                                                                 */
 /* -------------------------------------------------------------------- */
 
+/* -------------------------------------------------------------------- */
+/* StatusMultiSelect component                                         */
+/* -------------------------------------------------------------------- */
+function StatusMultiSelect({
+  selected,
+  onChange,
+}: {
+  selected: Set<string>;
+  onChange: (v: Set<string>) => void;
+}) {
+  const [open, setOpen] = React.useState(false);
+  const ref = React.useRef<HTMLDivElement>(null);
+  // Close on outside click
+  React.useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+  const toggle = (s: string) => {
+    const next = new Set(selected);
+    if (next.has(s)) next.delete(s);
+    else next.add(s);
+    onChange(next);
+  };
+  const label =
+    selected.size === 0
+      ? "ทุกสถานะหนี้"
+      : selected.size === 1
+        ? Array.from(selected)[0]
+        : `${selected.size} สถานะ`;
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-2 h-9 px-3 py-2 rounded-md border border-gray-200 bg-white text-sm text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[180px] justify-between"
+      >
+        <span className="truncate">{label}</span>
+        <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+      </button>
+      {open && (
+        <div className="absolute z-50 mt-1 w-[200px] bg-white border border-gray-200 rounded-md shadow-lg py-1 max-h-72 overflow-y-auto">
+          <button
+            type="button"
+            onClick={() => onChange(new Set())}
+            className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-gray-50 text-gray-700"
+          >
+            <span className={"w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 " + (selected.size === 0 ? "bg-blue-500 border-blue-500" : "border-gray-300")}>
+              {selected.size === 0 && <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
+            </span>
+            ทุกสถานะหนี้
+          </button>
+          <div className="border-t border-gray-100 my-1" />
+          {DEBT_STATUSES.map((s) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => toggle(s)}
+              className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-gray-50 text-gray-700"
+            >
+              <span className={"w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 " + (selected.has(s) ? "bg-blue-500 border-blue-500" : "border-gray-300")}>
+                {selected.has(s) && <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
+              </span>
+              {s}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function DebtReport() {
   const { can } = useAppAuth();
   const { section } = useSection();
@@ -173,7 +242,7 @@ export default function DebtReport() {
 
   const [tab, setTab] = useState<"target" | "collected">("target");
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("");
+  const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
   // Switch: true = เฉพาะเงินต้น (แสดง penalty/unlockFee = 0 ทุกงวด), false = รวมค่าปรับ+ค่าปลดล็อก
   const [principalOnly, setPrincipalOnly] = useState(true);
   // Pinned columns: set of LEFT_COLS keys that are sticky-left
@@ -209,7 +278,7 @@ export default function DebtReport() {
   const filteredRows = useMemo(() => {
     const q = search.trim().toLowerCase();
     return activeRows.filter((r) => {
-      if (statusFilter && r.debtStatus !== statusFilter) return false;
+      if (statusFilter.size > 0 && !statusFilter.has(r.debtStatus)) return false;
       if (!q) return true;
       return (
         (r.contractNo ?? "").toLowerCase().includes(q) ||
@@ -273,7 +342,7 @@ export default function DebtReport() {
       if (!section) return;
       const params = new URLSearchParams({ section, variant: tab });
       if (search) params.set("search", search);
-      if (statusFilter) params.set("status", statusFilter);
+      if (statusFilter.size > 0) params.set("status", Array.from(statusFilter).join(","));
       const toastId = toast.loading("กำลังเตรียมไฟล์ Excel…");
       try {
         const resp = await fetch(`/api/export/debt?${params.toString()}`, {
@@ -459,22 +528,11 @@ export default function DebtReport() {
             />
           </div>
           <div className="flex items-center gap-2">
-            <Select
-              value={statusFilter || "__all__"}
-              onValueChange={(v) => setStatusFilter(v === "__all__" ? "" : v)}
-            >
-              <SelectTrigger className="w-[180px] bg-white">
-                <SelectValue placeholder="ทุกสถานะหนี้" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__all__">ทุกสถานะหนี้</SelectItem>
-                {DEBT_STATUSES.map((s) => (
-                  <SelectItem key={s} value={s}>
-                    {s}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {/* Multi-select status filter */}
+            <StatusMultiSelect
+              selected={statusFilter}
+              onChange={setStatusFilter}
+            />
             {tab === "target" && (
               <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-md px-3 py-1.5">
                 <Switch
