@@ -333,3 +333,9 @@ Task list:
 ### Phase 9Y — แก้ isArrears per-period
 - [x] debtDb.ts: isArrears = per-period เฉพาะงวดที่มี penalty_due > 0 || unlock_fee_due > 0 จริงๆ และ dueDate <= today (past/current only)
 - [x] TypeScript 0 errors + tests 63/64 pass + commit c815d75 + push + checkpoint
+
+### Phase 9Z — isArrears งวดปัจจุบัน + penalty carry + isClosed display fix
+- [ ] debtDb.ts: isArrears = เฉพาะงวดปัจจุบัน (dueDate ใกล้ที่สุดที่ยังไม่จ่ายครบ) เท่านั้น
+- [ ] debtDb.ts: penalty ในงวดปัจจุบัน = รวมค่าปรับคงค้างทุกงวดที่ผ่านมา (sum of all penalty_due)
+- [ ] DebtReport.tsx: isClosed display = สีเทา + ตัวเอียง + 0 ทุก column + "ปิดค่างวดแล้ว" ที่ยอดหนี้รวม (เหมือน isSuspended)
+- [ ] TypeScript 0 errors + tests + commit + push + checkpoint

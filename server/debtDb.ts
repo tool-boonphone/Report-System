@@ -904,28 +904,56 @@ export async function listDebtTarget(params: { section: SectionKey }) {
       })
       .sort((a, b) => (a.period ?? 0) - (b.period ?? 0));
 
-    // --- Arrears pass (Phase 9X) ---
-    // isArrears is set from API *_due fields (penalty/unlockFee) in the map above.
-    // Additionally: if a past/current period has partial payment (paid > 0 but < amount),
-    // the NEXT past/current period must also be flagged isArrears=true.
+    // --- Arrears pass (Phase 9Z) ---
+    // กฎ:
+    //   1. isArrears = เฉพาะ "งวดปัจจุบัน" เท่านั้น
+    //      งวดปัจจุบัน = งวดแรก (period ต่ำสุด) ที่ dueDate <= today
+    //                    และ paid < amount (ยังไม่จ่ายครบ)
+    //                    และ !isClosed && !isSuspended
+    //   2. penalty ของงวดปัจจุบัน = sum penalty ของทุกงวดที่ dueDate <= today
+    //      (รวมค่าปรับคงค้างทุกงวดที่ผ่านมา)
+    //   3. unlockFee ของงวดปัจจุบัน = max unlockFee ของทุกงวดที่ dueDate <= today
+    //      (ค่าปลดล็อกไม่ทบ แต่ค้างข้ามงวดได้)
     {
       const todayMs = Date.now();
-      for (let i = 0; i < baseInstallments.length - 1; i++) {
-        const cur = baseInstallments[i];
-        const next = baseInstallments[i + 1];
-        if (!cur.dueDate || !next.dueDate) continue;
-        const curDueMs = Date.parse(`${cur.dueDate}T00:00:00`);
-        const nextDueMs = Date.parse(`${next.dueDate}T00:00:00`);
-        // Both must be past/current periods
-        if (curDueMs > todayMs || nextDueMs > todayMs) continue;
-        if (cur.isClosed || cur.isSuspended) continue;
-        if (next.isClosed || next.isSuspended) continue;
-        // Partial payment on current period
-        const paid = Number(cur.paid ?? 0);
-        const amount = Number(cur.amount ?? 0);
-        if (paid > 0.01 && paid < amount - 0.5) {
-          next.isArrears = true;
-        }
+      // Reset all isArrears (was set per-period in map above, now we re-derive)
+      for (const inst of baseInstallments) {
+        inst.isArrears = false;
+      }
+      // Find the "current period": first unpaid past/current period (lowest period no)
+      const currentPeriod = baseInstallments.find((inst) => {
+        if (inst.isClosed || inst.isSuspended) return false;
+        if (!inst.dueDate) return false;
+        const dueMs = Date.parse(`${inst.dueDate}T00:00:00`);
+        if (dueMs > todayMs) return false; // future period
+        const paid = Number(inst.paid ?? 0);
+        const amount = Number(inst.amount ?? 0);
+        return paid < amount - 0.5; // not fully paid
+      });
+      if (currentPeriod) {
+        // Sum penalty from all past/current periods (dueDate <= today)
+        const totalPenalty = baseInstallments.reduce((sum, inst) => {
+          if (inst.isClosed || inst.isSuspended) return sum;
+          if (!inst.dueDate) return sum;
+          const dueMs = Date.parse(`${inst.dueDate}T00:00:00`);
+          if (dueMs > todayMs) return sum;
+          return sum + Number(inst.penalty ?? 0);
+        }, 0);
+        // Max unlockFee from all past/current periods (ค่าปลดล็อกไม่ทบ)
+        const totalUnlockFee = baseInstallments.reduce((max, inst) => {
+          if (inst.isClosed || inst.isSuspended) return max;
+          if (!inst.dueDate) return max;
+          const dueMs = Date.parse(`${inst.dueDate}T00:00:00`);
+          if (dueMs > todayMs) return max;
+          return Math.max(max, Number(inst.unlockFee ?? 0));
+        }, 0);
+        // Update current period: set isArrears + accumulated penalty/unlockFee
+        currentPeriod.isArrears = true;
+        currentPeriod.penalty = totalPenalty;
+        currentPeriod.unlockFee = totalUnlockFee;
+        // Recalculate amount for current period to include accumulated charges
+        const baseNet = currentPeriod.principal + currentPeriod.interest + currentPeriod.fee;
+        currentPeriod.amount = baseNet + totalPenalty + totalUnlockFee;
       }
     }
 

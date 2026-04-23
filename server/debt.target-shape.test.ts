@@ -459,44 +459,43 @@ describe("listDebtTarget — arrears carry: past/current only (Phase 9P)", () =>
   );
 
   it(
-    "past/current periods with partial payment must have isArrears=true on the NEXT past/current period",
+    "Phase 9Z: isArrears=true only on the first unpaid past/current period (current period)",
     async () => {
-      // Find a contract where at least one past period has paid < amount (partial).
-      // The following past/current period must have isArrears=true.
+      // Phase 9Z rule: isArrears is set ONLY on the "current period" =
+      // the first (lowest period no) past/current period that is not fully paid.
+      // All other periods (past paid, future) must have isArrears=false.
       const { rows } = await listDebtTarget({ section: "Boonphone" });
       if (rows.length < 5) return;
 
       const todayMs = Date.now();
-      let found = false;
-      outer: for (const r of rows) {
+      let checked = 0;
+      for (const r of rows) {
         const insts = ((r.installments ?? []) as Array<any>)
-          .filter((c) => c.dueDate)
+          .filter((c) => c.dueDate && !c.isClosed && !c.isSuspended)
           .sort((a, b) => (a.period ?? 0) - (b.period ?? 0));
 
-        for (let i = 0; i < insts.length - 1; i++) {
-          const cur = insts[i];
-          const next = insts[i + 1];
-          const curDueMs = Date.parse(`${cur.dueDate}T00:00:00`);
-          const nextDueMs = Date.parse(`${next.dueDate}T00:00:00`);
+        // Find the current period: first unpaid past/current period
+        const currentPeriodIdx = insts.findIndex((inst) => {
+          const dueMs = Date.parse(`${inst.dueDate}T00:00:00`);
+          if (dueMs > todayMs) return false;
+          const paid = Number(inst.paid ?? 0);
+          const amount = Number(inst.amount ?? 0);
+          return paid < amount - 0.5;
+        });
+        if (currentPeriodIdx === -1) continue; // no unpaid past period
 
-          // Both must be past/current periods.
-          if (curDueMs > todayMs || nextDueMs > todayMs) continue;
-          if (cur.isClosed || cur.isSuspended) continue;
-          if (next.isClosed || next.isSuspended) continue;
-
-          // Current period partially paid (paid > 0 but < amount - 0.5).
-          const paid = Number(cur.paid ?? 0);
-          const amount = Number(cur.amount ?? 0);
-          if (paid > 0.01 && paid < amount - 0.5) {
-            // Next period should have isArrears=true.
-            expect(next.isArrears).toBe(true);
-            found = true;
-            break outer;
-          }
+        // The current period must have isArrears=true
+        expect(insts[currentPeriodIdx].isArrears).toBe(true);
+        // All other periods must have isArrears=false
+        for (let i = 0; i < insts.length; i++) {
+          if (i === currentPeriodIdx) continue;
+          expect(insts[i].isArrears).toBe(false);
         }
+        checked++;
+        if (checked >= 5) break; // check first 5 contracts with arrears
       }
-      // If no partial-payment contract found, skip gracefully.
-      if (!found) return;
+      // If no contract with unpaid past period found, skip gracefully.
+      if (checked === 0) return;
     },
     30_000,
   );
