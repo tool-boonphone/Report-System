@@ -438,7 +438,7 @@ export default function DebtReport() {
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
-          <div className="flex flex-col gap-1.5">
+          <div className="flex items-center gap-2">
             <Select
               value={statusFilter || "__all__"}
               onValueChange={(v) => setStatusFilter(v === "__all__" ? "" : v)}
@@ -456,7 +456,7 @@ export default function DebtReport() {
               </SelectContent>
             </Select>
             {tab === "target" && (
-              <div className="flex items-center gap-2 px-1">
+              <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-md px-3 py-1.5">
                 <Switch
                   id="principal-only"
                   checked={principalOnly}
@@ -464,9 +464,9 @@ export default function DebtReport() {
                 />
                 <label
                   htmlFor="principal-only"
-                  className="text-xs text-gray-600 cursor-pointer select-none"
+                  className="text-xs text-gray-600 cursor-pointer select-none whitespace-nowrap"
                 >
-                  {principalOnly ? "เฉพาะเงินต้น" : "รวมค่าปรับ+ค่าปลดล็อก"}
+                  เฉพาะเงินต้น
                 </label>
               </div>
             )}
@@ -694,9 +694,9 @@ export default function DebtReport() {
                               } else if (gc.key === "penalty") {
                                 // principalOnly=true → แสดง 0 (ตั้งหนี้เฉพาะเงินต้น)
                                 // principalOnly=false → แสดงค่าจริง (ถ้ามี)
-                                v = dimmed ? "0" : fmtMoney(principalOnly ? 0 : (inst.penalty || 0));
+                                v = dimmed ? "0" : fmtMoney(principalOnly ? 0 : (inst.penalty ?? 0));
                               } else if (gc.key === "unlockFee") {
-                                v = dimmed ? "0" : fmtMoney(principalOnly ? 0 : (inst.unlockFee || 0));
+                                v = dimmed ? "0" : fmtMoney(principalOnly ? 0 : (inst.unlockFee ?? 0));
                               } else if (gc.key === "amount") {
                                 if (suspended) {
                                   // แสดงลาเบลสถานะในคอลัมน์ยอดรวม
@@ -704,11 +704,15 @@ export default function DebtReport() {
                                 } else if (closed) {
                                   v = "ปิดค่างวดแล้ว";
                                 } else {
-                                  // ยอดหนี้รวม: ถ้า principalOnly=false ให้บวก penalty+unlockFee เข้าไปด้วย
-                                  const extraFees = principalOnly
-                                    ? 0
-                                    : (inst.penalty || 0) + (inst.unlockFee || 0);
-                                  v = fmtMoney(inst.amount + extraFees);
+                                  // inst.amount จาก API รวม penalty+unlockFee อยู่แล้ว
+                                  // principalOnly=true: ตัด penalty+unlockFee ออก → แสดงเฉพาะเงินต้น+ดอก+ค่าดำเนินการ
+                                  // principalOnly=false: ใช้ inst.amount ตรงๆ (รวมทุกอย่างแล้ว)
+                                  const penalty = inst.penalty ?? 0;
+                                  const unlockFee = inst.unlockFee ?? 0;
+                                  const displayAmount = principalOnly
+                                    ? Math.max(0, inst.amount - penalty - unlockFee)
+                                    : inst.amount;
+                                  v = fmtMoney(displayAmount);
                                   if (
                                     inst.overpaidApplied > 0.009 &&
                                     inst.baselineAmount > inst.amount + 0.009
