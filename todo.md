@@ -386,3 +386,14 @@ Task list:
 ### Phase 9AK — แก้ระงับสัญญา row styling
 - [x] debtDb.ts: Phase 9AK fallback — contract.status=ระงับสัญญา แต่ไม่มี installment ที่ status_code=ระงับสัญญา → treat ทุก period เป็น suspended จาก period 1
 - [x] TypeScript 0 errors + commit 2db4443 + push + checkpoint
+
+### Phase 10 — UI/UX Improvements (9 items)
+- [ ] P10-1: เพิ่มสิทธิ์ "การสลับ Section" ไว้บนสุดของรายการสิทธิ์ใน UserManagement
+- [ ] P10-2: Section switcher icon ที่มุมซ้ายบน — คลิกแล้วเห็น icon อีก Section เลือกได้เลย ไม่ต้องออกมาหน้าเลือก Section
+- [ ] P10-3: ย้ายปุ่ม เป้าเก็บหนี้/ยอดเก็บหนี้ มาซ้าย แทนหัวข้อ รายงานหนี้ แล้วเอาหัวข้อออก
+- [ ] P10-4: ไอคอน sticky column toggle ที่หัวตาราง (วันที่อนุมัติ/เลขที่สัญญา/ชื่อ/เบอร์/ยอดผ่อนรวม/งวดผ่อน/ผ่อนงวดละ/สถานะหนี้/เกินกำหนด)
+- [ ] P10-5: Multi-select status filter ในทั้ง 2 tab (เป้าเก็บหนี้ + ยอดเก็บหนี้)
+- [ ] P10-6: ย้ายปุ่ม Export ในหน้าข้อมูลสัญญา มาขวาสุดแนวเดียวกับค้นหา เปลี่ยนชื่อเป็น Export Excel สีเขียว
+- [ ] P10-7: ย้ายปุ่ม Export ในหน้ารายงานหนี้ มาขวาสุดแนวเดียวกับปุ่ม tab เปลี่ยนชื่อเป็น Export Excel สีเขียว
+- [ ] P10-8: Collapsible filter panel ในหน้าข้อมูลสัญญา (หุบ/ขยาย) ตัวกรองสัมพันธ์กันทุกคอลัมน์
+- [ ] P10-9: ยกเลิกการจำกัดความกว้างตาราง ให้ปล่อยตามขนาดหน้าจอ
