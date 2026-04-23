@@ -315,7 +315,7 @@ Task list:
 
 ### Phase 9R — ย้าย toggle เฉพาะเงินต้น + ปรับสูตรยอดหนี้รวม
 
-- [ ] ย้าย toggle ออกจาก tier-1 header → ไปไว้ใต้ Select สถานะหนี้ (toolbar area) เปลี่ยนเป็น Switch component, default = true (เปิด = รวมค่าปรับ+ค่าปลดล็อก)
-- [ ] ปรับ logic: เมื่อ principalOnly=false (เปิด) → amount = principal+interest+fee+penalty+unlockFee; เมื่อ principalOnly=true (ปิด) → amount = principal+interest+fee เท่านั้น
-- [ ] ลบ Checkbox ออกจาก tier-1 header ของตาราง
-- [ ] commit + push + checkpoint
+- [x] ย้าย toggle ออกจาก tier-1 header → ไปไว้ใต้ Select สถานะหนี้ (toolbar area) เปลี่ยนเป็น Switch component, default = true (เปิด = รวมค่าปรับ+ค่าปลดล็อก)
+- [x] ปรับ logic: เมื่อ principalOnly=false (เปิด) → amount = principal+interest+fee+penalty+unlockFee; เมื่อ principalOnly=true (ปิด) → amount = principal+interest+fee เท่านั้น
+- [x] ลบ Checkbox ออกจาก tier-1 header ของตาราง
+- [x] commit 71081ab + push + checkpoint
