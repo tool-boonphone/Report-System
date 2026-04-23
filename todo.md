@@ -331,5 +331,5 @@ Task list:
 - [x] Tests 63/64 pass + commit 1e8ddfa + push + checkpoint
 
 ### Phase 9Y — แก้ isArrears per-period
-- [ ] debtDb.ts: isArrears = per-period เฉพาะงวดที่มี penalty_due > 0 || unlock_fee_due > 0 จริงๆ ไม่ใช่ทุกงวดของสัญญา
-- [ ] TypeScript 0 errors + tests + commit + push + checkpoint
+- [x] debtDb.ts: isArrears = per-period เฉพาะงวดที่มี penalty_due > 0 || unlock_fee_due > 0 จริงๆ และ dueDate <= today (past/current only)
+- [x] TypeScript 0 errors + tests 63/64 pass + commit c815d75 + push + checkpoint
