@@ -20,6 +20,7 @@ import {
   type ContractSort,
 } from "../contractsDb";
 import { listDebtTarget, listDebtCollected } from "../debtDb";
+import { getBadDebtSummary } from "../badDebtDb";
 
 function parseCookies(header: string | undefined): Record<string, string> {
   if (!header) return {};
@@ -385,6 +386,121 @@ export async function handleDebtExport(req: Request, res: Response) {
     await wb.commit();
   } catch (err) {
     console.error("[export] debt failed:", err);
+    if (!res.headersSent) {
+      res.status(500).json({ message: "Export failed" });
+    } else {
+      res.end();
+    }
+  }
+}
+
+/* -------------------------------------------------------------------- */
+/* Bad Debt Summary Export                                              */
+/* -------------------------------------------------------------------- */
+
+/**
+ * GET /api/export/bad-debt?section=Fastfone365&approveMonth=2024-10&search=...
+ *
+ * ดาวน์โหลดตารางสรุปหนี้เสีย (กำไร/ขาดทุน) เป็น .xlsx
+ * ต้องมี permission: bad_debt_summary / view
+ */
+export async function handleBadDebtExport(req: Request, res: Response) {
+  try {
+    const sid = parseCookies(req.headers.cookie)[APP_SESSION_COOKIE];
+    const appUser = sid ? await getUserFromSession(sid) : null;
+    if (!appUser) {
+      res.status(401).json({ message: "Please login (10001)" });
+      return;
+    }
+    if (!checkPermission(appUser, "bad_debt_summary", "view")) {
+      res.status(403).json({ message: "ไม่มีสิทธิ์ Export สรุปหนี้เสีย" });
+      return;
+    }
+    const sectionRaw = String(req.query.section ?? "");
+    if (!SECTIONS.includes(sectionRaw as SectionKey)) {
+      res.status(400).json({ message: "ต้องระบุ section" });
+      return;
+    }
+    const section = sectionRaw as SectionKey;
+    const approveMonth = req.query.approveMonth
+      ? String(req.query.approveMonth)
+      : undefined;
+    const search = req.query.search ? String(req.query.search).trim() : "";
+
+    // 1. Load rows
+    const { rows } = await getBadDebtSummary({ section, approveMonth });
+
+    // 2. Apply search filter (same as UI)
+    const filtered = search
+      ? rows.filter(
+          (r) =>
+            matchesSearch(r.contractNo, search) ||
+            matchesSearch(r.customerName, search) ||
+            matchesSearch(r.phone, search),
+        )
+      : rows;
+
+    // 3. Stream Excel
+    const fileName = `bad_debt_summary_${section}_${new Date()
+      .toISOString()
+      .slice(0, 10)}.xlsx`;
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    );
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${fileName}"`,
+    );
+
+    const wb = new ExcelJS.stream.xlsx.WorkbookWriter({ stream: res });
+    const ws = wb.addWorksheet("สรุปหนี้เสีย");
+
+    ws.columns = [
+      { header: "#", key: "seq", width: 6 },
+      { header: "เลขที่สัญญา", key: "contractNo", width: 24 },
+      { header: "ชื่อลูกค้า", key: "customerName", width: 24 },
+      { header: "โทรศัพท์", key: "phone", width: 14 },
+      { header: "วันอนุมัติ", key: "approveDate", width: 14 },
+      { header: "รุ่น", key: "model", width: 20 },
+      { header: "ราคาขาย", key: "salePrice", width: 14 },
+      { header: "ยอดจัดไฟแนนซ์", key: "financeAmount", width: 16 },
+      { header: "ยอดเก็บได้", key: "totalPaid", width: 14 },
+      { header: "กำไร/ขาดทุน", key: "profitLoss", width: 14 },
+      { header: "งวด/ชำระแล้ว", key: "installments", width: 14 },
+      { header: "วันที่หนี้เสีย", key: "badDebtDate", width: 14 },
+    ];
+
+    ws.getRow(1).font = { bold: true };
+    ws.getRow(1).fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FFD9D9D9" },
+    };
+    ws.getRow(1).commit();
+
+    let seq = 1;
+    for (const r of filtered) {
+      ws.addRow({
+        seq: seq++,
+        contractNo: r.contractNo ?? "",
+        customerName: r.customerName ?? "",
+        phone: r.phone ?? "",
+        approveDate: r.approveDate ? r.approveDate.slice(0, 10) : "",
+        model: r.model ?? "-",
+        salePrice: r.salePrice ?? "",
+        financeAmount: r.financeAmount,
+        totalPaid: r.totalPaid,
+        profitLoss: r.profitLoss,
+        installments: `${r.paidInstallments}/${r.installmentCount ?? "-"}`,
+        badDebtDate: r.badDebtDate ? r.badDebtDate.slice(0, 10) : "",
+      }).commit();
+    }
+
+    ws.commit();
+    await wb.commit();
+  } catch (err) {
+    console.error("[export] bad-debt failed:", err);
     if (!res.headersSent) {
       res.status(500).json({ message: "Export failed" });
     } else {

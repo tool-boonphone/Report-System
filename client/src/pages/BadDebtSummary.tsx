@@ -7,7 +7,8 @@
  *   - ตารางรายสัญญา (เรียงจากขาดทุนมากสุด → กำไรมากสุด)
  *   - Filter: ค้นหาชื่อ/สัญญา, กรองตาม approve month
  */
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect, useCallback } from "react";
+import { toast } from "sonner";
 import {
   AlertTriangle,
   Banknote,
@@ -20,6 +21,8 @@ import {
   Wallet,
 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
+import { useNavActions } from "@/contexts/NavActionsContext";
+import { Download } from "lucide-react";
 import { useAppAuth } from "@/hooks/useAppAuth";
 import { useSection } from "@/contexts/SectionContext";
 import { trpc } from "@/lib/trpc";
@@ -55,6 +58,7 @@ export default function BadDebtSummary() {
   const { can } = useAppAuth();
   const { section } = useSection();
   const canView = can("bad_debt_summary", "view");
+  const { setActions } = useNavActions();
 
   const [search, setSearch] = useState("");
   const [approveMonthFilter, setApproveMonthFilter] = useState<string>("");
@@ -163,6 +167,53 @@ export default function BadDebtSummary() {
       <ChevronDown className="w-3 h-3" />
     );
   };
+
+  /* ── export ── */
+  const handleExport = useCallback(async () => {
+    if (!section) return;
+    const params = new URLSearchParams({ section });
+    if (search) params.set("search", search);
+    if (approveMonthFilter) params.set("approveMonth", approveMonthFilter);
+    const toastId = toast.loading("กำลังเตรียมไฟล์ Excel…");
+    try {
+      const resp = await fetch(`/api/export/bad-debt?${params.toString()}`, {
+        credentials: "include",
+      });
+      if (!resp.ok) {
+        const { message } = await resp.json().catch(() => ({ message: "Export failed" }));
+        toast.error(message, { id: toastId });
+        return;
+      }
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `bad_debt_summary_${section}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast.success("ดาวน์โหลดสำเร็จ", { id: toastId });
+    } catch (err) {
+      toast.error((err as Error).message ?? "Export failed", { id: toastId });
+    }
+  }, [section, search, approveMonthFilter]);
+
+  /* ── inject export button into TopNav ── */
+  useEffect(() => {
+    if (!canView) return;
+    setActions(
+      <button
+        onClick={handleExport}
+        className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md border border-gray-300 bg-white hover:bg-gray-50 transition-colors"
+        title="Export Excel"
+      >
+        <Download className="w-4 h-4" />
+        <span className="hidden sm:inline">Export Excel</span>
+      </button>,
+    );
+    return () => setActions(null);
+  }, [setActions, canView, handleExport]);
 
   /* ── render ── */
   if (!canView) {

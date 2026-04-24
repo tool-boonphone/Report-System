@@ -491,3 +491,9 @@ Task list:
 - [x] Server-side in-memory cache (TTL 5 นาที) — สร้าง `server/debtCache.ts` + เรียกใน `server/routers/debt.ts`
 - [x] Cache invalidation หลัง sync เสร็จ — `invalidateDebtCache(section)` ใน `server/sync/runner.ts`
 - [x] Virtual scrolling ใน UI — มีอยู่แล้ว (@tanstack/react-virtual, overscan: 10) ไม่ต้องเพิ่ม
+
+### Phase 22 — Performance + UX + Export Excel
+
+- [x] Pre-warm cache: สร้าง `server/debtPrewarm.ts` + เรียกใน `server/_core/index.ts` (non-blocking, background setTimeout 2s)
+- [x] Progress indicator: elapsed time counter + ข้อความแจ้งว่าครั้งถัดไปจะเร็วขึ้น ใน DebtReport.tsx loading state
+- [x] Export Excel: ปุ่ม Export Excel ใน BadDebtSummary TopNav + route `/api/export/bad-debt` + `handleBadDebtExport` ใน exportExcel.ts

@@ -385,6 +385,21 @@ export default function DebtReport() {
   const isLoading =
     tab === "target" ? targetQuery.isLoading : collectedQuery.isLoading;
 
+  // Track elapsed time for first-load progress indicator
+  const [elapsedSec, setElapsedSec] = useState(0);
+  useEffect(() => {
+    if (!isLoading) {
+      setElapsedSec(0);
+      return;
+    }
+    const t0 = Date.now();
+    setElapsedSec(0);
+    const interval = setInterval(() => {
+      setElapsedSec(Math.floor((Date.now() - t0) / 1000));
+    }, 500);
+    return () => clearInterval(interval);
+  }, [isLoading]);
+
   const activeRows: (TargetRow | CollectedRow)[] =
     (tab === "target"
       ? (targetQuery.data?.rows as TargetRow[])
@@ -871,8 +886,29 @@ export default function DebtReport() {
 
         {/* Table */}
         {isLoading ? (
-          <div className="flex items-center justify-center py-20">
+          <div className="flex flex-col items-center justify-center py-20 gap-4">
             <Spinner />
+            <div className="text-center">
+              <p className="text-sm font-medium text-gray-700">
+                กำลังโหลดข้อมูล{elapsedSec >= 3 ? " (ครั้งแรก)" : ""}...
+              </p>
+              {elapsedSec >= 3 && (
+                <p className="text-xs text-gray-500 mt-1">
+                  ใช้เวลา {elapsedSec} วินาที — ครั้งถัดไปจะเร็วขึ้นมาก
+                </p>
+              )}
+              {elapsedSec >= 3 && (
+                <div className="mt-3 w-64 bg-gray-200 rounded-full h-1.5 overflow-hidden">
+                  <div
+                    className="h-full rounded-full transition-all duration-500"
+                    style={{
+                      width: `${Math.min(95, (elapsedSec / 10) * 100)}%`,
+                      background: tab === "target" ? "#b45309" : "#047857",
+                    }}
+                  />
+                </div>
+              )}
+            </div>
           </div>
         ) : (
           <div

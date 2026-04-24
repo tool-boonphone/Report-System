@@ -7,8 +7,9 @@ import { registerOAuthRoutes } from "./oauth";
 import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
 import { seedSuperAdmin } from "../authDb";
-import { handleContractsExport, handleDebtExport } from "../routers/exportExcel";
+import { handleContractsExport, handleDebtExport, handleBadDebtExport } from "../routers/exportExcel";
 import { startScheduler } from "../sync/scheduler";
+import { prewarmDebtCache } from "../debtPrewarm";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 
@@ -42,6 +43,7 @@ async function startServer() {
   // Excel export (streams large files so it's outside of tRPC)
   app.get("/api/export/contracts", handleContractsExport);
   app.get("/api/export/debt", handleDebtExport);
+  app.get("/api/export/bad-debt", handleBadDebtExport);
   // tRPC API
   app.use(
     "/api/trpc",
@@ -76,6 +78,10 @@ async function startServer() {
     } catch (err) {
       console.error("[startup] startScheduler failed:", err);
     }
+    // Pre-warm debt cache in background (non-blocking, does not crash server on failure)
+    prewarmDebtCache().catch((err) =>
+      console.warn("[startup] prewarmDebtCache failed:", err)
+    );
   });
 }
 
