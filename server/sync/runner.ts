@@ -8,6 +8,7 @@
  */
 
 import { buildClientFromEnv, PartnerClient, PartnerApiError } from "../api/partnerClient";
+import { deriveBadDebtDate } from "../debtDb";
 import {
   mapContractListItem,
   mapContractDetailOverrides,
@@ -40,6 +41,7 @@ export const SYNC_STAGES = [
   "contracts",
   "installments",
   "payments",
+  "bad_debt",
 ] as const;
 export type SyncStage = (typeof SYNC_STAGES)[number];
 
@@ -207,6 +209,10 @@ async function doSync(
     setStage(section, 4);
     const payRows = await syncPayments(client, section);
     overallRows += payRows;
+
+    // 6) Compute & store bad-debt summary per contract
+    setStage(section, 5);
+    await computeAndStoreBadDebt(section);
 
     await finishSyncLog({
       id: overall.id,
@@ -460,27 +466,24 @@ async function syncPayments(
   });
   let rowCount = 0;
   try {
-    // Fastfone365 has no standalone payment endpoint.
-    // Payment data is derived from paid installments already stored in DB.
-    if (section === "Fastfone365") {
-      rowCount = await syncPaymentsFromInstallments(section);
-    } else {
-      // Boonphone: use the dedicated payment bulk endpoint.
-      const buffer: any[] = [];
-      await client.forEachPage<any>(
-        "payment",
-        (d) => d?.transactions,
-        { action: "transactions" },
-        async (items) => {
-          for (const it of items) buffer.push(mapPayment(section, it));
-          if (buffer.length >= 1000) {
-            rowCount += await upsertPayments(buffer.splice(0, buffer.length));
-          }
-        },
-        500,
-      );
-      if (buffer.length) rowCount += await upsertPayments(buffer);
-    }
+    // Both Boonphone and Fastfone365 use the same payment transactions endpoint.
+    // FF365 was previously using syncPaymentsFromInstallments (synthetic payments)
+    // but FF365 actually has /api/v1/payment?action=transactions with full field data
+    // (principal_paid, interest_paid, fee_paid, penalty_paid, bad_debt_amount, etc.)
+    const buffer: any[] = [];
+    await client.forEachPage<any>(
+      "payment",
+      (d) => d?.transactions,
+      { action: "transactions" },
+      async (items) => {
+        for (const it of items) buffer.push(mapPayment(section, it));
+        if (buffer.length >= 1000) {
+          rowCount += await upsertPayments(buffer.splice(0, buffer.length));
+        }
+      },
+      500,
+    );
+    if (buffer.length) rowCount += await upsertPayments(buffer);
     await finishSyncLog({ id: log.id, status: "success", rowCount });
     return rowCount;
   } catch (err: any) {
@@ -709,5 +712,215 @@ async function syncPaymentsFromInstallments(
   return await upsertPayments(buffer);
 }
 
+/**
+ * Compute and persist bad-debt summary columns on contracts table.
+ *
+ * Business rules (confirmed 2026-04-24):
+ *   1. contract.status = "หนี้เสีย" → bad-debt confirmed (device sold, applies to both Boonphone & FF365)
+ *   2. contract.status = "ยกเลิกสัญญา" (FF365 admin error) + payment on same date as status-change → treat as bad-debt
+ *   3. contract.status = "ระงับสัญญา" → device returned but NOT sold yet → no bad-debt amount
+ *
+ * Stores:
+ *   bad_debt_amount       = SUM of all bad-debt payments (total_paid_amount where isBadDebt)
+ *   bad_debt_date         = YYYY-MM-DD of the latest bad-debt payment (deriveBadDebtDate)
+ *   suspended_from_period = first installment period with suspend/cancel status code
+ */
+async function computeAndStoreBadDebt(section: SectionKey): Promise<void> {
+  const { getDb } = await import("../db");
+  const { contracts, installments, paymentTransactions } = await import("../../drizzle/schema");
+  const { and, eq, or, sql } = await import("drizzle-orm");
+  const db = await getDb();
+  if (!db) return;
+
+  const isFF365 = section === "Fastfone365";
+
+  // ---- 1) Fetch bad-debt contracts ----
+  // "หนี้เสีย" = confirmed bad-debt (device sold) for both sections.
+  // "ยกเลิกสัญญา" = FF365 admin-error case (may have bad-debt payment on same date).
+  const badDebtStatuses = isFF365
+    ? ["หนี้เสีย", "ยกเลิกสัญญา"]
+    : ["หนี้เสีย"];
+
+  const targetContracts = await db
+    .select({
+      externalId: contracts.externalId,
+      status: contracts.status,
+    })
+    .from(contracts)
+    .where(
+      and(
+        eq(contracts.section, section),
+        or(
+          eq(contracts.status, "หนี้เสีย"),
+          ...(isFF365 ? [eq(contracts.status, "ยกเลิกสัญญา")] : []),
+        ),
+      ),
+    );
+
+  if (targetContracts.length === 0) return;
+
+  // ---- 2) Fetch installments for these contracts ----
+  const extIds = targetContracts.map((c) => c.externalId);
+  // Process in chunks to avoid huge IN() clauses
+  const CHUNK = 500;
+
+  // Suspend codes per section
+  const suspendCodes = isFF365
+    ? ["ระงับสัญญา", "ยกเลิกสัญญา"]
+    : ["ระงับสัญญา", "หนี้เสีย"];
+
+  // Map: externalId → { suspendedFromPeriod, suspendedAt }
+  const suspendMap = new Map<string, { period: number; date: string | null }>();
+
+  for (let i = 0; i < extIds.length; i += CHUNK) {
+    const slice = extIds.slice(i, i + CHUNK);
+    const inClause = slice.map((id) => sql`${id}`).reduce((acc, cur, idx) => idx === 0 ? cur : sql`${acc}, ${cur}`);
+    const instRows = await db.execute(sql`
+      SELECT contract_external_id,
+             period,
+             due_date,
+             JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.installment_status_code')) AS status_code
+        FROM ${installments}
+       WHERE section = ${section}
+         AND contract_external_id IN (${inClause})
+       ORDER BY contract_external_id, period
+    `);
+    const rows: any[] = (instRows as any)[0] ?? instRows;
+    for (const r of rows) {
+      const extId = String(r.contract_external_id ?? "");
+      if (!extId) continue;
+      if (suspendMap.has(extId)) continue; // already found first suspended period
+      const code = r.status_code ?? "";
+      if (suspendCodes.includes(code)) {
+        suspendMap.set(extId, {
+          period: Number(r.period ?? 1),
+          date: r.due_date ?? null,
+        });
+      }
+    }
+    // Fallback: contracts with no matching installment status → period 1
+    for (const extId of slice) {
+      if (!suspendMap.has(extId)) {
+        // find period 1 due_date from rows
+        const p1 = rows.find((r) => String(r.contract_external_id) === extId && Number(r.period) === 1);
+        suspendMap.set(extId, { period: 1, date: p1?.due_date ?? null });
+      }
+    }
+  }
+
+  // ---- 3) Fetch payments for these contracts ----
+  // Map: externalId → Array<{ payment_external_id, paid_at, total_paid_amount, ff_status }>
+  // payment_external_id: numeric string = real payment from API; "pay-*" prefix = synthetic from installments
+  // real payments have total_paid_amount from raw_json; synthetic payments have null
+  const payMap = new Map<string, Array<{ payment_external_id: string; paid_at: string | null; total_paid_amount: number; ff_status: string | null }>>();
+
+  for (let i = 0; i < extIds.length; i += CHUNK) {
+    const slice = extIds.slice(i, i + CHUNK);
+    const inClause2 = slice.map((id) => sql`${id}`).reduce((acc, cur, idx) => idx === 0 ? cur : sql`${acc}, ${cur}`);
+    const payRows = await db.execute(sql`
+      SELECT contract_external_id,
+             external_id AS payment_external_id,
+             paid_at,
+             CAST(JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.total_paid_amount')) AS DECIMAL(18,2)) AS total_paid_amount,
+             status AS ff_status
+        FROM ${paymentTransactions}
+       WHERE section = ${section}
+         AND contract_external_id IN (${inClause2})
+       ORDER BY contract_external_id, paid_at
+    `);
+    const rows: any[] = (payRows as any)[0] ?? payRows;
+    for (const r of rows) {
+      const extId = String(r.contract_external_id ?? "");
+      if (!extId) continue;
+      if (!payMap.has(extId)) payMap.set(extId, []);
+      payMap.get(extId)!.push({
+        payment_external_id: String(r.payment_external_id ?? ""),
+        paid_at: r.paid_at ?? null,
+        total_paid_amount: Number(r.total_paid_amount ?? 0),
+        ff_status: r.ff_status ?? null,
+      });
+    }
+  }
+
+  // ---- 4) Compute bad-debt per contract and UPDATE ----
+  const BATCH = 200;
+  let batch: Array<{ externalId: string; amount: number; date: string | null; period: number }> = [];
+
+  async function flushBatch() {
+    if (!batch.length) return;
+    for (const row of batch) {
+      await db!.execute(sql`
+        UPDATE ${contracts}
+           SET bad_debt_amount = ${row.amount},
+               bad_debt_date   = ${row.date},
+               suspended_from_period = ${row.period}
+         WHERE section = ${section}
+           AND external_id = ${row.externalId}
+      `);
+    }
+    batch = [];
+  }
+
+  for (const c of targetContracts) {
+    const extId = c.externalId;
+    const contractStatus = c.status ?? "";
+    const suspend = suspendMap.get(extId) ?? { period: 1, date: null };
+    const payments = payMap.get(extId) ?? [];
+
+    // Determine which payments are "bad-debt" payments
+    // Logic (same for both "หนี้เสีย" and "ยกเลิกสัญญา"):
+    //
+    // Step 1 — TRIGGER: Find synthetic payments (external_id starts with "pay-") that have
+    //   ff_status = "ยกเลิกสัญญา". These indicate that a device-sale payment exists.
+    //   Synthetic payments are created from installments and have null total_paid_amount.
+    //
+    // Step 2 — AMOUNT & DATE: Use REAL payments (external_id is numeric, from API transactions)
+    //   to compute bad_debt_amount and bad_debt_date.
+    //   Real payments have the correct paid_at (slip date from admin) and total_paid_amount.
+    //   This gives us the correct accounting date for bank reconciliation.
+    //
+    // Why separate trigger from amount?
+    //   The system distributes the sale amount across multiple synthetic payment records
+    //   on the transaction date (e.g. 2026-04-16), but the actual receipt was recorded
+    //   on the slip date (e.g. 2026-04-06). Using real payments avoids date confusion.
+
+    // Step 1: Check if this contract has any synthetic bad-debt trigger
+    const hasBadDebtTrigger = payments.some(
+      (p) => p.ff_status === "ยกเลิกสัญญา" && p.payment_external_id.startsWith("pay-")
+    );
+
+    if (!hasBadDebtTrigger) {
+      // No bad-debt payments found → skip this contract
+      continue;
+    }
+
+    // Step 2: Sum real payments (numeric external_id, total_paid_amount > 0)
+    const realBadDebtPayments = payments.filter(
+      (p) => !p.payment_external_id.startsWith("pay-") && p.total_paid_amount > 0
+    );
+
+    if (realBadDebtPayments.length === 0) continue;
+
+    const totalBadDebt = realBadDebtPayments.reduce((sum, p) => sum + p.total_paid_amount, 0);
+    // bad_debt_date = paid_at of the latest real payment (slip date for bank reconciliation)
+    const badDebtDate = deriveBadDebtDate(
+      realBadDebtPayments.map((p) => ({ paid_at: p.paid_at })),
+      suspend.date,
+    );
+
+    batch.push({
+      externalId: extId,
+      amount: totalBadDebt,
+      date: badDebtDate ? String(badDebtDate).substring(0, 10) : null,
+      period: suspend.period,
+    });
+
+    if (batch.length >= BATCH) await flushBatch();
+  }
+  await flushBatch();
+
+  console.log(`[computeAndStoreBadDebt] ${section}: updated ${targetContracts.length} bad-debt contracts`);
+}
+
 // Re-export mapper for tests
-export { mapContractDetailOverrides };
+export { mapContractDetailOverrides, computeAndStoreBadDebt };
