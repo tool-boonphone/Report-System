@@ -1255,9 +1255,12 @@ export async function listDebtCollected(params: { section: SectionKey }) {
            NULL AS payment_id,
            JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.installmentExternalId')) AS installment_external_id,
            NULL AS receipt_no,
-           NULL AS remark
+           NULL AS remark,
+           status AS ff_status
       FROM ${paymentTransactions}
      WHERE ${paymentTransactions.section} = ${params.section}
+       AND (${paymentTransactions.status} IS NULL
+            OR LOWER(${paymentTransactions.status}) IN ('ยืนยันการชำระ', 'ยกเลิกสัญญา', 'active', 'paid', 'success', 'completed', 'เกินกำหนดชำระ', 'ชำระแล้วบางส่วน', 'ระงับสัญญา', 'ถึงกำหนดชำระ'))
      ORDER BY contract_external_id, paid_at
   ` : sql`
     SELECT contract_external_id,
@@ -1326,7 +1329,9 @@ export async function listDebtCollected(params: { section: SectionKey }) {
       payment_id: r.payment_id != null ? Number(r.payment_id) : null,
       receipt_no: r.receipt_no ?? null,
       remark: r.remark ?? null,
-    });
+      // FF365 only: raw status from payment_transactions
+      ff_status: r.ff_status ?? null,
+    } as any);
   }
 
   // Per-contract walk.
@@ -1339,13 +1344,53 @@ export async function listDebtCollected(params: { section: SectionKey }) {
     const rawPayments = payByContract.get(c.contractExternalId) ?? [];
     let tagged: Array<PayRawRow & { splitIndex: number; isCloseRow: boolean; isBadDebtRow: boolean }>;
     if (isFF365) {
-      // FF365: payments already have period assigned; just add splitIndex.
+      // Phase 34 (final): FF365 payment logic ใช้ ff_status + paid_at ตัดสิน isBadDebtRow
+      //
+      // FF365 payment_transactions.status:
+      //   "ยกเลิกสัญญา" → หนี้เสีย → isBadDebtRow=true
+      //   อื่นๆ          → ชำระปกติ → isBadDebtRow=false
+      //
+      // กฎพิเศษ: ถ้า paid_at วันเดียวกันมี payment ที่ status="ยกเลิกสัญญา" อยู่ด้วย
+      //   → ทุก payment ในวันนั้นถือเป็นหนี้เสียทั้งหมด
+      //   (เป็นการกระจายยอดจากการขายเครื่องลงตามงวด)
+      //
+      // ทุก payment มี installmentExternalId (format: "contractId-period") → ffPeriod ถูกต้อง
+      // ถ้า ffPeriod=null (ไม่มี installmentExternalId) → fallback ไปที่ period=1
+
+      // Step 1: หา paid_at dates ที่มี ยกเลิกสัญญา อยู่ด้วย
+      const badDebtDates = new Set<string>();
+      for (const p of rawPayments) {
+        if ((p as any).ff_status === "ยกเลิกสัญญา" && p.paid_at) {
+          // normalize date to YYYY-MM-DD string
+          const dateKey = String(p.paid_at).substring(0, 10);
+          badDebtDates.add(dateKey);
+        }
+      }
+
+      // Step 2: tag payments
       const periodSeen = new Map<number, number>();
       tagged = rawPayments.map((p) => {
-        const period = p.period;
-        const splitIdx = period != null ? (periodSeen.get(period) ?? 0) : 0;
-        if (period != null) periodSeen.set(period, splitIdx + 1);
-        return { ...p, splitIndex: splitIdx, isCloseRow: false, isBadDebtRow: false };
+        const ffStatus = (p as any).ff_status ?? null;
+        const dateKey = p.paid_at ? String(p.paid_at).substring(0, 10) : null;
+        // isBadDebt ถ้า: status=ยกเลิกสัญญา หรือ paid_at วันเดียวกับที่มี ยกเลิกสัญญา
+        const isBadDebt = ffStatus === "ยกเลิกสัญญา" || (dateKey != null && badDebtDates.has(dateKey));
+        const period = p.period ?? 1; // fallback to period 1 if installmentExternalId missing
+        const splitIdx = periodSeen.get(period) ?? 0;
+        periodSeen.set(period, splitIdx + 1);
+        if (isBadDebt) {
+          // bad-debt payment: ยอด = bad_debt_amount, total = null (แสดงเป็น "-")
+          return {
+            ...p,
+            period,
+            splitIndex: splitIdx,
+            isCloseRow: false,
+            isBadDebtRow: true,
+            bad_debt_amount: p.total_paid_amount ?? 0, // amount → bad_debt column
+            total_paid_amount: null,                   // ซ่อน total column
+          };
+        }
+        // ชำระปกติ
+        return { ...p, period, splitIndex: splitIdx, isCloseRow: false, isBadDebtRow: false };
       });
     } else {
       tagged = assignPayPeriods(

@@ -591,3 +591,10 @@ Task list:
 - [x] Reset page 1 เมื่อ filter เปลี่ยน หรือ section เปลี่ยน
 - [x] TypeScript: 0 errors, Server: running
 - [x] commit + checkpoint
+
+### Phase 34 — แก้ไขคอลัมน์หนี้เสียและ UI ตารางยอดเก็บหนี้
+- [ ] อ่าน debtDb.ts เพื่อเข้าใจโครงสร้างการคำนวณยอดหนี้เสีย (badDebt field)
+- [ ] แก้ไข debtDb.ts: ลงยอดหนี้เสียในคอลัมน์ badDebt ให้ถูกต้อง (ไม่ใช่ yodtChararuam)
+- [ ] แก้ไข DebtReport.tsx: ไฮไลท์ BG งวดปัจจุบัน (สีเขียวอ่อน)
+- [ ] แก้ไข DebtReport.tsx: BG สีแดงอ่อนสำหรับงวดที่ผ่านมาแล้วแต่ไม่มียอดชำระ
+- [ ] ทดสอบ TypeScript + commit + checkpoint
