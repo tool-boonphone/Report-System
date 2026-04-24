@@ -19,6 +19,7 @@ import {
   TrendingUp,
   Wallet,
 } from "lucide-react";
+import { AppShell } from "@/components/AppShell";
 import { useAppAuth } from "@/hooks/useAppAuth";
 import { useSection } from "@/contexts/SectionContext";
 import { trpc } from "@/lib/trpc";
@@ -166,30 +167,16 @@ export default function BadDebtSummary() {
   /* ── render ── */
   if (!canView) {
     return (
-      <div className="flex items-center justify-center py-32 text-gray-400">
-        <AlertTriangle className="w-5 h-5 mr-2" />
-        คุณไม่มีสิทธิ์ดูหน้านี้
-      </div>
+      <AppShell>
+        <div className="flex items-center justify-center py-32 text-gray-400">
+          <AlertTriangle className="w-5 h-5 mr-2" />
+          คุณไม่มีสิทธิ์ดูหน้านี้
+        </div>
+      </AppShell>
     );
   }
-
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* ── Header ── */}
-      <div className="bg-white border-b border-gray-200 px-4 py-3">
-        <div className="max-w-screen-2xl mx-auto">
-          <h1 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
-            <TrendingDown className="w-5 h-5 text-red-500" />
-            สรุปหนี้เสีย
-            {section && (
-              <span className="ml-2 text-xs font-normal px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">
-                {section}
-              </span>
-            )}
-          </h1>
-        </div>
-      </div>
-
+    <AppShell>
       <div className="max-w-screen-2xl mx-auto px-4 py-4 space-y-4">
         {/* ── Summary Cards ── */}
         {summary && (
@@ -355,11 +342,10 @@ export default function BadDebtSummary() {
           </div>
         )}
       </div>
-    </div>
+    </AppShell>
   );
 }
-
-/* ─── sub-components ────────────────────────────────────────────────────────── */
+/* ─── sub-componentss ────────────────────────────────────────────────────────── */
 function SummaryCard({
   label,
   value,

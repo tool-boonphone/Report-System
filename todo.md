@@ -479,3 +479,7 @@ Task list:
 - [x] Shared `shared/const.ts`: เพิ่ม `bad_debt_summary` ใน MENU_CODES + MENU_LABELS
 - [x] Unit tests `server/badDebt.test.ts`: 14 tests ครอบ row calculation + summary calculation
 - [x] TypeScript: 0 errors, Tests: 74/76 pass (1 fail = pre-existing admin.access timeout, 1 skip = FF365 creds)
+
+### Phase 20 — แก้ไข TopNav ใน BadDebtSummary
+
+- [x] แก้ไข BadDebtSummary.tsx ให้ใช้ AppShell (TopNav) เหมือนหน้า Contracts และ DebtReport — ลบ custom header div ออก
