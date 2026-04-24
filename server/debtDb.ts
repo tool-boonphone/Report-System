@@ -1397,21 +1397,19 @@ export async function listDebtCollected(params: { section: SectionKey }) {
         // real payment ที่เป็น "ยอดขายเครื่อง" = total_paid ≈ bad_debt_amount (ต่างกันไม่เกิน 1 บาท)
         // real payment ปกติ (งวดเดียว) = total_paid < bad_debt_amount → ควรแสดงในตาราง
         const normalPayments = assigned.filter((p) => {
-          const dateKey = p.paid_at ? String(p.paid_at).substring(0, 10) : null;
-          const ffStatus = (p as any).ff_status ?? null;
           const payExtId = (p as any).payment_external_id as string | null;
           const isRealPayment = payExtId != null && /^\d+$/.test(payExtId);
-          // ตัด: synthetic payments ที่เป็น bad debt date หรือ ยกเลิกสัญญา
-          const isBadDebtSynthetic = !isRealPayment && (
-            ffStatus === "ยกเลิกสัญญา" || (dateKey != null && badDebtDates.has(dateKey))
-          );
+          // ตัด: synthetic payments (เช่น pay-{id}-{n}) ทั้งหมด ไม่ว่า paid_at จะตรงกับ bad debt date หรือไม่
+          // เหตุผล: synthetic payments ไม่มี receipt_no / total_paid_amount จริง
+          //   และสร้างแถวซ้ำกับ real payment ที่มี paid_at วันเดียวกัน
+          if (!isRealPayment) return false;
           // ตัด: real payment ที่เป็นยอดขายเครื่อง (total_paid ≈ bad_debt_amount, ต่างกันไม่เกิน 1 บาท)
           const totalPaid = (p as any).total_paid_amount as number | null;
-          const isDeviceSalePayment = isRealPayment &&
+          const isDeviceSalePayment =
             contractBadDebtAmount != null &&
             totalPaid != null &&
             Math.abs(totalPaid - contractBadDebtAmount) <= 1;
-          return !isBadDebtSynthetic && !isDeviceSalePayment;
+          return !isDeviceSalePayment;
         });
 
         // หางวดสุดท้ายที่มีการชำระปกติ
