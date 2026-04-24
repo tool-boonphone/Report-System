@@ -150,7 +150,41 @@ function vitePluginManusDebugCollector(): Plugin {
   };
 }
 
-const plugins = [react(), tailwindcss(), jsxLocPlugin(), vitePluginManusRuntime(), vitePluginManusDebugCollector()];
+/**
+ * Auto-clear Vite transform cache when server-side source files change.
+ * This prevents stale tRPC/module cache from serving outdated data after code edits.
+ */
+function vitePluginAutoClearCache(): Plugin {
+  const WATCH_DIRS = ["server", "shared", "drizzle"];
+  let cacheDir: string;
+
+  return {
+    name: "manus-auto-clear-cache",
+    configResolved(config) {
+      cacheDir = config.cacheDir; // typically node_modules/.vite
+    },
+    configureServer(server: ViteDevServer) {
+      const clearCache = (filePath: string) => {
+        const rel = path.relative(PROJECT_ROOT, filePath);
+        const isWatched = WATCH_DIRS.some((d) => rel.startsWith(d + path.sep) || rel.startsWith(d + "/"));
+        if (!isWatched) return;
+        try {
+          if (fs.existsSync(cacheDir)) {
+            fs.rmSync(cacheDir, { recursive: true, force: true });
+            console.log(`[auto-cache] Cleared Vite cache after change: ${rel}`);
+          }
+        } catch {
+          /* ignore */
+        }
+      };
+      server.watcher.on("change", clearCache);
+      server.watcher.on("add", clearCache);
+      server.watcher.on("unlink", clearCache);
+    },
+  };
+}
+
+const plugins = [react(), tailwindcss(), jsxLocPlugin(), vitePluginManusRuntime(), vitePluginManusDebugCollector(), vitePluginAutoClearCache()];
 
 export default defineConfig({
   plugins,
