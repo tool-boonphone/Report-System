@@ -528,3 +528,14 @@ Task list:
 - [x] ตรวจสอบ DB: พบ 63 สัญญาที่มี overpaid carry-forward (Boonphone)
 - [x] แก้ไข DebtReport.tsx: เปลี่ยนเงื่อนไข annotation จาก `overpaidApplied > 0 && baselineAmount > amount` เป็น `overpaidApplied > 0.009` เพียงอย่างเดียว (เงื่อนไขเดิมไม่ทำงานเมื่อ penalty ถูกบวกเข้า amount ทำให้ amount = baseline)
 - [x] ทดสอบ TypeScript (ไม่มี error) + ยืนยัน UI แสดง (-หักชำระเกิน: 50.00) ในงวดที่ 2 ของ CT0226-SBR001-0909-01 แล้ว
+
+### Phase 28 — Bug fix: collected tab filter วันที่/เดือนที่ชำระ ต้องซ่อน payment sub-row ที่ไม่ตรงออกด้วย
+
+- [x] อ่านโค้ด collected tab: พบว่า dueDateFilter ใช้ dueDate เดียวกันทั้ง  2 tab แต่ collected tab ควรใช้ paidAt
+- [x] แก้ไข: dueDateOptions ใน collected tab ใช้ paidAt เดือน
+- [x] แก้ไข: filteredRows step 3 ใน collected tab กรองตาม paidAt เดือน
+- [x] แก้ไข: collectedSummary badge กรอง payment ตาม paidAt เดือน
+- [x] แก้ไข: paymentsByPeriod กรอง payment ตาม paidAt เดือนก่อน push เข้า map
+- [x] แก้ไข: isCollectedCellMasked เพิ่มเงื่อนไข dueDateFilter (pays.length === 0)
+- [x] แก้ไข: filter label เปลี่ยนเป็น "เดือน-ปีที่ชำระ" ใน collected tab
+- [x] ทดสอบ TypeScript (ไม่มี error) เรียบร้อย

@@ -443,13 +443,22 @@ export default function DebtReport() {
 
   const dueDateOptions = useMemo(() => {
     const s = new Set<string>();
-    for (const r of activeRows) {
-      for (const inst of r.installments) {
-        if (inst.dueDate) s.add(inst.dueDate.slice(0, 7));
+    // Phase 28: collected tab uses paidAt month for filter options; target tab uses dueDate month
+    if (tab === "collected") {
+      for (const r of activeRows as CollectedRow[]) {
+        for (const p of r.payments ?? []) {
+          if (p.paidAt) s.add(p.paidAt.slice(0, 7));
+        }
+      }
+    } else {
+      for (const r of activeRows) {
+        for (const inst of r.installments) {
+          if (inst.dueDate) s.add(inst.dueDate.slice(0, 7));
+        }
       }
     }
     return Array.from(s).sort().reverse();
-  }, [activeRows]);
+  }, [activeRows, tab]);
 
   const productTypeOptions = useMemo(() => {
     const s = new Set<string>();
@@ -483,13 +492,19 @@ export default function DebtReport() {
               );
         if (!hasMatch) return false;
       }
-      // 3. เดือน-ปีที่ต้องชำระ (month-year filter)
-      //    Row passes if ANY installment's due_date month is in the filter.
-      //    Cells of non-matching periods are masked (shown as "-") in the table.
+      // 3. เดือน-ปีที่ต้องชำระ / เดือน-ปีที่ชำระ (month-year filter)
+      //    target tab: Row passes if ANY installment's due_date month is in the filter.
+      //    collected tab: Row passes if ANY payment's paidAt month is in the filter.
+      //    Phase 28: collected tab filters by paidAt, not dueDate.
       if (dueDateFilter.size > 0) {
-        const hasMatch = r.installments.some(
-          (inst) => inst.dueDate && dueDateFilter.has(inst.dueDate.slice(0, 7))
-        );
+        const hasMatch =
+          tab === "collected"
+            ? (r as CollectedRow).payments?.some(
+                (p) => p.paidAt && dueDateFilter.has(p.paidAt.slice(0, 7))
+              ) ?? false
+            : r.installments.some(
+                (inst) => inst.dueDate && dueDateFilter.has(inst.dueDate.slice(0, 7))
+              );
         if (!hasMatch) return false;
       }
       // 4. สถานะหนี้
@@ -584,6 +599,8 @@ export default function DebtReport() {
       for (const p of r.payments ?? []) {
         // Phase 23: dueDateExact cell-mask — only sum payments whose paidAt matches exact date
         if (dueDateExact && (p.paidAt?.slice(0, 10) ?? null) !== dueDateExact) continue;
+        // Phase 28: dueDateFilter cell-mask — only sum payments whose paidAt month is in filter
+        if (dueDateFilter.size > 0 && !(p.paidAt && dueDateFilter.has(p.paidAt.slice(0, 7)))) continue;
         principal += p.principal ?? 0;
         interest += p.interest ?? 0;
         fee += p.fee ?? 0;
@@ -606,7 +623,7 @@ export default function DebtReport() {
       (bv.overpaid ? overpaid : 0) +
       (bv.badDebt ? badDebt : 0);
     return { principal, interest, fee, penalty, unlockFee, discount, overpaid, badDebt, total };
-  }, [filteredRows, tab, dueDateExact, badgeVisibility]);
+  }, [filteredRows, tab, dueDateExact, dueDateFilter, badgeVisibility]);
 
   /* ---- TopNav actions (sync + export) ---- */
   // Export handler (used inline in toolbar)
@@ -842,13 +859,13 @@ export default function DebtReport() {
                 options={approveDateOptions}
                 placeholder="ทุกเดือน-ปีที่อนุมัติ"
               />
-              {/* เดือน-ปีที่ต้องชำระ */}
+              {/* Phase 28: label changes based on tab — target=ต้องชำระ, collected=ชำระ */}
               <MultiSelectFilter
-                label="เดือน-ปีที่ต้องชำระ"
+                label={tab === "collected" ? "เดือน-ปีที่ชำระ" : "เดือน-ปีที่ต้องชำระ"}
                 selected={dueDateFilter}
                 onChange={setDueDateFilter}
                 options={dueDateOptions}
-                placeholder="ทุกเดือน-ปีที่ต้องชำระ"
+                placeholder={tab === "collected" ? "ทุกเดือน-ปีที่ชำระ" : "ทุกเดือน-ปีที่ต้องชำระ"}
               />
               {/* สถานะหนี้ */}
               <StatusMultiSelect selected={statusFilter} onChange={setStatusFilter} />
@@ -1108,10 +1125,13 @@ export default function DebtReport() {
                   const rowH =
                     ROW_HEIGHT + (lineCount - 1) * SUB_ROW_HEIGHT;
                   // Build per-period payments map for collected tab
+                  // Phase 28: filter payments by paidAt month (dueDateFilter) and exact date (dueDateExact)
                   const paymentsByPeriod = new Map<number, PaymentCell[]>();
                   if (tab === "collected") {
                     for (const p of (r as CollectedRow).payments ?? []) {
                       if (p.period == null) continue;
+                      // Phase 28: skip payments whose paidAt month is not in dueDateFilter
+                      if (dueDateFilter.size > 0 && !(p.paidAt && dueDateFilter.has(p.paidAt.slice(0, 7)))) continue;
                       if (!paymentsByPeriod.has(p.period))
                         paymentsByPeriod.set(p.period, []);
                       paymentsByPeriod.get(p.period)!.push(p);
@@ -1439,11 +1459,13 @@ export default function DebtReport() {
                           (contractSuspended && pays.length === 0);
 
                         // Phase 23: cell-level masking for dueDateExact (collected tab = paidAt filter)
-                        // A period is masked when dueDateExact is set AND none of its payments
-                        // have paidAt matching the selected date.
+                        // Phase 28: also mask when dueDateFilter is set and no pays remain after month filtering
+                        // A period is masked when:
+                        //   - dueDateExact is set AND none of its payments have paidAt matching the selected date, OR
+                        //   - dueDateFilter is set AND no payments remain after month filtering (pays already filtered)
                         const isCollectedCellMasked =
-                          !!dueDateExact &&
-                          !pays.some((p) => p.paidAt?.slice(0, 10) === dueDateExact);
+                          (!!dueDateExact && !pays.some((p) => p.paidAt?.slice(0, 10) === dueDateExact)) ||
+                          (dueDateFilter.size > 0 && pays.length === 0);
 
                         // Vertical stack: one cell per group sub-column,
                         // with N inner lines for N split payments.
