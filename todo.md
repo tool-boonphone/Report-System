@@ -652,3 +652,9 @@ Task list:
 - [x] Target table: ถ้า bad debt row มี overpaid → ไม่หัก ไม่แสดงข้อความ
 - [x] Target table: bad debt display — แสดงหนี้เสียตั้งแต่งวดที่มี bad debt row ใน Collected เป็นต้นไป
 - [x] Excel export: ส่งตัวเลขเท่านั้น ไม่ส่งข้อความ (-หักชำระเกิน: xx.xx)
+
+### Phase 36b — Fix: Overpaid carry-forward กรอง bad debt payment ออก
+- [x] debtDb.ts: กรอง overpaid ที่มาจาก bad debt payment (total_paid ≈ bad_debt_amount) ออกก่อน build effectiveCarryByPeriod — ปัจจุบัน overpaid 11,366 จาก bad debt row ถูก carry ไปงวดถัดไปผิด
+- [x] debtDb.ts: แก้ regex bug `/-(d+)$/` → `/-(\ d+)$/` ใน FF365 overpaid loop (ลืม backslash ทำให้ period ไม่ถูก extract)
+- [x] debtDb.ts: เพิ่ม `total_paid_amount` ใน FF365 payment query เพื่อใช้ตรวจ isBadDebtPayment
+- [x] debtDb.ts: สร้าง `badDebtAmountByContract` Map จาก cRows เพื่อ lookup ต่อสัญญา

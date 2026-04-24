@@ -581,6 +581,14 @@ export async function listDebtTarget(params: { section: SectionKey }) {
   //   no receipt_no → use contract.status for close detection
   const isFF365 = params.section === "Fastfone365";
 
+  // --- Build bad_debt_amount lookup per contract (used to filter bad-debt payments from overpaid carry) ---
+  const badDebtAmountByContract = new Map<string, number>();
+  for (const c of cRows) {
+    const extId = String(c.external_id ?? "");
+    const bda = Number(c.bad_debt_amount ?? 0);
+    if (extId && bda > 0) badDebtAmountByContract.set(extId, bda);
+  }
+
   // --- Load installments with sub-fields extracted from raw_json once ---
   // For Fastfone365: mulct maps to penalty_due, status maps to installment_status_code.
   // For Boonphone: use dedicated raw_json fields as before.
@@ -668,7 +676,8 @@ export async function listDebtTarget(params: { section: SectionKey }) {
       SELECT contract_external_id,
              paid_at,
              JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.receipt_no')) AS receipt_no,
-             CAST(JSON_EXTRACT(raw_json, '$.overpaid_amount') AS DECIMAL(18,2)) AS overpaid_amount
+             CAST(JSON_EXTRACT(raw_json, '$.overpaid_amount') AS DECIMAL(18,2)) AS overpaid_amount,
+             CAST(JSON_EXTRACT(raw_json, '$.total_paid_amount') AS DECIMAL(18,2)) AS total_paid_amount
         FROM ${paymentTransactions}
        WHERE ${paymentTransactions.section} = ${params.section}
     `);
@@ -682,14 +691,19 @@ export async function listDebtTarget(params: { section: SectionKey }) {
         paidAtsByContract.set(key, arr);
       }
       // Track overpaid_amount per period from real payments (receipt_no = TXRT...-{period})
-      // This mirrors the Boonphone logic so overpaidApplied works for FF365 too.
+      // Skip if this payment is the bad-debt settlement (total_paid ≈ bad_debt_amount)
+      // because overpaid from bad-debt payments must NOT carry forward to next periods.
       const receipt = String(pr.receipt_no ?? "");
       if (receipt && !receipt.startsWith("TXRTC")) {
         const m = /-(\d+)$/.exec(receipt);
         if (m) {
           const period = Number(m[1]);
           const overpaid = Number(pr.overpaid_amount ?? 0);
-          if (Number.isFinite(period) && period > 0 && overpaid > 0) {
+          const totalPaid = Number(pr.total_paid_amount ?? 0);
+          const contractBadDebt = badDebtAmountByContract.get(key) ?? 0;
+          // Filter out bad-debt payment: total_paid ≈ bad_debt_amount (within 1 baht)
+          const isBadDebtPayment = contractBadDebt > 0 && Math.abs(totalPaid - contractBadDebt) <= 1;
+          if (Number.isFinite(period) && period > 0 && overpaid > 0 && !isBadDebtPayment) {
             let periodMap = overpaidByContractPeriod.get(key);
             if (!periodMap) {
               periodMap = new Map<number, number>();
