@@ -442,28 +442,19 @@ export default function DebtReport() {
   }, [activeRows]);
 
   /* ---- Filter (client-side) ---- */
+  // Priority: approveDateFilter > dueDateExact > dueDateFilter > statusFilter > productTypeFilter
   const filteredRows = useMemo(() => {
     const q = search.trim().toLowerCase();
     return activeRows.filter((r) => {
-      if (statusFilter.size > 0 && !statusFilter.has(r.debtStatus)) return false;
-      if (productTypeFilter.size > 0 && !productTypeFilter.has(r.productType ?? "")) return false;
+      // 1. เดือน-ปีที่อนุมัติ
       if (approveDateFilter.size > 0) {
         const ym = r.approveDate ? r.approveDate.slice(0, 7) : "";
         if (!approveDateFilter.has(ym)) return false;
       }
-      if (dueDateFilter.size > 0) {
-        // Phase 23: dueDateFilter — row passes if ANY installment's due_date month is in the filter.
-        // Cells of non-matching periods are masked (shown as "-") in the table, not hidden.
-        // But rows that have NO matching period at all are still hidden.
-        const hasMatch = r.installments.some(
-          (inst) => inst.dueDate && dueDateFilter.has(inst.dueDate.slice(0, 7))
-        );
-        if (!hasMatch) return false;
-      }
+      // 2. วันที่ (exact date picker)
+      //    - collected tab: ซ่อน row ที่ไม่มี payment ใดที่ paidAt ตรงวันที่เลือก
+      //    - target tab: ซ่อน row ที่ไม่มี installment dueDate ตรงวันที่เลือก (cell masking handles the rest)
       if (dueDateExact) {
-        // Phase 23: dueDateExact — row passes if ANY installment's dueDate (target) or paidAt (collected) matches.
-        // Cells of non-matching periods are masked in the table, not hidden.
-        // But rows that have NO matching period/payment at all are still hidden.
         const hasMatch =
           tab === "collected"
             ? (r as CollectedRow).payments?.some(
@@ -474,6 +465,20 @@ export default function DebtReport() {
               );
         if (!hasMatch) return false;
       }
+      // 3. เดือน-ปีที่ต้องชำระ (month-year filter)
+      //    Row passes if ANY installment's due_date month is in the filter.
+      //    Cells of non-matching periods are masked (shown as "-") in the table.
+      if (dueDateFilter.size > 0) {
+        const hasMatch = r.installments.some(
+          (inst) => inst.dueDate && dueDateFilter.has(inst.dueDate.slice(0, 7))
+        );
+        if (!hasMatch) return false;
+      }
+      // 4. สถานะหนี้
+      if (statusFilter.size > 0 && !statusFilter.has(r.debtStatus)) return false;
+      // 5. ประเภทเครื่อง
+      if (productTypeFilter.size > 0 && !productTypeFilter.has(r.productType ?? "")) return false;
+      // 6. ค้นหา
       if (!q) return true;
       return (
         (r.contractNo ?? "").toLowerCase().includes(q) ||
@@ -766,7 +771,7 @@ export default function DebtReport() {
           )}
         </div>
 
-        {/* Toolbar Row 1: Search + Status + Month-year + PrincipalOnly */}
+        {/* Toolbar: Search > Date > ApproveDate > DueDate > Status > ProductType > PrincipalOnly */}
         <div className="flex flex-col gap-2 mb-2">
           <div className="flex flex-col md:flex-row md:items-center gap-2">
             <div className="relative flex-1 min-w-0">
@@ -779,37 +784,7 @@ export default function DebtReport() {
               />
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <MultiSelectFilter
-                label="เดือน-ปีที่อนุมัติ"
-                selected={approveDateFilter}
-                onChange={setApproveDateFilter}
-                options={approveDateOptions}
-                placeholder="ทุกเดือน-ปีที่อนุมัติ"
-              />
-              <MultiSelectFilter
-                label="เดือน-ปีที่ต้องชำระ"
-                selected={dueDateFilter}
-                onChange={setDueDateFilter}
-                options={dueDateOptions}
-                placeholder="ทุกเดือน-ปีที่ต้องชำระ"
-              />
-              <StatusMultiSelect selected={statusFilter} onChange={setStatusFilter} />
-              <MultiSelectFilter
-                label="ประเภทเครื่อง"
-                selected={productTypeFilter}
-                onChange={setProductTypeFilter}
-                options={productTypeOptions}
-                placeholder="ทุกประเภทเครื่อง"
-              />
-              {tab === "target" && (
-                <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-md px-3 py-1.5">
-                  <Switch id="principal-only" checked={principalOnly} onCheckedChange={setPrincipalOnly} />
-                  <label htmlFor="principal-only" className="text-xs text-gray-600 cursor-pointer select-none whitespace-nowrap">
-                    เฉพาะเงินต้น
-                  </label>
-                </div>
-              )}
-              {/* Phase 23: date picker filter (exact date) */}
+              {/* วันที่ (date picker) — target=วันที่ต้องชำระ, collected=วันที่ชำระ */}
               <div className="flex items-center gap-1.5">
                 <div className="relative flex items-center">
                   <CalendarDays className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
@@ -832,6 +807,41 @@ export default function DebtReport() {
                   </button>
                 )}
               </div>
+              {/* เดือน-ปีที่อนุมัติ */}
+              <MultiSelectFilter
+                label="เดือน-ปีที่อนุมัติ"
+                selected={approveDateFilter}
+                onChange={setApproveDateFilter}
+                options={approveDateOptions}
+                placeholder="ทุกเดือน-ปีที่อนุมัติ"
+              />
+              {/* เดือน-ปีที่ต้องชำระ */}
+              <MultiSelectFilter
+                label="เดือน-ปีที่ต้องชำระ"
+                selected={dueDateFilter}
+                onChange={setDueDateFilter}
+                options={dueDateOptions}
+                placeholder="ทุกเดือน-ปีที่ต้องชำระ"
+              />
+              {/* สถานะหนี้ */}
+              <StatusMultiSelect selected={statusFilter} onChange={setStatusFilter} />
+              {/* ประเภทเครื่อง */}
+              <MultiSelectFilter
+                label="ประเภทเครื่อง"
+                selected={productTypeFilter}
+                onChange={setProductTypeFilter}
+                options={productTypeOptions}
+                placeholder="ทุกประเภทเครื่อง"
+              />
+              {/* เฉพาะเงินต้น (target tab only) */}
+              {tab === "target" && (
+                <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-md px-3 py-1.5">
+                  <Switch id="principal-only" checked={principalOnly} onCheckedChange={setPrincipalOnly} />
+                  <label htmlFor="principal-only" className="text-xs text-gray-600 cursor-pointer select-none whitespace-nowrap">
+                    เฉพาะเงินต้น
+                  </label>
+                </div>
+              )}
               {(statusFilter.size > 0 || approveDateFilter.size > 0 || dueDateFilter.size > 0 || productTypeFilter.size > 0 || dueDateExact) && (
                 <button
                   type="button"

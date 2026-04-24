@@ -508,3 +508,10 @@ Task list:
 - [x] ตรวจสอบ DB: overpaid_amount, installments.amount ของสัญญา CT0226-SBR001-0909-01
 - [x] วิเคราะห์: API ส่ง apiAmount = baseline (ไม่หักให้) → else branch ต้องหัก overpaidApplied เอง
 - [x] แก้ไข debtDb.ts else branch: ถ้า apiEqualsBaseline && overpaidApplied > 0 → amount = max(0, apiAmount - overpaidApplied)
+
+### Phase 25 — Filter Order + Date Filter Behavior
+
+- [ ] เรียงลำดับ filter ใหม่: target tab = ค้นหา > วันที่ > เดือน-ปีที่อนุมัติ > เดือน-ปีที่ต้องชำระ > สถานะหนี้ > ประเภทเครื่อง > เฉพาะเงินต้น
+- [ ] เรียงลำดับ filter ใหม่: collected tab = ค้นหา > วันที่ > เดือน-ปีที่อนุมัติ > เดือน-ปีที่ต้องชำระ > สถานะหนี้ > ประเภทเครื่อง
+- [ ] collected tab date filter: เปลี่ยนจากซ่อน cell → ซ่อน row ที่ไม่มี payment ใดที่ paidAt ตรงวันที่เลือก
+- [ ] filteredRows ลำดับความสำคัญ: approveDateFilter > dueDateExact > dueDateFilter > debtStatusFilter > deviceTypeFilter
