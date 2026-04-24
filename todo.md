@@ -598,3 +598,25 @@ Task list:
 - [ ] แก้ไข DebtReport.tsx: ไฮไลท์ BG งวดปัจจุบัน (สีเขียวอ่อน)
 - [ ] แก้ไข DebtReport.tsx: BG สีแดงอ่อนสำหรับงวดที่ผ่านมาแล้วแต่ไม่มียอดชำระ
 - [ ] ทดสอบ TypeScript + commit + checkpoint
+
+### Phase 35 — บันทึกยอดหนี้เสียลง DB ต่อสัญญา (Bad Debt Storage)
+
+**Business Rule ที่ตกลงกัน:**
+- `contract.status = "หนี้เสีย"` → ขายเครื่องแล้ว → มียอดหนี้เสีย
+- `contract.status = "ยกเลิกสัญญา"` + มี payment ในวันเดียวกับวันที่เปลี่ยนสถานะ → แอดมินบันทึกผิด แต่ตีความเป็นหนี้เสีย
+- `contract.status = "ระงับสัญญา"` → ได้เครื่องคืนแต่ยังไม่ขาย → ไม่มียอดหนี้เสีย
+- Logic เดียวกันทั้ง Boonphone และ FF365
+
+- [ ] เพิ่ม columns ใน `contracts` table: `bad_debt_amount` DECIMAL(12,2), `bad_debt_date` VARCHAR(20), `suspended_from_period` INT
+- [ ] สร้าง migration SQL และ apply ผ่าน webdev_execute_sql
+- [ ] อัปเดต `drizzle/schema.ts` ให้ตรงกับ DB
+- [ ] สร้าง `computeAndStoreBadDebt(section)` function ใน `server/sync/runner.ts` หรือ `server/debtDb.ts`
+  - ดึง contracts ที่ status = "หนี้เสีย" หรือ "ยกเลิกสัญญา" (ที่มี payment ในวันเดียวกับวันเปลี่ยนสถานะ)
+  - ใช้ logic เดิม: หา suspendedFromPeriod จาก installment แรกที่ status เป็น suspend code
+  - รวมยอด payment ที่ isBadDebtRow = true → bad_debt_amount
+  - หา bad_debt_date จาก deriveBadDebtDate
+  - UPDATE contracts SET bad_debt_amount, bad_debt_date, suspended_from_period
+- [ ] เรียก `computeAndStoreBadDebt` เป็น Step 6 หลัง syncPayments ใน runner.ts
+- [ ] แก้ไข `listDebtTarget` SQL query ให้ดึง bad_debt_amount, bad_debt_date, suspended_from_period จาก contracts table โดยตรง (แทนการคำนวณใหม่)
+- [ ] ทดสอบ TypeScript + ตรวจสอบ DB ว่า bad_debt_amount ถูกต้อง
+- [ ] commit + checkpoint

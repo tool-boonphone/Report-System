@@ -206,6 +206,14 @@ export const contracts = mysqlTable(
     // Bookkeeping
     rawJson: json("raw_json"),
     syncedAt: timestamp("synced_at").defaultNow().notNull(),
+
+    // Bad-debt summary — computed & stored after each sync.
+    // bad_debt_amount:       total proceeds from device sale (ยอดขายเครื่อง)
+    // bad_debt_date:         date the bad-debt was recorded (YYYY-MM-DD)
+    // suspended_from_period: first installment period that became suspended/bad-debt
+    badDebtAmount: decimal("bad_debt_amount", { precision: 12, scale: 2 }),
+    badDebtDate: varchar("bad_debt_date", { length: 20 }),
+    suspendedFromPeriod: int("suspended_from_period"),
   },
   (t) => ({
     sectionExternalIdx: uniqueIndex("contracts_section_external_idx").on(

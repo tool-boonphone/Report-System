@@ -36,6 +36,13 @@
       "when": 1776981826714,
       "tag": "0004_good_tyger_tiger",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1777045906562,
+      "tag": "0005_square_black_queen",
+      "breakpoints": true
     }
   ]
 }

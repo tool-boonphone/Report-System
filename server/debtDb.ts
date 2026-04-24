@@ -1232,40 +1232,15 @@ export async function listDebtCollected(params: { section: SectionKey }) {
 
   const isFF365 = params.section === "Fastfone365";
 
-  // Boonphone payment_transactions.raw_json contains every field we need:
+  // Both Boonphone and Fastfone365 now use the same payment transactions endpoint.
+  // FF365 payment_transactions.raw_json contains the same fields as Boonphone:
   //   principal_paid, interest_paid, fee_paid, penalty_paid, unlock_fee_paid,
   //   discount_amount, overpaid_amount, close_installment_amount,
   //   bad_debt_amount, total_paid_amount, receipt_no, remark, payment_id.
-  // Fastfone365 payment_transactions.raw_json only has:
-  //   installmentExternalId (e.g. "41-1" = contract_id-period), source.
-  //   We extract the period from installmentExternalId and use amount as total_paid_amount.
-  const payRowsRaw = await db.execute(isFF365 ? sql`
-    SELECT pt.contract_external_id,
-           pt.paid_at,
-           CAST(pt.amount AS DECIMAL(18,2)) AS total_paid_amount,
-           NULL AS principal_paid,
-           NULL AS interest_paid,
-           NULL AS fee_paid,
-           CAST(JSON_EXTRACT(inst.raw_json, '$.mulct')    AS DECIMAL(18,2)) AS penalty_paid,
-           NULL AS unlock_fee_paid,
-           CAST(JSON_EXTRACT(inst.raw_json, '$.discount') AS DECIMAL(18,2)) AS discount_amount,
-           NULL AS overpaid_amount,
-           NULL AS close_installment_amount,
-           NULL AS bad_debt_amount,
-           NULL AS payment_id,
-           JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.installmentExternalId')) AS installment_external_id,
-           NULL AS receipt_no,
-           NULL AS remark,
-           pt.status AS ff_status
-      FROM ${paymentTransactions} pt
-      LEFT JOIN ${installments} inst
-        ON inst.section = pt.section
-       AND inst.external_id = JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.installmentExternalId'))
-     WHERE pt.section = ${params.section}
-       AND (pt.status IS NULL
-            OR LOWER(pt.status) IN ('ยืนยันการชำระ', 'ยกเลิกสัญญา', 'active', 'paid', 'success', 'completed', 'เกินกำหนดชำระ', 'ชำระแล้วบางส่วน', 'ระงับสัญญา', 'ถึงกำหนดชำระ'))
-     ORDER BY pt.contract_external_id, pt.paid_at
-  ` : sql`
+  // FF365 status field is preserved for isBadDebtRow detection:
+  //   "ยกเลิกสัญญา" → isBadDebtRow=true
+  //   others         → isBadDebtRow=false
+  const payRowsRaw = await db.execute(sql`
     SELECT contract_external_id,
            paid_at,
            CAST(amount AS DECIMAL(18,2)) AS total_paid_amount,
@@ -1281,11 +1256,12 @@ export async function listDebtCollected(params: { section: SectionKey }) {
            CAST(JSON_EXTRACT(raw_json, '$.payment_id')               AS UNSIGNED) AS payment_id,
            NULL AS installment_external_id,
            JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.receipt_no')) AS receipt_no,
-           JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.remark'))     AS remark
+           JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.remark'))     AS remark,
+           status AS ff_status
       FROM ${paymentTransactions}
      WHERE ${paymentTransactions.section} = ${params.section}
        AND (${paymentTransactions.status} IS NULL
-            OR LOWER(${paymentTransactions.status}) IN ('active', 'paid', 'success', 'completed'))
+            OR LOWER(${paymentTransactions.status}) IN ('ยืนยันการชำระ', 'ยกเลิกสัญญา', 'active', 'paid', 'success', 'completed', 'เกินกำหนดชำระ', 'ชำระแล้วบางส่วน', 'ระงับสัญญา', 'ถึงกำหนดชำระ'))
      ORDER BY contract_external_id, paid_at, payment_id
   `);
   const pRows: any[] = (payRowsRaw as any)[0] ?? payRowsRaw;
@@ -1296,19 +1272,9 @@ export async function listDebtCollected(params: { section: SectionKey }) {
     if (!key) continue;
     if (!payByContract.has(key)) payByContract.set(key, []);
 
-    // For Fastfone365: extract period from installmentExternalId (format: "contractId-period").
-    // e.g. "41-1" => period=1, "CT0125-AYA001-7207-02-3" => period=3 (last segment after last dash).
-    let ffPeriod: number | null = null;
-    if (isFF365 && r.installment_external_id) {
-      const parts = String(r.installment_external_id).split("-");
-      const lastPart = parts[parts.length - 1];
-      const n = Number(lastPart);
-      if (Number.isFinite(n) && n > 0) ffPeriod = n;
-    }
-
     payByContract.get(key)!.push({
       contract_external_id: key,
-      period: ffPeriod, // pre-assigned for FF365; null for Boonphone (derived by assignPayPeriods)
+      period: null, // period is derived by assignPayPeriods for both Boonphone and FF365
       paid_at: r.paid_at ?? null,
       total_paid_amount:
         r.total_paid_amount != null ? Number(r.total_paid_amount) : null,
@@ -1338,16 +1304,22 @@ export async function listDebtCollected(params: { section: SectionKey }) {
   }
 
   // Per-contract walk.
-  // For Fastfone365: period is already pre-assigned from installmentExternalId.
-  //   We skip assignPayPeriods and use the payments directly.
-  //   isCloseRow = false (FF365 has no close-contract receipt concept).
-  //   isBadDebtRow = false (FF365 bad-debt is handled at contract level).
-  // For Boonphone: use assignPayPeriods as before.
+  // Both Boonphone and FF365 now use assignPayPeriods to derive period from payment amount.
+  // FF365 additionally applies isBadDebtRow logic based on ff_status:
+  //   "ยกเลิกสัญญา" → isBadDebtRow=true (หนี้เสีย)
+  //   กฎพิเศษ: ถ้า paid_at วันเดียวกันมี ยกเลิกสัญญา → ทุก payment ในวันนั้นเป็นหนี้เสียทั้งหมด
   const rows = baseRows.map((c) => {
     const rawPayments = payByContract.get(c.contractExternalId) ?? [];
     let tagged: Array<PayRawRow & { splitIndex: number; isCloseRow: boolean; isBadDebtRow: boolean }>;
+
+    // Step 1: Use assignPayPeriods for both sections to derive period from payment amount
+    const assigned = assignPayPeriods(
+      rawPayments,
+      c.installments.map((i: { period: number | null; amount: number | string }) => ({ period: i.period, amount: Number(i.amount) || 0 })),
+    );
+
     if (isFF365) {
-      // Phase 34 (final): FF365 payment logic ใช้ ff_status + paid_at ตัดสิน isBadDebtRow
+      // Phase 36: FF365 isBadDebtRow logic ใช้ ff_status (payment_transactions.status)
       //
       // FF365 payment_transactions.status:
       //   "ยกเลิกสัญญา" → หนี้เสีย → isBadDebtRow=true
@@ -1356,50 +1328,40 @@ export async function listDebtCollected(params: { section: SectionKey }) {
       // กฎพิเศษ: ถ้า paid_at วันเดียวกันมี payment ที่ status="ยกเลิกสัญญา" อยู่ด้วย
       //   → ทุก payment ในวันนั้นถือเป็นหนี้เสียทั้งหมด
       //   (เป็นการกระจายยอดจากการขายเครื่องลงตามงวด)
-      //
-      // ทุก payment มี installmentExternalId (format: "contractId-period") → ffPeriod ถูกต้อง
-      // ถ้า ffPeriod=null (ไม่มี installmentExternalId) → fallback ไปที่ period=1
 
-      // Step 1: หา paid_at dates ที่มี ยกเลิกสัญญา อยู่ด้วย
+      // หา paid_at dates ที่มี ยกเลิกสัญญา อยู่ด้วย
       const badDebtDates = new Set<string>();
       for (const p of rawPayments) {
         if ((p as any).ff_status === "ยกเลิกสัญญา" && p.paid_at) {
-          // normalize date to YYYY-MM-DD string
           const dateKey = String(p.paid_at).substring(0, 10);
           badDebtDates.add(dateKey);
         }
       }
 
-      // Step 2: tag payments
-      const periodSeen = new Map<number, number>();
-      tagged = rawPayments.map((p) => {
+      // Tag payments with isBadDebtRow based on ff_status + date rule
+      tagged = assigned.map((p) => {
         const ffStatus = (p as any).ff_status ?? null;
         const dateKey = p.paid_at ? String(p.paid_at).substring(0, 10) : null;
         // isBadDebt ถ้า: status=ยกเลิกสัญญา หรือ paid_at วันเดียวกับที่มี ยกเลิกสัญญา
         const isBadDebt = ffStatus === "ยกเลิกสัญญา" || (dateKey != null && badDebtDates.has(dateKey));
-        const period = p.period ?? 1; // fallback to period 1 if installmentExternalId missing
-        const splitIdx = periodSeen.get(period) ?? 0;
-        periodSeen.set(period, splitIdx + 1);
         if (isBadDebt) {
-          // bad-debt payment: ยอด = bad_debt_amount, total = null (แสดงเป็น "-")
+          // bad-debt payment: ยอด = bad_debt_amount (จาก API) หรือ total_paid_amount เป็น fallback
+          const badDebtAmt = (p.bad_debt_amount != null && p.bad_debt_amount > 0)
+            ? p.bad_debt_amount
+            : (p.total_paid_amount ?? 0);
           return {
             ...p,
-            period,
-            splitIndex: splitIdx,
             isCloseRow: false,
             isBadDebtRow: true,
-            bad_debt_amount: p.total_paid_amount ?? 0, // amount → bad_debt column
-            total_paid_amount: null,                   // ซ่อน total column
+            bad_debt_amount: badDebtAmt,
+            total_paid_amount: null, // ซ่อน total column สำหรับ bad-debt row
           };
         }
-        // ชำระปกติ
-        return { ...p, period, splitIndex: splitIdx, isCloseRow: false, isBadDebtRow: false };
+        // ชำระปกติ — ใช้ isCloseRow จาก assignPayPeriods
+        return { ...p, isBadDebtRow: false };
       });
     } else {
-      tagged = assignPayPeriods(
-        rawPayments,
-        c.installments.map((i: { period: number | null; amount: number | string }) => ({ period: i.period, amount: Number(i.amount) || 0 })),
-      );
+      tagged = assigned;
     }
     return {
       ...c,
@@ -1425,7 +1387,7 @@ export async function listDebtCollected(params: { section: SectionKey }) {
     };
   });
 
-  // hasPrincipalBreakdown: true = Boonphone (has principal/interest/fee breakdown)
-  //                          false = Fastfone365 (only total_paid_amount, no breakdown)
-  return { rows, hasPrincipalBreakdown: isFF365 === false };
+  // hasPrincipalBreakdown: true = both Boonphone and Fastfone365 now have full breakdown
+  //   (principal_paid, interest_paid, fee_paid, penalty_paid, etc. from payment transactions API)
+  return { rows, hasPrincipalBreakdown: true };
 }
