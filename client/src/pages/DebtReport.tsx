@@ -26,6 +26,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   BadgeDollarSign,
   Banknote,
+  CalendarDays,
   Check,
   ChevronsUpDown,
   CircleDollarSign,
@@ -43,6 +44,7 @@ import {
   TrendingDown,
   TrendingUp,
   Wallet,
+  X,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -358,6 +360,10 @@ export default function DebtReport() {
   const [approveDateFilter, setApproveDateFilter] = useState<Set<string>>(new Set());
   const [dueDateFilter, setDueDateFilter] = useState<Set<string>>(new Set());
   const [productTypeFilter, setProductTypeFilter] = useState<Set<string>>(new Set());
+  // Phase 23: exact date filter (YYYY-MM-DD)
+  // target tab = วันที่ที่ต้องชำระ (dueDate), collected tab = วันที่ที่ชำระ (paidAt)
+  // When set, masks cells whose date != selected date (does NOT hide the row)
+  const [dueDateExact, setDueDateExact] = useState<string | null>(null);
   // Switch: true = เฉพาะเงินต้น (แสดง penalty/unlockFee = 0 ทุกงวด), false = รวมค่าปรับ+ค่าปลดล็อก
   const [principalOnly, setPrincipalOnly] = useState(true);
   // Pinned columns: set of LEFT_COLS keys that are sticky-left
@@ -446,10 +452,26 @@ export default function DebtReport() {
         if (!approveDateFilter.has(ym)) return false;
       }
       if (dueDateFilter.size > 0) {
-        // Row passes if ANY installment's due_date month is in the filter
+        // Phase 23: dueDateFilter — row passes if ANY installment's due_date month is in the filter.
+        // Cells of non-matching periods are masked (shown as "-") in the table, not hidden.
+        // But rows that have NO matching period at all are still hidden.
         const hasMatch = r.installments.some(
           (inst) => inst.dueDate && dueDateFilter.has(inst.dueDate.slice(0, 7))
         );
+        if (!hasMatch) return false;
+      }
+      if (dueDateExact) {
+        // Phase 23: dueDateExact — row passes if ANY installment's dueDate (target) or paidAt (collected) matches.
+        // Cells of non-matching periods are masked in the table, not hidden.
+        // But rows that have NO matching period/payment at all are still hidden.
+        const hasMatch =
+          tab === "collected"
+            ? (r as CollectedRow).payments?.some(
+                (p) => p.paidAt && p.paidAt.slice(0, 10) === dueDateExact
+              ) ?? false
+            : r.installments.some(
+                (inst) => inst.dueDate && inst.dueDate.slice(0, 10) === dueDateExact
+              );
         if (!hasMatch) return false;
       }
       if (!q) return true;
@@ -459,7 +481,7 @@ export default function DebtReport() {
         (r.phone ?? "").toLowerCase().includes(q)
       );
     });
-  }, [activeRows, search, statusFilter, approveDateFilter, dueDateFilter, productTypeFilter]);
+  }, [activeRows, search, statusFilter, approveDateFilter, dueDateFilter, productTypeFilter, dueDateExact, tab]);
 
   /* ---- Max periods for the repeating group block ---- */
   const maxPeriods = useMemo(() => {
@@ -516,6 +538,10 @@ export default function DebtReport() {
     for (const r of filteredRows) {
       for (const inst of r.installments) {
         if (inst.isClosed || inst.isSuspended) continue;
+        // Phase 23: dueDateFilter cell-mask — only sum periods whose dueDate month matches
+        if (dueDateFilter.size > 0 && !(inst.dueDate && dueDateFilter.has(inst.dueDate.slice(0, 7)))) continue;
+        // Phase 23: dueDateExact cell-mask — only sum periods whose dueDate matches exact date
+        if (dueDateExact && inst.dueDate?.slice(0, 10) !== dueDateExact) continue;
         principal += inst.principal ?? 0;
         interest += inst.interest ?? 0;
         fee += inst.fee ?? 0;
@@ -525,7 +551,7 @@ export default function DebtReport() {
     }
     total = principal + interest + fee + penalty + unlockFee;
     return { principal, interest, fee, penalty, unlockFee, total };
-  }, [filteredRows, tab, principalOnly]);
+  }, [filteredRows, tab, principalOnly, dueDateFilter, dueDateExact]);
 
   const collectedSummary = useMemo(() => {
     if (tab !== "collected") return null;
@@ -533,6 +559,8 @@ export default function DebtReport() {
     let discount = 0, overpaid = 0, badDebt = 0, total = 0;
     for (const r of filteredRows as CollectedRow[]) {
       for (const p of r.payments ?? []) {
+        // Phase 23: dueDateExact cell-mask — only sum payments whose paidAt matches exact date
+        if (dueDateExact && (p.paidAt?.slice(0, 10) ?? null) !== dueDateExact) continue;
         principal += p.principal ?? 0;
         interest += p.interest ?? 0;
         fee += p.fee ?? 0;
@@ -546,7 +574,7 @@ export default function DebtReport() {
       }
     }
     return { principal, interest, fee, penalty, unlockFee, discount, overpaid, badDebt, total };
-  }, [filteredRows, tab]);
+  }, [filteredRows, tab, dueDateExact]);
 
   /* ---- TopNav actions (sync + export) ---- */
   // Export handler (used inline in toolbar)
@@ -781,10 +809,33 @@ export default function DebtReport() {
                   </label>
                 </div>
               )}
-              {(statusFilter.size > 0 || approveDateFilter.size > 0 || dueDateFilter.size > 0 || productTypeFilter.size > 0) && (
+              {/* Phase 23: date picker filter (exact date) */}
+              <div className="flex items-center gap-1.5">
+                <div className="relative flex items-center">
+                  <CalendarDays className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+                  <input
+                    type="date"
+                    value={dueDateExact ?? ""}
+                    onChange={(e) => setDueDateExact(e.target.value || null)}
+                    className="h-9 pl-8 pr-2 rounded-md border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 w-[155px]"
+                    title={tab === "target" ? "กรองตามวันที่ที่ต้องชำระ" : "กรองตามวันที่ที่ชำระ"}
+                  />
+                </div>
+                {dueDateExact && (
+                  <button
+                    type="button"
+                    onClick={() => setDueDateExact(null)}
+                    className="flex items-center justify-center w-6 h-6 rounded-full bg-gray-100 hover:bg-red-100 text-gray-400 hover:text-red-500 transition-colors"
+                    title="ล้างฟิลเตอร์วันที่"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+              {(statusFilter.size > 0 || approveDateFilter.size > 0 || dueDateFilter.size > 0 || productTypeFilter.size > 0 || dueDateExact) && (
                 <button
                   type="button"
-                  onClick={() => { setStatusFilter(new Set()); setApproveDateFilter(new Set()); setDueDateFilter(new Set()); setProductTypeFilter(new Set()); }}
+                  onClick={() => { setStatusFilter(new Set()); setApproveDateFilter(new Set()); setDueDateFilter(new Set()); setProductTypeFilter(new Set()); setDueDateExact(null); }}
                   className="text-xs text-gray-400 hover:text-red-500 underline"
                 >
                   ล้างฟิลเตอร์
@@ -1193,10 +1244,38 @@ export default function DebtReport() {
                           const suspendLabel = inst?.suspendLabel ?? "ระงับสัญญา";
                           // Grey-out applies to both closed AND suspended cells.
                           const dimmed = closed || suspended;
+                          // Phase 23: cell-level masking for dueDateFilter and dueDateExact
+                          // If a filter is active and this period's dueDate doesn't match,
+                          // render the cell as "-" (masked) instead of actual values.
+                          const dueDateMonthMasked =
+                            dueDateFilter.size > 0 &&
+                            !(inst?.dueDate && dueDateFilter.has(inst.dueDate.slice(0, 7)));
+                          const dueDateExactMasked =
+                            !!dueDateExact &&
+                            inst?.dueDate?.slice(0, 10) !== dueDateExact;
+                          const isCellMasked = dueDateMonthMasked || dueDateExactMasked;
                           return groupCols.map((gc) => {
                             let v: any = "";
                             let annotation: string | null = null;
                             let annotationClass = "";
+                            // Phase 23: if cell is masked by date filter, show "-" for all columns
+                            // except "period" (always show period number for orientation)
+                            if (isCellMasked && gc.key !== "period") {
+                              const maskedStyle: Record<string, string | number> = {
+                                width: gc.width,
+                                textAlign: (gc as any).align === "right" ? "right" : "left",
+                                color: "#d1d5db", // gray-300
+                              };
+                              return (
+                                <div
+                                  key={`c-${vr.index}-${i}-${gc.key}`}
+                                  className="px-2 py-2 border-r whitespace-nowrap"
+                                  style={maskedStyle}
+                                >
+                                  -
+                                </div>
+                              );
+                            }
                             if (inst) {
                               if (gc.key === "period") {
                                 // Period number stays visible on closed/suspended rows too.
@@ -1327,9 +1406,35 @@ export default function DebtReport() {
                           periodNo > instCount ||
                           (contractSuspended && pays.length === 0);
 
+                        // Phase 23: cell-level masking for dueDateExact (collected tab = paidAt filter)
+                        // A period is masked when dueDateExact is set AND none of its payments
+                        // have paidAt matching the selected date.
+                        const isCollectedCellMasked =
+                          !!dueDateExact &&
+                          !pays.some((p) => p.paidAt?.slice(0, 10) === dueDateExact);
+
                         // Vertical stack: one cell per group sub-column,
                         // with N inner lines for N split payments.
                         return groupCols.map((gc, gcIdx) => {
+                          // Phase 23: masked period — show "-" except for "period" column
+                          if (isCollectedCellMasked && gc.key !== "period") {
+                            return (
+                              <div
+                                key={`c-${vr.index}-${i}-${gc.key}`}
+                                className="border-r"
+                                style={{
+                                  width: gc.width,
+                                  textAlign: (gc as any).align === "right" ? "right" : "left",
+                                  height: ROW_HEIGHT,
+                                  lineHeight: `${ROW_HEIGHT - 16}px`,
+                                  color: "#d1d5db", // gray-300
+                                  padding: "0 8px",
+                                }}
+                              >
+                                -
+                              </div>
+                            );
+                          }
                           return (
                             <div
                               key={`c-${vr.index}-${i}-${gc.key}`}

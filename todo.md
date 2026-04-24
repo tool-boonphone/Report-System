@@ -497,3 +497,8 @@ Task list:
 - [x] Pre-warm cache: สร้าง `server/debtPrewarm.ts` + เรียกใน `server/_core/index.ts` (non-blocking, background setTimeout 2s)
 - [x] Progress indicator: elapsed time counter + ข้อความแจ้งว่าครั้งถัดไปจะเร็วขึ้น ใน DebtReport.tsx loading state
 - [x] Export Excel: ปุ่ม Export Excel ใน BadDebtSummary TopNav + route `/api/export/bad-debt` + `handleBadDebtExport` ใน exportExcel.ts
+
+### Phase 23 — Filter Enhancements ใน DebtReport (cell-level hiding)
+
+- [ ] Feature 1: ฟิลเตอร์เดือน-ปีที่ต้องชำระ (dueDateFilter) → ซ่อน cell ของ period ที่ dueDate ไม่ตรงกับเดือนที่เลือก (แสดง "-" แทน) + Badge คำนวณเฉพาะ period ที่ตรง
+- [ ] Feature 2: เพิ่ม date picker filter (ปฏิทิน) ก่อนฟิลเตอร์เดือน-ปีที่อนุมัติ ทั้ง 2 tab → ซ่อน cell ของ period ที่ dueDate (target) หรือ paidAt (collected) ไม่ตรงวันที่เลือก + Badge คำนวณเฉพาะวันที่เลือก
