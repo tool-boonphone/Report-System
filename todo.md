@@ -641,4 +641,4 @@ Task list:
 - [x] Re-sync bad_debt_amount สำหรับสัญญา FF365 ทั้งหมดใน DB
 
 ### Fix: FF365 duplicate payment rows (synthetic payments หลุดผ่าน normalPayments filter)
-- [ ] แก้ normalPayments filter ใน debtDb.ts: ตัด synthetic payments (external_id ไม่ใช่ตัวเลข) ออกทั้งหมด ไม่ว่า paid_at จะตรงกับ bad debt date หรือไม่
+- [x] แก้ normalPayments filter ใน debtDb.ts: ตัด synthetic payments (external_id ไม่ใช่ตัวเลข) ออกทั้งหมด ไม่ว่า paid_at จะตรงกับ bad debt date หรือไม่
