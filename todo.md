@@ -511,7 +511,7 @@ Task list:
 
 ### Phase 25 — Filter Order + Date Filter Behavior
 
-- [ ] เรียงลำดับ filter ใหม่: target tab = ค้นหา > วันที่ > เดือน-ปีที่อนุมัติ > เดือน-ปีที่ต้องชำระ > สถานะหนี้ > ประเภทเครื่อง > เฉพาะเงินต้น
-- [ ] เรียงลำดับ filter ใหม่: collected tab = ค้นหา > วันที่ > เดือน-ปีที่อนุมัติ > เดือน-ปีที่ต้องชำระ > สถานะหนี้ > ประเภทเครื่อง
-- [ ] collected tab date filter: เปลี่ยนจากซ่อน cell → ซ่อน row ที่ไม่มี payment ใดที่ paidAt ตรงวันที่เลือก
-- [ ] filteredRows ลำดับความสำคัญ: approveDateFilter > dueDateExact > dueDateFilter > debtStatusFilter > deviceTypeFilter
+- [x] เรียงลำดับ filter ใหม่: target tab = ค้นหา > วันที่ > เดือน-ปีที่อนุมัติ > เดือน-ปีที่ต้องชำระ > สถานะหนี้ > ประเภทเครื่อง > เฉพาะเงินต้น
+- [x] เรียงลำดับ filter ใหม่: collected tab = ค้นหา > วันที่ > เดือน-ปีที่อนุมัติ > เดือน-ปีที่ต้องชำระ > สถานะหนี้ > ประเภทเครื่อง
+- [x] collected tab date filter: row-level hiding (filteredRows) + cell masking สำหรับ period ที่ไม่ตรงวันที่
+- [x] filteredRows ลำดับความสำคัญ: approveDateFilter > dueDateExact > dueDateFilter > statusFilter > productTypeFilter
