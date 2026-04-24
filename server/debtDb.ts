@@ -666,6 +666,9 @@ export async function listDebtTarget(params: { section: SectionKey }) {
   const paidAtsByContract = new Map<string, string[]>();
   // Phase 39b: สำหรับ bad-debt contracts — นับจาก payment_transactions จริงเท่านั้น
   const maxPaidPeriodByContract = new Map<string, number>();
+  // ff39bByContract: เก็บ periods จาก real FF365 payments (ไม่ใช่ bad debt) ต่อสัญญา
+  // declare ใน outer scope เพื่อให้ใช้ได้ใน Phase 39b FF365 block ด้านล่าง
+  const ff39bByContract = new Map<string, number[]>();
 
   if (isFF365) {
     // Fastfone365: detect close from contract.status = "สิ้นสุดสัญญา".
@@ -723,7 +726,6 @@ export async function listDebtTarget(params: { section: SectionKey }) {
     // Phase 39b: For bad-debt FF365 contracts, populate maxPaidPeriodByContract
     // นับจาก payment_transactions จริง (ffPays) เฉพาะ real payments ที่ไม่ใช่ bad debt payment
     // ใช้ logic เดียวกับ listDebtCollected: filter ออก TXRTC และ bad debt payment
-    const ff39bByContract = new Map<string, number[]>();
     for (const pr of ffPays) {
       const key = String(pr.contract_external_id ?? "");
       if (!key) continue;
@@ -742,9 +744,7 @@ export async function listDebtTarget(params: { section: SectionKey }) {
       arr.push(period);
       ff39bByContract.set(key, arr);
     }
-    // จะ populate maxPaidPeriodByContract หลัง cRows ถูก build (ดูด้านล่าง Phase 39b FF365 block)
-    // เก็บ ff39bByContract ไว้ใน closure scope เพื่อใช้ภายหลัง
-    void ff39bByContract; // จะใช้ใน Phase 39b block ด้านล่าง
+    // ff39bByContract ถูก declare ใน outer scope แล้ว จะ populate maxPaidPeriodByContract ด้านล่าง
   } else {
     // Boonphone: use receipt_no TXRTC prefix.
     const rawCloseData = await db.execute(sql`
@@ -856,6 +856,20 @@ export async function listDebtTarget(params: { section: SectionKey }) {
   }
 
   // Phase 39b: Boonphone maxPaidPeriodByContract ถูก populate ใน else block ด้านบน (normalPeriodsByContract)
+
+  // Phase 39b FF365: populate maxPaidPeriodByContract สำหรับ bad-debt FF365 contracts
+  // ff39bByContract ถูก build ใน if(isFF365) block แรก (line 726-743)
+  if (isFF365) {
+    for (const c of cRows) {
+      if (c.status !== "หนี้เสีย") continue;
+      const key = String(c.external_id ?? "");
+      if (!key) continue;
+      const periods = (ff39bByContract as Map<string, number[]>).get(key);
+      if (periods && periods.length > 0) {
+        maxPaidPeriodByContract.set(key, Math.max(...periods));
+      }
+    }
+  }
 
   const today = new Date();
 
