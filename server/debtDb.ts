@@ -1390,12 +1390,18 @@ export async function listDebtCollected(params: { section: SectionKey }) {
       //   → ตัด payments ทั้งหมดที่เกี่ยวกับ bad debt ออก (ทั้ง real และ synthetic)
       //   → สร้าง 1 bad debt row ใหม่ที่งวดถัดจากงวดสุดท้ายที่ชำระปกติ
       if (badDebtDates.size > 0 && contractBadDebtAmount != null && contractBadDebtAmount > 0) {
-        // แยก: payments ปกติ (ไม่ใช่ bad debt date) vs payments bad debt (ตัดออก)
+        // แยก: payments ปกติ vs payments bad debt (ตัดออก)
+        // ตัดออก: (1) payments ที่ paid_at วันเดียวกับ bad debt date (synthetic)
+        //          (2) real payment (external_id เป็นตัวเลข) เพราะยอดนี้คือยอดขายเครื่อง
+        //              ที่กระจายลงงวดแล้ว ไม่ควรแสดงในตาราง
         const normalPayments = assigned.filter((p) => {
           const dateKey = p.paid_at ? String(p.paid_at).substring(0, 10) : null;
           const ffStatus = (p as any).ff_status ?? null;
+          const payExtId = (p as any).payment_external_id as string | null;
+          const isRealPayment = payExtId != null && /^\d+$/.test(payExtId);
+          // ตัด: bad debt date payments หรือ real payment (ยอดขายเครื่อง)
           const isBadDebt = ffStatus === "ยกเลิกสัญญา" || (dateKey != null && badDebtDates.has(dateKey));
-          return !isBadDebt;
+          return !isBadDebt && !isRealPayment;
         });
 
         // หางวดสุดท้ายที่มีการชำระปกติ
