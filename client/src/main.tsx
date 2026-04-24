@@ -50,16 +50,23 @@ queryClient.getMutationCache().subscribe(event => {
   }
 });
 
+// Phase 32: เพิ่ม timeout 120 วินาที สำหรับ Fastfone365 ที่มี payload ใหญ่
+// (default fetch ไม่มี timeout แต่ reverse proxy มัก timeout ที่ ~30-60 วินาที)
+const TRPC_TIMEOUT_MS = 120_000; // 120 seconds
+
 const trpcClient = trpc.createClient({
   links: [
     httpBatchLink({
       url: "/api/trpc",
       transformer: superjson,
       fetch(input, init) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), TRPC_TIMEOUT_MS);
         return globalThis.fetch(input, {
           ...(init ?? {}),
           credentials: "include",
-        });
+          signal: controller.signal,
+        }).finally(() => clearTimeout(timeoutId));
       },
     }),
   ],

@@ -567,3 +567,14 @@ Task list:
 - [x] ตรวจสอบ debtDb.ts: พบว่า listDebtTarget SQL query ไม่มี filter status เลย
 - [x] เพิ่ม `AND (status IS NULL OR status != 'ยกเลิกสัญญา')` ใน listDebtTarget SQL (listDebtCollected reuse baseRows จึง filter ออกอัตโนมัติ)
 - [x] ทดสอบ TypeScript (ไม่มี error) เรียบร้อย
+
+#### Phase 32 — แก้ไขปัญหา Fastfone365 รายงานหนี้โหลดนาน/502 timeout
+- [x] ตรวจสอบ server log และ prewarm cache สำหรับ Fastfone365 (พบว่า 502 Bad Gateway เมื่อ cache miss)
+- [x] เพิ่ม Cache TTL จาก 5 นาที → 30 นาที ใน debtCache.ts
+- [x] เพิ่ม stale-while-revalidate: background refresh เมื่อ cache ใกล้หมด (< 5 นาที)
+- [x] เพิ่ม timeout 120 วินาที ใน tRPC client (main.tsx) เพื่อรอกรณี cache miss
+- [x] เพิ่ม retry: 1, staleTime: 25 นาที ใน query options (DebtReport.tsx)
+- [x] ปรับ loading message ให้แสดงเวลาที่ใช้ไปและ progress bar ที่ถูกต้องกว่าเดิม
+- [x] เพิ่ม error state พร้อมปุ่ม "ลองใหม่" เมื่อเกิด 502/timeout
+- [x] TypeScript: 0 errors, Server: running, prewarm: all sections cached
+- [x] commit + checkpoint

@@ -397,17 +397,34 @@ export default function DebtReport() {
   };
 
   // One-shot load per tab. Query disables itself when user lacks permission.
+  // Phase 32: เพิ่ม retry: 1 (ลองใหม่ 1 ครั้งถ้า error), staleTime: 25 นาที
   const targetQuery = trpc.debt.listTarget.useQuery(
     section ? { section } : (undefined as any),
-    { enabled: canView && !!section && tab === "target" },
+    {
+      enabled: canView && !!section && tab === "target",
+      retry: 1,
+      retryDelay: 2000,
+      staleTime: 25 * 60 * 1000, // 25 นาที (cache server 30 นาที)
+    },
   );
   const collectedQuery = trpc.debt.listCollected.useQuery(
     section ? { section } : (undefined as any),
-    { enabled: canView && !!section && tab === "collected" },
+    {
+      enabled: canView && !!section && tab === "collected",
+      retry: 1,
+      retryDelay: 2000,
+      staleTime: 25 * 60 * 1000, // 25 นาที (cache server 30 นาที)
+    },
   );
 
   const isLoading =
     tab === "target" ? targetQuery.isLoading : collectedQuery.isLoading;
+  const isError =
+    tab === "target" ? targetQuery.isError : collectedQuery.isError;
+  const queryError =
+    tab === "target" ? targetQuery.error : collectedQuery.error;
+  const refetch =
+    tab === "target" ? targetQuery.refetch : collectedQuery.refetch;
 
   // Track elapsed time for first-load progress indicator
   const [elapsedSec, setElapsedSec] = useState(0);
@@ -990,16 +1007,40 @@ export default function DebtReport() {
         </div>
 
         {/* Table */}
-        {isLoading ? (
+        {isError ? (
+          /* Phase 32: แสดง error state พร้อมปุ่ม retry */
+          <div className="flex flex-col items-center justify-center py-20 gap-4">
+            <div className="text-center">
+              <p className="text-sm font-semibold text-red-600 mb-1">โหลดข้อมูลไม่สำเร็จ</p>
+              <p className="text-xs text-gray-500 mb-3">
+                {(queryError as any)?.message?.includes("aborted")
+                  ? "การเชื่อมต่อใช้เวลานานเกินไป กรุณาลองใหม่"
+                  : ((queryError as any)?.message ?? "เกิดข้อผิดพลาด กรุณาลองใหม่")}
+              </p>
+              <button
+                onClick={() => refetch()}
+                className="px-4 py-2 text-sm bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors"
+              >
+                ลองใหม่
+              </button>
+            </div>
+          </div>
+        ) : isLoading ? (
           <div className="flex flex-col items-center justify-center py-20 gap-4">
             <Spinner />
             <div className="text-center">
               <p className="text-sm font-medium text-gray-700">
-                กำลังโหลดข้อมูล{elapsedSec >= 3 ? " (ครั้งแรก)" : ""}...
+                {elapsedSec < 3
+                  ? "กำลังโหลดข้อมูล..."
+                  : elapsedSec < 15
+                  ? `กำลังโหลดข้อมูล... (${elapsedSec} วินาที)`
+                  : `กำลังประมวลผลข้อมูลจำนวนมาก... (${elapsedSec} วินาที)`}
               </p>
               {elapsedSec >= 3 && (
                 <p className="text-xs text-gray-500 mt-1">
-                  ใช้เวลา {elapsedSec} วินาที — ครั้งถัดไปจะเร็วขึ้นมาก
+                  {elapsedSec < 15
+                    ? "ครั้งถัดไปจะเร็วขึ้นมาก (ข้อมูลถูก cache ไว้)"
+                    : "ข้อมูลมีปริมาณมาก กรุณารอสักครู่..."}
                 </p>
               )}
               {elapsedSec >= 3 && (
@@ -1007,7 +1048,10 @@ export default function DebtReport() {
                   <div
                     className="h-full rounded-full transition-all duration-500"
                     style={{
-                      width: `${Math.min(95, (elapsedSec / 10) * 100)}%`,
+                      // Progress bar: 0-15s → 0-80%, 15-60s → 80-95%
+                      width: elapsedSec < 15
+                        ? `${Math.min(80, (elapsedSec / 15) * 80)}%`
+                        : `${Math.min(95, 80 + ((elapsedSec - 15) / 45) * 15)}%`,
                       background: tab === "target" ? "#b45309" : "#047857",
                     }}
                   />
