@@ -236,7 +236,7 @@ Task list:
 - [x] ตรวจ Postman collection + DB schema — ไม่มี endpoint "การติดตามค่างวด" ใน collection; installments.raw_json มีแค่ฟิลด์ `suspended_at` / `bad_debt_at` แต่ค่าเป็น null ทั้งหมด (รวมถึง CT0226-UTT002-1265-01 ของธัญธร)
 - [x] **Decision C**: ยอมรัป approximation — ใช้ due_date ของงวดแรกที่เป็น "ระงับสัญญา" เป็น suspendedAt ตามที่ระบบทำไว้แล้วใน Phase 9j
 - [x] ไม่ต้องแก้โค้ด; ไม่ต้อง commit ใหม่
-- [ ] **Deferred**: ตอนเริ่มงาน Fastfone365 ให้ตรวจซ้ำว่า API Fastfone ส่ง suspended_at/bad_debt_at จริงหรือไม่
+- [x] **Deferred**: ตรวจซ้ำ FF365 suspended_at/bad_debt_at — null ทั้งหมด (171,363 installments) เหมือน Boonphone — ใช้ approximation (due_date ของงวดแรกที่ status=ระงับ/ยกเลิก) ถูกต้อง
 
 ### Phase 9L (TODO) — แก้ 5 ประเด็นในแท็บยอดเก็บหนี้ + สำรวจ pattern การปิดยอด
 
@@ -405,7 +405,7 @@ Task list:
 
 ### Phase 12 — Bug Fix: Installment Date Ordering
 - [x] P12-1: ตรวจสอบ root cause ของ bug วันที่ต้องชำระงวดที่ 1 อยู่หลังงวดที่ 2 (CT0226-SRI005-1183-01: งวด1=2027-01-05, งวด2=2026-04-05) — data anomaly จาก API (1 contract เดียว) ไม่ใช่ bug ใน code
-- [ ] P12-2: แก้ไข debtDb.ts ให้เรียงลำดับ installments ตาม due_date ก่อนใช้งาน
+- [x] P12-2: แก้ไข debtDb.ts ให้เรียงลำดับ installments ตาม due_date ก่อนใช้งาน — ✅ fixOutOfOrderDueDates() ใน debtDb.ts (duplicate ของ line 449)
 - [x] P12-3: ตรวจสอบว่ามีสัญญาอื่นที่มีปัญหาเดียวกันหรือไม่ — fixOutOfOrderDueDates() ใน debtDb.ts จัดการแล้ว
 
 ### Phase 13 — DebtReport UX Improvements (5 items)
