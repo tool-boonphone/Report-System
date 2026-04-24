@@ -886,6 +886,45 @@ export async function listDebtTarget(params: { section: SectionKey }) {
       }
     }
 
+    // --- Phase 36: Pre-compute multi-period overpaid carry-forward ---
+    // กฎ:
+    //   1. ใช้ overpaid_amount จาก API (overpaidByContractPeriod)
+    //   2. ถ้า overpaid > baseline ของงวดถัดไป → carry ส่วนที่เหลือต่อไปงวดถัดๆ ไป
+    //   3. หยุดถ้างวดถัดไปเป็น isSuspended (period >= suspendedFromPeriod)
+    //   4. ถ้า bad debt row มี overpaid → ไม่ carry ต่อ
+    // effectiveCarryByPeriod: Map<periodNo, overpaidApplied>
+    const effectiveCarryByPeriod = new Map<number, number>();
+    {
+      const rawOverpaidMap = overpaidByContractPeriod.get(extId);
+      if (rawOverpaidMap && rawOverpaidMap.size > 0) {
+        const sortedPeriods = list
+          .map((r) => Number(r.period ?? 0))
+          .filter((p) => p > 0)
+          .sort((a, b) => a - b);
+        let remainingCarry = 0;
+        for (const pNo of sortedPeriods) {
+          // Accumulate any new overpaid from this period
+          remainingCarry += rawOverpaidMap.get(pNo) ?? 0;
+          if (remainingCarry < 0.009) continue;
+          // Determine next period
+          const nextPNo = pNo + 1;
+          // Stop if next period is suspended/bad-debt
+          if (suspendedFromPeriod > 0 && nextPNo >= suspendedFromPeriod) {
+            remainingCarry = 0;
+            break;
+          }
+          // Apply carry to next period
+          effectiveCarryByPeriod.set(nextPNo, remainingCarry);
+          // Compute how much carry is consumed by next period's baseline
+          const nextInst = list.find((r) => Number(r.period ?? 0) === nextPNo);
+          const nextBaseline = baselineAmount != null && baselineAmount > 0
+            ? baselineAmount
+            : Number(nextInst?.amount ?? 0);
+          remainingCarry = Math.max(0, remainingCarry - nextBaseline);
+        }
+      }
+    }
+
     // Build installment schedule.
     //
     // USER RULE (2026-04-23):
@@ -975,15 +1014,13 @@ export async function listDebtTarget(params: { section: SectionKey }) {
         //        Example: CT0226-SNI001-0978-01 period 1 overpaid=1010, period 2 amount=0
         //        (zeroed by API after payment), so we must show baseline-1010=980.
         let overpaidApplied = 0;
-        if (!isClosed && periodNo > 1) {
+        if (!isClosed && !isSuspended && periodNo > 1) {
+          // Phase 36: use pre-computed multi-period carry-forward map
           // Skip carry-forward only when API already reduced the amount (paidInFullWithReducedAmount)
           // For paidInFullButZeroedByApi, we still apply carry so baseline display is reduced.
           const skipCarry = paidInFullWithReducedAmount;
           if (!skipCarry) {
-            const periodMap = overpaidByContractPeriod.get(extId);
-            if (periodMap) {
-              overpaidApplied = periodMap.get(periodNo - 1) ?? 0;
-            }
+            overpaidApplied = effectiveCarryByPeriod.get(periodNo) ?? 0;
           }
         }
 

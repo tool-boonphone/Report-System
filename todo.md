@@ -645,3 +645,10 @@ Task list:
 
 ### Fix: FF365 period assignment offset หลังแก้ synthetic filter
 - [x] แก้ debtDb.ts bad debt branch: re-assign periods จาก real payments เท่านั้น (ไม่ใช้ assigned ที่ include synthetic ทำให้ cursor offset ผิด)
+
+### Phase 36 — Overpaid Carry-Forward & Bad Debt Target Display
+- [ ] Target table: overpaid carry-forward — นำ overpaid_amount หักงวดถัดไปเรื่อยๆ จนหมด (N+1, N+2...) พร้อมแสดงข้อความ (-หักชำระเกิน: xx.xx) ใต้ยอดหนี้รวม
+- [ ] Target table: หยุด carry-forward ถ้างวดถัดไปเป็น bad debt row (isBadDebt)
+- [ ] Target table: ถ้า bad debt row มี overpaid → ไม่หัก ไม่แสดงข้อความ
+- [ ] Target table: bad debt display — แสดงหนี้เสียตั้งแต่งวดที่มี bad debt row ใน Collected เป็นต้นไป
+- [ ] Excel export: ส่งตัวเลขเท่านั้น ไม่ส่งข้อความ (-หักชำระเกิน: xx.xx)
