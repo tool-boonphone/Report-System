@@ -505,6 +505,6 @@ Task list:
 
 ### Phase 24 — Bug fix: overpaid ของงวดก่อนหน้าไม่ถูกนำมาหักในเป้าเก็บหนี้
 
-- [ ] ตรวจสอบ DB: overpaid_amount, installments.amount ของสัญญา CT0226-SBR001-0909-01
-- [ ] วิเคราะห์ว่า API ส่ง overpaid ใน installments.amount ของงวดถัดไปหรือไม่
-- [ ] แก้ไข listDebtTarget ให้แสดง annotation overpaid ที่งวดถัดไปถูกต้อง
+- [x] ตรวจสอบ DB: overpaid_amount, installments.amount ของสัญญา CT0226-SBR001-0909-01
+- [x] วิเคราะห์: API ส่ง apiAmount = baseline (ไม่หักให้) → else branch ต้องหัก overpaidApplied เอง
+- [x] แก้ไข debtDb.ts else branch: ถ้า apiEqualsBaseline && overpaidApplied > 0 → amount = max(0, apiAmount - overpaidApplied)
