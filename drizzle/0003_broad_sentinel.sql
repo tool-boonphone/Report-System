@@ -1,0 +1,1 @@
+ALTER TABLE `contracts` MODIFY COLUMN `workplace` varchar(1024);

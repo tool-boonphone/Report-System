@@ -160,7 +160,7 @@ export const contracts = mysqlTable(
     status: varchar("status", { length: 32 }),
 
     // === Partner ===
-    partnerCode: varchar("partner_code", { length: 64 }),
+    partnerCode: varchar("partner_code", { length: 255 }),
     partnerName: varchar("partner_name", { length: 255 }),
     partnerProvince: varchar("partner_province", { length: 64 }),
     partnerStatus: varchar("partner_status", { length: 32 }),
@@ -172,9 +172,9 @@ export const contracts = mysqlTable(
     citizenId: varchar("citizen_id", { length: 32 }),
     gender: varchar("gender", { length: 16 }),
     age: int("age"),
-    occupation: varchar("occupation", { length: 128 }),
+    occupation: varchar("occupation", { length: 512 }),
     salary: decimal("salary", { precision: 12, scale: 2 }),
-    workplace: varchar("workplace", { length: 255 }),
+    workplace: varchar("workplace", { length: 1024 }),
     phone: varchar("phone", { length: 32 }),
     idDistrict: varchar("id_district", { length: 128 }),
     idProvince: varchar("id_province", { length: 128 }),

@@ -22,6 +22,20 @@
       "when": 1776959819768,
       "tag": "0002_petite_charles_xavier",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1776980267544,
+      "tag": "0003_broad_sentinel",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1776981826714,
+      "tag": "0004_good_tyger_tiger",
+      "breakpoints": true
     }
   ]
 }

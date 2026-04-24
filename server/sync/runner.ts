@@ -28,7 +28,7 @@ import {
 } from "./syncLog";
 import type { SectionKey, SyncTrigger } from "../../shared/const";
 
-const OVERALL_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes ceiling per section
+const OVERALL_TIMEOUT_MS = 90 * 60 * 1000; // 90 minutes ceiling per section (Fastfone365 has 17k contracts)
 // A sync row older than this with status=in_progress is treated as abandoned.
 const STALE_INPROGRESS_MS = OVERALL_TIMEOUT_MS + 5 * 60 * 1000;
 
@@ -320,10 +320,13 @@ async function syncContracts(
           // Enrich with partner fields we already have.
           const partner = partnersById.get(String(it.partner_id));
           if (partner) {
-            row.partnerCode =
-              partner.partner_code && partner.partner_name
+            {
+              const combined = partner.partner_code && partner.partner_name
                 ? `${partner.partner_code} : ${partner.partner_name}`
                 : partner.partner_code ?? null;
+              // Truncate to column limit (varchar 255)
+              row.partnerCode = combined && combined.length > 255 ? combined.slice(0, 255) : combined;
+            }
             row.partnerName = partner.partner_name ?? null;
             row.partnerProvince = partner.partner_province ?? null;
             row.partnerStatus =
@@ -354,19 +357,24 @@ async function syncContracts(
     // detail endpoint under `contract.product`. We therefore collect the set
     // of contract IDs we just upserted and call `contract?action=detail&id=X`
     // with bounded concurrency to merge the two extra columns.
-    try {
-      const enriched = await enrichContractsWithDeviceIds(
-        client,
-        section,
-      );
-      rowCount += enriched;
-    } catch (err: any) {
-      // Backfill failure must NOT abort the whole contracts sync; we already
-      // have the list-level columns. Log and continue.
-      console.warn(
-        `[sync] ${section} imei/serial backfill skipped:`,
-        err?.message ?? err,
-      );
+    // NOTE: Skip for Fastfone365 — syncInstallmentsFromDetail() already calls
+    // the same detail endpoint for every contract, so IMEI will be picked up
+    // there instead. Running both would double the API calls (~17k requests).
+    if (section !== "Fastfone365") {
+      try {
+        const enriched = await enrichContractsWithDeviceIds(
+          client,
+          section,
+        );
+        rowCount += enriched;
+      } catch (err: any) {
+        // Backfill failure must NOT abort the whole contracts sync; we already
+        // have the list-level columns. Log and continue.
+        console.warn(
+          `[sync] ${section} imei/serial backfill skipped:`,
+          err?.message ?? err,
+        );
+      }
     }
 
     await finishSyncLog({ id: log.id, status: "success", rowCount });
@@ -393,31 +401,38 @@ async function syncInstallments(
   });
   let rowCount = 0;
   try {
-    const buffer: any[] = [];
-    try {
-      await client.forEachPage<any>(
-        "contract",
-        (d) => d?.installments,
-        { action: "installments" },
-        async (items) => {
-          for (const it of items) buffer.push(mapInstallment(section, it));
-          if (buffer.length >= 1000) {
-            rowCount += await upsertInstallments(
-              buffer.splice(0, buffer.length),
-            );
-          }
-        },
-        500,
-      );
-    } catch (err) {
-      // Endpoint may not exist on every deployment; degrade gracefully.
-      if (err instanceof PartnerApiError && err.status === 404) {
-        console.warn(`[sync] ${section} installments endpoint not available`);
-      } else {
-        throw err;
+    // Fastfone365 has no standalone installment endpoint.
+    // Installments are embedded inside the contract detail response.
+    if (section === "Fastfone365") {
+      rowCount = await syncInstallmentsFromDetail(client, section);
+    } else {
+      // Boonphone: use the dedicated installment bulk endpoint.
+      const buffer: any[] = [];
+      try {
+        await client.forEachPage<any>(
+          "contract",
+          (d) => d?.installments,
+          { action: "installments" },
+          async (items) => {
+            for (const it of items) buffer.push(mapInstallment(section, it));
+            if (buffer.length >= 1000) {
+              rowCount += await upsertInstallments(
+                buffer.splice(0, buffer.length),
+              );
+            }
+          },
+          500,
+        );
+      } catch (err) {
+        // Endpoint may not exist on every deployment; degrade gracefully.
+        if (err instanceof PartnerApiError && err.status === 404) {
+          console.warn(`[sync] ${section} installments endpoint not available`);
+        } else {
+          throw err;
+        }
       }
+      if (buffer.length) rowCount += await upsertInstallments(buffer);
     }
-    if (buffer.length) rowCount += await upsertInstallments(buffer);
     await finishSyncLog({ id: log.id, status: "success", rowCount });
     return rowCount;
   } catch (err: any) {
@@ -442,20 +457,27 @@ async function syncPayments(
   });
   let rowCount = 0;
   try {
-    const buffer: any[] = [];
-    await client.forEachPage<any>(
-      "payment",
-      (d) => d?.transactions,
-      { action: "transactions" },
-      async (items) => {
-        for (const it of items) buffer.push(mapPayment(section, it));
-        if (buffer.length >= 1000) {
-          rowCount += await upsertPayments(buffer.splice(0, buffer.length));
-        }
-      },
-      500,
-    );
-    if (buffer.length) rowCount += await upsertPayments(buffer);
+    // Fastfone365 has no standalone payment endpoint.
+    // Payment data is derived from paid installments already stored in DB.
+    if (section === "Fastfone365") {
+      rowCount = await syncPaymentsFromInstallments(section);
+    } else {
+      // Boonphone: use the dedicated payment bulk endpoint.
+      const buffer: any[] = [];
+      await client.forEachPage<any>(
+        "payment",
+        (d) => d?.transactions,
+        { action: "transactions" },
+        async (items) => {
+          for (const it of items) buffer.push(mapPayment(section, it));
+          if (buffer.length >= 1000) {
+            rowCount += await upsertPayments(buffer.splice(0, buffer.length));
+          }
+        },
+        500,
+      );
+      if (buffer.length) rowCount += await upsertPayments(buffer);
+    }
     await finishSyncLog({ id: log.id, status: "success", rowCount });
     return rowCount;
   } catch (err: any) {
@@ -555,6 +577,133 @@ async function enrichContractsWithDeviceIds(
   );
   await flush();
   return flushed;
+}
+
+/**
+ * Fastfone365-specific: fetch installments from contract detail endpoint.
+ * Loops through all contracts in DB and fetches detail for each, extracting
+ * the embedded installments array. Uses bounded concurrency (5 workers).
+ */
+async function syncInstallmentsFromDetail(
+  client: PartnerClient,
+  section: SectionKey,
+): Promise<number> {
+  const { getDb } = await import("../db");
+  const { contracts: contractsTable } = await import("../../drizzle/schema");
+  const { eq } = await import("drizzle-orm");
+  const db = await getDb();
+  if (!db) return 0;
+
+  // Get all contract IDs for this section
+  const targets = await db
+    .select({ externalId: contractsTable.externalId, contractNo: contractsTable.contractNo })
+    .from(contractsTable)
+    .where(eq(contractsTable.section, section));
+
+  if (targets.length === 0) return 0;
+
+  const CONCURRENCY = 5;
+  const FLUSH_EVERY = 500;
+  const buffer: any[] = [];
+  let flushed = 0;
+  let idx = 0;
+
+  async function flush() {
+    if (buffer.length === 0) return;
+    const batch = buffer.splice(0, buffer.length);
+    flushed += await upsertInstallments(batch);
+  }
+
+  async function worker() {
+    while (idx < targets.length) {
+      const my = idx++;
+      const { externalId, contractNo } = targets[my];
+      try {
+        const data: any = await client.get("contract", {
+          action: "detail",
+          id: externalId,
+        });
+        const rawInstallments: any[] = data?.contract?.installments ?? [];
+        for (const inst of rawInstallments) {
+          // Map Fastfone365 installment shape: { no, due_date, amount, paid, balance, mulct, discount, status }
+          const period = inst.no ?? inst.period;
+          const externalInstId = `${externalId}-${period}`;
+          buffer.push({
+            section,
+            externalId: externalInstId,
+            contractExternalId: String(externalId),
+            contractNo: contractNo ?? null,
+            period: period ? parseInt(String(period), 10) : null,
+            dueDate: inst.due_date ? inst.due_date.slice(0, 10) : null,
+            amount: inst.amount != null ? Number(inst.amount).toFixed(2) : null,
+            paidAmount: inst.paid != null ? Number(inst.paid).toFixed(2) : "0",
+            status: inst.status ?? null,
+            rawJson: inst,
+          });
+        }
+        if (buffer.length >= FLUSH_EVERY) await flush();
+      } catch {
+        // swallow per-contract errors; continue with next
+      }
+    }
+  }
+
+  await Promise.all(Array.from({ length: CONCURRENCY }, () => worker()));
+  await flush();
+  return flushed;
+}
+
+/**
+ * Fastfone365-specific: derive payment records from paid installments.
+ * Since Fastfone365 has no standalone payment endpoint, we create synthetic
+ * payment_transactions rows from installments where paid_amount > 0.
+ * Each paid installment becomes one payment record.
+ */
+async function syncPaymentsFromInstallments(
+  section: SectionKey,
+): Promise<number> {
+  const { getDb } = await import("../db");
+  const { installments: instTable } = await import("../../drizzle/schema");
+  const { and, eq, gt, sql: drizzleSql } = await import("drizzle-orm");
+  const db = await getDb();
+  if (!db) return 0;
+
+  // Fetch all paid installments for this section
+  const paidInsts = await db
+    .select()
+    .from(instTable)
+    .where(
+      and(
+        eq(instTable.section, section),
+        gt(instTable.paidAmount, drizzleSql`0`),
+      ),
+    );
+
+  if (paidInsts.length === 0) return 0;
+
+  const buffer: any[] = [];
+  for (const inst of paidInsts) {
+    // Use installment externalId as payment externalId (1:1 mapping)
+    const rawJson = inst.rawJson as any;
+    const paidAt = rawJson?.updated_at
+      ? String(rawJson.updated_at).slice(0, 10)
+      : inst.dueDate ?? null;
+
+    buffer.push({
+      section,
+      externalId: `pay-${inst.externalId}`,
+      contractExternalId: inst.contractExternalId ?? null,
+      contractNo: inst.contractNo ?? null,
+      customerName: null,
+      paidAt,
+      amount: inst.paidAmount,
+      method: null,
+      status: inst.status ?? null,
+      rawJson: { source: "installment", installmentExternalId: inst.externalId },
+    });
+  }
+
+  return await upsertPayments(buffer);
 }
 
 // Re-export mapper for tests

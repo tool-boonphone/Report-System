@@ -23,6 +23,13 @@ function toNumStr(v: unknown): string | null {
   return n.toFixed(2);
 }
 
+/** Truncate string to max length to prevent MySQL column overflow. */
+function trunc(v: unknown, maxLen: number): string | null {
+  if (v === null || v === undefined || v === "") return null;
+  const s = String(v);
+  return s.length > maxLen ? s.slice(0, maxLen) : s;
+}
+
 function toInt(v: unknown): number | null {
   if (v === null || v === undefined || v === "") return null;
   const n = parseInt(String(v), 10);
@@ -133,14 +140,14 @@ export function mapContractDetailOverrides(
     gender: member.sex ?? null,
     occupation: occ.career ?? null,
     salary: toNumStr(occ.income),
-    workplace: occ.place ?? null,
-    phone: member.tel ?? null,
-    idDistrict: card.amphure ?? null,
-    idProvince: card.province ?? null,
-    addrDistrict: contactAddr.amphure ?? null,
-    addrProvince: contactAddr.province ?? null,
-    workDistrict: workAddr.amphure ?? null,
-    workProvince: workAddr.province ?? null,
+    workplace: trunc(occ.place, 1024),
+    phone: trunc(member.tel, 32),
+    idDistrict: trunc(card.amphure, 128),
+    idProvince: trunc(card.province, 128),
+    addrDistrict: trunc(contactAddr.amphure, 128),
+    addrProvince: trunc(contactAddr.province, 128),
+    workDistrict: trunc(workAddr.amphure, 128),
+    workProvince: trunc(workAddr.province, 128),
 
     // Product extras
     imei: product.imei ?? null,
@@ -190,14 +197,14 @@ export function mapCustomerProfile(cust: CustomerListItem) {
     age: toInt(cust.age_years),
     occupation: cust.occupation_title ?? null,
     salary: toNumStr(cust.monthly_income),
-    workplace: cust.workplace_name ?? null,
-    phone: cust.mobile_phone ?? null,
-    idDistrict: cust.idcard_district ?? null,
-    idProvince: cust.idcard_province ?? null,
-    addrDistrict: cust.current_district ?? null,
-    addrProvince: cust.current_province ?? null,
-    workDistrict: cust.work_district ?? null,
-    workProvince: cust.work_province ?? null,
+    workplace: trunc(cust.workplace_name, 1024),
+    phone: trunc(cust.mobile_phone, 32),
+    idDistrict: trunc(cust.idcard_district, 128),
+    idProvince: trunc(cust.idcard_province, 128),
+    addrDistrict: trunc(cust.current_district, 128),
+    addrProvince: trunc(cust.current_province, 128),
+    workDistrict: trunc(cust.work_district, 128),
+    workProvince: trunc(cust.work_province, 128),
   };
 }
 

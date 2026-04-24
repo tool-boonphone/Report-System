@@ -448,3 +448,15 @@ Task list:
 ### Phase 12 — Bug Fix: Installment Date Ordering (DONE)
 - [x] P12-2: แก้ไข fixOutOfOrderDueDates() ใน debtDb.ts — เปลี่ยน anchor strategy จาก "smallest due_date = anchor ของ period นั้น" เป็น "smallest due_date = anchor ของ period 1 เสมอ" แล้ว rebuild ทุก period = anchor + (period-1) months — ทำให้ CT0226-SRI005-1183-01 งวด 1 แสดง 2026-04-05 (เม.ย.) แทน 2026-03-05 (มี.ค.) และงวด 10 แสดง 2027-01-05 (ม.ค.) แทน 2026-12-05 (ธ.ค.)
 - [x] Tests: 63/64 pass + TypeScript: 0 errors + commit + push + checkpoint
+
+### Phase 18 — Fastfone365 Full Audit & Fix
+
+- [ ] P18-1: ล้าง stale sync locks ของ Fastfone365 (in_progress ค้างอยู่)
+- [ ] P18-2: Trigger sync Fastfone365 ใหม่ทั้งหมด (contracts → installments → payments)
+- [ ] P18-3: ตรวจสอบ API Fastfone365 — field mapping, response structure vs Boonphone
+- [ ] P18-4: ตรวจสอบ installments Fastfone365 ใน DB — due_date ordering, raw_json fields
+- [ ] P18-5: ตรวจสอบ payments Fastfone365 ใน DB — receipt_no pattern, TXRTC/TXRT
+- [ ] P18-6: ตรวจสอบ UI Contracts page สำหรับ Fastfone365 — ข้อมูลครบถ้วนหรือไม่
+- [ ] P18-7: ตรวจสอบ UI Debt Report (เป้าเก็บหนี้/ยอดเก็บหนี้) สำหรับ Fastfone365
+- [ ] P18-8: แก้ไข mappers/debtDb/API ให้ Fastfone365 ทำงานเหมือน Boonphone ทุกด้าน
+- [ ] P18-9: Run tests + save checkpoint + push GitHub
