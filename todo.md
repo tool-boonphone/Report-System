@@ -549,3 +549,9 @@ Task list:
 - [x] isClosed/isSuspended/isBadDebt → 0 (plain number, ไม่มีข้อความ); overpaidApplied → netAmount (ตัวเลขล้วน)
 - [x] ทดสอบ TypeScript (ไม่มี error) เรียบร้อย
 - [x] Phase 29 เพิ่มเติม: Excel export — ไม่มีข้อความ (-หักชำระเกิน) ใส่เป็นตัวเลขล้วน; สถานะ ระงับสัญญา/ปิดค่างวดแล้ว/หนี้เสีย ให้ใส่เป็น 0
+
+### Phase 30 — Bug fix: dueDateExact filter ใน collected tab ไม่ซ่อน payment sub-row ที่ paidAt ไม่ตรง
+
+- [x] ตรวจสอบ: paymentsByPeriod บรรทัด 1139 มีเฉพาะ dueDateFilter แต่ไม่มี dueDateExact
+- [x] แก้ไข: เพิ่ม `if (dueDateExact && p.paidAt?.slice(0,10) !== dueDateExact) continue;` ใน paymentsByPeriod loop
+- [x] ทดสอบ TypeScript (ไม่มี error) เรียบร้อย

@@ -1137,6 +1137,8 @@ export default function DebtReport() {
                       if (p.period == null) continue;
                       // Phase 28: skip payments whose paidAt month is not in dueDateFilter
                       if (dueDateFilter.size > 0 && !(p.paidAt && dueDateFilter.has(p.paidAt.slice(0, 7)))) continue;
+                      // Phase 30: skip payments whose paidAt date does not match dueDateExact
+                      if (dueDateExact && p.paidAt?.slice(0, 10) !== dueDateExact) continue;
                       if (!paymentsByPeriod.has(p.period))
                         paymentsByPeriod.set(p.period, []);
                       paymentsByPeriod.get(p.period)!.push(p);
