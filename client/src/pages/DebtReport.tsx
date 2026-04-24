@@ -632,6 +632,11 @@ export default function DebtReport() {
     const params = new URLSearchParams({ section, variant: tab });
     if (search) params.set("search", search);
     if (statusFilter.size > 0) params.set("status", Array.from(statusFilter).join(","));
+    // Phase 29: pass date/month filters to export endpoint
+    if (dueDateExact) params.set("dueDateExact", dueDateExact);
+    if (dueDateFilter.size > 0) params.set("dueDateFilter", Array.from(dueDateFilter).join(","));
+    if (approveDateFilter.size > 0) params.set("approveDate", Array.from(approveDateFilter).join(","));
+    if (productTypeFilter.size > 0) params.set("productType", Array.from(productTypeFilter).join(","));
     const toastId = toast.loading("กำลังเตรียมไฟล์ Excel…");
     try {
       const resp = await fetch(`/api/export/debt?${params.toString()}`, {
@@ -660,7 +665,7 @@ export default function DebtReport() {
     } catch (err) {
       toast.error((err as Error).message ?? "Export failed", { id: toastId });
     }
-  }, [section, tab, search, statusFilter]);
+  }, [section, tab, search, statusFilter, dueDateExact, dueDateFilter, approveDateFilter, productTypeFilter]);
 
   useEffect(() => {
     setActions(

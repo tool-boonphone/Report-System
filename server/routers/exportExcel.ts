@@ -188,7 +188,15 @@ export async function handleDebtExport(req: Request, res: Response) {
     const variant = variantRaw as "target" | "collected";
 
     const search = req.query.search ? String(req.query.search).trim() : "";
+    // Phase 29: parse all filter parameters (mirrors UI filter state)
     const statusFilter = req.query.status ? String(req.query.status) : "";
+    const dueDateExact = req.query.dueDateExact ? String(req.query.dueDateExact) : "";
+    const dueDateFilterRaw = req.query.dueDateFilter ? String(req.query.dueDateFilter) : "";
+    const dueDateMonths = dueDateFilterRaw ? new Set(dueDateFilterRaw.split(",").filter(Boolean)) : new Set<string>();
+    const approveDateRaw = req.query.approveDate ? String(req.query.approveDate) : "";
+    const approveDateMonths = approveDateRaw ? new Set(approveDateRaw.split(",").filter(Boolean)) : new Set<string>();
+    const productTypeRaw = req.query.productType ? String(req.query.productType) : "";
+    const productTypes = productTypeRaw ? new Set(productTypeRaw.split(",").filter(Boolean)) : new Set<string>();
 
     // 1. Load all rows for the selected variant (DB has ~3.5k contracts — safe).
     let rows: any[];
@@ -200,9 +208,39 @@ export async function handleDebtExport(req: Request, res: Response) {
       rows = r.rows;
     }
 
-    // 2. Apply same filters as the UI.
+    // 2. Apply same filters as the UI (Phase 29: full filter parity).
     const filtered = (rows as any[]).filter((r) => {
-      if (statusFilter && r.debtStatus !== statusFilter) return false;
+      // 2a. เดือน-ปีที่อนุมัติ
+      if (approveDateMonths.size > 0) {
+        const ym = r.approveDate ? String(r.approveDate).slice(0, 7) : "";
+        if (!approveDateMonths.has(ym)) return false;
+      }
+      // 2b. วันที่ชำระ exact (dueDateExact)
+      //     target: installment dueDate; collected: payment paidAt
+      if (dueDateExact) {
+        const hasMatch =
+          variant === "collected"
+            ? (r.payments ?? []).some((p: any) => p.paidAt && String(p.paidAt).slice(0, 10) === dueDateExact)
+            : (r.installments ?? []).some((inst: any) => inst.dueDate && String(inst.dueDate).slice(0, 10) === dueDateExact);
+        if (!hasMatch) return false;
+      }
+      // 2c. เดือน-ปีที่ต้องชำระ / เดือน-ปีที่ชำระ (dueDateFilter)
+      //     target: installment dueDate month; collected: payment paidAt month
+      if (dueDateMonths.size > 0) {
+        const hasMatch =
+          variant === "collected"
+            ? (r.payments ?? []).some((p: any) => p.paidAt && dueDateMonths.has(String(p.paidAt).slice(0, 7)))
+            : (r.installments ?? []).some((inst: any) => inst.dueDate && dueDateMonths.has(String(inst.dueDate).slice(0, 7)));
+        if (!hasMatch) return false;
+      }
+      // 2d. สถานะหนี้ (multi-status: comma-separated)
+      if (statusFilter) {
+        const statuses = new Set(statusFilter.split(",").filter(Boolean));
+        if (statuses.size > 0 && !statuses.has(r.debtStatus)) return false;
+      }
+      // 2e. ประเภทเครื่อง
+      if (productTypes.size > 0 && !productTypes.has(r.productType ?? "")) return false;
+      // 2f. ค้นหา
       if (search) {
         return (
           matchesSearch(r.contractNo, search) ||
@@ -315,6 +353,13 @@ export async function handleDebtExport(req: Request, res: Response) {
           for (let i = 0; i < Math.min(arr.length, maxPeriods); i += 1) {
             const item = arr[i];
             const p = i + 1;
+            // Phase 29: cell-level masking — skip installments that don't match date/month filters
+            const instDueDate = item.dueDate ? String(item.dueDate).slice(0, 10) : "";
+            const instDueMonth = instDueDate.slice(0, 7);
+            const isMasked =
+              (dueDateExact && instDueDate !== dueDateExact) ||
+              (dueDateMonths.size > 0 && (!instDueMonth || !dueDateMonths.has(instDueMonth)));
+            if (isMasked) continue; // leave cells blank for this period
             rec[`p${p}_period`] = Number(item.period ?? p);
             rec[`p${p}_dueDate`] = item.dueDate ?? "";
             rec[`p${p}_principal`] = Number(item.principal ?? 0);
@@ -322,12 +367,14 @@ export async function handleDebtExport(req: Request, res: Response) {
             rec[`p${p}_fee`] = Number(item.fee ?? 0);
             rec[`p${p}_penalty`] = Number(item.penalty ?? 0);
             rec[`p${p}_unlockFee`] = Number(item.unlockFee ?? 0);
-            // Annotate the total column (matches UI): closed / overpaid applied.
-            let amountCell: string | number = Number(item.amount ?? 0);
-            if (item.isClosed) {
-              amountCell = "0 (ปิดค่างวดแล้ว)";
-            } else if (Number(item.overpaidApplied ?? 0) > 0.009) {
-              amountCell = `${Number(item.amount ?? 0).toFixed(2)} (-หักชำระเกิน ${Number(item.overpaidApplied).toFixed(2)})`;
+            // Phase 29: Excel uses plain numbers only — no annotation text.
+            // isClosed / isSuspended / isBadDebt => 0; overpaidApplied => use netAmount (already reduced).
+            let amountCell: number = 0;
+            if (!item.isClosed && !item.isSuspended) {
+              // Use netAmount when overpaid was applied (principal already reduced), otherwise amount.
+              amountCell = Number(item.overpaidApplied ?? 0) > 0.009
+                ? Number(item.netAmount ?? item.amount ?? 0)
+                : Number(item.amount ?? 0);
             }
             rec[`p${p}_amount`] = amountCell;
           }
@@ -335,6 +382,7 @@ export async function handleDebtExport(req: Request, res: Response) {
         ws.addRow(rec).commit();
       } else {
         // Collected variant: payments can be split.
+        // Phase 29: filter payments by paidAt (dueDateExact / dueDateMonths) before grouping.
         // We group payments by period, find the max split depth for this row,
         // and emit multiple Excel rows if a period has multiple payments.
         const arr = r.payments;
@@ -342,6 +390,11 @@ export async function handleDebtExport(req: Request, res: Response) {
         if (Array.isArray(arr)) {
           for (const p of arr) {
             if (p.period == null) continue;
+            // Phase 29: skip payments that don't match date/month filters
+            const paidAtDate = p.paidAt ? String(p.paidAt).slice(0, 10) : "";
+            const paidAtMonth = paidAtDate.slice(0, 7);
+            if (dueDateExact && paidAtDate !== dueDateExact) continue;
+            if (dueDateMonths.size > 0 && (!paidAtMonth || !dueDateMonths.has(paidAtMonth))) continue;
             if (!byPeriod.has(p.period)) byPeriod.set(p.period, []);
             byPeriod.get(p.period)!.push(p);
           }

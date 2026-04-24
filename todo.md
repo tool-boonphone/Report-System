@@ -539,3 +539,13 @@ Task list:
 - [x] แก้ไข: isCollectedCellMasked เพิ่มเงื่อนไข dueDateFilter (pays.length === 0)
 - [x] แก้ไข: filter label เปลี่ยนเป็น "เดือน-ปีที่ชำระ" ใน collected tab
 - [x] ทดสอบ TypeScript (ไม่มี error) เรียบร้อย
+
+### Phase 29 — Export Excel รองรับ filter วันที่/เดือนที่ชำระ
+
+- [x] อ่านโค้ด export handler (frontend handleExport + backend /api/export/debt)
+- [x] แก้ไข frontend: ส่ง dueDateExact, dueDateFilter, approveDate, productType ใน export URL params
+- [x] แก้ไข backend: รับและ filter ด้วย dueDateExact/dueDateFilter/approveDate/productType/status/search (target: dueDate, collected: paidAt)
+- [x] cell-level masking: target skip installment ที่ไม่ตรง filter; collected filter payment ก่อน group
+- [x] isClosed/isSuspended/isBadDebt → 0 (plain number, ไม่มีข้อความ); overpaidApplied → netAmount (ตัวเลขล้วน)
+- [x] ทดสอบ TypeScript (ไม่มี error) เรียบร้อย
+- [x] Phase 29 เพิ่มเติม: Excel export — ไม่มีข้อความ (-หักชำระเกิน) ใส่เป็นตัวเลขล้วน; สถานะ ระงับสัญญา/ปิดค่างวดแล้ว/หนี้เสีย ให้ใส่เป็น 0
