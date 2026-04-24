@@ -179,6 +179,8 @@ type PaymentCell = {
   total: number;
   receiptNo: string | null;
   remark: string | null;
+  /** tooltip สำหรับ bad debt rows: "ยอดขายเครื่อง X บาท (DD/MM/YYYY)" */
+  badDebtNote?: string | null;
 };
 
 type TargetRow = {
@@ -1734,7 +1736,9 @@ export default function DebtReport() {
                                         ? (periodNo > instCount
                                             ? "ไม่มีงวดนี้ในสัญญา"
                                             : "ระงับ/หนี้เสีย")
-                                        : (pay?.remark ?? pay?.receiptNo ?? undefined)
+                                        : gc.key === "badDebt" && pay?.isBadDebtRow && pay?.badDebtNote
+                                          ? pay.badDebtNote
+                                          : (pay?.remark ?? pay?.receiptNo ?? undefined)
                                     }
                                   >
                                     {v}

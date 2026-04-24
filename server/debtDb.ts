@@ -565,7 +565,9 @@ export async function listDebtTarget(params: { section: SectionKey }) {
            installment_amount,
            CAST(finance_amount AS DECIMAL(18,2)) AS finance_amount,
            status,
-           product_type
+           product_type,
+           CAST(bad_debt_amount AS DECIMAL(18,2)) AS bad_debt_amount,
+           bad_debt_date
       FROM ${contracts}
      WHERE ${contracts.section} = ${params.section}
        AND (${contracts.status} IS NULL OR ${contracts.status} != 'ยกเลิกสัญญา')
@@ -660,8 +662,13 @@ export async function listDebtTarget(params: { section: SectionKey }) {
     // For each such contract, find the last period where paid_amount > 0.
     // Periods strictly after that are "ปิดค่างวดแล้ว".
     // Also collect paid_at from payment_transactions for bad-debt date derivation.
+    // Also track overpaid_amount per period (from real payments with receipt_no TXRT...-{period})
+    //   so that overpaidApplied is correctly computed for the next period.
     const ffPayRows = await db.execute(sql`
-      SELECT contract_external_id, paid_at
+      SELECT contract_external_id,
+             paid_at,
+             JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.receipt_no')) AS receipt_no,
+             CAST(JSON_EXTRACT(raw_json, '$.overpaid_amount') AS DECIMAL(18,2)) AS overpaid_amount
         FROM ${paymentTransactions}
        WHERE ${paymentTransactions.section} = ${params.section}
     `);
@@ -673,6 +680,24 @@ export async function listDebtTarget(params: { section: SectionKey }) {
         const arr = paidAtsByContract.get(key) ?? [];
         arr.push(String(pr.paid_at));
         paidAtsByContract.set(key, arr);
+      }
+      // Track overpaid_amount per period from real payments (receipt_no = TXRT...-{period})
+      // This mirrors the Boonphone logic so overpaidApplied works for FF365 too.
+      const receipt = String(pr.receipt_no ?? "");
+      if (receipt && !receipt.startsWith("TXRTC")) {
+        const m = /-(\d+)$/.exec(receipt);
+        if (m) {
+          const period = Number(m[1]);
+          const overpaid = Number(pr.overpaid_amount ?? 0);
+          if (Number.isFinite(period) && period > 0 && overpaid > 0) {
+            let periodMap = overpaidByContractPeriod.get(key);
+            if (!periodMap) {
+              periodMap = new Map<number, number>();
+              overpaidByContractPeriod.set(key, periodMap);
+            }
+            periodMap.set(period, (periodMap.get(period) ?? 0) + overpaid);
+          }
+        }
       }
     }
     // Build closedByContract from installment data already loaded.
@@ -1212,6 +1237,9 @@ export async function listDebtTarget(params: { section: SectionKey }) {
       debtStatus,
       daysOverdue,
       installments: baseInstallments,
+      // bad debt info from contracts table (used by listDebtCollected for tooltip + real payment filtering)
+      contractBadDebtAmount: c.bad_debt_amount != null ? Number(c.bad_debt_amount) : null,
+      contractBadDebtDate: c.bad_debt_date ?? null,
     };
   });
 
@@ -1242,6 +1270,7 @@ export async function listDebtCollected(params: { section: SectionKey }) {
   //   others         → isBadDebtRow=false
   const payRowsRaw = await db.execute(sql`
     SELECT contract_external_id,
+           external_id AS payment_external_id,
            paid_at,
            CAST(amount AS DECIMAL(18,2)) AS total_paid_amount,
            CAST(JSON_EXTRACT(raw_json, '$.principal_paid')           AS DECIMAL(18,2)) AS principal_paid,
@@ -1275,6 +1304,8 @@ export async function listDebtCollected(params: { section: SectionKey }) {
     payByContract.get(key)!.push({
       contract_external_id: key,
       period: null, // period is derived by assignPayPeriods for both Boonphone and FF365
+      // payment_external_id: numeric string = real payment from API, "pay-{id}-{n}" = synthetic
+      payment_external_id: r.payment_external_id ?? null,
       paid_at: r.paid_at ?? null,
       total_paid_amount:
         r.total_paid_amount != null ? Number(r.total_paid_amount) : null,
@@ -1339,13 +1370,43 @@ export async function listDebtCollected(params: { section: SectionKey }) {
       }
 
       // Tag payments with isBadDebtRow based on ff_status + date rule
+      // กฎพิเศษ: real payment (external_id เป็นตัวเลข) ที่ paid_at วันเดียวกับ bad debt date
+      //   → ซ่อนออกจากตาราง (isHiddenRealPayment=true) เพราะยอดนี้กระจายลงงวดแล้ว
+      //   → ใช้ข้อมูลนี้สร้าง tooltip ที่ bad debt rows
+      // สร้าง tooltip text จาก contracts.bad_debt_amount + bad_debt_date
+      const contractBadDebtAmount = (c as any).contractBadDebtAmount as number | null;
+      const contractBadDebtDate = (c as any).contractBadDebtDate as string | null;
+      let badDebtNote: string | null = null;
+      if (contractBadDebtAmount != null && contractBadDebtAmount > 0 && contractBadDebtDate) {
+        // แปลงวันที่เป็น DD/MM/YYYY (พ.ศ.)
+        const d = new Date(`${contractBadDebtDate}T00:00:00`);
+        const day = String(d.getDate()).padStart(2, "0");
+        const month = String(d.getMonth() + 1).padStart(2, "0");
+        const year = d.getFullYear() + 543;
+        badDebtNote = `ยอดขายเครื่อง ${contractBadDebtAmount.toLocaleString("th-TH", { minimumFractionDigits: 0, maximumFractionDigits: 0 })} บาท (${day}/${month}/${year})`;
+      }
+
       tagged = assigned.map((p) => {
         const ffStatus = (p as any).ff_status ?? null;
         const dateKey = p.paid_at ? String(p.paid_at).substring(0, 10) : null;
+        const payExtId = (p as any).payment_external_id as string | null;
+        // real payment = external_id เป็นตัวเลขล้วน (ไม่ใช่ "pay-{id}-{n}")
+        const isRealPayment = payExtId != null && /^\d+$/.test(payExtId);
         // isBadDebt ถ้า: status=ยกเลิกสัญญา หรือ paid_at วันเดียวกับที่มี ยกเลิกสัญญา
         const isBadDebt = ffStatus === "ยกเลิกสัญญา" || (dateKey != null && badDebtDates.has(dateKey));
         if (isBadDebt) {
-          // bad-debt payment: ยอด = bad_debt_amount (จาก API) หรือ total_paid_amount เป็น fallback
+          // real payment ที่เป็น bad debt → ซ่อนออกจากตาราง (กระจายลงงวดแล้ว)
+          if (isRealPayment) {
+            return {
+              ...p,
+              isCloseRow: false,
+              isBadDebtRow: false,
+              isHiddenRealPayment: true, // ซ่อนออกจากตาราง
+              bad_debt_amount: null,
+              total_paid_amount: null,
+            } as any;
+          }
+          // synthetic bad-debt payment: ยอด = bad_debt_amount (จาก API) หรือ total_paid_amount เป็น fallback
           const badDebtAmt = (p.bad_debt_amount != null && p.bad_debt_amount > 0)
             ? p.bad_debt_amount
             : (p.total_paid_amount ?? 0);
@@ -1355,11 +1416,15 @@ export async function listDebtCollected(params: { section: SectionKey }) {
             isBadDebtRow: true,
             bad_debt_amount: badDebtAmt,
             total_paid_amount: null, // ซ่อน total column สำหรับ bad-debt row
-          };
+            badDebtNote, // tooltip text
+          } as any;
         }
         // ชำระปกติ — ใช้ isCloseRow จาก assignPayPeriods
         return { ...p, isBadDebtRow: false };
       });
+
+      // กรอง hidden real payments ออก
+      tagged = tagged.filter((p) => !(p as any).isHiddenRealPayment);
     } else {
       tagged = assigned;
     }
@@ -1383,6 +1448,8 @@ export async function listDebtCollected(params: { section: SectionKey }) {
         total: p.total_paid_amount ?? 0,
         receiptNo: p.receipt_no ?? null,
         remark: p.remark ?? null,
+        // tooltip สำหรับ bad debt rows: "ยอดขายเครื่อง X บาท (DD/MM/YYYY)"
+        badDebtNote: (p as any).badDebtNote ?? null,
       })),
     };
   });
