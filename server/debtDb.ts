@@ -1391,18 +1391,24 @@ export async function listDebtCollected(params: { section: SectionKey }) {
       //   → สร้าง 1 bad debt row ใหม่ที่งวดถัดจากงวดสุดท้ายที่ชำระปกติ
       if (badDebtDates.size > 0 && contractBadDebtAmount != null && contractBadDebtAmount > 0) {
         // แยก: payments ปกติ vs payments bad debt (ตัดออก)
-        // ตัดออก: (1) payments ที่ paid_at วันเดียวกับ bad debt date (synthetic)
-        //          (2) real payment (external_id เป็นตัวเลข) เพราะยอดนี้คือยอดขายเครื่อง
-        //              ที่กระจายลงงวดแล้ว ไม่ควรแสดงในตาราง
-        // real payment ที่เป็น "ยอดขายเครื่อง" = total_paid ≈ bad_debt_amount (ต่างกันไม่เกิน 1 บาท)
-        // real payment ปกติ (งวดเดียว) = total_paid < bad_debt_amount → ควรแสดงในตาราง
-        const normalPayments = assigned.filter((p) => {
+        // กฎ:
+        //   1. ใช้เฉพาะ real payments (external_id เป็นตัวเลข) เท่านั้น
+        //      Synthetic payments (pay-{id}-{n}) ตัดออกทั้งหมด ไม่ว่า paid_at จะตรงกับ bad debt date หรือไม่
+        //      เหตุผล: synthetic ไม่มี receipt_no/total_paid_amount จริง และทำให้ cursor offset ผิดถ้า assign รวมกัน
+        //   2. ตัด real payment ที่เป็นยอดขายเครื่อง (total_paid ≈ bad_debt_amount, ต่างกันไม่เกิน 1 บาท)
+        //      เพราะยอดนี้จะถูกแสดงเป็น bad debt row แทน
+        //
+        // Re-assign periods จาก real payments เท่านั้น (ไม่ใช้ assigned ที่รวม synthetic)
+        // เพื่อให้ cursor ไม่ถูก advance โดย synthetic payments
+        const realPaymentsForBadDebt = rawPayments.filter((p) => {
           const payExtId = (p as any).payment_external_id as string | null;
-          const isRealPayment = payExtId != null && /^\d+$/.test(payExtId);
-          // ตัด: synthetic payments (เช่น pay-{id}-{n}) ทั้งหมด ไม่ว่า paid_at จะตรงกับ bad debt date หรือไม่
-          // เหตุผล: synthetic payments ไม่มี receipt_no / total_paid_amount จริง
-          //   และสร้างแถวซ้ำกับ real payment ที่มี paid_at วันเดียวกัน
-          if (!isRealPayment) return false;
+          return payExtId != null && /^\d+$/.test(payExtId);
+        });
+        const realAssignedForBadDebt = assignPayPeriods(
+          realPaymentsForBadDebt,
+          c.installments.map((i: { period: number | null; amount: number | string }) => ({ period: i.period, amount: Number(i.amount) || 0 })),
+        );
+        const normalPayments = realAssignedForBadDebt.filter((p) => {
           // ตัด: real payment ที่เป็นยอดขายเครื่อง (total_paid ≈ bad_debt_amount, ต่างกันไม่เกิน 1 บาท)
           const totalPaid = (p as any).total_paid_amount as number | null;
           const isDeviceSalePayment =

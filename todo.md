@@ -642,3 +642,6 @@ Task list:
 
 ### Fix: FF365 duplicate payment rows (synthetic payments หลุดผ่าน normalPayments filter)
 - [x] แก้ normalPayments filter ใน debtDb.ts: ตัด synthetic payments (external_id ไม่ใช่ตัวเลข) ออกทั้งหมด ไม่ว่า paid_at จะตรงกับ bad debt date หรือไม่
+
+### Fix: FF365 period assignment offset หลังแก้ synthetic filter
+- [x] แก้ debtDb.ts bad debt branch: re-assign periods จาก real payments เท่านั้น (ไม่ใช้ assigned ที่ include synthetic ทำให้ cursor offset ผิด)
