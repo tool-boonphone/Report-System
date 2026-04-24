@@ -1240,28 +1240,31 @@ export async function listDebtCollected(params: { section: SectionKey }) {
   //   installmentExternalId (e.g. "41-1" = contract_id-period), source.
   //   We extract the period from installmentExternalId and use amount as total_paid_amount.
   const payRowsRaw = await db.execute(isFF365 ? sql`
-    SELECT contract_external_id,
-           paid_at,
-           CAST(amount AS DECIMAL(18,2)) AS total_paid_amount,
+    SELECT pt.contract_external_id,
+           pt.paid_at,
+           CAST(pt.amount AS DECIMAL(18,2)) AS total_paid_amount,
            NULL AS principal_paid,
            NULL AS interest_paid,
            NULL AS fee_paid,
-           NULL AS penalty_paid,
+           CAST(JSON_EXTRACT(inst.raw_json, '$.mulct')    AS DECIMAL(18,2)) AS penalty_paid,
            NULL AS unlock_fee_paid,
-           NULL AS discount_amount,
+           CAST(JSON_EXTRACT(inst.raw_json, '$.discount') AS DECIMAL(18,2)) AS discount_amount,
            NULL AS overpaid_amount,
            NULL AS close_installment_amount,
            NULL AS bad_debt_amount,
            NULL AS payment_id,
-           JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.installmentExternalId')) AS installment_external_id,
+           JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.installmentExternalId')) AS installment_external_id,
            NULL AS receipt_no,
            NULL AS remark,
-           status AS ff_status
-      FROM ${paymentTransactions}
-     WHERE ${paymentTransactions.section} = ${params.section}
-       AND (${paymentTransactions.status} IS NULL
-            OR LOWER(${paymentTransactions.status}) IN ('ยืนยันการชำระ', 'ยกเลิกสัญญา', 'active', 'paid', 'success', 'completed', 'เกินกำหนดชำระ', 'ชำระแล้วบางส่วน', 'ระงับสัญญา', 'ถึงกำหนดชำระ'))
-     ORDER BY contract_external_id, paid_at
+           pt.status AS ff_status
+      FROM ${paymentTransactions} pt
+      LEFT JOIN ${installments} inst
+        ON inst.section = pt.section
+       AND inst.external_id = JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.installmentExternalId'))
+     WHERE pt.section = ${params.section}
+       AND (pt.status IS NULL
+            OR LOWER(pt.status) IN ('ยืนยันการชำระ', 'ยกเลิกสัญญา', 'active', 'paid', 'success', 'completed', 'เกินกำหนดชำระ', 'ชำระแล้วบางส่วน', 'ระงับสัญญา', 'ถึงกำหนดชำระ'))
+     ORDER BY pt.contract_external_id, pt.paid_at
   ` : sql`
     SELECT contract_external_id,
            paid_at,
