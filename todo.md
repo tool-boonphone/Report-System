@@ -628,5 +628,5 @@ Task list:
 - [ ] P26-3: แก้ไข overpayment ใน CT0126-SNI017-22216-01 — ยอดชำระเกินต้องถูกนำไปหักงวดถัดไปและแสดงข้อความกำกับ
 
 ### Phase 27 — Bad Debt Display Refactor (ใหม่)
-- [ ] ตัด synthetic payments (pay-{id}-{n}) และ real payment ออกจากตารางสำหรับสัญญาหนี้เสีย
-- [ ] สร้าง 1 bad debt row: งวด = งวดถัดจากงวดสุดท้ายที่ชำระปกติ (ถ้าไม่มีการชำระ = งวด 1), badDebt = bad_debt_amount, คอลัมน์อื่น = 0, paidAt = bad_debt_date
+- [x] ตัด synthetic payments (pay-{id}-{n}) และ real payment ออกจากตารางสำหรับสัญญาหนี้เสีย
+- [x] สร้าง 1 bad debt row: งวด = งวดถัดจากงวดสุดท้ายที่ชำระปกติ (ถ้าไม่มีการชำระ = งวด 1), badDebt = bad_debt_amount, คอลัมน์อื่น = 0, paidAt = bad_debt_date
