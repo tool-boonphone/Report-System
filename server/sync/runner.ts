@@ -894,24 +894,39 @@ async function computeAndStoreBadDebt(section: SectionKey): Promise<void> {
       continue;
     }
 
-    // Step 2: Sum real payments (numeric external_id, total_paid_amount > 0)
+    // Step 2: Use the LATEST real payment (numeric external_id, total_paid_amount > 0)
+    //   as bad_debt_amount. This is the device-sale receipt — the final payment that
+    //   triggered the contract cancellation.
+    //
+    //   Why latest, not sum?
+    //   - Earlier real payments are normal installment payments (e.g. 1,499 ก.พ.)
+    //   - The last real payment is the device-sale amount (e.g. 8,000 from selling the device)
+    //   - bad_debt_amount should represent only the device-sale proceeds, not the total collected
+    //
+    //   Example: CT0126-SRI001-21064-01
+    //     real 103766: 1,499 (2026-02-10) = ชำระงวดปกติ
+    //     real 115702: 8,000 (2026-03-23) = ยอดขายเครื่อง ← bad_debt_amount
     const realBadDebtPayments = payments.filter(
       (p) => !p.payment_external_id.startsWith("pay-") && p.total_paid_amount > 0
     );
 
     if (realBadDebtPayments.length === 0) continue;
 
-    const totalBadDebt = realBadDebtPayments.reduce((sum, p) => sum + p.total_paid_amount, 0);
-    // bad_debt_date = paid_at of the latest real payment (slip date for bank reconciliation)
-    const badDebtDate = deriveBadDebtDate(
-      realBadDebtPayments.map((p) => ({ paid_at: p.paid_at })),
-      suspend.date,
+    // Sort by paid_at DESC to find the latest real payment
+    const sortedReal = [...realBadDebtPayments].sort((a, b) =>
+      (b.paid_at ?? "").localeCompare(a.paid_at ?? "")
     );
+    const latestRealPayment = sortedReal[0];
+    const totalBadDebt = latestRealPayment.total_paid_amount;
+    // bad_debt_date = paid_at of the latest real payment (slip date for bank reconciliation)
+    const badDebtDate = latestRealPayment.paid_at
+      ? String(latestRealPayment.paid_at).substring(0, 10)
+      : suspend.date;
 
     batch.push({
       externalId: extId,
       amount: totalBadDebt,
-      date: badDebtDate ? String(badDebtDate).substring(0, 10) : null,
+      date: badDebtDate,
       period: suspend.period,
     });
 

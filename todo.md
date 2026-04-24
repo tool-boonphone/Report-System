@@ -634,3 +634,8 @@ Task list:
 ### Phase 28 — Period Ordering & Overpaid Fix
 - [ ] แก้ไข assignPayPeriods: ลำดับงวดข้ามในตารางยอดเก็บหนี้ (เช่น CT0126-PII012-20958-01 แสดงงวด 2-1, 3-1 แต่ไม่มีงวด 1)
 - [ ] แก้ไข overpaid carry-forward: ยอดชำระเกินต้องหักงวดถัดไปในเป้าเก็บหนี้ ไม่ใช่งวดเดียวกัน
+
+### Fix: FF365 bad_debt_amount = ยอดขายเครื่อง (real payment ล่าสุด ไม่ใช่ sum)
+- [ ] Fix computeAndStoreBadDebt ใน runner.ts: bad_debt_amount = total_paid_amount ของ real payment ล่าสุด (ไม่ใช่ sum ทั้งหมด)
+- [ ] Fix display logic ใน debtDb.ts: real payment ปกติ (ก่อน bad debt) แสดงในตาราง, bad debt row = bad_debt_amount ใหม่
+- [ ] Re-sync bad_debt_amount สำหรับสัญญา FF365 ทั้งหมดใน DB

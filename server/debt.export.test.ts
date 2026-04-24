@@ -157,17 +157,16 @@ describe("handleDebtExport — target variant", () => {
       2,
     );
 
-    // Period 2 amount carries the deduction annotation.
+    // Period 2 amount is plain numeric (overpaid applied → netAmount = amount - overpaidApplied).
+    // Excel export uses plain numbers only (no annotation text) per Phase 29 decision.
     const p2AmountCol = headers.indexOf("งวดที่ 2 - ยอดหนี้รวม") + 1;
-    expect(String(dataRow.getCell(p2AmountCol).value)).toContain(
-      "หักชำระเกิน",
-    );
+    // overpaidApplied=200, amount=1466.67 → netAmount=1466.67 (already reduced by API)
+    expect(Number(dataRow.getCell(p2AmountCol).value)).toBeCloseTo(1466.67, 2);
 
-    // Period 3 amount shows the closed annotation.
+    // Period 3 is closed (isClosed=true) → Excel export writes 0 (plain number, no annotation text).
+    // Phase 29 decision: Excel uses plain numbers only to keep cells sortable/summable.
     const p3AmountCol = headers.indexOf("งวดที่ 3 - ยอดหนี้รวม") + 1;
-    expect(String(dataRow.getCell(p3AmountCol).value)).toContain(
-      "ปิดค่างวดแล้ว",
-    );
+    expect(Number(dataRow.getCell(p3AmountCol).value)).toBe(0);
 
     // Period 1 amount is plain numeric (no annotation).
     const p1AmountCol = headers.indexOf("งวดที่ 1 - ยอดหนี้รวม") + 1;
