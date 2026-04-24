@@ -341,11 +341,11 @@ Task list:
 - [x] TypeScript 0 errors + tests 63/64 pass + commit 3f48248 + push + checkpoint
 
 ### Phase 9AA — แก้ 4 จุด: isArrears + Switch + penalty future + isClosed
-- [ ] debtDb.ts: isArrears = มียอดค้างจากงวดก่อนเท่านั้น (ไม่ใช่ค่าปรับของงวดตัวเอง) — ต้องนิยาม "ค้างจากงวดก่อน" ให้ชัดเจน
-- [ ] DebtReport.tsx: Switch เฉพาะเงินต้น=เปิด → penalty/unlockFee = 0 ทุกงวด (ไม่มีข้อยกเว้น)
-- [ ] debtDb.ts/DebtReport.tsx: penalty/unlockFee แสดงเฉพาะงวดปัจจุบัน งวดอนาคต = 0
-- [ ] DebtReport.tsx: สิ้นสุดสัญญา — งวดที่ผ่านมาแล้ว (dueDate < today) ต้องเป็นสีเทา 0 เหมือน isSuspended
-- [ ] TypeScript 0 errors + tests + commit + push + checkpoint
+- [x] debtDb.ts: isArrears = มียอดค้างจากงวดก่อนเท่านั้น (ไม่ใช่ค่าปรับของงวดตัวเอง) — ✅ hasCarryFromPrior = priorPenalty > 0.005 || priorUnlockFee > 0.005 (line 1169)
+- [x] DebtReport.tsx: Switch เฉพาะเงินต้น=เปิด → penalty/unlockFee = 0 ทุกงวด (ไม่มีข้อยกเว้น) — ✅ line 1177 principalOnly ? 0 : (inst.penalty ?? 0)
+- [x] debtDb.ts/DebtReport.tsx: penalty/unlockFee แสดงเฉพาะงวดปัจจุบัน งวดอนาคต = 0 — ✅ line 1025-1027 isFuturePeriod ? 0 : rawPenalty
+- [x] DebtReport.tsx: สิ้นสุดสัญญา — งวดที่ผ่านมาแล้ว (dueDate < today) ต้องเป็นสีเทา 0 เหมือน isSuspended — ✅ dimmed = closed || suspended → gray-100 bg + gray-400 italic
+- [x] TypeScript 0 errors + tests + commit + push + checkpoint — ✅ 63/64 pass
 
 ### Phase 9AD — สูตรค่าดำเนินการ/เงินต้น/ดอกเบี้ย + ค่าปรับสะสม
 - [x] debtDb.ts: ค่าดำเนินการ = 100 เสมอ (ไม่ scale ตาม ratio)
