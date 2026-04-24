@@ -10,6 +10,7 @@ import Login from "./pages/Login";
 import SelectSection from "./pages/SelectSection";
 import ChangePassword from "./pages/ChangePassword";
 import Contracts from "./pages/Contracts";
+import BadDebtSummary from "./pages/BadDebtSummary";
 import DebtReport from "./pages/DebtReport";
 import UsersSettings from "./pages/settings/Users";
 import GroupsSettings from "./pages/settings/Groups";
@@ -23,6 +24,7 @@ function Router() {
       <Route path="/change-password" component={ChangePassword} />
       <Route path="/contracts" component={Contracts} />
       <Route path="/debt-report" component={DebtReport} />
+      <Route path="/bad-debt-summary" component={BadDebtSummary} />
       <Route path="/settings/users" component={UsersSettings} />
       <Route path="/settings/groups" component={GroupsSettings} />
       <Route path="/404" component={NotFound} />

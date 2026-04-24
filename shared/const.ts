@@ -21,6 +21,7 @@ export const MENU_CODES = [
   "section_switch", // การสลับ Section (ไว้บนสุด)
   "contract", // ข้อมูลสัญญา
   "debt_report", // รายงานหนี้
+  "bad_debt_summary", // สรุปหนี้เสีย
   "settings_users", // ตั้งค่า > จัดการผู้ใช้งาน
   "settings_groups", // ตั้งค่า > จัดการสิทธิ์
 ] as const;
@@ -30,6 +31,7 @@ export const MENU_LABELS: Record<MenuCode, string> = {
   section_switch: "การสลับ Section",
   contract: "ข้อมูลสัญญา",
   debt_report: "รายงานหนี้",
+  bad_debt_summary: "สรุปหนี้เสีย",
   settings_users: "จัดการผู้ใช้งาน",
   settings_groups: "จัดการสิทธิ์",
 };

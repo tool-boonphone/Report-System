@@ -389,6 +389,9 @@ export default function DebtReport() {
     (tab === "target"
       ? (targetQuery.data?.rows as TargetRow[])
       : (collectedQuery.data?.rows as CollectedRow[])) ?? [];
+  // hasPrincipalBreakdown: true = Boonphone (แสดง principal/interest/fee จริง)
+  //                         false = Fastfone365 (แสดง "-" แทน 0.00)
+  const hasPrincipalBreakdown = collectedQuery.data?.hasPrincipalBreakdown !== false;
 
   /* ---- Dynamic filter options (derived from ALL active rows, not filtered) ---- */
   const approveDateOptions = useMemo(() => {
@@ -819,18 +822,25 @@ export default function DebtReport() {
           )}
           {tab === "collected" && collectedSummary && (
             <div className="flex flex-wrap gap-1.5">
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-blue-50 text-blue-700 border border-blue-200">
-                <Banknote className="w-3 h-3" />
-                เงินต้น: {fmtMoney(collectedSummary.principal)}
-              </span>
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-purple-50 text-purple-700 border border-purple-200">
-                <Percent className="w-3 h-3" />
-                ดอกเบี้ย: {fmtMoney(collectedSummary.interest)}
-              </span>
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-cyan-50 text-cyan-700 border border-cyan-200">
-                <CircleDollarSign className="w-3 h-3" />
-                ค่าดำเนินการ: {fmtMoney(collectedSummary.fee)}
-              </span>
+              {/* เงินต้น/ดอกเบี้ย/ค่าดำเนินการ: ซ่อนสำหรับ FF365 เพราะ API ไม่ส่ง breakdown */}
+              {hasPrincipalBreakdown && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-blue-50 text-blue-700 border border-blue-200">
+                  <Banknote className="w-3 h-3" />
+                  เงินต้น: {fmtMoney(collectedSummary.principal)}
+                </span>
+              )}
+              {hasPrincipalBreakdown && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-purple-50 text-purple-700 border border-purple-200">
+                  <Percent className="w-3 h-3" />
+                  ดอกเบี้ย: {fmtMoney(collectedSummary.interest)}
+                </span>
+              )}
+              {hasPrincipalBreakdown && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-cyan-50 text-cyan-700 border border-cyan-200">
+                  <CircleDollarSign className="w-3 h-3" />
+                  ค่าดำเนินการ: {fmtMoney(collectedSummary.fee)}
+                </span>
+              )}
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-red-50 text-red-700 border border-red-200">
                 <Gavel className="w-3 h-3" />
                 ค่าปรับ: {fmtMoney(collectedSummary.penalty)}
@@ -1317,13 +1327,14 @@ export default function DebtReport() {
                                       v = fmtDate(pay.paidAt);
                                       break;
                                     case "principal":
-                                      v = fmtMoney(pay.principal);
+                                      // FF365: no breakdown available — show "-" instead of 0.00
+                                      v = hasPrincipalBreakdown ? fmtMoney(pay.principal) : "-";
                                       break;
                                     case "interest":
-                                      v = fmtMoney(pay.interest);
+                                      v = hasPrincipalBreakdown ? fmtMoney(pay.interest) : "-";
                                       break;
                                     case "fee":
-                                      v = fmtMoney(pay.fee);
+                                      v = hasPrincipalBreakdown ? fmtMoney(pay.fee) : "-";
                                       break;
                                     case "penalty":
                                       v = fmtMoney(pay.penalty || 0);

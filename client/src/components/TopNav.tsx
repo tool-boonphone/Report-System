@@ -13,6 +13,7 @@ import {
   Menu as MenuIcon,
   Settings,
   Shield,
+  TrendingDown,
   Users,
   X,
 } from "lucide-react";
@@ -20,7 +21,7 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Link, useLocation } from "wouter";
 
-type MenuCode = "contract" | "debt_report" | "settings_users" | "settings_groups";
+type MenuCode = "contract" | "debt_report" | "bad_debt_summary" | "settings_users" | "settings_groups";
 
 type NavItem = {
   label: string;
@@ -33,6 +34,7 @@ type NavItem = {
 const MAIN_NAV: NavItem[] = [
   { label: "ข้อมูลสัญญา", path: "/contracts", icon: FileText, menuCode: "contract" },
   { label: "รายงานหนี้", path: "/debt-report", icon: Banknote, menuCode: "debt_report" },
+  { label: "สรุปหนี้เสีย", path: "/bad-debt-summary", icon: TrendingDown, menuCode: "bad_debt_summary" },
 ];
 
 // Settings sub-menu: collapsed under the Settings icon button.

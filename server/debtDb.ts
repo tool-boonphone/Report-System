@@ -1370,5 +1370,7 @@ export async function listDebtCollected(params: { section: SectionKey }) {
     };
   });
 
-  return { rows };
+  // hasPrincipalBreakdown: true = Boonphone (has principal/interest/fee breakdown)
+  //                          false = Fastfone365 (only total_paid_amount, no breakdown)
+  return { rows, hasPrincipalBreakdown: isFF365 === false };
 }

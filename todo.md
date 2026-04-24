@@ -460,3 +460,22 @@ Task list:
 - [x] P18-7: ตรวจสอบ UI Debt Report (เป้าเก็บหนี้/ยอดเก็บหนี้) สำหรับ Fastfone365 — ✅ debtDb.ts รองรับ FF365 adapter
 - [x] P18-8: แก้ไข mappers/debtDb/API ให้ Fastfone365 ทำงานเหมือน Boonphone ทุกด้าน — ✅ เพิ่ม isFF365 adapter ใน debtDb.ts + listDebtCollected ใช้ installmentExternalId
 - [x] P18-9: Run tests (63 pass, 1 skip) + save checkpoint + commit 3568c47 (GitHub push failed: token expired)
+
+### Phase 19 — Fastfone365 UI Fixes + Phase 9k Bad Debt Summary
+
+#### P19-1: FF365 ยอดเก็บหนี้ — ซ่อน principal/interest/fee สำหรับ FF365
+- [x] Backend `debtDb.ts`: เพิ่ม `hasPrincipalBreakdown: boolean` ใน `listDebtCollected` return (true=Boonphone, false=FF365)
+- [x] Frontend `DebtReport.tsx`: ใช้ `hasPrincipalBreakdown` เพื่อแสดง "-" แทน "0.00" สำหรับ FF365 ใน principal/interest/fee columns
+- [x] Frontend `DebtReport.tsx`: ซ่อน Summary Badges เงินต้น/ดอกเบี้ย/ค่าดำเนินการ สำหรับ FF365
+
+#### P19-2: Phase 9k — หน้าสรุปกำไร/ขาดทุนจากหนี้เสีย
+- [x] สำรวจ DB: FF365 มี 3,123 สัญญาหนี้เสีย, `sale_price` อยู่ใน raw_json, `finance_amount` อยู่ใน DB column
+- [x] Backend `server/badDebtDb.ts`: `getBadDebtSummary({ section, approveMonth? })` — query contracts JOIN payments, คำนวณ profitLoss = totalPaid - financeAmount
+- [x] Backend `server/routers/badDebt.ts`: `badDebtRouter` + `badDebtViewProcedure` (permission: bad_debt_summary.view)
+- [x] Backend `server/routers.ts`: ลงทะเบียน `badDebtRouter`
+- [x] Frontend `client/src/pages/BadDebtSummary.tsx`: หน้าสรุปกำไร/ขาดทุน — Summary cards + ตารางรายสัญญา + filter + sort
+- [x] Frontend `client/src/App.tsx`: เพิ่ม route `/bad-debt-summary`
+- [x] Frontend `client/src/components/TopNav.tsx`: เพิ่ม nav item "สรุปหนี้เสีย" (icon: TrendingDown)
+- [x] Shared `shared/const.ts`: เพิ่ม `bad_debt_summary` ใน MENU_CODES + MENU_LABELS
+- [x] Unit tests `server/badDebt.test.ts`: 14 tests ครอบ row calculation + summary calculation
+- [x] TypeScript: 0 errors, Tests: 74/76 pass (1 fail = pre-existing admin.access timeout, 1 skip = FF365 creds)
