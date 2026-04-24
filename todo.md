@@ -636,6 +636,6 @@ Task list:
 - [ ] แก้ไข overpaid carry-forward: ยอดชำระเกินต้องหักงวดถัดไปในเป้าเก็บหนี้ ไม่ใช่งวดเดียวกัน
 
 ### Fix: FF365 bad_debt_amount = ยอดขายเครื่อง (real payment ล่าสุด ไม่ใช่ sum)
-- [ ] Fix computeAndStoreBadDebt ใน runner.ts: bad_debt_amount = total_paid_amount ของ real payment ล่าสุด (ไม่ใช่ sum ทั้งหมด)
-- [ ] Fix display logic ใน debtDb.ts: real payment ปกติ (ก่อน bad debt) แสดงในตาราง, bad debt row = bad_debt_amount ใหม่
-- [ ] Re-sync bad_debt_amount สำหรับสัญญา FF365 ทั้งหมดใน DB
+- [x] Fix computeAndStoreBadDebt ใน runner.ts: bad_debt_amount = total_paid_amount ของ real payment ล่าสุด (ไม่ใช่ sum ทั้งหมด)
+- [x] Fix display logic ใน debtDb.ts: real payment ปกติ (ก่อน bad debt) แสดงในตาราง, bad debt row = bad_debt_amount ใหม่
+- [x] Re-sync bad_debt_amount สำหรับสัญญา FF365 ทั้งหมดใน DB
