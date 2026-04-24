@@ -1446,8 +1446,19 @@ export async function listDebtCollected(params: { section: SectionKey }) {
           badDebtRow,
         ];
       } else {
-        // ไม่มี bad debt → tag ปกติ
-        tagged = assigned.map((p) => ({ ...p, isBadDebtRow: false }));
+        // ไม่มี bad debt → ใช้เฉพาะ real payments (external_id เป็นตัวเลข) เท่านั้น
+        // Synthetic payments (pay-{id}-{n}) ไม่ควรแสดงในตาราง
+        // เพราะ real payment คือยอดที่แอดมินบันทึกจริง (มี receipt_no, total_paid_amount)
+        // และ re-assign periods จาก real payments เท่านั้น เพื่อให้ลำดับงวดถูกต้อง
+        const realPaymentsRaw = rawPayments.filter((p) => {
+          const payExtId = (p as any).payment_external_id as string | null;
+          return payExtId != null && /^\d+$/.test(payExtId);
+        });
+        const realAssigned = assignPayPeriods(
+          realPaymentsRaw,
+          c.installments.map((i: { period: number | null; amount: number | string }) => ({ period: i.period, amount: Number(i.amount) || 0 })),
+        );
+        tagged = realAssigned.map((p) => ({ ...p, isBadDebtRow: false }));
       }
     } else {
       tagged = assigned;
