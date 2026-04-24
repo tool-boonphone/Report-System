@@ -620,3 +620,9 @@ Task list:
 - [ ] แก้ไข `listDebtTarget` SQL query ให้ดึง bad_debt_amount, bad_debt_date, suspended_from_period จาก contracts table โดยตรง (แทนการคำนวณใหม่)
 - [ ] ทดสอบ TypeScript + ตรวจสอบ DB ว่า bad_debt_amount ถูกต้อง
 - [ ] commit + checkpoint
+
+### Phase 26 — Bad Debt Display Fixes
+
+- [ ] P26-1: ซ่อน real payment (ยอดขายเครื่อง/ยอดรวม เช่น 20,000) ออกจากตารางยอดเก็บหนี้สำหรับสัญญาหนี้เสีย — real payment คือ external_id เป็นตัวเลข (ไม่ใช่ "pay-{id}-{n}") ไม่ควรแสดงในตารางเพราะกระจายลงงวดแล้ว
+- [ ] P26-2: เพิ่ม tooltip ที่ยอดหนี้เสียที่กระจายลงงวด (isBadDebtRow) — แสดงหมายเหตุ เช่น "ยอดขายเครื่อง 20,000 บาท (06/04/2569)"
+- [ ] P26-3: แก้ไข overpayment ใน CT0126-SNI017-22216-01 — ยอดชำระเกินต้องถูกนำไปหักงวดถัดไปและแสดงข้อความกำกับ
