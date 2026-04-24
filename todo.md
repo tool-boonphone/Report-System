@@ -665,3 +665,10 @@ Task list:
 - [x] ลบ isFF365 branch ออกจาก listDebtCollected — ใช้ shared logic เดียวกัน (4 steps)
 - [x] รัน test suite: 74 passed | 1 skipped | 1 flaky timeout (admin.access, ไม่เกี่ยวกับ refactor)
 - [x] commit + push + checkpoint
+
+### Phase 39 — Fix: เป้าเก็บหนี้ (bad debt) แสดงเฉพาะงวดที่มีการชำระในยอดเก็บหนี้
+- [x] debtDb.ts: สร้าง `maxPaidPeriodByContract` Map จาก installments.paid_amount > 0 (ยกเว้น bad debt installment)
+- [x] debtDb.ts: Boonphone ใช้ installment_status_code="หนี้เสีย", FF365 ใช้ installment_status_code="ยกเลิกสัญญา" เป็นตัวตรวจ bad debt installment
+- [x] debtDb.ts: filter `baseInstallments` เพื่อตัดงวดที่ period > maxPaidPeriod ออกจากตาราง
+- [x] รัน test suite: 75 passed | 1 skipped | 1 flaky timeout (admin.access)
+- [x] commit + push + checkpoint

@@ -787,6 +787,18 @@ export async function listDebtTarget(params: { section: SectionKey }) {
     }
   }
 
+  // --- Phase 39: Build maxPaidPeriodByContract for bad-debt contracts ---
+  // สำหรับสัญญาหนี้เสีย (สถานะ = "หนี้เสีย") ในเป้าเก็บหนี้ ให้แสดงเฉพาะงวดที่มีการชำระจริง
+  // งวดที่เกินจากนั้นไม่ต้องแสดงอะไร (ตัดออกจากตาราง)
+  //
+  // วิธีนับงวดที่มีการชำระ:
+  //   - Boonphone: นับจาก normalPeriodsByContract (receipt_no suffix -N)
+  //   - FF365: นับจาก installments.paid_amount > 0 (เพราะ FF365 ไม่มี receipt_no)
+  //
+  // ยกเว้น: bad debt payment (total_paid ≈ bad_debt_amount) ไม่นับเป็นงวดที่ชำระ
+  const maxPaidPeriodByContract = new Map<string, number>();
+  // จะบุ๊นหลังจาก closedByContract ถูก build แล้ว (Boonphone: normalPeriodsByContract, FF365: installments)
+
   // --- Fastfone365: build closedByContract from installment data ---
   // For FF365, a contract with status="สิ้นสุดสัญญา" is considered closed.
   // closeStartsAtPeriod = last period where paid_amount > 0 (i.e. customer paid),
@@ -795,7 +807,28 @@ export async function listDebtTarget(params: { section: SectionKey }) {
     for (const [key, list] of Array.from(instByContract.entries())) {
       // Find the contract status from cRows
       const contract = cRows.find((c: any) => String(c.external_id) === key);
-      if (!contract || contract.status !== "สิ้นสุดสัญญา") continue;
+      if (!contract) continue;
+
+      // Phase 39: For bad-debt FF365 contracts, track max paid period
+      // FF365 bad debt: status="หนี้เสีย" or installment_status_code="ยกเลิกสัญญา"
+      if (contract.status === "หนี้เสีย") {
+        // นับงวดที่มีการชำระจริง (ไม่ใช่ bad debt payment)
+        // FF365: ใช้ installment.paid_amount > 0 แต่ต้องไม่ใช่ installment_status_code="ยกเลิกสัญญา"
+        const normalPaidPeriods = list
+          .filter((r) => {
+            if (Number(r.paid_amount ?? 0) <= 0.001) return false;
+            // ยกเว้น bad debt installment (status="ยกเลิกสัญญา")
+            if (r.installment_status_code === "ยกเลิกสัญญา") return false;
+            return true;
+          })
+          .map((r) => Number(r.period ?? 0))
+          .filter((p) => p > 0);
+        if (normalPaidPeriods.length > 0) {
+          maxPaidPeriodByContract.set(key, Math.max(...normalPaidPeriods));
+        }
+      }
+
+      if (contract.status !== "สิ้นสุดสัญญา") continue;
       // Find last period with paid_amount > 0
       const paidPeriods = list
         .filter((r) => Number(r.paid_amount ?? 0) > 0.001)
@@ -809,6 +842,34 @@ export async function listDebtTarget(params: { section: SectionKey }) {
         closedByContract.set(key, maxPaidPeriod);
       }
       // If all periods are paid (maxPaidPeriod === totalPeriods), no need to mark as closed.
+    }
+  }
+
+  // --- Phase 39: Populate maxPaidPeriodByContract for Boonphone bad-debt contracts ---
+  // Boonphone: นับจาก normalPeriodsByContract (receipt_no suffix -N, ไม่ใช่ TXRTC)
+  // ยกเว้น: bad debt payment (total_paid ≈ bad_debt_amount) ไม่นับ
+  if (!isFF365) {
+    for (const c of cRows) {
+      if (c.status !== "หนี้เสีย") continue;
+      const key = String(c.external_id ?? "");
+      if (!key) continue;
+      // normalPeriodsByContract ถูก build ใน Boonphone branch ข้างบน (else block)
+      // แต่อยู่ใน scope ของ else block ดังนั้นต้องใช้ข้อมูลจาก payment_transactions โดยตรง
+      // ใช้ paidAtsByContract เป็นตัวแทนไม่ได้ เพราะเก็บแค่ paid_at ไม่เก็บ period
+      // จึงใช้ installments.paid_amount > 0 เป็น fallback เหมือน FF365
+      const list = instByContract.get(key) ?? [];
+      const normalPaidPeriods = list
+        .filter((r) => {
+          if (Number(r.paid_amount ?? 0) <= 0.001) return false;
+          // ยกเว้น bad debt installment (สถานะ = "หนี้เสีย")
+          if (r.installment_status_code === "หนี้เสีย") return false;
+          return true;
+        })
+        .map((r) => Number(r.period ?? 0))
+        .filter((p) => p > 0);
+      if (normalPaidPeriods.length > 0) {
+        maxPaidPeriodByContract.set(key, Math.max(...normalPaidPeriods));
+      }
     }
   }
 
@@ -1273,6 +1334,15 @@ export async function listDebtTarget(params: { section: SectionKey }) {
       }
     }
 
+    // --- Phase 39: For bad-debt contracts, trim installments to only show periods with real payments ---
+    // สำหรับสัญญาหนี้เสีย (สถานะ = "หนี้เสีย") ในเป้าเก็บหนี้:
+    //   - แสดงเฉพาะงวดที่ period <= maxPaidPeriod (งวดที่มีการชำระจริง)
+    //   - งวดที่เกินจากนั้นไม่ต้องแสดงอะไร (ตัดออกจากตารางเลย)
+    const maxPaidPeriod = maxPaidPeriodByContract.get(extId);
+    const finalInstallments = (isContractBadDebt || isContractCancelled) && maxPaidPeriod != null
+      ? baseInstallments.filter((inst) => Number(inst.period ?? 0) <= maxPaidPeriod)
+      : baseInstallments;
+
     return {
       contractExternalId: extId,
       contractNo: c.contract_no ?? null,
@@ -1287,7 +1357,7 @@ export async function listDebtTarget(params: { section: SectionKey }) {
       remaining: Math.max(totalAmount - totalPaid, 0),
       debtStatus,
       daysOverdue,
-      installments: baseInstallments,
+      installments: finalInstallments,
       // bad debt info from contracts table (used by listDebtCollected for tooltip + real payment filtering)
       contractBadDebtAmount: c.bad_debt_amount != null ? Number(c.bad_debt_amount) : null,
       contractBadDebtDate: c.bad_debt_date ?? null,
