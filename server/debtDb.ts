@@ -568,6 +568,7 @@ export async function listDebtTarget(params: { section: SectionKey }) {
            product_type
       FROM ${contracts}
      WHERE ${contracts.section} = ${params.section}
+       AND (${contracts.status} IS NULL OR ${contracts.status} != 'ยกเลิกสัญญา')
   `);
   const cRows: Array<any> = (contractRowsRaw as any)[0] ?? contractRowsRaw;
 

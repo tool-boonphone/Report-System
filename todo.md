@@ -555,3 +555,15 @@ Task list:
 - [x] ตรวจสอบ: paymentsByPeriod บรรทัด 1139 มีเฉพาะ dueDateFilter แต่ไม่มี dueDateExact
 - [x] แก้ไข: เพิ่ม `if (dueDateExact && p.paidAt?.slice(0,10) !== dueDateExact) continue;` ใน paymentsByPeriod loop
 - [x] ทดสอบ TypeScript (ไม่มี error) เรียบร้อย
+
+### Phase 31 — ตัดสัญญาสถานะ "ยกเลิกสัญญา" ออกจากรายงานหนี้ทั้งหมด
+
+- [x] ตรวจสอบ debtDb.ts: พบว่า listDebtTarget SQL query ไม่มี filter status เลย
+- [x] เพิ่ม `AND (status IS NULL OR status != 'ยกเลิกสัญญา')` ใน listDebtTarget SQL (listDebtCollected reuse baseRows จึง filter ออกอัตโนมัติ)
+- [x] ทดสอบ TypeScript (ไม่มี error) เรียบร้อย
+
+### Phase 31 — ตัดสัญญาสถานะ "ยกเลิกสัญญา" ออกจากรายงานหนี้ทั้งหมด
+
+- [x] ตรวจสอบ debtDb.ts: พบว่า listDebtTarget SQL query ไม่มี filter status เลย
+- [x] เพิ่ม `AND (status IS NULL OR status != 'ยกเลิกสัญญา')` ใน listDebtTarget SQL (listDebtCollected reuse baseRows จึง filter ออกอัตโนมัติ)
+- [x] ทดสอบ TypeScript (ไม่มี error) เรียบร้อย
