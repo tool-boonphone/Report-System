@@ -459,4 +459,4 @@ Task list:
 - [x] P18-6: ตรวจสอบ UI Contracts page สำหรับ Fastfone365 — ✅ 17,809 contracts แสดงผลถูกต้อง
 - [x] P18-7: ตรวจสอบ UI Debt Report (เป้าเก็บหนี้/ยอดเก็บหนี้) สำหรับ Fastfone365 — ✅ debtDb.ts รองรับ FF365 adapter
 - [x] P18-8: แก้ไข mappers/debtDb/API ให้ Fastfone365 ทำงานเหมือน Boonphone ทุกด้าน — ✅ เพิ่ม isFF365 adapter ใน debtDb.ts + listDebtCollected ใช้ installmentExternalId
-- [ ] P18-9: Run tests + save checkpoint + push GitHub
+- [x] P18-9: Run tests (63 pass, 1 skip) + save checkpoint + commit 3568c47 (GitHub push failed: token expired)
