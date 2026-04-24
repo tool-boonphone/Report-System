@@ -55,3 +55,10 @@ export function invalidateDebtCache(section: string): void {
   collectedCache.delete(section);
   console.log(`[debtCache] Invalidated cache for section: ${section}`);
 }
+
+/** Invalidate all sections (used after logic fixes that affect all data) */
+export function invalidateAllDebtCache(): void {
+  targetCache.clear();
+  collectedCache.clear();
+  console.log('[debtCache] Invalidated ALL cache entries');
+}

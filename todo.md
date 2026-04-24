@@ -502,3 +502,9 @@ Task list:
 
 - [x] Feature 1: ฟิลเตอร์เดือน-ปีที่ต้องชำระ (dueDateFilter) → ซ่อน cell ของ period ที่ dueDate ไม่ตรงกับเดือนที่เลือก (แสดง "-" แทน) + Badge คำนวณเฉพาะ period ที่ตรง
 - [x] Feature 2: เพิ่ม date picker filter (ปฏิทิน) ทั้ง 2 tab → target=วันที่ที่ต้องชำระ, collected=วันที่ที่ชำระ → ซ่อน cell ที่ไม่ตรงวันที่เลือก + Badge คำนวณเฉพาะวันที่เลือก
+
+### Phase 24 — Bug fix: overpaid ของงวดก่อนหน้าไม่ถูกนำมาหักในเป้าเก็บหนี้
+
+- [ ] ตรวจสอบ DB: overpaid_amount, installments.amount ของสัญญา CT0226-SBR001-0909-01
+- [ ] วิเคราะห์ว่า API ส่ง overpaid ใน installments.amount ของงวดถัดไปหรือไม่
+- [ ] แก้ไข listDebtTarget ให้แสดง annotation overpaid ที่งวดถัดไปถูกต้อง

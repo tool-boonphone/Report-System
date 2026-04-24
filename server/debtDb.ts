@@ -1064,8 +1064,14 @@ export async function listDebtTarget(params: { section: SectionKey }) {
             principal = Math.round(effectivePrincipal);
             interest  = Math.max(0, Math.round(netBaseline) - principal - fee);
 
+            // Phase 24 fix: if API amount equals baseline (API did NOT reduce it for overpaid carry),
+            // we must deduct overpaidApplied from the displayed amount so the UI shows the correct
+            // reduced target. Example: CT0226-SBR001-0909-01 period 2: apiAmount=2094 (=baseline),
+            // overpaidApplied=50 → display 2044 (not 2094).
+            const apiEqualsBaseline = apiAmount != null && Math.abs(apiAmount - baseline) < 0.5;
+            const applyCarryToAmount = overpaidApplied > 0.009 && apiEqualsBaseline;
             amount = apiAmount != null
-              ? apiAmount  // use API amount directly
+              ? (applyCarryToAmount ? Math.max(0, apiAmount - overpaidApplied) : apiAmount)
               : principal + interest + fee + penalty + unlockFee;
           }
 

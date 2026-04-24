@@ -8,7 +8,7 @@
  * ทุก procedure ถูกป้องกันด้วย permissionProcedure('debt_report', 'view').
  */
 import { z } from "zod";
-import { requirePermission, router } from "../_core/trpc";
+import { protectedProcedure, requirePermission, router } from "../_core/trpc";
 import {
   getDebtReport,
   getOverdueTopList,
@@ -20,6 +20,7 @@ import {
   setCachedTarget,
   getCachedCollected,
   setCachedCollected,
+  invalidateAllDebtCache,
 } from "../debtCache";
 import { SECTIONS } from "../../shared/const";
 
@@ -81,4 +82,10 @@ export const debtRouter = router({
       setCachedCollected(input.section, result);
       return result;
     }),
+
+  /** Admin: clear all in-memory cache so next query recomputes from DB */
+  invalidateCache: protectedProcedure.mutation(async () => {
+    invalidateAllDebtCache();
+    return { ok: true };
+  }),
 });
