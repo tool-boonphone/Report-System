@@ -630,3 +630,7 @@ Task list:
 ### Phase 27 — Bad Debt Display Refactor (ใหม่)
 - [x] ตัด synthetic payments (pay-{id}-{n}) และ real payment ออกจากตารางสำหรับสัญญาหนี้เสีย
 - [x] สร้าง 1 bad debt row: งวด = งวดถัดจากงวดสุดท้ายที่ชำระปกติ (ถ้าไม่มีการชำระ = งวด 1), badDebt = bad_debt_amount, คอลัมน์อื่น = 0, paidAt = bad_debt_date
+
+### Phase 28 — Period Ordering & Overpaid Fix
+- [ ] แก้ไข assignPayPeriods: ลำดับงวดข้ามในตารางยอดเก็บหนี้ (เช่น CT0126-PII012-20958-01 แสดงงวด 2-1, 3-1 แต่ไม่มีงวด 1)
+- [ ] แก้ไข overpaid carry-forward: ยอดชำระเกินต้องหักงวดถัดไปในเป้าเก็บหนี้ ไม่ใช่งวดเดียวกัน
