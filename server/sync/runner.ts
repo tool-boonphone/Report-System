@@ -27,6 +27,7 @@ import {
   finishSyncLog,
 } from "./syncLog";
 import type { SectionKey, SyncTrigger } from "../../shared/const";
+import { invalidateDebtCache } from "../debtCache";
 
 const OVERALL_TIMEOUT_MS = 90 * 60 * 1000; // 90 minutes ceiling per section (Fastfone365 has 17k contracts)
 // A sync row older than this with status=in_progress is treated as abandoned.
@@ -212,6 +213,8 @@ async function doSync(
       status: "success",
       rowCount: overallRows,
     });
+    // Invalidate debt report cache so next request gets fresh data after sync
+    invalidateDebtCache(section);
     return { ok: true, rowCount: overallRows };
   } catch (err: any) {
     await finishSyncLog({

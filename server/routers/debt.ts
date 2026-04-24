@@ -2,8 +2,8 @@
  * Debt-report router.
  *   - summary      : รวมทั้งช่วง + แยกรายเดือน (เก็บไว้เผื่อ backward compatibility)
  *   - overdueTop   : สัญญาค้างชำระสูงสุด
- *   - listTarget   : “เป้าเก็บหนี้” — ตารางรายงานต่อสัญญาของงวดตาม schedule จาก installments
- *   - listCollected: “ยอดเก็บหนี้” — ตารางรายงานต่อสัญญาจากการชำระจริง (payment_transactions)
+ *   - listTarget   : "เป้าเก็บหนี้" — ตารางรายงานต่อสัญญาของงวดตาม schedule จาก installments
+ *   - listCollected: "ยอดเก็บหนี้" — ตารางรายงานต่อสัญญาจากการชำระจริง (payment_transactions)
  *
  * ทุก procedure ถูกป้องกันด้วย permissionProcedure('debt_report', 'view').
  */
@@ -15,6 +15,12 @@ import {
   listDebtCollected,
   listDebtTarget,
 } from "../debtDb";
+import {
+  getCachedTarget,
+  setCachedTarget,
+  getCachedCollected,
+  setCachedCollected,
+} from "../debtCache";
 import { SECTIONS } from "../../shared/const";
 
 const debtViewProcedure = requirePermission("debt_report", "view");
@@ -51,12 +57,28 @@ export const debtRouter = router({
   listTarget: debtViewProcedure
     .input(z.object({ section: SectionEnum }))
     .query(async ({ input }) => {
-      return listDebtTarget(input);
+      // Check in-memory cache first (TTL: 5 min per section)
+      const cached = getCachedTarget(input.section);
+      if (cached) {
+        console.log(`[debtCache] HIT listTarget for ${input.section}`);
+        return cached;
+      }
+      const result = await listDebtTarget(input);
+      setCachedTarget(input.section, result);
+      return result;
     }),
 
   listCollected: debtViewProcedure
     .input(z.object({ section: SectionEnum }))
     .query(async ({ input }) => {
-      return listDebtCollected(input);
+      // Check in-memory cache first (TTL: 5 min per section)
+      const cached = getCachedCollected(input.section);
+      if (cached) {
+        console.log(`[debtCache] HIT listCollected for ${input.section}`);
+        return cached;
+      }
+      const result = await listDebtCollected(input);
+      setCachedCollected(input.section, result);
+      return result;
     }),
 });

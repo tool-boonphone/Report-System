@@ -483,3 +483,11 @@ Task list:
 ### Phase 20 — แก้ไข TopNav ใน BadDebtSummary
 
 - [x] แก้ไข BadDebtSummary.tsx ให้ใช้ AppShell (TopNav) เหมือนหน้า Contracts และ DebtReport — ลบ custom header div ออก
+
+### Phase 21 — Performance: หน้ารายงานหนี้ Fastfone365 โหลดเร็วขึ้น (ไม่แบ่งหน้า)
+
+- [x] วิเคราะห์สาเหตุที่โหลดช้า: contracts 1.7s + installments 3.5s + payments = รวม ~6-7 วินาที (DB query ล้วนหลัก, ไม่ใช่ render)
+- [x] DB indexes: ไม่เพิ่ม (query ใช้ full-table scan เพราะ listDebtTarget ต้องการ contracts ทุก status เพื่อคำนวณ isClosed/isSuspended)
+- [x] Server-side in-memory cache (TTL 5 นาที) — สร้าง `server/debtCache.ts` + เรียกใน `server/routers/debt.ts`
+- [x] Cache invalidation หลัง sync เสร็จ — `invalidateDebtCache(section)` ใน `server/sync/runner.ts`
+- [x] Virtual scrolling ใน UI — มีอยู่แล้ว (@tanstack/react-virtual, overscan: 10) ไม่ต้องเพิ่ม
