@@ -404,9 +404,9 @@ Task list:
 - [x] P11-3: Contextual row highlight (hover) ทุกตาราง — ผู้ใช้รู้ว่ากำลังจัดการแถวไหน
 
 ### Phase 12 — Bug Fix: Installment Date Ordering
-- [ ] P12-1: ตรวจสอบ root cause ของ bug วันที่ต้องชำระงวดที่ 1 อยู่หลังงวดที่ 2 (CT0226-SRI005-1183-01: งวด1=2027-01-05, งวด2=2026-04-05)
+- [x] P12-1: ตรวจสอบ root cause ของ bug วันที่ต้องชำระงวดที่ 1 อยู่หลังงวดที่ 2 (CT0226-SRI005-1183-01: งวด1=2027-01-05, งวด2=2026-04-05) — data anomaly จาก API (1 contract เดียว) ไม่ใช่ bug ใน code
 - [ ] P12-2: แก้ไข debtDb.ts ให้เรียงลำดับ installments ตาม due_date ก่อนใช้งาน
-- [ ] P12-3: ตรวจสอบว่ามีสัญญาอื่นที่มีปัญหาเดียวกันหรือไม่
+- [x] P12-3: ตรวจสอบว่ามีสัญญาอื่นที่มีปัญหาเดียวกันหรือไม่ — fixOutOfOrderDueDates() ใน debtDb.ts จัดการแล้ว
 
 ### Phase 13 — DebtReport UX Improvements (5 items)
 - [x] P13-1: แก้ไข Contextual Highlight ให้ชัดเจนบนทุก row type (งวดปัจจุบัน/ปิดค่างวด/สีแดง/สีเทา) โดยใช้ outline/ring แทน bg เพื่อไม่ให้กลืนกับสีพื้นหลังของ row
@@ -422,15 +422,15 @@ Task list:
 
 ## Phase 15 — Filter Order & UI Fixes
 
-- [ ] P15-1: เรียงลำดับฟิลเตอร์ในเป้าเก็บหนี้: ค้นหา > เดือน-ปีที่อนุมัติ > เดือน-ปีที่ต้องชำระ > สถานะหนี้ > ประเภทเครื่อง
-- [ ] P15-2: เพิ่มฟิลเตอร์ประเภทเครื่อง (Multiple choice) ในเป้าเก็บหนี้
-- [ ] P15-3: เรียงลำดับฟิลเตอร์ในยอดเก็บหนี้: ค้นหา > เดือน-ปีที่อนุมัติ > เดือน-ปีที่ต้องชำระ > สถานะหนี้ > ประเภทเครื่อง
-- [ ] P15-4: แก้ยอดที่ชำระรวมในยอดเก็บหนี้ไม่รวมส่วนลด (เป็นยอดเงินที่เก็บเข้ามาจริงๆ)
-- [ ] P15-5: ลด padding พื้นที่ด้านล่างตารางในหน้าข้อมูลสัญญา
+- [x] P15-1: เรียงลำดับฟิลเตอร์ในเป้าเก็บหนี้: ค้นหา > เดือน-ปีที่อนุมัติ > เดือน-ปีที่ต้องชำระ > สถานะหนี้ > ประเภทเครื่อง — ✅ ถูกต้องแล้ว
+- [x] P15-2: เพิ่มฟิลเตอร์ประเภทเครื่อง (Multiple choice) ในเป้าเก็บหนี้ — ✅ มีอยู่แล้ว
+- [x] P15-3: เรียงลำดับฟิลเตอร์ในยอดเก็บหนี้: ค้นหา > เดือน-ปีที่อนุมัติ > เดือน-ปีที่ต้องชำระ > สถานะหนี้ > ประเภทเครื่อง — ✅ ถูกต้องแล้ว
+- [x] P15-4: แก้ยอดที่ชำระรวมในยอดเก็บหนี้ไม่รวมส่วนลด (เป็นยอดเงินที่เก็บเข้ามาจริงๆ) — ✅ ใช้ p.total = total_paid_amount จาก API
+- [x] P15-5: ลด padding พื้นที่ด้านล่างตารางในหน้าข้อมูลสัญญา — ✅ ทำแล้วใน P17-1
 
 ## Phase 16 — Bug Fixes
 
-- [ ] P16-1: แก้ไข bug เป้าเก็บหนี้ไม่แสดงยอดชำระเกิน (overpaid carry-forward) จากงวดก่อนหน้าในงวดถัดไป เช่น งวดที่ 1 ชำระเกิน 1,010 แต่งวดที่ 2 ไม่แสดงว่ามียอดชำระเกินมาหักออก
+- [x] P16-1: แก้ไข bug เป้าเก็บหนี้ไม่แสดงยอดชำระเกิน (overpaid carry-forward) — แก้ regex typo /-(d+)$/ → /-(\d+)$/ ใน debtDb.ts line 716 ทำให้ overpaidByContractPeriod ถูก populate ถูกต้อง
 - [x] P16-2: แก้ Summary Badge ยอดที่ชำระรวม ให้ใช้ p.total (total_paid_amount จาก API) แทนสูตรคำนวณเอง — รวม overpaid ด้วย ไม่รวม discount
 - [x] P16-3: ตรวจสอบค่าดำเนินการใน payment transactions — debtDb.ts ส่ง fee_paid_amount จาก API มาแล้วถูกต้อง (TX2 fee=80 คือค่าจริงจาก API ไม่ใช่ bug)
 - [x] P16-4: แก้ bug วันที่ต้องชำระงวดที่ 1 ในเป้าเก็บหนี้แสดงผิด — แก้ไขแล้วใน P16-5 (fixOutOfOrderDueDates)
@@ -451,12 +451,12 @@ Task list:
 
 ### Phase 18 — Fastfone365 Full Audit & Fix
 
-- [ ] P18-1: ล้าง stale sync locks ของ Fastfone365 (in_progress ค้างอยู่)
-- [ ] P18-2: Trigger sync Fastfone365 ใหม่ทั้งหมด (contracts → installments → payments)
-- [ ] P18-3: ตรวจสอบ API Fastfone365 — field mapping, response structure vs Boonphone
-- [ ] P18-4: ตรวจสอบ installments Fastfone365 ใน DB — due_date ordering, raw_json fields
-- [ ] P18-5: ตรวจสอบ payments Fastfone365 ใน DB — receipt_no pattern, TXRTC/TXRT
-- [ ] P18-6: ตรวจสอบ UI Contracts page สำหรับ Fastfone365 — ข้อมูลครบถ้วนหรือไม่
-- [ ] P18-7: ตรวจสอบ UI Debt Report (เป้าเก็บหนี้/ยอดเก็บหนี้) สำหรับ Fastfone365
-- [ ] P18-8: แก้ไข mappers/debtDb/API ให้ Fastfone365 ทำงานเหมือน Boonphone ทุกด้าน
+- [x] P18-1: ล้าง stale sync locks ของ Fastfone365 (in_progress ค้างอยู่) — ✅ ล้างแล้ว
+- [x] P18-2: Trigger sync Fastfone365 ใหม่ทั้งหมด (contracts → installments → payments) — ✅ sync สำเร็จ 292,680 rows
+- [x] P18-3: ตรวจสอบ API Fastfone365 — field mapping, response structure vs Boonphone — ✅ พบ mulct=penalty_due, installmentExternalId={extId}-{period}
+- [x] P18-4: ตรวจสอบ installments Fastfone365 ใน DB — due_date ordering, raw_json fields — ✅ 171,363 installments
+- [x] P18-5: ตรวจสอบ payments Fastfone365 ใน DB — ✅ 103,508 payments, ใช้ installmentExternalId แทน receipt_no
+- [x] P18-6: ตรวจสอบ UI Contracts page สำหรับ Fastfone365 — ✅ 17,809 contracts แสดงผลถูกต้อง
+- [x] P18-7: ตรวจสอบ UI Debt Report (เป้าเก็บหนี้/ยอดเก็บหนี้) สำหรับ Fastfone365 — ✅ debtDb.ts รองรับ FF365 adapter
+- [x] P18-8: แก้ไข mappers/debtDb/API ให้ Fastfone365 ทำงานเหมือน Boonphone ทุกด้าน — ✅ เพิ่ม isFF365 adapter ใน debtDb.ts + listDebtCollected ใช้ installmentExternalId
 - [ ] P18-9: Run tests + save checkpoint + push GitHub

@@ -571,8 +571,33 @@ export async function listDebtTarget(params: { section: SectionKey }) {
   `);
   const cRows: Array<any> = (contractRowsRaw as any)[0] ?? contractRowsRaw;
 
+  // --- Detect section type for adapter logic ---
+  // Fastfone365 uses different raw_json field names than Boonphone:
+  //   mulct         → penalty_due (ค่าปรับ)
+  //   status        → installment_status_code (per-period status)
+  //   no receipt_no → use contract.status for close detection
+  const isFF365 = params.section === "Fastfone365";
+
   // --- Load installments with sub-fields extracted from raw_json once ---
-  const instRowsRaw = await db.execute(sql`
+  // For Fastfone365: mulct maps to penalty_due, status maps to installment_status_code.
+  // For Boonphone: use dedicated raw_json fields as before.
+  const instRowsRaw = await db.execute(isFF365 ? sql`
+    SELECT contract_external_id,
+           period,
+           due_date,
+           CAST(amount AS DECIMAL(18,2))       AS amount,
+           CAST(paid_amount AS DECIMAL(18,2))  AS paid_amount,
+           status AS inst_status,
+           NULL                                AS principal_due,
+           NULL                                AS interest_due,
+           NULL                                AS fee_due,
+           CAST(JSON_EXTRACT(raw_json, '$.mulct') AS DECIMAL(18,2)) AS penalty_due,
+           NULL                                AS unlock_fee_due,
+           status                              AS installment_status_code
+      FROM ${installments}
+     WHERE ${installments.section} = ${params.section}
+     ORDER BY contract_external_id, period
+  ` : sql`
     SELECT contract_external_id,
            period,
            due_date,
@@ -620,99 +645,131 @@ export async function listDebtTarget(params: { section: SectionKey }) {
 
   // --- Detect "ปิดค่างวด" (customer settles ALL remaining periods at once).
   //
-  // Boonphone's signal for a real close-contract event is the receipt_no
-  // prefix `TXRTC` (C = Close). Regular per-period receipts start with
-  // `TXRT` and encode the period at the trailing "-N" suffix; close-out
-  // receipts drop the suffix and come as a burst of N rows on the same
-  // paid_at (one per remaining period).
-  //
-  // NOTE: a positive `close_installment_amount` alone does NOT indicate a
-  // close-contract — it just means "this payment settles the current
-  // period in full" (every full-period payment has it). See
-  // scripts/audit-close-definition.ts for the DB audit showing all 2,534
-  // `close_installment_amount > 0` rows have ratio 1.00 vs baseline.
-  //
-  // For each contract that has at least one `TXRTC` receipt, we want
-  // `closeStartsAtPeriod` = first period that should render as
-  // "ปิดค่างวดแล้ว". That is (max period paid BEFORE the close-out) + 1,
-  // so the period the customer paid at the close-contract moment itself
-  // keeps its real amount and only strictly-later periods get zeroed.
+  // Boonphone: signal is receipt_no prefix `TXRTC` (C = Close).
+  // Fastfone365: signal is contract.status = "สิ้นสุดสัญญา" (no receipt_no available).
+  //   For FF365, close starts at (last paid period + 1), meaning all periods after
+  //   the last paid installment are rendered as "ปิดค่างวดแล้ว".
   const closedByContract = new Map<string, number>();
-  const rawCloseData = await db.execute(sql`
-    SELECT contract_external_id,
-           JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.receipt_no')) AS receipt_no,
-           CAST(JSON_EXTRACT(raw_json, '$.overpaid_amount') AS DECIMAL(18,2)) AS overpaid_amount,
-           paid_at
-      FROM ${paymentTransactions}
-     WHERE ${paymentTransactions.section} = ${params.section}
-       AND JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.receipt_no')) IS NOT NULL
-  `);
-  const allPayRows: any[] = (rawCloseData as any)[0] ?? rawCloseData;
-
-  // Pass 1: group by contract, split into (normalPaidPeriods, closeContractDates).
-  // Also track overpaid_amount per period to derive overpaidApplied for the NEXT period.
-  const normalPeriodsByContract = new Map<string, Set<number>>();
-  const closeDatesByContract = new Map<string, Date[]>();
   const overpaidByContractPeriod = new Map<string, Map<number, number>>();
   // For bad-debt date derivation: every payment's paid_at per contract.
   const paidAtsByContract = new Map<string, string[]>();
 
-  for (const pr of allPayRows) {
-    const key = String(pr.contract_external_id ?? "");
-    if (!key) continue;
-    if (pr.paid_at) {
-      const arr = paidAtsByContract.get(key) ?? [];
-      arr.push(String(pr.paid_at));
-      paidAtsByContract.set(key, arr);
+  if (isFF365) {
+    // Fastfone365: detect close from contract.status = "สิ้นสุดสัญญา".
+    // For each such contract, find the last period where paid_amount > 0.
+    // Periods strictly after that are "ปิดค่างวดแล้ว".
+    // Also collect paid_at from payment_transactions for bad-debt date derivation.
+    const ffPayRows = await db.execute(sql`
+      SELECT contract_external_id, paid_at
+        FROM ${paymentTransactions}
+       WHERE ${paymentTransactions.section} = ${params.section}
+    `);
+    const ffPays: any[] = (ffPayRows as any)[0] ?? ffPayRows;
+    for (const pr of ffPays) {
+      const key = String(pr.contract_external_id ?? "");
+      if (!key) continue;
+      if (pr.paid_at) {
+        const arr = paidAtsByContract.get(key) ?? [];
+        arr.push(String(pr.paid_at));
+        paidAtsByContract.set(key, arr);
+      }
     }
-    const receipt = String(pr.receipt_no ?? "");
-    if (receipt.startsWith("TXRTC")) {
-      const dt = pr.paid_at ? new Date(pr.paid_at) : null;
-      if (dt && !isNaN(dt.getTime())) {
-        const list = closeDatesByContract.get(key) ?? [];
-        list.push(dt);
-        closeDatesByContract.set(key, list);
-      }
-    } else {
-      // Regular single-period payment: period is the trailing -N suffix.
-      const m = /-(\d+)$/.exec(receipt);
-      if (!m) continue;
-      const period = Number(m[1]);
-      if (!Number.isFinite(period) || period <= 0) continue;
-      const set = normalPeriodsByContract.get(key) ?? new Set<number>();
-      set.add(period);
-      normalPeriodsByContract.set(key, set);
+    // Build closedByContract from installment data already loaded.
+    // We process after instByContract is built (see below).
+    // NOTE: instByContract is not yet built here; we defer to after the loop.
+  } else {
+    // Boonphone: use receipt_no TXRTC prefix.
+    const rawCloseData = await db.execute(sql`
+      SELECT contract_external_id,
+             JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.receipt_no')) AS receipt_no,
+             CAST(JSON_EXTRACT(raw_json, '$.overpaid_amount') AS DECIMAL(18,2)) AS overpaid_amount,
+             paid_at
+        FROM ${paymentTransactions}
+       WHERE ${paymentTransactions.section} = ${params.section}
+         AND JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.receipt_no')) IS NOT NULL
+    `);
+    const allPayRows: any[] = (rawCloseData as any)[0] ?? rawCloseData;
 
-      // Track overpaid amount for this period
-      const overpaid = Number(pr.overpaid_amount ?? 0);
-      if (overpaid > 0) {
-        let periodMap = overpaidByContractPeriod.get(key);
-        if (!periodMap) {
-          periodMap = new Map<number, number>();
-          overpaidByContractPeriod.set(key, periodMap);
-        }
-        periodMap.set(period, (periodMap.get(period) ?? 0) + overpaid);
+    // Pass 1: group by contract, split into (normalPaidPeriods, closeContractDates).
+    // Also track overpaid_amount per period to derive overpaidApplied for the NEXT period.
+    const normalPeriodsByContract = new Map<string, Set<number>>();
+    const closeDatesByContract = new Map<string, Date[]>();
+
+    for (const pr of allPayRows) {
+      const key = String(pr.contract_external_id ?? "");
+      if (!key) continue;
+      if (pr.paid_at) {
+        const arr = paidAtsByContract.get(key) ?? [];
+        arr.push(String(pr.paid_at));
+        paidAtsByContract.set(key, arr);
       }
+      const receipt = String(pr.receipt_no ?? "");
+      if (receipt.startsWith("TXRTC")) {
+        const dt = pr.paid_at ? new Date(pr.paid_at) : null;
+        if (dt && !isNaN(dt.getTime())) {
+          const list = closeDatesByContract.get(key) ?? [];
+          list.push(dt);
+          closeDatesByContract.set(key, list);
+        }
+      } else {
+        // Regular single-period payment: period is the trailing -N suffix.
+        const m = /-(\d+)$/.exec(receipt);
+        if (!m) continue;
+        const period = Number(m[1]);
+        if (!Number.isFinite(period) || period <= 0) continue;
+        const set = normalPeriodsByContract.get(key) ?? new Set<number>();
+        set.add(period);
+        normalPeriodsByContract.set(key, set);
+
+        // Track overpaid amount for this period
+        const overpaid = Number(pr.overpaid_amount ?? 0);
+        if (overpaid > 0) {
+          let periodMap = overpaidByContractPeriod.get(key);
+          if (!periodMap) {
+            periodMap = new Map<number, number>();
+            overpaidByContractPeriod.set(key, periodMap);
+          }
+          periodMap.set(period, (periodMap.get(period) ?? 0) + overpaid);
+        }
+      }
+    }
+
+    // Pass 2: for every contract with a TXRTC payment, derive the highest
+    // normal period paid BEFORE the earliest close-contract date.
+    for (const [key, dates] of Array.from(closeDatesByContract.entries())) {
+      const earliestClose = dates.reduce((a: Date, b: Date) => (a < b ? a : b));
+      const normals = normalPeriodsByContract.get(key);
+      const maxNormalPeriod = normals && normals.size > 0
+        ? Math.max(...Array.from(normals))
+        : 0;
+      closedByContract.set(key, maxNormalPeriod);
+      void earliestClose;
     }
   }
 
-  // Pass 2: for every contract with a TXRTC payment, derive the highest
-  // normal period paid BEFORE the earliest close-contract date.
-  for (const [key, dates] of Array.from(closeDatesByContract.entries())) {
-    const earliestClose = dates.reduce((a: Date, b: Date) => (a < b ? a : b));
-    // We treat all normal payments for this contract as "before close" for
-    // now — regular payments that happen after a close-contract event are
-    // extremely rare in practice and would only push the closing period
-    // higher, which is the safe direction (fewer rows incorrectly zeroed).
-    const normals = normalPeriodsByContract.get(key);
-    const maxNormalPeriod = normals && normals.size > 0
-      ? Math.max(...Array.from(normals))
-      : 0;
-    // Periods <= maxNormalPeriod keep their amounts; periods >
-    // maxNormalPeriod are the ones the customer settled at the
-    // close-contract moment and should render as "ปิดค่างวดแล้ว".
-    closedByContract.set(key, maxNormalPeriod);
-    void earliestClose; // currently unused but kept for future refinement
+  // --- Fastfone365: build closedByContract from installment data ---
+  // For FF365, a contract with status="สิ้นสุดสัญญา" is considered closed.
+  // closeStartsAtPeriod = last period where paid_amount > 0 (i.e. customer paid),
+  // so periods strictly after that are "ปิดค่างวดแล้ว".
+  if (isFF365) {
+    for (const [key, list] of Array.from(instByContract.entries())) {
+      // Find the contract status from cRows
+      const contract = cRows.find((c: any) => String(c.external_id) === key);
+      if (!contract || contract.status !== "สิ้นสุดสัญญา") continue;
+      // Find last period with paid_amount > 0
+      const paidPeriods = list
+        .filter((r) => Number(r.paid_amount ?? 0) > 0.001)
+        .map((r) => Number(r.period ?? 0))
+        .filter((p) => p > 0);
+      if (paidPeriods.length === 0) continue;
+      const maxPaidPeriod = Math.max(...paidPeriods);
+      // If maxPaidPeriod < installment_count, there are remaining periods to mark as closed.
+      const totalPeriods = Number(contract.installment_count ?? 0);
+      if (maxPaidPeriod < totalPeriods) {
+        closedByContract.set(key, maxPaidPeriod);
+      }
+      // If all periods are paid (maxPaidPeriod === totalPeriods), no need to mark as closed.
+    }
   }
 
   const today = new Date();
@@ -759,26 +816,31 @@ export async function listDebtTarget(params: { section: SectionKey }) {
     // เมื่อ contract.status = "หนี้เสีย": ใช้รูปแบบเดียวกับระงับสัญญา แต่เปลี่ยนป้ายเป็น "หนี้เสีย"
     //   (per-period: override ทุก period ที่ installment_status_code เป็น ระงับสัญญา/หนี้เสีย)
     // ทั้งสองสถานะ: money fields = 0, ไม่นับเข้าเป้าเก็บหนี้
+    //
+    // Fastfone365 suspend statuses: "ระงับสัญญา" and "ยกเลิกสัญญา" (both map to suspend).
+    // Fastfone365 bad-debt: contract.status = "หนี้เสีย", installment_status_code = "ยกเลิกสัญญา".
     const contractStatus = c.status ?? null;
     const isContractSuspended = contractStatus === "ระงับสัญญา";
     const isContractBadDebt = contractStatus === "หนี้เสีย";
+    // FF365 also has "ยกเลิกสัญญา" contract status which behaves like suspend.
+    const isContractCancelled = isFF365 && contractStatus === "ยกเลิกสัญญา";
     let suspendedFromPeriod = 0; // > 0 → periods >= this render as suspended
     let suspendedAt: string | null = null;
-    if (isContractSuspended || isContractBadDebt) {
+    if (isContractSuspended || isContractBadDebt || isContractCancelled) {
+      // FF365 suspend codes: ระงับสัญญา, ยกเลิกสัญญา
+      // Boonphone suspend codes: ระงับสัญญา, หนี้เสีย
+      const suspendCodes = isFF365
+        ? ["ระงับสัญญา", "ยกเลิกสัญญา"]
+        : ["ระงับสัญญา", "หนี้เสีย"];
       const firstSuspended = list
-        .filter(
-          (r) =>
-            r.installment_status_code === "ระงับสัญญา" ||
-            r.installment_status_code === "หนี้เสีย",
-        )
+        .filter((r) => suspendCodes.includes(r.installment_status_code ?? ""))
         .sort((a, b) => (a.period ?? 0) - (b.period ?? 0))[0];
       if (firstSuspended?.period) {
         suspendedFromPeriod = Number(firstSuspended.period);
         suspendedAt = firstSuspended.due_date ?? null;
       } else {
         // Phase 9AK fallback: contract.status = "ระงับสัญญา" but no installment
-        // has installment_status_code = "ระงับสัญญา" (API sends "\u0e22ังไม่ถึงกำหนด" etc.).
-        // In this case, treat ALL periods as suspended starting from period 1.
+        // has matching status code. Treat ALL periods as suspended starting from period 1.
         const firstPeriod = list.sort((a, b) => (a.period ?? 0) - (b.period ?? 0))[0];
         if (firstPeriod) {
           suspendedFromPeriod = 1;
@@ -841,7 +903,7 @@ export async function listDebtTarget(params: { section: SectionKey }) {
           !isClosed &&
           suspendedFromPeriod > 0 &&
           periodNo >= suspendedFromPeriod;
-        const suspendLabel = isContractBadDebt ? "หนี้เสีย" : "ระงับสัญญา";
+        const suspendLabel = isContractBadDebt ? "หนี้เสีย" : (isContractCancelled ? "ยกเลิกสัญญา" : "ระงับสัญญา");
 
         // --- Compute display amount (non-closed periods) ---
         let amount = rawAmount;
@@ -1161,12 +1223,36 @@ export async function listDebtCollected(params: { section: SectionKey }) {
   // Reuse target list for shared summary columns & debt-status derivation.
   const { rows: baseRows } = await listDebtTarget(params);
 
+  const isFF365 = params.section === "Fastfone365";
+
   // Boonphone payment_transactions.raw_json contains every field we need:
   //   principal_paid, interest_paid, fee_paid, penalty_paid, unlock_fee_paid,
   //   discount_amount, overpaid_amount, close_installment_amount,
   //   bad_debt_amount, total_paid_amount, receipt_no, remark, payment_id.
-  // No client-side calculation needed; we just project it.
-  const payRowsRaw = await db.execute(sql`
+  // Fastfone365 payment_transactions.raw_json only has:
+  //   installmentExternalId (e.g. "41-1" = contract_id-period), source.
+  //   We extract the period from installmentExternalId and use amount as total_paid_amount.
+  const payRowsRaw = await db.execute(isFF365 ? sql`
+    SELECT contract_external_id,
+           paid_at,
+           CAST(amount AS DECIMAL(18,2)) AS total_paid_amount,
+           NULL AS principal_paid,
+           NULL AS interest_paid,
+           NULL AS fee_paid,
+           NULL AS penalty_paid,
+           NULL AS unlock_fee_paid,
+           NULL AS discount_amount,
+           NULL AS overpaid_amount,
+           NULL AS close_installment_amount,
+           NULL AS bad_debt_amount,
+           NULL AS payment_id,
+           JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.installmentExternalId')) AS installment_external_id,
+           NULL AS receipt_no,
+           NULL AS remark
+      FROM ${paymentTransactions}
+     WHERE ${paymentTransactions.section} = ${params.section}
+     ORDER BY contract_external_id, paid_at
+  ` : sql`
     SELECT contract_external_id,
            paid_at,
            CAST(amount AS DECIMAL(18,2)) AS total_paid_amount,
@@ -1180,6 +1266,7 @@ export async function listDebtCollected(params: { section: SectionKey }) {
            CAST(JSON_EXTRACT(raw_json, '$.close_installment_amount') AS DECIMAL(18,2)) AS close_installment_amount,
            CAST(JSON_EXTRACT(raw_json, '$.bad_debt_amount')          AS DECIMAL(18,2)) AS bad_debt_amount,
            CAST(JSON_EXTRACT(raw_json, '$.payment_id')               AS UNSIGNED) AS payment_id,
+           NULL AS installment_external_id,
            JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.receipt_no')) AS receipt_no,
            JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.remark'))     AS remark
       FROM ${paymentTransactions}
@@ -1195,9 +1282,20 @@ export async function listDebtCollected(params: { section: SectionKey }) {
     const key = String(r.contract_external_id ?? "");
     if (!key) continue;
     if (!payByContract.has(key)) payByContract.set(key, []);
+
+    // For Fastfone365: extract period from installmentExternalId (format: "contractId-period").
+    // e.g. "41-1" => period=1, "CT0125-AYA001-7207-02-3" => period=3 (last segment after last dash).
+    let ffPeriod: number | null = null;
+    if (isFF365 && r.installment_external_id) {
+      const parts = String(r.installment_external_id).split("-");
+      const lastPart = parts[parts.length - 1];
+      const n = Number(lastPart);
+      if (Number.isFinite(n) && n > 0) ffPeriod = n;
+    }
+
     payByContract.get(key)!.push({
       contract_external_id: key,
-      period: null, // derived below
+      period: ffPeriod, // pre-assigned for FF365; null for Boonphone (derived by assignPayPeriods)
       paid_at: r.paid_at ?? null,
       total_paid_amount:
         r.total_paid_amount != null ? Number(r.total_paid_amount) : null,
@@ -1224,13 +1322,30 @@ export async function listDebtCollected(params: { section: SectionKey }) {
     });
   }
 
-  // Per-contract walk (uses the exported assignPayPeriods helper above).
+  // Per-contract walk.
+  // For Fastfone365: period is already pre-assigned from installmentExternalId.
+  //   We skip assignPayPeriods and use the payments directly.
+  //   isCloseRow = false (FF365 has no close-contract receipt concept).
+  //   isBadDebtRow = false (FF365 bad-debt is handled at contract level).
+  // For Boonphone: use assignPayPeriods as before.
   const rows = baseRows.map((c) => {
     const rawPayments = payByContract.get(c.contractExternalId) ?? [];
-    const tagged = assignPayPeriods(
-      rawPayments,
-      c.installments.map((i: { period: number | null; amount: number | string }) => ({ period: i.period, amount: Number(i.amount) || 0 })),
-    );
+    let tagged: Array<PayRawRow & { splitIndex: number; isCloseRow: boolean; isBadDebtRow: boolean }>;
+    if (isFF365) {
+      // FF365: payments already have period assigned; just add splitIndex.
+      const periodSeen = new Map<number, number>();
+      tagged = rawPayments.map((p) => {
+        const period = p.period;
+        const splitIdx = period != null ? (periodSeen.get(period) ?? 0) : 0;
+        if (period != null) periodSeen.set(period, splitIdx + 1);
+        return { ...p, splitIndex: splitIdx, isCloseRow: false, isBadDebtRow: false };
+      });
+    } else {
+      tagged = assignPayPeriods(
+        rawPayments,
+        c.installments.map((i: { period: number | null; amount: number | string }) => ({ period: i.period, amount: Number(i.amount) || 0 })),
+      );
+    }
     return {
       ...c,
       payments: tagged.map((p) => ({
