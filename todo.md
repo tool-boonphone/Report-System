@@ -521,3 +521,10 @@ Task list:
 - [x] เพิ่ม toggle เปิด/ปิดตา (Eye icon) ใน Badge แต่ละตัวของ collected tab — default = เปิด (นำมาคิดในยอดรวม)
 - [x] ส่วนลด: ปิดตาตลอด ไม่สามารถเปิดได้ ไม่นำมาคิดในยอดรวม
 - [x] Badge ที่ปิดตา: แสดงตัวเลขแบบ dimmed (opacity-40) และไม่นำมารวมใน "ยอดที่ชำระรวม"
+
+### Phase 27 — แสดงข้อความ "-หักชำระเกิน" กำกับในงวดที่ถูกหักยอดเกิน
+
+- [x] ตรวจสอบว่า `overpaidApplied` field ถูกส่งมาใน TargetRow installments แล้ว (ยืนยันผ่าน API call: overpaidApplied=50)
+- [x] ตรวจสอบ DB: พบ 63 สัญญาที่มี overpaid carry-forward (Boonphone)
+- [x] แก้ไข DebtReport.tsx: เปลี่ยนเงื่อนไข annotation จาก `overpaidApplied > 0 && baselineAmount > amount` เป็น `overpaidApplied > 0.009` เพียงอย่างเดียว (เงื่อนไขเดิมไม่ทำงานเมื่อ penalty ถูกบวกเข้า amount ทำให้ amount = baseline)
+- [x] ทดสอบ TypeScript (ไม่มี error) + ยืนยัน UI แสดง (-หักชำระเกิน: 50.00) ในงวดที่ 2 ของ CT0226-SBR001-0909-01 แล้ว

@@ -1350,10 +1350,10 @@ export default function DebtReport() {
                                   const unlockAmt = principalOnly ? 0 : (inst.unlockFee ?? 0);
                                   const displayAmount = netAmt + penaltyAmt + unlockAmt;
                                   v = fmtMoney(displayAmount);
-                                  if (
-                                    inst.overpaidApplied > 0.009 &&
-                                    inst.baselineAmount > inst.amount + 0.009
-                                  ) {
+                                  // Phase 27 fix: ตรวจสอบ overpaidApplied > 0 เพียงอย่างเดียว
+                                  // เงื่อนไขเดิม (baselineAmount > amount) ไม่ทำงานเมื่อ penalty ถูกบวกเข้า amount
+                                  // ทำให้ amount = baseline แม้จะมีการหักยอดเกินแล้ว
+                                  if (inst.overpaidApplied > 0.009) {
                                     annotation = `(-หักชำระเกิน: ${fmtMoney(inst.overpaidApplied)})`;
                                     annotationClass = "text-emerald-600 font-semibold";
                                   }
