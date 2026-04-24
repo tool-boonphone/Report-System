@@ -1473,8 +1473,7 @@ export default function DebtReport() {
                                   // Phase 27 fix: ตรวจสอบ overpaidApplied > 0 เพียงอย่างเดียว
                                   // เงื่อนไขเดิม (baselineAmount > amount) ไม่ทำงานเมื่อ penalty ถูกบวกเข้า amount
                                   // ทำให้ amount = baseline แม้จะมีการหักยอดเกินแล้ว
-                                  // Phase 36: ไม่แสดง annotation ถ้างวดนี้เป็น bad debt/ระงับสัญญา
-                                  if (inst.overpaidApplied > 0.009 && !inst.isSuspended) {
+                                  if (inst.overpaidApplied > 0.009) {
                                     annotation = `(-หักชำระเกิน: ${fmtMoney(inst.overpaidApplied)})`;
                                     annotationClass = "text-emerald-600 font-semibold";
                                   }
