@@ -672,3 +672,9 @@ Task list:
 - [x] debtDb.ts: filter `baseInstallments` เพื่อตัดงวดที่ period > maxPaidPeriod ออกจากตาราง
 - [x] รัน test suite: 75 passed | 1 skipped | 1 flaky timeout (admin.access)
 - [x] commit + push + checkpoint
+
+### Phase 39b — Fix: maxPaidPeriodByContract นับจาก payment_transactions จริง
+- [ ] debtDb.ts: เปลี่ยน maxPaidPeriodByContract จากนับ installments.paid_amount > 0 มาเป็นนับจาก payment_transactions ที่ไม่ใช่ bad debt (เหมือนกับที่ listDebtCollected ใช้)
+- [ ] ทั้ง FF365 และ Boonphone ใช้ logic เดียวกัน: นับ period จาก real payment transactions
+- [ ] รัน test suite ตรวจสอบ
+- [ ] commit + push + checkpoint
