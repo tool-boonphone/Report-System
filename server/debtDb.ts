@@ -1386,45 +1386,63 @@ export async function listDebtCollected(params: { section: SectionKey }) {
         badDebtNote = `ยอดขายเครื่อง ${contractBadDebtAmount.toLocaleString("th-TH", { minimumFractionDigits: 0, maximumFractionDigits: 0 })} บาท (${day}/${month}/${year})`;
       }
 
-      tagged = assigned.map((p) => {
-        const ffStatus = (p as any).ff_status ?? null;
-        const dateKey = p.paid_at ? String(p.paid_at).substring(0, 10) : null;
-        const payExtId = (p as any).payment_external_id as string | null;
-        // real payment = external_id เป็นตัวเลขล้วน (ไม่ใช่ "pay-{id}-{n}")
-        const isRealPayment = payExtId != null && /^\d+$/.test(payExtId);
-        // isBadDebt ถ้า: status=ยกเลิกสัญญา หรือ paid_at วันเดียวกับที่มี ยกเลิกสัญญา
-        const isBadDebt = ffStatus === "ยกเลิกสัญญา" || (dateKey != null && badDebtDates.has(dateKey));
-        if (isBadDebt) {
-          // real payment ที่เป็น bad debt → ซ่อนออกจากตาราง (กระจายลงงวดแล้ว)
-          if (isRealPayment) {
-            return {
-              ...p,
-              isCloseRow: false,
-              isBadDebtRow: false,
-              isHiddenRealPayment: true, // ซ่อนออกจากตาราง
-              bad_debt_amount: null,
-              total_paid_amount: null,
-            } as any;
-          }
-          // synthetic bad-debt payment: ยอด = bad_debt_amount (จาก API) หรือ total_paid_amount เป็น fallback
-          const badDebtAmt = (p.bad_debt_amount != null && p.bad_debt_amount > 0)
-            ? p.bad_debt_amount
-            : (p.total_paid_amount ?? 0);
-          return {
-            ...p,
-            isCloseRow: false,
-            isBadDebtRow: true,
-            bad_debt_amount: badDebtAmt,
-            total_paid_amount: null, // ซ่อน total column สำหรับ bad-debt row
-            badDebtNote, // tooltip text
-          } as any;
-        }
-        // ชำระปกติ — ใช้ isCloseRow จาก assignPayPeriods
-        return { ...p, isBadDebtRow: false };
-      });
+      // Phase 27: ถ้า contract มี bad debt (badDebtDates ไม่ว่าง)
+      //   → ตัด payments ทั้งหมดที่เกี่ยวกับ bad debt ออก (ทั้ง real และ synthetic)
+      //   → สร้าง 1 bad debt row ใหม่ที่งวดถัดจากงวดสุดท้ายที่ชำระปกติ
+      if (badDebtDates.size > 0 && contractBadDebtAmount != null && contractBadDebtAmount > 0) {
+        // แยก: payments ปกติ (ไม่ใช่ bad debt date) vs payments bad debt (ตัดออก)
+        const normalPayments = assigned.filter((p) => {
+          const dateKey = p.paid_at ? String(p.paid_at).substring(0, 10) : null;
+          const ffStatus = (p as any).ff_status ?? null;
+          const isBadDebt = ffStatus === "ยกเลิกสัญญา" || (dateKey != null && badDebtDates.has(dateKey));
+          return !isBadDebt;
+        });
 
-      // กรอง hidden real payments ออก
-      tagged = tagged.filter((p) => !(p as any).isHiddenRealPayment);
+        // หางวดสุดท้ายที่มีการชำระปกติ
+        let lastNormalPeriod = 0;
+        for (const p of normalPayments) {
+          if (p.period != null && p.period > lastNormalPeriod) {
+            lastNormalPeriod = p.period;
+          }
+        }
+        // งวดของ bad debt row = งวดถัดจากงวดสุดท้ายที่ชำระปกติ (ถ้าไม่มีการชำระ = งวด 1)
+        const badDebtPeriod = lastNormalPeriod + 1;
+
+        // สร้าง 1 bad debt row
+        const badDebtRow: any = {
+          contract_external_id: c.contractExternalId,
+          period: badDebtPeriod,
+          splitIndex: 0,
+          isCloseRow: false,
+          isBadDebtRow: true,
+          paid_at: contractBadDebtDate, // วันที่รับเงินจริง (bad_debt_date)
+          principal_paid: 0,
+          interest_paid: 0,
+          fee_paid: 0,
+          penalty_paid: 0,
+          unlock_fee_paid: 0,
+          discount_amount: 0,
+          overpaid_amount: 0,
+          close_installment_amount: 0,
+          bad_debt_amount: contractBadDebtAmount, // เต็มจำนวน
+          total_paid_amount: 0, // ยอดที่ชำระรวม = 0 (ไม่ใช่ยอดปกติ)
+          payment_id: null,
+          receipt_no: null,
+          remark: null,
+          ff_status: null,
+          payment_external_id: null,
+          badDebtNote, // tooltip text
+        };
+
+        // tagged = payments ปกติ + 1 bad debt row
+        tagged = [
+          ...normalPayments.map((p) => ({ ...p, isBadDebtRow: false })),
+          badDebtRow,
+        ];
+      } else {
+        // ไม่มี bad debt → tag ปกติ
+        tagged = assigned.map((p) => ({ ...p, isBadDebtRow: false }));
+      }
     } else {
       tagged = assigned;
     }
