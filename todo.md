@@ -658,3 +658,10 @@ Task list:
 - [x] debtDb.ts: แก้ regex bug `/-(d+)$/` → `/-(\ d+)$/` ใน FF365 overpaid loop (ลืม backslash ทำให้ period ไม่ถูก extract)
 - [x] debtDb.ts: เพิ่ม `total_paid_amount` ใน FF365 payment query เพื่อใช้ตรวจ isBadDebtPayment
 - [x] debtDb.ts: สร้าง `badDebtAmountByContract` Map จาก cRows เพื่อ lookup ต่อสัญญา
+
+### Phase 38 — Refactor: listDebtCollected ใช้โค้ดชุดเดียวกันสำหรับ Boonphone และ FF365
+- [x] วิเคราะห์ความต่าง: Boonphone ใช้ bad_debt_amount>0, FF365 ใช้ ff_status="ยกเลิกสัญญา" + date rule
+- [x] รวม bad debt detection เป็น unified path: pre-tag FF365 bad_debt_amount ก่อนส่งเข้า assignPayPeriods
+- [x] ลบ isFF365 branch ออกจาก listDebtCollected — ใช้ shared logic เดียวกัน (4 steps)
+- [x] รัน test suite: 74 passed | 1 skipped | 1 flaky timeout (admin.access, ไม่เกี่ยวกับ refactor)
+- [x] commit + push + checkpoint

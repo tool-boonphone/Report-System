@@ -1385,149 +1385,83 @@ export async function listDebtCollected(params: { section: SectionKey }) {
     } as any);
   }
 
-  // Per-contract walk.
-  // Both Boonphone and FF365 now use assignPayPeriods to derive period from payment amount.
-  // FF365 additionally applies isBadDebtRow logic based on ff_status:
-  //   "ยกเลิกสัญญา" → isBadDebtRow=true (หนี้เสีย)
-  //   กฎพิเศษ: ถ้า paid_at วันเดียวกันมี ยกเลิกสัญญา → ทุก payment ในวันนั้นเป็นหนี้เสียทั้งหมด
+  // Per-contract walk — unified path for both Boonphone and FF365.
+  //
+  // Unified logic (Phase 38):
+  //   1. Pre-tag bad debt payments ก่อนส่งเข้า assignPayPeriods
+  //      - Boonphone: bad_debt_amount > 0 → isBadDebtRow=true (assignPayPeriods จัดการเอง)
+  //      - FF365: ff_status="ยกเลิกสัญญา" + date rule → pre-tag bad_debt_amount ก่อน
+  //   2. Filter เฉพาะ real payments (external_id เป็นตัวเลข) ออกก่อน
+  //   3. assignPayPeriods (shared)
+  //   4. Filter !isBadDebtRow (shared)
+  //
+  // ทั้งสอง section ใช้โค้ดชุดเดียวกัน แค่สลับ section ใน SQL query เท่านั้น
   const rows = baseRows.map((c) => {
     const rawPayments = payByContract.get(c.contractExternalId) ?? [];
-    let tagged: Array<PayRawRow & { splitIndex: number; isCloseRow: boolean; isBadDebtRow: boolean }>;
+    const contractBadDebtAmount = (c as any).contractBadDebtAmount as number | null;
+    const contractBadDebtDate = (c as any).contractBadDebtDate as string | null;
 
-    // Step 1: Use assignPayPeriods for both sections to derive period from payment amount
-    const assigned = assignPayPeriods(
-      rawPayments,
-      c.installments.map((i: { period: number | null; amount: number | string }) => ({ period: i.period, amount: Number(i.amount) || 0 })),
-    );
-
+    // --- Step 1: Pre-tag bad debt payments (FF365 only) ---
+    // FF365 ใช้ ff_status="ยกเลิกสัญญา" แทน bad_debt_amount field
+    // กฎพิเศษ: payments ทุกรายการในวันเดียวกับ "ยกเลิกสัญญา" ถือเป็น bad debt ทั้งหมด
+    // → pre-tag โดยใส่ bad_debt_amount ลงใน payment row เพื่อให้ assignPayPeriods จัดการเหมือน Boonphone
+    let normalizedPayments: PayRawRow[];
     if (isFF365) {
-      // Phase 36: FF365 isBadDebtRow logic ใช้ ff_status (payment_transactions.status)
-      //
-      // FF365 payment_transactions.status:
-      //   "ยกเลิกสัญญา" → หนี้เสีย → isBadDebtRow=true
-      //   อื่นๆ          → ชำระปกติ → isBadDebtRow=false
-      //
-      // กฎพิเศษ: ถ้า paid_at วันเดียวกันมี payment ที่ status="ยกเลิกสัญญา" อยู่ด้วย
-      //   → ทุก payment ในวันนั้นถือเป็นหนี้เสียทั้งหมด
-      //   (เป็นการกระจายยอดจากการขายเครื่องลงตามงวด)
-
       // หา paid_at dates ที่มี ยกเลิกสัญญา อยู่ด้วย
       const badDebtDates = new Set<string>();
       for (const p of rawPayments) {
         if ((p as any).ff_status === "ยกเลิกสัญญา" && p.paid_at) {
-          const dateKey = String(p.paid_at).substring(0, 10);
-          badDebtDates.add(dateKey);
+          badDebtDates.add(String(p.paid_at).substring(0, 10));
         }
       }
-
-      // Tag payments with isBadDebtRow based on ff_status + date rule
-      // กฎพิเศษ: real payment (external_id เป็นตัวเลข) ที่ paid_at วันเดียวกับ bad debt date
-      //   → ซ่อนออกจากตาราง (isHiddenRealPayment=true) เพราะยอดนี้กระจายลงงวดแล้ว
-      //   → ใช้ข้อมูลนี้สร้าง tooltip ที่ bad debt rows
-      // สร้าง tooltip text จาก contracts.bad_debt_amount + bad_debt_date
-      const contractBadDebtAmount = (c as any).contractBadDebtAmount as number | null;
-      const contractBadDebtDate = (c as any).contractBadDebtDate as string | null;
-      let badDebtNote: string | null = null;
-      if (contractBadDebtAmount != null && contractBadDebtAmount > 0 && contractBadDebtDate) {
-        // แปลงวันที่เป็น DD/MM/YYYY (พ.ศ.)
-        const d = new Date(`${contractBadDebtDate}T00:00:00`);
-        const day = String(d.getDate()).padStart(2, "0");
-        const month = String(d.getMonth() + 1).padStart(2, "0");
-        const year = d.getFullYear() + 543;
-        badDebtNote = `ยอดขายเครื่อง ${contractBadDebtAmount.toLocaleString("th-TH", { minimumFractionDigits: 0, maximumFractionDigits: 0 })} บาท (${day}/${month}/${year})`;
-      }
-
-      // Phase 27: ถ้า contract มี bad debt (badDebtDates ไม่ว่าง)
-      //   → ตัด payments ทั้งหมดที่เกี่ยวกับ bad debt ออก (ทั้ง real และ synthetic)
-      //   → สร้าง 1 bad debt row ใหม่ที่งวดถัดจากงวดสุดท้ายที่ชำระปกติ
-      if (badDebtDates.size > 0 && contractBadDebtAmount != null && contractBadDebtAmount > 0) {
-        // แยก: payments ปกติ vs payments bad debt (ตัดออก)
-        // กฎ:
-        //   1. ใช้เฉพาะ real payments (external_id เป็นตัวเลข) เท่านั้น
-        //      Synthetic payments (pay-{id}-{n}) ตัดออกทั้งหมด ไม่ว่า paid_at จะตรงกับ bad debt date หรือไม่
-        //      เหตุผล: synthetic ไม่มี receipt_no/total_paid_amount จริง และทำให้ cursor offset ผิดถ้า assign รวมกัน
-        //   2. ตัด real payment ที่เป็นยอดขายเครื่อง (total_paid ≈ bad_debt_amount, ต่างกันไม่เกิน 1 บาท)
-        //      เพราะยอดนี้จะถูกแสดงเป็น bad debt row แทน
-        //
-        // Re-assign periods จาก real payments เท่านั้น (ไม่ใช้ assigned ที่รวม synthetic)
-        // เพื่อให้ cursor ไม่ถูก advance โดย synthetic payments
-        const realPaymentsForBadDebt = rawPayments.filter((p) => {
-          const payExtId = (p as any).payment_external_id as string | null;
-          return payExtId != null && /^\d+$/.test(payExtId);
-        });
-        const realAssignedForBadDebt = assignPayPeriods(
-          realPaymentsForBadDebt,
-          c.installments.map((i: { period: number | null; amount: number | string }) => ({ period: i.period, amount: Number(i.amount) || 0 })),
-        );
-        const normalPayments = realAssignedForBadDebt.filter((p) => {
-          // ตัด: real payment ที่เป็นยอดขายเครื่อง (total_paid ≈ bad_debt_amount, ต่างกันไม่เกิน 1 บาท)
-          const totalPaid = (p as any).total_paid_amount as number | null;
-          const isDeviceSalePayment =
-            contractBadDebtAmount != null &&
-            totalPaid != null &&
-            Math.abs(totalPaid - contractBadDebtAmount) <= 1;
-          return !isDeviceSalePayment;
-        });
-
-        // หางวดสุดท้ายที่มีการชำระปกติ
-        let lastNormalPeriod = 0;
-        for (const p of normalPayments) {
-          if (p.period != null && p.period > lastNormalPeriod) {
-            lastNormalPeriod = p.period;
-          }
+      // Pre-tag: payments ที่ ff_status="ยกเลิกสัญญา" หรืออยู่ในวันเดียวกัน → ใส่ bad_debt_amount
+      // เพื่อให้ assignPayPeriods ตรวจจับ isBadDebtRow=true เหมือน Boonphone
+      normalizedPayments = rawPayments.map((p) => {
+        const dateKey = p.paid_at ? String(p.paid_at).substring(0, 10) : "";
+        const isBadDebtDate = badDebtDates.has(dateKey);
+        if (isBadDebtDate && (p.bad_debt_amount == null || p.bad_debt_amount === 0)) {
+          // ใส่ bad_debt_amount = 1 เพื่อให้ assignPayPeriods tag เป็น isBadDebtRow=true
+          // (ค่าจริงจะใช้ contractBadDebtAmount ตอนสร้าง bad debt row)
+          return { ...p, bad_debt_amount: 1 };
         }
-        // งวดของ bad debt row = งวดถัดจากงวดสุดท้ายที่ชำระปกติ (ถ้าไม่มีการชำระ = งวด 1)
-        const badDebtPeriod = lastNormalPeriod + 1;
-
-        // สร้าง 1 bad debt row
-        const badDebtRow: any = {
-          contract_external_id: c.contractExternalId,
-          period: badDebtPeriod,
-          splitIndex: 0,
-          isCloseRow: false,
-          isBadDebtRow: true,
-          paid_at: contractBadDebtDate, // วันที่รับเงินจริง (bad_debt_date)
-          principal_paid: 0,
-          interest_paid: 0,
-          fee_paid: 0,
-          penalty_paid: 0,
-          unlock_fee_paid: 0,
-          discount_amount: 0,
-          overpaid_amount: 0,
-          close_installment_amount: 0,
-          bad_debt_amount: contractBadDebtAmount, // เต็มจำนวน
-          total_paid_amount: 0, // ยอดที่ชำระรวม = 0 (ไม่ใช่ยอดปกติ)
-          payment_id: null,
-          receipt_no: null,
-          remark: null,
-          ff_status: null,
-          payment_external_id: null,
-          badDebtNote, // tooltip text
-        };
-
-        // tagged = payments ปกติ + 1 bad debt row
-        tagged = [
-          ...normalPayments.map((p) => ({ ...p, isBadDebtRow: false })),
-          badDebtRow,
-        ];
-      } else {
-        // ไม่มี bad debt → ใช้เฉพาะ real payments (external_id เป็นตัวเลข) เท่านั้น
-        // Synthetic payments (pay-{id}-{n}) ไม่ควรแสดงในตาราง
-        // เพราะ real payment คือยอดที่แอดมินบันทึกจริง (มี receipt_no, total_paid_amount)
-        // และ re-assign periods จาก real payments เท่านั้น เพื่อให้ลำดับงวดถูกต้อง
-        const realPaymentsRaw = rawPayments.filter((p) => {
-          const payExtId = (p as any).payment_external_id as string | null;
-          return payExtId != null && /^\d+$/.test(payExtId);
-        });
-        const realAssigned = assignPayPeriods(
-          realPaymentsRaw,
-          c.installments.map((i: { period: number | null; amount: number | string }) => ({ period: i.period, amount: Number(i.amount) || 0 })),
-        );
-        tagged = realAssigned.map((p) => ({ ...p, isBadDebtRow: false }));
-      }
+        return p;
+      });
     } else {
-      tagged = assigned;
+      normalizedPayments = rawPayments;
     }
+
+    // --- Step 2: Filter เฉพาะ real payments (external_id เป็นตัวเลข) ---
+    // Synthetic payments (pay-{id}-{n}) ตัดออกทั้งหมด
+    // เหตุผล: synthetic ไม่มี receipt_no/total_paid_amount จริง
+    //         และทำให้ cursor offset ผิดถ้า assign รวมกัน
+    const realPayments = normalizedPayments.filter((p) => {
+      const payExtId = (p as any).payment_external_id as string | null;
+      return payExtId != null && /^\d+$/.test(payExtId);
+    });
+
+    // --- Step 3: assignPayPeriods (shared) ---
+    // assignPayPeriods จะ tag isBadDebtRow=true เมื่อ bad_debt_amount > 0
+    const assigned = assignPayPeriods(
+      realPayments,
+      c.installments.map((i: { period: number | null; amount: number | string }) => ({ period: i.period, amount: Number(i.amount) || 0 })),
+    );
+
+    // --- Step 4: Filter เฉพาะยอดชำระปกติ (Phase 37) ---
+    // ซ่อน bad debt rows และยอดที่กระจายมาจากหนี้เสียออกจากตาราง
+    // แสดงเฉพาะยอดชำระปกติเท่านั้น
+    // ยกเว้น: Boonphone ตัด real payment ที่เป็นยอดขายเครื่อง (total_paid ≈ bad_debt_amount) ออกด้วย
+    const tagged = assigned.filter((p) => {
+      if (p.isBadDebtRow) return false;
+      // ตัด real payment ที่เป็นยอดขายเครื่อง (total_paid ≈ bad_debt_amount, ต่างกันไม่เกิน 1 บาท)
+      const totalPaid = p.total_paid_amount;
+      if (
+        contractBadDebtAmount != null &&
+        contractBadDebtAmount > 0 &&
+        totalPaid != null &&
+        Math.abs(totalPaid - contractBadDebtAmount) <= 1
+      ) return false;
+      return true;
+    });
     return {
       ...c,
       payments: tagged.map((p) => ({
