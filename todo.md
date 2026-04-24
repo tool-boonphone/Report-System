@@ -578,3 +578,16 @@ Task list:
 - [x] เพิ่ม error state พร้อมปุ่ม "ลองใหม่" เมื่อเกิด 502/timeout
 - [x] TypeScript: 0 errors, Server: running, prewarm: all sections cached
 - [x] commit + checkpoint
+
+### Phase 33 — แก้ไข 503 timeout + gzip compression + Pagination
+- [x] เพิ่ม HTTP gzip compression ใน Express server (compression middleware)
+- [x] สร้าง Streaming endpoint /api/debt/stream/target และ /api/debt/stream/collected
+- [x] ส่งข้อมูลเป็น chunked transfer encoding เพื่อป้องกัน proxy timeout
+- [x] ส่ง hasPrincipalBreakdown ใน streaming response metadata
+- [x] เปลี่ยน DebtReport.tsx จาก tRPC query → streaming fetch (bypass proxy timeout)
+- [x] เพิ่ม pagination state: currentPage, pageSize (default 100)
+- [x] เพิ่ม pagedRows: slice filteredRows ตาม page/pageSize
+- [x] เพิ่ม Pagination UI ด้านล่างตาราง (เลขหน้า, กด prev/next, เลือก 50/100/200/500)
+- [x] Reset page 1 เมื่อ filter เปลี่ยน หรือ section เปลี่ยน
+- [x] TypeScript: 0 errors, Server: running
+- [x] commit + checkpoint
