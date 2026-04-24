@@ -809,31 +809,15 @@ export async function listDebtTarget(params: { section: SectionKey }) {
       const contract = cRows.find((c: any) => String(c.external_id) === key);
       if (!contract) continue;
 
-      // Phase 39: For bad-debt FF365 contracts, track max paid period
-      // ใช้ inst_status (installments.status column) ไม่ใช่ installment_status_code (raw_json, เป็น null เสมอ)
-      // งวดที่ถือว่า bad debt installment:
-      //   1. inst_status = "ยกเลิกสัญญา" (FF365 bad debt status)
-      //   2. due_date >= bad_debt_date (งวดที่ถึงกำหนดหลังจากวันที่เป็นหนี้เสีย)
+      // Phase 39 (revised): For bad-debt FF365 contracts, track max paid period
+      // กฎง่าย: นับจากงวดที่มี paid_amount > 0 เท่านั้น ไม่สนใจ inst_status หรือ bad_debt_date
       if (contract.status === "หนี้เสีย") {
-        const badDebtDateMs = contract.bad_debt_date
-          ? Date.parse(String(contract.bad_debt_date).slice(0, 10) + "T00:00:00")
-          : Infinity;
-        const normalPaidPeriods = list
-          .filter((r) => {
-            if (Number(r.paid_amount ?? 0) <= 0.001) return false;
-            // ยกเว้น bad debt installment: inst_status = "ยกเลิกสัญญา"
-            if (r.inst_status === "ยกเลิกสัญญา") return false;
-            // ยกเว้น งวดที่ due_date >= bad_debt_date
-            if (r.due_date) {
-              const dueDateMs = Date.parse(String(r.due_date).slice(0, 10) + "T00:00:00");
-              if (dueDateMs >= badDebtDateMs) return false;
-            }
-            return true;
-          })
+        const paidPeriods = list
+          .filter((r) => Number(r.paid_amount ?? 0) > 0.001)
           .map((r) => Number(r.period ?? 0))
           .filter((p) => p > 0);
-        if (normalPaidPeriods.length > 0) {
-          maxPaidPeriodByContract.set(key, Math.max(...normalPaidPeriods));
+        if (paidPeriods.length > 0) {
+          maxPaidPeriodByContract.set(key, Math.max(...paidPeriods));
         }
       }
 
@@ -854,36 +838,20 @@ export async function listDebtTarget(params: { section: SectionKey }) {
     }
   }
 
-  // --- Phase 39: Populate maxPaidPeriodByContract for Boonphone bad-debt contracts ---
-  // ใช้ inst_status (installments.status column) ไม่ใช่ installment_status_code (raw_json)
-  // งวดที่ถือว่า bad debt installment:
-  //   1. inst_status = "หนี้เสีย" (Boonphone bad debt status)
-  //   2. due_date >= bad_debt_date (งวดที่ถึงกำหนดหลังจากวันที่เป็นหนี้เสีย)
+  // --- Phase 39 (revised): Populate maxPaidPeriodByContract for Boonphone bad-debt contracts ---
+  // กฎง่าย: นับจากงวดที่มี paid_amount > 0 เท่านั้น ไม่สนใจ inst_status หรือ bad_debt_date
   if (!isFF365) {
     for (const c of cRows) {
       if (c.status !== "หนี้เสีย") continue;
       const key = String(c.external_id ?? "");
       if (!key) continue;
-      const badDebtDateMs = c.bad_debt_date
-        ? Date.parse(String(c.bad_debt_date).slice(0, 10) + "T00:00:00")
-        : Infinity;
       const list = instByContract.get(key) ?? [];
-      const normalPaidPeriods = list
-        .filter((r) => {
-          if (Number(r.paid_amount ?? 0) <= 0.001) return false;
-          // ยกเว้น bad debt installment: inst_status = "หนี้เสีย"
-          if (r.inst_status === "หนี้เสีย") return false;
-          // ยกเว้น งวดที่ due_date >= bad_debt_date
-          if (r.due_date) {
-            const dueDateMs = Date.parse(String(r.due_date).slice(0, 10) + "T00:00:00");
-            if (dueDateMs >= badDebtDateMs) return false;
-          }
-          return true;
-        })
+      const paidPeriods = list
+        .filter((r) => Number(r.paid_amount ?? 0) > 0.001)
         .map((r) => Number(r.period ?? 0))
         .filter((p) => p > 0);
-      if (normalPaidPeriods.length > 0) {
-        maxPaidPeriodByContract.set(key, Math.max(...normalPaidPeriods));
+      if (paidPeriods.length > 0) {
+        maxPaidPeriodByContract.set(key, Math.max(...paidPeriods));
       }
     }
   }
