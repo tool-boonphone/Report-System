@@ -515,3 +515,9 @@ Task list:
 - [x] เรียงลำดับ filter ใหม่: collected tab = ค้นหา > วันที่ > เดือน-ปีที่อนุมัติ > เดือน-ปีที่ต้องชำระ > สถานะหนี้ > ประเภทเครื่อง
 - [x] collected tab date filter: row-level hiding (filteredRows) + cell masking สำหรับ period ที่ไม่ตรงวันที่
 - [x] filteredRows ลำดับความสำคัญ: approveDateFilter > dueDateExact > dueDateFilter > statusFilter > productTypeFilter
+
+### Phase 26 — Badge ยอดเก็บหนี้: สูตรยอดรวม + Toggle ตา
+- [ ] แก้สูตรยอดที่ชำระรวม = เงินต้น + ดอกเบี้ย + ค่าดำเนินการ + ค่าปรับ + ค่าปลดล็อก + ชำระเกิน + หนี้เสีย (ไม่รวมส่วนลด)
+- [ ] เพิ่ม toggle เปิด/ปิดตา (Eye icon) ใน Badge แต่ละตัวของ collected tab — default = เปิด (นำมาคิดในยอดรวม)
+- [ ] ส่วนลด: ปิดตาตลอด ไม่สามารถเปิดได้ ไม่นำมาคิดในยอดรวม
+- [ ] Badge ที่ปิดตา: แสดงตัวเลขแบบ dimmed/greyed-out และไม่นำมารวมใน "ยอดที่ชำระรวม"

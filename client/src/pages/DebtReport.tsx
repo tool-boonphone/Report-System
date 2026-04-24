@@ -28,6 +28,8 @@ import {
   Banknote,
   CalendarDays,
   Check,
+  Eye,
+  EyeOff,
   ChevronsUpDown,
   CircleDollarSign,
   Coins,
@@ -364,6 +366,22 @@ export default function DebtReport() {
   // target tab = วันที่ที่ต้องชำระ (dueDate), collected tab = วันที่ที่ชำระ (paidAt)
   // When set, masks cells whose date != selected date (does NOT hide the row)
   const [dueDateExact, setDueDateExact] = useState<string | null>(null);
+  // Phase 26: badge visibility toggle for collected tab
+  // discount is always false (cannot be toggled on)
+  const [badgeVisibility, setBadgeVisibility] = useState<Record<string, boolean>>({
+    principal: true,
+    interest: true,
+    fee: true,
+    penalty: true,
+    unlockFee: true,
+    overpaid: true,
+    badDebt: true,
+    discount: false, // always off — not collected money
+  });
+  const toggleBadge = (key: string) => {
+    if (key === "discount") return; // cannot toggle discount
+    setBadgeVisibility((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
   // Switch: true = เฉพาะเงินต้น (แสดง penalty/unlockFee = 0 ทุกงวด), false = รวมค่าปรับ+ค่าปลดล็อก
   const [principalOnly, setPrincipalOnly] = useState(true);
   // Pinned columns: set of LEFT_COLS keys that are sticky-left
@@ -561,7 +579,7 @@ export default function DebtReport() {
   const collectedSummary = useMemo(() => {
     if (tab !== "collected") return null;
     let principal = 0, interest = 0, fee = 0, penalty = 0, unlockFee = 0;
-    let discount = 0, overpaid = 0, badDebt = 0, total = 0;
+    let discount = 0, overpaid = 0, badDebt = 0;
     for (const r of filteredRows as CollectedRow[]) {
       for (const p of r.payments ?? []) {
         // Phase 23: dueDateExact cell-mask — only sum payments whose paidAt matches exact date
@@ -574,12 +592,21 @@ export default function DebtReport() {
         discount += p.discount ?? 0;
         overpaid += p.overpaid ?? 0;
         badDebt += p.badDebt ?? 0;
-        // ยอดที่ชำระรวม = total_paid_amount จาก API (รวม overpaid ด้วย ไม่รวม discount)
-        total += p.total ?? 0;
       }
     }
+    // Phase 26: total = sum of visible badges only (discount always excluded)
+    // ยอดที่ชำระรวม = เงินต้น + ดอกเบี้ย + ค่าดำเนินการ + ค่าปรับ + ค่าปลดล็อก + ชำระเกิน + หนี้เสีย (ไม่รวมส่วนลด)
+    const bv = badgeVisibility;
+    const total =
+      (bv.principal ? principal : 0) +
+      (bv.interest ? interest : 0) +
+      (bv.fee ? fee : 0) +
+      (bv.penalty ? penalty : 0) +
+      (bv.unlockFee ? unlockFee : 0) +
+      (bv.overpaid ? overpaid : 0) +
+      (bv.badDebt ? badDebt : 0);
     return { principal, interest, fee, penalty, unlockFee, discount, overpaid, badDebt, total };
-  }, [filteredRows, tab, dueDateExact]);
+  }, [filteredRows, tab, dueDateExact, badgeVisibility]);
 
   /* ---- TopNav actions (sync + export) ---- */
   // Export handler (used inline in toolbar)
@@ -898,45 +925,40 @@ export default function DebtReport() {
           )}
           {tab === "collected" && collectedSummary && (
             <div className="flex flex-wrap gap-1.5">
-              {/* เงินต้น/ดอกเบี้ย/ค่าดำเนินการ: ซ่อนสำหรับ FF365 เพราะ API ไม่ส่ง breakdown */}
-              {hasPrincipalBreakdown && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-blue-50 text-blue-700 border border-blue-200">
-                  <Banknote className="w-3 h-3" />
-                  เงินต้น: {fmtMoney(collectedSummary.principal)}
-                </span>
-              )}
-              {hasPrincipalBreakdown && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-purple-50 text-purple-700 border border-purple-200">
-                  <Percent className="w-3 h-3" />
-                  ดอกเบี้ย: {fmtMoney(collectedSummary.interest)}
-                </span>
-              )}
-              {hasPrincipalBreakdown && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-cyan-50 text-cyan-700 border border-cyan-200">
-                  <CircleDollarSign className="w-3 h-3" />
-                  ค่าดำเนินการ: {fmtMoney(collectedSummary.fee)}
-                </span>
-              )}
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-red-50 text-red-700 border border-red-200">
-                <Gavel className="w-3 h-3" />
-                ค่าปรับ: {fmtMoney(collectedSummary.penalty)}
-              </span>
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-orange-50 text-orange-700 border border-orange-200">
-                <LockOpen className="w-3 h-3" />
-                ค่าปลดล็อก: {fmtMoney(collectedSummary.unlockFee)}
-              </span>
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-teal-50 text-teal-700 border border-teal-200">
-                <Tag className="w-3 h-3" />
-                ส่วนลด: {fmtMoney(collectedSummary.discount)}
-              </span>
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
-                <TrendingUp className="w-3 h-3" />
-                ชำระเกิน: {fmtMoney(collectedSummary.overpaid)}
-              </span>
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-gray-100 text-gray-700 border border-gray-300">
-                <TrendingDown className="w-3 h-3" />
-                หนี้เสีย: {fmtMoney(collectedSummary.badDebt)}
-              </span>
+              {/* Helper: renders a badge with eye toggle. discount badge has canToggle=false */}
+              {([
+                hasPrincipalBreakdown && { key: "principal", label: "เงินต้น", value: collectedSummary.principal, icon: <Banknote className="w-3 h-3" />, colors: "bg-blue-50 text-blue-700 border-blue-200", canToggle: true },
+                hasPrincipalBreakdown && { key: "interest", label: "ดอกเบี้ย", value: collectedSummary.interest, icon: <Percent className="w-3 h-3" />, colors: "bg-purple-50 text-purple-700 border-purple-200", canToggle: true },
+                hasPrincipalBreakdown && { key: "fee", label: "ค่าดำเนินการ", value: collectedSummary.fee, icon: <CircleDollarSign className="w-3 h-3" />, colors: "bg-cyan-50 text-cyan-700 border-cyan-200", canToggle: true },
+                { key: "penalty", label: "ค่าปรับ", value: collectedSummary.penalty, icon: <Gavel className="w-3 h-3" />, colors: "bg-red-50 text-red-700 border-red-200", canToggle: true },
+                { key: "unlockFee", label: "ค่าปลดล็อก", value: collectedSummary.unlockFee, icon: <LockOpen className="w-3 h-3" />, colors: "bg-orange-50 text-orange-700 border-orange-200", canToggle: true },
+                { key: "discount", label: "ส่วนลด", value: collectedSummary.discount, icon: <Tag className="w-3 h-3" />, colors: "bg-teal-50 text-teal-700 border-teal-200", canToggle: false },
+                { key: "overpaid", label: "ชำระเกิน", value: collectedSummary.overpaid, icon: <TrendingUp className="w-3 h-3" />, colors: "bg-emerald-50 text-emerald-700 border-emerald-200", canToggle: true },
+                { key: "badDebt", label: "หนี้เสีย", value: collectedSummary.badDebt, icon: <TrendingDown className="w-3 h-3" />, colors: "bg-gray-100 text-gray-700 border-gray-300", canToggle: true },
+              ] as const).filter(Boolean).map((b) => {
+                if (!b) return null;
+                const isOn = badgeVisibility[b.key] ?? false;
+                const dimmed = !isOn;
+                return (
+                  <span
+                    key={b.key}
+                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border ${b.colors} ${dimmed ? "opacity-40" : ""}`}
+                  >
+                    {b.icon}
+                    {b.label}: {fmtMoney(b.value)}
+                    <button
+                      type="button"
+                      onClick={() => toggleBadge(b.key)}
+                      disabled={!b.canToggle}
+                      className={`ml-0.5 rounded-full p-0.5 transition-opacity ${b.canToggle ? "hover:opacity-70 cursor-pointer" : "cursor-not-allowed opacity-30"}`}
+                      title={!b.canToggle ? "ส่วนลดไม่นำมาคำนวณยอดรวม" : isOn ? "คลิกเพื่อไม่นำมารวมในยอดรวม" : "คลิกเพื่อนำมารวมในยอดรวม"}
+                      aria-label={isOn ? `ปิด ${b.label}` : `เปิด ${b.label}`}
+                    >
+                      {isOn ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
+                    </button>
+                  </span>
+                );
+              })}
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
                 <Wallet className="w-3 h-3" />
                 ยอดที่ชำระรวม: {fmtMoney(collectedSummary.total)}
