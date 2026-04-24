@@ -500,5 +500,5 @@ Task list:
 
 ### Phase 23 — Filter Enhancements ใน DebtReport (cell-level hiding)
 
-- [ ] Feature 1: ฟิลเตอร์เดือน-ปีที่ต้องชำระ (dueDateFilter) → ซ่อน cell ของ period ที่ dueDate ไม่ตรงกับเดือนที่เลือก (แสดง "-" แทน) + Badge คำนวณเฉพาะ period ที่ตรง
-- [ ] Feature 2: เพิ่ม date picker filter (ปฏิทิน) ก่อนฟิลเตอร์เดือน-ปีที่อนุมัติ ทั้ง 2 tab → ซ่อน cell ของ period ที่ dueDate (target) หรือ paidAt (collected) ไม่ตรงวันที่เลือก + Badge คำนวณเฉพาะวันที่เลือก
+- [x] Feature 1: ฟิลเตอร์เดือน-ปีที่ต้องชำระ (dueDateFilter) → ซ่อน cell ของ period ที่ dueDate ไม่ตรงกับเดือนที่เลือก (แสดง "-" แทน) + Badge คำนวณเฉพาะ period ที่ตรง
+- [x] Feature 2: เพิ่ม date picker filter (ปฏิทิน) ทั้ง 2 tab → target=วันที่ที่ต้องชำระ, collected=วันที่ที่ชำระ → ซ่อน cell ที่ไม่ตรงวันที่เลือก + Badge คำนวณเฉพาะวันที่เลือก
