@@ -1,0 +1,247 @@
+/**
+ * AI Chat Router
+ * รับคำถามจากผู้ใช้ + section (boonphone/ff365)
+ * ดึงข้อมูลสรุปจาก DB แล้วส่งให้ LLM ตอบ
+ */
+import { z } from "zod";
+import { router, appProcedure } from "../_core/trpc";
+import { invokeLLM } from "../_core/llm";
+import { getDb } from "../db";
+import { contracts, installments, paymentTransactions } from "../../drizzle/schema";
+import { eq, sql, and, like, desc } from "drizzle-orm";
+
+// ── helpers ──────────────────────────────────────────────────────────────────
+
+/** ดึงข้อมูลสรุป DB สำหรับ context ให้ LLM */
+async function buildDbContext(section: string, question: string): Promise<string> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const q = question.toLowerCase();
+
+  const lines: string[] = [];
+
+  // 1. สรุปจำนวนสัญญาตาม status
+  const contractSummary = await db
+    .select({
+      status: contracts.status,
+      count: sql<number>`COUNT(*)`,
+      totalFinance: sql<number>`SUM(CAST(finance_amount AS DECIMAL(14,2)))`,
+    })
+    .from(contracts)
+    .where(eq(contracts.section, section))
+    .groupBy(contracts.status)
+    .orderBy(desc(sql`COUNT(*)`));
+
+  lines.push(`## สรุปสัญญาทั้งหมด (section: ${section})`);
+  lines.push(`| สถานะ | จำนวนสัญญา | ยอดไฟแนนซ์รวม |`);
+  lines.push(`|---|---|---|`);
+  for (const r of contractSummary) {
+    lines.push(`| ${r.status ?? "-"} | ${r.count} | ${Number(r.totalFinance ?? 0).toLocaleString("th-TH", { minimumFractionDigits: 2 })} |`);
+  }
+
+  // 2. ถ้าถามเกี่ยวกับหนี้เสีย / bad debt
+  if (q.includes("หนี้เสีย") || q.includes("bad debt") || q.includes("ระงับ")) {
+    const badDebt = await db
+      .select({
+        count: sql<number>`COUNT(*)`,
+        totalBadDebt: sql<number>`SUM(CAST(bad_debt_amount AS DECIMAL(14,2)))`,
+        avgBadDebt: sql<number>`AVG(CAST(bad_debt_amount AS DECIMAL(14,2)))`,
+      })
+      .from(contracts)
+      .where(
+        and(
+          eq(contracts.section, section),
+          sql`bad_debt_amount IS NOT NULL AND bad_debt_amount > 0`,
+        ),
+      );
+    lines.push(`\n## ข้อมูลหนี้เสีย`);
+    lines.push(`- จำนวนสัญญาหนี้เสีย: ${badDebt[0]?.count ?? 0} สัญญา`);
+    lines.push(`- ยอดหนี้เสียรวม: ${Number(badDebt[0]?.totalBadDebt ?? 0).toLocaleString("th-TH", { minimumFractionDigits: 2 })} บาท`);
+    lines.push(`- ยอดหนี้เสียเฉลี่ย: ${Number(badDebt[0]?.avgBadDebt ?? 0).toLocaleString("th-TH", { minimumFractionDigits: 2 })} บาท`);
+  }
+
+  // 3. ถ้าถามเกี่ยวกับการชำระ / payment
+  if (q.includes("ชำระ") || q.includes("payment") || q.includes("เก็บหนี้") || q.includes("รับเงิน")) {
+    const paymentSummary = await db
+      .select({
+        count: sql<number>`COUNT(*)`,
+        total: sql<number>`SUM(CAST(amount AS DECIMAL(14,2)))`,
+      })
+      .from(paymentTransactions)
+      .where(
+        and(
+          eq(paymentTransactions.section, section),
+          sql`status NOT IN ('ยกเลิกสัญญา','ระงับสัญญา','หนี้เสีย')`,
+          sql`amount > 0`,
+        ),
+      );
+    lines.push(`\n## ข้อมูลการชำระเงิน`);
+    lines.push(`- จำนวนรายการชำระ: ${paymentSummary[0]?.count ?? 0} รายการ`);
+    lines.push(`- ยอดชำระรวม: ${Number(paymentSummary[0]?.total ?? 0).toLocaleString("th-TH", { minimumFractionDigits: 2 })} บาท`);
+  }
+
+  // 4. ถ้าถามเกี่ยวกับสัญญาเฉพาะ (มีเลขสัญญาในคำถาม)
+  const contractNoMatch = question.match(/CT[\w-]+/i);
+  if (contractNoMatch) {
+    const contractNo = contractNoMatch[0].toUpperCase();
+    const found = await db
+      .select()
+      .from(contracts)
+      .where(
+        and(
+          eq(contracts.section, section),
+          like(contracts.contractNo, `%${contractNo}%`),
+        ),
+      )
+      .limit(5);
+    if (found.length > 0) {
+      lines.push(`\n## ข้อมูลสัญญา ${contractNo}`);
+      for (const c of found) {
+        lines.push(`- เลขที่สัญญา: ${c.contractNo}`);
+        lines.push(`  ลูกค้า: ${c.customerName ?? "-"}`);
+        lines.push(`  สถานะ: ${c.status ?? "-"}`);
+        lines.push(`  ยอดไฟแนนซ์: ${Number(c.financeAmount ?? 0).toLocaleString("th-TH", { minimumFractionDigits: 2 })} บาท`);
+        lines.push(`  งวดทั้งหมด: ${c.installmentCount ?? "-"} งวด`);
+        lines.push(`  ชำระแล้ว: ${c.paidInstallments ?? 0} งวด`);
+        if (c.badDebtAmount) {
+          lines.push(`  ยอดหนี้เสีย: ${Number(c.badDebtAmount).toLocaleString("th-TH", { minimumFractionDigits: 2 })} บาท`);
+        }
+      }
+    }
+  }
+
+  // 5. ถ้าถามเกี่ยวกับลูกค้า (มีชื่อในคำถาม)
+  if (q.includes("ลูกค้า") || q.includes("ชื่อ")) {
+    // ดึงสถิติลูกค้า
+    const customerStats = await db
+      .select({
+        count: sql<number>`COUNT(DISTINCT customer_name)`,
+      })
+      .from(contracts)
+      .where(eq(contracts.section, section));
+    lines.push(`\n## ข้อมูลลูกค้า`);
+    lines.push(`- จำนวนลูกค้าทั้งหมด: ${customerStats[0]?.count ?? 0} ราย`);
+  }
+
+  // 6. ถ้าถามเกี่ยวกับงวด / installment
+  if (q.includes("งวด") || q.includes("installment") || q.includes("ค้างชำระ")) {
+    const instSummary = await db
+      .select({
+        status: installments.status,
+        count: sql<number>`COUNT(*)`,
+        totalAmount: sql<number>`SUM(CAST(amount AS DECIMAL(14,2)))`,
+      })
+      .from(installments)
+      .where(eq(installments.section, section))
+      .groupBy(installments.status)
+      .orderBy(desc(sql`COUNT(*)`))
+      .limit(10);
+    lines.push(`\n## สรุปงวดชำระ`);
+    lines.push(`| สถานะงวด | จำนวน | ยอดรวม |`);
+    lines.push(`|---|---|---|`);
+    for (const r of instSummary) {
+      lines.push(`| ${r.status ?? "-"} | ${r.count} | ${Number(r.totalAmount ?? 0).toLocaleString("th-TH", { minimumFractionDigits: 2 })} |`);
+    }
+  }
+
+  // 7. ถ้าถามเกี่ยวกับสินค้า / device
+  if (q.includes("สินค้า") || q.includes("device") || q.includes("iphone") || q.includes("ipad") || q.includes("มือถือ")) {
+    const deviceStats = await db
+      .select({
+        device: contracts.device,
+        count: sql<number>`COUNT(*)`,
+      })
+      .from(contracts)
+      .where(eq(contracts.section, section))
+      .groupBy(contracts.device)
+      .orderBy(desc(sql`COUNT(*)`))
+      .limit(10);
+    lines.push(`\n## สรุปสินค้า`);
+    lines.push(`| สินค้า | จำนวนสัญญา |`);
+    lines.push(`|---|---|`);
+    for (const r of deviceStats) {
+      lines.push(`| ${r.device ?? "-"} | ${r.count} |`);
+    }
+  }
+
+  // 8. ถ้าถามเกี่ยวกับพาร์ทเนอร์ / partner
+  if (q.includes("พาร์ทเนอร์") || q.includes("partner") || q.includes("สาขา") || q.includes("ร้าน")) {
+    const partnerStats = await db
+      .select({
+        partner: contracts.partnerCode,
+        count: sql<number>`COUNT(*)`,
+        totalFinance: sql<number>`SUM(CAST(finance_amount AS DECIMAL(14,2)))`,
+      })
+      .from(contracts)
+      .where(eq(contracts.section, section))
+      .groupBy(contracts.partnerCode)
+      .orderBy(desc(sql`COUNT(*)`))
+      .limit(15);
+    lines.push(`\n## สรุปพาร์ทเนอร์ (Top 15)`);
+    lines.push(`| รหัสพาร์ทเนอร์ | จำนวนสัญญา | ยอดไฟแนนซ์รวม |`);
+    lines.push(`|---|---|---|`);
+    for (const r of partnerStats) {
+      lines.push(`| ${r.partner ?? "-"} | ${r.count} | ${Number(r.totalFinance ?? 0).toLocaleString("th-TH", { minimumFractionDigits: 2 })} |`);
+    }
+  }
+
+  return lines.join("\n");
+}
+
+// ── router ────────────────────────────────────────────────────────────────────
+
+export const aiRouter = router({
+  /**
+   * ai.chat — รับ messages history + section แล้วตอบด้วย LLM
+   */
+  chat: appProcedure
+    .input(
+      z.object({
+        messages: z.array(
+          z.object({
+            role: z.enum(["user", "assistant"]),
+            content: z.string(),
+          }),
+        ),
+        section: z.string(), // "boonphone" | "ff365"
+      }),
+    )
+    .mutation(async ({ input }) => {
+      const { messages, section } = input;
+
+      // คำถามล่าสุด
+      const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
+      const question = lastUserMsg?.content ?? "";
+
+      // ดึงข้อมูลจาก DB ตามคำถาม
+      const dbContext = await buildDbContext(section, question);
+
+      // สร้าง system prompt พร้อม context จาก DB
+      const sectionLabel = section === "boonphone" ? "Boonphone" : "Fastfone365";
+      const systemPrompt = `คุณคือผู้ช่วย AI สำหรับระบบ Report System ของ ${sectionLabel}
+คุณสามารถตอบคำถาม ค้นหา คำนวณ และวิเคราะห์ข้อมูลสัญญาผ่อนชำระได้
+
+ข้อมูลจากฐานข้อมูล (${sectionLabel}) ณ ขณะนี้:
+${dbContext}
+
+กฎการตอบ:
+- ตอบเป็นภาษาไทยเสมอ
+- ใช้ข้อมูลจากฐานข้อมูลด้านบนในการตอบ
+- ถ้าข้อมูลไม่เพียงพอ ให้บอกว่าไม่มีข้อมูลนั้นในระบบ
+- แสดงตัวเลขในรูปแบบ Thai locale (เช่น 1,234,567.89)
+- ตอบกระชับ ชัดเจน และมีประโยชน์`;
+
+      // เรียก LLM
+      const response = await invokeLLM({
+        messages: [
+          { role: "system", content: systemPrompt },
+          ...messages.map((m) => ({ role: m.role, content: m.content as string })),
+        ],
+      });
+
+      const reply =
+        response.choices?.[0]?.message?.content ?? "ขออภัย ไม่สามารถตอบได้ในขณะนี้";
+
+      return { reply };
+    }),
+});

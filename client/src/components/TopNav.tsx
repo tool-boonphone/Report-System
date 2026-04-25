@@ -13,10 +13,12 @@ import {
   Menu as MenuIcon,
   Settings,
   Shield,
+  Sparkles,
   TrendingDown,
   Users,
   X,
 } from "lucide-react";
+import { AIChatPanel } from "./AIChatPanel";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Link, useLocation } from "wouter";
@@ -52,6 +54,7 @@ export function TopNav() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [sectionMenuOpen, setSectionMenuOpen] = useState(false);
   const [settingsMenuOpen, setSettingsMenuOpen] = useState(false);
+  const [aiChatOpen, setAiChatOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const sectionMenuRef = useRef<HTMLDivElement>(null);
   const settingsMenuRef = useRef<HTMLDivElement>(null);
@@ -249,6 +252,22 @@ export function TopNav() {
               </div>
             )}
 
+            {/* AI Chat button — between settings and profile */}
+            {me && (
+              <button
+                onClick={() => setAiChatOpen((v) => !v)}
+                aria-label="AI Assistant"
+                title="AI Assistant"
+                className={cn(
+                  "h-9 w-9 inline-flex items-center justify-center rounded-lg border transition-colors",
+                  aiChatOpen
+                    ? "bg-indigo-50 border-indigo-200 text-indigo-700"
+                    : "bg-white border-gray-200 text-gray-600 hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-200",
+                )}
+              >
+                <Sparkles className="w-4 h-4" />
+              </button>
+            )}
             {me && (
               <div ref={userMenuRef} className="relative">
                 <button
@@ -368,6 +387,8 @@ export function TopNav() {
           </aside>
         </>
       )}
+      {/* AI Chat Panel */}
+      <AIChatPanel isOpen={aiChatOpen} onClose={() => setAiChatOpen(false)} />
     </>
   );
 }
