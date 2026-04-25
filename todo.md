@@ -688,3 +688,12 @@ Task list:
 - [x] P44-1: ตรวจสอบ listDebtCollectedStream ว่า streaming ทำงานได้จริงไหม
 - [x] P44-2: แก้ไข handleDebtStreamCollected ให้ streaming ทำงานได้จริง
 - [x] P44-3: TypeScript check + checkpoint + push
+
+### Phase 45 — Fix: เป้าเก็บหนี้ duplicate columns + ยอดเก็บหนี้ OOM/503
+- [x] P45-1: วิเคราะห์สาเหตุ Bug 1 (target tab duplicate columns) — DB มี 14,000 duplicate installment rows (185,363 total แต่ distinct periods = 171,363)
+- [x] P45-2: เพิ่ม `dedupInstByPeriod()` helper function ใน debtDb.ts — dedup per period โดยเก็บ row ที่มี amount สูงสุด
+- [x] P45-3: เรียก `dedupInstByPeriod()` ใน `listDebtTarget` (non-stream) ก่อน `fixOutOfOrderDueDates`
+- [x] P45-4: เรียก `dedupInstByPeriod()` ใน `listDebtTargetStream` ก่อน `fixOutOfOrderDueDates`
+- [x] P45-5: เพิ่ม dedup per-period ใน `listDebtCollectedStream` (instByContract building)
+- [x] P45-6: แก้ Bug 2 (collected tab OOM/503) — เปลี่ยน `listDebtCollectedStream` จาก "โหลด ALL 222K payments ก่อน" เป็น "โหลด payments per-batch" (~100 contracts × ~15 payments = ~1,500 rows ต่อ query แทน 222K rows ทั้งหมด)
+- [x] P45-7: TypeScript check ผ่าน + ยืนยัน prewarm สำเร็จ (Boonphone: 10.8s, Fastfone365: 51.7s) + commit + push GitHub + checkpoint

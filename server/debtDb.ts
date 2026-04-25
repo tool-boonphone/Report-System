@@ -428,6 +428,33 @@ export type PayRawRow = {
 };
 
 /**
+ * Deduplicate installments per period — keep the row with the most data.
+ *
+ * DB may have 2 rows per (contract_external_id, period) when the API returns
+ * duplicate installment_ids or when the sync upsert key collides.
+ * Strategy: for each period, keep the row that has the largest `amount` value
+ * (or the first row if amounts are equal). This is idempotent and safe.
+ */
+function dedupInstByPeriod(list: InstRawRow[]): InstRawRow[] {
+  if (list.length === 0) return list;
+  const byPeriod = new Map<number | null, InstRawRow>();
+  for (const row of list) {
+    const p = row.period;
+    const existing = byPeriod.get(p);
+    if (!existing) {
+      byPeriod.set(p, row);
+    } else {
+      // Keep row with larger amount (more complete data)
+      const existingAmt = Number(existing.amount ?? 0);
+      const rowAmt = Number(row.amount ?? 0);
+      if (rowAmt > existingAmt) byPeriod.set(p, row);
+    }
+  }
+  // Return sorted by period ascending
+  return Array.from(byPeriod.values()).sort((a, b) => (a.period ?? 0) - (b.period ?? 0));
+}
+
+/**
  * Fix installments whose due_date is out-of-order relative to adjacent periods.
  *
  * Boonphone API occasionally sends a wrong due_date for a period (e.g. period 1
@@ -616,6 +643,10 @@ export async function listDebtTarget(params: { section: SectionKey }) {
     });
   }
 
+  // --- Dedup installments per period (DB may have 2 rows per period) ---
+  for (const [key, list] of Array.from(instByContract.entries())) {
+    instByContract.set(key, dedupInstByPeriod(list));
+  }
   // --- Fix out-of-order due_dates (Boonphone API bug) ---
   // Apply in-memory correction for any contract whose installments have a
   // period N with due_date > period N+1.  This is idempotent and safe.
@@ -1430,6 +1461,10 @@ export async function* listDebtTargetStream(params: {
     });
   }
 
+  // --- Dedup installments per period (DB may have 2 rows per period) ---
+  for (const [key, list] of Array.from(instByContract.entries())) {
+    instByContract.set(key, dedupInstByPeriod(list));
+  }
   // Fix out-of-order due_dates
   for (const [key, list] of Array.from(instByContract.entries())) {
     instByContract.set(key, fixOutOfOrderDueDates(list));
@@ -1753,61 +1788,9 @@ export async function* listDebtCollectedStream(params: {
   const allContractHeaders: any[] = (contractHeadersRaw as any)[0] ?? contractHeadersRaw;
   if (!allContractHeaders.length) return;
 
-  // Step 2: Load ALL payments for this section in ONE query (faster than per-batch queries)
-  // For Fastfone365: ~222K payments, ~71MB — feasible to load at once
-  const sectionLiteralForPay = params.section.replace(/'/g, "''");
-  const allPayRaw = await db.execute(sql.raw(`
-    SELECT contract_external_id,
-           external_id AS payment_external_id,
-           paid_at,
-           CAST(amount AS DECIMAL(18,2)) AS total_paid_amount,
-           CAST(JSON_EXTRACT(raw_json, '$.principal_paid')           AS DECIMAL(18,2)) AS principal_paid,
-           CAST(JSON_EXTRACT(raw_json, '$.interest_paid')            AS DECIMAL(18,2)) AS interest_paid,
-           CAST(JSON_EXTRACT(raw_json, '$.fee_paid')                 AS DECIMAL(18,2)) AS fee_paid,
-           CAST(JSON_EXTRACT(raw_json, '$.penalty_paid')             AS DECIMAL(18,2)) AS penalty_paid,
-           CAST(JSON_EXTRACT(raw_json, '$.unlock_fee_paid')          AS DECIMAL(18,2)) AS unlock_fee_paid,
-           CAST(JSON_EXTRACT(raw_json, '$.discount_amount')          AS DECIMAL(18,2)) AS discount_amount,
-           CAST(JSON_EXTRACT(raw_json, '$.overpaid_amount')          AS DECIMAL(18,2)) AS overpaid_amount,
-           CAST(JSON_EXTRACT(raw_json, '$.close_installment_amount') AS DECIMAL(18,2)) AS close_installment_amount,
-           CAST(JSON_EXTRACT(raw_json, '$.bad_debt_amount')          AS DECIMAL(18,2)) AS bad_debt_amount,
-           CAST(JSON_EXTRACT(raw_json, '$.payment_id')               AS UNSIGNED) AS payment_id,
-           JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.receipt_no')) AS receipt_no,
-           JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.remark'))     AS remark,
-           status AS ff_status
-      FROM payment_transactions
-     WHERE section = '${sectionLiteralForPay}'
-     ORDER BY contract_external_id, paid_at, payment_id
-  `));
-  const allPayRows: any[] = (allPayRaw as any)[0] ?? allPayRaw;
-  // Build global payByContract Map (contract_external_id → PayRawRow[])
-  const globalPayByContract = new Map<string, PayRawRow[]>();
-  for (const r of allPayRows) {
-    const key = String(r.contract_external_id ?? "");
-    if (!key) continue;
-    if (!globalPayByContract.has(key)) globalPayByContract.set(key, []);
-    globalPayByContract.get(key)!.push({
-      contract_external_id: key,
-      period: null,
-      payment_external_id: r.payment_external_id ?? null,
-      paid_at: r.paid_at ?? null,
-      total_paid_amount: r.total_paid_amount != null ? Number(r.total_paid_amount) : null,
-      principal_paid: r.principal_paid != null ? Number(r.principal_paid) : null,
-      interest_paid: r.interest_paid != null ? Number(r.interest_paid) : null,
-      fee_paid: r.fee_paid != null ? Number(r.fee_paid) : null,
-      penalty_paid: r.penalty_paid != null ? Number(r.penalty_paid) : null,
-      unlock_fee_paid: r.unlock_fee_paid != null ? Number(r.unlock_fee_paid) : null,
-      discount_amount: r.discount_amount != null ? Number(r.discount_amount) : null,
-      overpaid_amount: r.overpaid_amount != null ? Number(r.overpaid_amount) : null,
-      close_installment_amount: r.close_installment_amount != null ? Number(r.close_installment_amount) : null,
-      bad_debt_amount: r.bad_debt_amount != null ? Number(r.bad_debt_amount) : null,
-      payment_id: r.payment_id != null ? Number(r.payment_id) : null,
-      receipt_no: r.receipt_no ?? null,
-      remark: r.remark ?? null,
-      ff_status: r.ff_status ?? null,
-    } as any);
-  }
-
-  // Step 3: Process contracts in batches — query installments per batch, use global payments Map
+  // Step 2 + 3: Process contracts in batches — query BOTH installments AND payments per batch.
+  // This avoids loading ALL 222K payment rows into memory at once (which caused OOM/503 in production).
+  // Per-batch: ~100 contracts × ~15 payments = ~1,500 payment rows per query (~1MB) vs ~150MB for all.
   let yieldBatch: any[] = [];
   for (let batchStart = 0; batchStart < allContractHeaders.length; batchStart += CONTRACT_BATCH) {
     const contractBatch = allContractHeaders.slice(batchStart, batchStart + CONTRACT_BATCH);
@@ -1827,14 +1810,77 @@ export async function* listDebtCollectedStream(params: {
        ORDER BY contract_external_id, period
     `));
     const instRows: any[] = (instRaw as any)[0] ?? instRaw;
-    const instByContract = new Map<string, Array<{ period: number | null; amount: number }>>();
+    const instByContractRaw = new Map<string, Array<{ period: number | null; amount: number }>>();
     for (const r of instRows) {
       const key = String(r.contract_external_id ?? "");
-      if (!instByContract.has(key)) instByContract.set(key, []);
-      instByContract.get(key)!.push({
+      if (!instByContractRaw.has(key)) instByContractRaw.set(key, []);
+      instByContractRaw.get(key)!.push({
         period: r.period != null ? Number(r.period) : null,
         amount: r.amount != null ? Number(r.amount) : 0,
       });
+    }
+    // Dedup per period (DB may have 2 rows per period)
+    const instByContract = new Map<string, Array<{ period: number | null; amount: number }>>();
+    for (const [key, list] of Array.from(instByContractRaw.entries())) {
+      const byPeriod = new Map<number | null, { period: number | null; amount: number }>();
+      for (const row of list) {
+        const p = row.period;
+        const existing = byPeriod.get(p);
+        if (!existing || row.amount > existing.amount) byPeriod.set(p, row);
+      }
+      instByContract.set(key, Array.from(byPeriod.values()).sort((a, b) => (a.period ?? 0) - (b.period ?? 0)));
+    }
+
+    // Query payments for this batch only (per-batch to avoid OOM with 222K rows)
+    const payRaw = await db.execute(sql.raw(`
+      SELECT contract_external_id,
+             external_id AS payment_external_id,
+             paid_at,
+             CAST(amount AS DECIMAL(18,2)) AS total_paid_amount,
+             CAST(JSON_EXTRACT(raw_json, '$.principal_paid')           AS DECIMAL(18,2)) AS principal_paid,
+             CAST(JSON_EXTRACT(raw_json, '$.interest_paid')            AS DECIMAL(18,2)) AS interest_paid,
+             CAST(JSON_EXTRACT(raw_json, '$.fee_paid')                 AS DECIMAL(18,2)) AS fee_paid,
+             CAST(JSON_EXTRACT(raw_json, '$.penalty_paid')             AS DECIMAL(18,2)) AS penalty_paid,
+             CAST(JSON_EXTRACT(raw_json, '$.unlock_fee_paid')          AS DECIMAL(18,2)) AS unlock_fee_paid,
+             CAST(JSON_EXTRACT(raw_json, '$.discount_amount')          AS DECIMAL(18,2)) AS discount_amount,
+             CAST(JSON_EXTRACT(raw_json, '$.overpaid_amount')          AS DECIMAL(18,2)) AS overpaid_amount,
+             CAST(JSON_EXTRACT(raw_json, '$.close_installment_amount') AS DECIMAL(18,2)) AS close_installment_amount,
+             CAST(JSON_EXTRACT(raw_json, '$.bad_debt_amount')          AS DECIMAL(18,2)) AS bad_debt_amount,
+             CAST(JSON_EXTRACT(raw_json, '$.payment_id')               AS UNSIGNED) AS payment_id,
+             JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.receipt_no')) AS receipt_no,
+             JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.remark'))     AS remark,
+             status AS ff_status
+        FROM payment_transactions
+       WHERE section = '${sectionLiteral}'
+         AND contract_external_id IN (${batchIdsLiteral})
+       ORDER BY contract_external_id, paid_at, payment_id
+    `));
+    const payRows: any[] = (payRaw as any)[0] ?? payRaw;
+    const batchPayByContract = new Map<string, PayRawRow[]>();
+    for (const r of payRows) {
+      const key = String(r.contract_external_id ?? "");
+      if (!key) continue;
+      if (!batchPayByContract.has(key)) batchPayByContract.set(key, []);
+      batchPayByContract.get(key)!.push({
+        contract_external_id: key,
+        period: null,
+        payment_external_id: r.payment_external_id ?? null,
+        paid_at: r.paid_at ?? null,
+        total_paid_amount: r.total_paid_amount != null ? Number(r.total_paid_amount) : null,
+        principal_paid: r.principal_paid != null ? Number(r.principal_paid) : null,
+        interest_paid: r.interest_paid != null ? Number(r.interest_paid) : null,
+        fee_paid: r.fee_paid != null ? Number(r.fee_paid) : null,
+        penalty_paid: r.penalty_paid != null ? Number(r.penalty_paid) : null,
+        unlock_fee_paid: r.unlock_fee_paid != null ? Number(r.unlock_fee_paid) : null,
+        discount_amount: r.discount_amount != null ? Number(r.discount_amount) : null,
+        overpaid_amount: r.overpaid_amount != null ? Number(r.overpaid_amount) : null,
+        close_installment_amount: r.close_installment_amount != null ? Number(r.close_installment_amount) : null,
+        bad_debt_amount: r.bad_debt_amount != null ? Number(r.bad_debt_amount) : null,
+        payment_id: r.payment_id != null ? Number(r.payment_id) : null,
+        receipt_no: r.receipt_no ?? null,
+        remark: r.remark ?? null,
+        ff_status: r.ff_status ?? null,
+      } as any);
     }
 
     // Process each contract in this batch
@@ -1856,8 +1902,8 @@ export async function* listDebtCollectedStream(params: {
         contractBadDebtDate: ch.bad_debt_date ?? null,
         installments: instByContract.get(extId) ?? [],
       };
-      // Use global payments Map (loaded once before the batch loop)
-      const rawPayments = globalPayByContract.get(extId) ?? [];
+      // Use per-batch payments Map (loaded per batch to avoid OOM)
+      const rawPayments = batchPayByContract.get(extId) ?? [];
       const contractBadDebtAmount = c.contractBadDebtAmount as number | null;
       const contractBadDebtDate = c.contractBadDebtDate as string | null;
       const realPaymentsRaw = rawPayments.filter((p) => {
