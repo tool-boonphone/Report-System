@@ -708,3 +708,6 @@ Task list:
 
 ### Bug Fix — ยอดเก็บหนี้: สถานะหนี้ไม่แสดงผล
 - [x] BugFix-Collected-Status-1: ตรวจสอบและแก้ไขคอลัมน์ "สถานะหนี้" ใน tab ยอดเก็บหนี้ไม่แสดงผล — แก้ listDebtCollectedStream ให้เพิ่ม due_date/paid_amount ใน installments query และเรียก deriveDebtStatus() เพื่อคำนวณ debtStatus ก่อน spread เข้า row
+
+### Bug Fix — ยอดเก็บหนี้: ยอดผ่อนรวมหายไป
+- [x] BugFix-Collected-TotalAmount-1: แก้ไข totalAmount (ยอดผ่อนรวม) หายไปใน tab ยอดเก็บหนี้ — เพิ่ม totalAmount/totalPaid/remaining ใน object c ของ listDebtCollectedStream โดยคำนวณจาก instList

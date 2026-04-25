@@ -1897,6 +1897,9 @@ export async function* listDebtCollectedStream(params: {
       const extId = String(ch.external_id);
       // Build a contract object compatible with what listDebtTargetStream returns
       const instList = instByContract.get(extId) ?? [];
+      // Compute totalAmount (sum of installment amounts) and totalPaid (sum of paid_amount)
+      const totalAmount = instList.reduce((s, i) => s + (i.amount ?? 0), 0);
+      const totalPaid = instList.reduce((s, i) => s + (i.paid_amount ?? 0), 0);
       // Derive debtStatus using contract status + installment due_date/paid_amount
       const instForStatus: InstRawRow[] = instList.map((i) => ({
         contract_external_id: extId,
@@ -1924,6 +1927,9 @@ export async function* listDebtCollectedStream(params: {
         installmentAmount: ch.installment_amount != null ? Number(ch.installment_amount) : null,
         financeAmount: ch.finance_amount != null ? Number(ch.finance_amount) : null,
         status: ch.status ?? null,
+        totalAmount,
+        totalPaid,
+        remaining: Math.max(totalAmount - totalPaid, 0),
         debtStatus,
         daysOverdue,
         contractBadDebtAmount: ch.bad_debt_amount != null ? Number(ch.bad_debt_amount) : null,
