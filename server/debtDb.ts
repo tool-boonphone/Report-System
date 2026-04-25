@@ -1320,6 +1320,16 @@ export async function listDebtCollected(params: { section: SectionKey }) {
         if (p.period != null && p.period > lastNormalPeriod) lastNormalPeriod = p.period;
       }
       const badDebtPeriod = lastNormalPeriod + 1;
+      // Phase 55: patch installments so periods < badDebtPeriod show normal amounts.
+      // งวดที่ลูกค้าจ่ายปกติก่อนหนี้เสีย ให้ตั้งหนี้ตามปกติ
+      // เฉพาะงวดที่ >= badDebtPeriod เท่านั้นที่แสดงเป็นหนี้เสีย
+      c.installments = c.installments.map((inst: any) => {
+        const pNo = inst.period ?? 0;
+        if (pNo > 0 && pNo < badDebtPeriod && inst.isSuspended) {
+          return { ...inst, isSuspended: false, suspendLabel: null, suspendedAt: null };
+        }
+        return inst;
+      });
 
       const badDebtRow: any = {
         contract_external_id: c.contractExternalId,
@@ -1992,6 +2002,14 @@ export async function* listDebtCollectedStream(params: {
           if (p.period != null && p.period > lastNormalPeriod) lastNormalPeriod = p.period;
         }
         const badDebtPeriod = lastNormalPeriod + 1;
+        // Phase 55: patch installments so periods < badDebtPeriod show normal amounts.
+        c.installments = c.installments.map((inst: any) => {
+          const pNo = inst.period ?? 0;
+          if (pNo > 0 && pNo < badDebtPeriod && inst.isSuspended) {
+            return { ...inst, isSuspended: false, suspendLabel: null, suspendedAt: null };
+          }
+          return inst;
+        });
         const badDebtRow: any = {
           contract_external_id: c.contractExternalId,
           period: badDebtPeriod, splitIndex: 0, isCloseRow: false, isBadDebtRow: true,

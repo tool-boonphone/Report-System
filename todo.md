@@ -753,4 +753,11 @@ Task list:
 - [x] P54-1: แก้ isSuspended condition ใน listDebtTarget — เพิ่ม `&& paid <= 0` เพื่อให้งวดที่มีการชำระแล้วแสดงยอดปกติ
 - [x] P54-2: แก้ isSuspended condition ใน listDebtTargetStream — เช่นเดียวกัน
 - [x] P54-3: TypeScript check ผ่าน 0 errors
-- [ ] P54-4: อัปเดต skill + Checkpoint + Push GitHub
+- [x] P54-4: อัปเดต skill + Checkpoint + Push GitHub
+
+### Phase 55 — หนี้เสีย: ใช้ badDebtPeriod เป็นจุดตัด isSuspended
+- [x] P55-1: คำนวณ badDebtFromPeriod จาก lastNormalPeriod+1 ใน listDebtTarget (Pass 1 ก่อน build installments)
+- [x] P55-2: แก้ isSuspended สำหรับ isContractBadDebt ให้ใช้ badDebtFromPeriod แทน suspendedFromPeriod
+- [x] P55-3: ทำเช่นเดียวกันใน listDebtTargetStream
+- [x] P55-4: TypeScript check ผ่าน 0 errors
+- [ ] P55-5: อัปเดต skill + Checkpoint + Push GitHub
