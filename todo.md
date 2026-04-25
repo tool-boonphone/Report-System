@@ -705,3 +705,6 @@ Task list:
 - [x] P48-4: TypeScript check ผ่าน (0 errors) + ลบ cascade pass เก่าออก
 - [x] P48-5: แก้ cascade overpayment pass ให้หักในลำดับ ดอกเบี้ย → ค่าดำเนินการ → เงินต้น (ไม่ใช่หักยอดหนี้รวมโดยตรง) ใน listDebtTarget และ listDebtTargetStream
 - [x] P48-6: ลบ cascade post-processing pass เก่า (double-deduction) ออกจากทั้ง 2 functions — overpaidApplied ต่อ period มาจาก DB แล้ว ไม่ต้องทำ cascade เพิ่มเติม
+
+### Bug Fix — ยอดเก็บหนี้: สถานะหนี้ไม่แสดงผล
+- [x] BugFix-Collected-Status-1: ตรวจสอบและแก้ไขคอลัมน์ "สถานะหนี้" ใน tab ยอดเก็บหนี้ไม่แสดงผล — แก้ listDebtCollectedStream ให้เพิ่ม due_date/paid_amount ใน installments query และเรียก deriveDebtStatus() เพื่อคำนวณ debtStatus ก่อน spread เข้า row

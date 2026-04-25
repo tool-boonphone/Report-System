@@ -1765,6 +1765,7 @@ export async function* listDebtCollectedStream(params: {
 }): AsyncGenerator<{ rows: any[]; meta?: Record<string, unknown> }, void, unknown> {
   const CONTRACT_BATCH = 500; // contracts per DB query batch (keeps memory low)
   const YIELD_BATCH = params.batchSize ?? 100; // rows per HTTP chunk
+  const today = new Date(); // used by deriveDebtStatus
 
   const db = await getDb();
   if (!db) return;
@@ -1803,29 +1804,34 @@ export async function* listDebtCollectedStream(params: {
     const sectionLiteral = params.section.replace(/'/g, "''");
 
     // Query installments for this batch only (installments are smaller, per-batch is fine)
+    // Include due_date and paid_amount for deriveDebtStatus calculation
     const instRaw = await db.execute(sql.raw(`
       SELECT contract_external_id,
              period,
-             CAST(amount AS DECIMAL(18,2)) AS amount
+             CAST(amount AS DECIMAL(18,2)) AS amount,
+             due_date,
+             CAST(paid_amount AS DECIMAL(18,2)) AS paid_amount
         FROM installments
        WHERE section = '${sectionLiteral}'
          AND contract_external_id IN (${batchIdsLiteral})
        ORDER BY contract_external_id, period
     `));
     const instRows: any[] = (instRaw as any)[0] ?? instRaw;
-    const instByContractRaw = new Map<string, Array<{ period: number | null; amount: number }>>();
+    const instByContractRaw = new Map<string, Array<{ period: number | null; amount: number; due_date: string | null; paid_amount: number | null }>>();
     for (const r of instRows) {
       const key = String(r.contract_external_id ?? "");
       if (!instByContractRaw.has(key)) instByContractRaw.set(key, []);
       instByContractRaw.get(key)!.push({
         period: r.period != null ? Number(r.period) : null,
         amount: r.amount != null ? Number(r.amount) : 0,
+        due_date: r.due_date ?? null,
+        paid_amount: r.paid_amount != null ? Number(r.paid_amount) : null,
       });
     }
     // Dedup per period (DB may have 2 rows per period)
-    const instByContract = new Map<string, Array<{ period: number | null; amount: number }>>();
+    const instByContract = new Map<string, Array<{ period: number | null; amount: number; due_date: string | null; paid_amount: number | null }>>();
     for (const [key, list] of Array.from(instByContractRaw.entries())) {
-      const byPeriod = new Map<number | null, { period: number | null; amount: number }>();
+      const byPeriod = new Map<number | null, { period: number | null; amount: number; due_date: string | null; paid_amount: number | null }>();
       for (const row of list) {
         const p = row.period;
         const existing = byPeriod.get(p);
@@ -1890,6 +1896,23 @@ export async function* listDebtCollectedStream(params: {
     for (const ch of contractBatch) {
       const extId = String(ch.external_id);
       // Build a contract object compatible with what listDebtTargetStream returns
+      const instList = instByContract.get(extId) ?? [];
+      // Derive debtStatus using contract status + installment due_date/paid_amount
+      const instForStatus: InstRawRow[] = instList.map((i) => ({
+        contract_external_id: extId,
+        period: i.period,
+        due_date: i.due_date,
+        amount: i.amount,
+        paid_amount: i.paid_amount,
+        inst_status: null,
+        principal_due: null,
+        interest_due: null,
+        fee_due: null,
+        penalty_due: null,
+        unlock_fee_due: null,
+        installment_status_code: null,
+      }));
+      const { label: debtStatus, daysOverdue } = deriveDebtStatus(ch.status ?? null, instForStatus, today);
       const c = {
         contractExternalId: extId,
         contractNo: ch.contract_no ?? null,
@@ -1901,9 +1924,11 @@ export async function* listDebtCollectedStream(params: {
         installmentAmount: ch.installment_amount != null ? Number(ch.installment_amount) : null,
         financeAmount: ch.finance_amount != null ? Number(ch.finance_amount) : null,
         status: ch.status ?? null,
+        debtStatus,
+        daysOverdue,
         contractBadDebtAmount: ch.bad_debt_amount != null ? Number(ch.bad_debt_amount) : null,
         contractBadDebtDate: ch.bad_debt_date ?? null,
-        installments: instByContract.get(extId) ?? [],
+        installments: instList,
       };
       // Use per-batch payments Map (loaded per batch to avoid OOM)
       const rawPayments = batchPayByContract.get(extId) ?? [];
