@@ -847,8 +847,8 @@ export default function DebtReport() {
 
   return (
     <AppShell>
-      {/* flex flex-col h-full: fills the scrollable main area so pagination can stick to bottom */}
-      <div className="w-full px-3 md:px-5 py-4 flex flex-col" style={{ minHeight: '100%' }}>
+      {/* pb-16 reserves space for the fixed pagination bar at the bottom */}
+      <div className="w-full px-3 md:px-5 py-4 pb-16">
         {/* Tabs (moved to left, replacing title) + Export Excel on right */}
         <div className="flex items-center justify-between gap-2 mb-3">
           <div className="flex items-center gap-2">
@@ -1113,8 +1113,8 @@ export default function DebtReport() {
         ) : (
           <div
             ref={scrollRef}
-            className="border rounded-lg bg-white overflow-auto flex-1"
-            style={{ minHeight: '200px' }}
+            className="border rounded-lg bg-white overflow-auto"
+            style={{ maxHeight: "calc(100vh - 280px)" }}
           >
             <div style={{ width: LEFT_WIDTH + GROUP_WIDTH * maxPeriods }}>
               {/* Header row */}
@@ -1765,9 +1765,9 @@ export default function DebtReport() {
 
         )}
 
-        {/* ---- Pagination UI (Phase 33) — sticky to bottom of viewport ---- */}
+        {/* ---- Pagination UI (Phase 33) — fixed bottom bar ---- */}
         {!isError && !isLoading && filteredRows.length > 0 && (
-          <div className="sticky bottom-0 z-10 flex flex-col sm:flex-row items-center justify-between gap-3 px-2 py-3 border-t border-gray-200 bg-white shadow-[0_-2px_8px_rgba(0,0,0,0.06)]">
+          <div className="fixed bottom-0 left-0 right-0 z-30 flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 border-t border-gray-200 bg-white shadow-[0_-2px_8px_rgba(0,0,0,0.08)]">
             {/* Page size selector */}
             <div className="flex items-center gap-2 text-xs text-gray-600">
               <span>แสดง</span>

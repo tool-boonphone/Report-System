@@ -11,9 +11,6 @@ import { TopNav } from "./TopNav";
  *  - If not authenticated → /login
  *  - If authenticated but no section picked → /select-section
  *  - Otherwise render children inside TopNav layout
- *
- * Layout: h-screen flex-col so pages can use sticky/fixed bottom elements
- * that stay visible without scrolling.
  */
 export function AppShell({
   children,
@@ -46,10 +43,9 @@ export function AppShell({
   }
 
   return (
-    <div className="h-screen flex flex-col bg-gray-50 overflow-hidden">
+    <div className="min-h-screen bg-gray-50">
       <TopNav />
-      {/* flex-1 + overflow-y-auto: page content scrolls inside, TopNav stays fixed at top */}
-      <main className="flex-1 overflow-y-auto min-h-0">{children}</main>
+      <main>{children}</main>
     </div>
   );
 }
