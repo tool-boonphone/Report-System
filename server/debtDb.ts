@@ -1320,26 +1320,42 @@ export async function listDebtCollected(params: { section: SectionKey }) {
         return !isDeviceSalePayment;
       });
 
-      // Phase 55c: badDebtPeriod = งวดแรกที่มี isSuspended=true ใน installments
-      // (งวดที่ installment_status_code = หนี้เสีย ครั้งแรก = งวดที่มียอดขายเครื่อง)
-      // ไม่ใช้ lastNormalPeriod+1 จาก payment เพราะ FF365 payment ไม่มี period field ตรงๆ ทำให้คำนวณผิด
-      const firstSuspendedPeriod = c.installments
-        .filter((inst: any) => inst.isSuspended)
-        .map((inst: any) => inst.period ?? 0)
-        .filter((p: number) => p > 0)
-        .sort((a: number, b: number) => a - b)[0] ?? null;
-      // Fallback: ถ้าไม่มี isSuspended ใน installments ให้ใช้ lastNormalPeriod+1 จาก payment
+      // Phase 56 (revised): badDebtPeriod = งวดที่มียอดขายเครื่อง
+      // Priority 1: ใช้ receipt_no suffix ของ TXRT payment ที่ amount ≈ contractBadDebtAmount
+      //   เช่น TXRT1225-SRI001-19817-01-2 → period = 2
+      // Priority 2: fallback ใช้ period ที่ assignPayPeriods assign ให้
+      // Priority 3: fallback ใช้ lastNormalPeriod+1
       let badDebtPeriod: number;
-      if (firstSuspendedPeriod != null) {
-        badDebtPeriod = firstSuspendedPeriod;
-      } else {
-        let lastNormalPeriod = 0;
-        for (const p of normalPayments) {
-          if (p.period != null && p.period > lastNormalPeriod) lastNormalPeriod = p.period;
+      {
+        // Try receipt_no suffix first (most reliable)
+        const deviceSaleRaw = realPaymentsRaw.find((p) => {
+          const totalPaid = (p as any).total_paid_amount as number | null;
+          return totalPaid != null && Math.abs(totalPaid - contractBadDebtAmount) <= 1;
+        });
+        const receiptNo = deviceSaleRaw ? String((deviceSaleRaw as any).receipt_no ?? '') : '';
+        const suffixMatch = receiptNo.match(/-([1-9]\d*)$/);
+        if (suffixMatch) {
+          // receipt_no suffix is the most reliable period indicator
+          badDebtPeriod = parseInt(suffixMatch[1], 10);
+        } else {
+          // Fallback: use period from assignPayPeriods
+          const deviceSalePayment = realAssignedForBadDebt.find((p) => {
+            const totalPaid = (p as any).total_paid_amount as number | null;
+            return totalPaid != null && Math.abs(totalPaid - contractBadDebtAmount) <= 1;
+          });
+          if (deviceSalePayment?.period != null) {
+            badDebtPeriod = deviceSalePayment.period;
+          } else {
+            // Final fallback: lastNormalPeriod+1
+            let lastNormalPeriod = 0;
+            for (const p of normalPayments) {
+              if (p.period != null && p.period > lastNormalPeriod) lastNormalPeriod = p.period;
+            }
+            badDebtPeriod = lastNormalPeriod + 1;
+          }
         }
-        badDebtPeriod = lastNormalPeriod + 1;
       }
-      // Phase 55: patch installments so periods < badDebtPeriod show normal amounts.
+      // Phase 55/56: patch installments so periods < badDebtPeriod show normal amounts.
       // งวดที่ลูกค้าจ่ายปกติก่อนหนี้เสีย ให้ตั้งหนี้ตามปกติ
       // เฉพาะงวดที่ >= badDebtPeriod เท่านั้นที่แสดงเป็นหนี้เสีย
       c.installments = c.installments.map((inst: any) => {
@@ -1519,11 +1535,14 @@ export async function* listDebtTargetStream(params: {
   const closedByContract = new Map<string, number>();
   const overpaidByContractPeriod = new Map<string, Map<number, number>>();
   const paidAtsByContract = new Map<string, string[]>();
+  // Phase 56: device-sale period = period of TXRT payment whose amount ≈ bad_debt_amount
+  const deviceSalePeriodByContract = new Map<string, number>();
   {
     const rawCloseData = await db.execute(sql`
       SELECT contract_external_id,
              JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.receipt_no')) AS receipt_no,
              CAST(JSON_EXTRACT(raw_json, '$.overpaid_amount') AS DECIMAL(18,2)) AS overpaid_amount,
+             CAST(amount AS DECIMAL(18,2)) AS amount,
              paid_at
         FROM ${paymentTransactions}
        WHERE ${paymentTransactions.section} = ${params.section}
@@ -1550,7 +1569,7 @@ export async function* listDebtTargetStream(params: {
           closeDatesByContract.set(key, list);
         }
       } else {
-        const m = /-(\d+)$/.exec(receipt);
+        const m = /-(d+)$/.exec(receipt);
         if (!m) continue;
         const period = Number(m[1]);
         if (!Number.isFinite(period) || period <= 0) continue;
@@ -1566,6 +1585,35 @@ export async function* listDebtTargetStream(params: {
           }
           periodMap.set(period, (periodMap.get(period) ?? 0) + overpaid);
         }
+      }
+    }
+
+    // Phase 56: Build deviceSalePeriodByContract
+    // A contract's device-sale period = period of the TXRT payment whose amount ≈ bad_debt_amount.
+    // We use the receipt_no suffix (e.g. TXRT...-2 → period 2) as the most reliable indicator.
+    // We need bad_debt_amount per contract — look it up from cRows.
+    const badDebtAmountByContract = new Map<string, number>();
+    for (const c of cRows) {
+      if (c.bad_debt_amount != null && Number(c.bad_debt_amount) > 0) {
+        badDebtAmountByContract.set(String(c.external_id), Number(c.bad_debt_amount));
+      }
+    }
+    for (const pr of allPayRows) {
+      const key = String(pr.contract_external_id ?? '');
+      if (!key) continue;
+      const badDebtAmt = badDebtAmountByContract.get(key);
+      if (!badDebtAmt) continue;
+      const payAmt = Number(pr.amount ?? 0);
+      if (Math.abs(payAmt - badDebtAmt) > 1) continue; // not a device-sale payment
+      const receipt = String(pr.receipt_no ?? '');
+      const m = /-([1-9]\d*)$/.exec(receipt);
+      if (!m) continue;
+      const period = Number(m[1]);
+      if (!Number.isFinite(period) || period <= 0) continue;
+      // Keep the smallest period (earliest device-sale payment)
+      const existing = deviceSalePeriodByContract.get(key);
+      if (existing == null || period < existing) {
+        deviceSalePeriodByContract.set(key, period);
       }
     }
 
@@ -1774,6 +1822,65 @@ export async function* listDebtTargetStream(params: {
         currentPeriod.amount = effectiveBase + currentPeriod.penalty + currentPeriod.unlockFee;
         currentPeriod.netAmount = effectiveBase;
         currentPeriod.isCurrentPeriod = true;
+      }
+    }
+
+    // Phase 56: patch installments for bad-debt contracts
+    // กฎ: งวดที่มียอดขายเครื่อง (deviceSalePeriod) เป็นจุดตัด
+    //   - งวดก่อน badDebtPeriod (งวด 1..badDebtPeriod-1) → แสดงยอดปกติ (isSuspended = false)
+    //   - งวดตั้งแต่ badDebtPeriod เป็นต้นไป → หนี้เสีย (isSuspended = true, amount = 0)
+    const contractBadDebtAmount = c.bad_debt_amount != null ? Number(c.bad_debt_amount) : null;
+    if (contractBadDebtAmount != null && contractBadDebtAmount > 0 && isContractBadDebt) {
+      const badDebtPeriod = deviceSalePeriodByContract.get(extId) ?? null;
+      if (badDebtPeriod != null) {
+        const suspendLabel = 'หนี้เสีย';
+        const financeAmt = c.finance_amount != null ? Number(c.finance_amount) : 0;
+        const periods = c.installment_count != null ? Number(c.installment_count) : 0;
+        const baseline = c.installment_amount != null ? Number(c.installment_amount) : 0;
+        for (const inst of baseInstallments) {
+          const pNo = Number(inst.period ?? 0);
+          if (pNo <= 0) continue;
+          if (pNo < badDebtPeriod) {
+            // งวดก่อน badDebtPeriod → ปกติ (ยกเลิก isSuspended ถ้ามี)
+            if (inst.isSuspended) {
+              inst.isSuspended = false;
+              inst.suspendLabel = null;
+              inst.suspendedAt = null;
+              // Restore amounts from raw installment data
+              const rawInst = list.find((r) => Number(r.period) === pNo);
+              if (rawInst) {
+                const rawAmount = Number(rawInst.amount ?? 0);
+                const rawPrincipal = Number(rawInst.principal_due ?? 0);
+                const rawInterest = Number(rawInst.interest_due ?? 0);
+                const rawFee = Number(rawInst.fee_due ?? 0);
+                if (financeAmt > 0 && periods > 0) {
+                  inst.principal = Math.ceil(financeAmt / periods);
+                  inst.fee = 100;
+                  inst.interest = Math.max(0, baseline - inst.principal - inst.fee);
+                  inst.amount = baseline;
+                  inst.netAmount = inst.principal + inst.interest + inst.fee;
+                } else if (rawAmount > 0.009) {
+                  inst.principal = rawPrincipal > 0 ? rawPrincipal : inst.principal;
+                  inst.interest = rawInterest > 0 ? rawInterest : inst.interest;
+                  inst.fee = rawFee > 0 ? rawFee : inst.fee;
+                  inst.amount = rawAmount;
+                  inst.netAmount = inst.principal + inst.interest + inst.fee;
+                }
+              }
+            }
+          } else {
+            // งวดตั้งแต่ badDebtPeriod เป็นต้นไป → หนี้เสีย (force isSuspended=true)
+            if (!inst.isClosed) {
+              inst.isSuspended = true;
+              inst.suspendLabel = suspendLabel;
+              inst.suspendedAt = inst.suspendedAt ?? inst.dueDate ?? null;
+              inst.principal = 0; inst.interest = 0; inst.fee = 0;
+              inst.penalty = 0; inst.unlockFee = 0;
+              inst.amount = 0; inst.netAmount = 0;
+              inst.isCurrentPeriod = false;
+            }
+          }
+        }
       }
     }
 
@@ -2020,23 +2127,42 @@ export async function* listDebtCollectedStream(params: {
           const totalPaid = (p as any).total_paid_amount as number | null;
           return !(totalPaid != null && Math.abs(totalPaid - contractBadDebtAmount) <= 1);
         });
-        // Phase 55c: ใช้ firstSuspendedPeriod จาก installments แทน lastNormalPeriod+1
-        const firstSuspendedPeriod = c.installments
-          .filter((inst: any) => inst.isSuspended)
-          .map((inst: any) => inst.period ?? 0)
-          .filter((p: number) => p > 0)
-          .sort((a: number, b: number) => a - b)[0] ?? null;
+        // Phase 56 (revised): badDebtPeriod = งวดที่มียอดขายเครื่อง
+        // Priority 1: ใช้ receipt_no suffix ของ TXRT payment ที่ amount ≈ contractBadDebtAmount
+        //   เช่น TXRT1225-SRI001-19817-01-2 → period = 2
+        // Priority 2: fallback ใช้ period ที่ assignPayPeriods assign ให้
+        // Priority 3: fallback ใช้ lastNormalPeriod+1
         let badDebtPeriod: number;
-        if (firstSuspendedPeriod != null) {
-          badDebtPeriod = firstSuspendedPeriod;
-        } else {
-          let lastNormalPeriod = 0;
-          for (const p of normalPayments) {
-            if (p.period != null && p.period > lastNormalPeriod) lastNormalPeriod = p.period;
+        {
+          // Try receipt_no suffix first (most reliable)
+          const deviceSaleRaw = realPaymentsRaw.find((p) => {
+            const totalPaid = (p as any).total_paid_amount as number | null;
+            return totalPaid != null && Math.abs(totalPaid - contractBadDebtAmount) <= 1;
+          });
+          const receiptNo = deviceSaleRaw ? String((deviceSaleRaw as any).receipt_no ?? '') : '';
+          const suffixMatch = receiptNo.match(/-([1-9]\d*)$/);
+          if (suffixMatch) {
+            // receipt_no suffix is the most reliable period indicator
+            badDebtPeriod = parseInt(suffixMatch[1], 10);
+          } else {
+            // Fallback: use period from assignPayPeriods
+            const deviceSalePayment = realAssignedForBadDebt.find((p) => {
+              const totalPaid = (p as any).total_paid_amount as number | null;
+              return totalPaid != null && Math.abs(totalPaid - contractBadDebtAmount) <= 1;
+            });
+            if (deviceSalePayment?.period != null) {
+              badDebtPeriod = deviceSalePayment.period;
+            } else {
+              // Final fallback: lastNormalPeriod+1
+              let lastNormalPeriod = 0;
+              for (const p of normalPayments) {
+                if (p.period != null && p.period > lastNormalPeriod) lastNormalPeriod = p.period;
+              }
+              badDebtPeriod = lastNormalPeriod + 1;
+            }
           }
-          badDebtPeriod = lastNormalPeriod + 1;
         }
-        // Phase 55: patch installments so periods < badDebtPeriod show normal amounts.
+        // Phase 55/56: patch installments so periods < badDebtPeriod show normal amounts.
         c.installments = c.installments.map((inst: any) => {
           const pNo = inst.period ?? 0;
           if (pNo > 0 && pNo < badDebtPeriod && inst.isSuspended) {
