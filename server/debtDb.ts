@@ -1535,7 +1535,8 @@ export async function* listDebtTargetStream(params: {
   // --- Load payments (for close detection + paidAts) ---
   // Phase 52 rule: close period = last period with paid_amount > 0 in installments.
   const closedByContract = new Map<string, number>();
-  const overpaidByContractPeriod = new Map<string, Map<number, number>>();
+  // Phase 58: เก็บ { amount, paidAt } แทน number เพื่อใช้ carry-forward และ date ใน listDebtCollected
+  const overpaidByContractPeriod = new Map<string, Map<number, { amount: number; paidAt: string | null }>>();
   const paidAtsByContract = new Map<string, string[]>();
   // Phase 56: device-sale period = period of TXRT payment whose amount ≈ bad_debt_amount
   const deviceSalePeriodByContract = new Map<string, number>();
@@ -1584,10 +1585,15 @@ export async function* listDebtTargetStream(params: {
         if (overpaid > 0) {
           let periodMap = overpaidByContractPeriod.get(key);
           if (!periodMap) {
-            periodMap = new Map<number, number>();
+            periodMap = new Map<number, { amount: number; paidAt: string | null }>();
             overpaidByContractPeriod.set(key, periodMap);
           }
-          periodMap.set(period, (periodMap.get(period) ?? 0) + overpaid);
+          const existing = periodMap.get(period);
+          // Phase 58: accumulate overpaid amounts per period; keep earliest paidAt
+          periodMap.set(period, {
+            amount: (existing?.amount ?? 0) + overpaid,
+            paidAt: existing?.paidAt ?? (pr.paid_at ? String(pr.paid_at) : null),
+          });
         }
       }
     }
@@ -1673,6 +1679,52 @@ export async function* listDebtTargetStream(params: {
       }
     }
 
+    // Phase 58: Pre-compute cumulative carry pool per period.
+    // For each period N that has overpaid, carry forward to N+1, N+2, ... until pool is exhausted.
+    // carryForPeriod[P] = { carryUsed: amount used to reduce period P, sourcePaidAt: date of payment }
+    const carryForPeriod = new Map<number, { carryUsed: number; sourcePaidAt: string | null }>();
+    {
+      const periodMap = overpaidByContractPeriod.get(extId);
+      if (periodMap && baselineAmount != null && baselineAmount > 0) {
+        // Collect all overpaid entries sorted by period
+        const overpaidEntries = Array.from(periodMap.entries()).sort((a, b) => a[0] - b[0]);
+        // Build a sorted list of all installment periods for this contract
+        const sortedPeriods = list
+          .map((r) => r.period != null ? Number(r.period) : 0)
+          .filter((p) => p > 0)
+          .sort((a, b) => a - b);
+        // For each overpaid source period, distribute carry to subsequent periods
+        for (const [srcPeriod, { amount: overpaidAmt, paidAt: srcPaidAt }] of overpaidEntries) {
+          let remainingCarry = overpaidAmt;
+          for (const targetPeriod of sortedPeriods) {
+            if (targetPeriod <= srcPeriod) continue; // only apply to periods AFTER source
+            if (remainingCarry < 0.009) break;
+            // Check if target period is isClosed or isSuspended — skip carry for those
+            const targetInst = list.find((r) => Number(r.period) === targetPeriod);
+            if (!targetInst) continue;
+            const targetPaid = Number(targetInst.paid_amount ?? 0);
+            const targetIsClosed = closedByContract.has(extId) && maxClosedPeriod > 0 && targetPeriod > 1 && targetPeriod >= maxClosedPeriod;
+            const targetIsSuspended = !targetIsClosed && suspendedFromPeriod > 0 && targetPeriod >= suspendedFromPeriod && targetPaid <= 0;
+            if (targetIsClosed || targetIsSuspended) continue; // skip suspended/closed periods
+            // Determine if this target period has paidInFullWithReducedAmount (API already reduced)
+            const targetRawAmount = Number(targetInst.amount ?? 0);
+            const targetPaidInFullWithReduced = !targetIsClosed &&
+              targetRawAmount > 0.009 && baselineAmount > 0 &&
+              targetRawAmount < baselineAmount - 0.5 && targetPaid >= targetRawAmount - 0.5;
+            if (targetPaidInFullWithReduced) continue; // API already handled this, skip
+            // Apply carry to this period
+            const carryUsed = Math.min(remainingCarry, baselineAmount);
+            const existing = carryForPeriod.get(targetPeriod);
+            carryForPeriod.set(targetPeriod, {
+              carryUsed: (existing?.carryUsed ?? 0) + carryUsed,
+              sourcePaidAt: existing?.sourcePaidAt ?? srcPaidAt,
+            });
+            remainingCarry = Math.max(0, remainingCarry - carryUsed);
+          }
+        }
+      }
+    }
+
     const baseInstallments = list
       .map((r) => {
         const rawAmount = Number(r.amount ?? 0);
@@ -1700,12 +1752,17 @@ export async function* listDebtTargetStream(params: {
         const paidInFullButZeroedByApi = !isClosed && rawAmount <= 0.009 && paid > 0.009 && baselineAmount != null && baselineAmount > 0;
         const paidInFullWithReducedAmount = !isClosed && !paidInFullButZeroedByApi && rawAmount > 0.009 && baselineAmount != null && baselineAmount > 0 && rawAmount < baselineAmount - 0.5 && paid >= rawAmount - 0.5;
         const useBaselineDisplay = paidInFullButZeroedByApi || paidInFullWithReducedAmount;
+        // Phase 58: use cumulative carry pool instead of single-period lookup
         let overpaidApplied = 0;
-        if (!isClosed && periodNo > 1) {
+        let overpaidCarryLabel: string | null = null; // label for UI: "(-หักชำระเกิน: xxx)"
+        if (!isClosed && !isSuspended && periodNo > 0) {
           const skipCarry = paidInFullWithReducedAmount;
           if (!skipCarry) {
-            const periodMap = overpaidByContractPeriod.get(extId);
-            if (periodMap) overpaidApplied = periodMap.get(periodNo - 1) ?? 0;
+            const carryEntry = carryForPeriod.get(periodNo);
+            if (carryEntry && carryEntry.carryUsed > 0.009) {
+              overpaidApplied = carryEntry.carryUsed;
+              overpaidCarryLabel = `(-หักชำระเกิน: ${Math.round(carryEntry.carryUsed).toLocaleString('th-TH')})`;
+            }
           }
         }
         if (isClosed || isSuspended) {
@@ -1775,6 +1832,8 @@ export async function* listDebtTargetStream(params: {
           principal, interest, fee, penalty, unlockFee, amount,
           netAmount: principal + interest + fee,
           paid, baselineAmount: baselineAmount ?? 0, overpaidApplied,
+          // Phase 58: label for UI "งวดที่ถูกหักชำระเกิน"
+          overpaidCarryLabel,
           principalDeducted: 0, interestDeducted: 0, feeDeducted: 0,
           isClosed, isSuspended,
           suspendLabel: isSuspended ? suspendLabel : null,
@@ -2115,6 +2174,58 @@ export async function* listDebtCollectedStream(params: {
         const isTxrtReceipt = receiptNo != null && /^TXRT.*-\d+$/.test(receiptNo);
         return isNumericPayExt || isTxrtReceipt;
       });
+      // Phase 58: Pre-compute cumulative carry pool for listDebtCollected
+      // งวดที่ถูกหักจนเป็น 0 → บันทึกวันที่ของ payment ที่มี overpaid (ไม่ใช่วันที่ครบกำหนด)
+      const baselineAmountForCarry = c.installmentAmount;
+      const overpaidCarryRows: Array<{ period: number; paidAt: string | null; carryUsed: number }> = [];
+      if (baselineAmountForCarry != null && baselineAmountForCarry > 0) {
+        // Build overpaid map from realPaymentsRaw (before bad-debt filtering)
+        // Use receipt_no suffix to determine period
+        const overpaidByPeriodLocal = new Map<number, { amount: number; paidAt: string | null }>();
+        for (const p of rawPayments) {
+          const receiptNo = (p as any).receipt_no as string | null;
+          const overpaidAmt = (p as any).overpaid_amount as number | null;
+          if (!receiptNo || !overpaidAmt || overpaidAmt <= 0) continue;
+          // Phase 57 fix: use /-0\d-(\d+)/ to correctly extract period
+          const m = /-0\d-(\d+)/.exec(receiptNo);
+          if (!m) continue;
+          const period = Number(m[1]);
+          if (!Number.isFinite(period) || period <= 0) continue;
+          const existing = overpaidByPeriodLocal.get(period);
+          overpaidByPeriodLocal.set(period, {
+            amount: (existing?.amount ?? 0) + overpaidAmt,
+            paidAt: existing?.paidAt ?? ((p as any).paid_at ? String((p as any).paid_at) : null),
+          });
+        }
+        if (overpaidByPeriodLocal.size > 0) {
+          const sortedPeriods = instList
+            .map((i) => i.period != null ? Number(i.period) : 0)
+            .filter((p) => p > 0)
+            .sort((a, b) => a - b);
+          const overpaidEntries = Array.from(overpaidByPeriodLocal.entries()).sort((a, b) => a[0] - b[0]);
+          for (const [srcPeriod, { amount: overpaidAmt, paidAt: srcPaidAt }] of overpaidEntries) {
+            let remainingCarry = overpaidAmt;
+            for (const targetPeriod of sortedPeriods) {
+              if (targetPeriod <= srcPeriod) continue;
+              if (remainingCarry < 0.009) break;
+              // Check if target period already has a real payment
+              const targetInst = instList.find((i) => Number(i.period) === targetPeriod);
+              if (!targetInst) continue;
+              const targetPaid = Number(targetInst.paid_amount ?? 0);
+              // Skip if target period has a real payment (not zero)
+              // We only add carry rows for periods with no real payment (paid=0)
+              if (targetPaid > 0.009) {
+                // Period has real payment — carry was absorbed, stop distributing
+                break;
+              }
+              const carryUsed = Math.min(remainingCarry, baselineAmountForCarry);
+              overpaidCarryRows.push({ period: targetPeriod, paidAt: srcPaidAt, carryUsed });
+              remainingCarry = Math.max(0, remainingCarry - carryUsed);
+            }
+          }
+        }
+      }
+
       let tagged: Array<PayRawRow & { splitIndex: number; isCloseRow: boolean; isBadDebtRow: boolean }>;
       if (contractBadDebtAmount != null && contractBadDebtAmount > 0 && contractBadDebtDate) {
         let badDebtNote: string | null = null;
@@ -2191,17 +2302,44 @@ export async function* listDebtCollectedStream(params: {
         );
         tagged = realAssigned.map((p) => ({ ...p, isBadDebtRow: false }));
       }
+      // Phase 58: Merge overpaidCarryRows into payments
+      // งวดที่ถูกหักจนเป็น 0 → เพิ่ม row พิเศษ isOverpaidCarryRow=true เพื่อให้ frontend แสดงวันที่และยอด 0
+      const overpaidCarryPayments = overpaidCarryRows
+        .filter((cr) => {
+          // Only add carry row if there's no existing payment for this period in tagged
+          const existingForPeriod = tagged.find((t) => t.period === cr.period);
+          return !existingForPeriod;
+        })
+        .map((cr) => ({
+          period: cr.period,
+          splitIndex: 0,
+          isCloseRow: false,
+          isBadDebtRow: false,
+          isOverpaidCarryRow: true,
+          paidAt: cr.paidAt,
+          principal: 0, interest: 0, fee: 0, penalty: 0, unlockFee: 0,
+          discount: 0, overpaid: 0,
+          closeInstallmentAmount: 0, badDebt: 0,
+          total: 0,
+          receiptNo: null, remark: null, badDebtNote: null,
+          overpaidCarryUsed: cr.carryUsed,
+        }));
       const row = {
         ...c,
-        payments: tagged.map((p) => ({
-          period: p.period ?? null, splitIndex: p.splitIndex, isCloseRow: p.isCloseRow, isBadDebtRow: p.isBadDebtRow,
-          paidAt: p.paid_at, principal: p.principal_paid ?? 0, interest: p.interest_paid ?? 0,
-          fee: p.fee_paid ?? 0, penalty: p.penalty_paid ?? 0, unlockFee: p.unlock_fee_paid ?? 0,
-          discount: p.discount_amount ?? 0, overpaid: p.overpaid_amount ?? 0,
-          closeInstallmentAmount: p.close_installment_amount ?? 0, badDebt: p.bad_debt_amount ?? 0,
-          total: p.total_paid_amount ?? 0, receiptNo: p.receipt_no ?? null, remark: p.remark ?? null,
-          badDebtNote: (p as any).badDebtNote ?? null,
-        })),
+        payments: [
+          ...tagged.map((p) => ({
+            period: p.period ?? null, splitIndex: p.splitIndex, isCloseRow: p.isCloseRow, isBadDebtRow: p.isBadDebtRow,
+            isOverpaidCarryRow: false,
+            paidAt: p.paid_at, principal: p.principal_paid ?? 0, interest: p.interest_paid ?? 0,
+            fee: p.fee_paid ?? 0, penalty: p.penalty_paid ?? 0, unlockFee: p.unlock_fee_paid ?? 0,
+            discount: p.discount_amount ?? 0, overpaid: p.overpaid_amount ?? 0,
+            closeInstallmentAmount: p.close_installment_amount ?? 0, badDebt: p.bad_debt_amount ?? 0,
+            total: p.total_paid_amount ?? 0, receiptNo: p.receipt_no ?? null, remark: p.remark ?? null,
+            badDebtNote: (p as any).badDebtNote ?? null,
+            overpaidCarryUsed: 0,
+          })),
+          ...overpaidCarryPayments,
+        ].sort((a, b) => (a.period ?? 0) - (b.period ?? 0)),
       };
       yieldBatch.push(row);
       if (yieldBatch.length >= YIELD_BATCH) {
