@@ -1781,51 +1781,62 @@ export async function* listDebtTargetStream(params: {
             baseFee = rawFee > 0 ? rawFee : 100;
             baseInterest = rawInterest;
           }
-          // Phase 48: ลำดับการหัก ดอกเบี้ย → ค่าดำเนินการ → เงินต้น
-          let effectiveInterest = baseInterest;
-          let effectiveFee = baseFee;
-          let effectivePrincipal = basePrincipal;
-          if (overpaidApplied > 0.009) {
-            let rem = overpaidApplied;
-            const dInt = Math.min(rem, effectiveInterest);
-            effectiveInterest = Math.max(0, effectiveInterest - dInt);
-            rem = Math.max(0, rem - dInt);
-            const dFee = Math.min(rem, effectiveFee);
-            effectiveFee = Math.max(0, effectiveFee - dFee);
-            rem = Math.max(0, rem - dFee);
-            effectivePrincipal = Math.max(0, effectivePrincipal - rem);
-          }
-          const dueDateForPenalty = r.due_date ? Date.parse(`${r.due_date}T00:00:00`) : 0;
-          const isFuturePeriod = dueDateForPenalty > today.getTime();
-          penalty = isFuturePeriod ? 0 : rawPenalty;
-          unlockFee = isFuturePeriod ? 0 : rawUnlockFee;
-          if (useBaselineDisplay) {
-            principal = basePrincipal; interest = baseInterest; fee = baseFee; amount = baseline;
-            if (paidInFullButZeroedByApi && overpaidApplied > 0.009) {
-              // Phase 48: Apply carry in order: interest → fee → principal
+
+          // Phase 58 fix: ถ้า carry ครอบคลุมทั้งงวด (overpaidApplied >= baseline) ให้ force amount=0
+          // งวดนี้ถูกหักจาก carry pool จนเป็น 0 — ไม่ต้องตั้งเป้าอีก
+          // paid=0 และไม่ใช่ paidInFullWithReducedAmount (ไม่ใช่งวดที่ API ลดให้แล้ว)
+          const isFullyCoveredByCarry = overpaidApplied > 0.009 && baseline > 0 && overpaidApplied >= baseline - 0.5 && paid < 0.009;
+          if (isFullyCoveredByCarry) {
+            // งวดถูกหักจนเป็น 0 — แสดง 0 ทั้งหมด
+            amount = 0; principal = 0; interest = 0; fee = 0; penalty = 0; unlockFee = 0;
+          } else {
+            // Phase 48: ลำดับการหัก ดอกเบี้ย → ค่าดำเนินการ → เงินต้น
+            let effectiveInterest = baseInterest;
+            let effectiveFee = baseFee;
+            let effectivePrincipal = basePrincipal;
+            if (overpaidApplied > 0.009) {
+              let rem = overpaidApplied;
+              const dInt = Math.min(rem, effectiveInterest);
+              effectiveInterest = Math.max(0, effectiveInterest - dInt);
+              rem = Math.max(0, rem - dInt);
+              const dFee = Math.min(rem, effectiveFee);
+              effectiveFee = Math.max(0, effectiveFee - dFee);
+              rem = Math.max(0, rem - dFee);
+              effectivePrincipal = Math.max(0, effectivePrincipal - rem);
+            }
+            const dueDateForPenalty = r.due_date ? Date.parse(`${r.due_date}T00:00:00`) : 0;
+            const isFuturePeriod = dueDateForPenalty > today.getTime();
+            penalty = isFuturePeriod ? 0 : rawPenalty;
+            unlockFee = isFuturePeriod ? 0 : rawUnlockFee;
+            if (useBaselineDisplay) {
+              principal = basePrincipal; interest = baseInterest; fee = baseFee; amount = baseline;
+              if (paidInFullButZeroedByApi && overpaidApplied > 0.009) {
+                // Phase 48: Apply carry in order: interest → fee → principal
+                principal = Math.round(effectivePrincipal);
+                interest = Math.round(effectiveInterest);
+                fee = Math.round(effectiveFee);
+                amount = principal + interest + fee;
+              }
+            } else {
+              const apiAmount = rawAmount > 0.009 ? rawAmount : null;
+              const apiEqualsBaseline = apiAmount != null && Math.abs(apiAmount - baseline) < 0.5;
+              const applyCarryToAmount = overpaidApplied > 0.009 && apiEqualsBaseline;
+              // Phase 48: ใช้ effective values (หัก overpaid แล้ว) ทั้ง 3 fields
+              fee = Math.round(effectiveFee);
               principal = Math.round(effectivePrincipal);
               interest = Math.round(effectiveInterest);
-              fee = Math.round(effectiveFee);
-              amount = principal + interest + fee;
+              amount = apiAmount != null
+                ? (applyCarryToAmount ? Math.max(0, apiAmount - overpaidApplied) : apiAmount)
+                : principal + interest + fee + penalty + unlockFee;
             }
-          } else {
-            const apiAmount = rawAmount > 0.009 ? rawAmount : null;
-            const apiEqualsBaseline = apiAmount != null && Math.abs(apiAmount - baseline) < 0.5;
-            const applyCarryToAmount = overpaidApplied > 0.009 && apiEqualsBaseline;
-            // Phase 48: ใช้ effective values (หัก overpaid แล้ว) ทั้ง 3 fields
-            fee = Math.round(effectiveFee);
-            principal = Math.round(effectivePrincipal);
-            interest = Math.round(effectiveInterest);
-            amount = apiAmount != null
-              ? (applyCarryToAmount ? Math.max(0, apiAmount - overpaidApplied) : apiAmount)
-              : principal + interest + fee + penalty + unlockFee;
+            const todayForArrears = new Date();
+            todayForArrears.setHours(0, 0, 0, 0);
+            const dueDateMs = r.due_date ? Date.parse(`${r.due_date}T00:00:00`) : 0;
+            const isPastOrCurrent = dueDateMs <= todayForArrears.getTime();
+            const hasArrears = isPastOrCurrent && (rawPenalty > 0.005 || rawUnlockFee > 0.005);
+            (r as any)._hasArrears = hasArrears;
           }
-          const todayForArrears = new Date();
-          todayForArrears.setHours(0, 0, 0, 0);
-          const dueDateMs = r.due_date ? Date.parse(`${r.due_date}T00:00:00`) : 0;
-          const isPastOrCurrent = dueDateMs <= todayForArrears.getTime();
-          const hasArrears = isPastOrCurrent && (rawPenalty > 0.005 || rawUnlockFee > 0.005);
-          (r as any)._hasArrears = hasArrears;
+          // isFullyCoveredByCarry: _hasArrears already false (amount=0, no penalty)
         }
         return {
           period: r.period ?? null, dueDate: r.due_date ?? null,
