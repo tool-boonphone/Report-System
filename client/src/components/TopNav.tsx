@@ -47,8 +47,13 @@ const SETTINGS_NAV: NavItem[] = [
 /**
  * AI Chat icon — gradient sparkles with subtle pulse animation
  * ใช้ SVG แทน lucide เพื่อให้ใส่ gradient ได้
+ * section-aware: Boonphone = pink+yellow, Fastfone365 = orange+amber
  */
-function AiChatIcon({ active }: { active: boolean }) {
+function AiChatIcon({ active, section }: { active: boolean; section: string | null }) {
+  const isBoon = !section || section === "Boonphone";
+  // Boonphone: ชมพูสด #F03E7B → เหลือง #FFD700
+  // Fastfone365: ส้มทอง #F5A623 → ส้มเข้ม #E8621A
+  const gradId = isBoon ? "aiGradBoon" : "aiGradFast";
   return (
     <svg
       viewBox="0 0 24 24"
@@ -58,27 +63,35 @@ function AiChatIcon({ active }: { active: boolean }) {
       aria-hidden="true"
     >
       <defs>
-        <linearGradient id="aiGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#a855f7" />
-          <stop offset="50%" stopColor="#ec4899" />
-          <stop offset="100%" stopColor="#3b82f6" />
-        </linearGradient>
+        {isBoon ? (
+          <linearGradient id={gradId} x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#F03E7B" />
+            <stop offset="60%" stopColor="#FF6BA8" />
+            <stop offset="100%" stopColor="#FFD700" />
+          </linearGradient>
+        ) : (
+          <linearGradient id={gradId} x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#F5A623" />
+            <stop offset="60%" stopColor="#F07A1A" />
+            <stop offset="100%" stopColor="#E8621A" />
+          </linearGradient>
+        )}
       </defs>
       {/* Main sparkle star */}
       <path
         d="M12 2l1.5 4.5L18 8l-4.5 1.5L12 14l-1.5-4.5L6 8l4.5-1.5L12 2z"
-        fill="url(#aiGrad)"
+        fill={`url(#${gradId})`}
       />
       {/* Small sparkle top-right */}
       <path
         d="M19 3l.75 2.25L22 6l-2.25.75L19 9l-.75-2.25L16 6l2.25-.75L19 3z"
-        fill="url(#aiGrad)"
+        fill={`url(#${gradId})`}
         opacity="0.8"
       />
       {/* Small sparkle bottom-left */}
       <path
         d="M5 15l.6 1.8L7.4 17.4l-1.8.6L5 20l-.6-1.8L2.6 17.4l1.8-.6L5 15z"
-        fill="url(#aiGrad)"
+        fill={`url(#${gradId})`}
         opacity="0.6"
       />
     </svg>
@@ -293,22 +306,30 @@ export function TopNav() {
             )}
 
             {/* AI Chat button — between settings and profile
-                ใช้ gradient sparkle icon + animation เพื่อดึงดูดความสนใจ */}
-            {me && (
-              <button
-                onClick={toggleAiChat}
-                aria-label="น้องเป๋าตัง AI Assistant"
-                title="น้องเป๋าตัง — AI Assistant"
-                className={cn(
-                  "h-9 w-9 inline-flex items-center justify-center rounded-lg border transition-all duration-200",
-                  aiChatOpen
-                    ? "bg-gradient-to-br from-purple-50 to-pink-50 border-purple-300 shadow-sm shadow-purple-100"
-                    : "bg-white border-gray-200 hover:border-purple-300 hover:bg-gradient-to-br hover:from-purple-50 hover:to-pink-50",
-                )}
-              >
-                <AiChatIcon active={aiChatOpen} />
-              </button>
-            )}
+                ใช้ gradient sparkle icon + animation เพื่อดึงดูดความสนใจ
+                section-aware: Boonphone = pink/yellow, Fastfone365 = orange */}
+            {me && (() => {
+              const isBoon = !section || section === "Boonphone";
+              return (
+                <button
+                  onClick={toggleAiChat}
+                  aria-label="น้องเป๋าตัง AI Assistant"
+                  title="น้องเป๋าตัง — AI Assistant"
+                  className={cn(
+                    "h-9 w-9 inline-flex items-center justify-center rounded-lg border transition-all duration-200",
+                    aiChatOpen
+                      ? isBoon
+                        ? "bg-pink-50 border-pink-300 shadow-sm shadow-pink-100"
+                        : "bg-orange-50 border-orange-300 shadow-sm shadow-orange-100"
+                      : isBoon
+                        ? "bg-white border-gray-200 hover:border-pink-300 hover:bg-pink-50"
+                        : "bg-white border-gray-200 hover:border-orange-300 hover:bg-orange-50",
+                  )}
+                >
+                  <AiChatIcon active={aiChatOpen} section={section} />
+                </button>
+              );
+            })()}
 
             {me && (
               <div ref={userMenuRef} className="relative">

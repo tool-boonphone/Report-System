@@ -8,7 +8,10 @@ import { router, appProcedure } from "../_core/trpc";
 import { invokeLLM } from "../_core/llm";
 import { getDb } from "../db";
 import { contracts, installments, paymentTransactions } from "../../drizzle/schema";
-import { eq, sql, and, like, desc } from "drizzle-orm";
+import { eq, sql, and, like, desc, inArray } from "drizzle-orm";
+
+/** สถานะที่ถือว่า "ค้างชำระ" (ยังไม่ได้จ่ายหรือจ่ายไม่ครบ) */
+const OVERDUE_STATUSES = ["เกินกำหนดชำระ", "ถึงกำหนดชำระ", "ชำระแล้วบางส่วน"];
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -123,7 +126,39 @@ async function buildDbContext(section: string, question: string): Promise<string
     lines.push(`- จำนวนลูกค้าทั้งหมด: ${customerStats[0]?.count ?? 0} ราย`);
   }
 
-  // 6. ถ้าถามเกี่ยวกับงวด / installment
+  // 6. ค้างชำระแยกตามงวด (ดึงเสมอ — ข้อมูลสำคัญมาก)
+  const overdueByPeriod = await db
+    .select({
+      period: installments.period,
+      count: sql<number>`COUNT(DISTINCT contract_no)`,
+      totalAmount: sql<number>`SUM(CAST(amount AS DECIMAL(14,2)))`,
+    })
+    .from(installments)
+    .where(
+      and(
+        eq(installments.section, section),
+        inArray(installments.status, OVERDUE_STATUSES),
+      ),
+    )
+    .groupBy(installments.period)
+    .orderBy(installments.period)
+    .limit(24);
+
+  if (overdueByPeriod.length > 0) {
+    lines.push(`\n## ค้างชำระแยกตามงวด (สัญญาที่ยังไม่ได้ชำระ)`);
+    lines.push(`| งวดที่ | จำนวนสัญญาที่ค้าง | ยอดค้างรวม (บาท) |`);
+    lines.push(`|---|---|---|`);
+    for (const r of overdueByPeriod) {
+      lines.push(`| งวด ${r.period ?? "-"} | ${r.count} ราย | ${Number(r.totalAmount ?? 0).toLocaleString("th-TH", { minimumFractionDigits: 2 })} |`);
+    }
+    const totalOverdue = overdueByPeriod.reduce((s, r) => s + Number(r.count), 0);
+    const totalOverdueAmt = overdueByPeriod.reduce((s, r) => s + Number(r.totalAmount ?? 0), 0);
+    lines.push(`\n**รวมสัญญาค้างชำระทั้งหมด: ${totalOverdue} ราย | ยอดรวม: ${totalOverdueAmt.toLocaleString("th-TH", { minimumFractionDigits: 2 })} บาท**`);
+  } else {
+    lines.push(`\n## ค้างชำระแยกตามงวด\n- ไม่มีสัญญาค้างชำระในขณะนี้`);
+  }
+
+  // 6b. ถ้าถามเกี่ยวกับงวด / installment (สรุปตาม status)
   if (q.includes("งวด") || q.includes("installment") || q.includes("ค้างชำระ")) {
     const instSummary = await db
       .select({
@@ -238,6 +273,9 @@ ${dbContext}
 กฎการตอบ:
 - ตอบเป็นภาษาไทยเสมอ
 - ใช้ข้อมูลจากฐานข้อมูลด้านบนในการตอบ
+- ใช้ข้อมูลจากตาราง "ค้างชำระแยกตามงวด" เพื่อตอบคำถามเกี่ยวกับค้างชำระแยกตามงวด
+- "ค้างชำระงวดแรก" = งวด 1 ใน "ค้างชำระแยกตามงวด"
+- "ค้างชำระงวดสอง" = งวด 2 ใน "ค้างชำระแยกตามงวด"
 - ถ้าข้อมูลไม่เพียงพอ ให้บอกตรงๆ ว่าไม่มีข้อมูลนั้นในระบบ
 - แสดงตัวเลขในรูปแบบ Thai locale (เช่น 1,234,567.89)
 - ตอบกระชับ ชัดเจน และเป็นประโยชน์ ไม่ยืดเยื้อ`;

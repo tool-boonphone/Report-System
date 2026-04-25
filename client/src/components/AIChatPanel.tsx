@@ -29,16 +29,22 @@ const SUGGESTED_PROMPTS = [
   "พาร์ทเนอร์ที่มีสัญญามากที่สุด",
 ];
 
-/** Gradient sparkle avatar สำหรับน้องเป๋าตัง */
-function PaotangAvatar({ size = "sm" }: { size?: "sm" | "lg" }) {
+/**
+ * Gradient sparkle avatar สำหรับน้องเป๋าตัง
+ * section-aware: Boonphone = pink+yellow, Fastfone365 = orange+amber
+ */
+function PaotangAvatar({ size = "sm", section }: { size?: "sm" | "lg"; section?: string | null }) {
   const cls = size === "lg" ? "w-12 h-12" : "w-7 h-7";
+  const isBoon = !section || section === "Boonphone";
+  // Boonphone: ชมพู #F03E7B → เหลือง #FFD700
+  // Fastfone365: ส้มทอง #F5A623 → ส้มเข้ม #E8621A
+  const gradStyle = isBoon
+    ? { background: "linear-gradient(135deg, #F03E7B 0%, #FF6BA8 60%, #FFD700 100%)" }
+    : { background: "linear-gradient(135deg, #F5A623 0%, #F07A1A 60%, #E8621A 100%)" };
   return (
     <div
-      className={cn(
-        cls,
-        "rounded-full flex items-center justify-center shrink-0 text-white font-semibold",
-        "bg-gradient-to-br from-purple-500 via-pink-500 to-blue-500",
-      )}
+      className={cn(cls, "rounded-full flex items-center justify-center shrink-0 text-white font-semibold")}
+      style={gradStyle}
     >
       {size === "lg" ? (
         <svg viewBox="0 0 24 24" fill="none" className="w-6 h-6" aria-hidden="true">
@@ -65,6 +71,26 @@ export function AIChatPanel() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const sectionLabel = section ?? "Boonphone";
+  // โทนสีตาม section
+  const isBoon = !section || section === "Boonphone";
+  // header gradient style
+  const headerGradStyle = isBoon
+    ? { background: "linear-gradient(135deg, #F03E7B 0%, #FF6BA8 50%, #FFD700 100%)" }
+    : { background: "linear-gradient(135deg, #F5A623 0%, #F07A1A 60%, #E8621A 100%)" };
+  // send button style
+  const sendBtnStyle = isBoon
+    ? { background: "linear-gradient(135deg, #F03E7B, #FFD700)" }
+    : { background: "linear-gradient(135deg, #F5A623, #E8621A)" };
+  // user bubble color
+  const userBubbleCls = isBoon ? "bg-pink-500 text-white" : "bg-orange-500 text-white";
+  // user avatar bg
+  const userAvatarCls = isBoon ? "bg-pink-500" : "bg-orange-500";
+  // focus ring color
+  const inputFocusCls = isBoon ? "focus:ring-pink-400" : "focus:ring-orange-400";
+  // suggested prompt hover
+  const promptHoverCls = isBoon
+    ? "hover:bg-pink-50 hover:text-pink-700 hover:border-pink-200"
+    : "hover:bg-orange-50 hover:text-orange-700 hover:border-orange-200";
 
   // ชื่อผู้ใช้สำหรับ AI เรียก
   const userName = me?.fullName ?? me?.username ?? "";
@@ -172,9 +198,12 @@ export function AIChatPanel() {
           aiChatOpen ? "translate-x-0" : "translate-x-full",
         )}
       >
-        {/* Header */}
-        <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-200 shrink-0 bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 text-white">
-          <PaotangAvatar size="sm" />
+        {/* Header — section-aware gradient */}
+        <div
+          className="flex items-center gap-3 px-4 py-3 border-b border-gray-200 shrink-0 text-white"
+          style={headerGradStyle}
+        >
+          <PaotangAvatar size="sm" section={section} />
           <div className="flex-1 min-w-0">
             <p className="font-semibold text-sm leading-tight">น้องเป๋าตัง</p>
             <p className="text-xs text-white/70 truncate">AI Assistant · {sectionLabel}</p>
@@ -207,7 +236,7 @@ export function AIChatPanel() {
           {messages.length === 0 ? (
             /* Empty state — แสดงเมื่อยังไม่มี greeting (ช่วงโหลด) */
             <div className="flex flex-col items-center justify-center h-full gap-6 text-center">
-              <PaotangAvatar size="lg" />
+              <PaotangAvatar size="lg" section={section} />
               <div>
                 <p className="font-semibold text-gray-800 text-base">
                   น้องเป๋าตัง
@@ -224,7 +253,7 @@ export function AIChatPanel() {
                   <button
                     key={prompt}
                     onClick={() => sendMessage(prompt)}
-                    className="w-full text-left text-sm px-3 py-2.5 rounded-xl bg-gray-50 hover:bg-purple-50 hover:text-purple-700 border border-gray-200 hover:border-purple-200 transition-colors"
+                    className={cn("w-full text-left text-sm px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 transition-colors", promptHoverCls)}
                   >
                     {prompt}
                   </button>
@@ -244,9 +273,9 @@ export function AIChatPanel() {
                 >
                   {/* Avatar */}
                   {msg.role === "assistant" ? (
-                    <PaotangAvatar size="sm" />
+                    <PaotangAvatar size="sm" section={section} />
                   ) : (
-                    <div className="w-7 h-7 rounded-full bg-blue-600 text-white flex items-center justify-center shrink-0 text-xs font-semibold mt-0.5">
+                    <div className={cn("w-7 h-7 rounded-full text-white flex items-center justify-center shrink-0 text-xs font-semibold mt-0.5", userAvatarCls)}>
                       {userName ? userName.charAt(0).toUpperCase() : "ฉ"}
                     </div>
                   )}
@@ -255,7 +284,7 @@ export function AIChatPanel() {
                     className={cn(
                       "max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm",
                       msg.role === "user"
-                        ? "bg-blue-600 text-white rounded-tr-sm"
+                        ? cn(userBubbleCls, "rounded-tr-sm")
                         : "bg-gray-100 text-gray-800 rounded-tl-sm",
                     )}
                   >
@@ -273,7 +302,7 @@ export function AIChatPanel() {
               {/* Loading indicator */}
               {chatMutation.isPending && (
                 <div className="flex gap-2">
-                  <PaotangAvatar size="sm" />
+                  <PaotangAvatar size="sm" section={section} />
                   <div className="bg-gray-100 rounded-2xl rounded-tl-sm px-4 py-3">
                     <div className="flex gap-1 items-center">
                       <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:0ms]" />
@@ -294,7 +323,7 @@ export function AIChatPanel() {
                     <button
                       key={prompt}
                       onClick={() => sendMessage(prompt)}
-                      className="w-full text-left text-sm px-3 py-2 rounded-xl bg-gray-50 hover:bg-purple-50 hover:text-purple-700 border border-gray-200 hover:border-purple-200 transition-colors"
+                      className={cn("w-full text-left text-sm px-3 py-2 rounded-xl bg-gray-50 border border-gray-200 transition-colors", promptHoverCls)}
                     >
                       {prompt}
                     </button>
@@ -326,7 +355,8 @@ export function AIChatPanel() {
             <button
               onClick={() => sendMessage(input)}
               disabled={!input.trim() || chatMutation.isPending}
-              className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 disabled:from-gray-300 disabled:to-gray-300 text-white flex items-center justify-center transition-all shrink-0"
+              className="w-10 h-10 rounded-xl text-white flex items-center justify-center transition-all shrink-0 disabled:opacity-40"
+              style={chatMutation.isPending || !input.trim() ? undefined : sendBtnStyle}
             >
               {chatMutation.isPending ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
