@@ -723,19 +723,20 @@ export async function listDebtTarget(params: { section: SectionKey }) {
       }
     }
 
-    // Pass 2 (Phase 52): for every contract that has at least one TXRTC payment,
-    // derive the close period as the HIGHEST period whose paid_amount > 0 in
-    // the installments table. Periods strictly after this are rendered as
-    // "ปิดค่างวดแล้ว" with zero amounts.
+    // Pass 2 (Phase 52 fix v2): for every contract that has at least one TXRTC payment,
+    // derive the close period as the HIGHEST period from TXRT normal receipts (suffix -N).
+    // Periods strictly AFTER this are rendered as "ปิดค่างวดแล้ว" with zero amounts.
+    //
+    // Rationale: TXRT-N receipts explicitly identify which periods were paid normally.
+    // The max TXRT period = last normally-paid period. Everything after = lump-sum closed.
+    // This correctly handles cases where installments.paid_amount is partial or
+    // inconsistent due to API data quirks.
     for (const key of Array.from(closeDatesByContract.keys())) {
-      const instList = instByContract.get(key) ?? [];
-      // Find the last period that has any payment recorded
-      const maxPaidPeriod = instList.reduce((max, r) => {
-        const p = r.period != null ? Number(r.period) : 0;
-        const paidAmt = Number(r.paid_amount ?? 0);
-        return paidAmt > 0 && p > max ? p : max;
-      }, 0);
-      closedByContract.set(key, maxPaidPeriod);
+      const normalPeriods = normalPeriodsByContract.get(key);
+      const maxNormalPeriod = normalPeriods && normalPeriods.size > 0
+        ? Math.max(...Array.from(normalPeriods))
+        : 0;
+      closedByContract.set(key, maxNormalPeriod);
     }
   }
 
@@ -1533,15 +1534,14 @@ export async function* listDebtTargetStream(params: {
       }
     }
 
-    // Pass 2 (Phase 52): close period = highest period with paid_amount > 0
+    // Pass 2 (Phase 52 fix v2): close period = max period from TXRT normal receipts (suffix -N).
+    // Periods strictly AFTER this are rendered as "ปิดค่างวดแล้ว" with zero amounts.
     for (const key of Array.from(closeDatesByContract.keys())) {
-      const instList = instByContract.get(key) ?? [];
-      const maxPaidPeriod = instList.reduce((max, r) => {
-        const p = r.period != null ? Number(r.period) : 0;
-        const paidAmt = Number(r.paid_amount ?? 0);
-        return paidAmt > 0 && p > max ? p : max;
-      }, 0);
-      closedByContract.set(key, maxPaidPeriod);
+      const normalPeriods = normalPeriodsByContract.get(key);
+      const maxNormalPeriod = normalPeriods && normalPeriods.size > 0
+        ? Math.max(...Array.from(normalPeriods))
+        : 0;
+      closedByContract.set(key, maxNormalPeriod);
     }
   }
 
