@@ -1719,142 +1719,201 @@ export async function* listDebtCollectedStream(params: {
   section: SectionKey;
   batchSize?: number;
 }): AsyncGenerator<{ rows: any[]; meta?: Record<string, unknown> }, void, unknown> {
-  const BATCH = params.batchSize ?? 100;
-
-  // First, collect all target rows (needed for payment assignment)
-  const allTargetRows: any[] = [];
-  for await (const batch of listDebtTargetStream({ section: params.section, batchSize: 500 })) {
-    allTargetRows.push(...batch);
-  }
+  const CONTRACT_BATCH = 500; // contracts per DB query batch (keeps memory low)
+  const YIELD_BATCH = params.batchSize ?? 100; // rows per HTTP chunk
 
   const db = await getDb();
   if (!db) return;
 
-  // Load all payments
-  const payRowsRaw = await db.execute(sql`
-    SELECT contract_external_id,
-           external_id AS payment_external_id,
-           paid_at,
-           CAST(amount AS DECIMAL(18,2)) AS total_paid_amount,
-           CAST(JSON_EXTRACT(raw_json, '$.principal_paid')           AS DECIMAL(18,2)) AS principal_paid,
-           CAST(JSON_EXTRACT(raw_json, '$.interest_paid')            AS DECIMAL(18,2)) AS interest_paid,
-           CAST(JSON_EXTRACT(raw_json, '$.fee_paid')                 AS DECIMAL(18,2)) AS fee_paid,
-           CAST(JSON_EXTRACT(raw_json, '$.penalty_paid')             AS DECIMAL(18,2)) AS penalty_paid,
-           CAST(JSON_EXTRACT(raw_json, '$.unlock_fee_paid')          AS DECIMAL(18,2)) AS unlock_fee_paid,
-           CAST(JSON_EXTRACT(raw_json, '$.discount_amount')          AS DECIMAL(18,2)) AS discount_amount,
-           CAST(JSON_EXTRACT(raw_json, '$.overpaid_amount')          AS DECIMAL(18,2)) AS overpaid_amount,
-           CAST(JSON_EXTRACT(raw_json, '$.close_installment_amount') AS DECIMAL(18,2)) AS close_installment_amount,
-           CAST(JSON_EXTRACT(raw_json, '$.bad_debt_amount')          AS DECIMAL(18,2)) AS bad_debt_amount,
-           CAST(JSON_EXTRACT(raw_json, '$.payment_id')               AS UNSIGNED) AS payment_id,
-           NULL AS installment_external_id,
-           JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.receipt_no')) AS receipt_no,
-           JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.remark'))     AS remark,
-           status AS ff_status
-      FROM ${paymentTransactions}
-     WHERE ${paymentTransactions.section} = ${params.section}
-     ORDER BY contract_external_id, paid_at, payment_id
+  // Step 1: Load only contract headers (no installments) — small payload
+  const contractHeadersRaw = await db.execute(sql`
+    SELECT external_id,
+           contract_no,
+           approve_date,
+           customer_name,
+           phone,
+           installment_count,
+           CAST(installment_amount AS DECIMAL(18,2)) AS installment_amount,
+           CAST(finance_amount AS DECIMAL(18,2)) AS finance_amount,
+           status,
+           product_type,
+           CAST(bad_debt_amount AS DECIMAL(18,2)) AS bad_debt_amount,
+           bad_debt_date
+      FROM ${contracts}
+     WHERE ${contracts.section} = ${params.section}
+       AND (status IS NULL OR status != 'ยกเลิกสัญญา')
+     ORDER BY external_id
   `);
-  const pRows: any[] = (payRowsRaw as any)[0] ?? payRowsRaw;
+  const allContractHeaders: any[] = (contractHeadersRaw as any)[0] ?? contractHeadersRaw;
+  if (!allContractHeaders.length) return;
 
-  const payByContract = new Map<string, PayRawRow[]>();
-  for (const r of pRows) {
-    const key = String(r.contract_external_id ?? "");
-    if (!key) continue;
-    if (!payByContract.has(key)) payByContract.set(key, []);
-    payByContract.get(key)!.push({
-      contract_external_id: key,
-      period: null,
-      payment_external_id: r.payment_external_id ?? null,
-      paid_at: r.paid_at ?? null,
-      total_paid_amount: r.total_paid_amount != null ? Number(r.total_paid_amount) : null,
-      principal_paid: r.principal_paid != null ? Number(r.principal_paid) : null,
-      interest_paid: r.interest_paid != null ? Number(r.interest_paid) : null,
-      fee_paid: r.fee_paid != null ? Number(r.fee_paid) : null,
-      penalty_paid: r.penalty_paid != null ? Number(r.penalty_paid) : null,
-      unlock_fee_paid: r.unlock_fee_paid != null ? Number(r.unlock_fee_paid) : null,
-      discount_amount: r.discount_amount != null ? Number(r.discount_amount) : null,
-      overpaid_amount: r.overpaid_amount != null ? Number(r.overpaid_amount) : null,
-      close_installment_amount: r.close_installment_amount != null ? Number(r.close_installment_amount) : null,
-      bad_debt_amount: r.bad_debt_amount != null ? Number(r.bad_debt_amount) : null,
-      payment_id: r.payment_id != null ? Number(r.payment_id) : null,
-      receipt_no: r.receipt_no ?? null,
-      remark: r.remark ?? null,
-      ff_status: r.ff_status ?? null,
-    } as any);
-  }
+  // Step 2: Process contracts in batches — query installments + payments per batch
+  let yieldBatch: any[] = [];
+  for (let batchStart = 0; batchStart < allContractHeaders.length; batchStart += CONTRACT_BATCH) {
+    const contractBatch = allContractHeaders.slice(batchStart, batchStart + CONTRACT_BATCH);
+    const batchIds = contractBatch.map((c: any) => String(c.external_id));
+    // Build safe IN clause (IDs are numeric strings from the API)
+    const batchIdsLiteral = batchIds.map((id: string) => `'${id.replace(/'/g, "''")}'`).join(",");
+    const sectionLiteral = params.section.replace(/'/g, "''");
 
-  // Process in batches
-  let batch: any[] = [];
-  for (const c of allTargetRows) {
-    const rawPayments = payByContract.get(c.contractExternalId) ?? [];
-    const contractBadDebtAmount = c.contractBadDebtAmount as number | null;
-    const contractBadDebtDate = c.contractBadDebtDate as string | null;
-    const realPaymentsRaw = rawPayments.filter((p) => {
-      const payExtId = (p as any).payment_external_id as string | null;
-      return payExtId != null && /^\d+$/.test(payExtId);
-    });
-
-    let tagged: Array<PayRawRow & { splitIndex: number; isCloseRow: boolean; isBadDebtRow: boolean }>;
-
-    if (contractBadDebtAmount != null && contractBadDebtAmount > 0 && contractBadDebtDate) {
-      let badDebtNote: string | null = null;
-      const d = new Date(`${contractBadDebtDate}T00:00:00`);
-      const day = String(d.getDate()).padStart(2, "0");
-      const month = String(d.getMonth() + 1).padStart(2, "0");
-      const year = d.getFullYear() + 543;
-      badDebtNote = `ยอดขายเครื่อง ${contractBadDebtAmount.toLocaleString("th-TH", { minimumFractionDigits: 0, maximumFractionDigits: 0 })} บาท (${day}/${month}/${year})`;
-      const realAssignedForBadDebt = assignPayPeriods(
-        realPaymentsRaw,
-        c.installments.map((i: { period: number | null; amount: number | string }) => ({ period: i.period, amount: Number(i.amount) || 0 })),
-      );
-      const normalPayments = realAssignedForBadDebt.filter((p) => {
-        const totalPaid = (p as any).total_paid_amount as number | null;
-        return !(totalPaid != null && Math.abs(totalPaid - contractBadDebtAmount) <= 1);
+    // Query installments for this batch only
+    const instRaw = await db.execute(sql.raw(`
+      SELECT contract_external_id,
+             period,
+             CAST(amount AS DECIMAL(18,2)) AS amount
+        FROM installments
+       WHERE section = '${sectionLiteral}'
+         AND contract_external_id IN (${batchIdsLiteral})
+       ORDER BY contract_external_id, period
+    `));
+    const instRows: any[] = (instRaw as any)[0] ?? instRaw;
+    const instByContract = new Map<string, Array<{ period: number | null; amount: number }>>();
+    for (const r of instRows) {
+      const key = String(r.contract_external_id ?? "");
+      if (!instByContract.has(key)) instByContract.set(key, []);
+      instByContract.get(key)!.push({
+        period: r.period != null ? Number(r.period) : null,
+        amount: r.amount != null ? Number(r.amount) : 0,
       });
-      let lastNormalPeriod = 0;
-      for (const p of normalPayments) {
-        if (p.period != null && p.period > lastNormalPeriod) lastNormalPeriod = p.period;
-      }
-      const badDebtPeriod = lastNormalPeriod + 1;
-      const badDebtRow: any = {
-        contract_external_id: c.contractExternalId,
-        period: badDebtPeriod, splitIndex: 0, isCloseRow: false, isBadDebtRow: true,
-        paid_at: contractBadDebtDate, principal_paid: 0, interest_paid: 0, fee_paid: 0,
-        penalty_paid: 0, unlock_fee_paid: 0, discount_amount: 0, overpaid_amount: 0,
-        close_installment_amount: 0, bad_debt_amount: contractBadDebtAmount,
-        total_paid_amount: 0, payment_id: null, receipt_no: null, remark: null,
-        ff_status: null, payment_external_id: null, badDebtNote,
+    }
+
+    // Query payments for this batch only
+    const payRaw = await db.execute(sql.raw(`
+      SELECT contract_external_id,
+             external_id AS payment_external_id,
+             paid_at,
+             CAST(amount AS DECIMAL(18,2)) AS total_paid_amount,
+             CAST(JSON_EXTRACT(raw_json, '$.principal_paid')           AS DECIMAL(18,2)) AS principal_paid,
+             CAST(JSON_EXTRACT(raw_json, '$.interest_paid')            AS DECIMAL(18,2)) AS interest_paid,
+             CAST(JSON_EXTRACT(raw_json, '$.fee_paid')                 AS DECIMAL(18,2)) AS fee_paid,
+             CAST(JSON_EXTRACT(raw_json, '$.penalty_paid')             AS DECIMAL(18,2)) AS penalty_paid,
+             CAST(JSON_EXTRACT(raw_json, '$.unlock_fee_paid')          AS DECIMAL(18,2)) AS unlock_fee_paid,
+             CAST(JSON_EXTRACT(raw_json, '$.discount_amount')          AS DECIMAL(18,2)) AS discount_amount,
+             CAST(JSON_EXTRACT(raw_json, '$.overpaid_amount')          AS DECIMAL(18,2)) AS overpaid_amount,
+             CAST(JSON_EXTRACT(raw_json, '$.close_installment_amount') AS DECIMAL(18,2)) AS close_installment_amount,
+             CAST(JSON_EXTRACT(raw_json, '$.bad_debt_amount')          AS DECIMAL(18,2)) AS bad_debt_amount,
+             CAST(JSON_EXTRACT(raw_json, '$.payment_id')               AS UNSIGNED) AS payment_id,
+             JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.receipt_no')) AS receipt_no,
+             JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.remark'))     AS remark,
+             status AS ff_status
+        FROM payment_transactions
+       WHERE section = '${sectionLiteral}'
+         AND contract_external_id IN (${batchIdsLiteral})
+       ORDER BY contract_external_id, paid_at, payment_id
+    `));
+    const payRows: any[] = (payRaw as any)[0] ?? payRaw;
+    const payByContract = new Map<string, PayRawRow[]>();
+    for (const r of payRows) {
+      const key = String(r.contract_external_id ?? "");
+      if (!key) continue;
+      if (!payByContract.has(key)) payByContract.set(key, []);
+      payByContract.get(key)!.push({
+        contract_external_id: key,
+        period: null,
+        payment_external_id: r.payment_external_id ?? null,
+        paid_at: r.paid_at ?? null,
+        total_paid_amount: r.total_paid_amount != null ? Number(r.total_paid_amount) : null,
+        principal_paid: r.principal_paid != null ? Number(r.principal_paid) : null,
+        interest_paid: r.interest_paid != null ? Number(r.interest_paid) : null,
+        fee_paid: r.fee_paid != null ? Number(r.fee_paid) : null,
+        penalty_paid: r.penalty_paid != null ? Number(r.penalty_paid) : null,
+        unlock_fee_paid: r.unlock_fee_paid != null ? Number(r.unlock_fee_paid) : null,
+        discount_amount: r.discount_amount != null ? Number(r.discount_amount) : null,
+        overpaid_amount: r.overpaid_amount != null ? Number(r.overpaid_amount) : null,
+        close_installment_amount: r.close_installment_amount != null ? Number(r.close_installment_amount) : null,
+        bad_debt_amount: r.bad_debt_amount != null ? Number(r.bad_debt_amount) : null,
+        payment_id: r.payment_id != null ? Number(r.payment_id) : null,
+        receipt_no: r.receipt_no ?? null,
+        remark: r.remark ?? null,
+        ff_status: r.ff_status ?? null,
+      } as any);
+    }
+
+    // Process each contract in this batch
+    for (const ch of contractBatch) {
+      const extId = String(ch.external_id);
+      // Build a contract object compatible with what listDebtTargetStream returns
+      const c = {
+        contractExternalId: extId,
+        contractNo: ch.contract_no ?? null,
+        approveDate: ch.approve_date ?? null,
+        customerName: ch.customer_name ?? null,
+        phone: ch.phone ?? null,
+        productType: ch.product_type ?? null,
+        installmentCount: ch.installment_count != null ? Number(ch.installment_count) : null,
+        installmentAmount: ch.installment_amount != null ? Number(ch.installment_amount) : null,
+        financeAmount: ch.finance_amount != null ? Number(ch.finance_amount) : null,
+        status: ch.status ?? null,
+        contractBadDebtAmount: ch.bad_debt_amount != null ? Number(ch.bad_debt_amount) : null,
+        contractBadDebtDate: ch.bad_debt_date ?? null,
+        installments: instByContract.get(extId) ?? [],
       };
-      tagged = [...normalPayments.map((p) => ({ ...p, isBadDebtRow: false })), badDebtRow];
-    } else {
-      const realAssigned = assignPayPeriods(
-        realPaymentsRaw,
-        c.installments.map((i: { period: number | null; amount: number | string }) => ({ period: i.period, amount: Number(i.amount) || 0 })),
-      );
-      tagged = realAssigned.map((p) => ({ ...p, isBadDebtRow: false }));
-    }
-
-    const row = {
-      ...c,
-      payments: tagged.map((p) => ({
-        period: p.period ?? null, splitIndex: p.splitIndex, isCloseRow: p.isCloseRow, isBadDebtRow: p.isBadDebtRow,
-        paidAt: p.paid_at, principal: p.principal_paid ?? 0, interest: p.interest_paid ?? 0,
-        fee: p.fee_paid ?? 0, penalty: p.penalty_paid ?? 0, unlockFee: p.unlock_fee_paid ?? 0,
-        discount: p.discount_amount ?? 0, overpaid: p.overpaid_amount ?? 0,
-        closeInstallmentAmount: p.close_installment_amount ?? 0, badDebt: p.bad_debt_amount ?? 0,
-        total: p.total_paid_amount ?? 0, receiptNo: p.receipt_no ?? null, remark: p.remark ?? null,
-        badDebtNote: (p as any).badDebtNote ?? null,
-      })),
-    };
-
-    batch.push(row);
-    if (batch.length >= BATCH) {
-      yield { rows: batch, meta: { hasPrincipalBreakdown: true } };
-      batch = [];
-      await new Promise<void>((resolve) => setImmediate(resolve));
-    }
-  }
-  if (batch.length > 0) {
-    yield { rows: batch, meta: { hasPrincipalBreakdown: true } };
+      const rawPayments = payByContract.get(extId) ?? [];
+      const contractBadDebtAmount = c.contractBadDebtAmount as number | null;
+      const contractBadDebtDate = c.contractBadDebtDate as string | null;
+      const realPaymentsRaw = rawPayments.filter((p) => {
+        const payExtId = (p as any).payment_external_id as string | null;
+        return payExtId != null && /^\d+$/.test(payExtId);
+      });
+      let tagged: Array<PayRawRow & { splitIndex: number; isCloseRow: boolean; isBadDebtRow: boolean }>;
+      if (contractBadDebtAmount != null && contractBadDebtAmount > 0 && contractBadDebtDate) {
+        let badDebtNote: string | null = null;
+        const d = new Date(`${contractBadDebtDate}T00:00:00`);
+        const day = String(d.getDate()).padStart(2, "0");
+        const month = String(d.getMonth() + 1).padStart(2, "0");
+        const year = d.getFullYear() + 543;
+        badDebtNote = `ยอดขายเครื่อง ${contractBadDebtAmount.toLocaleString("th-TH", { minimumFractionDigits: 0, maximumFractionDigits: 0 })} บาท (${day}/${month}/${year})`;
+        const realAssignedForBadDebt = assignPayPeriods(
+          realPaymentsRaw,
+          c.installments.map((i: { period: number | null; amount: number | string }) => ({ period: i.period, amount: Number(i.amount) || 0 })),
+        );
+        const normalPayments = realAssignedForBadDebt.filter((p) => {
+          const totalPaid = (p as any).total_paid_amount as number | null;
+          return !(totalPaid != null && Math.abs(totalPaid - contractBadDebtAmount) <= 1);
+        });
+        let lastNormalPeriod = 0;
+        for (const p of normalPayments) {
+          if (p.period != null && p.period > lastNormalPeriod) lastNormalPeriod = p.period;
+        }
+        const badDebtPeriod = lastNormalPeriod + 1;
+        const badDebtRow: any = {
+          contract_external_id: c.contractExternalId,
+          period: badDebtPeriod, splitIndex: 0, isCloseRow: false, isBadDebtRow: true,
+          paid_at: contractBadDebtDate, principal_paid: 0, interest_paid: 0, fee_paid: 0,
+          penalty_paid: 0, unlock_fee_paid: 0, discount_amount: 0, overpaid_amount: 0,
+          close_installment_amount: 0, bad_debt_amount: contractBadDebtAmount,
+          total_paid_amount: 0, payment_id: null, receipt_no: null, remark: null,
+          ff_status: null, payment_external_id: null, badDebtNote,
+        };
+        tagged = [...normalPayments.map((p) => ({ ...p, isBadDebtRow: false })), badDebtRow];
+      } else {
+        const realAssigned = assignPayPeriods(
+          realPaymentsRaw,
+          c.installments.map((i: { period: number | null; amount: number | string }) => ({ period: i.period, amount: Number(i.amount) || 0 })),
+        );
+        tagged = realAssigned.map((p) => ({ ...p, isBadDebtRow: false }));
+      }
+      const row = {
+        ...c,
+        payments: tagged.map((p) => ({
+          period: p.period ?? null, splitIndex: p.splitIndex, isCloseRow: p.isCloseRow, isBadDebtRow: p.isBadDebtRow,
+          paidAt: p.paid_at, principal: p.principal_paid ?? 0, interest: p.interest_paid ?? 0,
+          fee: p.fee_paid ?? 0, penalty: p.penalty_paid ?? 0, unlockFee: p.unlock_fee_paid ?? 0,
+          discount: p.discount_amount ?? 0, overpaid: p.overpaid_amount ?? 0,
+          closeInstallmentAmount: p.close_installment_amount ?? 0, badDebt: p.bad_debt_amount ?? 0,
+          total: p.total_paid_amount ?? 0, receiptNo: p.receipt_no ?? null, remark: p.remark ?? null,
+          badDebtNote: (p as any).badDebtNote ?? null,
+        })),
+      };
+      yieldBatch.push(row);
+      if (yieldBatch.length >= YIELD_BATCH) {
+        yield { rows: yieldBatch, meta: { hasPrincipalBreakdown: true } };
+        yieldBatch = [];
+        await new Promise<void>((resolve) => setImmediate(resolve));
+      }
+    } // end for contractBatch
+  } // end for batchStart
+  if (yieldBatch.length > 0) {
+    yield { rows: yieldBatch, meta: { hasPrincipalBreakdown: true } };
   }
 }
