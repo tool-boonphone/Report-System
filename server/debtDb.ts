@@ -866,10 +866,13 @@ export async function listDebtTarget(params: { section: SectionKey }) {
         const isClosed = closedByContract.has(extId) && maxClosedPeriod > 0 && periodNo > 1 && periodNo >= maxClosedPeriod;
         // Per-period suspended flag: period is >= the first suspended period.
         // Bad-debt contract → re-use the same flag but surface a different label.
+        // Phase 54: งวดที่ลูกค้าชำระเข้ามาแล้ว (paid > 0) ให้แสดงยอดปกติ
+        // เฉพาะงวดที่ยังไม่มีการชำระเท่านั้นที่แสดงเป็นระงับสัญญา
         const isSuspended =
           !isClosed &&
           suspendedFromPeriod > 0 &&
-          periodNo >= suspendedFromPeriod;
+          periodNo >= suspendedFromPeriod &&
+          paid <= 0;
         const suspendLabel = isContractBadDebt ? "หนี้เสีย" : "ระงับสัญญา";
         // --- Compute display amount (non-closed periods) ---
         let amount = rawAmount;
@@ -1604,7 +1607,8 @@ export async function* listDebtTargetStream(params: {
         // Guard maxClosedPeriod > 0 so contracts with no normal receipts are unaffected.
         // Phase 53: periodNo > 1 — งวดที่ 1 แสดงยอดตั้งหนี้ปกติเสมอ แม้ maxClosedPeriod=1
         const isClosed = closedByContract.has(extId) && maxClosedPeriod > 0 && periodNo > 1 && periodNo >= maxClosedPeriod;
-        const isSuspended = !isClosed && suspendedFromPeriod > 0 && periodNo >= suspendedFromPeriod;
+        // Phase 54: งวดที่ลูกค้าชำระเข้ามาแล้ว (paid > 0) ให้แสดงยอดปกติ
+        const isSuspended = !isClosed && suspendedFromPeriod > 0 && periodNo >= suspendedFromPeriod && paid <= 0;
         const suspendLabel = isContractBadDebt ? "หนี้เสีย" : "ระงับสัญญา";
         let amount = rawAmount;
         let principal = rawPrincipal;

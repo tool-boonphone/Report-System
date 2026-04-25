@@ -747,4 +747,10 @@ Task list:
 - [x] P53-1: แก้ isClosed — งวดที่ 1 (periodNo=1) แสดงยอดตั้งหนี้ปกติเสมอ แม้ maxNormalPeriod=1 (ใน listDebtTarget และ listDebtTargetStream)
 - [x] P53-2: ซ่อน BG สีฟ้า (isCurrentPeriod highlight) สำหรับสัญญาสถานะ ระงับสัญญา / สิ้นสุดสัญญา / หนี้เสีย (ใน DebtReport.tsx)
 - [x] P53-3: TypeScript check ผ่าน 0 errors
-- [ ] P53-4: Checkpoint + Push GitHub
+- [x] P53-4: Checkpoint + Push GitHub
+
+### Phase 54 — ระงับสัญญา: งวดที่ชำระแล้วแสดงยอดปกติ
+- [x] P54-1: แก้ isSuspended condition ใน listDebtTarget — เพิ่ม `&& paid <= 0` เพื่อให้งวดที่มีการชำระแล้วแสดงยอดปกติ
+- [x] P54-2: แก้ isSuspended condition ใน listDebtTargetStream — เช่นเดียวกัน
+- [x] P54-3: TypeScript check ผ่าน 0 errors
+- [ ] P54-4: อัปเดต skill + Checkpoint + Push GitHub
