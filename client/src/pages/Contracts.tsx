@@ -690,8 +690,8 @@ export default function Contracts() {
               <thead className="sticky top-0 z-10">
                 {/* Group header row — 6+4+15+8+7+1 = 41 cols */}
                 <tr className="text-xs font-semibold text-center">
-                  {/* สินเชื่อ: idx 0-5 */}
-                  <th colSpan={6} className="px-3 py-1.5 bg-slate-600 text-white border-b border-slate-500 whitespace-nowrap">สินเชื่อ</th>
+                  {/* สินเชื่อ: idx 0-5 — sticky left */}
+                  <th colSpan={6} className="sticky left-0 z-20 px-3 py-1.5 bg-slate-600 text-white border-b border-slate-500 whitespace-nowrap">สินเชื่อ</th>
                   {/* พาร์ทเนอร์: idx 6-9 */}
                   <th colSpan={4} className="px-3 py-1.5 bg-indigo-600 text-white border-b border-indigo-500 whitespace-nowrap">พาร์ทเนอร์</th>
                   {/* ลูกค้า: idx 10-24 */}
@@ -714,6 +714,9 @@ export default function Contracts() {
                       idx < 33 ? "bg-amber-50" :
                       idx < 40 ? "bg-rose-50" :
                       "bg-purple-50";
+                    // Sticky left offsets for group สินเชื่อ (idx 0-5)
+                    const stickyLeftOffsets: Record<number, number> = { 0: 0, 1: 50, 2: 210, 3: 320, 4: 430, 5: 520 };
+                    const isSticky = idx < 6;
                     const sortable = SORTABLE_FIELDS.includes(
                       col.key as SortField,
                     );
@@ -722,8 +725,11 @@ export default function Contracts() {
                       <th
                         key={col.key}
                         className={`px-3 py-2 text-left whitespace-nowrap font-medium border-b border-gray-200 ${groupBg} ${
+                          isSticky ? "sticky z-20 after:absolute after:inset-y-0 after:right-0 after:w-px after:bg-slate-200" : ""
+                        } ${
                           sortable ? "cursor-pointer hover:brightness-95" : ""
                         }`}
+                        style={isSticky ? { left: stickyLeftOffsets[idx] } : undefined}
                         onClick={
                           sortable
                             ? () => toggleSort(col.key as SortField)
@@ -785,18 +791,26 @@ export default function Contracts() {
                       onMouseEnter={() => setHoveredRow(virtualRow.index)}
                       onMouseLeave={() => setHoveredRow(null)}
                     >
-                      {CONTRACT_COLUMNS.map((col) => (
-                        <td
-                          key={col.key}
-                          className={`px-3 py-2 whitespace-nowrap ${
-                            col.type === "money" || col.type === "number"
-                              ? "text-right tabular-nums"
-                              : ""
-                          }`}
-                        >
-                          {formatCell(col.key, row, seq)}
-                        </td>
-                      ))}
+                      {CONTRACT_COLUMNS.map((col, idx) => {
+                        const stickyLeftOffsets: Record<number, number> = { 0: 0, 1: 50, 2: 210, 3: 320, 4: 430, 5: 520 };
+                        const isSticky = idx < 6;
+                        const stickyBg = isHovered ? "bg-blue-50" : "bg-white";
+                        return (
+                          <td
+                            key={col.key}
+                            className={`px-3 py-2 whitespace-nowrap ${
+                              col.type === "money" || col.type === "number"
+                                ? "text-right tabular-nums"
+                                : ""
+                            } ${
+                              isSticky ? `sticky z-10 ${stickyBg} after:absolute after:inset-y-0 after:right-0 after:w-px after:bg-slate-100` : ""
+                            }`}
+                            style={isSticky ? { left: stickyLeftOffsets[idx] } : undefined}
+                          >
+                            {formatCell(col.key, row, seq)}
+                          </td>
+                        );
+                      })}
                     </tr>
                   );
                 })}
