@@ -1530,7 +1530,9 @@ export default function DebtReport() {
                               }
                             }
                             const isArrears = !dimmed && !!inst?.isArrears;
-                            const isCurrentPeriod = !dimmed && !!inst?.isCurrentPeriod;
+                            // Phase 53: ซ่อน BG สีฟ้าสำหรับสัญญาสถานะ ระงับสัญญา / สิ้นสุดสัญญา / หนี้เสีย (ขายเครื่อง)
+                            const isSpecialContractStatus = r.debtStatus === 'ระงับสัญญา' || r.debtStatus === 'สิ้นสุดสัญญา' || r.debtStatus === 'ขายเครื่อง';
+                            const isCurrentPeriod = !dimmed && !isSpecialContractStatus && !!inst?.isCurrentPeriod;
                             // Phase 9AI: future period = dueDate > today (not closed/suspended)
                             const todayStr = new Date().toISOString().slice(0, 10);
                             const isFuturePeriod = !dimmed && !isArrears && !isCurrentPeriod &&

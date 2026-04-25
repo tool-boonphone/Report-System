@@ -742,3 +742,9 @@ Task list:
 - [x] P52-2: แก้ closedByContract ใน listDebtTargetStream ให้ใช้ logic เดียวกัน
 - [x] P52-3: TypeScript check ผ่าน 0 errors
 - [x] P52-4: Checkpoint + Push GitHub
+
+### Phase 53 — แก้ isClosed edge case + ซ่อน BG สีฟ้าสำหรับสัญญาพิเศษ
+- [x] P53-1: แก้ isClosed — งวดที่ 1 (periodNo=1) แสดงยอดตั้งหนี้ปกติเสมอ แม้ maxNormalPeriod=1 (ใน listDebtTarget และ listDebtTargetStream)
+- [x] P53-2: ซ่อน BG สีฟ้า (isCurrentPeriod highlight) สำหรับสัญญาสถานะ ระงับสัญญา / สิ้นสุดสัญญา / หนี้เสีย (ใน DebtReport.tsx)
+- [x] P53-3: TypeScript check ผ่าน 0 errors
+- [ ] P53-4: Checkpoint + Push GitHub

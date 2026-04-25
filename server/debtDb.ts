@@ -862,7 +862,8 @@ export async function listDebtTarget(params: { section: SectionKey }) {
         // Phase 52 fix v3: >= maxClosedPeriod so the last normally-paid period is
         // also rendered as "ปิดค่างวดแล้ว" (it was paid as part of the lump-sum close).
         // Guard maxClosedPeriod > 0 so contracts with no normal receipts are unaffected.
-        const isClosed = closedByContract.has(extId) && maxClosedPeriod > 0 && periodNo >= maxClosedPeriod;
+        // Phase 53: periodNo > 1 — งวดที่ 1 แสดงยอดตั้งหนี้ปกติเสมอ แม้ maxClosedPeriod=1
+        const isClosed = closedByContract.has(extId) && maxClosedPeriod > 0 && periodNo > 1 && periodNo >= maxClosedPeriod;
         // Per-period suspended flag: period is >= the first suspended period.
         // Bad-debt contract → re-use the same flag but surface a different label.
         const isSuspended =
@@ -870,7 +871,6 @@ export async function listDebtTarget(params: { section: SectionKey }) {
           suspendedFromPeriod > 0 &&
           periodNo >= suspendedFromPeriod;
         const suspendLabel = isContractBadDebt ? "หนี้เสีย" : "ระงับสัญญา";
-
         // --- Compute display amount (non-closed periods) ---
         let amount = rawAmount;
         let principal = rawPrincipal;
@@ -1602,7 +1602,8 @@ export async function* listDebtTargetStream(params: {
         // Phase 52 fix v3: >= maxClosedPeriod so the last normally-paid period is
         // also rendered as "ปิดค่างวดแล้ว" (it was paid as part of the lump-sum close).
         // Guard maxClosedPeriod > 0 so contracts with no normal receipts are unaffected.
-        const isClosed = closedByContract.has(extId) && maxClosedPeriod > 0 && periodNo >= maxClosedPeriod;
+        // Phase 53: periodNo > 1 — งวดที่ 1 แสดงยอดตั้งหนี้ปกติเสมอ แม้ maxClosedPeriod=1
+        const isClosed = closedByContract.has(extId) && maxClosedPeriod > 0 && periodNo > 1 && periodNo >= maxClosedPeriod;
         const isSuspended = !isClosed && suspendedFromPeriod > 0 && periodNo >= suspendedFromPeriod;
         const suspendLabel = isContractBadDebt ? "หนี้เสีย" : "ระงับสัญญา";
         let amount = rawAmount;
