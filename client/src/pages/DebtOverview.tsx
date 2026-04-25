@@ -10,6 +10,9 @@ import { useNavActions } from "@/contexts/NavActionsContext";
 import { useSection } from "@/contexts/SectionContext";
 import { useAppAuth } from "@/hooks/useAppAuth";
 import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
   BadgeDollarSign,
   Banknote,
   CalendarDays,
@@ -18,6 +21,7 @@ import {
   Coins,
   Eye,
   EyeOff,
+  FileDown,
   Gavel,
   LockOpen,
   Percent,
@@ -484,9 +488,14 @@ export default function DebtOverview() {
   });
   // Toggle ยอดขายเครื่อง (มีผลต่อ รายรับรวม)
   const [showDeviceSale, setShowDeviceSale] = useState(true);
+  // Sort direction for month column: "asc" = เก่าสุดบนสุด, "desc" = ใหม่สุดบนสุด
+  const [monthSortDir, setMonthSortDir] = useState<"asc" | "desc">("asc");
+  // Hidden months (eye toggle per row)
+  const [hiddenMonths, setHiddenMonths] = useState<Set<string>>(new Set());
+  // Export loading state
+  const [isExporting, setIsExporting] = useState(false);
 
   const toggleBadge = (key: string) => {
-    if (key === "discount") return;
     setBadgeVisibility((prev) => ({ ...prev, [key]: !prev[key] }));
   };
   const toggleTargetBadge = (key: string) => {
@@ -672,19 +681,24 @@ export default function DebtOverview() {
       }
 
       // เป้าเก็บหนี้ — sum installments ที่ผ่าน filter
+      // หมายเหตุ: isClosed installments ยังอาจมี penalty/unlockFee ค้างอยู่
       for (const inst of r.installments) {
-        if (inst.isClosed || inst.isSuspended) continue;
+        if (inst.isSuspended) continue;
         if (dueDateFilter.size > 0 && !(inst.dueDate && dueDateFilter.has(inst.dueDate.slice(0, 7)))) continue;
         if (dueDateExact && inst.dueDate?.slice(0, 10) !== dueDateExact) continue;
-        row.targetPrincipal += inst.principal ?? 0;
-        row.targetInterest += inst.interest ?? 0;
-        row.targetFee += inst.fee ?? 0;
+        if (!inst.isClosed) {
+          // งวดที่ยังไม่ปิด: sum ทุก component
+          row.targetPrincipal += inst.principal ?? 0;
+          row.targetInterest += inst.interest ?? 0;
+          row.targetFee += inst.fee ?? 0;
+          // ยังไม่ครบกำหนด: principal only, dueDate > today
+          if (inst.dueDate && inst.dueDate.slice(0, 10) > todayStr) {
+            row.notYetDue += inst.principal ?? 0;
+          }
+        }
+        // penalty/unlockFee: sum จากทุกงวด (รวม isClosed) เพราะอาจมีค้างอยู่
         row.targetPenalty += principalOnly ? 0 : (inst.penalty ?? 0);
         row.targetUnlockFee += principalOnly ? 0 : (inst.unlockFee ?? 0);
-        // ยังไม่ครบกำหนด: principal only, dueDate > today
-        if (inst.dueDate && inst.dueDate.slice(0, 10) > todayStr) {
-          row.notYetDue += inst.principal ?? 0;
-        }
       }
     }
 
@@ -729,11 +743,15 @@ export default function DebtOverview() {
         (cv.badDebt ? row.collectedBadDebt : 0);
     });
 
-    // Sort by monthKey desc
+    // Sort by monthKey (default asc = เก่าสุดบนสุด)
     const result: MonthRow[] = [];
     map.forEach((v) => result.push(v));
-    return result.sort((a, b) => b.monthKey.localeCompare(a.monthKey));
-  }, [filteredTargetRows, filteredCollectedRows, principalOnly, dueDateFilter, dueDateExact, badgeVisibility, targetBadgeVisibility, todayStr]);
+    return result.sort((a, b) =>
+      monthSortDir === "asc"
+        ? a.monthKey.localeCompare(b.monthKey)
+        : b.monthKey.localeCompare(a.monthKey)
+    );
+  }, [filteredTargetRows, filteredCollectedRows, principalOnly, dueDateFilter, dueDateExact, badgeVisibility, targetBadgeVisibility, todayStr, monthSortDir]);
 
   /* ---- Grand totals (for badge display) ---- */
   const grandTarget = useMemo(() => {
@@ -872,6 +890,72 @@ export default function DebtOverview() {
             <StatusMultiSelect selected={statusFilter} onChange={setStatusFilter} />
             {/* ประเภทเครื่อง */}
             <ProductTypeMultiSelect options={productTypeOptions} selected={productTypeFilter} onChange={setProductTypeFilter} />
+            {/* เฉพาะเงินต้น toggle */}
+            <div className="flex items-center gap-1.5 h-9 px-3 rounded-md border border-gray-200 bg-white cursor-pointer select-none"
+              onClick={() => setPrincipalOnly((v) => !v)}
+              title="เปิด/ปิด เฉพาะเงินต้น (ไม่รวมค่าปรับ+ค่าปลดล็อกในเป้า)"
+            >
+              <Switch checked={principalOnly} onCheckedChange={setPrincipalOnly} id="principalOnly" onClick={(e) => e.stopPropagation()} />
+              <label htmlFor="principalOnly" className="text-xs text-gray-600 cursor-pointer">เฉพาะเงินต้น</label>
+            </div>
+            {/* Export Excel */}
+            {hasData && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5 h-9 text-xs"
+                disabled={isExporting}
+                onClick={async () => {
+                  if (!section) return;
+                  setIsExporting(true);
+                  const toastId = toast.loading("กำลังเตรียมไฟล์ Excel…");
+                  try {
+                    const rows = monthRows.filter((r) => !hiddenMonths.has(r.monthKey));
+                    const XLSX = await import("xlsx");
+                    const wb = XLSX.utils.book_new();
+                    const wsData = [
+                      ["เดือน", "จำนวนสัญญา", "เป้าเก็บหนี้", "ยอดเก็บหนี้", "% การเก็บ", "ยอดขายเครื่อง", "รายรับรวม", "ต้นทุน", "กำไรขั้นต้น", "ยังไม่ครบกำหนด"],
+                      ...rows.map((r) => {
+                        const deviceSale = showDeviceSale ? r.deviceSaleAmount : 0;
+                        const revenue = r.collectedTotal + deviceSale;
+                        const profit = revenue - r.cost;
+                        const rate = r.targetTotal > 0 ? ((r.collectedTotal / r.targetTotal) * 100).toFixed(1) + "%" : "0%";
+                        return [
+                          fmtMonthYear(r.monthKey), r.contractCount, r.targetTotal, r.collectedTotal, rate,
+                          r.deviceSaleAmount, revenue, r.cost, profit, r.notYetDue,
+                        ];
+                      }),
+                      // ผลรวม
+                      [
+                        "รวมทั้งหมด",
+                        rows.reduce((s, r) => s + r.contractCount, 0),
+                        rows.reduce((s, r) => s + r.targetTotal, 0),
+                        rows.reduce((s, r) => s + r.collectedTotal, 0),
+                        rows.reduce((s, r) => s + r.targetTotal, 0) > 0
+                          ? (rows.reduce((s, r) => s + r.collectedTotal, 0) / rows.reduce((s, r) => s + r.targetTotal, 0) * 100).toFixed(1) + "%"
+                          : "0%",
+                        rows.reduce((s, r) => s + r.deviceSaleAmount, 0),
+                        rows.reduce((s, r) => s + r.collectedTotal + (showDeviceSale ? r.deviceSaleAmount : 0), 0),
+                        rows.reduce((s, r) => s + r.cost, 0),
+                        rows.reduce((s, r) => s + r.collectedTotal + (showDeviceSale ? r.deviceSaleAmount : 0) - r.cost, 0),
+                        rows.reduce((s, r) => s + r.notYetDue, 0),
+                      ],
+                    ];
+                    const ws = XLSX.utils.aoa_to_sheet(wsData);
+                    XLSX.utils.book_append_sheet(wb, ws, "ภาพรวมหนี้");
+                    XLSX.writeFile(wb, `ภาพรวมหนี้_${section}_${new Date().toISOString().slice(0,10)}.xlsx`);
+                    toast.success("ดาวน์โหลดสำเร็จ", { id: toastId });
+                  } catch (e: any) {
+                    toast.error("เกิดข้อผิดพลาด: " + (e?.message ?? ""), { id: toastId });
+                  } finally {
+                    setIsExporting(false);
+                  }
+                }}
+              >
+                <FileDown className="w-4 h-4" />
+                Export Excel
+              </Button>
+            )}
             {/* Clear all */}
             {(search || statusFilter.size > 0 || approveDateFilter.size > 0 || dueDateFilter.size > 0 || productTypeFilter.size > 0 || dueDateExact) && (
               <button
@@ -918,7 +1002,7 @@ export default function DebtOverview() {
                 { key: "unlockFee", label: "ค่าปลดล็อก", value: grandCollected.unlockFee, icon: <LockOpen className="w-3.5 h-3.5" />, color: "bg-lime-50 text-lime-800 border-lime-200" },
                 { key: "overpaid", label: "ชำระเกิน", value: grandCollected.overpaid, icon: <TrendingUp className="w-3.5 h-3.5" />, color: "bg-emerald-50 text-emerald-800 border-emerald-200" },
                 { key: "badDebt", label: "หนี้เสีย", value: grandCollected.badDebt, icon: <TrendingDown className="w-3.5 h-3.5" />, color: "bg-red-50 text-red-800 border-red-200" },
-                { key: "discount", label: "ส่วนลด", value: grandCollected.discount, icon: <Tag className="w-3.5 h-3.5" />, color: "bg-gray-50 text-gray-500 border-gray-200", canToggle: false },
+                { key: "discount", label: "ส่วนลด", value: grandCollected.discount, icon: <Tag className="w-3.5 h-3.5" />, color: "bg-gray-50 text-gray-600 border-gray-200" },
               ]}
               visibility={badgeVisibility}
               onToggle={toggleBadge}
@@ -926,17 +1010,7 @@ export default function DebtOverview() {
               totalValue={grandCollected.total}
               totalColor="bg-green-600 text-white border-green-700"
             />
-            {/* เฉพาะเงินต้น toggle */}
-            <div className="flex items-center gap-2 mt-1">
-              <Switch
-                checked={principalOnly}
-                onCheckedChange={setPrincipalOnly}
-                id="principalOnly"
-              />
-              <label htmlFor="principalOnly" className="text-xs text-gray-600 cursor-pointer select-none">
-                เฉพาะเงินต้น (ไม่รวมค่าปรับ+ค่าปลดล็อกในเป้า)
-              </label>
-            </div>
+
           </div>
         )}
 
@@ -971,17 +1045,27 @@ export default function DebtOverview() {
               <table className="w-full text-sm border-collapse min-w-[1200px]">
                 <thead>
                   <tr className="bg-gradient-to-r from-slate-700 to-slate-800 text-white">
-                    <th className="px-3 py-3 text-left font-semibold whitespace-nowrap sticky left-0 bg-slate-700 z-10 min-w-[100px]">เดือน</th>
-                    <th className="px-3 py-3 text-right font-semibold whitespace-nowrap min-w-[90px]">จำนวนสัญญา</th>
-                    <th className="px-3 py-3 text-right font-semibold whitespace-nowrap min-w-[140px] bg-blue-800">เป้าเก็บหนี้</th>
-                    <th className="px-3 py-3 text-right font-semibold whitespace-nowrap min-w-[140px] bg-green-800">ยอดเก็บหนี้</th>
-                    <th className="px-3 py-3 text-right font-semibold whitespace-nowrap min-w-[90px]">% การเก็บ</th>
-                    <th className="px-3 py-3 text-right font-semibold whitespace-nowrap min-w-[140px]">
+                    <th className="px-3 py-3 text-left font-semibold whitespace-nowrap sticky left-0 bg-slate-700 z-10 min-w-[120px]">
+                      <button
+                        type="button"
+                        onClick={() => setMonthSortDir((d) => d === "asc" ? "desc" : "asc")}
+                        className="flex items-center gap-1 text-white hover:text-blue-200 transition-colors"
+                        title={`เรียงลำดับ: ${`เดือน ${`เก่าสุดบนสุด`}`}`}
+                      >
+                        เดือน
+                        {monthSortDir === "asc" ? <ArrowUp className="w-3.5 h-3.5" /> : <ArrowDown className="w-3.5 h-3.5" />}
+                      </button>
+                    </th>
+                    <th className="px-3 py-3 text-right font-semibold whitespace-nowrap text-white min-w-[90px]">จำนวนสัญญา</th>
+                    <th className="px-3 py-3 text-right font-semibold whitespace-nowrap text-white min-w-[140px] bg-blue-800">เป้าเก็บหนี้</th>
+                    <th className="px-3 py-3 text-right font-semibold whitespace-nowrap text-white min-w-[140px] bg-green-800">ยอดเก็บหนี้</th>
+                    <th className="px-3 py-3 text-right font-semibold whitespace-nowrap text-white min-w-[90px]">% การเก็บ</th>
+                    <th className="px-3 py-3 text-right font-semibold whitespace-nowrap text-white min-w-[140px]">
                       <div className="flex items-center justify-end gap-1">
                         <button
                           type="button"
                           onClick={() => setShowDeviceSale((v) => !v)}
-                          className="opacity-70 hover:opacity-100 transition-opacity"
+                          className="opacity-70 hover:opacity-100 transition-opacity text-white"
                           title={showDeviceSale ? "ซ่อนยอดขายเครื่อง" : "แสดงยอดขายเครื่อง"}
                         >
                           {showDeviceSale ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
@@ -989,19 +1073,21 @@ export default function DebtOverview() {
                         ยอดขายเครื่อง
                       </div>
                     </th>
-                    <th className="px-3 py-3 text-right font-semibold whitespace-nowrap min-w-[140px] bg-emerald-800">รายรับรวม</th>
-                    <th className="px-3 py-3 text-right font-semibold whitespace-nowrap min-w-[140px]">ต้นทุน</th>
-                    <th className="px-3 py-3 text-right font-semibold whitespace-nowrap min-w-[140px] bg-amber-700">กำไรขั้นต้น</th>
-                    <th className="px-3 py-3 text-right font-semibold whitespace-nowrap min-w-[140px]">ยังไม่ครบกำหนด</th>
+                    <th className="px-3 py-3 text-right font-semibold whitespace-nowrap text-white min-w-[140px] bg-emerald-800">รายรับรวม</th>
+                    <th className="px-3 py-3 text-right font-semibold whitespace-nowrap text-white min-w-[140px]">ต้นทุน</th>
+                    <th className="px-3 py-3 text-right font-semibold whitespace-nowrap text-white min-w-[140px] bg-amber-700">กำไรขั้นต้น</th>
+                    <th className="px-3 py-3 text-right font-semibold whitespace-nowrap text-white min-w-[140px]">ยังไม่ครบกำหนด</th>
+                    <th className="px-3 py-3 text-center font-semibold whitespace-nowrap text-white min-w-[50px]">แสดง</th>
                   </tr>
                 </thead>
                 <tbody>
                   {monthRows.length === 0 && (
                     <tr>
-                      <td colSpan={10} className="text-center py-12 text-gray-400">ไม่มีข้อมูล</td>
+                      <td colSpan={11} className="text-center py-12 text-gray-400">ไม่มีข้อมูล</td>
                     </tr>
                   )}
                   {monthRows.map((row, idx) => {
+                    const isHidden = hiddenMonths.has(row.monthKey);
                     const collectionRate = row.targetTotal > 0 ? (row.collectedTotal / row.targetTotal) * 100 : 0;
                     const deviceSale = showDeviceSale ? row.deviceSaleAmount : 0;
                     const revenue = row.collectedTotal + deviceSale;
@@ -1019,8 +1105,8 @@ export default function DebtOverview() {
                     const profitColor = grossProfit > 0 ? "text-emerald-700 font-semibold" : grossProfit < 0 ? "text-red-600 font-semibold" : "text-gray-600";
 
                     return (
+                      <React.Fragment key={row.monthKey}>
                       <tr
-                        key={row.monthKey}
                         className={[
                           "border-b border-gray-100 hover:bg-blue-50/40 transition-colors",
                           isEven ? "bg-white" : "bg-slate-50/60",
@@ -1072,7 +1158,39 @@ export default function DebtOverview() {
                         <td className="px-3 py-2.5 text-right text-slate-500">
                           {fmtMoney(row.notYetDue)}
                         </td>
+                        {/* Eye toggle */}
+                        <td className="px-3 py-2.5 text-center">
+                          <button
+                            type="button"
+                            onClick={() => setHiddenMonths((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(row.monthKey)) next.delete(row.monthKey);
+                              else next.add(row.monthKey);
+                              return next;
+                            })}
+                            className={[
+                              "p-1 rounded transition-colors",
+                              hiddenMonths.has(row.monthKey)
+                                ? "text-gray-300 hover:text-gray-500"
+                                : "text-slate-500 hover:text-slate-700",
+                            ].join(" ")}
+                            title={hiddenMonths.has(row.monthKey) ? "แสดงเดือนนี้" : "ซ่อนเดือนนี้"}
+                          >
+                            {hiddenMonths.has(row.monthKey)
+                              ? <EyeOff className="w-4 h-4" />
+                              : <Eye className="w-4 h-4" />}
+                          </button>
+                        </td>
                       </tr>
+                      {/* Hidden month detail row */}
+                      {isHidden && (
+                        <tr className={isEven ? "bg-white" : "bg-slate-50/60"}>
+                          <td colSpan={11} className="px-6 py-1.5 text-xs text-gray-400 italic border-b border-gray-100">
+                            ซ่อนแล้ว — คลิกไอคอนตาเพื่อแสดงอีกครั้ง
+                          </td>
+                        </tr>
+                      )}
+                      </React.Fragment>
                     );
                   })}
                 </tbody>
@@ -1104,6 +1222,7 @@ export default function DebtOverview() {
                         <td className="px-3 py-3 text-right text-slate-200">{fmtMoney(totalCost)}</td>
                         <td className={["px-3 py-3 text-right", totalProfit >= 0 ? "text-amber-200" : "text-red-300"].join(" ")}>{fmtMoney(totalProfit)}</td>
                         <td className="px-3 py-3 text-right text-slate-300">{fmtMoney(totalNotYetDue)}</td>
+                        <td></td>
                       </tr>
                     </tfoot>
                   );

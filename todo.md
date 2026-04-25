@@ -718,3 +718,17 @@ Task list:
 
 ### Bug Fix — เป้าเก็บหนี้: ยอดหนี้รวมไม่เท่ากับ 0 เมื่อทุก component = 0
 - [x] BugFix-TotalDebt-Zero-1: แก้ไข arrears pass (Phase 49) — ไม่ fallback ไป baselineAmount เมื่อ overpaidApplied > 0 เพราะ baseNet=0 ในกรณีนั้นหมายความว่า overpaid หักครบทุก component แล้ว (ถูกต้อง) ไม่ใช่ API ส่ง 0 มาผิด แก้ในทั้ง listDebtTarget และ listDebtTargetStream
+
+### Phase 50 — แก้ไขหน้าภาพรวมหนี้ (DebtOverview) หลายจุด
+- [x] P50-1: ลบเมนู "สรุปหนี้" ออกจาก sidebar navigation
+- [x] P50-2: แก้สีหัวตาราง (header) ให้ข้อความไม่กลืนกับพื้นหลัง
+- [x] P50-3: เรียงลำดับเดือนใหม่ เก่าสุดอยู่บนสุด + สามารถสลับได้ที่คอลัมน์เดือน
+- [x] P50-4: เพิ่มปุ่มเปิด/ปิดตาของแต่ละเดือน (toggle visibility per row)
+- [x] P50-5: เพิ่ม row ผลรวมล่างสุดของตาราง
+- [x] P50-6: ย้าย toggle "เฉพาะเงินต้น" ไปไว้ในส่วนฟิลเตอร์
+- [x] P50-7: เพิ่มปุ่ม Export Excel ของตารางภาพรวมหนี้ไว้ข้างฟิลเตอร์
+- [x] P50-8: แก้ไขส่วนลดไม่ต้องขีดฆ่า
+- [x] P50-9: แก้ไข aggregation penalty/unlockFee ให้ sum จากทุกงวดรวม isClosed ด้วย
+- [~] P50-10: เดือน มี.ค. 69 และ เม.ษ. 69 — fmtMonthYear ถูกต้องแล้ว น่าจะเป็นข้อมูลจริงยังไม่มีใน cache (ต้อง deploy แล้ว prewarm ใหม่)
+- [x] P50-11: ฟิลเตอร์สถานะสัญญา — statusFilter ใช้ debtStatus ทั้ง filteredTargetRows และ filteredCollectedRows อยู่แล้ว ปัญหาเดิมเพราะ debtStatus ของ collected rows ไม่ถูก set (แก้ไขแล้วใน BugFix-Collected-Status-1)
+- [x] P50-12: ปรับวิธีโหลดข้อมูล — DebtOverview ใช้ stream endpoint เหมือนหน้ารายงานหนี้อยู่แล้ว (ไม่ต้องปรับ)
