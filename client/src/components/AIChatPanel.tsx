@@ -1,12 +1,18 @@
 /**
- * AIChatPanel — slide-in panel ทางขวา
- * เปิด/ปิดด้วยไอคอน AI ใน TopNav
- * ถาม/ตอบข้อมูลจาก DB ตาม section ปัจจุบัน
+ * AIChatPanel — น้องเป๋าตัง AI Chat Panel
+ *
+ * Phase 41: เปลี่ยนจาก overlay popup เป็น fixed right panel
+ * - ใช้ useAiChat() สำหรับ isOpen/onClose (ไม่รับ props)
+ * - ส่ง userName จาก useAppAuth().me?.fullName
+ * - เพิ่ม greeting message อัตโนมัติเมื่อ panel เปิดครั้งแรก
+ * - fixed right, width 400px — AppShell จัดการ margin ให้ content ไม่ถูกทับ
  */
 import { useState, useRef, useEffect } from "react";
-import { X, Sparkles, Send, Loader2, RotateCcw } from "lucide-react";
+import { X, Send, Loader2, RotateCcw } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { useSection } from "@/contexts/SectionContext";
+import { useAiChat } from "@/contexts/AiChatContext";
+import { useAppAuth } from "@/hooks/useAppAuth";
 import { Streamdown } from "streamdown";
 import { cn } from "@/lib/utils";
 
@@ -23,19 +29,45 @@ const SUGGESTED_PROMPTS = [
   "พาร์ทเนอร์ที่มีสัญญามากที่สุด",
 ];
 
-interface AIChatPanelProps {
-  isOpen: boolean;
-  onClose: () => void;
+/** Gradient sparkle avatar สำหรับน้องเป๋าตัง */
+function PaotangAvatar({ size = "sm" }: { size?: "sm" | "lg" }) {
+  const cls = size === "lg" ? "w-12 h-12" : "w-7 h-7";
+  return (
+    <div
+      className={cn(
+        cls,
+        "rounded-full flex items-center justify-center shrink-0 text-white font-semibold",
+        "bg-gradient-to-br from-purple-500 via-pink-500 to-blue-500",
+      )}
+    >
+      {size === "lg" ? (
+        <svg viewBox="0 0 24 24" fill="none" className="w-6 h-6" aria-hidden="true">
+          <path d="M12 2l1.5 4.5L18 8l-4.5 1.5L12 14l-1.5-4.5L6 8l4.5-1.5L12 2z" fill="white" />
+          <path d="M19 3l.75 2.25L22 6l-2.25.75L19 9l-.75-2.25L16 6l2.25-.75L19 3z" fill="white" opacity="0.8" />
+        </svg>
+      ) : (
+        <svg viewBox="0 0 24 24" fill="none" className="w-3.5 h-3.5" aria-hidden="true">
+          <path d="M12 2l1.5 4.5L18 8l-4.5 1.5L12 14l-1.5-4.5L6 8l4.5-1.5L12 2z" fill="white" />
+        </svg>
+      )}
+    </div>
+  );
 }
 
-export function AIChatPanel({ isOpen, onClose }: AIChatPanelProps) {
+export function AIChatPanel() {
+  const { aiChatOpen, setAiChatOpen } = useAiChat();
   const { section } = useSection();
+  const { me } = useAppAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
+  const [hasGreeted, setHasGreeted] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const sectionLabel = section ?? "Boonphone";
+
+  // ชื่อผู้ใช้สำหรับ AI เรียก
+  const userName = me?.fullName ?? me?.username ?? "";
 
   const chatMutation = trpc.ai.chat.useMutation({
     onSuccess: (data) => {
@@ -49,7 +81,7 @@ export function AIChatPanel({ isOpen, onClose }: AIChatPanelProps) {
         ...prev,
         {
           role: "assistant",
-          content: `ขออภัย เกิดข้อผิดพลาด: ${err.message}`,
+          content: `ขออภัยนะคะ เกิดข้อผิดพลาด: ${err.message} ลองใหม่อีกครั้งได้เลยค่ะ`,
         },
       ]);
     },
@@ -64,10 +96,33 @@ export function AIChatPanel({ isOpen, onClose }: AIChatPanelProps) {
 
   // Focus input เมื่อ panel เปิด
   useEffect(() => {
-    if (isOpen) {
+    if (aiChatOpen) {
       setTimeout(() => inputRef.current?.focus(), 300);
     }
-  }, [isOpen]);
+  }, [aiChatOpen]);
+
+  // Greeting message อัตโนมัติเมื่อเปิด panel ครั้งแรก
+  useEffect(() => {
+    if (aiChatOpen && !hasGreeted) {
+      setHasGreeted(true);
+      const rawName = (userName ?? "").trim();
+      const displayName = rawName.startsWith("พี่")
+        ? rawName
+        : rawName
+          ? `คุณ${rawName}`
+          : "";
+      const greeting = displayName
+        ? `สวัสดีค่ะ ${displayName}! หนูคือน้องเป๋าตัง ผู้ช่วย AI ของระบบ Report System ค่ะ 😊\n\nวันนี้กำลังดูข้อมูล **${sectionLabel}** อยู่นะคะ มีอะไรให้หนูช่วยสืบค้นหรือวิเคราะห์ข้อมูลได้เลยค่ะ`
+        : `สวัสดีค่ะ! หนูคือน้องเป๋าตัง ผู้ช่วย AI ของระบบ Report System ค่ะ 😊\n\nวันนี้กำลังดูข้อมูล **${sectionLabel}** อยู่นะคะ มีอะไรให้หนูช่วยสืบค้นหรือวิเคราะห์ข้อมูลได้เลยค่ะ`;
+      setMessages([{ role: "assistant", content: greeting }]);
+    }
+  }, [aiChatOpen, hasGreeted, userName, sectionLabel]);
+
+  // Reset greeting เมื่อ section เปลี่ยน (เพื่อให้ทักทายใหม่กับ section ใหม่)
+  useEffect(() => {
+    setHasGreeted(false);
+    setMessages([]);
+  }, [section]);
 
   const sendMessage = (content: string) => {
     if (!content.trim() || chatMutation.isPending) return;
@@ -79,7 +134,8 @@ export function AIChatPanel({ isOpen, onClose }: AIChatPanelProps) {
     setInput("");
     chatMutation.mutate({
       messages: newMessages,
-      section: section ?? "Boonphone",
+      section: sectionLabel,
+      userName,
     });
   };
 
@@ -93,36 +149,35 @@ export function AIChatPanel({ isOpen, onClose }: AIChatPanelProps) {
   const clearChat = () => {
     setMessages([]);
     setInput("");
+    setHasGreeted(false);
   };
 
   return (
     <>
-      {/* Backdrop (mobile) */}
-      {isOpen && (
+      {/* Backdrop (mobile only) — ปิด panel เมื่อแตะนอก panel บน mobile */}
+      {aiChatOpen && (
         <div
           className="fixed inset-0 bg-black/20 z-40 lg:hidden"
-          onClick={onClose}
+          onClick={() => setAiChatOpen(false)}
         />
       )}
 
-      {/* Panel */}
+      {/* Panel — fixed right, width 400px
+          ใช้ translate-x animation เพื่อ slide in/out
+          AppShell จัดการ marginRight ของ main content */}
       <div
         className={cn(
-          "fixed top-0 right-0 h-full w-[380px] max-w-[100vw] bg-white shadow-2xl z-50 flex flex-col",
+          "fixed top-0 right-0 h-full w-[400px] max-w-[100vw] bg-white shadow-2xl z-50 flex flex-col",
           "transition-transform duration-300 ease-in-out",
-          isOpen ? "translate-x-0" : "translate-x-full",
+          aiChatOpen ? "translate-x-0" : "translate-x-full",
         )}
       >
         {/* Header */}
-        <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-200 bg-gradient-to-r from-blue-600 to-indigo-600 text-white shrink-0">
-          <div className="flex items-center gap-2 flex-1 min-w-0">
-            <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center shrink-0">
-              <Sparkles className="w-4 h-4" />
-            </div>
-            <div className="min-w-0">
-              <p className="font-semibold text-sm leading-tight">AI Assistant</p>
-              <p className="text-xs text-blue-100 truncate">{sectionLabel}</p>
-            </div>
+        <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-200 shrink-0 bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 text-white">
+          <PaotangAvatar size="sm" />
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-sm leading-tight">น้องเป๋าตัง</p>
+            <p className="text-xs text-white/70 truncate">AI Assistant · {sectionLabel}</p>
           </div>
           <div className="flex items-center gap-1">
             {messages.length > 0 && (
@@ -135,8 +190,9 @@ export function AIChatPanel({ isOpen, onClose }: AIChatPanelProps) {
               </button>
             )}
             <button
-              onClick={onClose}
+              onClick={() => setAiChatOpen(false)}
               className="p-1.5 rounded-lg hover:bg-white/20 transition-colors"
+              title="ปิด"
             >
               <X className="w-4 h-4" />
             </button>
@@ -149,17 +205,15 @@ export function AIChatPanel({ isOpen, onClose }: AIChatPanelProps) {
           className="flex-1 overflow-y-auto px-4 py-4 space-y-4"
         >
           {messages.length === 0 ? (
-            /* Empty state */
+            /* Empty state — แสดงเมื่อยังไม่มี greeting (ช่วงโหลด) */
             <div className="flex flex-col items-center justify-center h-full gap-6 text-center">
-              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg">
-                <Sparkles className="w-8 h-8 text-white" />
-              </div>
+              <PaotangAvatar size="lg" />
               <div>
                 <p className="font-semibold text-gray-800 text-base">
-                  สวัสดี! ฉันคือ AI Assistant
+                  น้องเป๋าตัง
                 </p>
                 <p className="text-sm text-gray-500 mt-1">
-                  ถามฉันเกี่ยวกับข้อมูล {sectionLabel} ได้เลย
+                  AI Assistant สำหรับข้อมูล {sectionLabel}
                 </p>
               </div>
               <div className="w-full space-y-2">
@@ -170,7 +224,7 @@ export function AIChatPanel({ isOpen, onClose }: AIChatPanelProps) {
                   <button
                     key={prompt}
                     onClick={() => sendMessage(prompt)}
-                    className="w-full text-left text-sm px-3 py-2.5 rounded-xl bg-gray-50 hover:bg-blue-50 hover:text-blue-700 border border-gray-200 hover:border-blue-200 transition-colors"
+                    className="w-full text-left text-sm px-3 py-2.5 rounded-xl bg-gray-50 hover:bg-purple-50 hover:text-purple-700 border border-gray-200 hover:border-purple-200 transition-colors"
                   >
                     {prompt}
                   </button>
@@ -189,17 +243,13 @@ export function AIChatPanel({ isOpen, onClose }: AIChatPanelProps) {
                   )}
                 >
                   {/* Avatar */}
-                  <div
-                    className={cn(
-                      "w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-xs font-semibold mt-0.5",
-                      msg.role === "user"
-                        ? "bg-blue-600 text-white"
-                        : "bg-gradient-to-br from-blue-500 to-indigo-600 text-white",
-                    )}
-                  >
-                    {msg.role === "user" ? "ฉ" : <Sparkles className="w-3.5 h-3.5" />}
-                  </div>
-
+                  {msg.role === "assistant" ? (
+                    <PaotangAvatar size="sm" />
+                  ) : (
+                    <div className="w-7 h-7 rounded-full bg-blue-600 text-white flex items-center justify-center shrink-0 text-xs font-semibold mt-0.5">
+                      {userName ? userName.charAt(0).toUpperCase() : "ฉ"}
+                    </div>
+                  )}
                   {/* Bubble */}
                   <div
                     className={cn(
@@ -223,9 +273,7 @@ export function AIChatPanel({ isOpen, onClose }: AIChatPanelProps) {
               {/* Loading indicator */}
               {chatMutation.isPending && (
                 <div className="flex gap-2">
-                  <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shrink-0">
-                    <Sparkles className="w-3.5 h-3.5 text-white" />
-                  </div>
+                  <PaotangAvatar size="sm" />
                   <div className="bg-gray-100 rounded-2xl rounded-tl-sm px-4 py-3">
                     <div className="flex gap-1 items-center">
                       <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:0ms]" />
@@ -233,6 +281,24 @@ export function AIChatPanel({ isOpen, onClose }: AIChatPanelProps) {
                       <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:300ms]" />
                     </div>
                   </div>
+                </div>
+              )}
+
+              {/* Suggested prompts (แสดงหลัง greeting) */}
+              {messages.length === 1 && messages[0].role === "assistant" && (
+                <div className="space-y-1.5 pt-2">
+                  <p className="text-xs text-gray-400 font-medium uppercase tracking-wide text-center">
+                    คำถามแนะนำ
+                  </p>
+                  {SUGGESTED_PROMPTS.map((prompt) => (
+                    <button
+                      key={prompt}
+                      onClick={() => sendMessage(prompt)}
+                      className="w-full text-left text-sm px-3 py-2 rounded-xl bg-gray-50 hover:bg-purple-50 hover:text-purple-700 border border-gray-200 hover:border-purple-200 transition-colors"
+                    >
+                      {prompt}
+                    </button>
+                  ))}
                 </div>
               )}
             </>
@@ -247,9 +313,9 @@ export function AIChatPanel({ isOpen, onClose }: AIChatPanelProps) {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={`ถามเกี่ยวกับข้อมูล ${sectionLabel}...`}
+              placeholder={`ถามน้องเป๋าตังเกี่ยวกับ ${sectionLabel}...`}
               rows={1}
-              className="flex-1 resize-none rounded-xl border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent max-h-32 overflow-y-auto"
+              className="flex-1 resize-none rounded-xl border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent max-h-32 overflow-y-auto"
               style={{ minHeight: "42px" }}
               onInput={(e) => {
                 const el = e.currentTarget;
@@ -260,7 +326,7 @@ export function AIChatPanel({ isOpen, onClose }: AIChatPanelProps) {
             <button
               onClick={() => sendMessage(input)}
               disabled={!input.trim() || chatMutation.isPending}
-              className="w-10 h-10 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white flex items-center justify-center transition-colors shrink-0"
+              className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 disabled:from-gray-300 disabled:to-gray-300 text-white flex items-center justify-center transition-all shrink-0"
             >
               {chatMutation.isPending ? (
                 <Loader2 className="w-4 h-4 animate-spin" />

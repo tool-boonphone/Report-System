@@ -175,3 +175,27 @@
     }
   }
 }
+
+/* Phase 41: AI Chat sparkle icon animation */
+@keyframes ai-sparkle {
+  0%, 100% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+  25% {
+    transform: scale(1.15) rotate(5deg);
+    opacity: 0.9;
+  }
+  50% {
+    transform: scale(1.05) rotate(-3deg);
+    opacity: 1;
+  }
+  75% {
+    transform: scale(1.1) rotate(3deg);
+    opacity: 0.95;
+  }
+}
+
+.animate-ai-sparkle {
+  animation: ai-sparkle 3s ease-in-out infinite;
+}

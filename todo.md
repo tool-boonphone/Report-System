@@ -656,3 +656,14 @@ Task list:
 - [x] P40-7: Unify debtDb.ts: ลบ isFF365 branch ใน listDebtCollected — ใช้ Boonphone path เดียวกัน
 - [x] P40-8: Unify mappers.ts: ให้ FF365 installments ใช้ field mapping เดียวกับ Boonphone (rawJson fields)
 - [x] P40-9: ทดสอบ TypeScript, restart server, commit + checkpoint
+
+### Phase 41 — AI Chat Panel "น้องเป๋าตัง" (Side-by-Side Layout)
+- [x] P41-1: สร้าง server/routers/ai.ts — AI chat tRPC router, query DB + LLM, userName parameter, system prompt น้องเป๋าตัง
+- [x] P41-2: Register aiRouter ใน server/routers.ts
+- [x] P41-3: สร้าง client/src/contexts/AiChatContext.tsx — share aiChatOpen state ระหว่าง TopNav และ AppShell
+- [x] P41-4: เพิ่ม AiChatProvider ใน client/src/main.tsx
+- [x] P41-5: แก้ TopNav.tsx — ใช้ useAiChat() แทน local state, gradient sparkle icon + animation, ลบ AIChatPanel ออก
+- [x] P41-6: แก้ AppShell.tsx — side-by-side layout, marginRight เมื่อ panel เปิด, mount AIChatPanel
+- [x] P41-7: เขียน AIChatPanel.tsx ใหม่ — fixed right panel, ใช้ useAiChat()/useAppAuth(), greeting message อัตโนมัติ, suggested prompts หลัง greeting
+- [x] P41-8: เพิ่ม CSS animation animate-ai-sparkle ใน index.css
+- [x] P41-9: TypeScript check ผ่าน, commit + push GitHub, checkpoint

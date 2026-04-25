@@ -1,9 +1,11 @@
 import { useAppAuth } from "@/hooks/useAppAuth";
 import { useSection } from "@/contexts/SectionContext";
+import { useAiChat } from "@/contexts/AiChatContext";
 import { Loader2 } from "lucide-react";
 import { type ReactNode, useEffect } from "react";
 import { useLocation } from "wouter";
 import { TopNav } from "./TopNav";
+import { AIChatPanel } from "./AIChatPanel";
 
 /**
  * AppShell guards authenticated routes:
@@ -21,6 +23,7 @@ export function AppShell({
 }) {
   const { isLoading, isAuthenticated } = useAppAuth();
   const { hasSection } = useSection();
+  const { aiChatOpen } = useAiChat();
   const [, navigate] = useLocation();
 
   useEffect(() => {
@@ -43,9 +46,20 @@ export function AppShell({
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 flex flex-col">
       <TopNav />
-      <main>{children}</main>
+      {/* Content area: flex row เพื่อรองรับ side-by-side AI panel */}
+      <div className="flex flex-1 min-h-0 relative">
+        {/* Main content — transition margin เมื่อ panel เปิด */}
+        <main
+          className="flex-1 min-w-0 transition-all duration-300"
+          style={aiChatOpen ? { marginRight: "400px" } : {}}
+        >
+          {children}
+        </main>
+        {/* AI Chat Panel — fixed right, ไม่ทับ content */}
+        <AIChatPanel />
+      </div>
     </div>
   );
 }

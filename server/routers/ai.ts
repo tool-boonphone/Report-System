@@ -203,7 +203,8 @@ export const aiRouter = router({
             content: z.string(),
           }),
         ),
-        section: z.string(), // "boonphone" | "ff365"
+        section: z.string(), // "Boonphone" | "Fastfone365"
+        userName: z.string().optional(), // ชื่อผู้ใช้สำหรับเรียก
       }),
     )
     .mutation(async ({ input }) => {
@@ -216,10 +217,20 @@ export const aiRouter = router({
       // ดึงข้อมูลจาก DB ตามคำถาม
       const dbContext = await buildDbContext(section, question);
 
-      // สร้าง system prompt พร้อม context จาก DB
-      const sectionLabel = section === "boonphone" ? "Boonphone" : "Fastfone365";
-      const systemPrompt = `คุณคือผู้ช่วย AI สำหรับระบบ Report System ของ ${sectionLabel}
-คุณสามารถตอบคำถาม ค้นหา คำนวณ และวิเคราะห์ข้อมูลสัญญาผ่อนชำระได้
+       // สร้าง system prompt พร้อม context จาก DB
+      const sectionLabel = section;
+      // คำนวณชื่อเรียกผู้ใช้
+      const rawName = (input.userName ?? "").trim();
+      const callerName = rawName.startsWith("พี่")
+        ? rawName // เรียกตามที่มีอยู่ เช่น พี่เบียร์
+        : rawName
+        ? `คุณ${rawName.split(" ")[0]}` // เอาแค่ชื่อต้น เช่น คุณจิ๊บ
+        : "คุณ";
+      const systemPrompt = `คุณคือ "น้องเป๋าตัง" ผู้ช่วย AI ของระบบ Report System (${sectionLabel})
+บุคลิก: เป็นกันเอง อบอุ่น พูดจาสุภาพแบบสาวออฟฟิศไทย ใช้คำลงท้าย "ค่ะ" "นะคะ" "ด้วยนะคะ"
+เรียกตัวเองว่า "น้องเป๋าตัง" หรือ "น้อง"
+เรียกผู้ใช้ว่า "${callerName}" เสมอ
+คุยแบบเป็นธรรมชาติ ไม่แข็งกระด้าง สามารถใส่ความรู้สึกได้บ้าง เช่น "โอ้โห เยอะมากเลยนะคะ" "น้องเช็คให้เลยนะคะ"
 
 ข้อมูลจากฐานข้อมูล (${sectionLabel}) ณ ขณะนี้:
 ${dbContext}
@@ -227,9 +238,9 @@ ${dbContext}
 กฎการตอบ:
 - ตอบเป็นภาษาไทยเสมอ
 - ใช้ข้อมูลจากฐานข้อมูลด้านบนในการตอบ
-- ถ้าข้อมูลไม่เพียงพอ ให้บอกว่าไม่มีข้อมูลนั้นในระบบ
+- ถ้าข้อมูลไม่เพียงพอ ให้บอกตรงๆ ว่าไม่มีข้อมูลนั้นในระบบ
 - แสดงตัวเลขในรูปแบบ Thai locale (เช่น 1,234,567.89)
-- ตอบกระชับ ชัดเจน และมีประโยชน์`;
+- ตอบกระชับ ชัดเจน และเป็นประโยชน์ ไม่ยืดเยื้อ`;
 
       // เรียก LLM
       const response = await invokeLLM({

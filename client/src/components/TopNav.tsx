@@ -1,6 +1,7 @@
 import { BRAND_LOGOS } from "@/config/brand";
 import { useNavActions } from "@/contexts/NavActionsContext";
 import { useSection } from "@/contexts/SectionContext";
+import { useAiChat } from "@/contexts/AiChatContext";
 import { useAppAuth } from "@/hooks/useAppAuth";
 import { cn } from "@/lib/utils";
 import { SECTIONS } from "@shared/const";
@@ -13,12 +14,10 @@ import {
   Menu as MenuIcon,
   Settings,
   Shield,
-  Sparkles,
   TrendingDown,
   Users,
   X,
 } from "lucide-react";
-import { AIChatPanel } from "./AIChatPanel";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Link, useLocation } from "wouter";
@@ -45,16 +44,57 @@ const SETTINGS_NAV: NavItem[] = [
   { label: "จัดการสิทธิ์", path: "/settings/groups", icon: Shield, menuCode: "settings_groups" },
 ];
 
+/**
+ * AI Chat icon — gradient sparkles with subtle pulse animation
+ * ใช้ SVG แทน lucide เพื่อให้ใส่ gradient ได้
+ */
+function AiChatIcon({ active }: { active: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className={cn("w-[18px] h-[18px]", active ? "" : "animate-ai-sparkle")}
+      aria-hidden="true"
+    >
+      <defs>
+        <linearGradient id="aiGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#a855f7" />
+          <stop offset="50%" stopColor="#ec4899" />
+          <stop offset="100%" stopColor="#3b82f6" />
+        </linearGradient>
+      </defs>
+      {/* Main sparkle star */}
+      <path
+        d="M12 2l1.5 4.5L18 8l-4.5 1.5L12 14l-1.5-4.5L6 8l4.5-1.5L12 2z"
+        fill="url(#aiGrad)"
+      />
+      {/* Small sparkle top-right */}
+      <path
+        d="M19 3l.75 2.25L22 6l-2.25.75L19 9l-.75-2.25L16 6l2.25-.75L19 3z"
+        fill="url(#aiGrad)"
+        opacity="0.8"
+      />
+      {/* Small sparkle bottom-left */}
+      <path
+        d="M5 15l.6 1.8L7.4 17.4l-1.8.6L5 20l-.6-1.8L2.6 17.4l1.8-.6L5 15z"
+        fill="url(#aiGrad)"
+        opacity="0.6"
+      />
+    </svg>
+  );
+}
+
 export function TopNav() {
   const { me, can, logout } = useAppAuth();
   const { section, setSection, clearSection } = useSection();
   const { actions } = useNavActions();
+  const { aiChatOpen, toggleAiChat } = useAiChat();
   const [location, navigate] = useLocation();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [sectionMenuOpen, setSectionMenuOpen] = useState(false);
   const [settingsMenuOpen, setSettingsMenuOpen] = useState(false);
-  const [aiChatOpen, setAiChatOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const sectionMenuRef = useRef<HTMLDivElement>(null);
   const settingsMenuRef = useRef<HTMLDivElement>(null);
@@ -199,7 +239,7 @@ export function TopNav() {
             </div>
           </div>
 
-          {/* Right: injected actions + settings + user */}
+          {/* Right: injected actions + settings + AI chat + user */}
           <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
             <div className="hidden md:flex items-center gap-2">{actions}</div>
 
@@ -252,22 +292,24 @@ export function TopNav() {
               </div>
             )}
 
-            {/* AI Chat button — between settings and profile */}
+            {/* AI Chat button — between settings and profile
+                ใช้ gradient sparkle icon + animation เพื่อดึงดูดความสนใจ */}
             {me && (
               <button
-                onClick={() => setAiChatOpen((v) => !v)}
-                aria-label="AI Assistant"
-                title="AI Assistant"
+                onClick={toggleAiChat}
+                aria-label="น้องเป๋าตัง AI Assistant"
+                title="น้องเป๋าตัง — AI Assistant"
                 className={cn(
-                  "h-9 w-9 inline-flex items-center justify-center rounded-lg border transition-colors",
+                  "h-9 w-9 inline-flex items-center justify-center rounded-lg border transition-all duration-200",
                   aiChatOpen
-                    ? "bg-indigo-50 border-indigo-200 text-indigo-700"
-                    : "bg-white border-gray-200 text-gray-600 hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-200",
+                    ? "bg-gradient-to-br from-purple-50 to-pink-50 border-purple-300 shadow-sm shadow-purple-100"
+                    : "bg-white border-gray-200 hover:border-purple-300 hover:bg-gradient-to-br hover:from-purple-50 hover:to-pink-50",
                 )}
               >
-                <Sparkles className="w-4 h-4" />
+                <AiChatIcon active={aiChatOpen} />
               </button>
             )}
+
             {me && (
               <div ref={userMenuRef} className="relative">
                 <button
@@ -387,8 +429,7 @@ export function TopNav() {
           </aside>
         </>
       )}
-      {/* AI Chat Panel */}
-      <AIChatPanel isOpen={aiChatOpen} onClose={() => setAiChatOpen(false)} />
+      {/* NOTE: AIChatPanel ถูกย้ายไปอยู่ใน AppShell เพื่อทำ side-by-side layout */}
     </>
   );
 }
