@@ -534,14 +534,14 @@ export default function Contracts() {
           </div>
         </div>
 
-        {/* Collapsible filter panel */}
+        {/* Collapsible filter panel — entire header row is clickable */}
         <div className="bg-white border border-gray-200 rounded-xl mb-3">
-          {/* Header: toggle + clear */}
-          <div className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-gray-700">
-            <button
-              onClick={() => setFilterOpen((v) => !v)}
-              className="flex items-center gap-2 hover:text-indigo-600 transition-colors"
-            >
+          <button
+            type="button"
+            onClick={() => setFilterOpen((v) => !v)}
+            className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 rounded-xl transition-colors"
+          >
+            <div className="flex items-center gap-2">
               <FilterIcon className="w-4 h-4 text-gray-400" />
               <span>ตัวกรองข้อมูล</span>
               {activeFilterCount > 0 && (
@@ -549,22 +549,25 @@ export default function Contracts() {
                   {activeFilterCount}
                 </span>
               )}
-            </button>
+            </div>
             <div className="flex items-center gap-3">
               {activeFilterCount > 0 && (
-                <button
-                  onClick={() => setFilters(EMPTY_FILTERS)}
+                <span
+                  role="button"
+                  tabIndex={0}
+                  onClick={(e) => { e.stopPropagation(); setFilters(EMPTY_FILTERS); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); setFilters(EMPTY_FILTERS); } }}
                   className="inline-flex items-center gap-1 text-xs text-red-500 hover:text-red-700 font-medium"
                 >
                   <X className="w-3 h-3" />
                   ล้างทั้งหมด
-                </button>
+                </span>
               )}
               <ChevronDown
                 className={`w-4 h-4 text-gray-400 transition-transform ${filterOpen ? "rotate-180" : ""}`}
               />
             </div>
-          </div>
+          </button>
 
           {/* Body: filter controls */}
           {filterOpen && (
@@ -676,17 +679,41 @@ export default function Contracts() {
           )}
         </div>
 
-        {/* Virtualized table */}
+        {/* Virtualized table — fills remaining viewport height */}
         <div className="relative bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
           <div
             ref={scrollRef}
             className="overflow-x-auto overflow-y-auto"
-            style={{ maxHeight: "calc(100vh - 280px)", height: filteredRows.length > 0 ? Math.min(filteredRows.length * 36 + 40, window.innerHeight - 280) : undefined }}
+            style={{ height: "calc(100vh - 230px)" }}
           >
             <table className="min-w-full text-[13px]">
-              <thead className="bg-gray-50 sticky top-0 z-10">
+              <thead className="sticky top-0 z-10">
+                {/* Group header row — 6+4+15+8+7+1 = 41 cols */}
+                <tr className="text-xs font-semibold text-center">
+                  {/* สินเชื่อ: idx 0-5 */}
+                  <th colSpan={6} className="px-3 py-1.5 bg-slate-600 text-white border-b border-slate-500 whitespace-nowrap">สินเชื่อ</th>
+                  {/* พาร์ทเนอร์: idx 6-9 */}
+                  <th colSpan={4} className="px-3 py-1.5 bg-indigo-600 text-white border-b border-indigo-500 whitespace-nowrap">พาร์ทเนอร์</th>
+                  {/* ลูกค้า: idx 10-24 */}
+                  <th colSpan={15} className="px-3 py-1.5 bg-teal-600 text-white border-b border-teal-500 whitespace-nowrap">ลูกค้า</th>
+                  {/* สินค้า: idx 25-32 */}
+                  <th colSpan={8} className="px-3 py-1.5 bg-amber-600 text-white border-b border-amber-500 whitespace-nowrap">สินค้า</th>
+                  {/* ไฟแนนซ์: idx 33-39 */}
+                  <th colSpan={7} className="px-3 py-1.5 bg-rose-600 text-white border-b border-rose-500 whitespace-nowrap">ไฟแนนซ์</th>
+                  {/* หนี้: idx 40 */}
+                  <th colSpan={1} className="px-3 py-1.5 bg-purple-600 text-white border-b border-purple-500 whitespace-nowrap">หนี้</th>
+                </tr>
+                {/* Column header row */}
                 <tr className="text-gray-700">
-                  {CONTRACT_COLUMNS.map((col) => {
+                  {CONTRACT_COLUMNS.map((col, idx) => {
+                    // Assign bg color based on group (idx 0-5 / 6-9 / 10-24 / 25-32 / 33-39 / 40)
+                    const groupBg =
+                      idx < 6 ? "bg-slate-50" :
+                      idx < 10 ? "bg-indigo-50" :
+                      idx < 25 ? "bg-teal-50" :
+                      idx < 33 ? "bg-amber-50" :
+                      idx < 40 ? "bg-rose-50" :
+                      "bg-purple-50";
                     const sortable = SORTABLE_FIELDS.includes(
                       col.key as SortField,
                     );
@@ -694,8 +721,8 @@ export default function Contracts() {
                     return (
                       <th
                         key={col.key}
-                        className={`px-3 py-2 text-left whitespace-nowrap font-medium border-b border-gray-200 ${
-                          sortable ? "cursor-pointer hover:bg-gray-100" : ""
+                        className={`px-3 py-2 text-left whitespace-nowrap font-medium border-b border-gray-200 ${groupBg} ${
+                          sortable ? "cursor-pointer hover:brightness-95" : ""
                         }`}
                         onClick={
                           sortable
