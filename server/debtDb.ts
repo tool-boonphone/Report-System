@@ -859,7 +859,10 @@ export async function listDebtTarget(params: { section: SectionKey }) {
         // Bug 4 fix (Phase 9AA): use closedByContract.has() so contracts with
         // only TXRTC receipts (maxNormalPeriod=0) are also detected correctly.
         // When maxNormalPeriod=0, period > 0 is always true for any real period.
-        const isClosed = closedByContract.has(extId) && periodNo > maxClosedPeriod;
+        // Phase 52 fix v3: >= maxClosedPeriod so the last normally-paid period is
+        // also rendered as "ปิดค่างวดแล้ว" (it was paid as part of the lump-sum close).
+        // Guard maxClosedPeriod > 0 so contracts with no normal receipts are unaffected.
+        const isClosed = closedByContract.has(extId) && maxClosedPeriod > 0 && periodNo >= maxClosedPeriod;
         // Per-period suspended flag: period is >= the first suspended period.
         // Bad-debt contract → re-use the same flag but surface a different label.
         const isSuspended =
@@ -1596,7 +1599,10 @@ export async function* listDebtTargetStream(params: {
         const rawUnlockFee = Number(r.unlock_fee_due ?? 0);
         const paid = Number(r.paid_amount ?? 0);
         const periodNo = r.period != null ? Number(r.period) : 0;
-        const isClosed = closedByContract.has(extId) && periodNo > maxClosedPeriod;
+        // Phase 52 fix v3: >= maxClosedPeriod so the last normally-paid period is
+        // also rendered as "ปิดค่างวดแล้ว" (it was paid as part of the lump-sum close).
+        // Guard maxClosedPeriod > 0 so contracts with no normal receipts are unaffected.
+        const isClosed = closedByContract.has(extId) && maxClosedPeriod > 0 && periodNo >= maxClosedPeriod;
         const isSuspended = !isClosed && suspendedFromPeriod > 0 && periodNo >= suspendedFromPeriod;
         const suspendLabel = isContractBadDebt ? "หนี้เสีย" : "ระงับสัญญา";
         let amount = rawAmount;
