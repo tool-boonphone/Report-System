@@ -1320,12 +1320,25 @@ export async function listDebtCollected(params: { section: SectionKey }) {
         return !isDeviceSalePayment;
       });
 
-      // Bad debt row goes to the period after the last normal paid period.
-      let lastNormalPeriod = 0;
-      for (const p of normalPayments) {
-        if (p.period != null && p.period > lastNormalPeriod) lastNormalPeriod = p.period;
+      // Phase 55c: badDebtPeriod = งวดแรกที่มี isSuspended=true ใน installments
+      // (งวดที่ installment_status_code = หนี้เสีย ครั้งแรก = งวดที่มียอดขายเครื่อง)
+      // ไม่ใช้ lastNormalPeriod+1 จาก payment เพราะ FF365 payment ไม่มี period field ตรงๆ ทำให้คำนวณผิด
+      const firstSuspendedPeriod = c.installments
+        .filter((inst: any) => inst.isSuspended)
+        .map((inst: any) => inst.period ?? 0)
+        .filter((p: number) => p > 0)
+        .sort((a: number, b: number) => a - b)[0] ?? null;
+      // Fallback: ถ้าไม่มี isSuspended ใน installments ให้ใช้ lastNormalPeriod+1 จาก payment
+      let badDebtPeriod: number;
+      if (firstSuspendedPeriod != null) {
+        badDebtPeriod = firstSuspendedPeriod;
+      } else {
+        let lastNormalPeriod = 0;
+        for (const p of normalPayments) {
+          if (p.period != null && p.period > lastNormalPeriod) lastNormalPeriod = p.period;
+        }
+        badDebtPeriod = lastNormalPeriod + 1;
       }
-      const badDebtPeriod = lastNormalPeriod + 1;
       // Phase 55: patch installments so periods < badDebtPeriod show normal amounts.
       // งวดที่ลูกค้าจ่ายปกติก่อนหนี้เสีย ให้ตั้งหนี้ตามปกติ
       // เฉพาะงวดที่ >= badDebtPeriod เท่านั้นที่แสดงเป็นหนี้เสีย
@@ -2007,11 +2020,22 @@ export async function* listDebtCollectedStream(params: {
           const totalPaid = (p as any).total_paid_amount as number | null;
           return !(totalPaid != null && Math.abs(totalPaid - contractBadDebtAmount) <= 1);
         });
-        let lastNormalPeriod = 0;
-        for (const p of normalPayments) {
-          if (p.period != null && p.period > lastNormalPeriod) lastNormalPeriod = p.period;
+        // Phase 55c: ใช้ firstSuspendedPeriod จาก installments แทน lastNormalPeriod+1
+        const firstSuspendedPeriod = c.installments
+          .filter((inst: any) => inst.isSuspended)
+          .map((inst: any) => inst.period ?? 0)
+          .filter((p: number) => p > 0)
+          .sort((a: number, b: number) => a - b)[0] ?? null;
+        let badDebtPeriod: number;
+        if (firstSuspendedPeriod != null) {
+          badDebtPeriod = firstSuspendedPeriod;
+        } else {
+          let lastNormalPeriod = 0;
+          for (const p of normalPayments) {
+            if (p.period != null && p.period > lastNormalPeriod) lastNormalPeriod = p.period;
+          }
+          badDebtPeriod = lastNormalPeriod + 1;
         }
-        const badDebtPeriod = lastNormalPeriod + 1;
         // Phase 55: patch installments so periods < badDebtPeriod show normal amounts.
         c.installments = c.installments.map((inst: any) => {
           const pNo = inst.period ?? 0;

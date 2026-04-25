@@ -766,4 +766,4 @@ Task list:
 - [x] P55b-1: แก้ normalPayments filter ใน listDebtTarget ให้รวม TXRT receipt pattern ด้วย
 - [x] P55b-2: แก้เช่นเดียวกันใน listDebtTargetStream
 - [x] P55b-3: TypeScript check ผ่าน 0 errors
-- [ ] P55b-4: Checkpoint + Push GitHub
+- [x] P55b-4: Checkpoint + Push GitHub
