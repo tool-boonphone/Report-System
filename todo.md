@@ -736,3 +736,9 @@ Task list:
 ### Phase 51 — เปลี่ยนชื่อ "หนี้เสีย" → "ขายเครื่อง" ใน Badge/หัวตาราง
 - [x] P51-1: เปลี่ยน Badge "หนี้เสีย" → "ขายเครื่อง" และหัวตาราง "ยอดหนี้เสีย (ยอดขายเครื่อง)" → "ขายเครื่อง" ใน tab ยอดเก็บหนี้ (DebtReport.tsx)
 - [x] P51-2: เปลี่ยน Badge "หนี้เสีย" → "ขายเครื่อง" ในภาพรวมหนี้ (DebtOverview.tsx)
+
+### Phase 52 — แก้ isClosed logic: ใช้ "งวดสุดท้ายที่ paid > 0" แทน maxNormalPeriod
+- [x] P52-1: แก้ closedByContract ใน listDebtTarget ให้ใช้ max(period ที่ paid_amount > 0) แทน maxNormalPeriod จาก TXRTC
+- [x] P52-2: แก้ closedByContract ใน listDebtTargetStream ให้ใช้ logic เดียวกัน
+- [x] P52-3: TypeScript check ผ่าน 0 errors
+- [ ] P52-4: Checkpoint + Push GitHub

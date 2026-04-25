@@ -656,16 +656,19 @@ export async function listDebtTarget(params: { section: SectionKey }) {
 
   // --- Detect "ปิดค่างวด" (customer settles ALL remaining periods at once).
   //
-  // Both Boonphone and Fastfone365: signal is receipt_no prefix `TXRTC` (C = Close).
-  // TXRTC payments indicate a lump-sum settlement; all periods after the last
-  // normal paid period are rendered as "ปิดค่างวดแล้ว".
+  // Phase 52 rule (2026-04-26): use the LAST period that has paid_amount > 0
+  // (from installments, which is already loaded into instByContract) as the
+  // "close period". Periods strictly AFTER that period render as "ปิดค่างวดแล้ว".
+  // Only applies to contracts that have status = 'สิ้นสุดสัญญา' (i.e. have a TXRTC
+  // close payment). Active/suspended contracts are NOT affected.
   const closedByContract = new Map<string, number>();
   const overpaidByContractPeriod = new Map<string, Map<number, number>>();
   // For bad-debt date derivation: every payment's paid_at per contract.
   const paidAtsByContract = new Map<string, string[]>();
 
   {
-    // Both Boonphone and Fastfone365: use receipt_no TXRTC prefix for close detection.
+    // Load all payments: needed for (a) TXRTC close detection, (b) overpaid tracking,
+    // (c) paidAts for bad-debt date derivation.
     const rawCloseData = await db.execute(sql`
       SELECT contract_external_id,
              JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.receipt_no')) AS receipt_no,
@@ -677,10 +680,9 @@ export async function listDebtTarget(params: { section: SectionKey }) {
     `);
     const allPayRows: any[] = (rawCloseData as any)[0] ?? rawCloseData;
 
-    // Pass 1: group by contract, split into (normalPaidPeriods, closeContractDates).
-    // Also track overpaid_amount per period to derive overpaidApplied for the NEXT period.
-    const normalPeriodsByContract = new Map<string, Set<number>>();
+    // Pass 1: collect paidAts, TXRTC close markers, and overpaid per period.
     const closeDatesByContract = new Map<string, Date[]>();
+    const normalPeriodsByContract = new Map<string, Set<number>>();
 
     for (const pr of allPayRows) {
       const key = String(pr.contract_external_id ?? "");
@@ -721,16 +723,19 @@ export async function listDebtTarget(params: { section: SectionKey }) {
       }
     }
 
-    // Pass 2: for every contract with a TXRTC payment, derive the highest
-    // normal period paid BEFORE the earliest close-contract date.
-    for (const [key, dates] of Array.from(closeDatesByContract.entries())) {
-      const earliestClose = dates.reduce((a: Date, b: Date) => (a < b ? a : b));
-      const normals = normalPeriodsByContract.get(key);
-      const maxNormalPeriod = normals && normals.size > 0
-        ? Math.max(...Array.from(normals))
-        : 0;
-      closedByContract.set(key, maxNormalPeriod);
-      void earliestClose;
+    // Pass 2 (Phase 52): for every contract that has at least one TXRTC payment,
+    // derive the close period as the HIGHEST period whose paid_amount > 0 in
+    // the installments table. Periods strictly after this are rendered as
+    // "ปิดค่างวดแล้ว" with zero amounts.
+    for (const key of Array.from(closeDatesByContract.keys())) {
+      const instList = instByContract.get(key) ?? [];
+      // Find the last period that has any payment recorded
+      const maxPaidPeriod = instList.reduce((max, r) => {
+        const p = r.period != null ? Number(r.period) : 0;
+        const paidAmt = Number(r.paid_amount ?? 0);
+        return paidAmt > 0 && p > max ? p : max;
+      }, 0);
+      closedByContract.set(key, maxPaidPeriod);
     }
   }
 
@@ -1474,6 +1479,7 @@ export async function* listDebtTargetStream(params: {
   }
 
   // --- Load payments (for close detection + paidAts) ---
+  // Phase 52 rule: close period = last period with paid_amount > 0 in installments.
   const closedByContract = new Map<string, number>();
   const overpaidByContractPeriod = new Map<string, Map<number, number>>();
   const paidAtsByContract = new Map<string, string[]>();
@@ -1527,14 +1533,15 @@ export async function* listDebtTargetStream(params: {
       }
     }
 
-    for (const [key, dates] of Array.from(closeDatesByContract.entries())) {
-      const earliestClose = dates.reduce((a: Date, b: Date) => (a < b ? a : b));
-      const normals = normalPeriodsByContract.get(key);
-      const maxNormalPeriod = normals && normals.size > 0
-        ? Math.max(...Array.from(normals))
-        : 0;
-      closedByContract.set(key, maxNormalPeriod);
-      void earliestClose;
+    // Pass 2 (Phase 52): close period = highest period with paid_amount > 0
+    for (const key of Array.from(closeDatesByContract.keys())) {
+      const instList = instByContract.get(key) ?? [];
+      const maxPaidPeriod = instList.reduce((max, r) => {
+        const p = r.period != null ? Number(r.period) : 0;
+        const paidAmt = Number(r.paid_amount ?? 0);
+        return paidAmt > 0 && p > max ? p : max;
+      }, 0);
+      closedByContract.set(key, maxPaidPeriod);
     }
   }
 
