@@ -701,8 +701,10 @@ export async function listDebtTarget(params: { section: SectionKey }) {
           closeDatesByContract.set(key, list);
         }
       } else {
-        // Regular single-period payment: period is the trailing -N suffix.
-        const m = /-(\d+)$/.exec(receipt);
+        // Regular single-period payment: period is the -N suffix after the contract suffix (-01/-02).
+        // Phase 57 fix: use /-0\d-(\d+)/ to correctly extract period from receipts like
+        // TXRT...-01-2-1 (period=2) instead of matching the last -N (which would give 1).
+        const m = /-0\d-(\d+)/.exec(receipt);
         if (!m) continue;
         const period = Number(m[1]);
         if (!Number.isFinite(period) || period <= 0) continue;
@@ -1569,7 +1571,9 @@ export async function* listDebtTargetStream(params: {
           closeDatesByContract.set(key, list);
         }
       } else {
-        const m = /-(d+)$/.exec(receipt);
+        // Phase 57 fix: use /-0\d-(\d+)/ to correctly extract period from receipts like
+        // TXRT...-01-2-1 (period=2) instead of matching the last -N (which would give 1).
+        const m = /-0\d-(\d+)/.exec(receipt);
         if (!m) continue;
         const period = Number(m[1]);
         if (!Number.isFinite(period) || period <= 0) continue;
