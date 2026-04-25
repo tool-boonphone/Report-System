@@ -20,6 +20,7 @@ export type SectionKey = (typeof SECTIONS)[number];
 export const MENU_CODES = [
   "section_switch", // การสลับ Section (ไว้บนสุด)
   "contract", // ข้อมูลสัญญา
+  "debt_summary", // สรุปหนี้ (มุมมองย่อของรายงานหนี้)
   "debt_report", // รายงานหนี้
   "bad_debt_summary", // สรุปหนี้เสีย
   "settings_users", // ตั้งค่า > จัดการผู้ใช้งาน
@@ -30,6 +31,7 @@ export type MenuCode = (typeof MENU_CODES)[number];
 export const MENU_LABELS: Record<MenuCode, string> = {
   section_switch: "การสลับ Section",
   contract: "ข้อมูลสัญญา",
+  debt_summary: "สรุปหนี้",
   debt_report: "รายงานหนี้",
   bad_debt_summary: "สรุปหนี้เสีย",
   settings_users: "จัดการผู้ใช้งาน",
