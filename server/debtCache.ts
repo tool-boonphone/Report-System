@@ -134,6 +134,29 @@ export function setCachedCollected(section: string, data: any): void {
   });
 }
 
+// Prewarm state tracking — ป้องกัน double-stream ระหว่าง prewarm + user request
+const _prewarmingTarget = new Map<string, Promise<void>>();
+const _prewarmingCollected = new Map<string, Promise<void>>();
+
+/** Register a prewarm promise so concurrent requests can wait for it */
+export function setPrewarmingTarget(section: string, p: Promise<void>): void {
+  _prewarmingTarget.set(section, p);
+  p.finally(() => _prewarmingTarget.delete(section));
+}
+export function setPrewarmingCollected(section: string, p: Promise<void>): void {
+  _prewarmingCollected.set(section, p);
+  p.finally(() => _prewarmingCollected.delete(section));
+}
+/** Wait for any in-progress prewarm for this section (returns immediately if none) */
+export async function waitForPrewarmTarget(section: string): Promise<void> {
+  const p = _prewarmingTarget.get(section);
+  if (p) await p.catch(() => {});
+}
+export async function waitForPrewarmCollected(section: string): Promise<void> {
+  const p = _prewarmingCollected.get(section);
+  if (p) await p.catch(() => {});
+}
+
 /** เรียกเมื่อ sync ใหม่เสร็จ เพื่อ clear cache ของ section นั้น */
 export function invalidateDebtCache(section: string): void {
   targetCache.delete(section);

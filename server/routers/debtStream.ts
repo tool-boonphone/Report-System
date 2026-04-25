@@ -26,6 +26,8 @@ import {
   setCachedTarget,
   getCachedCollected,
   setCachedCollected,
+  waitForPrewarmTarget,
+  waitForPrewarmCollected,
 } from "../debtCache";
 import {
   listDebtTarget,
@@ -191,6 +193,9 @@ export async function handleDebtStreamTarget(
   }
 
   try {
+    // If prewarm is in progress, wait for it — avoids double-streaming and OOM
+    await waitForPrewarmTarget(section);
+
     // Cache hit — stream immediately from cached array
     const cached = getCachedTarget(section);
     if (cached) {
@@ -200,8 +205,7 @@ export async function handleDebtStreamTarget(
       return;
     }
 
-    // Cache miss — TRUE STREAMING: ส่ง rows ทีละ batch ระหว่างคำนวณ
-    // เขียน byte แรกทันที ทำให้ Cloudflare ไม่ timeout แม้คำนวณนาน 60+ วินาที
+    // Cache miss (prewarm failed or not started) — TRUE STREAMING
     console.log(`[debtStream] MISS target for ${section}, true-streaming...`);
     startStreamResponse(res);
 
@@ -257,6 +261,9 @@ export async function handleDebtStreamCollected(
   }
 
   try {
+    // If prewarm is in progress, wait for it — avoids keep-alive whitespace corrupting JSON
+    await waitForPrewarmCollected(section);
+
     // Cache hit — stream immediately from cached array
     const cached = getCachedCollected(section);
     if (cached) {
@@ -268,38 +275,25 @@ export async function handleDebtStreamCollected(
       return;
     }
 
-    // Cache miss — TRUE STREAMING: ส่ง rows ทีละ batch ระหว่างคำนวณ
+    // Cache miss (prewarm failed or not started) — TRUE STREAMING (no keep-alive needed)
     console.log(`[debtStream] MISS collected for ${section}, true-streaming...`);
     startStreamResponse(res);
-
-    // Keep-alive: ส่ง whitespace ทุก 5 วินาทีระหว่างรอ load data
-    // JSON parser จะ ignore whitespace ใน array ดังนั้น " " ระหว่าง rows ไม่กระทบ parse
-    let keepAliveTimer: ReturnType<typeof setInterval> | null = setInterval(() => {
-      try { res.write(" "); } catch { /* ignore if connection closed */ }
-    }, 5000);
-    const stopKeepAlive = () => {
-      if (keepAliveTimer) { clearInterval(keepAliveTimer); keepAliveTimer = null; }
-    };
 
     // Collect all rows while streaming (for cache fill)
     const allRows: any[] = [];
     let hasPrincipalBreakdown = true;
     const gen = listDebtCollectedStream({ section: section as SectionKey, batchSize: 100 });
     let first = true;
-    try {
-      for await (const chunk of gen) {
-        for (const row of chunk.rows) {
-          const prefix = first ? "" : ",";
-          first = false;
-          res.write(prefix + JSON.stringify(row));
-          allRows.push(row);
-        }
-        if (chunk.meta?.hasPrincipalBreakdown != null) {
-          hasPrincipalBreakdown = chunk.meta.hasPrincipalBreakdown as boolean;
-        }
+    for await (const chunk of gen) {
+      for (const row of chunk.rows) {
+        const prefix = first ? "" : ",";
+        first = false;
+        res.write(prefix + JSON.stringify(row));
+        allRows.push(row);
       }
-    } finally {
-      stopKeepAlive();
+      if (chunk.meta?.hasPrincipalBreakdown != null) {
+        hasPrincipalBreakdown = chunk.meta.hasPrincipalBreakdown as boolean;
+      }
     }
     res.write(`],\"hasPrincipalBreakdown\":${hasPrincipalBreakdown}}`);
     res.end();

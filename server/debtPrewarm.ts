@@ -12,7 +12,10 @@
  *   เพื่อป้องกัน OOM ใน Cloud Run ระหว่าง prewarm
  */
 import { listDebtTargetStream, listDebtCollectedStream } from "./debtDb";
-import { setCachedTarget, setCachedCollected, registerBgRefresh } from "./debtCache";
+import {
+  setCachedTarget, setCachedCollected, registerBgRefresh,
+  setPrewarmingTarget, setPrewarmingCollected,
+} from "./debtCache";
 import { SECTIONS } from "../shared/const";
 import type { SectionKey } from "../shared/const";
 
@@ -71,28 +74,31 @@ export async function prewarmDebtCache(): Promise<void> {
 
   for (const section of SECTIONS) {
     // Pre-warm target (เป้าเก็บหนี้)
-    try {
-      const t0 = Date.now();
-      const targetResult = await collectStreamTarget(section);
-      setCachedTarget(section, targetResult);
-      console.log(
-        `[debtPrewarm] ✓ listTarget(${section}) cached in ${Date.now() - t0}ms`
-      );
-    } catch (err) {
-      console.warn(`[debtPrewarm] ✗ listTarget(${section}) failed:`, err);
-    }
+    // Register promise BEFORE await so concurrent requests can wait instead of double-streaming
+    const t0 = Date.now();
+    const targetPromise = collectStreamTarget(section)
+      .then((targetResult) => {
+        setCachedTarget(section, targetResult);
+        console.log(`[debtPrewarm] ✓ listTarget(${section}) cached in ${Date.now() - t0}ms`);
+      })
+      .catch((err) => {
+        console.warn(`[debtPrewarm] ✗ listTarget(${section}) failed:`, err);
+      });
+    setPrewarmingTarget(section, targetPromise as Promise<void>);
+    await targetPromise;
 
     // Pre-warm collected (ยอดเก็บหนี้)
-    try {
-      const t0 = Date.now();
-      const collectedResult = await collectStreamCollected(section);
-      setCachedCollected(section, collectedResult);
-      console.log(
-        `[debtPrewarm] ✓ listCollected(${section}) cached in ${Date.now() - t0}ms`
-      );
-    } catch (err) {
-      console.warn(`[debtPrewarm] ✗ listCollected(${section}) failed:`, err);
-    }
+    const t1 = Date.now();
+    const collectedPromise = collectStreamCollected(section)
+      .then((collectedResult) => {
+        setCachedCollected(section, collectedResult);
+        console.log(`[debtPrewarm] ✓ listCollected(${section}) cached in ${Date.now() - t1}ms`);
+      })
+      .catch((err) => {
+        console.warn(`[debtPrewarm] ✗ listCollected(${section}) failed:`, err);
+      });
+    setPrewarmingCollected(section, collectedPromise as Promise<void>);
+    await collectedPromise;
   }
 
   console.log(

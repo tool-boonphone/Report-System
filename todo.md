@@ -711,3 +711,7 @@ Task list:
 
 ### Bug Fix — ยอดเก็บหนี้: ยอดผ่อนรวมหายไป
 - [x] BugFix-Collected-TotalAmount-1: แก้ไข totalAmount (ยอดผ่อนรวม) หายไปใน tab ยอดเก็บหนี้ — เพิ่ม totalAmount/totalPaid/remaining ใน object c ของ listDebtCollectedStream โดยคำนวณจาก instList
+
+### Bug Fix — เป้าเก็บหนี้/ยอดเก็บหนี้: โหลดครั้งแรก error
+- [x] BugFix-Stream-503-1: แก้ไข HTTP 503 ครั้งแรกในเป้าเก็บหนี้ — เพิ่ม waitForPrewarmTarget/Collected ใน stream handler ให้รอ prewarm เสร็จก่อน serve (prewarm register promise ก่อน await ใน debtPrewarm.ts)
+- [x] BugFix-Stream-JSON-1: แก้ไข JSON parse error ครั้งแรกในยอดเก็บหนี้ — ลบ keep-alive whitespace timer ออก (ทำให้ JSON เสีย) และให้ handler รอ prewarm เสร็จก่อน stream แทน
