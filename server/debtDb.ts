@@ -1755,6 +1755,7 @@ export async function* listDebtTargetStream(params: {
         // Phase 58: use cumulative carry pool instead of single-period lookup
         let overpaidApplied = 0;
         let overpaidCarryLabel: string | null = null; // label for UI: "(-หักชำระเกิน: xxx)"
+        let overpaidSourceLabel: string | null = null; // label for UI: "(+ชำระเกิน: xxx)" at source period
         if (!isClosed && !isSuspended && periodNo > 0) {
           const skipCarry = paidInFullWithReducedAmount;
           if (!skipCarry) {
@@ -1762,6 +1763,14 @@ export async function* listDebtTargetStream(params: {
             if (carryEntry && carryEntry.carryUsed > 0.009) {
               overpaidApplied = carryEntry.carryUsed;
               overpaidCarryLabel = `(-หักชำระเกิน: ${Math.round(carryEntry.carryUsed).toLocaleString('th-TH')})`;
+            }
+          }
+          // Check if THIS period is a source of overpaid carry (i.e. it generated overpaid)
+          const periodMap = overpaidByContractPeriod.get(extId);
+          if (periodMap) {
+            const srcEntry = periodMap.get(periodNo);
+            if (srcEntry && srcEntry.amount > 0.009) {
+              overpaidSourceLabel = `(+ชำระเกิน: ${Math.round(srcEntry.amount).toLocaleString('th-TH')})`;
             }
           }
         }
@@ -1851,6 +1860,8 @@ export async function* listDebtTargetStream(params: {
           suspendedAt: isSuspended ? suspendedAt : null,
           isArrears: (r as any)._hasArrears === true,
           isCurrentPeriod: false,
+          // Phase 58: annotation for source period that generated overpaid carry
+          overpaidSourceLabel,
         };
       })
       .sort((a, b) => (a.period ?? 0) - (b.period ?? 0));

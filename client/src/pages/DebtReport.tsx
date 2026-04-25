@@ -145,6 +145,8 @@ type InstallmentCell = {
   overpaidApplied: number;
   /** Phase 58: label for UI when period is reduced by carry-forward overpaid, e.g. "(-หักชำระเกิน: 7,802)" */
   overpaidCarryLabel?: string | null;
+  /** Phase 58: label for UI when this period generated overpaid carry, e.g. "(+ชำระเกิน: 7,802)" */
+  overpaidSourceLabel?: string | null;
   /** True when the period is reported as already closed (amount=0 with baseline>0). */
   isClosed: boolean;
   /** True when the period is ระงับสัญญา or หนี้เสีย. */
@@ -1537,6 +1539,11 @@ export default function DebtReport() {
                                     annotation = `(-หักชำระเกิน: ${fmtMoney(inst.overpaidApplied)})`;
                                     annotationClass = "text-emerald-600 font-semibold";
                                   }
+                                  // Phase 58: annotation for source period that generated overpaid carry
+                                  if (inst.overpaidSourceLabel) {
+                                    annotation = (annotation ? annotation + " " : "") + inst.overpaidSourceLabel;
+                                    annotationClass = "text-blue-600 font-semibold";
+                                  }
                                 }
                               }
                             }
@@ -1716,7 +1723,14 @@ export default function DebtReport() {
                                       v = fmtMoney(pay.badDebt || 0);
                                       break;
                                     case "total":
-                                      v = fmtMoney(pay.total);
+                                      // Phase 58: เมื่อมี overpaid ให้แสดง closeInstallmentAmount
+                                      // (ยอดที่ปิดงวดจริง) แทน total (ที่รวม overpaid ด้วย)
+                                      // เช่น จ่าย 11,703 แต่ overpaid 7,802 → แสดง 3,901
+                                      if (pay.overpaid > 0 && pay.closeInstallmentAmount > 0) {
+                                        v = fmtMoney(pay.closeInstallmentAmount);
+                                      } else {
+                                        v = fmtMoney(pay.total);
+                                      }
                                       break;
                                   }
                                 }
