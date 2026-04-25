@@ -667,3 +667,10 @@ Task list:
 - [x] P41-7: เขียน AIChatPanel.tsx ใหม่ — fixed right panel, ใช้ useAiChat()/useAppAuth(), greeting message อัตโนมัติ, suggested prompts หลัง greeting
 - [x] P41-8: เพิ่ม CSS animation animate-ai-sparkle ใน index.css
 - [x] P41-9: TypeScript check ผ่าน, commit + push GitHub, checkpoint
+
+### Fix: Production Fastfone365 โหลดไม่ได้ + Refresh progress bar
+- [x] Fix-P1: เพิ่ม server.keepAliveTimeout + server.headersTimeout ใน server/_core/index.ts เพื่อป้องกัน proxy ตัด connection
+- [x] Fix-P2: เพิ่ม fetchStream timeout จาก 120s เป็น 180s ใน DebtReport.tsx
+- [x] Fix-P3: เพิ่ม keep-alive ping ใน debtStream.ts — ส่ง whitespace chunk ทุก 10 วินาทีระหว่างคำนวณ เพื่อป้องกัน proxy timeout
+- [x] Fix-P4: แก้ progress bar ใน DebtReport.tsx ให้แสดงตั้งแต่วินาทีแรก (ไม่รอ 3 วินาที)
+- [ ] Fix-P5: save checkpoint + push GitHub + publish

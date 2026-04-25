@@ -73,6 +73,13 @@ async function startServer() {
     console.log(`Port ${preferredPort} is busy, using port ${port} instead`);
   }
 
+  // Phase 42: ป้องกัน reverse proxy ตัด connection ก่อนเวลา
+  // Cloud Run / nginx default keepAlive = 5s → ทำให้ FF365 (30s+ compute) timeout
+  // ต้องตั้งก่อน server.listen เสมอ
+  server.keepAliveTimeout = 120_000; // 120s — มากกว่า proxy timeout (~60s)
+  server.headersTimeout = 125_000;   // ต้องมากกว่า keepAliveTimeout เสมอ
+  server.requestTimeout = 300_000;   // 5 นาที — ป้องกัน request ค้างนาน
+
   server.listen(port, async () => {
     console.log(`Server running on http://localhost:${port}/`);
     try {

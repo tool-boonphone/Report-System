@@ -427,7 +427,7 @@ export default function DebtReport() {
     try {
       const resp = await fetch(`/api/debt/stream/${t}?section=${encodeURIComponent(section)}`, {
         credentials: "include",
-        signal: AbortSignal.timeout(120_000), // 2 นาที timeout
+        signal: AbortSignal.timeout(180_000), // 3 นาที timeout (Phase 42: เพิ่มจาก 2 นาที เพื่อรอการ compute FF365)
       });
       if (!resp.ok) {
         const text = await resp.text().catch(() => resp.statusText);
@@ -1081,33 +1081,35 @@ export default function DebtReport() {
             <Spinner />
             <div className="text-center">
               <p className="text-sm font-medium text-gray-700">
-                {elapsedSec < 3
+                {elapsedSec < 5
                   ? "กำลังโหลดข้อมูล..."
-                  : elapsedSec < 15
+                  : elapsedSec < 20
                   ? `กำลังโหลดข้อมูล... (${elapsedSec} วินาที)`
                   : `กำลังประมวลผลข้อมูลจำนวนมาก... (${elapsedSec} วินาที)`}
               </p>
-              {elapsedSec >= 3 && (
-                <p className="text-xs text-gray-500 mt-1">
-                  {elapsedSec < 15
-                    ? "ครั้งถัดไปจะเร็วขึ้นมาก (ข้อมูลถูก cache ไว้)"
-                    : "ข้อมูลมีปริมาณมาก กรุณารอสักครู่..."}
-                </p>
-              )}
-              {elapsedSec >= 3 && (
-                <div className="mt-3 w-64 bg-gray-200 rounded-full h-1.5 overflow-hidden">
-                  <div
-                    className="h-full rounded-full transition-all duration-500"
-                    style={{
-                      // Progress bar: 0-15s → 0-80%, 15-60s → 80-95%
-                      width: elapsedSec < 15
-                        ? `${Math.min(80, (elapsedSec / 15) * 80)}%`
-                        : `${Math.min(95, 80 + ((elapsedSec - 15) / 45) * 15)}%`,
-                      background: tab === "target" ? "#b45309" : "#047857",
-                    }}
-                  />
-                </div>
-              )}
+              {/* Phase 42: แสดง hint + progress bar ตั้งแต่วินาทีแรก */}
+              <p className="text-xs text-gray-500 mt-1">
+                {elapsedSec < 5
+                  ? "กำลังเชื่อมต่อ..."
+                  : elapsedSec < 20
+                  ? "ครั้งถัดไปจะเร็วขึ้นมาก (ข้อมูลถูก cache ไว้)"
+                  : "ข้อมูลมีปริมาณมาก กรุณารอสักครู่..."}
+              </p>
+              <div className="mt-3 w-64 bg-gray-200 rounded-full h-2 overflow-hidden">
+                <div
+                  className="h-full rounded-full transition-all duration-500"
+                  style={{
+                    // Phase 42: Progress bar แสดงตั้งแต่วินาทีแรก
+                    // 0-5s → 0-20%, 5-20s → 20-70%, 20-60s → 70-95%
+                    width: elapsedSec < 5
+                      ? `${Math.max(3, (elapsedSec / 5) * 20)}%`
+                      : elapsedSec < 20
+                      ? `${Math.min(70, 20 + ((elapsedSec - 5) / 15) * 50)}%`
+                      : `${Math.min(95, 70 + ((elapsedSec - 20) / 40) * 25)}%`,
+                    background: tab === "target" ? "#b45309" : "#047857",
+                  }}
+                />
+              </div>
             </div>
           </div>
         ) : (
