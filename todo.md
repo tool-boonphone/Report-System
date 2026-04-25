@@ -683,3 +683,8 @@ Task list:
 - [x] P43-5: แก้ fetchStream ใน DebtReport.tsx ให้ parse NDJSON + แสดง progress ระหว่างโหลด
 - [x] P43-6: แก้ error message ใน UI ให้แสดง string error ได้ถูกต้อง
 - [x] P43-7: TypeScript check + commit + checkpoint + push
+
+### Phase 44 — Fix: ยอดเก็บหนี้ Fastfone365 โหลดไม่ขึ้น
+- [x] P44-1: ตรวจสอบ listDebtCollectedStream ว่า streaming ทำงานได้จริงไหม
+- [x] P44-2: แก้ไข handleDebtStreamCollected ให้ streaming ทำงานได้จริง
+- [x] P44-3: TypeScript check + checkpoint + push

@@ -272,21 +272,34 @@ export async function handleDebtStreamCollected(
     console.log(`[debtStream] MISS collected for ${section}, true-streaming...`);
     startStreamResponse(res);
 
+    // Keep-alive: ส่ง whitespace ทุก 5 วินาทีระหว่างรอ load data
+    // JSON parser จะ ignore whitespace ใน array ดังนั้น " " ระหว่าง rows ไม่กระทบ parse
+    let keepAliveTimer: ReturnType<typeof setInterval> | null = setInterval(() => {
+      try { res.write(" "); } catch { /* ignore if connection closed */ }
+    }, 5000);
+    const stopKeepAlive = () => {
+      if (keepAliveTimer) { clearInterval(keepAliveTimer); keepAliveTimer = null; }
+    };
+
     // Collect all rows while streaming (for cache fill)
     const allRows: any[] = [];
     let hasPrincipalBreakdown = true;
     const gen = listDebtCollectedStream({ section: section as SectionKey, batchSize: 100 });
     let first = true;
-    for await (const chunk of gen) {
-      for (const row of chunk.rows) {
-        const prefix = first ? "" : ",";
-        first = false;
-        res.write(prefix + JSON.stringify(row));
-        allRows.push(row);
+    try {
+      for await (const chunk of gen) {
+        for (const row of chunk.rows) {
+          const prefix = first ? "" : ",";
+          first = false;
+          res.write(prefix + JSON.stringify(row));
+          allRows.push(row);
+        }
+        if (chunk.meta?.hasPrincipalBreakdown != null) {
+          hasPrincipalBreakdown = chunk.meta.hasPrincipalBreakdown as boolean;
+        }
       }
-      if (chunk.meta?.hasPrincipalBreakdown != null) {
-        hasPrincipalBreakdown = chunk.meta.hasPrincipalBreakdown as boolean;
-      }
+    } finally {
+      stopKeepAlive();
     }
     res.write(`],\"hasPrincipalBreakdown\":${hasPrincipalBreakdown}}`);
     res.end();
