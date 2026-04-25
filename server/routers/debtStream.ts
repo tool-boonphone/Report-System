@@ -8,6 +8,9 @@
  * The server writes the first byte immediately (keeps proxy alive), then
  * streams the JSON payload in chunks as it computes.
  *
+ * Phase 43: True streaming — ส่ง rows ทีละ batch ระหว่างคำนวณ (ไม่รอ compute ทั้งหมด)
+ * ทำให้ Cloudflare เห็น data ไหลมาตลอดและไม่ตัด connection ที่ 100s
+ *
  * Endpoints:
  *   GET /api/debt/stream/target?section=Fastfone365
  *   GET /api/debt/stream/collected?section=Fastfone365
@@ -24,7 +27,12 @@ import {
   getCachedCollected,
   setCachedCollected,
 } from "../debtCache";
-import { listDebtTarget, listDebtCollected } from "../debtDb";
+import {
+  listDebtTarget,
+  listDebtCollected,
+  listDebtTargetStream,
+  listDebtCollectedStream,
+} from "../debtDb";
 import type { SectionKey } from "../../shared/const";
 import { SECTIONS } from "../../shared/const";
 
@@ -51,61 +59,29 @@ async function resolveUser(req: Request) {
 }
 
 /**
- * Send periodic keep-alive whitespace pings while waiting for computation.
- * Returns a cleanup function that stops the ping interval.
- *
- * Phase 42: ป้องกัน reverse proxy ตัด connection ระหว่าง cache-miss computation
- * (FF365 ใช้เวลา 30-60s) — ส่ง comment JSON `\n` ทุก 8 วินาที
- * NOTE: ใช้เฉพาะก่อน res.write() ครั้งแรก เพราะหลังจากนั้น chunked stream จะ keep-alive เองแล้ว
+ * Set streaming headers and write the opening JSON bracket immediately.
+ * Returns immediately — caller must write rows then close with `]...}`.
  */
-function startKeepAlivePing(res: Response): () => void {
-  // ส่ง HTTP header ก่อน (ทำให้ proxy รู้ว่า connection ยังมีชีวิต)
+function startStreamResponse(res: Response): void {
   res.setHeader("Content-Type", "application/json; charset=utf-8");
   res.setHeader("Transfer-Encoding", "chunked");
   res.setHeader("X-Content-Type-Options", "nosniff");
-  res.setHeader("X-Accel-Buffering", "no"); // ปิด nginx buffering
-
-  // เขียน opening bracket ทันที — proxy จะเห็น byte แรกและไม่ตัด connection
+  res.setHeader("X-Accel-Buffering", "no"); // ปิด nginx/Cloudflare buffering
+  res.setHeader("Cache-Control", "no-cache");
+  // Write opening bracket immediately — proxy sees byte 1 and won't timeout
   res.write('{"rows":[');
-
-  // ส่ง ping comment ทุก 8 วินาที (ก่อน proxy timeout ที่ ~10s)
-  // NOTE: เราเขียน '{}' เป็น placeholder row ไม่ได้ เพราะ client parse JSON
-  // แต่เราสามารถ flush empty write เพื่อ keep TCP alive ได้
-  const interval = setInterval(() => {
-    if (!res.writableEnded) {
-      // flush ทำให้ proxy รู้ว่า connection ยังมีชีวิต
-      res.flushHeaders?.();
-    } else {
-      clearInterval(interval);
-    }
-  }, 8_000);
-
-  return () => clearInterval(interval);
 }
 
 /**
  * Stream JSON response in chunks to keep the proxy connection alive.
- * Writes the opening `{"rows":[` immediately, then each row as a chunk,
- * then closes with metadata fields and `}`.
- * This way the first byte arrives within milliseconds even if computation takes 10+ seconds.
+ * Assumes `{"rows":[` has already been written by startStreamResponse().
  */
 async function streamJsonRows(
   res: Response,
   rows: any[], // eslint-disable-line @typescript-eslint/no-explicit-any
   meta: Record<string, unknown> = {},
-  /** ถ้า true = startKeepAlivePing เขียน opening bracket ไว้แล้ว ไม่ต้องเขียนซ้ำ */
-  hasOpeningBracket = false,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
-    if (!hasOpeningBracket) {
-      res.setHeader("Content-Type", "application/json; charset=utf-8");
-      res.setHeader("Transfer-Encoding", "chunked");
-      res.setHeader("X-Content-Type-Options", "nosniff");
-      res.setHeader("X-Accel-Buffering", "no"); // ปิด nginx buffering
-      // Write opening immediately — keeps proxy alive
-      res.write('{"rows":[');
-    }
-
     const CHUNK_SIZE = 50; // rows per write
     let i = 0;
     let first = true;
@@ -141,6 +117,56 @@ async function streamJsonRows(
   });
 }
 
+/**
+ * True streaming: iterate async generator and write rows as they arrive.
+ * Phase 43: ส่ง rows ทีละ batch ระหว่างคำนวณ — Cloudflare เห็น data ไหลมาตลอด
+ */
+async function streamFromGenerator(
+  res: Response,
+  gen: AsyncGenerator<any[], void, unknown>,
+  meta: Record<string, unknown> = {},
+): Promise<void> {
+  let first = true;
+  for await (const batch of gen) {
+    for (const row of batch) {
+      const prefix = first ? "" : ",";
+      first = false;
+      res.write(prefix + JSON.stringify(row));
+    }
+    // Flush after each batch so Cloudflare sees data flowing
+    // (Express will flush automatically on next tick, but explicit helps)
+  }
+  const metaStr = Object.entries(meta)
+    .map(([k, v]) => `,${JSON.stringify(k)}:${JSON.stringify(v)}`)
+    .join("");
+  res.write("]" + metaStr + "}");
+  res.end();
+}
+
+/**
+ * True streaming for collected: generator yields { rows, meta } objects
+ */
+async function streamFromCollectedGenerator(
+  res: Response,
+  gen: AsyncGenerator<{ rows: any[]; meta?: Record<string, unknown> }, void, unknown>,
+): Promise<void> {
+  let first = true;
+  let lastMeta: Record<string, unknown> = {};
+  for await (const chunk of gen) {
+    for (const row of chunk.rows) {
+      const prefix = first ? "" : ",";
+      first = false;
+      res.write(prefix + JSON.stringify(row));
+    }
+    if (chunk.meta) lastMeta = { ...lastMeta, ...chunk.meta };
+  }
+  const metaStr = Object.entries(lastMeta)
+    .map(([k, v]) => `,${JSON.stringify(k)}:${JSON.stringify(v)}`)
+    .join("");
+  res.write("]" + metaStr + "}");
+  res.end();
+}
+
 /** GET /api/debt/stream/target?section=... */
 export async function handleDebtStreamTarget(
   req: Request,
@@ -165,27 +191,38 @@ export async function handleDebtStreamTarget(
   }
 
   try {
-    // Cache hit — stream immediately
+    // Cache hit — stream immediately from cached array
     const cached = getCachedTarget(section);
     if (cached) {
       console.log(`[debtStream] HIT target for ${section}`);
+      startStreamResponse(res);
       await streamJsonRows(res, cached.rows);
       return;
     }
 
-    // Cache miss — เริ่ม keep-alive ping ก่อน compute
-    // (FF365 ใช้เวลา 30-60s — ต้องส่ง byte แรกก่อนเพื่อไม่ให้ proxy timeout)
-    console.log(`[debtStream] MISS target for ${section}, computing...`);
-    const stopPing = startKeepAlivePing(res);
-    let result;
-    try {
-      result = await listDebtTarget({ section: section as SectionKey });
-    } finally {
-      stopPing();
+    // Cache miss — TRUE STREAMING: ส่ง rows ทีละ batch ระหว่างคำนวณ
+    // เขียน byte แรกทันที ทำให้ Cloudflare ไม่ timeout แม้คำนวณนาน 60+ วินาที
+    console.log(`[debtStream] MISS target for ${section}, true-streaming...`);
+    startStreamResponse(res);
+
+    // Collect all rows while streaming (for cache fill)
+    const allRows: any[] = [];
+    const gen = listDebtTargetStream({ section: section as SectionKey, batchSize: 100 });
+    let first = true;
+    for await (const batch of gen) {
+      for (const row of batch) {
+        const prefix = first ? "" : ",";
+        first = false;
+        res.write(prefix + JSON.stringify(row));
+        allRows.push(row);
+      }
     }
-    setCachedTarget(section, result);
-    // hasOpeningBracket=true — startKeepAlivePing เขียน '{"rows":[' ไว้แล้ว
-    await streamJsonRows(res, result.rows, {}, true);
+    res.write("]}");
+    res.end();
+
+    // Cache the result for subsequent requests
+    setCachedTarget(section, { rows: allRows });
+    console.log(`[debtStream] target for ${section} cached (${allRows.length} rows)`);
   } catch (err) {
     console.error("[debtStream] target error:", err);
     if (!res.headersSent) {
@@ -220,30 +257,43 @@ export async function handleDebtStreamCollected(
   }
 
   try {
-    // Cache hit — stream immediately
+    // Cache hit — stream immediately from cached array
     const cached = getCachedCollected(section);
     if (cached) {
       console.log(`[debtStream] HIT collected for ${section}`);
+      startStreamResponse(res);
       await streamJsonRows(res, cached.rows, {
         hasPrincipalBreakdown: cached.hasPrincipalBreakdown,
       });
       return;
     }
 
-    // Cache miss — เริ่ม keep-alive ping ก่อน compute
-    console.log(`[debtStream] MISS collected for ${section}, computing...`);
-    const stopPing = startKeepAlivePing(res);
-    let result;
-    try {
-      result = await listDebtCollected({ section: section as SectionKey });
-    } finally {
-      stopPing();
+    // Cache miss — TRUE STREAMING: ส่ง rows ทีละ batch ระหว่างคำนวณ
+    console.log(`[debtStream] MISS collected for ${section}, true-streaming...`);
+    startStreamResponse(res);
+
+    // Collect all rows while streaming (for cache fill)
+    const allRows: any[] = [];
+    let hasPrincipalBreakdown = true;
+    const gen = listDebtCollectedStream({ section: section as SectionKey, batchSize: 100 });
+    let first = true;
+    for await (const chunk of gen) {
+      for (const row of chunk.rows) {
+        const prefix = first ? "" : ",";
+        first = false;
+        res.write(prefix + JSON.stringify(row));
+        allRows.push(row);
+      }
+      if (chunk.meta?.hasPrincipalBreakdown != null) {
+        hasPrincipalBreakdown = chunk.meta.hasPrincipalBreakdown as boolean;
+      }
     }
-    setCachedCollected(section, result);
-    // hasOpeningBracket=true — startKeepAlivePing เขียน '{"rows":[' ไว้แล้ว
-    await streamJsonRows(res, result.rows, {
-      hasPrincipalBreakdown: result.hasPrincipalBreakdown,
-    }, true);
+    res.write(`],\"hasPrincipalBreakdown\":${hasPrincipalBreakdown}}`);
+    res.end();
+
+    // Cache the result for subsequent requests
+    setCachedCollected(section, { rows: allRows, hasPrincipalBreakdown });
+    console.log(`[debtStream] collected for ${section} cached (${allRows.length} rows)`);
   } catch (err) {
     console.error("[debtStream] collected error:", err);
     if (!res.headersSent) {

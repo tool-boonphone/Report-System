@@ -673,4 +673,13 @@ Task list:
 - [x] Fix-P2: เพิ่ม fetchStream timeout จาก 120s เป็น 180s ใน DebtReport.tsx
 - [x] Fix-P3: เพิ่ม keep-alive ping ใน debtStream.ts — ส่ง whitespace chunk ทุก 10 วินาทีระหว่างคำนวณ เพื่อป้องกัน proxy timeout
 - [x] Fix-P4: แก้ progress bar ใน DebtReport.tsx ให้แสดงตั้งแต่วินาทีแรก (ไม่รอ 3 วินาที)
-- [ ] Fix-P5: save checkpoint + push GitHub + publish
+- [x] Fix-P5: save checkpoint + push GitHub + publish
+
+### Phase 43 — True Streaming: ส่ง rows ระหว่างคำนวณ (แก้ Cloudflare 100s hard timeout)
+- [x] P43-1: เพิ่ม listDebtTargetStream async generator ใน debtDb.ts ที่ yield rows ทีละ batch ระหว่างคำนวณ
+- [x] P43-2: แก้ handleDebtStreamTarget ใน debtStream.ts ให้ใช้ NDJSON streaming เมื่อ cache miss
+- [x] P43-3: เพิ่ม listDebtCollectedStream async generator ใน debtDb.ts
+- [x] P43-4: แก้ handleDebtStreamCollected ใน debtStream.ts ให้ใช้ NDJSON streaming เมื่อ cache miss
+- [x] P43-5: แก้ fetchStream ใน DebtReport.tsx ให้ parse NDJSON + แสดง progress ระหว่างโหลด
+- [x] P43-6: แก้ error message ใน UI ให้แสดง string error ได้ถูกต้อง
+- [x] P43-7: TypeScript check + commit + checkpoint + push

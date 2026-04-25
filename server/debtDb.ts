@@ -1339,3 +1339,522 @@ export async function listDebtCollected(params: { section: SectionKey }) {
   //   (principal_paid, interest_paid, fee_paid, penalty_paid, etc. from payment transactions API)
   return { rows, hasPrincipalBreakdown: true };
 }
+
+/**
+ * Streaming variant of listDebtTarget.
+ *
+ * Phase 43: แก้ Cloudflare 100s hard timeout โดยส่ง rows ทีละ batch ระหว่างคำนวณ
+ * แทนที่จะรอ compute ทั้งหมดก่อนส่ง
+ *
+ * Strategy:
+ *   1. Load ALL DB data upfront (contracts + installments + payments) — 1 round-trip
+ *   2. Process contracts ทีละ BATCH_SIZE แล้ว yield batch ทันที
+ *   3. ใช้ setImmediate ระหว่าง batch เพื่อ yield event loop ให้ Express flush chunk
+ *
+ * Caller (debtStream.ts) ต้อง:
+ *   - เขียน opening `{"rows":[` ก่อน iterate
+ *   - เขียน `,` ระหว่าง rows
+ *   - เขียน closing `]}` หลัง iterate เสร็จ
+ */
+export async function* listDebtTargetStream(params: {
+  section: SectionKey;
+  /** rows per yield (default 100) */
+  batchSize?: number;
+}): AsyncGenerator<any[], void, unknown> {
+  const BATCH = params.batchSize ?? 100;
+  const db = await getDb();
+  if (!db) return;
+
+  // --- Load contract headers ---
+  const contractRowsRaw = await db.execute(sql`
+    SELECT external_id,
+           contract_no,
+           approve_date,
+           customer_name,
+           phone,
+           installment_count,
+           installment_amount,
+           CAST(finance_amount AS DECIMAL(18,2)) AS finance_amount,
+           status,
+           product_type,
+           CAST(bad_debt_amount AS DECIMAL(18,2)) AS bad_debt_amount,
+           bad_debt_date
+      FROM ${contracts}
+     WHERE ${contracts.section} = ${params.section}
+       AND (status IS NULL OR status != 'ยกเลิกสัญญา')
+  `);
+  const cRows: Array<any> = (contractRowsRaw as any)[0] ?? contractRowsRaw;
+  if (!cRows.length) return;
+
+  // --- Load installments ---
+  const instRowsRaw = await db.execute(sql`
+    SELECT contract_external_id,
+           period,
+           due_date,
+           CAST(amount AS DECIMAL(18,2))       AS amount,
+           CAST(paid_amount AS DECIMAL(18,2))  AS paid_amount,
+           status AS inst_status,
+           CAST(JSON_EXTRACT(raw_json, '$.principal_due') AS DECIMAL(18,2)) AS principal_due,
+           CAST(JSON_EXTRACT(raw_json, '$.interest_due')  AS DECIMAL(18,2)) AS interest_due,
+           CAST(JSON_EXTRACT(raw_json, '$.fee_due')       AS DECIMAL(18,2)) AS fee_due,
+           CAST(JSON_EXTRACT(raw_json, '$.penalty_due')    AS DECIMAL(18,2)) AS penalty_due,
+           CAST(JSON_EXTRACT(raw_json, '$.unlock_fee_due')  AS DECIMAL(18,2)) AS unlock_fee_due,
+           JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.installment_status_code')) AS installment_status_code
+      FROM ${installments}
+     WHERE ${installments.section} = ${params.section}
+     ORDER BY contract_external_id, period
+  `);
+  const iRows: InstRawRow[] = (instRowsRaw as any)[0] ?? instRowsRaw;
+
+  const instByContract = new Map<string, InstRawRow[]>();
+  for (const r of iRows) {
+    const key = String(r.contract_external_id);
+    if (!instByContract.has(key)) instByContract.set(key, []);
+    instByContract.get(key)!.push({
+      contract_external_id: key,
+      period: r.period != null ? Number(r.period) : null,
+      due_date: r.due_date ?? null,
+      amount: r.amount != null ? Number(r.amount) : null,
+      paid_amount: r.paid_amount != null ? Number(r.paid_amount) : null,
+      inst_status: r.inst_status ?? null,
+      principal_due: r.principal_due != null ? Number(r.principal_due) : null,
+      interest_due: r.interest_due != null ? Number(r.interest_due) : null,
+      fee_due: r.fee_due != null ? Number(r.fee_due) : null,
+      penalty_due: r.penalty_due != null ? Number(r.penalty_due) : null,
+      unlock_fee_due: r.unlock_fee_due != null ? Number(r.unlock_fee_due) : null,
+      installment_status_code: r.installment_status_code ?? null,
+    });
+  }
+
+  // Fix out-of-order due_dates
+  for (const [key, list] of Array.from(instByContract.entries())) {
+    instByContract.set(key, fixOutOfOrderDueDates(list));
+  }
+
+  // --- Load payments (for close detection + paidAts) ---
+  const closedByContract = new Map<string, number>();
+  const overpaidByContractPeriod = new Map<string, Map<number, number>>();
+  const paidAtsByContract = new Map<string, string[]>();
+  {
+    const rawCloseData = await db.execute(sql`
+      SELECT contract_external_id,
+             JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.receipt_no')) AS receipt_no,
+             CAST(JSON_EXTRACT(raw_json, '$.overpaid_amount') AS DECIMAL(18,2)) AS overpaid_amount,
+             paid_at
+        FROM ${paymentTransactions}
+       WHERE ${paymentTransactions.section} = ${params.section}
+         AND JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.receipt_no')) IS NOT NULL
+    `);
+    const allPayRows: any[] = (rawCloseData as any)[0] ?? rawCloseData;
+    const normalPeriodsByContract = new Map<string, Set<number>>();
+    const closeDatesByContract = new Map<string, Date[]>();
+
+    for (const pr of allPayRows) {
+      const key = String(pr.contract_external_id ?? "");
+      if (!key) continue;
+      if (pr.paid_at) {
+        const arr = paidAtsByContract.get(key) ?? [];
+        arr.push(String(pr.paid_at));
+        paidAtsByContract.set(key, arr);
+      }
+      const receipt = String(pr.receipt_no ?? "");
+      if (receipt.startsWith("TXRTC")) {
+        const dt = pr.paid_at ? new Date(pr.paid_at) : null;
+        if (dt && !isNaN(dt.getTime())) {
+          const list = closeDatesByContract.get(key) ?? [];
+          list.push(dt);
+          closeDatesByContract.set(key, list);
+        }
+      } else {
+        const m = /-(\d+)$/.exec(receipt);
+        if (!m) continue;
+        const period = Number(m[1]);
+        if (!Number.isFinite(period) || period <= 0) continue;
+        const set = normalPeriodsByContract.get(key) ?? new Set<number>();
+        set.add(period);
+        normalPeriodsByContract.set(key, set);
+        const overpaid = Number(pr.overpaid_amount ?? 0);
+        if (overpaid > 0) {
+          let periodMap = overpaidByContractPeriod.get(key);
+          if (!periodMap) {
+            periodMap = new Map<number, number>();
+            overpaidByContractPeriod.set(key, periodMap);
+          }
+          periodMap.set(period, (periodMap.get(period) ?? 0) + overpaid);
+        }
+      }
+    }
+
+    for (const [key, dates] of Array.from(closeDatesByContract.entries())) {
+      const earliestClose = dates.reduce((a: Date, b: Date) => (a < b ? a : b));
+      const normals = normalPeriodsByContract.get(key);
+      const maxNormalPeriod = normals && normals.size > 0
+        ? Math.max(...Array.from(normals))
+        : 0;
+      closedByContract.set(key, maxNormalPeriod);
+      void earliestClose;
+    }
+  }
+
+  const today = new Date();
+
+  // --- Process contracts in batches, yield each batch ---
+  // Reuse the same per-contract logic from listDebtTarget
+  function processContract(c: any): any {
+    const extId = String(c.external_id);
+    const list = instByContract.get(extId) ?? [];
+    const totalPaid = list.reduce((s, r) => s + Number(r.paid_amount ?? 0), 0);
+    const totalAmount = list.reduce((s, r) => s + Number(r.amount ?? 0), 0);
+    const { label: debtStatus, daysOverdue } = deriveDebtStatus(c.status ?? null, list, today);
+    const baselineAmount = c.installment_amount != null ? Number(c.installment_amount) : null;
+    const maxClosedPeriod = closedByContract.get(extId) ?? 0;
+    const contractStatus = c.status ?? null;
+    const isContractSuspended = contractStatus === "ระงับสัญญา";
+    const isContractBadDebt = contractStatus === "หนี้เสีย";
+    let suspendedFromPeriod = 0;
+    let suspendedAt: string | null = null;
+    if (isContractSuspended || isContractBadDebt) {
+      const suspendCodes = ["ระงับสัญญา", "หนี้เสีย"];
+      const firstSuspended = list
+        .filter((r) => suspendCodes.includes(r.installment_status_code ?? ""))
+        .sort((a, b) => (a.period ?? 0) - (b.period ?? 0))[0];
+      if (firstSuspended?.period) {
+        suspendedFromPeriod = Number(firstSuspended.period);
+        suspendedAt = firstSuspended.due_date ?? null;
+      } else {
+        const firstPeriod = list.sort((a, b) => (a.period ?? 0) - (b.period ?? 0))[0];
+        if (firstPeriod) {
+          suspendedFromPeriod = 1;
+          suspendedAt = firstPeriod.due_date ?? null;
+        }
+      }
+      if (isContractBadDebt && suspendedAt) {
+        const paidAts = paidAtsByContract.get(extId) ?? [];
+        suspendedAt = deriveBadDebtDate(
+          paidAts.map((t) => ({ paid_at: t })),
+          suspendedAt,
+        );
+      }
+    }
+
+    const baseInstallments = list
+      .map((r) => {
+        const rawAmount = Number(r.amount ?? 0);
+        const rawPrincipal = Number(r.principal_due ?? 0);
+        const rawInterest = Number(r.interest_due ?? 0);
+        const rawFee = Number(r.fee_due ?? 0);
+        const rawPenalty = Number(r.penalty_due ?? 0);
+        const rawUnlockFee = Number(r.unlock_fee_due ?? 0);
+        const paid = Number(r.paid_amount ?? 0);
+        const periodNo = r.period != null ? Number(r.period) : 0;
+        const isClosed = closedByContract.has(extId) && periodNo > maxClosedPeriod;
+        const isSuspended = !isClosed && suspendedFromPeriod > 0 && periodNo >= suspendedFromPeriod;
+        const suspendLabel = isContractBadDebt ? "หนี้เสีย" : "ระงับสัญญา";
+        let amount = rawAmount;
+        let principal = rawPrincipal;
+        let interest = rawInterest;
+        let fee = rawFee;
+        let penalty = rawPenalty;
+        let unlockFee = rawUnlockFee;
+        const paidInFullButZeroedByApi = !isClosed && rawAmount <= 0.009 && paid > 0.009 && baselineAmount != null && baselineAmount > 0;
+        const paidInFullWithReducedAmount = !isClosed && !paidInFullButZeroedByApi && rawAmount > 0.009 && baselineAmount != null && baselineAmount > 0 && rawAmount < baselineAmount - 0.5 && paid >= rawAmount - 0.5;
+        const useBaselineDisplay = paidInFullButZeroedByApi || paidInFullWithReducedAmount;
+        let overpaidApplied = 0;
+        if (!isClosed && periodNo > 1) {
+          const skipCarry = paidInFullWithReducedAmount;
+          if (!skipCarry) {
+            const periodMap = overpaidByContractPeriod.get(extId);
+            if (periodMap) overpaidApplied = periodMap.get(periodNo - 1) ?? 0;
+          }
+        }
+        if (isClosed || isSuspended) {
+          amount = 0; principal = 0; interest = 0; fee = 0; penalty = 0; unlockFee = 0;
+        } else {
+          const financeAmt = c.finance_amount != null ? Number(c.finance_amount) : 0;
+          const periods = c.installment_count != null ? Number(c.installment_count) : 0;
+          const baseline = baselineAmount ?? 0;
+          let basePrincipal: number, baseFee: number, baseInterest: number;
+          if (financeAmt > 0 && periods > 0) {
+            basePrincipal = Math.ceil(financeAmt / periods);
+            baseFee = 100;
+            baseInterest = Math.max(0, baseline - basePrincipal - baseFee);
+          } else {
+            basePrincipal = rawPrincipal;
+            baseFee = rawFee > 0 ? rawFee : 100;
+            baseInterest = rawInterest;
+          }
+          let effectivePrincipal = basePrincipal;
+          let effectiveInterest = baseInterest;
+          const effectiveFee = baseFee;
+          if (overpaidApplied > 0.009) {
+            effectivePrincipal = Math.max(0, basePrincipal - overpaidApplied);
+            const remainingCarry = Math.max(0, overpaidApplied - basePrincipal);
+            effectiveInterest = Math.max(0, baseInterest - remainingCarry);
+          }
+          const dueDateForPenalty = r.due_date ? Date.parse(`${r.due_date}T00:00:00`) : 0;
+          const isFuturePeriod = dueDateForPenalty > today.getTime();
+          penalty = isFuturePeriod ? 0 : rawPenalty;
+          unlockFee = isFuturePeriod ? 0 : rawUnlockFee;
+          if (useBaselineDisplay) {
+            principal = basePrincipal; interest = baseInterest; fee = baseFee; amount = baseline;
+            if (paidInFullButZeroedByApi && overpaidApplied > 0.009) {
+              const effPrincipal = Math.max(0, basePrincipal - overpaidApplied);
+              const remaining = Math.max(0, overpaidApplied - basePrincipal);
+              const effInterest = Math.max(0, baseInterest - remaining);
+              principal = Math.round(effPrincipal);
+              interest = Math.round(effInterest);
+              amount = principal + interest + fee;
+            }
+          } else {
+            const apiAmount = rawAmount > 0.009 ? rawAmount : null;
+            const baselineForCalc = apiAmount != null ? apiAmount : baseline;
+            const netBaseline = Math.max(0, baselineForCalc - penalty - unlockFee);
+            fee = baseFee;
+            principal = Math.round(effectivePrincipal);
+            interest = Math.max(0, Math.round(netBaseline) - principal - fee);
+            const apiEqualsBaseline = apiAmount != null && Math.abs(apiAmount - baseline) < 0.5;
+            const applyCarryToAmount = overpaidApplied > 0.009 && apiEqualsBaseline;
+            amount = apiAmount != null
+              ? (applyCarryToAmount ? Math.max(0, apiAmount - overpaidApplied) : apiAmount)
+              : principal + interest + fee + penalty + unlockFee;
+          }
+          const todayForArrears = new Date();
+          todayForArrears.setHours(0, 0, 0, 0);
+          const dueDateMs = r.due_date ? Date.parse(`${r.due_date}T00:00:00`) : 0;
+          const isPastOrCurrent = dueDateMs <= todayForArrears.getTime();
+          const hasArrears = isPastOrCurrent && (rawPenalty > 0.005 || rawUnlockFee > 0.005);
+          (r as any)._hasArrears = hasArrears;
+        }
+        return {
+          period: r.period ?? null, dueDate: r.due_date ?? null,
+          principal, interest, fee, penalty, unlockFee, amount,
+          netAmount: principal + interest + fee,
+          paid, baselineAmount: baselineAmount ?? 0, overpaidApplied,
+          principalDeducted: 0, interestDeducted: 0, feeDeducted: 0,
+          isClosed, isSuspended,
+          suspendLabel: isSuspended ? suspendLabel : null,
+          suspendedAt: isSuspended ? suspendedAt : null,
+          isArrears: (r as any)._hasArrears === true,
+          isCurrentPeriod: false,
+        };
+      })
+      .sort((a, b) => (a.period ?? 0) - (b.period ?? 0));
+
+    // Arrears pass
+    {
+      const todayMs = Date.now();
+      for (const inst of baseInstallments) inst.isArrears = false;
+      const currentPeriod = baseInstallments
+        .filter((inst) => {
+          if (inst.isClosed || inst.isSuspended) return false;
+          if (!inst.dueDate) return false;
+          return Date.parse(`${inst.dueDate}T00:00:00`) <= todayMs;
+        })
+        .sort((a, b) => Number(b.period ?? 0) - Number(a.period ?? 0))[0] ?? null;
+      if (currentPeriod) {
+        const currentPeriodNo = Number(currentPeriod.period ?? 0);
+        const priorPenalty = baseInstallments.reduce((sum, inst) => {
+          if (inst.isClosed || inst.isSuspended || !inst.dueDate) return sum;
+          if (Date.parse(`${inst.dueDate}T00:00:00`) > todayMs) return sum;
+          if (Number(inst.period ?? 0) >= currentPeriodNo) return sum;
+          return sum + Number(inst.penalty ?? 0);
+        }, 0);
+        const priorUnlockFee = baseInstallments.reduce((max, inst) => {
+          if (inst.isClosed || inst.isSuspended || !inst.dueDate) return max;
+          if (Date.parse(`${inst.dueDate}T00:00:00`) > todayMs) return max;
+          if (Number(inst.period ?? 0) >= currentPeriodNo) return max;
+          return Math.max(max, Number(inst.unlockFee ?? 0));
+        }, 0);
+        const hasCarryFromPrior = priorPenalty > 0.005 || priorUnlockFee > 0.005;
+        currentPeriod.isArrears = hasCarryFromPrior;
+        const ownPenalty = Number(currentPeriod.penalty ?? 0);
+        const ownUnlockFee = Number(currentPeriod.unlockFee ?? 0);
+        currentPeriod.penalty = priorPenalty + ownPenalty;
+        currentPeriod.unlockFee = Math.max(priorUnlockFee, ownUnlockFee);
+        const baseNet = currentPeriod.principal + currentPeriod.interest + currentPeriod.fee;
+        const effectiveBase = baseNet > 0.009 ? baseNet : (currentPeriod.baselineAmount > 0.009 ? currentPeriod.baselineAmount : baseNet);
+        currentPeriod.amount = effectiveBase + currentPeriod.penalty + currentPeriod.unlockFee;
+        currentPeriod.netAmount = effectiveBase;
+        currentPeriod.isCurrentPeriod = true;
+      }
+    }
+
+    return {
+      contractExternalId: extId,
+      contractNo: c.contract_no ?? null,
+      approveDate: c.approve_date ?? null,
+      customerName: c.customer_name ?? null,
+      phone: c.phone ?? null,
+      productType: c.product_type ?? null,
+      installmentCount: c.installment_count != null ? Number(c.installment_count) : list.length,
+      installmentAmount: c.installment_amount != null ? Number(c.installment_amount) : null,
+      totalAmount, totalPaid,
+      remaining: Math.max(totalAmount - totalPaid, 0),
+      debtStatus, daysOverdue,
+      installments: baseInstallments,
+      contractBadDebtAmount: c.bad_debt_amount != null ? Number(c.bad_debt_amount) : null,
+      contractBadDebtDate: c.bad_debt_date ?? null,
+    };
+  }
+
+  // Yield in batches
+  let batch: any[] = [];
+  for (const c of cRows) {
+    batch.push(processContract(c));
+    if (batch.length >= BATCH) {
+      yield batch;
+      batch = [];
+      // Yield event loop so Express can flush the chunk
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    }
+  }
+  if (batch.length > 0) yield batch;
+}
+
+/**
+ * Streaming variant of listDebtCollected.
+ * Loads target rows first (via listDebtTargetStream), then streams collected rows.
+ */
+export async function* listDebtCollectedStream(params: {
+  section: SectionKey;
+  batchSize?: number;
+}): AsyncGenerator<{ rows: any[]; meta?: Record<string, unknown> }, void, unknown> {
+  const BATCH = params.batchSize ?? 100;
+
+  // First, collect all target rows (needed for payment assignment)
+  const allTargetRows: any[] = [];
+  for await (const batch of listDebtTargetStream({ section: params.section, batchSize: 500 })) {
+    allTargetRows.push(...batch);
+  }
+
+  const db = await getDb();
+  if (!db) return;
+
+  // Load all payments
+  const payRowsRaw = await db.execute(sql`
+    SELECT contract_external_id,
+           external_id AS payment_external_id,
+           paid_at,
+           CAST(amount AS DECIMAL(18,2)) AS total_paid_amount,
+           CAST(JSON_EXTRACT(raw_json, '$.principal_paid')           AS DECIMAL(18,2)) AS principal_paid,
+           CAST(JSON_EXTRACT(raw_json, '$.interest_paid')            AS DECIMAL(18,2)) AS interest_paid,
+           CAST(JSON_EXTRACT(raw_json, '$.fee_paid')                 AS DECIMAL(18,2)) AS fee_paid,
+           CAST(JSON_EXTRACT(raw_json, '$.penalty_paid')             AS DECIMAL(18,2)) AS penalty_paid,
+           CAST(JSON_EXTRACT(raw_json, '$.unlock_fee_paid')          AS DECIMAL(18,2)) AS unlock_fee_paid,
+           CAST(JSON_EXTRACT(raw_json, '$.discount_amount')          AS DECIMAL(18,2)) AS discount_amount,
+           CAST(JSON_EXTRACT(raw_json, '$.overpaid_amount')          AS DECIMAL(18,2)) AS overpaid_amount,
+           CAST(JSON_EXTRACT(raw_json, '$.close_installment_amount') AS DECIMAL(18,2)) AS close_installment_amount,
+           CAST(JSON_EXTRACT(raw_json, '$.bad_debt_amount')          AS DECIMAL(18,2)) AS bad_debt_amount,
+           CAST(JSON_EXTRACT(raw_json, '$.payment_id')               AS UNSIGNED) AS payment_id,
+           NULL AS installment_external_id,
+           JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.receipt_no')) AS receipt_no,
+           JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.remark'))     AS remark,
+           status AS ff_status
+      FROM ${paymentTransactions}
+     WHERE ${paymentTransactions.section} = ${params.section}
+     ORDER BY contract_external_id, paid_at, payment_id
+  `);
+  const pRows: any[] = (payRowsRaw as any)[0] ?? payRowsRaw;
+
+  const payByContract = new Map<string, PayRawRow[]>();
+  for (const r of pRows) {
+    const key = String(r.contract_external_id ?? "");
+    if (!key) continue;
+    if (!payByContract.has(key)) payByContract.set(key, []);
+    payByContract.get(key)!.push({
+      contract_external_id: key,
+      period: null,
+      payment_external_id: r.payment_external_id ?? null,
+      paid_at: r.paid_at ?? null,
+      total_paid_amount: r.total_paid_amount != null ? Number(r.total_paid_amount) : null,
+      principal_paid: r.principal_paid != null ? Number(r.principal_paid) : null,
+      interest_paid: r.interest_paid != null ? Number(r.interest_paid) : null,
+      fee_paid: r.fee_paid != null ? Number(r.fee_paid) : null,
+      penalty_paid: r.penalty_paid != null ? Number(r.penalty_paid) : null,
+      unlock_fee_paid: r.unlock_fee_paid != null ? Number(r.unlock_fee_paid) : null,
+      discount_amount: r.discount_amount != null ? Number(r.discount_amount) : null,
+      overpaid_amount: r.overpaid_amount != null ? Number(r.overpaid_amount) : null,
+      close_installment_amount: r.close_installment_amount != null ? Number(r.close_installment_amount) : null,
+      bad_debt_amount: r.bad_debt_amount != null ? Number(r.bad_debt_amount) : null,
+      payment_id: r.payment_id != null ? Number(r.payment_id) : null,
+      receipt_no: r.receipt_no ?? null,
+      remark: r.remark ?? null,
+      ff_status: r.ff_status ?? null,
+    } as any);
+  }
+
+  // Process in batches
+  let batch: any[] = [];
+  for (const c of allTargetRows) {
+    const rawPayments = payByContract.get(c.contractExternalId) ?? [];
+    const contractBadDebtAmount = c.contractBadDebtAmount as number | null;
+    const contractBadDebtDate = c.contractBadDebtDate as string | null;
+    const realPaymentsRaw = rawPayments.filter((p) => {
+      const payExtId = (p as any).payment_external_id as string | null;
+      return payExtId != null && /^\d+$/.test(payExtId);
+    });
+
+    let tagged: Array<PayRawRow & { splitIndex: number; isCloseRow: boolean; isBadDebtRow: boolean }>;
+
+    if (contractBadDebtAmount != null && contractBadDebtAmount > 0 && contractBadDebtDate) {
+      let badDebtNote: string | null = null;
+      const d = new Date(`${contractBadDebtDate}T00:00:00`);
+      const day = String(d.getDate()).padStart(2, "0");
+      const month = String(d.getMonth() + 1).padStart(2, "0");
+      const year = d.getFullYear() + 543;
+      badDebtNote = `ยอดขายเครื่อง ${contractBadDebtAmount.toLocaleString("th-TH", { minimumFractionDigits: 0, maximumFractionDigits: 0 })} บาท (${day}/${month}/${year})`;
+      const realAssignedForBadDebt = assignPayPeriods(
+        realPaymentsRaw,
+        c.installments.map((i: { period: number | null; amount: number | string }) => ({ period: i.period, amount: Number(i.amount) || 0 })),
+      );
+      const normalPayments = realAssignedForBadDebt.filter((p) => {
+        const totalPaid = (p as any).total_paid_amount as number | null;
+        return !(totalPaid != null && Math.abs(totalPaid - contractBadDebtAmount) <= 1);
+      });
+      let lastNormalPeriod = 0;
+      for (const p of normalPayments) {
+        if (p.period != null && p.period > lastNormalPeriod) lastNormalPeriod = p.period;
+      }
+      const badDebtPeriod = lastNormalPeriod + 1;
+      const badDebtRow: any = {
+        contract_external_id: c.contractExternalId,
+        period: badDebtPeriod, splitIndex: 0, isCloseRow: false, isBadDebtRow: true,
+        paid_at: contractBadDebtDate, principal_paid: 0, interest_paid: 0, fee_paid: 0,
+        penalty_paid: 0, unlock_fee_paid: 0, discount_amount: 0, overpaid_amount: 0,
+        close_installment_amount: 0, bad_debt_amount: contractBadDebtAmount,
+        total_paid_amount: 0, payment_id: null, receipt_no: null, remark: null,
+        ff_status: null, payment_external_id: null, badDebtNote,
+      };
+      tagged = [...normalPayments.map((p) => ({ ...p, isBadDebtRow: false })), badDebtRow];
+    } else {
+      const realAssigned = assignPayPeriods(
+        realPaymentsRaw,
+        c.installments.map((i: { period: number | null; amount: number | string }) => ({ period: i.period, amount: Number(i.amount) || 0 })),
+      );
+      tagged = realAssigned.map((p) => ({ ...p, isBadDebtRow: false }));
+    }
+
+    const row = {
+      ...c,
+      payments: tagged.map((p) => ({
+        period: p.period ?? null, splitIndex: p.splitIndex, isCloseRow: p.isCloseRow, isBadDebtRow: p.isBadDebtRow,
+        paidAt: p.paid_at, principal: p.principal_paid ?? 0, interest: p.interest_paid ?? 0,
+        fee: p.fee_paid ?? 0, penalty: p.penalty_paid ?? 0, unlockFee: p.unlock_fee_paid ?? 0,
+        discount: p.discount_amount ?? 0, overpaid: p.overpaid_amount ?? 0,
+        closeInstallmentAmount: p.close_installment_amount ?? 0, badDebt: p.bad_debt_amount ?? 0,
+        total: p.total_paid_amount ?? 0, receiptNo: p.receipt_no ?? null, remark: p.remark ?? null,
+        badDebtNote: (p as any).badDebtNote ?? null,
+      })),
+    };
+
+    batch.push(row);
+    if (batch.length >= BATCH) {
+      yield { rows: batch, meta: { hasPrincipalBreakdown: true } };
+      batch = [];
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    }
+  }
+  if (batch.length > 0) {
+    yield { rows: batch, meta: { hasPrincipalBreakdown: true } };
+  }
+}

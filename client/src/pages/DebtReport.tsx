@@ -411,6 +411,7 @@ export default function DebtReport() {
   };
 
   // Phase 33: ใช้ streaming fetch แทน tRPC เพื่อป้องกัน proxy 503 timeout
+  // Phase 43: True streaming — อ่าน chunks ระหว่างที่ server ส่งมา ป้องกัน Cloudflare 100s timeout
   // Cache ใน state เพื่อไม่ต้องโหลดซ้ำเมื่อสลับ tab
   const [streamData, setStreamData] = useState<{
     target: { rows: TargetRow[] } | null;
@@ -418,22 +419,51 @@ export default function DebtReport() {
   }>({ target: null, collected: null });
   const [streamLoading, setStreamLoading] = useState<{ target: boolean; collected: boolean }>({ target: false, collected: false });
   const [streamError, setStreamError] = useState<{ target: string | null; collected: string | null }>({ target: null, collected: null });
+  // Phase 43: track bytes received for progress display
+  const [streamProgress, setStreamProgress] = useState<{ target: number; collected: number }>({ target: 0, collected: 0 });
 
-  // Fetch via streaming endpoint (bypasses tRPC buffering)
+  // Phase 43: True streaming fetch — อ่าน chunks ระหว่างที่ server ส่งมา
+  // ทำให้ browser เห็น data ไหลมาตลอด ป้องกัน Cloudflare 100s timeout
   const fetchStream = useCallback(async (t: "target" | "collected") => {
     if (!canView || !section) return;
     setStreamLoading((prev) => ({ ...prev, [t]: true }));
     setStreamError((prev) => ({ ...prev, [t]: null }));
+    setStreamProgress((prev) => ({ ...prev, [t]: 0 }));
     try {
       const resp = await fetch(`/api/debt/stream/${t}?section=${encodeURIComponent(section)}`, {
         credentials: "include",
-        signal: AbortSignal.timeout(180_000), // 3 นาที timeout (Phase 42: เพิ่มจาก 2 นาที เพื่อรอการ compute FF365)
+        signal: AbortSignal.timeout(300_000), // 5 นาที timeout
       });
       if (!resp.ok) {
         const text = await resp.text().catch(() => resp.statusText);
         throw new Error(`HTTP ${resp.status}: ${text}`);
       }
-      const json = await resp.json();
+
+      // Phase 43: อ่าน streaming response ทีละ chunk
+      const reader = resp.body?.getReader();
+      if (!reader) {
+        // Fallback: browser ไม่รองรับ ReadableStream
+        const json = await resp.json();
+        setStreamData((prev) => ({ ...prev, [t]: json }));
+        return;
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let bytesReceived = 0;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        bytesReceived += value.byteLength;
+        buffer += decoder.decode(value, { stream: true });
+        // อัปเดต progress โดยประมาณจาก bytes ที่ได้รับ
+        setStreamProgress((prev) => ({ ...prev, [t]: bytesReceived }));
+      }
+      buffer += decoder.decode(); // flush
+
+      // Parse JSON ที่สมบูรณ์แล้ว
+      const json = JSON.parse(buffer);
       setStreamData((prev) => ({ ...prev, [t]: json }));
     } catch (err: any) {
       setStreamError((prev) => ({ ...prev, [t]: err?.message ?? "เกิดข้อผิดพลาด" }));
@@ -1064,9 +1094,9 @@ export default function DebtReport() {
             <div className="text-center">
               <p className="text-sm font-semibold text-red-600 mb-1">โหลดข้อมูลไม่สำเร็จ</p>
               <p className="text-xs text-gray-500 mb-3">
-                {(queryError as any)?.message?.includes("aborted")
+                {typeof queryError === "string" && queryError.includes("aborted")
                   ? "การเชื่อมต่อใช้เวลานานเกินไป กรุณาลองใหม่"
-                  : ((queryError as any)?.message ?? "เกิดข้อผิดพลาด กรุณาลองใหม่")}
+                  : (typeof queryError === "string" ? queryError : "เกิดข้อผิดพลาด กรุณาลองใหม่")}
               </p>
               <button
                 onClick={() => refetch()}
@@ -1095,17 +1125,32 @@ export default function DebtReport() {
                   ? "ครั้งถัดไปจะเร็วขึ้นมาก (ข้อมูลถูก cache ไว้)"
                   : "ข้อมูลมีปริมาณมาก กรุณารอสักครู่..."}
               </p>
+              {/* Phase 43: แสดง bytes ที่ได้รับระหว่างโหลด */}
+              {(tab === "target" ? streamProgress.target : streamProgress.collected) > 0 && (
+                <p className="text-xs text-blue-600 mt-1">
+                  ได้รับข้อมูล {((tab === "target" ? streamProgress.target : streamProgress.collected) / 1024 / 1024).toFixed(1)} MB
+                </p>
+              )}
               <div className="mt-3 w-64 bg-gray-200 rounded-full h-2 overflow-hidden">
                 <div
                   className="h-full rounded-full transition-all duration-500"
                   style={{
-                    // Phase 42: Progress bar แสดงตั้งแต่วินาทีแรก
-                    // 0-5s → 0-20%, 5-20s → 20-70%, 20-60s → 70-95%
-                    width: elapsedSec < 5
-                      ? `${Math.max(3, (elapsedSec / 5) * 20)}%`
-                      : elapsedSec < 20
-                      ? `${Math.min(70, 20 + ((elapsedSec - 5) / 15) * 50)}%`
-                      : `${Math.min(95, 70 + ((elapsedSec - 20) / 40) * 25)}%`,
+                    // Phase 43: Progress bar — ใช้ bytes ที่ได้รับเป็นตัวแสดง progress
+                    // FF365 ประมาณ 50MB, Boonphone ประมาณ 5MB
+                    width: (() => {
+                      const bytes = tab === "target" ? streamProgress.target : streamProgress.collected;
+                      if (bytes > 0) {
+                        // คาดว่า total size จากเวลาที่ใช้ไป
+                        const estimatedTotal = elapsedSec > 5 ? (bytes / elapsedSec) * 90 : bytes * 3;
+                        return `${Math.min(95, Math.max(5, (bytes / estimatedTotal) * 100))}%`;
+                      }
+                      // ยังไม่ได้รับ bytes — ใช้ elapsed time
+                      return elapsedSec < 5
+                        ? `${Math.max(3, (elapsedSec / 5) * 20)}%`
+                        : elapsedSec < 20
+                        ? `${Math.min(70, 20 + ((elapsedSec - 5) / 15) * 50)}%`
+                        : `${Math.min(95, 70 + ((elapsedSec - 20) / 40) * 25)}%`;
+                    })(),
                     background: tab === "target" ? "#b45309" : "#047857",
                   }}
                 />
