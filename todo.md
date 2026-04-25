@@ -715,3 +715,6 @@ Task list:
 ### Bug Fix — เป้าเก็บหนี้/ยอดเก็บหนี้: โหลดครั้งแรก error
 - [x] BugFix-Stream-503-1: แก้ไข HTTP 503 ครั้งแรกในเป้าเก็บหนี้ — เพิ่ม waitForPrewarmTarget/Collected ใน stream handler ให้รอ prewarm เสร็จก่อน serve (prewarm register promise ก่อน await ใน debtPrewarm.ts)
 - [x] BugFix-Stream-JSON-1: แก้ไข JSON parse error ครั้งแรกในยอดเก็บหนี้ — ลบ keep-alive whitespace timer ออก (ทำให้ JSON เสีย) และให้ handler รอ prewarm เสร็จก่อน stream แทน
+
+### Bug Fix — เป้าเก็บหนี้: ยอดหนี้รวมไม่เท่ากับ 0 เมื่อทุก component = 0
+- [x] BugFix-TotalDebt-Zero-1: แก้ไข arrears pass (Phase 49) — ไม่ fallback ไป baselineAmount เมื่อ overpaidApplied > 0 เพราะ baseNet=0 ในกรณีนั้นหมายความว่า overpaid หักครบทุก component แล้ว (ถูกต้อง) ไม่ใช่ API ส่ง 0 มาผิด แก้ในทั้ง listDebtTarget และ listDebtTargetStream

@@ -1140,10 +1140,14 @@ export async function listDebtTarget(params: { section: SectionKey }) {
         // Recalculate amount for current period to include accumulated charges
         // Bug fix (Phase 9AB): when baseNet=0 (API sent amount=0 for an unpaid period),
         // fall back to baselineAmount so the total is not just penalty alone.
+        // Phase 49 fix: do NOT fallback to baselineAmount when overpaidApplied > 0
+        // because baseNet=0 in that case means overpaid covered all components (correct),
+        // not that API sent 0 erroneously. Fallback only when overpaidApplied=0.
         const baseNet = currentPeriod.principal + currentPeriod.interest + currentPeriod.fee;
+        const noOverpaid = (currentPeriod.overpaidApplied ?? 0) < 0.009;
         const effectiveBase = baseNet > 0.009
           ? baseNet
-          : (currentPeriod.baselineAmount > 0.009 ? currentPeriod.baselineAmount : baseNet);
+          : (noOverpaid && currentPeriod.baselineAmount > 0.009 ? currentPeriod.baselineAmount : baseNet);
         currentPeriod.amount = effectiveBase + totalPenalty + totalUnlockFee;
         // Phase 9AH: keep netAmount in sync (netAmount = principal+interest+fee, no penalty)
         currentPeriod.netAmount = effectiveBase;
@@ -1714,7 +1718,12 @@ export async function* listDebtTargetStream(params: {
         currentPeriod.penalty = priorPenalty + ownPenalty;
         currentPeriod.unlockFee = Math.max(priorUnlockFee, ownUnlockFee);
         const baseNet = currentPeriod.principal + currentPeriod.interest + currentPeriod.fee;
-        const effectiveBase = baseNet > 0.009 ? baseNet : (currentPeriod.baselineAmount > 0.009 ? currentPeriod.baselineAmount : baseNet);
+        // Phase 49 fix: do NOT fallback to baselineAmount when overpaidApplied > 0
+        // because baseNet=0 means overpaid covered all components (correct), not API error.
+        const noOverpaidS = (currentPeriod.overpaidApplied ?? 0) < 0.009;
+        const effectiveBase = baseNet > 0.009
+          ? baseNet
+          : (noOverpaidS && currentPeriod.baselineAmount > 0.009 ? currentPeriod.baselineAmount : baseNet);
         currentPeriod.amount = effectiveBase + currentPeriod.penalty + currentPeriod.unlockFee;
         currentPeriod.netAmount = effectiveBase;
         currentPeriod.isCurrentPeriod = true;
