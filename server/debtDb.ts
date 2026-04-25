@@ -1284,11 +1284,17 @@ export async function listDebtCollected(params: { section: SectionKey }) {
     const contractBadDebtAmount = (c as any).contractBadDebtAmount as number | null;
     const contractBadDebtDate = (c as any).contractBadDebtDate as string | null;
 
-    // Use only real payments (external_id is numeric) from the API.
+    // Use only real payments from the API.
+    // Real payments are identified by:
+    //   1. Numeric payment_external_id (Boonphone/FF365 standard)
+    //   2. TXRT receipt pattern (TXRT...-N) — FF365 contracts without numeric pay_ext_id
     // Synthetic payments (pay-{id}-{n}) are excluded.
     const realPaymentsRaw = rawPayments.filter((p) => {
       const payExtId = (p as any).payment_external_id as string | null;
-      return payExtId != null && /^\d+$/.test(payExtId);
+      const receiptNo = (p as any).receipt_no as string | null;
+      const isNumericPayExt = payExtId != null && /^\d+$/.test(payExtId);
+      const isTxrtReceipt = receiptNo != null && /^TXRT.*-\d+$/.test(receiptNo);
+      return isNumericPayExt || isTxrtReceipt;
     });
 
     if (contractBadDebtAmount != null && contractBadDebtAmount > 0 && contractBadDebtDate) {
@@ -1977,9 +1983,13 @@ export async function* listDebtCollectedStream(params: {
       const rawPayments = batchPayByContract.get(extId) ?? [];
       const contractBadDebtAmount = c.contractBadDebtAmount as number | null;
       const contractBadDebtDate = c.contractBadDebtDate as string | null;
+      // Real payments: numeric pay_ext_id OR TXRT receipt pattern
       const realPaymentsRaw = rawPayments.filter((p) => {
         const payExtId = (p as any).payment_external_id as string | null;
-        return payExtId != null && /^\d+$/.test(payExtId);
+        const receiptNo = (p as any).receipt_no as string | null;
+        const isNumericPayExt = payExtId != null && /^\d+$/.test(payExtId);
+        const isTxrtReceipt = receiptNo != null && /^TXRT.*-\d+$/.test(receiptNo);
+        return isNumericPayExt || isTxrtReceipt;
       });
       let tagged: Array<PayRawRow & { splitIndex: number; isCloseRow: boolean; isBadDebtRow: boolean }>;
       if (contractBadDebtAmount != null && contractBadDebtAmount > 0 && contractBadDebtDate) {

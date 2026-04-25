@@ -760,4 +760,10 @@ Task list:
 - [x] P55-2: แก้ isSuspended สำหรับ isContractBadDebt ให้ใช้ badDebtFromPeriod แทน suspendedFromPeriod
 - [x] P55-3: ทำเช่นเดียวกันใน listDebtTargetStream
 - [x] P55-4: TypeScript check ผ่าน 0 errors
-- [ ] P55-5: อัปเดต skill + Checkpoint + Push GitHub
+- [x] P55-5: อัปเดต skill + Checkpoint + Push GitHub
+
+### Phase 55b — แก้ bug badDebtPeriod คำนวณผิด (TXRT receipt pattern)
+- [x] P55b-1: แก้ normalPayments filter ใน listDebtTarget ให้รวม TXRT receipt pattern ด้วย
+- [x] P55b-2: แก้เช่นเดียวกันใน listDebtTargetStream
+- [x] P55b-3: TypeScript check ผ่าน 0 errors
+- [ ] P55b-4: Checkpoint + Push GitHub
