@@ -647,12 +647,12 @@ Task list:
 - [x] แก้ debtDb.ts bad debt branch: re-assign periods จาก real payments เท่านั้น (ไม่ใช้ assigned ที่ include synthetic ทำให้ cursor offset ผิด)
 
 ### Phase 40 — Unify Boonphone + FF365 ใช้โค้ดชุดเดียวกัน
-- [ ] P40-1: Unify sync/runner.ts: ให้ FF365 ใช้ syncInstallments Boonphone path (bulk endpoint) แทน syncInstallmentsFromDetail
-- [ ] P40-2: Unify sync/runner.ts: ลบ isFF365 branch ใน syncInstallments, enrichContractsWithDeviceIds
-- [ ] P40-3: Unify sync/runner.ts: ลบ isFF365 branch ใน computeAndStoreBadDebt — ใช้ Boonphone logic เดียวกัน
-- [ ] P40-4: Unify debtDb.ts: ลบ isFF365 branch ใน SQL query installments (listDebtTarget) — ใช้ Boonphone fields เดียวกัน
-- [ ] P40-5: Unify debtDb.ts: ลบ isFF365 branch ใน closedByContract detection — ใช้ TXRTC logic เดียวกัน
-- [ ] P40-6: Unify debtDb.ts: ลบ isFF365 branch ใน suspend codes — ใช้ Boonphone codes เดียวกัน
-- [ ] P40-7: Unify debtDb.ts: ลบ isFF365 branch ใน listDebtCollected — ใช้ Boonphone path เดียวกัน
-- [ ] P40-8: Unify mappers.ts: ให้ FF365 installments ใช้ field mapping เดียวกับ Boonphone (rawJson fields)
-- [ ] P40-9: ทดสอบ TypeScript, restart server, commit + checkpoint
+- [x] P40-1: Unify sync/runner.ts: ให้ FF365 ใช้ syncInstallments Boonphone path (bulk endpoint) แทน syncInstallmentsFromDetail
+- [x] P40-2: Unify sync/runner.ts: ลบ isFF365 branch ใน syncInstallments, enrichContractsWithDeviceIds
+- [x] P40-3: Unify sync/runner.ts: ลบ isFF365 branch ใน computeAndStoreBadDebt — ใช้ Boonphone logic เดียวกัน
+- [x] P40-4: Unify debtDb.ts: ลบ isFF365 branch ใน SQL query installments (listDebtTarget) — ใช้ Boonphone fields เดียวกัน
+- [x] P40-5: Unify debtDb.ts: ลบ isFF365 branch ใน closedByContract detection — ใช้ TXRTC logic เดียวกัน
+- [x] P40-6: Unify debtDb.ts: ลบ isFF365 branch ใน suspend codes — ใช้ Boonphone codes เดียวกัน
+- [x] P40-7: Unify debtDb.ts: ลบ isFF365 branch ใน listDebtCollected — ใช้ Boonphone path เดียวกัน
+- [x] P40-8: Unify mappers.ts: ให้ FF365 installments ใช้ field mapping เดียวกับ Boonphone (rawJson fields)
+- [x] P40-9: ทดสอบ TypeScript, restart server, commit + checkpoint
