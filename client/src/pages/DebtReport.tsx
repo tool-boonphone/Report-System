@@ -859,7 +859,7 @@ export default function DebtReport() {
           { key: "unlockFee", label: "ค่าปลดล็อก", width: 80, align: "right" },
           { key: "discount", label: "ส่วนลด", width: 70, align: "right" },
           { key: "overpaid", label: "ชำระเกิน", width: 80, align: "right" },
-          { key: "badDebt", label: "หนี้เสีย", width: 80, align: "right" },
+          { key: "badDebt", label: "ขายเครื่อง", width: 80, align: "right" },
           { key: "total", label: "ยอดที่ชำระรวม", width: 100, align: "right" },
         ];
 
@@ -1054,7 +1054,7 @@ export default function DebtReport() {
                 { key: "unlockFee", label: "ค่าปลดล็อก", value: collectedSummary.unlockFee, icon: <LockOpen className="w-3 h-3" />, colors: "bg-orange-50 text-orange-700 border-orange-200", canToggle: true },
                 { key: "discount", label: "ส่วนลด", value: collectedSummary.discount, icon: <Tag className="w-3 h-3" />, colors: "bg-teal-50 text-teal-700 border-teal-200", canToggle: false },
                 { key: "overpaid", label: "ชำระเกิน", value: collectedSummary.overpaid, icon: <TrendingUp className="w-3 h-3" />, colors: "bg-emerald-50 text-emerald-700 border-emerald-200", canToggle: true },
-                { key: "badDebt", label: "หนี้เสีย", value: collectedSummary.badDebt, icon: <TrendingDown className="w-3 h-3" />, colors: "bg-gray-100 text-gray-700 border-gray-300", canToggle: true },
+                { key: "badDebt", label: "ขายเครื่อง", value: collectedSummary.badDebt, icon: <TrendingDown className="w-3 h-3" />, colors: "bg-gray-100 text-gray-700 border-gray-300", canToggle: true },
               ] as const).filter(Boolean).map((b) => {
                 if (!b) return null;
                 const isOn = badgeVisibility[b.key] ?? false;

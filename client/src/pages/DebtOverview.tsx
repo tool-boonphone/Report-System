@@ -1001,7 +1001,7 @@ export default function DebtOverview() {
                 { key: "penalty", label: "ค่าปรับ", value: grandCollected.penalty, icon: <Gavel className="w-3.5 h-3.5" />, color: "bg-yellow-50 text-yellow-800 border-yellow-200" },
                 { key: "unlockFee", label: "ค่าปลดล็อก", value: grandCollected.unlockFee, icon: <LockOpen className="w-3.5 h-3.5" />, color: "bg-lime-50 text-lime-800 border-lime-200" },
                 { key: "overpaid", label: "ชำระเกิน", value: grandCollected.overpaid, icon: <TrendingUp className="w-3.5 h-3.5" />, color: "bg-emerald-50 text-emerald-800 border-emerald-200" },
-                { key: "badDebt", label: "หนี้เสีย", value: grandCollected.badDebt, icon: <TrendingDown className="w-3.5 h-3.5" />, color: "bg-red-50 text-red-800 border-red-200" },
+                { key: "badDebt", label: "ขายเครื่อง", value: grandCollected.badDebt, icon: <TrendingDown className="w-3.5 h-3.5" />, color: "bg-red-50 text-red-800 border-red-200" },
                 { key: "discount", label: "ส่วนลด", value: grandCollected.discount, icon: <Tag className="w-3.5 h-3.5" />, color: "bg-gray-50 text-gray-600 border-gray-200" },
               ]}
               visibility={badgeVisibility}

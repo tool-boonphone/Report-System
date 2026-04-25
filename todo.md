@@ -732,3 +732,7 @@ Task list:
 - [~] P50-10: เดือน มี.ค. 69 และ เม.ษ. 69 — fmtMonthYear ถูกต้องแล้ว น่าจะเป็นข้อมูลจริงยังไม่มีใน cache (ต้อง deploy แล้ว prewarm ใหม่)
 - [x] P50-11: ฟิลเตอร์สถานะสัญญา — statusFilter ใช้ debtStatus ทั้ง filteredTargetRows และ filteredCollectedRows อยู่แล้ว ปัญหาเดิมเพราะ debtStatus ของ collected rows ไม่ถูก set (แก้ไขแล้วใน BugFix-Collected-Status-1)
 - [x] P50-12: ปรับวิธีโหลดข้อมูล — DebtOverview ใช้ stream endpoint เหมือนหน้ารายงานหนี้อยู่แล้ว (ไม่ต้องปรับ)
+
+### Phase 51 — เปลี่ยนชื่อ "หนี้เสีย" → "ขายเครื่อง" ใน Badge/หัวตาราง
+- [x] P51-1: เปลี่ยน Badge "หนี้เสีย" → "ขายเครื่อง" และหัวตาราง "ยอดหนี้เสีย (ยอดขายเครื่อง)" → "ขายเครื่อง" ใน tab ยอดเก็บหนี้ (DebtReport.tsx)
+- [x] P51-2: เปลี่ยน Badge "หนี้เสีย" → "ขายเครื่อง" ในภาพรวมหนี้ (DebtOverview.tsx)
