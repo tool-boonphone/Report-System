@@ -699,8 +699,9 @@ Task list:
 - [x] P45-7: TypeScript check ผ่าน + ยืนยัน prewarm สำเร็จ (Boonphone: 10.8s, Fastfone365: 51.7s) + commit + push GitHub + checkpoint
 
 ### Phase 48 — เป้าเก็บหนี้: หักยอดชำระเกิน cascade ข้ามงวด
-- [ ] P48-1: วิเคราะห์ overpayment field ใน installments และ processContract ว่า overpayment ถูก store ที่ไหนและ format อย่างไร
-- [ ] P48-2: เพิ่ม cascade overpayment deduction logic ใน processContract (listDebtTargetStream) — หักยอดชำระเกินออกจาก totalAmount ของงวดนั้น แล้ว cascade ส่วนที่เหลือไปงวดถัดไปจนหมด
-- [ ] P48-3: เพิ่ม cascade overpayment deduction logic ใน listDebtTarget (non-stream) ด้วย
-- [ ] P48-4: TypeScript check + ทดสอบ + commit + push GitHub + checkpoint
+- [x] P48-1: วิเคราะห์ overpayment field ใน installments และ processContract ว่า overpayment ถูก store ที่ไหนและ format อย่างไร
+- [x] P48-2: เพิ่ม cascade overpayment deduction logic ใน processContract (listDebtTargetStream) — หักยอดชำระเกินออกจาก totalAmount ของงวดนั้น แล้ว cascade ส่วนที่เหลือไปงวดถัดไปจนหมด
+- [x] P48-3: เพิ่ม cascade overpayment deduction logic ใน listDebtTarget (non-stream) ด้วย
+- [x] P48-4: TypeScript check ผ่าน (0 errors) + ลบ cascade pass เก่าออก
 - [x] P48-5: แก้ cascade overpayment pass ให้หักในลำดับ ดอกเบี้ย → ค่าดำเนินการ → เงินต้น (ไม่ใช่หักยอดหนี้รวมโดยตรง) ใน listDebtTarget และ listDebtTargetStream
+- [x] P48-6: ลบ cascade post-processing pass เก่า (double-deduction) ออกจากทั้ง 2 functions — overpaidApplied ต่อ period มาจาก DB แล้ว ไม่ต้องทำ cascade เพิ่มเติม

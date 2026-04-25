@@ -961,17 +961,22 @@ export async function listDebtTarget(params: { section: SectionKey }) {
           }
 
           // Step 2: Apply overpaid deduction from previous period
-          // สูตร (Phase 9AD): carry หักจากเงินต้นก่อน ถ้าเงินต้นหมดแล้วค่อยหักดอกเบี้ย
-          // ค่าดำเนินการ = 100 คงที่เสมอ ไม่ถูกหัก
-          let effectivePrincipal = basePrincipal;
+          // Phase 48: ลำดับการหัก ดอกเบี้ย → ค่าดำเนินการ → เงินต้น
           let effectiveInterest = baseInterest;
-          const effectiveFee = baseFee; // ค่าดำเนินการ = 100 เสมอ
+          let effectiveFee = baseFee;
+          let effectivePrincipal = basePrincipal;
           if (overpaidApplied > 0.009) {
-            // หักจากเงินต้นก่อน
-            effectivePrincipal = Math.max(0, basePrincipal - overpaidApplied);
-            // ถ้า overpaid เกินเงินต้น ให้หักส่วนที่เหลือจากดอกเบี้ย
-            const remainingCarry = Math.max(0, overpaidApplied - basePrincipal);
-            effectiveInterest  = Math.max(0, baseInterest - remainingCarry);
+            let rem = overpaidApplied;
+            // 1) หักดอกเบี้ยก่อน
+            const dInt = Math.min(rem, effectiveInterest);
+            effectiveInterest = Math.max(0, effectiveInterest - dInt);
+            rem = Math.max(0, rem - dInt);
+            // 2) หักค่าดำเนินการ
+            const dFee = Math.min(rem, effectiveFee);
+            effectiveFee = Math.max(0, effectiveFee - dFee);
+            rem = Math.max(0, rem - dFee);
+            // 3) หักเงินต้น
+            effectivePrincipal = Math.max(0, effectivePrincipal - rem);
           }
 
           // Step 3: penalty/unlockFee from API *_due
@@ -996,12 +1001,10 @@ export async function listDebtTarget(params: { section: SectionKey }) {
             // to show the correct reduced baseline. Example: period 2 baseline=1990, overpaid
             // carry from period 1=1010 → display 980 (not 1990).
             if (paidInFullButZeroedByApi && overpaidApplied > 0.009) {
-              // Apply carry: deduct from principal first, then interest
-              const effPrincipal = Math.max(0, basePrincipal - overpaidApplied);
-              const remaining = Math.max(0, overpaidApplied - basePrincipal);
-              const effInterest = Math.max(0, baseInterest - remaining);
-              principal = Math.round(effPrincipal);
-              interest  = Math.round(effInterest);
+              // Phase 48: Apply carry in order: interest → fee → principal
+              principal = Math.round(effectivePrincipal);
+              interest  = Math.round(effectiveInterest);
+              fee       = Math.round(effectiveFee);
               amount    = principal + interest + fee;
             }
           } else {
@@ -1012,14 +1015,10 @@ export async function listDebtTarget(params: { section: SectionKey }) {
             const netBaseline = Math.max(0, baselineForCalc - penalty - unlockFee);
 
             // Scale formula sub-fields to fit netBaseline
-            // Bug fix (Phase 9AB): round to integers after scaling to avoid decimal display
-            // สูตร (Phase 9AD):
-            //   ค่าดำเนินการ = 100 เสมอ
-            //   เงินต้น = effectivePrincipal (คงที่ หัก overpaid แล้วใน Step 2)
-            //   ดอกเบี้ย = ยอดงวดจริง - เงินต้น - 100 (รับส่วนที่เหลือ)
-            fee       = baseFee; // 100 เสมอ
+            // Phase 48: ใช้ effective values (หัก overpaid แล้ว) ทั้ง 3 fields
+            fee       = Math.round(effectiveFee);
             principal = Math.round(effectivePrincipal);
-            interest  = Math.max(0, Math.round(netBaseline) - principal - fee);
+            interest  = Math.round(effectiveInterest);
 
             // Phase 24 fix: if API amount equals baseline (API did NOT reduce it for overpaid carry),
             // we must deduct overpaidApplied from the displayed amount so the UI shows the correct
@@ -1150,44 +1149,6 @@ export async function listDebtTarget(params: { section: SectionKey }) {
         currentPeriod.netAmount = effectiveBase;
         // Mark this as the current period for UI highlighting
         currentPeriod.isCurrentPeriod = true;
-      }
-    }
-
-    // --- Cascade overpayment pass (Phase 48) ---
-    // หักยอดชำระเกินในลำดับ: ดอกเบี้ย → ค่าดำเนินการ → เงินต้น
-    // ส่วนที่เหลือ cascade ไปงวดถัดไปต่อเนื่อง จนกว่ายอดชำระเกินจะหมด
-    {
-      let carryOver = 0;
-      for (const inst of baseInstallments) {
-        if (inst.isClosed || inst.isSuspended) continue;
-        const totalCarry = carryOver + (inst.overpaidApplied ?? 0);
-        if (totalCarry < 0.009) { carryOver = 0; continue; }
-
-        // หักในลำดับ: ดอกเบี้ย → ค่าดำเนินการ → เงินต้น
-        let remaining = totalCarry;
-
-        // 1) หักดอกเบี้ย
-        const deductInterest = Math.min(remaining, inst.interest);
-        inst.interest = Math.round(inst.interest - deductInterest);
-        remaining = Math.max(0, remaining - deductInterest);
-
-        // 2) หักค่าดำเนินการ
-        const deductFee = Math.min(remaining, inst.fee);
-        inst.fee = Math.round(inst.fee - deductFee);
-        remaining = Math.max(0, remaining - deductFee);
-
-        // 3) หักเงินต้น
-        const deductPrincipal = Math.min(remaining, inst.principal);
-        inst.principal = Math.round(inst.principal - deductPrincipal);
-        remaining = Math.max(0, remaining - deductPrincipal);
-
-        // อัปเดต netAmount และ amount
-        inst.netAmount = inst.principal + inst.interest + inst.fee;
-        inst.amount = inst.netAmount + inst.penalty + inst.unlockFee;
-        inst.overpaidApplied = totalCarry;
-
-        // ส่วนที่หักไม่หมด cascade ไปงวดถัดไป
-        carryOver = remaining;
       }
     }
 
@@ -1660,13 +1621,19 @@ export async function* listDebtTargetStream(params: {
             baseFee = rawFee > 0 ? rawFee : 100;
             baseInterest = rawInterest;
           }
-          let effectivePrincipal = basePrincipal;
+          // Phase 48: ลำดับการหัก ดอกเบี้ย → ค่าดำเนินการ → เงินต้น
           let effectiveInterest = baseInterest;
-          const effectiveFee = baseFee;
+          let effectiveFee = baseFee;
+          let effectivePrincipal = basePrincipal;
           if (overpaidApplied > 0.009) {
-            effectivePrincipal = Math.max(0, basePrincipal - overpaidApplied);
-            const remainingCarry = Math.max(0, overpaidApplied - basePrincipal);
-            effectiveInterest = Math.max(0, baseInterest - remainingCarry);
+            let rem = overpaidApplied;
+            const dInt = Math.min(rem, effectiveInterest);
+            effectiveInterest = Math.max(0, effectiveInterest - dInt);
+            rem = Math.max(0, rem - dInt);
+            const dFee = Math.min(rem, effectiveFee);
+            effectiveFee = Math.max(0, effectiveFee - dFee);
+            rem = Math.max(0, rem - dFee);
+            effectivePrincipal = Math.max(0, effectivePrincipal - rem);
           }
           const dueDateForPenalty = r.due_date ? Date.parse(`${r.due_date}T00:00:00`) : 0;
           const isFuturePeriod = dueDateForPenalty > today.getTime();
@@ -1675,22 +1642,20 @@ export async function* listDebtTargetStream(params: {
           if (useBaselineDisplay) {
             principal = basePrincipal; interest = baseInterest; fee = baseFee; amount = baseline;
             if (paidInFullButZeroedByApi && overpaidApplied > 0.009) {
-              const effPrincipal = Math.max(0, basePrincipal - overpaidApplied);
-              const remaining = Math.max(0, overpaidApplied - basePrincipal);
-              const effInterest = Math.max(0, baseInterest - remaining);
-              principal = Math.round(effPrincipal);
-              interest = Math.round(effInterest);
+              // Phase 48: Apply carry in order: interest → fee → principal
+              principal = Math.round(effectivePrincipal);
+              interest = Math.round(effectiveInterest);
+              fee = Math.round(effectiveFee);
               amount = principal + interest + fee;
             }
           } else {
             const apiAmount = rawAmount > 0.009 ? rawAmount : null;
-            const baselineForCalc = apiAmount != null ? apiAmount : baseline;
-            const netBaseline = Math.max(0, baselineForCalc - penalty - unlockFee);
-            fee = baseFee;
-            principal = Math.round(effectivePrincipal);
-            interest = Math.max(0, Math.round(netBaseline) - principal - fee);
             const apiEqualsBaseline = apiAmount != null && Math.abs(apiAmount - baseline) < 0.5;
             const applyCarryToAmount = overpaidApplied > 0.009 && apiEqualsBaseline;
+            // Phase 48: ใช้ effective values (หัก overpaid แล้ว) ทั้ง 3 fields
+            fee = Math.round(effectiveFee);
+            principal = Math.round(effectivePrincipal);
+            interest = Math.round(effectiveInterest);
             amount = apiAmount != null
               ? (applyCarryToAmount ? Math.max(0, apiAmount - overpaidApplied) : apiAmount)
               : principal + interest + fee + penalty + unlockFee;
@@ -1753,44 +1718,6 @@ export async function* listDebtTargetStream(params: {
         currentPeriod.amount = effectiveBase + currentPeriod.penalty + currentPeriod.unlockFee;
         currentPeriod.netAmount = effectiveBase;
         currentPeriod.isCurrentPeriod = true;
-      }
-    }
-
-    // --- Cascade overpayment pass (Phase 48) ---
-    // หักยอดชำระเกินในลำดับ: ดอกเบี้ย → ค่าดำเนินการ → เงินต้น
-    // ส่วนที่เหลือ cascade ไปงวดถัดไปต่อเนื่อง จนกว่ายอดชำระเกินจะหมด
-    {
-      let carryOver = 0;
-      for (const inst of baseInstallments) {
-        if (inst.isClosed || inst.isSuspended) continue;
-        const totalCarry = carryOver + (inst.overpaidApplied ?? 0);
-        if (totalCarry < 0.009) { carryOver = 0; continue; }
-
-        // หักในลำดับ: ดอกเบี้ย → ค่าดำเนินการ → เงินต้น
-        let remaining = totalCarry;
-
-        // 1) หักดอกเบี้ย
-        const deductInterest = Math.min(remaining, inst.interest);
-        inst.interest = Math.round(inst.interest - deductInterest);
-        remaining = Math.max(0, remaining - deductInterest);
-
-        // 2) หักค่าดำเนินการ
-        const deductFee = Math.min(remaining, inst.fee);
-        inst.fee = Math.round(inst.fee - deductFee);
-        remaining = Math.max(0, remaining - deductFee);
-
-        // 3) หักเงินต้น
-        const deductPrincipal = Math.min(remaining, inst.principal);
-        inst.principal = Math.round(inst.principal - deductPrincipal);
-        remaining = Math.max(0, remaining - deductPrincipal);
-
-        // อัปเดต netAmount และ amount
-        inst.netAmount = inst.principal + inst.interest + inst.fee;
-        inst.amount = inst.netAmount + inst.penalty + inst.unlockFee;
-        inst.overpaidApplied = totalCarry;
-
-        // ส่วนที่หักไม่หมด cascade ไปงวดถัดไป
-        carryOver = remaining;
       }
     }
 
