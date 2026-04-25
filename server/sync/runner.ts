@@ -366,24 +366,20 @@ async function syncContracts(
     // detail endpoint under `contract.product`. We therefore collect the set
     // of contract IDs we just upserted and call `contract?action=detail&id=X`
     // with bounded concurrency to merge the two extra columns.
-    // NOTE: Skip for Fastfone365 — syncInstallmentsFromDetail() already calls
-    // the same detail endpoint for every contract, so IMEI will be picked up
-    // there instead. Running both would double the API calls (~17k requests).
-    if (section !== "Fastfone365") {
-      try {
-        const enriched = await enrichContractsWithDeviceIds(
-          client,
-          section,
-        );
-        rowCount += enriched;
-      } catch (err: any) {
-        // Backfill failure must NOT abort the whole contracts sync; we already
-        // have the list-level columns. Log and continue.
-        console.warn(
-          `[sync] ${section} imei/serial backfill skipped:`,
-          err?.message ?? err,
-        );
-      }
+    // Both Boonphone and Fastfone365 use the same detail endpoint.
+    try {
+      const enriched = await enrichContractsWithDeviceIds(
+        client,
+        section,
+      );
+      rowCount += enriched;
+    } catch (err: any) {
+      // Backfill failure must NOT abort the whole contracts sync; we already
+      // have the list-level columns. Log and continue.
+      console.warn(
+        `[sync] ${section} imei/serial backfill skipped:`,
+        err?.message ?? err,
+      );
     }
 
     await finishSyncLog({ id: log.id, status: "success", rowCount });
@@ -410,38 +406,34 @@ async function syncInstallments(
   });
   let rowCount = 0;
   try {
-    // Fastfone365 has no standalone installment endpoint.
-    // Installments are embedded inside the contract detail response.
-    if (section === "Fastfone365") {
-      rowCount = await syncInstallmentsFromDetail(client, section);
-    } else {
-      // Boonphone: use the dedicated installment bulk endpoint.
-      const buffer: any[] = [];
-      try {
-        await client.forEachPage<any>(
-          "contract",
-          (d) => d?.installments,
-          { action: "installments" },
-          async (items) => {
-            for (const it of items) buffer.push(mapInstallment(section, it));
-            if (buffer.length >= 1000) {
-              rowCount += await upsertInstallments(
-                buffer.splice(0, buffer.length),
-              );
-            }
-          },
-          500,
-        );
-      } catch (err) {
-        // Endpoint may not exist on every deployment; degrade gracefully.
-        if (err instanceof PartnerApiError && err.status === 404) {
-          console.warn(`[sync] ${section} installments endpoint not available`);
-        } else {
-          throw err;
-        }
+    // Both Boonphone and Fastfone365 use the same bulk installments endpoint.
+    // GET /api/v1/contract?action=installments
+    // Response fields are identical: installment_status_code, principal_due, interest_due, etc.
+    const buffer: any[] = [];
+    try {
+      await client.forEachPage<any>(
+        "contract",
+        (d) => d?.installments,
+        { action: "installments" },
+        async (items) => {
+          for (const it of items) buffer.push(mapInstallment(section, it));
+          if (buffer.length >= 1000) {
+            rowCount += await upsertInstallments(
+              buffer.splice(0, buffer.length),
+            );
+          }
+        },
+        500,
+      );
+    } catch (err) {
+      // Endpoint may not exist on every deployment; degrade gracefully.
+      if (err instanceof PartnerApiError && err.status === 404) {
+        console.warn(`[sync] ${section} installments endpoint not available`);
+      } else {
+        throw err;
       }
-      if (buffer.length) rowCount += await upsertInstallments(buffer);
     }
+    if (buffer.length) rowCount += await upsertInstallments(buffer);
     await finishSyncLog({ id: log.id, status: "success", rowCount });
     return rowCount;
   } catch (err: any) {
@@ -467,9 +459,8 @@ async function syncPayments(
   let rowCount = 0;
   try {
     // Both Boonphone and Fastfone365 use the same payment transactions endpoint.
-    // FF365 was previously using syncPaymentsFromInstallments (synthetic payments)
-    // but FF365 actually has /api/v1/payment?action=transactions with full field data
-    // (principal_paid, interest_paid, fee_paid, penalty_paid, bad_debt_amount, etc.)
+    // GET /api/v1/payment?action=transactions
+    // Response fields are identical: principal_paid, interest_paid, fee_paid, etc.
     const buffer: any[] = [];
     await client.forEachPage<any>(
       "payment",
@@ -585,140 +576,16 @@ async function enrichContractsWithDeviceIds(
   return flushed;
 }
 
-/**
- * Fastfone365-specific: fetch installments from contract detail endpoint.
- * Loops through all contracts in DB and fetches detail for each, extracting
- * the embedded installments array. Uses bounded concurrency (5 workers).
- */
-async function syncInstallmentsFromDetail(
-  client: PartnerClient,
-  section: SectionKey,
-): Promise<number> {
-  const { getDb } = await import("../db");
-  const { contracts: contractsTable } = await import("../../drizzle/schema");
-  const { eq } = await import("drizzle-orm");
-  const db = await getDb();
-  if (!db) return 0;
-
-  // Get all contract IDs for this section
-  const targets = await db
-    .select({ externalId: contractsTable.externalId, contractNo: contractsTable.contractNo })
-    .from(contractsTable)
-    .where(eq(contractsTable.section, section));
-
-  if (targets.length === 0) return 0;
-
-  const CONCURRENCY = 5;
-  const FLUSH_EVERY = 500;
-  const buffer: any[] = [];
-  let flushed = 0;
-  let idx = 0;
-
-  async function flush() {
-    if (buffer.length === 0) return;
-    const batch = buffer.splice(0, buffer.length);
-    flushed += await upsertInstallments(batch);
-  }
-
-  async function worker() {
-    while (idx < targets.length) {
-      const my = idx++;
-      const { externalId, contractNo } = targets[my];
-      try {
-        const data: any = await client.get("contract", {
-          action: "detail",
-          id: externalId,
-        });
-        const rawInstallments: any[] = data?.contract?.installments ?? [];
-        for (const inst of rawInstallments) {
-          // Map Fastfone365 installment shape: { no, due_date, amount, paid, balance, mulct, discount, status }
-          const period = inst.no ?? inst.period;
-          const externalInstId = `${externalId}-${period}`;
-          buffer.push({
-            section,
-            externalId: externalInstId,
-            contractExternalId: String(externalId),
-            contractNo: contractNo ?? null,
-            period: period ? parseInt(String(period), 10) : null,
-            dueDate: inst.due_date ? inst.due_date.slice(0, 10) : null,
-            amount: inst.amount != null ? Number(inst.amount).toFixed(2) : null,
-            paidAmount: inst.paid != null ? Number(inst.paid).toFixed(2) : "0",
-            status: inst.status ?? null,
-            rawJson: inst,
-          });
-        }
-        if (buffer.length >= FLUSH_EVERY) await flush();
-      } catch {
-        // swallow per-contract errors; continue with next
-      }
-    }
-  }
-
-  await Promise.all(Array.from({ length: CONCURRENCY }, () => worker()));
-  await flush();
-  return flushed;
-}
 
 /**
- * Fastfone365-specific: derive payment records from paid installments.
- * Since Fastfone365 has no standalone payment endpoint, we create synthetic
- * payment_transactions rows from installments where paid_amount > 0.
- * Each paid installment becomes one payment record.
- */
-async function syncPaymentsFromInstallments(
-  section: SectionKey,
-): Promise<number> {
-  const { getDb } = await import("../db");
-  const { installments: instTable } = await import("../../drizzle/schema");
-  const { and, eq, gt, sql: drizzleSql } = await import("drizzle-orm");
-  const db = await getDb();
-  if (!db) return 0;
-
-  // Fetch all paid installments for this section
-  const paidInsts = await db
-    .select()
-    .from(instTable)
-    .where(
-      and(
-        eq(instTable.section, section),
-        gt(instTable.paidAmount, drizzleSql`0`),
-      ),
-    );
-
-  if (paidInsts.length === 0) return 0;
-
-  const buffer: any[] = [];
-  for (const inst of paidInsts) {
-    // Use installment externalId as payment externalId (1:1 mapping)
-    const rawJson = inst.rawJson as any;
-    const paidAt = rawJson?.updated_at
-      ? String(rawJson.updated_at).slice(0, 10)
-      : inst.dueDate ?? null;
-
-    buffer.push({
-      section,
-      externalId: `pay-${inst.externalId}`,
-      contractExternalId: inst.contractExternalId ?? null,
-      contractNo: inst.contractNo ?? null,
-      customerName: null,
-      paidAt,
-      amount: inst.paidAmount,
-      method: null,
-      status: inst.status ?? null,
-      rawJson: { source: "installment", installmentExternalId: inst.externalId },
-    });
-  }
-
-  return await upsertPayments(buffer);
-}
+ * Compute and persist bad-debt summary columns on contracts table.
 
 /**
  * Compute and persist bad-debt summary columns on contracts table.
  *
  * Business rules (confirmed 2026-04-24):
  *   1. contract.status = "หนี้เสีย" → bad-debt confirmed (device sold, applies to both Boonphone & FF365)
- *   2. contract.status = "ยกเลิกสัญญา" (FF365 admin error) + payment on same date as status-change → treat as bad-debt
- *   3. contract.status = "ระงับสัญญา" → device returned but NOT sold yet → no bad-debt amount
+ *   2. contract.status = "ระงับสัญญา" → device returned but NOT sold yet → no bad-debt amount
  *
  * Stores:
  *   bad_debt_amount       = SUM of all bad-debt payments (total_paid_amount where isBadDebt)
@@ -728,19 +595,12 @@ async function syncPaymentsFromInstallments(
 async function computeAndStoreBadDebt(section: SectionKey): Promise<void> {
   const { getDb } = await import("../db");
   const { contracts, installments, paymentTransactions } = await import("../../drizzle/schema");
-  const { and, eq, or, sql } = await import("drizzle-orm");
+  const { and, eq, sql } = await import("drizzle-orm");
   const db = await getDb();
   if (!db) return;
 
-  const isFF365 = section === "Fastfone365";
-
   // ---- 1) Fetch bad-debt contracts ----
-  // "หนี้เสีย" = confirmed bad-debt (device sold) for both sections.
-  // "ยกเลิกสัญญา" = FF365 admin-error case (may have bad-debt payment on same date).
-  const badDebtStatuses = isFF365
-    ? ["หนี้เสีย", "ยกเลิกสัญญา"]
-    : ["หนี้เสีย"];
-
+  // "หนี้เสีย" = confirmed bad-debt (device sold) for both Boonphone and Fastfone365.
   const targetContracts = await db
     .select({
       externalId: contracts.externalId,
@@ -750,10 +610,7 @@ async function computeAndStoreBadDebt(section: SectionKey): Promise<void> {
     .where(
       and(
         eq(contracts.section, section),
-        or(
-          eq(contracts.status, "หนี้เสีย"),
-          ...(isFF365 ? [eq(contracts.status, "ยกเลิกสัญญา")] : []),
-        ),
+        eq(contracts.status, "หนี้เสีย"),
       ),
     );
 
@@ -764,10 +621,9 @@ async function computeAndStoreBadDebt(section: SectionKey): Promise<void> {
   // Process in chunks to avoid huge IN() clauses
   const CHUNK = 500;
 
-  // Suspend codes per section
-  const suspendCodes = isFF365
-    ? ["ระงับสัญญา", "ยกเลิกสัญญา"]
-    : ["ระงับสัญญา", "หนี้เสีย"];
+  // Suspend codes: same for both Boonphone and Fastfone365.
+  // installment_status_code values that indicate a suspended/bad-debt installment.
+  const suspendCodes = ["ระงับสัญญา", "หนี้เสีย"];
 
   // Map: externalId → { suspendedFromPeriod, suspendedAt }
   const suspendMap = new Map<string, { period: number; date: string | null }>();
@@ -863,49 +719,22 @@ async function computeAndStoreBadDebt(section: SectionKey): Promise<void> {
 
   for (const c of targetContracts) {
     const extId = c.externalId;
-    const contractStatus = c.status ?? "";
     const suspend = suspendMap.get(extId) ?? { period: 1, date: null };
     const payments = payMap.get(extId) ?? [];
 
-    // Determine which payments are "bad-debt" payments
-    // Logic (same for both "หนี้เสีย" and "ยกเลิกสัญญา"):
+    // Determine bad-debt amount and date from real payments.
+    // Both Boonphone and Fastfone365 use the same payment transactions API.
+    // Real payments (external_id is numeric) have total_paid_amount from the API.
+    // We use the LATEST real payment as bad_debt_amount (device-sale receipt).
     //
-    // Step 1 — TRIGGER: Find synthetic payments (external_id starts with "pay-") that have
-    //   ff_status = "ยกเลิกสัญญา". These indicate that a device-sale payment exists.
-    //   Synthetic payments are created from installments and have null total_paid_amount.
-    //
-    // Step 2 — AMOUNT & DATE: Use REAL payments (external_id is numeric, from API transactions)
-    //   to compute bad_debt_amount and bad_debt_date.
-    //   Real payments have the correct paid_at (slip date from admin) and total_paid_amount.
-    //   This gives us the correct accounting date for bank reconciliation.
-    //
-    // Why separate trigger from amount?
-    //   The system distributes the sale amount across multiple synthetic payment records
-    //   on the transaction date (e.g. 2026-04-16), but the actual receipt was recorded
-    //   on the slip date (e.g. 2026-04-06). Using real payments avoids date confusion.
-
-    // Step 1: Check if this contract has any synthetic bad-debt trigger
-    const hasBadDebtTrigger = payments.some(
-      (p) => p.ff_status === "ยกเลิกสัญญา" && p.payment_external_id.startsWith("pay-")
-    );
-
-    if (!hasBadDebtTrigger) {
-      // No bad-debt payments found → skip this contract
-      continue;
-    }
-
-    // Step 2: Use the LATEST real payment (numeric external_id, total_paid_amount > 0)
-    //   as bad_debt_amount. This is the device-sale receipt — the final payment that
-    //   triggered the contract cancellation.
-    //
-    //   Why latest, not sum?
-    //   - Earlier real payments are normal installment payments (e.g. 1,499 ก.พ.)
+    // Why latest, not sum?
+    //   - Earlier real payments are normal installment payments
     //   - The last real payment is the device-sale amount (e.g. 8,000 from selling the device)
-    //   - bad_debt_amount should represent only the device-sale proceeds, not the total collected
+    //   - bad_debt_amount should represent only the device-sale proceeds
     //
-    //   Example: CT0126-SRI001-21064-01
-    //     real 103766: 1,499 (2026-02-10) = ชำระงวดปกติ
-    //     real 115702: 8,000 (2026-03-23) = ยอดขายเครื่อง ← bad_debt_amount
+    // Example: CT0126-SRI001-21064-01
+    //   real 103766: 1,499 (2026-02-10) = ชำระงวดปกติ
+    //   real 115702: 8,000 (2026-03-23) = ยอดขายเครื่อง ← bad_debt_amount
     const realBadDebtPayments = payments.filter(
       (p) => !p.payment_external_id.startsWith("pay-") && p.total_paid_amount > 0
     );
