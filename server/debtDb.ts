@@ -567,7 +567,8 @@ export async function listDebtTarget(params: { section: SectionKey }) {
            status,
            product_type,
            CAST(bad_debt_amount AS DECIMAL(18,2)) AS bad_debt_amount,
-           bad_debt_date
+           bad_debt_date,
+           CAST(commission_net AS DECIMAL(18,2)) AS commission_net
       FROM ${contracts}
      WHERE ${contracts.section} = ${params.section}
   `);
@@ -1139,6 +1140,8 @@ export async function listDebtTarget(params: { section: SectionKey }) {
       // bad debt info from contracts table (used by listDebtCollected for tooltip + real payment filtering)
       contractBadDebtAmount: c.bad_debt_amount != null ? Number(c.bad_debt_amount) : null,
       contractBadDebtDate: c.bad_debt_date ?? null,
+      financeAmount: c.finance_amount != null ? Number(c.finance_amount) : null,
+      commissionNet: c.commission_net != null ? Number(c.commission_net) : null,
     };
   });
 
@@ -1378,7 +1381,8 @@ export async function* listDebtTargetStream(params: {
            status,
            product_type,
            CAST(bad_debt_amount AS DECIMAL(18,2)) AS bad_debt_amount,
-           bad_debt_date
+           bad_debt_date,
+           CAST(commission_net AS DECIMAL(18,2)) AS commission_net
       FROM ${contracts}
      WHERE ${contracts.section} = ${params.section}
        AND (status IS NULL OR status != 'ยกเลิกสัญญา')
@@ -1694,6 +1698,8 @@ export async function* listDebtTargetStream(params: {
       installments: baseInstallments,
       contractBadDebtAmount: c.bad_debt_amount != null ? Number(c.bad_debt_amount) : null,
       contractBadDebtDate: c.bad_debt_date ?? null,
+      financeAmount: c.finance_amount != null ? Number(c.finance_amount) : null,
+      commissionNet: c.commission_net != null ? Number(c.commission_net) : null,
     };
   }
 
