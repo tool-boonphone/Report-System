@@ -1153,6 +1153,44 @@ export async function listDebtTarget(params: { section: SectionKey }) {
       }
     }
 
+    // --- Cascade overpayment pass (Phase 48) ---
+    // หักยอดชำระเกินในลำดับ: ดอกเบี้ย → ค่าดำเนินการ → เงินต้น
+    // ส่วนที่เหลือ cascade ไปงวดถัดไปต่อเนื่อง จนกว่ายอดชำระเกินจะหมด
+    {
+      let carryOver = 0;
+      for (const inst of baseInstallments) {
+        if (inst.isClosed || inst.isSuspended) continue;
+        const totalCarry = carryOver + (inst.overpaidApplied ?? 0);
+        if (totalCarry < 0.009) { carryOver = 0; continue; }
+
+        // หักในลำดับ: ดอกเบี้ย → ค่าดำเนินการ → เงินต้น
+        let remaining = totalCarry;
+
+        // 1) หักดอกเบี้ย
+        const deductInterest = Math.min(remaining, inst.interest);
+        inst.interest = Math.round(inst.interest - deductInterest);
+        remaining = Math.max(0, remaining - deductInterest);
+
+        // 2) หักค่าดำเนินการ
+        const deductFee = Math.min(remaining, inst.fee);
+        inst.fee = Math.round(inst.fee - deductFee);
+        remaining = Math.max(0, remaining - deductFee);
+
+        // 3) หักเงินต้น
+        const deductPrincipal = Math.min(remaining, inst.principal);
+        inst.principal = Math.round(inst.principal - deductPrincipal);
+        remaining = Math.max(0, remaining - deductPrincipal);
+
+        // อัปเดต netAmount และ amount
+        inst.netAmount = inst.principal + inst.interest + inst.fee;
+        inst.amount = inst.netAmount + inst.penalty + inst.unlockFee;
+        inst.overpaidApplied = totalCarry;
+
+        // ส่วนที่หักไม่หมด cascade ไปงวดถัดไป
+        carryOver = remaining;
+      }
+    }
+
     return {
       contractExternalId: extId,
       contractNo: c.contract_no ?? null,
@@ -1715,6 +1753,44 @@ export async function* listDebtTargetStream(params: {
         currentPeriod.amount = effectiveBase + currentPeriod.penalty + currentPeriod.unlockFee;
         currentPeriod.netAmount = effectiveBase;
         currentPeriod.isCurrentPeriod = true;
+      }
+    }
+
+    // --- Cascade overpayment pass (Phase 48) ---
+    // หักยอดชำระเกินในลำดับ: ดอกเบี้ย → ค่าดำเนินการ → เงินต้น
+    // ส่วนที่เหลือ cascade ไปงวดถัดไปต่อเนื่อง จนกว่ายอดชำระเกินจะหมด
+    {
+      let carryOver = 0;
+      for (const inst of baseInstallments) {
+        if (inst.isClosed || inst.isSuspended) continue;
+        const totalCarry = carryOver + (inst.overpaidApplied ?? 0);
+        if (totalCarry < 0.009) { carryOver = 0; continue; }
+
+        // หักในลำดับ: ดอกเบี้ย → ค่าดำเนินการ → เงินต้น
+        let remaining = totalCarry;
+
+        // 1) หักดอกเบี้ย
+        const deductInterest = Math.min(remaining, inst.interest);
+        inst.interest = Math.round(inst.interest - deductInterest);
+        remaining = Math.max(0, remaining - deductInterest);
+
+        // 2) หักค่าดำเนินการ
+        const deductFee = Math.min(remaining, inst.fee);
+        inst.fee = Math.round(inst.fee - deductFee);
+        remaining = Math.max(0, remaining - deductFee);
+
+        // 3) หักเงินต้น
+        const deductPrincipal = Math.min(remaining, inst.principal);
+        inst.principal = Math.round(inst.principal - deductPrincipal);
+        remaining = Math.max(0, remaining - deductPrincipal);
+
+        // อัปเดต netAmount และ amount
+        inst.netAmount = inst.principal + inst.interest + inst.fee;
+        inst.amount = inst.netAmount + inst.penalty + inst.unlockFee;
+        inst.overpaidApplied = totalCarry;
+
+        // ส่วนที่หักไม่หมด cascade ไปงวดถัดไป
+        carryOver = remaining;
       }
     }
 

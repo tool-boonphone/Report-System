@@ -697,3 +697,10 @@ Task list:
 - [x] P45-5: เพิ่ม dedup per-period ใน `listDebtCollectedStream` (instByContract building)
 - [x] P45-6: แก้ Bug 2 (collected tab OOM/503) — เปลี่ยน `listDebtCollectedStream` จาก "โหลด ALL 222K payments ก่อน" เป็น "โหลด payments per-batch" (~100 contracts × ~15 payments = ~1,500 rows ต่อ query แทน 222K rows ทั้งหมด)
 - [x] P45-7: TypeScript check ผ่าน + ยืนยัน prewarm สำเร็จ (Boonphone: 10.8s, Fastfone365: 51.7s) + commit + push GitHub + checkpoint
+
+### Phase 48 — เป้าเก็บหนี้: หักยอดชำระเกิน cascade ข้ามงวด
+- [ ] P48-1: วิเคราะห์ overpayment field ใน installments และ processContract ว่า overpayment ถูก store ที่ไหนและ format อย่างไร
+- [ ] P48-2: เพิ่ม cascade overpayment deduction logic ใน processContract (listDebtTargetStream) — หักยอดชำระเกินออกจาก totalAmount ของงวดนั้น แล้ว cascade ส่วนที่เหลือไปงวดถัดไปจนหมด
+- [ ] P48-3: เพิ่ม cascade overpayment deduction logic ใน listDebtTarget (non-stream) ด้วย
+- [ ] P48-4: TypeScript check + ทดสอบ + commit + push GitHub + checkpoint
+- [x] P48-5: แก้ cascade overpayment pass ให้หักในลำดับ ดอกเบี้ย → ค่าดำเนินการ → เงินต้น (ไม่ใช่หักยอดหนี้รวมโดยตรง) ใน listDebtTarget และ listDebtTargetStream
