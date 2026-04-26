@@ -336,6 +336,29 @@ export function assignPayPeriods(
   const periodSeen = new Map<number, number>();
   const out: Array<PayRawRow & { splitIndex: number; isCloseRow: boolean; isBadDebtRow: boolean }> = [];
 
+  // Phase 75C: Pre-check for duplicate TXRT suffixes.
+  // If any TXRT suffix (the period-number segment) appears more than once,
+  // it means the suffix is a receipt sequence number — NOT a period number.
+  // In that case, skip Phase 75B (receipt-based cursor advancement) and
+  // fall back to the original amount-based cursor walk.
+  let useSuffixPeriod = false;
+  if (contractNo) {
+    const prefix75c = "TXRT" + contractNo.replace(/^CT/, "") + "-";
+    const suffixCounts = new Map<string, number>();
+    for (const p of payments) {
+      const r = String(p.receipt_no ?? "");
+      if (r.startsWith(prefix75c) && !r.startsWith("TXRTC")) {
+        const suffix = r.slice(prefix75c.length);
+        const firstSeg = suffix.split("-")[0];
+        if (/^\d+$/.test(firstSeg)) {
+          suffixCounts.set(firstSeg, (suffixCounts.get(firstSeg) ?? 0) + 1);
+        }
+      }
+    }
+    // Use suffix-based period only when all suffixes are unique
+    useSuffixPeriod = Array.from(suffixCounts.values()).every((c) => c === 1);
+  }
+
   const sorted = [...payments].sort((a, b) => {
     const at = a.paid_at ?? "";
     const bt = b.paid_at ?? "";
@@ -368,7 +391,8 @@ export function assignPayPeriods(
     // parse the explicit period from the receipt_no suffix and advance cursor to that period.
     // This fixes cases where partial payments (e.g. TXRT-3-1 = 2.50 baht) don't advance
     // the cursor, causing subsequent receipts to be assigned to wrong periods.
-    if (contractNo && !isCloseRow && receipt.startsWith("TXRT")) {
+    // Phase 75C: Only use suffix-based period when useSuffixPeriod=true (no duplicate suffixes).
+    if (contractNo && !isCloseRow && receipt.startsWith("TXRT") && useSuffixPeriod) {
       const prefix = "TXRT" + contractNo.replace(/^CT/, "") + "-";
       if (receipt.startsWith(prefix)) {
         const suffix = receipt.slice(prefix.length); // e.g. "2-1" or "4"
