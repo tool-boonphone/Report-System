@@ -864,7 +864,7 @@ export default function DebtReport() {
         ]
       : [
           // collected tab: ซ่อน closeInstallmentAmount (ซ้ำซ้อนกับ principal+interest+fee)
-          { key: "period", label: "งวดที่", width: 55 },
+          { key: "period", label: "รายการ", width: 55 },
           { key: "paidAt", label: "วันที่ชำระ", width: 100 },
           { key: "principal", label: "เงินต้น", width: 80, align: "right" },
           { key: "interest", label: "ดอกเบี้ย", width: 80, align: "right" },
@@ -1192,7 +1192,7 @@ export default function DebtReport() {
                       className="border-r text-center flex items-center justify-center text-white"
                       style={{ width: GROUP_WIDTH, height: 28, background: "#047857" }}
                     >
-                      ข้อมูลการชำระเงิน
+                      รายการชำระเงิน
                     </div>
                   ) : (
                     Array.from({ length: maxPeriods }, (_, i) => (
@@ -1435,7 +1435,15 @@ export default function DebtReport() {
                           background: pinnedCols.has("installmentCount") ? "#eff6ff" : undefined,
                         }}
                       >
-                        {r.installmentCount ?? "-"}
+                        {(() => {
+                          // งวดล่าสุดที่ค้างชำระ = period ของ isCurrentPeriod installment
+                          const currentInst = r.installments.find((inst) => inst.isCurrentPeriod);
+                          const latestOverdue = currentInst?.period ?? null;
+                          if (latestOverdue != null && r.installmentCount != null) {
+                            return `${latestOverdue}/${r.installmentCount}`;
+                          }
+                          return r.installmentCount ?? "-";
+                        })()}
                       </div>
                       <div
                         className="px-2 py-2 border-r text-right tabular-nums"
@@ -1506,7 +1514,7 @@ export default function DebtReport() {
                                           isExpanded ? "rotate-90" : ""
                                         }`}
                                       />
-                                      {hasPayments ? `${filteredPayments.length} รายการ` : "-"}
+                                      {hasPayments ? filteredPayments.length : "-"}
                                     </button>
                                   );
                                   break;
