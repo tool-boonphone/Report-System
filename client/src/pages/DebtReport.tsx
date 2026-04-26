@@ -143,10 +143,6 @@ type InstallmentCell = {
   baselineAmount: number;
   /** Delta vs baseline: > 0 when API deducted overpaid from this period. */
   overpaidApplied: number;
-  /** Phase 58: label for UI when period is reduced by carry-forward overpaid, e.g. "(-หักชำระเกิน: 7,802)" */
-  overpaidCarryLabel?: string | null;
-  /** Phase 58: label for UI when this period generated overpaid carry, e.g. "(+ชำระเกิน: 7,802)" */
-  overpaidSourceLabel?: string | null;
   /** True when the period is reported as already closed (amount=0 with baseline>0). */
   isClosed: boolean;
   /** True when the period is ระงับสัญญา or หนี้เสีย. */
@@ -185,10 +181,6 @@ type PaymentCell = {
   remark: string | null;
   /** tooltip สำหรับ bad debt rows: "ยอดขายเครื่อง X บาท (DD/MM/YYYY)" */
   badDebtNote?: string | null;
-  /** Phase 58: true when this row represents a period zeroed by overpaid carry-forward */
-  isOverpaidCarryRow?: boolean;
-  /** Phase 58: amount of carry used to zero this period */
-  overpaidCarryUsed?: number;
 };
 
 type TargetRow = {
@@ -1530,19 +1522,9 @@ export default function DebtReport() {
                                   // Phase 27 fix: ตรวจสอบ overpaidApplied > 0 เพียงอย่างเดียว
                                   // เงื่อนไขเดิม (baselineAmount > amount) ไม่ทำงานเมื่อ penalty ถูกบวกเข้า amount
                                   // ทำให้ amount = baseline แม้จะมีการหักยอดเกินแล้ว
-                                  // Phase 58: ใช้ overpaidCarryLabel จาก server (carry-forward หลายงวด)
-                                  // ถ้าไม่มี overpaidCarryLabel ให้ fallback ไปใช้ overpaidApplied (backward compat)
-                                  if (inst.overpaidCarryLabel) {
-                                    annotation = inst.overpaidCarryLabel;
-                                    annotationClass = "text-emerald-600 font-semibold";
-                                  } else if (inst.overpaidApplied > 0.009) {
+                                  if (inst.overpaidApplied > 0.009) {
                                     annotation = `(-หักชำระเกิน: ${fmtMoney(inst.overpaidApplied)})`;
                                     annotationClass = "text-emerald-600 font-semibold";
-                                  }
-                                  // Phase 58: annotation for source period that generated overpaid carry
-                                  if (inst.overpaidSourceLabel) {
-                                    annotation = (annotation ? annotation + " " : "") + inst.overpaidSourceLabel;
-                                    annotationClass = "text-blue-600 font-semibold";
                                   }
                                 }
                               }
@@ -1680,14 +1662,12 @@ export default function DebtReport() {
                                 // on the first ("period") column of each
                                 // group.
                                 const isCloseCell = !!pay && pay.isCloseRow;
-                                // Phase 58: overpaid carry row — period zeroed by carry-forward
-                                const isCarryRow = !!pay && !!pay.isOverpaidCarryRow;
                                 if (pay) {
                                   switch (gc.key) {
                                     case "period":
                                       // Always show the receipt's sequence per period.
                                       // First payment of period P → "P-1", second → "P-2", etc.
-                                      v = isCarryRow ? `${periodNo}-★` : `${periodNo}-${(pay.splitIndex ?? 0) + 1}`;
+                                      v = `${periodNo}-${(pay.splitIndex ?? 0) + 1}`;
                                       break;
                                     case "paidAt":
                                       v = fmtDate(pay.paidAt);
@@ -1723,8 +1703,6 @@ export default function DebtReport() {
                                       v = fmtMoney(pay.badDebt || 0);
                                       break;
                                     case "total":
-                                      // Phase 61: แสดง total จริง (รวม overpaid) เพื่อให้ตรงกับยอดที่ชำระจริง
-                                      // เช่น จ่าย 11,703 (3,901 + 7,802 overpaid) → แสดง 11,703
                                       v = fmtMoney(pay.total);
                                       break;
                                   }
@@ -1744,17 +1722,6 @@ export default function DebtReport() {
                                   textClass = "text-gray-400 italic";
                                   cellBg = undefined; // parent div already grey
                                   cellBorderLeft = undefined;
-                                } else if (isCarryRow) {
-                                  // Phase 58: overpaid carry row: emerald-50 bg + emerald text
-                                  // Show date of overpaid payment + 0 total
-                                  textClass = gc.key === "total"
-                                    ? "text-emerald-700 font-bold"
-                                    : (isZeroish ? "text-emerald-300 italic" : "text-emerald-600");
-                                  cellBg = "#ecfdf5"; // emerald-50
-                                  cellBorderLeft =
-                                    gcIdx === 0
-                                      ? "4px solid #34d399" // emerald-400
-                                      : undefined;
                                 } else if (isCloseCell) {
                                   // TXRTC close row: rose-50 bg + rose-700 text
                                   // 0.00 values use rose-300 italic (faded)
@@ -1820,11 +1787,9 @@ export default function DebtReport() {
                                         ? (periodNo > instCount
                                             ? "ไม่มีงวดนี้ในสัญญา"
                                             : "ระงับ/หนี้เสีย")
-                                        : isCarryRow
-                                          ? `หักจากชำระเกินงวดก่อน: ${(pay?.overpaidCarryUsed ?? 0).toLocaleString('th-TH', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} บาท`
-                                          : gc.key === "badDebt" && pay?.isBadDebtRow && pay?.badDebtNote
-                                            ? pay.badDebtNote
-                                            : (pay?.remark ?? pay?.receiptNo ?? undefined)
+                                        : gc.key === "badDebt" && pay?.isBadDebtRow && pay?.badDebtNote
+                                          ? pay.badDebtNote
+                                          : (pay?.remark ?? pay?.receiptNo ?? undefined)
                                     }
                                   >
                                     {v}
