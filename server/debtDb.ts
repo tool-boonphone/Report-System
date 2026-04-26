@@ -341,35 +341,77 @@ export function assignPayPeriods(
   // it means the suffix is a receipt sequence number — NOT a period number.
   // In that case, skip Phase 75B (receipt-based cursor advancement) and
   // fall back to the original amount-based cursor walk.
+  //
+  // Phase 76 amendment: TXRT-N-M format (where M is a sub-payment index)
+  // always uses N as the period number, regardless of duplicate N values.
+  // Only TXRT-N (no M) receipts are checked for duplicates.
+  // Example: TXRT-1-2 and TXRT-1-3 are both period 1 (not duplicates).
   let useSuffixPeriod = false;
+  // hasNMFormat: true if ANY receipt uses N-M format (has sub-payment index)
+  let hasNMFormat = false;
   if (contractNo) {
     const prefix75c = "TXRT" + contractNo.replace(/^CT/, "") + "-";
-    const suffixCounts = new Map<string, number>();
+    const suffixCounts = new Map<string, number>(); // only for N-only receipts
     for (const p of payments) {
       const r = String(p.receipt_no ?? "");
       if (r.startsWith(prefix75c) && !r.startsWith("TXRTC")) {
         const suffix = r.slice(prefix75c.length);
-        const firstSeg = suffix.split("-")[0];
+        const parts = suffix.split("-");
+        const firstSeg = parts[0];
         if (/^\d+$/.test(firstSeg)) {
-          suffixCounts.set(firstSeg, (suffixCounts.get(firstSeg) ?? 0) + 1);
+          if (parts.length >= 2 && /^\d+$/.test(parts[1])) {
+            // N-M format: N is always the period, M is sub-payment index
+            hasNMFormat = true;
+          } else {
+            // N-only format: check for duplicates
+            suffixCounts.set(firstSeg, (suffixCounts.get(firstSeg) ?? 0) + 1);
+          }
         }
       }
     }
-    // Use suffix-based period only when all suffixes are unique
-    useSuffixPeriod = Array.from(suffixCounts.values()).every((c) => c === 1);
+    if (hasNMFormat) {
+      // When N-M format exists, always use suffix-based period for N-M receipts.
+      // For N-only receipts, still check duplicates.
+      useSuffixPeriod = true; // will be applied selectively in Phase 75B
+    } else {
+      // No N-M format: use suffix-based period only when all N-only suffixes are unique
+      useSuffixPeriod = Array.from(suffixCounts.values()).every((c) => c === 1);
+    }
   }
+
+  // Phase 76: Extract numeric segments from TXRT receipt suffix for numeric sort.
+  // TXRT-N-M receipts must sort N=1 before N=10 (not lexicographically).
+  // TXRTC rows sort after TXRT rows (isClose=true → sortKey ends with large number).
+  const getTxrtSortKey = (receiptNo: string | null): number[] => {
+    if (!receiptNo) return [9999];
+    if (receiptNo.startsWith("TXRTC")) return [99999]; // close rows always last
+    // Match TXRT{contractSuffix}-N or TXRT{contractSuffix}-N-M
+    const m = receiptNo.match(/-(\d+)(?:-(\d+))?$/);
+    if (m) {
+      const n = parseInt(m[1], 10);
+      const sub = m[2] != null ? parseInt(m[2], 10) : 0;
+      return [n, sub];
+    }
+    return [9999];
+  };
 
   const sorted = [...payments].sort((a, b) => {
     const at = a.paid_at ?? "";
     const bt = b.paid_at ?? "";
     if (at !== bt) return at.localeCompare(bt);
-    // Phase 75: tie-break by receipt_no alphabetically so TXRT-N-M receipts
-    // are processed in period order (e.g. TXRT-2-1 before TXRT-3-1 on same day).
-    // TXRTC rows sort after TXRT rows naturally because 'C' > '' alphabetically.
-    // Fall back to payment_id for rows with identical receipt_no.
+    // Phase 76: tie-break by TXRT numeric segments (N, then M) so TXRT-1-2 < TXRT-1-3 < TXRT-2-1 < TXRT-10
+    // instead of alphabetical which would give TXRT-10 < TXRT-2 < TXRT-9.
     const ar = a.receipt_no ?? "";
     const br = b.receipt_no ?? "";
-    if (ar !== br) return ar.localeCompare(br);
+    if (ar !== br) {
+      const ak = getTxrtSortKey(ar);
+      const bk = getTxrtSortKey(br);
+      for (let i = 0; i < Math.max(ak.length, bk.length); i++) {
+        const av = ak[i] ?? 0;
+        const bv = bk[i] ?? 0;
+        if (av !== bv) return av - bv;
+      }
+    }
     return (a.payment_id ?? 0) - (b.payment_id ?? 0);
   });
 
@@ -392,18 +434,42 @@ export function assignPayPeriods(
     // This fixes cases where partial payments (e.g. TXRT-3-1 = 2.50 baht) don't advance
     // the cursor, causing subsequent receipts to be assigned to wrong periods.
     // Phase 75C: Only use suffix-based period when useSuffixPeriod=true (no duplicate suffixes).
+    // Phase 76 amendment: When hasNMFormat=true, N-M receipts always use N as period;
+    //   N-only receipts use suffix-based period only when useSuffixPeriod=true.
     if (contractNo && !isCloseRow && receipt.startsWith("TXRT") && useSuffixPeriod) {
       const prefix = "TXRT" + contractNo.replace(/^CT/, "") + "-";
       if (receipt.startsWith(prefix)) {
         const suffix = receipt.slice(prefix.length); // e.g. "2-1" or "4"
-        const firstSegment = suffix.split("-")[0];
-        const explicitPeriod = Number(firstSegment);
-        if (Number.isFinite(explicitPeriod) && explicitPeriod > 0) {
-          // Advance cursor to the schedule index for this explicit period
-          const targetIdx = schedule.findIndex((s) => s.period === explicitPeriod);
-          if (targetIdx >= 0 && targetIdx >= cursor) {
-            cursor = targetIdx;
-            coveredCurrent = 0;
+        const parts = suffix.split("-");
+        const firstSegment = parts[0];
+        const isNMFormat = parts.length >= 2 && /^\d+$/.test(parts[1]);
+        // For N-only receipts when hasNMFormat is true, skip suffix-based period
+        // (N-only receipts in a mixed contract may be sequence numbers)
+        if (!isNMFormat && hasNMFormat) {
+          // N-only receipt in a contract that also has N-M receipts:
+          // use amount-based cursor walk (do not advance cursor here)
+        } else {
+          const explicitPeriod = Number(firstSegment);
+          if (Number.isFinite(explicitPeriod) && explicitPeriod > 0) {
+            // Advance cursor to the schedule index for this explicit period.
+            // Phase 76: For N-M format receipts, allow cursor to move backward
+            // to the explicit period (e.g. TXRT-1-3 after cursor advanced past period 1).
+            // For N-only receipts, only advance forward (original Phase 75B behavior).
+            const targetIdx = schedule.findIndex((s) => s.period === explicitPeriod);
+            if (targetIdx >= 0) {
+              if (isNMFormat) {
+                // N-M: always set cursor to explicit period (allow backward).
+                // Phase 76: always reset coveredCurrent for N-M receipts because
+                // N-M format explicitly declares the period — any carry-over from
+                // a previous receipt's partial payment should not affect this period.
+                cursor = targetIdx;
+                coveredCurrent = 0;
+              } else if (targetIdx >= cursor) {
+                // N-only: only advance forward
+                cursor = targetIdx;
+                coveredCurrent = 0;
+              }
+            }
           }
         }
       }
@@ -432,18 +498,22 @@ export function assignPayPeriods(
         coveredCurrent = 0;
       }
     } else {
-      // Prefer principal+interest+fee when present; fall back to
-      // close_installment_amount, then raw amount. Any of these tells us
-      // "how much of the current installment did this payment burn".
+      // Phase 77: Prefer close_installment_amount for cursor advancement because
+      // it reflects exactly how much of the current installment was closed by this
+      // payment in the source system. pif (principal+interest+fee) can differ from
+      // the installment amount when there are rounding differences, partial payments,
+      // or overpayments — using pif caused cursor to advance too early or too late.
+      // Fall back to pif when close_installment_amount is absent, then raw total.
+      const closeAmt = Number(p.close_installment_amount ?? 0);
       const pif =
         Number(p.principal_paid ?? 0) +
         Number(p.interest_paid ?? 0) +
         Number(p.fee_paid ?? 0);
       const consumed =
-        pif > 0
-          ? pif
-          : Number(p.close_installment_amount ?? 0) > 0
-            ? Number(p.close_installment_amount)
+        closeAmt > 0
+          ? closeAmt
+          : pif > 0
+            ? pif
             : Number(p.total_paid_amount ?? 0);
       coveredCurrent += consumed;
       while (
@@ -454,6 +524,12 @@ export function assignPayPeriods(
         coveredCurrent -= schedule[cursor].amount;
         cursor += 1;
       }
+      // Phase 76: after cursor advance, if coveredCurrent is negative (payment was
+      // slightly less than installment amount but still triggered advance due to -0.5
+      // threshold), reset to 0 so the deficit does NOT carry forward to the next
+      // period. This prevents TXRT-N-M partial payments from causing subsequent
+      // N-only receipts to be assigned to the wrong period.
+      if (coveredCurrent < 0) coveredCurrent = 0;
       // Phase 63: advance cursor เพิ่มตาม overpaid amount
       // ถ้าจ่ายเกิน (overpaid > 0) ให้ข้ามงวดที่ถูกครอบคลุมโดย overpaid pool
       const overpaidAmount = Number(p.overpaid_amount ?? 0);
