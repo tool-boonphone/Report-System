@@ -323,6 +323,7 @@ type InstRawRow = {
 export function assignPayPeriods(
   payments: PayRawRow[],
   installmentList: Array<{ period: number | null; amount: number }>,
+  skipPeriods?: Set<number>,
 ): Array<PayRawRow & { splitIndex: number; isCloseRow: boolean; isBadDebtRow: boolean }> {
   if (!payments.length) return [];
   const schedule = installmentList
@@ -331,6 +332,13 @@ export function assignPayPeriods(
     .sort((a, b) => a.period - b.period);
 
   let cursor = 0;
+  // Phase 58: Skip periods that are fully covered by carry-forward
+  // Advance cursor past any skipped periods at the start
+  if (skipPeriods && skipPeriods.size > 0) {
+    while (cursor < schedule.length && skipPeriods.has(schedule[cursor].period)) {
+      cursor += 1;
+    }
+  }
   let coveredCurrent = 0;
   const periodSeen = new Map<number, number>();
   const out: Array<PayRawRow & { splitIndex: number; isCloseRow: boolean; isBadDebtRow: boolean }> = [];
@@ -379,6 +387,10 @@ export function assignPayPeriods(
       if (cursor < schedule.length - 1) {
         cursor += 1;
         coveredCurrent = 0;
+        // Phase 58: Skip carry periods during TXRTC cursor advancement
+        while (cursor < schedule.length && skipPeriods?.has(schedule[cursor].period)) {
+          cursor += 1;
+        }
       }
     } else {
       // Prefer principal+interest+fee when present; fall back to
@@ -402,6 +414,10 @@ export function assignPayPeriods(
       ) {
         coveredCurrent -= schedule[cursor].amount;
         cursor += 1;
+        // Phase 58: Skip carry periods during cursor advancement
+        while (cursor < schedule.length && skipPeriods?.has(schedule[cursor].period)) {
+          cursor += 1;
+        }
       }
     }
   }
@@ -2230,16 +2246,11 @@ export async function* listDebtCollectedStream(params: {
             for (const targetPeriod of sortedPeriods) {
               if (targetPeriod <= srcPeriod) continue;
               if (remainingCarry < 0.009) break;
-              // Check if target period already has a real payment
+              // Phase 58 fix: Always distribute carry to next periods regardless of paid_amount
+              // (API paid_amount reflects actual payments, not carry-adjusted)
+              // assignPayPeriods will skip these periods via skipPeriods set
               const targetInst = instList.find((i) => Number(i.period) === targetPeriod);
               if (!targetInst) continue;
-              const targetPaid = Number(targetInst.paid_amount ?? 0);
-              // Skip if target period has a real payment (not zero)
-              // We only add carry rows for periods with no real payment (paid=0)
-              if (targetPaid > 0.009) {
-                // Period has real payment — carry was absorbed, stop distributing
-                break;
-              }
               const carryUsed = Math.min(remainingCarry, baselineAmountForCarry);
               overpaidCarryRows.push({ period: targetPeriod, paidAt: srcPaidAt, carryUsed });
               remainingCarry = Math.max(0, remainingCarry - carryUsed);
@@ -2247,6 +2258,9 @@ export async function* listDebtCollectedStream(params: {
           }
         }
       }
+
+      // Phase 58: Build skipPeriods set from overpaidCarryRows
+      const skipPeriods = new Set<number>(overpaidCarryRows.map((cr) => cr.period));
 
       let tagged: Array<PayRawRow & { splitIndex: number; isCloseRow: boolean; isBadDebtRow: boolean }>;
       if (contractBadDebtAmount != null && contractBadDebtAmount > 0 && contractBadDebtDate) {
@@ -2259,6 +2273,7 @@ export async function* listDebtCollectedStream(params: {
         const realAssignedForBadDebt = assignPayPeriods(
           realPaymentsRaw,
           c.installments.map((i: { period: number | null; amount: number | string }) => ({ period: i.period, amount: Number(i.amount) || 0 })),
+          skipPeriods,
         );
         const normalPayments = realAssignedForBadDebt.filter((p) => {
           const totalPaid = (p as any).total_paid_amount as number | null;
@@ -2321,6 +2336,7 @@ export async function* listDebtCollectedStream(params: {
         const realAssigned = assignPayPeriods(
           realPaymentsRaw,
           c.installments.map((i: { period: number | null; amount: number | string }) => ({ period: i.period, amount: Number(i.amount) || 0 })),
+          skipPeriods,
         );
         tagged = realAssigned.map((p) => ({ ...p, isBadDebtRow: false }));
       }
