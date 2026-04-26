@@ -846,3 +846,15 @@ Task list:
 - [ ] P74-4: แก้ไข listDebtTargetStream เช่นเดียวกัน
 - [ ] P74-5: Restart server + ทดสอบ
 - [ ] P74-6: Commit + push GitHub + checkpoint
+
+### Phase 75 — Refactor: Collected Tab เปลี่ยนเป็น Vertical Layout + เปลี่ยน "ขายเครื่อง" → "หนี้เสีย"
+- [x] P75-1: เพิ่ม `expandedRows` state + `toggleExpand` function ใน DebtReport.tsx
+- [x] P75-2: เพิ่ม `ChevronRight` import จาก lucide-react
+- [x] P75-3: แก้ไข header rendering ของ collected tab ให้เป็น single-group header (แทน per-period matrix)
+- [x] P75-4: แก้ไข row rendering ของ collected tab ให้เป็น vertical layout
+  - Summary row (สีเขียว green-50): แสดงยอดรวม + ปุ่ม expand/collapse
+  - Detail rows (เมื่อ expand): แสดงรายการ payment แต่ละรายการ
+- [x] P75-5: เปลี่ยน "ขายเครื่อง" → "หนี้เสีย" ใน groupCols และ badge config
+- [x] P75-6: แก้ไข `rowLineCount` ให้นับ total payments (vertical) แทน max splits per period (matrix)
+- [x] P75-7: แก้ไข `estimateSize` ให้คำนวณ height ตาม expand state
+- [x] P75-8: Commit + push GitHub + checkpoint
