@@ -1334,7 +1334,7 @@ export default function DebtReport() {
                   return (
                     <div
                       key={vr.key}
-                      className={`flex border-b text-[12px] transition-colors cursor-default relative ${
+                      className={`border-b text-[12px] transition-colors cursor-default relative ${
                         hoveredRow === vr.index
                           ? "shadow-[inset_4px_0_0_0_#2563eb,inset_0_-1px_0_0_#93c5fd,0_-1px_0_0_#93c5fd]"
                           : ""

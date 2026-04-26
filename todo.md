@@ -858,8 +858,3 @@ Task list:
 - [x] P75-6: แก้ไข `rowLineCount` ให้นับ total payments (vertical) แทน max splits per period (matrix)
 - [x] P75-7: แก้ไข `estimateSize` ให้คำนวณ height ตาม expand state
 - [x] P75-8: Commit + push GitHub + checkpoint
-
-### Phase 76 — Fix: Regression bug ใน target tab (ข้อมูลซ้อนทับ)
-- [x] P76-1: วิเคราะห์ root cause — outer row div หาย `flex` class ออกไปตอน refactor Phase 75
-- [x] P76-2: เพิ่ม `flex` กลับไปใน outer row div className ของ DebtReport.tsx
-- [x] P76-3: ตรวจสอบ TypeScript 0 errors + commit + checkpoint
