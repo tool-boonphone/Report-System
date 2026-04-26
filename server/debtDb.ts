@@ -1646,11 +1646,39 @@ export async function* listDebtTargetStream(params: {
 
     // Pass 2 (Phase 52 fix v2): close period = max period from TXRT normal receipts (suffix -N).
     // Periods strictly AFTER this are rendered as "ปิดค่างวดแล้ว" with zero amounts.
+    //
+    // Phase 60 fix: สัญญาที่มี overpaid carry pool (ชำระเกิน) จะมี carry periods ที่ถูก skip
+    // ดังนั้น TXRT-N suffix จาก DB ไม่ตรงกับ period จริงๆ ที่ re-mapped
+    // ตัวอย่าง: TXRT-3 อาจครอบคลุม period 5 จริงๆ (ถ้ามี 2 carry periods)
+    // วิธีแก้: maxNormalPeriod = max(normalPeriods) + carryCount
+    // โดย carryCount = floor(totalOverpaid / baselineAmount) ต่อ contract
+
+    // Build baselineByContract map จาก cRows สำหรับใช้คำนวณ carryCount
+    const baselineByContractForClose = new Map<string, number>();
+    for (const c of cRows) {
+      if (c.installment_amount != null && Number(c.installment_amount) > 0) {
+        baselineByContractForClose.set(String(c.external_id), Number(c.installment_amount));
+      }
+    }
+
     for (const key of Array.from(closeDatesByContract.keys())) {
       const normalPeriods = normalPeriodsByContract.get(key);
-      const maxNormalPeriod = normalPeriods && normalPeriods.size > 0
+      const rawMaxNormal = normalPeriods && normalPeriods.size > 0
         ? Math.max(...Array.from(normalPeriods))
         : 0;
+      // Phase 60: คำนวณ carryCount จาก overpaid pool
+      // carryCount = จำนวน periods ที่ถูก skip เพราะ carry pool ครอบคลุม
+      let carryCount = 0;
+      const periodMap = overpaidByContractPeriod.get(key);
+      const baseline = baselineByContractForClose.get(key);
+      if (periodMap && baseline && baseline > 0) {
+        let totalOverpaid = 0;
+        for (const [, entry] of Array.from(periodMap.entries())) {
+          totalOverpaid += entry.amount;
+        }
+        carryCount = Math.floor(totalOverpaid / baseline);
+      }
+      const maxNormalPeriod = rawMaxNormal > 0 ? rawMaxNormal + carryCount : 0;
       closedByContract.set(key, maxNormalPeriod);
     }
   }
