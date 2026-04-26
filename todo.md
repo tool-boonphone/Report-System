@@ -786,7 +786,7 @@ Task list:
 - [x] P63-5: Commit + push GitHub + checkpoint
 
 ### Phase 64 — Fix: เป้าเก็บหนี้ overpaid cascade ไม่ถูกต้อง (งวด 3,4 ควร = 0 พร้อม annotation)
-- [ ] P64-1: ตรวจสอบ listDebtTarget overpaid cascade logic สำหรับ CT0925-PKN001-15462-01
-- [ ] P64-2: แก้ไข listDebtTarget และ listDebtTargetStream ให้ overpaid cascade ถูกต้อง
-- [ ] P64-3: Restart server + ทดสอบผลลัพธ์
-- [ ] P64-4: Commit + push GitHub + checkpoint
+- [x] P64-1: ตรวจสอบ listDebtTarget overpaid cascade logic สำหรับ CT0925-PKN001-15462-01
+- [x] P64-2: แก้ไข listDebtTarget และ listDebtTargetStream ให้ overpaid cascade ถูกต้อง
+- [x] P64-3: Restart server + ทดสอบผลลัพธ์
+- [x] P64-4: Commit + push GitHub + checkpoint
