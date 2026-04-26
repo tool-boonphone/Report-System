@@ -792,7 +792,7 @@ Task list:
 - [x] P64-4: Commit + push GitHub + checkpoint
 
 ### Phase 65 — Fix: งวด 6,7,8 ของ CT0925-PKN001-15462-01 แสดงเป็น ปิดค่างวด ทั้งที่มี payment จริง
-- [ ] P65-1: ตรวจสอบ closedByContract logic สำหรับ CT0925-PKN001-15462-01
-- [ ] P65-2: แก้ไข isClosed logic ใน listDebtTarget และ listDebtTargetStream
-- [ ] P65-3: Restart server + ทดสอบผลลัพธ์
-- [ ] P65-4: Commit + push GitHub + checkpoint
+- [x] P65-1: ตรวจสอบ closedByContract logic สำหรับ CT0925-PKN001-15462-01
+- [x] P65-2: แก้ไข isClosed logic ใน listDebtTarget และ listDebtTargetStream
+- [x] P65-3: Restart server + ทดสอบผลลัพธ์
+- [x] P65-4: Commit + push GitHub + checkpoint
