@@ -1845,7 +1845,12 @@ export async function* listDebtTargetStream(params: {
             } else {
               const apiAmount = rawAmount > 0.009 ? rawAmount : null;
               const apiEqualsBaseline = apiAmount != null && Math.abs(apiAmount - baseline) < 0.5;
-              const applyCarryToAmount = overpaidApplied > 0.009 && apiEqualsBaseline;
+              // Phase 58 fix: only apply carry deduction when the period is NOT yet paid
+              // (paid < 0.009). If the customer already paid this period, carry should NOT
+              // reduce the displayed amount — the carry was already "used" by the API to
+              // credit future periods, not to reduce a period that was paid normally.
+              const periodAlreadyPaid = paid >= (apiAmount ?? 0) - 0.5 && (apiAmount ?? 0) > 0.009;
+              const applyCarryToAmount = overpaidApplied > 0.009 && apiEqualsBaseline && !periodAlreadyPaid;
               // Phase 48: ใช้ effective values (หัก overpaid แล้ว) ทั้ง 3 fields
               fee = Math.round(effectiveFee);
               principal = Math.round(effectivePrincipal);
@@ -1917,9 +1922,22 @@ export async function* listDebtTargetStream(params: {
         // Phase 49 fix: do NOT fallback to baselineAmount when overpaidApplied > 0
         // because baseNet=0 means overpaid covered all components (correct), not API error.
         const noOverpaidS = (currentPeriod.overpaidApplied ?? 0) < 0.009;
-        const effectiveBase = baseNet > 0.009
-          ? baseNet
-          : (noOverpaidS && currentPeriod.baselineAmount > 0.009 ? currentPeriod.baselineAmount : baseNet);
+        // Phase 58 fix: if the period was already paid (paid >= amount) and the pre-computed
+        // amount is already correct (> 0), preserve it instead of recalculating from baseNet.
+        // This prevents the Arrears pass from zeroing out a paid period whose principal/interest/fee
+        // were reduced to 0 by the effective-values carry logic.
+        const periodPaid = Number(currentPeriod.paid ?? 0);
+        const preComputedAmount = Number(currentPeriod.amount ?? 0);
+        const periodIsAlreadyPaid = periodPaid >= preComputedAmount - 0.5 && preComputedAmount > 0.009;
+        let effectiveBase: number;
+        if (periodIsAlreadyPaid && preComputedAmount > 0.009) {
+          // Period was paid — keep the pre-computed amount as the base
+          effectiveBase = preComputedAmount;
+        } else {
+          effectiveBase = baseNet > 0.009
+            ? baseNet
+            : (noOverpaidS && currentPeriod.baselineAmount > 0.009 ? currentPeriod.baselineAmount : baseNet);
+        }
         currentPeriod.amount = effectiveBase + currentPeriod.penalty + currentPeriod.unlockFee;
         currentPeriod.netAmount = effectiveBase;
         currentPeriod.isCurrentPeriod = true;
@@ -2252,6 +2270,7 @@ export async function* listDebtCollectedStream(params: {
               const targetInst = instList.find((i) => Number(i.period) === targetPeriod);
               if (!targetInst) continue;
               const carryUsed = Math.min(remainingCarry, baselineAmountForCarry);
+              if (carryUsed < 0.009) break; // carry exhausted, stop
               overpaidCarryRows.push({ period: targetPeriod, paidAt: srcPaidAt, carryUsed });
               remainingCarry = Math.max(0, remainingCarry - carryUsed);
             }
