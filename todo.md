@@ -810,3 +810,11 @@ Task list:
 - [x] P68-2: แก้ไข listDebtTargetStream — เพิ่ม logic เดียวกัน
 - [x] P68-3: Restart server + ทดสอบ CT0126-AYA001-20952-01 (งวด 1 ปกติ, งวด 2-12 หนี้เสีย)
 - [x] P68-4: Commit + push GitHub + checkpoint
+
+### Phase 69 — Fix: FF365 suspendedFromPeriod ต้องใช้ inst_status (i.status column) แทน installment_status_code จาก raw_json
+- [x] P69-1: แก้ไข suspendCodes ใน listDebtTarget และ listDebtTargetStream — FF365 ใช้ ["ระงับสัญญา", "ยกเลิกสัญญา"] แทน ["ระงับสัญญา", "หนี้เสีย"]
+- [x] P69-2: แก้ไข firstSuspended filter ให้ตรวจสอบทั้ง installment_status_code (raw_json) และ inst_status (i.status column)
+- [x] P69-3: แก้ไข isSuspended logic — งวดที่ inst_status ตรงกับ suspendCodes ให้ isSuspended = true เสมอ ไม่ว่าจะมี paid > 0 หรือไม่
+- [x] P69-4: ย้าย suspendCodes declaration ออกมา outer scope ใน listDebtTargetStream เพื่อให้ใช้ใน baseInstallments.map ได้
+- [x] P69-5: Restart server + ทดสอบ CT0126-AYA001-22194-01 (งวด 1-2 ปกติ, งวด 3-12 หนี้เสีย แม้งวด 3 มี paid=740)
+- [x] P69-6: Commit + push GitHub + checkpoint
