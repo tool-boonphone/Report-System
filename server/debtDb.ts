@@ -913,15 +913,15 @@ export async function listDebtTarget(params: { section: SectionKey }) {
     const isContractSuspended = contractStatus === "ระงับสัญญา";
     const isContractBadDebt = contractStatus === "หนี้เสีย";
     const isFF365Section = params.section === "Fastfone365";
+    // Phase 69: declare suspendCodes outside if-block so it's accessible in baseInstallments.map
+    // FF365: "ระงับสัญญา" | "ยกเลิกสัญญา"  (FF365 stores status in i.status column, not raw_json)
+    // Boonphone: "ระงับสัญญา" | "หนี้เสีย"
+    const suspendCodes = isFF365Section
+      ? ["ระงับสัญญา", "ยกเลิกสัญญา"]
+      : ["ระงับสัญญา", "หนี้เสีย"];
     let suspendedFromPeriod = 0; // > 0 → periods >= this render as suspended
     let suspendedAt: string | null = null;
     if (isContractSuspended || isContractBadDebt) {
-      // installment_status_code values that indicate a suspended/bad-debt installment.
-      // FF365: "ระงับสัญญา" | "ยกเลิกสัญญา"  (FF365 stores status in i.status column, not raw_json)
-      // Boonphone: "ระงับสัญญา" | "หนี้เสีย"
-      const suspendCodes = isFF365Section
-        ? ["ระงับสัญญา", "ยกเลิกสัญญา"]
-        : ["ระงับสัญญา", "หนี้เสีย"];
       // FF365 stores status in i.status (inst_status), Boonphone stores in raw_json.installment_status_code
       // Check both fields to handle both providers
       const firstSuspended = list
@@ -1974,10 +1974,8 @@ export async function* listDebtTargetStream(params: {
     let suspendedFromPeriod = 0;
     let suspendedAt: string | null = null;
     if (isContractSuspended || isContractBadDebt) {
-      // FF365: "ระงับสัญญา" | "ยกเลิกสัญญา"  (FF365 stores status in i.status column, not raw_json)
-      // Boonphone: "ระงับสัญญา" | "หนี้เสีย" (suspendCodes declared above, reused here)
       // FF365 stores status in i.status (inst_status), Boonphone stores in raw_json.installment_status_code
-      // Check both fields to handle both providers
+      // Check both fields to handle both providers (suspendCodes declared above)
       const firstSuspended = list
         .filter((r) => {
           const code = r.installment_status_code ?? r.inst_status ?? "";
