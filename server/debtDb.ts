@@ -923,11 +923,14 @@ export async function listDebtTarget(params: { section: SectionKey }) {
         // Phase 62: 3-pattern isClosed logic
         // maxClosedPeriod = -1 → Pattern 3 (ยอดปกติทั้งหมด, isClosed = false)
         // maxClosedPeriod = 0  → Pattern 1 (งวด 1 ยอดปกติ, งวด 2+ ปิดค่างวด)
-        // maxClosedPeriod = N  → Pattern 2 (งวด 1..N ยอดปกต์, งวด N+1+ ปิดค่างวด)
+        // maxClosedPeriod = N  → Pattern 2 (งวด 1..N ยอดปกติ, งวด N+1+ ปิดค่างวด)
+        // Phase 65: งวดที่มี paid > 0 ให้แสดงยอดปกติเสมอ แม้ว่า TXRTC จะอยู่ก่อนงวดนั้น
+        // (เช่น carry-forward ทำให้ period shift ทำให้ TXRT-3 ถูก assign ไปงวด 5,6,7)
         const isClosed = closedByContract.has(extId)
           && maxClosedPeriod !== -1   // Pattern 3 = ยอดปกติทั้งหมด
           && periodNo > 1             // งวด 1 ยอดปกติเสมอ (Pattern 1 + 2)
-          && periodNo > maxClosedPeriod; // Pattern 1: >0 → period>1 เสมอ true; Pattern 2: period>N
+          && periodNo > maxClosedPeriod // Pattern 1: >0 → period>1 เสมอ true; Pattern 2: period>N
+          && paid <= 0;               // Phase 65: งวดที่มีการชำระจริงไม่ถือว่าปิดค่างวด
         // Per-period suspended flag: period is >= the first suspended period.
         // Bad-debt contract → re-use the same flag but surface a different label.
         // Phase 54: งวดที่ลูกค้าชำระเข้ามาแล้ว (paid > 0) ให้แสดงยอดปกติ
@@ -1809,10 +1812,12 @@ export async function* listDebtTargetStream(params: {
         // maxClosedPeriod = -1 → Pattern 3 (ยอดปกติทั้งหมด, isClosed = false)
         // maxClosedPeriod = 0  → Pattern 1 (งวด 1 ยอดปกติ, งวด 2+ ปิดค่างวด)
         // maxClosedPeriod = N  → Pattern 2 (งวด 1..N ยอดปกติ, งวด N+1+ ปิดค่างวด)
+        // Phase 65: งวดที่มี paid > 0 ให้แสดงยอดปกติเสมอ แม้ว่า TXRTC จะอยู่ก่อนงวดนั้น
         const isClosed = closedByContract.has(extId)
           && maxClosedPeriod !== -1   // Pattern 3 = ยอดปกติทั้งหมด
           && periodNo > 1             // งวด 1 ยอดปกติเสมอ (Pattern 1 + 2)
-          && periodNo > maxClosedPeriod; // Pattern 1: >0 → period>1 เสมอ true; Pattern 2: period>N
+          && periodNo > maxClosedPeriod // Pattern 1: >0 → period>1 เสมอ true; Pattern 2: period>N
+          && paid <= 0;               // Phase 65: งวดที่มีการชำระจริงไม่ถือว่าปิดค่างวด
         // Phase 54: งวดที่ลูกค้าชำระเข้ามาแล้ว (paid > 0) ให้แสดงยอดปกติ
         const isSuspended = !isClosed && suspendedFromPeriod > 0 && periodNo >= suspendedFromPeriod && paid <= 0;
         const suspendLabel = isContractBadDebt ? "หนี้เสีย" : "ระงับสัญญา";
