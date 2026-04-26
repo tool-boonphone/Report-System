@@ -779,4 +779,4 @@ Task list:
 - [x] P61-1: วิเคราะห์โค้ด collected stream หาสูตร total — พบว่า backend ถูกต้องแล้ว (total=11,703) แต่ frontend (DebtReport.tsx บรรทัด 1729) แสดง closeInstallmentAmount (3,901) แทน total
 - [x] P61-2: แก้ไข frontend ให้แสดง pay.total โดยตรง (ลบ Phase 58 override ออก)
 - [x] P61-3: TypeScript check ผ่าน 0 errors
-- [ ] P61-4: Commit + push GitHub + checkpoint
+- [x] P61-4: Commit + push GitHub + checkpoint
