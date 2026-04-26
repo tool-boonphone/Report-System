@@ -738,14 +738,44 @@ export async function listDebtTarget(params: { section: SectionKey }) {
       }
     }
 
+    // Phase 64: Cascade overpaid carry-forward across periods
+    // If overpaid[p] > installment_amount (contract baseline), the excess
+    // carries to period p+1, p+2, ... until exhausted.
+    // Example: CT0925-PKN001-15462-01 period 2 overpaid=7802, baseline=3901
+    //   → period 3 gets 7802 (covers full 3901), excess 3901 → period 4
+    //   → period 4 gets 3901 (covers full 3901), excess 0 → done
+    {
+      const baselineByKey = new Map<string, number>();
+      for (const cr of cRows) {
+        const k = String(cr.external_id ?? "");
+        if (k && cr.installment_amount != null) {
+          baselineByKey.set(k, Number(cr.installment_amount));
+        }
+      }
+      for (const [key, periodMap] of Array.from(overpaidByContractPeriod.entries())) {
+        const baseline = baselineByKey.get(key) ?? 0;
+        if (baseline <= 0) continue;
+        // Sort periods ascending so cascade flows forward
+        const periods = Array.from(periodMap.keys()).sort((a, b) => a - b);
+        for (const p of periods) {
+          const overpaid = periodMap.get(p) ?? 0;
+          if (overpaid > baseline + 0.5) {
+            // Carry excess to next period
+            const excess = overpaid - baseline;
+            periodMap.set(p + 1, (periodMap.get(p + 1) ?? 0) + excess);
+          }
+        }
+      }
+    }
+
     // Pass 2 (Phase 62): 3-pattern isClosed logic based on TXRTC position
     //
     // Pattern 1: maxNormal=0 (TXRTC ปิดงวดแรก ไม่มี TXRT ปกติ)
-    //   → งวด 1 ยอดปกติ, งวด 2+ ปิดค่างวด
+    //   → งวด 1 ยอดปกติ, งวด 2+ ปดค่างวด
     //   stored as: closedByContract.set(key, 0)
     //
     // Pattern 2: 1 < maxNormal < totalPeriods (TXRTC ปิดงวด N ระหว่างกลาง)
-    //   → งวด 1..N ยอดปกติ, งวด N+1+ ปิดค่างวด
+    //   → งวด 1..N ยอดปกติ, งวด N+1+ ปดค่างวด
     //   stored as: closedByContract.set(key, N)
     //
     // Pattern 3: maxNormal >= totalPeriods (TXRTC ปิดงวดสุดท้ายงวดเดียว)
@@ -1674,6 +1704,29 @@ export async function* listDebtTargetStream(params: {
             overpaidByContractPeriod.set(key, periodMap);
           }
           periodMap.set(period, (periodMap.get(period) ?? 0) + overpaid);
+        }
+      }
+    }
+
+    // Phase 64: Cascade overpaid carry-forward across periods (same logic as listDebtTarget)
+    {
+      const baselineByKey = new Map<string, number>();
+      for (const cr of cRows) {
+        const k = String(cr.external_id ?? "");
+        if (k && cr.installment_amount != null) {
+          baselineByKey.set(k, Number(cr.installment_amount));
+        }
+      }
+      for (const [key, periodMap] of Array.from(overpaidByContractPeriod.entries())) {
+        const baseline = baselineByKey.get(key) ?? 0;
+        if (baseline <= 0) continue;
+        const periods = Array.from(periodMap.keys()).sort((a, b) => a - b);
+        for (const p of periods) {
+          const overpaid = periodMap.get(p) ?? 0;
+          if (overpaid > baseline + 0.5) {
+            const excess = overpaid - baseline;
+            periodMap.set(p + 1, (periodMap.get(p + 1) ?? 0) + excess);
+          }
         }
       }
     }

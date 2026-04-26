@@ -779,8 +779,14 @@ Task list:
 - [x] P62-4: Commit + push GitHub + checkpoint
 
 ### Phase 63 — Fix: ยอดเก็บหนี้ (collected stream) แสดง carry rows สำหรับงวดที่ถูกหักด้วย overpaid pool
-- [ ] P63-1: วิเคราะห์โค้ด listDebtCollectedStream ว่าตอนนี้แสดง carry rows อย่างไร
-- [ ] P63-2: แก้ไข backend ให้สร้าง carry rows ใน collected stream (receipt=(carry), วันที่=วันที่ TXRT ที่ overpaid, amount=0, หมายเหตุ=(-หักชำระเกิน: X))
-- [ ] P63-3: แก้ไข frontend ให้แสดง carry rows ใน collected tab
-- [ ] P63-4: ทดสอบ ยืนยันผลลัพธ์ตรงกับภาพ
-- [ ] P63-5: Commit + push GitHub + checkpoint
+- [x] P63-1: วิเคราะห์โค้ด listDebtCollectedStream ว่าตอนนี้แสดง carry rows อย่างไร
+- [x] P63-2: แก้ไข backend ให้สร้าง carry rows ใน collected stream (receipt=(carry), วันที่=วันที่ TXRT ที่ overpaid, amount=0, หมายเหตุ=(-หักชำระเกิน: X))
+- [x] P63-3: แก้ไข frontend ให้แสดง carry rows ใน collected tab
+- [x] P63-4: ทดสอบ ยืนยันผลลัพธ์ตรงกับภาพ
+- [x] P63-5: Commit + push GitHub + checkpoint
+
+### Phase 64 — Fix: เป้าเก็บหนี้ overpaid cascade ไม่ถูกต้อง (งวด 3,4 ควร = 0 พร้อม annotation)
+- [ ] P64-1: ตรวจสอบ listDebtTarget overpaid cascade logic สำหรับ CT0925-PKN001-15462-01
+- [ ] P64-2: แก้ไข listDebtTarget และ listDebtTargetStream ให้ overpaid cascade ถูกต้อง
+- [ ] P64-3: Restart server + ทดสอบผลลัพธ์
+- [ ] P64-4: Commit + push GitHub + checkpoint
