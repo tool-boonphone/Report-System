@@ -818,3 +818,8 @@ Task list:
 - [x] P69-4: ย้าย suspendCodes declaration ออกมา outer scope ใน listDebtTargetStream เพื่อให้ใช้ใน baseInstallments.map ได้
 - [x] P69-5: Restart server + ทดสอบ CT0126-AYA001-22194-01 (งวด 1-2 ปกติ, งวด 3-12 หนี้เสีย แม้งวด 3 มี paid=740)
 - [x] P69-6: Commit + push GitHub + checkpoint
+
+### Phase 70 — Fix: หน้าเป้าเก็บหนี้แสดงป้าย "หนี้เสีย" ตั้งแต่ badDebtPeriod จนถึงงวดสุดท้าย
+- [ ] วิเคราะห์ว่า isSuspended ใน listDebtTarget ใช้ suspendedFromPeriod (DB) ซึ่งอาจผิด
+- [ ] แก้ไขให้ใช้ badDebtPeriod ที่คำนวณจาก payment จริง (เหมือน listDebtTargetStream)
+- [ ] ตรวจสอบ frontend ว่าแสดงป้าย "หนี้เสีย" ถูกต้องหรือเปล่า
