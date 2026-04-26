@@ -403,6 +403,21 @@ export function assignPayPeriods(
         coveredCurrent -= schedule[cursor].amount;
         cursor += 1;
       }
+      // Phase 63: advance cursor เพิ่มตาม overpaid amount
+      // ถ้าจ่ายเกิน (overpaid > 0) ให้ข้ามงวดที่ถูกครอบคลุมโดย overpaid pool
+      const overpaidAmount = Number(p.overpaid_amount ?? 0);
+      if (overpaidAmount > 0.009) {
+        let overpaidRem = overpaidAmount;
+        while (
+          cursor < schedule.length - 1 &&
+          schedule[cursor].amount > 0 &&
+          overpaidRem >= schedule[cursor].amount - 0.5
+        ) {
+          overpaidRem -= schedule[cursor].amount;
+          cursor += 1;
+          coveredCurrent = 0;
+        }
+      }
     }
   }
   return out;
@@ -1327,9 +1342,12 @@ export async function listDebtCollected(params: { section: SectionKey }) {
 
       // Assign periods from real payments, excluding the device-sale payment
       // (total_paid ≈ bad_debt_amount, difference ≤ 1 baht).
+      // Phase 63 fix: ใช้ installmentAmount เป็น fallback เมื่อ amount=0
+      // (listDebtTarget ตั้ง amount=0 สำหรับงวดที่ isClosed=true ซึ่งทำให้ assignPayPeriods ไม่ advance cursor)
+      const baselineAmt = c.installmentAmount ?? 0;
       const realAssignedForBadDebt = assignPayPeriods(
         realPaymentsRaw,
-        c.installments.map((i: { period: number | null; amount: number | string }) => ({ period: i.period, amount: Number(i.amount) || 0 })),
+        c.installments.map((i: { period: number | null; amount: number | string }) => ({ period: i.period, amount: Number(i.amount) > 0 ? Number(i.amount) : baselineAmt })),
       );
       const normalPayments = realAssignedForBadDebt.filter((p) => {
         const totalPaid = (p as any).total_paid_amount as number | null;
@@ -1400,11 +1418,83 @@ export async function listDebtCollected(params: { section: SectionKey }) {
       ];
     } else {
       // No bad debt: use real payments only, assign periods normally.
+      // Phase 63 fix: ใช้ installmentAmount เป็น fallback เมื่อ amount=0
+      // (listDebtTarget ตั้ง amount=0 สำหรับงวดที่ isClosed=true ซึ่งทำให้ assignPayPeriods ไม่ advance cursor)
+      const baselineAmtNoBd = c.installmentAmount ?? 0;
       const realAssigned = assignPayPeriods(
         realPaymentsRaw,
-        c.installments.map((i: { period: number | null; amount: number | string }) => ({ period: i.period, amount: Number(i.amount) || 0 })),
+        c.installments.map((i: { period: number | null; amount: number | string }) => ({ period: i.period, amount: Number(i.amount) > 0 ? Number(i.amount) : baselineAmtNoBd })),
       );
       tagged = realAssigned.map((p) => ({ ...p, isBadDebtRow: false }));
+    }
+    // Phase 63: สร้าง carry rows สำหรับงวดที่ถูก skip เพราะ overpaid
+    // ตรวจสอบ gaps ใน periods ของ tagged payments
+    // ถ้ามี gap (เช่น period 2 แล้วข้ามไป period 5) ให้สร้าง carry rows สำหรับงวด 3, 4
+    {
+      const baselineAmount = c.installmentAmount ?? 0;
+      if (baselineAmount > 0) {
+        // หา periods ที่มีอยู่ใน tagged (เฉพาะ non-close, non-badDebt)
+        const existingPeriods = new Set<number>();
+        for (const p of tagged) {
+          if (p.period != null && !p.isCloseRow && !p.isBadDebtRow) {
+            existingPeriods.add(p.period);
+          }
+        }
+        const normalPeriods = Array.from(existingPeriods).sort((a, b) => a - b);
+        const maxNormal = normalPeriods.length > 0 ? normalPeriods[normalPeriods.length - 1] : 0;
+        // สร้าง carry rows สำหรับ gaps ระหว่าง 1 ถึง maxNormal
+        if (maxNormal > 1) {
+          const carryRows: Array<typeof tagged[0]> = [];
+          for (let pNo = 1; pNo <= maxNormal; pNo++) {
+            if (!existingPeriods.has(pNo)) {
+              // หา payment ก่อน gap นี้ (period < pNo) ที่มี overpaid
+              const prevPayments = tagged
+                .filter((p) => p.period != null && p.period < pNo && !p.isCloseRow && !p.isBadDebtRow)
+                .sort((a, b) => (b.period ?? 0) - (a.period ?? 0));
+              const sourcePayment = prevPayments[0];
+              const carryPaidAt = sourcePayment?.paid_at ?? null;
+              const carryRow: typeof tagged[0] = {
+                contract_external_id: c.contractExternalId,
+                period: pNo,
+                splitIndex: 0,
+                isCloseRow: false,
+                isBadDebtRow: false,
+                paid_at: carryPaidAt,
+                total_paid_amount: 0,
+                principal_paid: 0,
+                interest_paid: 0,
+                fee_paid: 0,
+                penalty_paid: 0,
+                unlock_fee_paid: 0,
+                discount_amount: 0,
+                overpaid_amount: 0,
+                close_installment_amount: 0,
+                bad_debt_amount: 0,
+                payment_id: null,
+                receipt_no: "(carry)",
+                remark: `(-หักชำระเกิน: ${baselineAmount.toLocaleString("th-TH", { minimumFractionDigits: 0, maximumFractionDigits: 0 })})`,
+                ff_status: null,
+                payment_external_id: null,
+              } as any;
+              carryRows.push(carryRow);
+            }
+          }
+          if (carryRows.length > 0) {
+            // รวม carry rows เข้าไปใน tagged แล้ว sort ตาม period
+            tagged = [...tagged, ...carryRows].sort((a, b) => {
+              const pa = a.period ?? 9999;
+              const pb = b.period ?? 9999;
+              if (pa !== pb) return pa - pb;
+              // carry rows ให้อยู่หลัง normal rows ของ period เดียวกัน
+              const aIsCarry = (a as any).receipt_no === "(carry)";
+              const bIsCarry = (b as any).receipt_no === "(carry)";
+              if (aIsCarry && !bIsCarry) return 1;
+              if (!aIsCarry && bIsCarry) return -1;
+              return (a.splitIndex ?? 0) - (b.splitIndex ?? 0);
+            });
+          }
+        }
+      }
     }
     return {
       ...c,
@@ -2095,6 +2185,82 @@ export async function* listDebtCollectedStream(params: {
         );
         tagged = realAssigned.map((p) => ({ ...p, isBadDebtRow: false }));
       }
+
+      // Phase 63: สร้าง carry rows สำหรับงวดที่ถูก skip เพราะ overpaid
+      // ตรวจสอบ gaps ใน periods ของ tagged payments
+      // ถ้ามี gap (เช่น period 2 แล้วข้ามไป period 5) ให้สร้าง carry rows สำหรับงวด 3, 4
+      {
+        const baselineAmount = c.installmentAmount ?? 0;
+        if (baselineAmount > 0) {
+          // หา periods ที่มีอยู่ใน tagged (เฉพาะ non-close, non-badDebt)
+          const existingPeriods = new Set<number>();
+          for (const p of tagged) {
+            if (p.period != null && !p.isCloseRow && !p.isBadDebtRow) {
+              existingPeriods.add(p.period);
+            }
+          }
+          // หา maxNormalPeriod และ minClosePeriod
+          const normalPeriods = Array.from(existingPeriods).sort((a, b) => a - b);
+          const closePeriods = tagged
+            .filter((p) => p.isCloseRow && p.period != null)
+            .map((p) => p.period as number)
+            .sort((a, b) => a - b);
+          const maxNormal = normalPeriods.length > 0 ? normalPeriods[normalPeriods.length - 1] : 0;
+          // สร้าง carry rows สำหรับ gaps ระหว่าง 1 ถึง maxNormal
+          if (maxNormal > 1) {
+            const carryRows: Array<typeof tagged[0]> = [];
+            for (let pNo = 1; pNo <= maxNormal; pNo++) {
+              if (!existingPeriods.has(pNo)) {
+                // หา payment ก่อน gap นี้ (period < pNo) ที่มี overpaid
+                const prevPayments = tagged
+                  .filter((p) => p.period != null && p.period < pNo && !p.isCloseRow && !p.isBadDebtRow)
+                  .sort((a, b) => (b.period ?? 0) - (a.period ?? 0));
+                const sourcePayment = prevPayments[0];
+                const carryPaidAt = sourcePayment?.paid_at ?? null;
+                const carryRow: typeof tagged[0] = {
+                  contract_external_id: c.contractExternalId,
+                  period: pNo,
+                  splitIndex: 0,
+                  isCloseRow: false,
+                  isBadDebtRow: false,
+                  paid_at: carryPaidAt,
+                  total_paid_amount: 0,
+                  principal_paid: 0,
+                  interest_paid: 0,
+                  fee_paid: 0,
+                  penalty_paid: 0,
+                  unlock_fee_paid: 0,
+                  discount_amount: 0,
+                  overpaid_amount: 0,
+                  close_installment_amount: 0,
+                  bad_debt_amount: 0,
+                  payment_id: null,
+                  receipt_no: "(carry)",
+                  remark: `(-หักชำระเกิน: ${baselineAmount.toLocaleString("th-TH", { minimumFractionDigits: 0, maximumFractionDigits: 0 })})`,
+                  ff_status: null,
+                  payment_external_id: null,
+                } as any;
+                carryRows.push(carryRow);
+              }
+            }
+            if (carryRows.length > 0) {
+              // รวม carry rows เข้าไปใน tagged แล้ว sort ตาม period
+              tagged = [...tagged, ...carryRows].sort((a, b) => {
+                const pa = a.period ?? 9999;
+                const pb = b.period ?? 9999;
+                if (pa !== pb) return pa - pb;
+                // carry rows (receipt=(carry)) ให้อยู่หลัง normal rows ของ period เดียวกัน
+                const aIsCarry = (a as any).receipt_no === "(carry)";
+                const bIsCarry = (b as any).receipt_no === "(carry)";
+                if (aIsCarry && !bIsCarry) return 1;
+                if (!aIsCarry && bIsCarry) return -1;
+                return (a.splitIndex ?? 0) - (b.splitIndex ?? 0);
+              });
+            }
+          }
+        }
+      }
+
       const row = {
         ...c,
         payments: tagged.map((p) => ({

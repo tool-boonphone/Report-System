@@ -777,3 +777,10 @@ Task list:
 - [x] P62-2: แก้ไข closedByContract logic ใน listDebtTargetStream — เช่นเดียวกัน (installCountByKeyStream)
 - [x] P62-3: ทดสอบ 3 patterns จาก DB จริง — P1: 3 สัญญา, P2: 2 สัญญา, P3: 0 (ยังไม่มีใน DB), TypeScript 0 errors
 - [x] P62-4: Commit + push GitHub + checkpoint
+
+### Phase 63 — Fix: ยอดเก็บหนี้ (collected stream) แสดง carry rows สำหรับงวดที่ถูกหักด้วย overpaid pool
+- [ ] P63-1: วิเคราะห์โค้ด listDebtCollectedStream ว่าตอนนี้แสดง carry rows อย่างไร
+- [ ] P63-2: แก้ไข backend ให้สร้าง carry rows ใน collected stream (receipt=(carry), วันที่=วันที่ TXRT ที่ overpaid, amount=0, หมายเหตุ=(-หักชำระเกิน: X))
+- [ ] P63-3: แก้ไข frontend ให้แสดง carry rows ใน collected tab
+- [ ] P63-4: ทดสอบ ยืนยันผลลัพธ์ตรงกับภาพ
+- [ ] P63-5: Commit + push GitHub + checkpoint

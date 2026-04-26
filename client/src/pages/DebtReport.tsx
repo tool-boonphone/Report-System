@@ -1662,6 +1662,8 @@ export default function DebtReport() {
                                 // on the first ("period") column of each
                                 // group.
                                 const isCloseCell = !!pay && pay.isCloseRow;
+                                // Phase 63: carry row = งวดที่ถูกชำระล่วงหน้า (overpaid carry-forward)
+                                const isCarryRow = !!pay && pay.receiptNo === "(carry)";
                                 if (pay) {
                                   switch (gc.key) {
                                     case "period":
@@ -1722,6 +1724,15 @@ export default function DebtReport() {
                                   textClass = "text-gray-400 italic";
                                   cellBg = undefined; // parent div already grey
                                   cellBorderLeft = undefined;
+                                } else if (isCarryRow) {
+                                  // Phase 63: carry row = งวดที่ถูกชำระล่วงหน้า (overpaid carry-forward)
+                                  // emerald-50 bg + emerald-700 text + emerald-400 left accent
+                                  textClass = "text-emerald-700 italic";
+                                  cellBg = "#ecfdf5"; // emerald-50
+                                  cellBorderLeft =
+                                    gcIdx === 0
+                                      ? "4px solid #34d399" // emerald-400
+                                      : undefined;
                                 } else if (isCloseCell) {
                                   // TXRTC close row: rose-50 bg + rose-700 text
                                   // 0.00 values use rose-300 italic (faded)
