@@ -1723,14 +1723,9 @@ export default function DebtReport() {
                                       v = fmtMoney(pay.badDebt || 0);
                                       break;
                                     case "total":
-                                      // Phase 58: เมื่อมี overpaid ให้แสดง closeInstallmentAmount
-                                      // (ยอดที่ปิดงวดจริง) แทน total (ที่รวม overpaid ด้วย)
-                                      // เช่น จ่าย 11,703 แต่ overpaid 7,802 → แสดง 3,901
-                                      if (pay.overpaid > 0 && pay.closeInstallmentAmount > 0) {
-                                        v = fmtMoney(pay.closeInstallmentAmount);
-                                      } else {
-                                        v = fmtMoney(pay.total);
-                                      }
+                                      // Phase 61: แสดง total จริง (รวม overpaid) เพื่อให้ตรงกับยอดที่ชำระจริง
+                                      // เช่น จ่าย 11,703 (3,901 + 7,802 overpaid) → แสดง 11,703
+                                      v = fmtMoney(pay.total);
                                       break;
                                   }
                                 }
