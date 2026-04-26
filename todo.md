@@ -776,4 +776,4 @@ Task list:
 - [x] P62-1: แก้ไข closedByContract logic ใน listDebtTarget (non-stream) — Pass 2 ใช้ installCountByKey + sentinel -1 สำหรับ Pattern 3
 - [x] P62-2: แก้ไข closedByContract logic ใน listDebtTargetStream — เช่นเดียวกัน (installCountByKeyStream)
 - [x] P62-3: ทดสอบ 3 patterns จาก DB จริง — P1: 3 สัญญา, P2: 2 สัญญา, P3: 0 (ยังไม่มีใน DB), TypeScript 0 errors
-- [ ] P62-4: Commit + push GitHub + checkpoint
+- [x] P62-4: Commit + push GitHub + checkpoint
