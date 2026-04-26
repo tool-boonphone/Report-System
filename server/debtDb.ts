@@ -684,6 +684,51 @@ export async function listDebtTarget(params: { section: SectionKey }) {
   const normalPeriodsByContractOuter = new Map<string, Set<number>>();
   // Phase 68: track total_paid_amount per TXRT suffix per contract (to detect device sale payments)
   const txrtTotalByContractPeriod = new Map<string, Map<number, number>>();
+  // Phase 68B: sum of close_installment_amount per contract (excluding device sale payments)
+  // Used when receipt_no is null (FF365 style) to compute suspendedFromPeriod via close amounts
+  const closeAmtSumByContract = new Map<string, number>();
+  const closePayTotalByContract = new Map<string, number[]>(); // list of total_paid_amount per payment
+
+  {
+    // Extra query: get close_installment_amount for ALL payments (no receipt_no filter)
+    const rawCloseAmtData = await db.execute(sql`
+      SELECT contract_external_id,
+             CAST(amount AS DECIMAL(18,2)) AS total_paid_amount,
+             CAST(JSON_EXTRACT(raw_json, '$.close_installment_amount') AS DECIMAL(18,2)) AS close_installment_amount
+        FROM ${paymentTransactions}
+       WHERE ${paymentTransactions.section} = ${params.section}
+         AND JSON_EXTRACT(raw_json, '$.close_installment_amount') IS NOT NULL
+         AND CAST(JSON_EXTRACT(raw_json, '$.close_installment_amount') AS DECIMAL(18,2)) > 0
+    `);
+    const closeAmtRows: any[] = (rawCloseAmtData as any)[0] ?? rawCloseAmtData;
+    // First pass: collect all total_paid_amounts per contract
+    for (const row of closeAmtRows) {
+      const key = String(row.contract_external_id ?? "");
+      if (!key) continue;
+      const totalPaid = Number(row.total_paid_amount ?? 0);
+      const tList = closePayTotalByContract.get(key) ?? [];
+      tList.push(totalPaid);
+      closePayTotalByContract.set(key, tList);
+    }
+    // Second pass: accumulate close_installment_amount, excluding device sale payments
+    // Device sale payment: total_paid_amount ≈ bad_debt_amount (within 1 baht)
+    // We need bad_debt_amount per contract — load it from cRows (already queried above)
+    const badDebtAmtByContract = new Map<string, number>();
+    for (const cr of cRows) {
+      const k = String(cr.external_id ?? "");
+      if (k && cr.bad_debt_amount != null) badDebtAmtByContract.set(k, Number(cr.bad_debt_amount));
+    }
+    for (const row of closeAmtRows) {
+      const key = String(row.contract_external_id ?? "");
+      if (!key) continue;
+      const totalPaid = Number(row.total_paid_amount ?? 0);
+      const closeAmt = Number(row.close_installment_amount ?? 0);
+      const badDebt = badDebtAmtByContract.get(key) ?? 0;
+      // Skip device sale payments
+      if (badDebt > 0 && Math.abs(totalPaid - badDebt) <= 1) continue;
+      closeAmtSumByContract.set(key, (closeAmtSumByContract.get(key) ?? 0) + closeAmt);
+    }
+  }
 
   {
     // Load all payments: needed for (a) TXRTC close detection, (b) overpaid tracking,
@@ -863,18 +908,27 @@ export async function listDebtTarget(params: { section: SectionKey }) {
     //   (per-period: override ทุก period ที่ installment_status_code เป็น ระงับสัญญา/หนี้เสีย)
     // ทั้งสองสถานะ: money fields = 0, ไม่นับเข้าเป้าเก็บหนี้
     //
-    // Suspend/bad-debt detection: same codes for both Boonphone and Fastfone365.
+    // Suspend/bad-debt detection: FF365 uses "ยกเลิกสัญญา"; Boonphone uses "ระงับสัญญา"/"หนี้เสีย".
     const contractStatus = c.status ?? null;
     const isContractSuspended = contractStatus === "ระงับสัญญา";
     const isContractBadDebt = contractStatus === "หนี้เสีย";
+    const isFF365Section = params.section === "Fastfone365";
     let suspendedFromPeriod = 0; // > 0 → periods >= this render as suspended
     let suspendedAt: string | null = null;
     if (isContractSuspended || isContractBadDebt) {
       // installment_status_code values that indicate a suspended/bad-debt installment.
-      // Same for both Boonphone and Fastfone365.
-      const suspendCodes = ["ระงับสัญญา", "หนี้เสีย"];
+      // FF365: "ระงับสัญญา" | "ยกเลิกสัญญา"  (FF365 stores status in i.status column, not raw_json)
+      // Boonphone: "ระงับสัญญา" | "หนี้เสีย"
+      const suspendCodes = isFF365Section
+        ? ["ระงับสัญญา", "ยกเลิกสัญญา"]
+        : ["ระงับสัญญา", "หนี้เสีย"];
+      // FF365 stores status in i.status (inst_status), Boonphone stores in raw_json.installment_status_code
+      // Check both fields to handle both providers
       const firstSuspended = list
-        .filter((r) => suspendCodes.includes(r.installment_status_code ?? ""))
+        .filter((r) => {
+          const code = r.installment_status_code ?? r.inst_status ?? "";
+          return suspendCodes.includes(code);
+        })
         .sort((a, b) => (a.period ?? 0) - (b.period ?? 0))[0];
       if (firstSuspended?.period) {
         suspendedFromPeriod = Number(firstSuspended.period);
@@ -913,11 +967,39 @@ export async function listDebtTarget(params: { section: SectionKey }) {
               suspendedAt = lastTxrtRow?.due_date ?? null;
             }
           } else {
-            // No TXRT at all → fallback to period 1
-            const firstPeriod = list.sort((a, b) => (a.period ?? 0) - (b.period ?? 0))[0];
-            if (firstPeriod) {
-              suspendedFromPeriod = 1;
-              suspendedAt = firstPeriod.due_date ?? null;
+            // No TXRT receipt_no → use close_installment_amount sum to compute suspendedFromPeriod
+            // Phase 68B: sum(close_installment_amount of non-device-sale payments) / installment_amount
+            const contractInstAmt = c.installment_amount != null ? Number(c.installment_amount) : 0;
+            const contractBadDebtAmt = c.bad_debt_amount != null ? Number(c.bad_debt_amount) : 0;
+            const payTotals = closePayTotalByContract.get(extId) ?? [];
+            const closeSum = closeAmtSumByContract.get(extId) ?? 0;
+            // Subtract close_installment_amount from device sale payments (total ≈ bad_debt_amount)
+            // We need to find which payments are device sale and subtract their close_installment_amount
+            // Since we only have total_paid_amount list, we do a separate query approach:
+            // Simpler: recompute closeSum excluding device-sale payments from raw query data
+            // For now, use closeSum directly (device sale payment's close_installment_amount is typically
+            // the last installment amount, not the full bad_debt_amount)
+            if (contractInstAmt > 0 && closeSum > 0) {
+              // Count how many full installments were closed
+              const closedPeriods = Math.round(closeSum / contractInstAmt);
+              suspendedFromPeriod = closedPeriods + 1;
+              // Find due_date of suspendedFromPeriod
+              const suspendedPeriodRow = list
+                .filter((r) => Number(r.period ?? 0) === suspendedFromPeriod)
+                .sort((a, b) => (a.period ?? 0) - (b.period ?? 0))[0];
+              suspendedAt = suspendedPeriodRow?.due_date ?? null;
+              if (!suspendedAt && closedPeriods > 0) {
+                const lastClosedRow = list
+                  .filter((r) => Number(r.period ?? 0) === closedPeriods)
+                  .sort((a, b) => (a.period ?? 0) - (b.period ?? 0))[0];
+                suspendedAt = lastClosedRow?.due_date ?? null;
+              }
+            } else {
+              const firstPeriod = list.sort((a, b) => (a.period ?? 0) - (b.period ?? 0))[0];
+              if (firstPeriod) {
+                suspendedFromPeriod = 1;
+                suspendedAt = firstPeriod.due_date ?? null;
+              }
             }
           }
         } else {
@@ -990,11 +1072,15 @@ export async function listDebtTarget(params: { section: SectionKey }) {
         // Bad-debt contract → re-use the same flag but surface a different label.
         // Phase 54: งวดที่ลูกค้าชำระเข้ามาแล้ว (paid > 0) ให้แสดงยอดปกติ
         // เฉพาะงวดที่ยังไม่มีการชำระเท่านั้นที่แสดงเป็นระงับสัญญา
+        // Phase 69: ถ้า inst_status ตรงกับ suspendCodes โดยตรง → isSuspended = true เสมอ
+        // ไม่ว่าจะมี paid > 0 หรือไม่ (เช่น FF365 งวดที่ชำระบางส่วนแต่สถานะ "ยกเลิกสัญญา")
+        const instStatusIsSuspend = suspendCodes.includes(r.installment_status_code ?? "") ||
+          suspendCodes.includes((r as any).inst_status ?? "");
         const isSuspended =
           !isClosed &&
           suspendedFromPeriod > 0 &&
           periodNo >= suspendedFromPeriod &&
-          paid <= 0;
+          (instStatusIsSuspend || paid <= 0);
         const suspendLabel = isContractBadDebt ? "หนี้เสีย" : "ระงับสัญญา";
         // --- Compute display amount (non-closed periods) ---
         let amount = rawAmount;
@@ -1720,6 +1806,48 @@ export async function* listDebtTargetStream(params: {
   const normalPeriodsByContract = new Map<string, Set<number>>();
   // Phase 68: track total_paid_amount per TXRT suffix per contract (to detect device sale payments)
   const txrtTotalByContractPeriodStream = new Map<string, Map<number, number>>();
+  // Phase 68B: sum of close_installment_amount per contract (excluding device sale payments)
+  const closeAmtSumByContractStream = new Map<string, number>();
+  const closePayTotalByContractStream = new Map<string, number[]>();
+
+  {
+    // Extra query: get close_installment_amount for ALL payments (no receipt_no filter)
+    const rawCloseAmtData = await db.execute(sql`
+      SELECT contract_external_id,
+             CAST(amount AS DECIMAL(18,2)) AS total_paid_amount,
+             CAST(JSON_EXTRACT(raw_json, '$.close_installment_amount') AS DECIMAL(18,2)) AS close_installment_amount
+        FROM ${paymentTransactions}
+       WHERE ${paymentTransactions.section} = ${params.section}
+         AND JSON_EXTRACT(raw_json, '$.close_installment_amount') IS NOT NULL
+         AND CAST(JSON_EXTRACT(raw_json, '$.close_installment_amount') AS DECIMAL(18,2)) > 0
+    `);
+    const closeAmtRows: any[] = (rawCloseAmtData as any)[0] ?? rawCloseAmtData;
+    // First pass: collect total_paid_amounts per contract
+    for (const row of closeAmtRows) {
+      const key = String(row.contract_external_id ?? "");
+      if (!key) continue;
+      const totalPaid = Number(row.total_paid_amount ?? 0);
+      const tList = closePayTotalByContractStream.get(key) ?? [];
+      tList.push(totalPaid);
+      closePayTotalByContractStream.set(key, tList);
+    }
+    // Second pass: accumulate close_installment_amount, excluding device sale payments
+    const badDebtAmtByContractStream = new Map<string, number>();
+    for (const cr of cRows) {
+      const k = String(cr.external_id ?? "");
+      if (k && cr.bad_debt_amount != null) badDebtAmtByContractStream.set(k, Number(cr.bad_debt_amount));
+    }
+    for (const row of closeAmtRows) {
+      const key = String(row.contract_external_id ?? "");
+      if (!key) continue;
+      const totalPaid = Number(row.total_paid_amount ?? 0);
+      const closeAmt = Number(row.close_installment_amount ?? 0);
+      const badDebt = badDebtAmtByContractStream.get(key) ?? 0;
+      if (badDebt > 0 && Math.abs(totalPaid - badDebt) <= 1) continue; // skip device sale
+      closeAmtSumByContractStream.set(key, (closeAmtSumByContractStream.get(key) ?? 0) + closeAmt);
+    }
+  }
+
   {
     const rawCloseData = await db.execute(sql`
       SELECT contract_external_id,
@@ -1838,12 +1966,23 @@ export async function* listDebtTargetStream(params: {
     const contractStatus = c.status ?? null;
     const isContractSuspended = contractStatus === "ระงับสัญญา";
     const isContractBadDebt = contractStatus === "หนี้เสีย";
+    const isFF365SectionStream = params.section === "Fastfone365";
+    // Phase 69: declare suspendCodes outside if-block so it's accessible in baseInstallments.map
+    const suspendCodes = isFF365SectionStream
+      ? ["ระงับสัญญา", "ยกเลิกสัญญา"]
+      : ["ระงับสัญญา", "หนี้เสีย"];
     let suspendedFromPeriod = 0;
     let suspendedAt: string | null = null;
     if (isContractSuspended || isContractBadDebt) {
-      const suspendCodes = ["ระงับสัญญา", "หนี้เสีย"];
+      // FF365: "ระงับสัญญา" | "ยกเลิกสัญญา"  (FF365 stores status in i.status column, not raw_json)
+      // Boonphone: "ระงับสัญญา" | "หนี้เสีย" (suspendCodes declared above, reused here)
+      // FF365 stores status in i.status (inst_status), Boonphone stores in raw_json.installment_status_code
+      // Check both fields to handle both providers
       const firstSuspended = list
-        .filter((r) => suspendCodes.includes(r.installment_status_code ?? ""))
+        .filter((r) => {
+          const code = r.installment_status_code ?? r.inst_status ?? "";
+          return suspendCodes.includes(code);
+        })
         .sort((a, b) => (a.period ?? 0) - (b.period ?? 0))[0];
       if (firstSuspended?.period) {
         suspendedFromPeriod = Number(firstSuspended.period);
@@ -1876,10 +2015,28 @@ export async function* listDebtTargetStream(params: {
               suspendedAt = lastTxrtRow?.due_date ?? null;
             }
           } else {
-            const firstPeriod = list.sort((a, b) => (a.period ?? 0) - (b.period ?? 0))[0];
-            if (firstPeriod) {
-              suspendedFromPeriod = 1;
-              suspendedAt = firstPeriod.due_date ?? null;
+            // Phase 68B: No TXRT receipt_no → use close_installment_amount sum
+            const contractInstAmt = c.installment_amount != null ? Number(c.installment_amount) : 0;
+            const closeSum = closeAmtSumByContractStream.get(extId) ?? 0;
+            if (contractInstAmt > 0 && closeSum > 0) {
+              const closedPeriods = Math.round(closeSum / contractInstAmt);
+              suspendedFromPeriod = closedPeriods + 1;
+              const suspendedPeriodRow = list
+                .filter((r) => Number(r.period ?? 0) === suspendedFromPeriod)
+                .sort((a, b) => (a.period ?? 0) - (b.period ?? 0))[0];
+              suspendedAt = suspendedPeriodRow?.due_date ?? null;
+              if (!suspendedAt && closedPeriods > 0) {
+                const lastClosedRow = list
+                  .filter((r) => Number(r.period ?? 0) === closedPeriods)
+                  .sort((a, b) => (a.period ?? 0) - (b.period ?? 0))[0];
+                suspendedAt = lastClosedRow?.due_date ?? null;
+              }
+            } else {
+              const firstPeriod = list.sort((a, b) => (a.period ?? 0) - (b.period ?? 0))[0];
+              if (firstPeriod) {
+                suspendedFromPeriod = 1;
+                suspendedAt = firstPeriod.due_date ?? null;
+              }
             }
           }
         } else {
@@ -1920,7 +2077,12 @@ export async function* listDebtTargetStream(params: {
           && periodNo > maxClosedPeriod // Pattern 1: >0 → period>1 เสมอ true; Pattern 2: period>N
           && paid <= 0;               // Phase 65: งวดที่มีการชำระจริงไม่ถือว่าปิดค่างวด
         // Phase 54: งวดที่ลูกค้าชำระเข้ามาแล้ว (paid > 0) ให้แสดงยอดปกติ
-        const isSuspended = !isClosed && suspendedFromPeriod > 0 && periodNo >= suspendedFromPeriod && paid <= 0;
+        // Phase 69: ถ้า inst_status ตรงกับ suspendCodes โดยตรง → isSuspended = true เสมอ
+        // ไม่ว่าจะมี paid > 0 หรือไม่ (เช่น FF365 งวดที่ชำระบางส่วนแต่สถานะ "ยกเลิกสัญญา")
+        const instStatusIsSuspendStream = suspendCodes.includes(r.installment_status_code ?? "") ||
+          suspendCodes.includes((r as any).inst_status ?? "");
+        const isSuspended = !isClosed && suspendedFromPeriod > 0 && periodNo >= suspendedFromPeriod &&
+          (instStatusIsSuspendStream || paid <= 0);
         const suspendLabel = isContractBadDebt ? "หนี้เสีย" : "ระงับสัญญา";
         let amount = rawAmount;
         let principal = rawPrincipal;
