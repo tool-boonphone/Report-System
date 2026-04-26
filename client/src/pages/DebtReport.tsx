@@ -1334,7 +1334,7 @@ export default function DebtReport() {
                   return (
                     <div
                       key={vr.key}
-                      className={`border-b text-[12px] transition-colors cursor-default relative ${
+                      className={`flex border-b text-[12px] transition-colors cursor-default relative ${
                         hoveredRow === vr.index
                           ? "shadow-[inset_4px_0_0_0_#2563eb,inset_0_-1px_0_0_#93c5fd,0_-1px_0_0_#93c5fd]"
                           : ""
@@ -1484,7 +1484,8 @@ export default function DebtReport() {
                       {tab === "collected" ? (
                         // Phase 3: Vertical layout for collected tab
                         // Summary row (always visible) + Detail rows (visible when expanded)
-                        <>
+                        // Right section: flex-col so summary row + detail rows stack vertically
+                        <div className="flex flex-col flex-1">
                           {/* Summary row */}
                           <div className="flex" style={{ height: ROW_HEIGHT }}>
                             {groupCols.map((gc) => {
@@ -1660,7 +1661,7 @@ export default function DebtReport() {
                               })}
                             </div>
                           ))}
-                        </>
+                        </div>
                       ) : Array.from({ length: maxPeriods }, (_, i) => {
                         const periodNo = i + 1;
                         if (tab === "target") {
