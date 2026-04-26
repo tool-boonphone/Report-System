@@ -680,6 +680,8 @@ export async function listDebtTarget(params: { section: SectionKey }) {
   const overpaidByContractPeriod = new Map<string, Map<number, number>>();
   // For bad-debt date derivation: every payment's paid_at per contract.
   const paidAtsByContract = new Map<string, string[]>();
+  // Phase 67: TXRT normal receipt suffix periods per contract (for bad-debt suspendedFromPeriod fallback)
+  const normalPeriodsByContractOuter = new Map<string, Set<number>>();
 
   {
     // Load all payments: needed for (a) TXRTC close detection, (b) overpaid tracking,
@@ -697,7 +699,7 @@ export async function listDebtTarget(params: { section: SectionKey }) {
 
     // Pass 1: collect paidAts, TXRTC close markers, and overpaid per period.
     const closeDatesByContract = new Map<string, Date[]>();
-    const normalPeriodsByContract = new Map<string, Set<number>>();
+    // normalPeriodsByContractOuter is declared outside this block (Phase 67)
 
     for (const pr of allPayRows) {
       const key = String(pr.contract_external_id ?? "");
@@ -721,9 +723,10 @@ export async function listDebtTarget(params: { section: SectionKey }) {
         if (!m) continue;
         const period = Number(m[1]);
         if (!Number.isFinite(period) || period <= 0) continue;
-        const set = normalPeriodsByContract.get(key) ?? new Set<number>();
-        set.add(period);
-        normalPeriodsByContract.set(key, set);
+        // Phase 67: use outer map directly (declared outside block)
+        const outerSet = normalPeriodsByContractOuter.get(key) ?? new Set<number>();
+        outerSet.add(period);
+        normalPeriodsByContractOuter.set(key, outerSet);
 
         // Track overpaid amount for this period
         const overpaid = Number(pr.overpaid_amount ?? 0);
@@ -790,7 +793,7 @@ export async function listDebtTarget(params: { section: SectionKey }) {
     }
 
     for (const key of Array.from(closeDatesByContract.keys())) {
-      const normalPeriods = normalPeriodsByContract.get(key);
+      const normalPeriods = normalPeriodsByContractOuter.get(key);
       const maxNormalPeriod = normalPeriods && normalPeriods.size > 0
         ? Math.max(...Array.from(normalPeriods))
         : 0;
@@ -868,13 +871,44 @@ export async function listDebtTarget(params: { section: SectionKey }) {
       } else {
         // Phase 9AK fallback: contract.status = "ระงับสัญญา" but no installment
         // has matching status code. Treat ALL periods as suspended starting from period 1.
-        const firstPeriod = list.sort((a, b) => (a.period ?? 0) - (b.period ?? 0))[0];
-        if (firstPeriod) {
-          suspendedFromPeriod = 1;
-          suspendedAt = firstPeriod.due_date ?? null;
+        // Phase 67 override for bad debt: if contract has TXRT receipts, use max(suffix)+1
+        // so periods that were already paid normally are NOT marked as bad debt.
+        // Example: TXRT-1, TXRT-2 exist → suspendedFromPeriod = 3 (not 1)
+        if (isContractBadDebt) {
+          const txrtPeriods = normalPeriodsByContractOuter.get(extId);
+          if (txrtPeriods && txrtPeriods.size > 0) {
+            const maxTxrtPeriod = Math.max(...Array.from(txrtPeriods));
+            suspendedFromPeriod = maxTxrtPeriod + 1;
+            // suspendedAt = due_date of the period at suspendedFromPeriod
+            const suspendedPeriodRow = list
+              .filter((r) => Number(r.period ?? 0) === suspendedFromPeriod)
+              .sort((a, b) => (a.period ?? 0) - (b.period ?? 0))[0];
+            suspendedAt = suspendedPeriodRow?.due_date ?? null;
+            // If no row for that period, fall back to last TXRT period's due_date
+            if (!suspendedAt) {
+              const lastTxrtRow = list
+                .filter((r) => Number(r.period ?? 0) === maxTxrtPeriod)
+                .sort((a, b) => (a.period ?? 0) - (b.period ?? 0))[0];
+              suspendedAt = lastTxrtRow?.due_date ?? null;
+            }
+          } else {
+            // No TXRT at all → fallback to period 1
+            const firstPeriod = list.sort((a, b) => (a.period ?? 0) - (b.period ?? 0))[0];
+            if (firstPeriod) {
+              suspendedFromPeriod = 1;
+              suspendedAt = firstPeriod.due_date ?? null;
+            }
+          }
+        } else {
+          // ระงับสัญญา fallback: start from period 1
+          const firstPeriod = list.sort((a, b) => (a.period ?? 0) - (b.period ?? 0))[0];
+          if (firstPeriod) {
+            suspendedFromPeriod = 1;
+            suspendedAt = firstPeriod.due_date ?? null;
+          }
         }
       }
-      // For bad-debt contracts, the effective “status-change date” is
+      // For bad-debt contracts, the effective "status-change date" is
       // the LAST payment that arrived while the contract was still in
       // ระงับสัญญา (i.e. after `suspendedAt`). Falls back to
       // `suspendedAt` when no such payment exists.
@@ -1661,6 +1695,8 @@ export async function* listDebtTargetStream(params: {
   const closedByContract = new Map<string, number>();
   const overpaidByContractPeriod = new Map<string, Map<number, number>>();
   const paidAtsByContract = new Map<string, string[]>();
+  // Phase 67: TXRT normal receipt suffix periods per contract (for bad-debt suspendedFromPeriod fallback)
+  const normalPeriodsByContract = new Map<string, Set<number>>();
   {
     const rawCloseData = await db.execute(sql`
       SELECT contract_external_id,
@@ -1672,7 +1708,6 @@ export async function* listDebtTargetStream(params: {
          AND JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.receipt_no')) IS NOT NULL
     `);
     const allPayRows: any[] = (rawCloseData as any)[0] ?? rawCloseData;
-    const normalPeriodsByContract = new Map<string, Set<number>>();
     const closeDatesByContract = new Map<string, Date[]>();
 
     for (const pr of allPayRows) {
@@ -1783,10 +1818,35 @@ export async function* listDebtTargetStream(params: {
         suspendedFromPeriod = Number(firstSuspended.period);
         suspendedAt = firstSuspended.due_date ?? null;
       } else {
-        const firstPeriod = list.sort((a, b) => (a.period ?? 0) - (b.period ?? 0))[0];
-        if (firstPeriod) {
-          suspendedFromPeriod = 1;
-          suspendedAt = firstPeriod.due_date ?? null;
+        // Phase 67 override for bad debt: if contract has TXRT receipts, use max(suffix)+1
+        if (isContractBadDebt) {
+          const txrtPeriods = normalPeriodsByContract.get(extId);
+          if (txrtPeriods && txrtPeriods.size > 0) {
+            const maxTxrtPeriod = Math.max(...Array.from(txrtPeriods));
+            suspendedFromPeriod = maxTxrtPeriod + 1;
+            const suspendedPeriodRow = list
+              .filter((r) => Number(r.period ?? 0) === suspendedFromPeriod)
+              .sort((a, b) => (a.period ?? 0) - (b.period ?? 0))[0];
+            suspendedAt = suspendedPeriodRow?.due_date ?? null;
+            if (!suspendedAt) {
+              const lastTxrtRow = list
+                .filter((r) => Number(r.period ?? 0) === maxTxrtPeriod)
+                .sort((a, b) => (a.period ?? 0) - (b.period ?? 0))[0];
+              suspendedAt = lastTxrtRow?.due_date ?? null;
+            }
+          } else {
+            const firstPeriod = list.sort((a, b) => (a.period ?? 0) - (b.period ?? 0))[0];
+            if (firstPeriod) {
+              suspendedFromPeriod = 1;
+              suspendedAt = firstPeriod.due_date ?? null;
+            }
+          }
+        } else {
+          const firstPeriod = list.sort((a, b) => (a.period ?? 0) - (b.period ?? 0))[0];
+          if (firstPeriod) {
+            suspendedFromPeriod = 1;
+            suspendedAt = firstPeriod.due_date ?? null;
+          }
         }
       }
       if (isContractBadDebt && suspendedAt) {

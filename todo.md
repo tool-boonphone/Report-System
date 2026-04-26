@@ -796,3 +796,12 @@ Task list:
 - [x] P65-2: แก้ไข isClosed logic ใน listDebtTarget และ listDebtTargetStream
 - [x] P65-3: Restart server + ทดสอบผลลัพธ์
 - [x] P65-4: Commit + push GitHub + checkpoint
+
+### Phase 66 — Fix: ซ่อน BG สีฟ้าสำหรับสัญญาหนี้เสียในเป้าเก็บหนี้
+- [x] P66-1: เพิ่ม 'หนี้เสีย' ใน isSpecialContractStatus เพื่อซ่อน BG สีฟ้า (current period highlight)
+- [x] P66-2: Commit + push GitHub + checkpoint
+### Phase 67 — Fix: เป้าเก็บหนี้ สัญญาหนี้เสีย (FF365) ที่ไม่มี installment_status_code ให้ใช้ max TXRT receipt suffix + 1 เป็น suspendedFromPeriod
+- [x] P67-1: แก้ไข listDebtTarget — เพิ่ม fallback สำหรับ bad debt contract ที่ไม่มี installment_status_code: หา max TXRT suffix จาก payment_transactions แล้วใช้ max+1 เป็น suspendedFromPeriod
+- [x] P67-2: แก้ไข listDebtTargetStream — เพิ่ม fallback เดียวกัน
+- [x] P67-3: Restart server + ทดสอบ CT0126-AYA001-20952-01 (งวด 1-2 ปกติ, งวด 3-12 หนี้เสีย)
+- [x] P67-4: Commit + push GitHub + checkpoint
