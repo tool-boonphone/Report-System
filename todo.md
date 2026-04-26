@@ -823,3 +823,18 @@ Task list:
 - [ ] วิเคราะห์ว่า isSuspended ใน listDebtTarget ใช้ suspendedFromPeriod (DB) ซึ่งอาจผิด
 - [ ] แก้ไขให้ใช้ badDebtPeriod ที่คำนวณจาก payment จริง (เหมือน listDebtTargetStream)
 - [ ] ตรวจสอบ frontend ว่าแสดงป้าย "หนี้เสีย" ถูกต้องหรือเปล่า
+
+### Phase 70-73 — Fix: bad debt label logic (clean branch by contract status)
+- [x] P70: bad debt contracts → periods >= suspendedFromPeriod always isSuspended=true (no paid check)
+- [x] P71: bad debt contracts → use TXRT receipt period as suspendedFromPeriod (not installment status)
+- [x] P72: bad debt contracts → isClosed overridden to false for periods >= suspendedFromPeriod
+- [x] P73: Clean refactor — check contract status first, apply that status's logic exclusively:
+  - isContractBadDebt → bad debt logic only (isSuspended = periodNo >= suspendedFromPeriod)
+  - isContractSuspended → suspended logic only (isSuspended = periodNo >= suspendedFromPeriod && (instStatus || paid<=0))
+  - else → TXRTC (closed/normal) logic
+- [x] Regex fix: /-(d+)$/ → /-(\\d+)$/ for TXRT receipt period parsing
+- [x] Verified: CT0225-RBR003-10331-01 all 8 periods show หนี้เสีย label (suspendedFromPeriod=1)
+- [x] Verified: สิ้นสุดสัญญา (CT0126-AYA010-22052-01) unaffected — งวดต้นยอดปกติ, งวดหลัง "ปิดงวดแล้ว"
+- [x] Verified: ระงับสัญญา (CT0126-RBR003-22265-01) unaffected — งวด 1 ยอดปกติ, งวดหลัง "ระงับสัญญา"
+- [x] Commit: "Phase 73: clean branch logic by contract status" (commit 9d84ac8)
+- [x] Checkpoint + Push GitHub
