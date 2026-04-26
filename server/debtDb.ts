@@ -877,13 +877,14 @@ export async function listDebtTarget(params: { section: SectionKey }) {
         // Bug 4 fix (Phase 9AA): use closedByContract.has() so contracts with
         // only TXRTC receipts (maxNormalPeriod=0) are also detected correctly.
         // When maxNormalPeriod=0, period > 0 is always true for any real period.
-        // Phase 52 fix v3: >= maxClosedPeriod so the last normally-paid period is
-        // also rendered as "ปิดค่างวดแล้ว" (it was paid as part of the lump-sum close).
+        // Phase 59 fix: use > (strictly after maxClosedPeriod) instead of >=.
+        // maxClosedPeriod = max period from TXRT normal receipts (e.g. 5 if TXRT...-5 exists).
+        // Periods WITH a TXRT receipt (including maxClosedPeriod itself) are paid normally
+        // and must NOT be marked isClosed. Only periods AFTER maxClosedPeriod (no TXRT receipt)
+        // are closed by the TXRTC lump-sum payment.
         // Guard maxClosedPeriod > 0 so contracts with no normal receipts are unaffected.
         // Phase 53: periodNo > 1 — งวดที่ 1 แสดงยอดตั้งหนี้ปกติเสมอ แม้ maxClosedPeriod=1
-        const isClosed = closedByContract.has(extId) && maxClosedPeriod > 0 && periodNo > 1 && periodNo >= maxClosedPeriod;
-        // Per-period suspended flag: period is >= the first suspended period.
-        // Bad-debt contract → re-use the same flag but surface a different label.
+        const isClosed = closedByContract.has(extId) && maxClosedPeriod > 0 && periodNo > 1 && periodNo > maxClosedPeriod;
         // Phase 54: งวดที่ลูกค้าชำระเข้ามาแล้ว (paid > 0) ให้แสดงยอดปกติ
         // เฉพาะงวดที่ยังไม่มีการชำระเท่านั้นที่แสดงเป็นระงับสัญญา
         const isSuspended =
@@ -1719,7 +1720,7 @@ export async function* listDebtTargetStream(params: {
             const targetInst = list.find((r) => Number(r.period) === targetPeriod);
             if (!targetInst) continue;
             const targetPaid = Number(targetInst.paid_amount ?? 0);
-            const targetIsClosed = closedByContract.has(extId) && maxClosedPeriod > 0 && targetPeriod > 1 && targetPeriod >= maxClosedPeriod;
+            const targetIsClosed = closedByContract.has(extId) && maxClosedPeriod > 0 && targetPeriod > 1 && targetPeriod > maxClosedPeriod;
             const targetIsSuspended = !targetIsClosed && suspendedFromPeriod > 0 && targetPeriod >= suspendedFromPeriod && targetPaid <= 0;
             if (targetIsClosed || targetIsSuspended) continue; // skip suspended/closed periods
             // Determine if this target period has paidInFullWithReducedAmount (API already reduced)
@@ -1751,11 +1752,9 @@ export async function* listDebtTargetStream(params: {
         const rawUnlockFee = Number(r.unlock_fee_due ?? 0);
         const paid = Number(r.paid_amount ?? 0);
         const periodNo = r.period != null ? Number(r.period) : 0;
-        // Phase 52 fix v3: >= maxClosedPeriod so the last normally-paid period is
-        // also rendered as "ปิดค่างวดแล้ว" (it was paid as part of the lump-sum close).
-        // Guard maxClosedPeriod > 0 so contracts with no normal receipts are unaffected.
-        // Phase 53: periodNo > 1 — งวดที่ 1 แสดงยอดตั้งหนี้ปกติเสมอ แม้ maxClosedPeriod=1
-        const isClosed = closedByContract.has(extId) && maxClosedPeriod > 0 && periodNo > 1 && periodNo >= maxClosedPeriod;
+        // Phase 59 fix: use > (strictly after maxClosedPeriod) instead of >=.
+        // See listDebtCollectedStream isClosed comment above for full rationale.
+        const isClosed = closedByContract.has(extId) && maxClosedPeriod > 0 && periodNo > 1 && periodNo > maxClosedPeriod;
         // Phase 54: งวดที่ลูกค้าชำระเข้ามาแล้ว (paid > 0) ให้แสดงยอดปกติ
         const isSuspended = !isClosed && suspendedFromPeriod > 0 && periodNo >= suspendedFromPeriod && paid <= 0;
         const suspendLabel = isContractBadDebt ? "หนี้เสีย" : "ระงับสัญญา";
@@ -1845,12 +1844,7 @@ export async function* listDebtTargetStream(params: {
             } else {
               const apiAmount = rawAmount > 0.009 ? rawAmount : null;
               const apiEqualsBaseline = apiAmount != null && Math.abs(apiAmount - baseline) < 0.5;
-              // Phase 58 fix: only apply carry deduction when the period is NOT yet paid
-              // (paid < 0.009). If the customer already paid this period, carry should NOT
-              // reduce the displayed amount — the carry was already "used" by the API to
-              // credit future periods, not to reduce a period that was paid normally.
-              const periodAlreadyPaid = paid >= (apiAmount ?? 0) - 0.5 && (apiAmount ?? 0) > 0.009;
-              const applyCarryToAmount = overpaidApplied > 0.009 && apiEqualsBaseline && !periodAlreadyPaid;
+              const applyCarryToAmount = overpaidApplied > 0.009 && apiEqualsBaseline;
               // Phase 48: ใช้ effective values (หัก overpaid แล้ว) ทั้ง 3 fields
               fee = Math.round(effectiveFee);
               principal = Math.round(effectivePrincipal);
@@ -1922,22 +1916,9 @@ export async function* listDebtTargetStream(params: {
         // Phase 49 fix: do NOT fallback to baselineAmount when overpaidApplied > 0
         // because baseNet=0 means overpaid covered all components (correct), not API error.
         const noOverpaidS = (currentPeriod.overpaidApplied ?? 0) < 0.009;
-        // Phase 58 fix: if the period was already paid (paid >= amount) and the pre-computed
-        // amount is already correct (> 0), preserve it instead of recalculating from baseNet.
-        // This prevents the Arrears pass from zeroing out a paid period whose principal/interest/fee
-        // were reduced to 0 by the effective-values carry logic.
-        const periodPaid = Number(currentPeriod.paid ?? 0);
-        const preComputedAmount = Number(currentPeriod.amount ?? 0);
-        const periodIsAlreadyPaid = periodPaid >= preComputedAmount - 0.5 && preComputedAmount > 0.009;
-        let effectiveBase: number;
-        if (periodIsAlreadyPaid && preComputedAmount > 0.009) {
-          // Period was paid — keep the pre-computed amount as the base
-          effectiveBase = preComputedAmount;
-        } else {
-          effectiveBase = baseNet > 0.009
-            ? baseNet
-            : (noOverpaidS && currentPeriod.baselineAmount > 0.009 ? currentPeriod.baselineAmount : baseNet);
-        }
+        const effectiveBase = baseNet > 0.009
+          ? baseNet
+          : (noOverpaidS && currentPeriod.baselineAmount > 0.009 ? currentPeriod.baselineAmount : baseNet);
         currentPeriod.amount = effectiveBase + currentPeriod.penalty + currentPeriod.unlockFee;
         currentPeriod.netAmount = effectiveBase;
         currentPeriod.isCurrentPeriod = true;
