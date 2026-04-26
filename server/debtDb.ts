@@ -323,6 +323,7 @@ type InstRawRow = {
 export function assignPayPeriods(
   payments: PayRawRow[],
   installmentList: Array<{ period: number | null; amount: number }>,
+  contractNo?: string | null,
 ): Array<PayRawRow & { splitIndex: number; isCloseRow: boolean; isBadDebtRow: boolean }> {
   if (!payments.length) return [];
   const schedule = installmentList
@@ -339,6 +340,13 @@ export function assignPayPeriods(
     const at = a.paid_at ?? "";
     const bt = b.paid_at ?? "";
     if (at !== bt) return at.localeCompare(bt);
+    // Phase 75: tie-break by receipt_no alphabetically so TXRT-N-M receipts
+    // are processed in period order (e.g. TXRT-2-1 before TXRT-3-1 on same day).
+    // TXRTC rows sort after TXRT rows naturally because 'C' > '' alphabetically.
+    // Fall back to payment_id for rows with identical receipt_no.
+    const ar = a.receipt_no ?? "";
+    const br = b.receipt_no ?? "";
+    if (ar !== br) return ar.localeCompare(br);
     return (a.payment_id ?? 0) - (b.payment_id ?? 0);
   });
 
@@ -353,16 +361,35 @@ export function assignPayPeriods(
       continue;
     }
 
+      const receipt = String(p.receipt_no ?? "");
+    const isCloseRow = receipt.startsWith("TXRTC");
+
+    // Phase 75B: If contractNo is provided and receipt is a TXRT (non-close) receipt,
+    // parse the explicit period from the receipt_no suffix and advance cursor to that period.
+    // This fixes cases where partial payments (e.g. TXRT-3-1 = 2.50 baht) don't advance
+    // the cursor, causing subsequent receipts to be assigned to wrong periods.
+    if (contractNo && !isCloseRow && receipt.startsWith("TXRT")) {
+      const prefix = "TXRT" + contractNo.replace(/^CT/, "") + "-";
+      if (receipt.startsWith(prefix)) {
+        const suffix = receipt.slice(prefix.length); // e.g. "2-1" or "4"
+        const firstSegment = suffix.split("-")[0];
+        const explicitPeriod = Number(firstSegment);
+        if (Number.isFinite(explicitPeriod) && explicitPeriod > 0) {
+          // Advance cursor to the schedule index for this explicit period
+          const targetIdx = schedule.findIndex((s) => s.period === explicitPeriod);
+          if (targetIdx >= 0 && targetIdx >= cursor) {
+            cursor = targetIdx;
+            coveredCurrent = 0;
+          }
+        }
+      }
+    }
+
     const period = schedule[cursor]?.period ?? null;
     const splitIdx = period != null ? (periodSeen.get(period) ?? 0) : 0;
     if (period != null) periodSeen.set(period, splitIdx + 1);
-
-    const receipt = String(p.receipt_no ?? "");
-    const isCloseRow = receipt.startsWith("TXRTC");
-
     out.push({ ...p, period, splitIndex: splitIdx, isCloseRow, isBadDebtRow: false });
-
-    // Cursor advancement.
+    // Cursor advancement..
     //
     // Business rule (Phase 9M, 2026-04-23):
     //   TXRTC (close-contract) receipts — each receipt represents exactly
@@ -1567,6 +1594,7 @@ export async function listDebtCollected(params: { section: SectionKey }) {
       const realAssignedForBadDebt = assignPayPeriods(
         realPaymentsRaw,
         c.installments.map((i: { period: number | null; amount: number | string }) => ({ period: i.period, amount: Number(i.amount) > 0 ? Number(i.amount) : baselineAmt })),
+        c.contractNo ?? null,
       );
       const normalPayments = realAssignedForBadDebt.filter((p) => {
         const totalPaid = (p as any).total_paid_amount as number | null;
@@ -1651,6 +1679,7 @@ export async function listDebtCollected(params: { section: SectionKey }) {
       const realAssigned = assignPayPeriods(
         realPaymentsRaw,
         c.installments.map((i: { period: number | null; amount: number | string }) => ({ period: i.period, amount: Number(i.amount) > 0 ? Number(i.amount) : baselineAmtNoBd })),
+        c.contractNo ?? null,
       );
       tagged = realAssigned.map((p) => ({ ...p, isBadDebtRow: false }));
     }
@@ -2566,6 +2595,7 @@ export async function* listDebtCollectedStream(params: {
         const realAssignedForBadDebt = assignPayPeriods(
           realPaymentsRaw,
           c.installments.map((i: { period: number | null; amount: number | string }) => ({ period: i.period, amount: Number(i.amount) || 0 })),
+          c.contractNo ?? null,
         );
         const normalPayments = realAssignedForBadDebt.filter((p) => {
           const totalPaid = (p as any).total_paid_amount as number | null;
@@ -2615,11 +2645,11 @@ export async function* listDebtCollectedStream(params: {
         const realAssigned = assignPayPeriods(
           realPaymentsRaw,
           c.installments.map((i: { period: number | null; amount: number | string }) => ({ period: i.period, amount: Number(i.amount) || 0 })),
+          c.contractNo ?? null,
         );
         tagged = realAssigned.map((p) => ({ ...p, isBadDebtRow: false }));
       }
-
-      // Phase 63: สร้าง carry rows สำหรับงวดที่ถูก skip เพราะ overpaid
+      // Phase 63: สร้าง carry rows สำหรับงวดที่ถูก skip เพราะ overpaidd
       // ตรวจสอบ gaps ใน periods ของ tagged payments
       // ถ้ามี gap (เช่น period 2 แล้วข้ามไป period 5) ให้สร้าง carry rows สำหรับงวด 3, 4
       {
