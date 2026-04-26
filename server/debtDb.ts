@@ -682,6 +682,8 @@ export async function listDebtTarget(params: { section: SectionKey }) {
   const paidAtsByContract = new Map<string, string[]>();
   // Phase 67: TXRT normal receipt suffix periods per contract (for bad-debt suspendedFromPeriod fallback)
   const normalPeriodsByContractOuter = new Map<string, Set<number>>();
+  // Phase 68: track total_paid_amount per TXRT suffix per contract (to detect device sale payments)
+  const txrtTotalByContractPeriod = new Map<string, Map<number, number>>();
 
   {
     // Load all payments: needed for (a) TXRTC close detection, (b) overpaid tracking,
@@ -690,6 +692,7 @@ export async function listDebtTarget(params: { section: SectionKey }) {
       SELECT contract_external_id,
              JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.receipt_no')) AS receipt_no,
              CAST(JSON_EXTRACT(raw_json, '$.overpaid_amount') AS DECIMAL(18,2)) AS overpaid_amount,
+             CAST(amount AS DECIMAL(18,2)) AS total_paid_amount,
              paid_at
         FROM ${paymentTransactions}
        WHERE ${paymentTransactions.section} = ${params.section}
@@ -699,7 +702,7 @@ export async function listDebtTarget(params: { section: SectionKey }) {
 
     // Pass 1: collect paidAts, TXRTC close markers, and overpaid per period.
     const closeDatesByContract = new Map<string, Date[]>();
-    // normalPeriodsByContractOuter is declared outside this block (Phase 67)
+    // normalPeriodsByContractOuter and txrtTotalByContractPeriod are declared outside this block (Phase 67/68)
 
     for (const pr of allPayRows) {
       const key = String(pr.contract_external_id ?? "");
@@ -727,6 +730,14 @@ export async function listDebtTarget(params: { section: SectionKey }) {
         const outerSet = normalPeriodsByContractOuter.get(key) ?? new Set<number>();
         outerSet.add(period);
         normalPeriodsByContractOuter.set(key, outerSet);
+
+        // Phase 68: track total_paid_amount per TXRT suffix (to detect device sale payments)
+        const totalPaidForPeriod = Number(pr.total_paid_amount ?? 0);
+        if (totalPaidForPeriod > 0) {
+          let tMap = txrtTotalByContractPeriod.get(key);
+          if (!tMap) { tMap = new Map<number, number>(); txrtTotalByContractPeriod.set(key, tMap); }
+          tMap.set(period, (tMap.get(period) ?? 0) + totalPaidForPeriod);
+        }
 
         // Track overpaid amount for this period
         const overpaid = Number(pr.overpaid_amount ?? 0);
@@ -876,16 +887,26 @@ export async function listDebtTarget(params: { section: SectionKey }) {
         // Example: TXRT-1, TXRT-2 exist → suspendedFromPeriod = 3 (not 1)
         if (isContractBadDebt) {
           const txrtPeriods = normalPeriodsByContractOuter.get(extId);
+          const contractBadDebt = c.bad_debt_amount != null ? Number(c.bad_debt_amount) : null;
           if (txrtPeriods && txrtPeriods.size > 0) {
-            const maxTxrtPeriod = Math.max(...Array.from(txrtPeriods));
+            // Phase 68: exclude TXRT periods that are device sale payments (total ≈ bad_debt_amount)
+            const tMap = txrtTotalByContractPeriod.get(extId);
+            const normalTxrtPeriods = Array.from(txrtPeriods).filter((p) => {
+              if (!contractBadDebt || contractBadDebt <= 0) return true;
+              const total = tMap?.get(p) ?? 0;
+              return Math.abs(total - contractBadDebt) > 1; // not a device sale payment
+            });
+            const maxTxrtPeriod = normalTxrtPeriods.length > 0
+              ? Math.max(...normalTxrtPeriods)
+              : 0;
             suspendedFromPeriod = maxTxrtPeriod + 1;
             // suspendedAt = due_date of the period at suspendedFromPeriod
             const suspendedPeriodRow = list
               .filter((r) => Number(r.period ?? 0) === suspendedFromPeriod)
               .sort((a, b) => (a.period ?? 0) - (b.period ?? 0))[0];
             suspendedAt = suspendedPeriodRow?.due_date ?? null;
-            // If no row for that period, fall back to last TXRT period's due_date
-            if (!suspendedAt) {
+            // If no row for that period, fall back to last normal TXRT period's due_date
+            if (!suspendedAt && maxTxrtPeriod > 0) {
               const lastTxrtRow = list
                 .filter((r) => Number(r.period ?? 0) === maxTxrtPeriod)
                 .sort((a, b) => (a.period ?? 0) - (b.period ?? 0))[0];
@@ -1697,11 +1718,14 @@ export async function* listDebtTargetStream(params: {
   const paidAtsByContract = new Map<string, string[]>();
   // Phase 67: TXRT normal receipt suffix periods per contract (for bad-debt suspendedFromPeriod fallback)
   const normalPeriodsByContract = new Map<string, Set<number>>();
+  // Phase 68: track total_paid_amount per TXRT suffix per contract (to detect device sale payments)
+  const txrtTotalByContractPeriodStream = new Map<string, Map<number, number>>();
   {
     const rawCloseData = await db.execute(sql`
       SELECT contract_external_id,
              JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.receipt_no')) AS receipt_no,
              CAST(JSON_EXTRACT(raw_json, '$.overpaid_amount') AS DECIMAL(18,2)) AS overpaid_amount,
+             CAST(amount AS DECIMAL(18,2)) AS total_paid_amount,
              paid_at
         FROM ${paymentTransactions}
        WHERE ${paymentTransactions.section} = ${params.section}
@@ -1727,13 +1751,20 @@ export async function* listDebtTargetStream(params: {
           closeDatesByContract.set(key, list);
         }
       } else {
-        const m = /-(\d+)$/.exec(receipt);
+        const m = /-(d+)$/.exec(receipt);
         if (!m) continue;
         const period = Number(m[1]);
         if (!Number.isFinite(period) || period <= 0) continue;
         const set = normalPeriodsByContract.get(key) ?? new Set<number>();
         set.add(period);
         normalPeriodsByContract.set(key, set);
+        // Phase 68: track total_paid_amount per TXRT suffix
+        const totalPaidForPeriod = Number(pr.total_paid_amount ?? 0);
+        if (totalPaidForPeriod > 0) {
+          let tMap = txrtTotalByContractPeriodStream.get(key);
+          if (!tMap) { tMap = new Map<number, number>(); txrtTotalByContractPeriodStream.set(key, tMap); }
+          tMap.set(period, (tMap.get(period) ?? 0) + totalPaidForPeriod);
+        }
         const overpaid = Number(pr.overpaid_amount ?? 0);
         if (overpaid > 0) {
           let periodMap = overpaidByContractPeriod.get(key);
@@ -1818,17 +1849,27 @@ export async function* listDebtTargetStream(params: {
         suspendedFromPeriod = Number(firstSuspended.period);
         suspendedAt = firstSuspended.due_date ?? null;
       } else {
-        // Phase 67 override for bad debt: if contract has TXRT receipts, use max(suffix)+1
+        // Phase 67/68 override for bad debt: if contract has TXRT receipts, use max(non-device-sale suffix)+1
         if (isContractBadDebt) {
           const txrtPeriods = normalPeriodsByContract.get(extId);
+          const contractBadDebt = c.bad_debt_amount != null ? Number(c.bad_debt_amount) : null;
           if (txrtPeriods && txrtPeriods.size > 0) {
-            const maxTxrtPeriod = Math.max(...Array.from(txrtPeriods));
+            // Phase 68: exclude TXRT periods that are device sale payments (total ≈ bad_debt_amount)
+            const tMap = txrtTotalByContractPeriodStream.get(extId);
+            const normalTxrtPeriods = Array.from(txrtPeriods).filter((p) => {
+              if (!contractBadDebt || contractBadDebt <= 0) return true;
+              const total = tMap?.get(p) ?? 0;
+              return Math.abs(total - contractBadDebt) > 1;
+            });
+            const maxTxrtPeriod = normalTxrtPeriods.length > 0
+              ? Math.max(...normalTxrtPeriods)
+              : 0;
             suspendedFromPeriod = maxTxrtPeriod + 1;
             const suspendedPeriodRow = list
               .filter((r) => Number(r.period ?? 0) === suspendedFromPeriod)
               .sort((a, b) => (a.period ?? 0) - (b.period ?? 0))[0];
             suspendedAt = suspendedPeriodRow?.due_date ?? null;
-            if (!suspendedAt) {
+            if (!suspendedAt && maxTxrtPeriod > 0) {
               const lastTxrtRow = list
                 .filter((r) => Number(r.period ?? 0) === maxTxrtPeriod)
                 .sort((a, b) => (a.period ?? 0) - (b.period ?? 0))[0];

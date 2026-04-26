@@ -805,3 +805,8 @@ Task list:
 - [x] P67-2: แก้ไข listDebtTargetStream — เพิ่ม fallback เดียวกัน
 - [x] P67-3: Restart server + ทดสอบ CT0126-AYA001-20952-01 (งวด 1-2 ปกติ, งวด 3-12 หนี้เสีย)
 - [x] P67-4: Commit + push GitHub + checkpoint
+### Phase 68 — Fix: suspendedFromPeriod ต้องข้าม TXRT ที่เป็น device sale payment (total ≈ bad_debt_amount)
+- [x] P68-1: แก้ไข listDebtTarget — ใน normalPeriodsByContractOuter ให้ข้าม TXRT receipt ที่ total_paid_amount ≈ contractBadDebtAmount
+- [x] P68-2: แก้ไข listDebtTargetStream — เพิ่ม logic เดียวกัน
+- [x] P68-3: Restart server + ทดสอบ CT0126-AYA001-20952-01 (งวด 1 ปกติ, งวด 2-12 หนี้เสีย)
+- [x] P68-4: Commit + push GitHub + checkpoint
