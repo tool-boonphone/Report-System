@@ -767,3 +767,13 @@ Task list:
 - [x] P55b-2: แก้เช่นเดียวกันใน listDebtTargetStream
 - [x] P55b-3: TypeScript check ผ่าน 0 errors
 - [x] P55b-4: Checkpoint + Push GitHub
+
+### Phase 62 — Fix: isClosed Logic 3 Patterns (เป้าเก็บหนี้)
+3 Patterns:
+- P1: maxNormal=0 (TXRTC ปิดงวดแรก) → งวด 1 ยอดปกติ, งวด 2+ ปิดค่างวด
+- P2: 1 < maxNormal < totalPeriods (TXRTC ปิดงวด N ระหว่างกลาง) → งวด 1..N ยอดปกติ, งวด N+1+ ปิดค่างวด
+- P3: maxNormal = totalPeriods (TXRTC ปิดงวดสุดท้ายงวดเดียว) → ทุกงวด ยอดปกติ
+- [x] P62-1: แก้ไข closedByContract logic ใน listDebtTarget (non-stream) — Pass 2 ใช้ installCountByKey + sentinel -1 สำหรับ Pattern 3
+- [x] P62-2: แก้ไข closedByContract logic ใน listDebtTargetStream — เช่นเดียวกัน (installCountByKeyStream)
+- [x] P62-3: ทดสอบ 3 patterns จาก DB จริง — P1: 3 สัญญา, P2: 2 สัญญา, P3: 0 (ยังไม่มีใน DB), TypeScript 0 errors
+- [ ] P62-4: Commit + push GitHub + checkpoint

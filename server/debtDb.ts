@@ -723,20 +723,39 @@ export async function listDebtTarget(params: { section: SectionKey }) {
       }
     }
 
-    // Pass 2 (Phase 52 fix v2): for every contract that has at least one TXRTC payment,
-    // derive the close period as the HIGHEST period from TXRT normal receipts (suffix -N).
-    // Periods strictly AFTER this are rendered as "ปิดค่างวดแล้ว" with zero amounts.
+    // Pass 2 (Phase 62): 3-pattern isClosed logic based on TXRTC position
     //
-    // Rationale: TXRT-N receipts explicitly identify which periods were paid normally.
-    // The max TXRT period = last normally-paid period. Everything after = lump-sum closed.
-    // This correctly handles cases where installments.paid_amount is partial or
-    // inconsistent due to API data quirks.
+    // Pattern 1: maxNormal=0 (TXRTC ปิดงวดแรก ไม่มี TXRT ปกติ)
+    //   → งวด 1 ยอดปกติ, งวด 2+ ปิดค่างวด
+    //   stored as: closedByContract.set(key, 0)
+    //
+    // Pattern 2: 1 < maxNormal < totalPeriods (TXRTC ปิดงวด N ระหว่างกลาง)
+    //   → งวด 1..N ยอดปกติ, งวด N+1+ ปิดค่างวด
+    //   stored as: closedByContract.set(key, N)
+    //
+    // Pattern 3: maxNormal >= totalPeriods (TXRTC ปิดงวดสุดท้ายงวดเดียว)
+    //   → ทุกงวดยอดปกติ (isClosed = false ทั้งหมด)
+    //   stored as: closedByContract.set(key, -1)  (-1 = sentinel for Pattern 3)
+    //
+    // Build a lookup of installment_count per contract for Pattern 3 detection.
+    const installCountByKey = new Map<string, number>();
+    for (const cr of cRows) {
+      const k = String(cr.external_id ?? "");
+      if (k) installCountByKey.set(k, cr.installment_count != null ? Number(cr.installment_count) : 0);
+    }
+
     for (const key of Array.from(closeDatesByContract.keys())) {
       const normalPeriods = normalPeriodsByContract.get(key);
       const maxNormalPeriod = normalPeriods && normalPeriods.size > 0
         ? Math.max(...Array.from(normalPeriods))
         : 0;
-      closedByContract.set(key, maxNormalPeriod);
+      const totalPeriods = installCountByKey.get(key) ?? 0;
+      // Pattern 3: TXRTC ปิดงวดสุดท้ายงวดเดียว (maxNormal >= totalPeriods > 0) → ยอดปกติทั้งหมด
+      if (totalPeriods > 0 && maxNormalPeriod >= totalPeriods) {
+        closedByContract.set(key, -1); // -1 = Pattern 3: no isClosed
+      } else {
+        closedByContract.set(key, maxNormalPeriod); // 0 = Pattern 1, N = Pattern 2
+      }
     }
   }
 
@@ -856,14 +875,14 @@ export async function listDebtTarget(params: { section: SectionKey }) {
         const paid = Number(r.paid_amount ?? 0);
         const periodNo = r.period != null ? Number(r.period) : 0;
 
-        // Bug 4 fix (Phase 9AA): use closedByContract.has() so contracts with
-        // only TXRTC receipts (maxNormalPeriod=0) are also detected correctly.
-        // When maxNormalPeriod=0, period > 0 is always true for any real period.
-        // Phase 52 fix v3: >= maxClosedPeriod so the last normally-paid period is
-        // also rendered as "ปิดค่างวดแล้ว" (it was paid as part of the lump-sum close).
-        // Guard maxClosedPeriod > 0 so contracts with no normal receipts are unaffected.
-        // Phase 53: periodNo > 1 — งวดที่ 1 แสดงยอดตั้งหนี้ปกติเสมอ แม้ maxClosedPeriod=1
-        const isClosed = closedByContract.has(extId) && maxClosedPeriod > 0 && periodNo > 1 && periodNo >= maxClosedPeriod;
+        // Phase 62: 3-pattern isClosed logic
+        // maxClosedPeriod = -1 → Pattern 3 (ยอดปกติทั้งหมด, isClosed = false)
+        // maxClosedPeriod = 0  → Pattern 1 (งวด 1 ยอดปกติ, งวด 2+ ปิดค่างวด)
+        // maxClosedPeriod = N  → Pattern 2 (งวด 1..N ยอดปกต์, งวด N+1+ ปิดค่างวด)
+        const isClosed = closedByContract.has(extId)
+          && maxClosedPeriod !== -1   // Pattern 3 = ยอดปกติทั้งหมด
+          && periodNo > 1             // งวด 1 ยอดปกติเสมอ (Pattern 1 + 2)
+          && periodNo > maxClosedPeriod; // Pattern 1: >0 → period>1 เสมอ true; Pattern 2: period>N
         // Per-period suspended flag: period is >= the first suspended period.
         // Bad-debt contract → re-use the same flag but surface a different label.
         // Phase 54: งวดที่ลูกค้าชำระเข้ามาแล้ว (paid > 0) ให้แสดงยอดปกติ
@@ -1569,14 +1588,26 @@ export async function* listDebtTargetStream(params: {
       }
     }
 
-    // Pass 2 (Phase 52 fix v2): close period = max period from TXRT normal receipts (suffix -N).
-    // Periods strictly AFTER this are rendered as "ปิดค่างวดแล้ว" with zero amounts.
+    // Pass 2 (Phase 62): 3-pattern isClosed logic based on TXRTC position
+    // Pattern 1: maxNormal=0 → stored as 0 (งวด 1 ยอดปกติ, งวด 2+ ปิดค่างวด)
+    // Pattern 2: 1 < maxNormal < totalPeriods → stored as N (งวด N+1+ ปิดค่างวด)
+    // Pattern 3: maxNormal >= totalPeriods → stored as -1 (ยอดปกติทั้งหมด)
+    const installCountByKeyStream = new Map<string, number>();
+    for (const cr of cRows) {
+      const k = String(cr.external_id ?? "");
+      if (k) installCountByKeyStream.set(k, cr.installment_count != null ? Number(cr.installment_count) : 0);
+    }
     for (const key of Array.from(closeDatesByContract.keys())) {
       const normalPeriods = normalPeriodsByContract.get(key);
       const maxNormalPeriod = normalPeriods && normalPeriods.size > 0
         ? Math.max(...Array.from(normalPeriods))
         : 0;
-      closedByContract.set(key, maxNormalPeriod);
+      const totalPeriods = installCountByKeyStream.get(key) ?? 0;
+      if (totalPeriods > 0 && maxNormalPeriod >= totalPeriods) {
+        closedByContract.set(key, -1); // Pattern 3: ยอดปกติทั้งหมด
+      } else {
+        closedByContract.set(key, maxNormalPeriod); // Pattern 1 (0) or Pattern 2 (N)
+      }
     }
   }
 
@@ -1631,11 +1662,14 @@ export async function* listDebtTargetStream(params: {
         const rawUnlockFee = Number(r.unlock_fee_due ?? 0);
         const paid = Number(r.paid_amount ?? 0);
         const periodNo = r.period != null ? Number(r.period) : 0;
-        // Phase 52 fix v3: >= maxClosedPeriod so the last normally-paid period is
-        // also rendered as "ปิดค่างวดแล้ว" (it was paid as part of the lump-sum close).
-        // Guard maxClosedPeriod > 0 so contracts with no normal receipts are unaffected.
-        // Phase 53: periodNo > 1 — งวดที่ 1 แสดงยอดตั้งหนี้ปกติเสมอ แม้ maxClosedPeriod=1
-        const isClosed = closedByContract.has(extId) && maxClosedPeriod > 0 && periodNo > 1 && periodNo >= maxClosedPeriod;
+        // Phase 62: 3-pattern isClosed logic
+        // maxClosedPeriod = -1 → Pattern 3 (ยอดปกติทั้งหมด, isClosed = false)
+        // maxClosedPeriod = 0  → Pattern 1 (งวด 1 ยอดปกติ, งวด 2+ ปิดค่างวด)
+        // maxClosedPeriod = N  → Pattern 2 (งวด 1..N ยอดปกติ, งวด N+1+ ปิดค่างวด)
+        const isClosed = closedByContract.has(extId)
+          && maxClosedPeriod !== -1   // Pattern 3 = ยอดปกติทั้งหมด
+          && periodNo > 1             // งวด 1 ยอดปกติเสมอ (Pattern 1 + 2)
+          && periodNo > maxClosedPeriod; // Pattern 1: >0 → period>1 เสมอ true; Pattern 2: period>N
         // Phase 54: งวดที่ลูกค้าชำระเข้ามาแล้ว (paid > 0) ให้แสดงยอดปกติ
         const isSuspended = !isClosed && suspendedFromPeriod > 0 && periodNo >= suspendedFromPeriod && paid <= 0;
         const suspendLabel = isContractBadDebt ? "หนี้เสีย" : "ระงับสัญญา";
