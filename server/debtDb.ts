@@ -677,6 +677,35 @@ export async function listDebtTarget(params: { section: SectionKey }) {
   // Only applies to contracts that have status = 'สิ้นสุดสัญญา' (i.e. have a TXRTC
   // close payment). Active/suspended contracts are NOT affected.
   const closedByContract = new Map<string, number>();
+
+  // Phase 74: Build contractNo lookup for correct receipt period parsing
+  // Receipt format: TXRT{contract_no}-{period} or TXRT{contract_no}-{period}-{sub}
+  // e.g. TXRT0225-SRI001-9292-01-2-1 → contract_no=CT0225-SRI001-9292-01 → period=2
+  // Regex /-(d+)$/ incorrectly matches last digit (-1 instead of -2)
+  // Fix: strip "TXRT{contract_no}-" prefix, then take first segment
+  const contractNoByExtId = new Map<string, string>();
+  for (const cr of cRows) {
+    const k = String(cr.external_id ?? "");
+    if (k && cr.contract_no) contractNoByExtId.set(k, String(cr.contract_no));
+  }
+  // Helper: parse period from TXRT receipt_no using contract_no prefix strip
+  function parseTxrtPeriod(receipt: string, contractExtId: string): number {
+    const contractNo = contractNoByExtId.get(contractExtId);
+    if (contractNo) {
+      // receipt prefix = "TXRT" + contract_no.replace(/^CT/, '') + "-"
+      // e.g. contract_no = "CT0225-SRI001-9292-01" → prefix = "TXRT0225-SRI001-9292-01-"
+      const prefix = "TXRT" + contractNo.replace(/^CT/, "") + "-";
+      if (receipt.startsWith(prefix)) {
+        const suffix = receipt.slice(prefix.length); // e.g. "2-1" or "4"
+        const firstSegment = suffix.split("-")[0];
+        const p = Number(firstSegment);
+        if (Number.isFinite(p) && p > 0) return p;
+      }
+    }
+    // Fallback: use last -N suffix (old behavior)
+    const m = /-(\d+)$/.exec(receipt);
+    return m ? Number(m[1]) : 0;
+  }
   const overpaidByContractPeriod = new Map<string, Map<number, number>>();
   // For bad-debt date derivation: every payment's paid_at per contract.
   const paidAtsByContract = new Map<string, string[]>();
@@ -766,10 +795,8 @@ export async function listDebtTarget(params: { section: SectionKey }) {
           closeDatesByContract.set(key, list);
         }
       } else {
-        // Regular single-period payment: period is the trailing -N suffix.
-        const m = /-(\d+)$/.exec(receipt);
-        if (!m) continue;
-        const period = Number(m[1]);
+        // Regular single-period payment: parse period using contract_no prefix strip (Phase 74)
+        const period = parseTxrtPeriod(receipt, key);
         if (!Number.isFinite(period) || period <= 0) continue;
         // Phase 67: use outer map directly (declared outside block)
         const outerSet = normalPeriodsByContractOuter.get(key) ?? new Set<number>();
@@ -1092,11 +1119,13 @@ export async function listDebtTarget(params: { section: SectionKey }) {
           // maxClosedPeriod = 0  → Pattern 1 (งวด 1 ยอดปกติ, งวด 2+ ปิดค่างวด)
           // maxClosedPeriod = N  → Pattern 2 (งวด 1..N ยอดปกติ, งวด N+1+ ปิดค่างวด)
           // Phase 65: งวดที่มี paid > 0 ให้แสดงยอดปกติเสมอ
+          // Phase 74: ลบ paid<=0 guard — TXRTC close contracts ต้องแสดง isClosed เสมอ
+          // ไม่ว่า paid จะเป็นเท่าไหร่ (เช่น งวด 8 ของ CT0225-SRI001-9292-01 มี paid=1550 แต่ถูกปิดด้วย TXRTC)
+          // closedByContract.has(extId) รับประกันว่าสัญญานี้มี TXRTC close payment จริง
           isClosed = closedByContract.has(extId)
             && maxClosedPeriod !== -1
             && periodNo > 1
-            && periodNo > maxClosedPeriod
-            && paid <= 0;
+            && periodNo > maxClosedPeriod;
         }
         // --- Compute display amount (non-closed periods) ---
         let amount = rawAmount;
@@ -1834,6 +1863,27 @@ export async function* listDebtTargetStream(params: {
   const closeAmtSumByContractStream = new Map<string, number>();
   const closePayTotalByContractStream = new Map<string, number[]>();
 
+  // Phase 74: Build contractNo lookup for correct receipt period parsing (stream version)
+  const contractNoByExtIdStream = new Map<string, string>();
+  for (const cr of cRows) {
+    const k = String(cr.external_id ?? "");
+    if (k && cr.contract_no) contractNoByExtIdStream.set(k, String(cr.contract_no));
+  }
+  function parseTxrtPeriodStream(receipt: string, contractExtId: string): number {
+    const contractNo = contractNoByExtIdStream.get(contractExtId);
+    if (contractNo) {
+      const prefix = "TXRT" + contractNo.replace(/^CT/, "") + "-";
+      if (receipt.startsWith(prefix)) {
+        const suffix = receipt.slice(prefix.length);
+        const firstSegment = suffix.split("-")[0];
+        const p = Number(firstSegment);
+        if (Number.isFinite(p) && p > 0) return p;
+      }
+    }
+    const m = /-(\d+)$/.exec(receipt);
+    return m ? Number(m[1]) : 0;
+  }
+
   {
     // Extra query: get close_installment_amount for ALL payments (no receipt_no filter)
     const rawCloseAmtData = await db.execute(sql`
@@ -1903,9 +1953,8 @@ export async function* listDebtTargetStream(params: {
           closeDatesByContract.set(key, list);
         }
       } else {
-        const m = /-(\d+)$/.exec(receipt);
-        if (!m) continue;
-        const period = Number(m[1]);
+        // Phase 74: parse period using contract_no prefix strip
+        const period = parseTxrtPeriodStream(receipt, key);
         if (!Number.isFinite(period) || period <= 0) continue;
         const set = normalPeriodsByContract.get(key) ?? new Set<number>();
         set.add(period);
@@ -2133,12 +2182,11 @@ export async function* listDebtTargetStream(params: {
           // maxClosedPeriod = -1 → Pattern 3 (ยอดปกติทั้งหมด)
           // maxClosedPeriod = 0  → Pattern 1 (งวด 1 ยอดปกติ, งวด 2+ ปิดค่างวด)
           // maxClosedPeriod = N  → Pattern 2 (งวด 1..N ยอดปกติ, งวด N+1+ ปิดค่างวด)
-          // Phase 65: งวดที่มี paid > 0 ให้แสดงยอดปกติเสมอ
+          // Phase 74: ลบ paid<=0 guard — TXRTC close contracts ต้องแสดง isClosed เสมอ
           isClosed = closedByContract.has(extId)
             && maxClosedPeriod !== -1
             && periodNo > 1
-            && periodNo > maxClosedPeriod
-            && paid <= 0;
+            && periodNo > maxClosedPeriod;
         }
         let amount = rawAmount;
         let principal = rawPrincipal;

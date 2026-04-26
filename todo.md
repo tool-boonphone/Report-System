@@ -838,3 +838,11 @@ Task list:
 - [x] Verified: ระงับสัญญา (CT0126-RBR003-22265-01) unaffected — งวด 1 ยอดปกติ, งวดหลัง "ระงับสัญญา"
 - [x] Commit: "Phase 73: clean branch logic by contract status" (commit 9d84ac8)
 - [x] Checkpoint + Push GitHub
+
+### Phase 74 — Fix: เป้าเก็บหนี้ สัญญา "สิ้นสุดสัญญา" และ "หนี้เสีย" ไม่แสดง label ถูกต้อง
+- [ ] P74-1: วิเคราะห์ root cause — ตรวจสอบสัญญาตัวอย่างจาก DB
+- [ ] P74-2: แก้ไข isContractClosed logic — สิ้นสุดสัญญาที่ไม่มี TXRTC ต้องใช้ contract.status แทน
+- [ ] P74-3: แก้ไข isContractBadDebt logic — ตรวจสอบว่า Boonphone ใช้สถานะอะไรสำหรับหนี้เสีย
+- [ ] P74-4: แก้ไข listDebtTargetStream เช่นเดียวกัน
+- [ ] P74-5: Restart server + ทดสอบ
+- [ ] P74-6: Commit + push GitHub + checkpoint
