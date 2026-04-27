@@ -892,10 +892,17 @@ Task list:
 - [x] P79-7: ตรวจสอบ TypeScript + commit + checkpoint
 
 ### Phase 80 — Fix: MonthlySummary per-tab filters
-- [ ] P80-1: ปรับ monthlySummaryDb.ts — แยก query 3 เส้น (count/paid/due) แต่ละเส้นมี filter ของตัวเอง
+- [x] P80-1: ปรับ monthlySummaryDb.ts — แยก query 3 เส้น (count/paid/due) แต่ละเส้นมี filter ของตัวเอง
   - count: productType
   - paid: paidAtFrom/paidAtTo + paidAtMonth (YYYY-MM) + productType
   - due: dueAtFrom/dueAtTo + dueAtMonth (YYYY-MM) + productType
-- [ ] P80-2: ปรับ monthlySummary router — input schema แยกตาม tab
-- [ ] P80-3: ปรับ MonthlySummary.tsx — filter bar แยกตาม tab, เพิ่ม month-year picker, เพิ่ม due-date filter
-- [ ] P80-4: ตรวจสอบ TypeScript + commit + checkpoint
+- [x] P80-2: ปรับ monthlySummary router — input schema แยกตาม tab
+- [x] P80-3: ปรับ MonthlySummary.tsx — filter bar แยกตาม tab, เพิ่ม month-year picker, เพิ่ม due-date filter
+- [x] P80-4: ตรวจสอบ TypeScript + commit + checkpoint
+
+### Phase 81 — Fix: MonthlySummary corrections (feedback)
+- [ ] P81-1: ตัดสัญญาสถานะ "ยกเลิกสัญญา" ออกจาก WHERE clause ใน monthlySummaryDb.ts (contract.status != 'ยกเลิกสัญญา')
+- [ ] P81-2: ปรับ eye toggle ในหัวตาราง — แสดง 0 แทนซ่อนคอลัมน์ (คอลัมน์ยังคงอยู่แต่ค่าเป็น 0)
+- [ ] P81-3: เพิ่มคอลัมน์รวม: รวม(ปกติ) = ปกติ+เกิน1-7+เกิน8-14+เกิน15-30+เกิน31-60, รวม(สงสัย) = เกิน61-90+เกิน>90, รวม = ทุก bucket ที่เปิดอยู่
+- [ ] P81-4: ลบคำว่า "สัญญา" ออกจากชื่อคอลัมน์ bucket ทุกคอลัมน์ (เช่น "ปกติสัญญา" → "ปกติ")
+- [ ] P81-5: ตรวจสอบ TypeScript + commit + push GitHub + checkpoint

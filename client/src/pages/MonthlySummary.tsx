@@ -1,11 +1,12 @@
 /**
- * MonthlySummary — สรุปรายเดือน (Phase 80)
- * Filter แยกตาม tab:
- *   count: ประเภทสินค้า
- *   paid:  วันที่ชำระ (from-to) + เดือน-ปีที่ชำระ + ประเภทสินค้า
- *   due:   วันที่ต้องชำระ (from-to) + เดือน-ปีที่ต้องชำระ + ประเภทเครื่อง
+ * MonthlySummary — สรุปรายเดือน (Phase 81)
+ * - ตัดสัญญาสถานะ "ยกเลิกสัญญา" ออก (ใน backend)
+ * - eye toggle แสดง 0 แทนซ่อนคอลัมน์
+ * - เพิ่มคอลัมน์ รวม(ปกติ) และ รวม(สงสัย) ระหว่าง group
+ * - ลบคำว่า "สัญญา" ออกจาก sub-header
+ * - badge คำนวณจากทุก bucket (ไม่กรองตาม hidden)
  */
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { SyncStatusBar } from "@/components/SyncStatusBar";
 import { useNavActions } from "@/contexts/NavActionsContext";
@@ -20,21 +21,31 @@ import { Banknote, CalendarDays, Check, ChevronsUpDown, Coins, Download, Eye, Ey
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
 
+// ─── Constants ───────────────────────────────────────────────────────────────
 const DEBT_BUCKETS = ["ปกติ","เกิน 1-7","เกิน 8-14","เกิน 15-30","เกิน 31-60","เกิน 61-90","เกิน >90","ระงับสัญญา","สิ้นสุดสัญญา","หนี้เสีย"] as const;
 type DebtBucket = (typeof DEBT_BUCKETS)[number];
+
+// กลุ่มสำหรับ header row 1 (group toggle)
 type ColGroup = { key: string; label: string; buckets: DebtBucket[]; headerBg: string };
 const COL_GROUPS: ColGroup[] = [
   { key:"normal",  label:"ปกติ",        buckets:["ปกติ","เกิน 1-7","เกิน 8-14","เกิน 15-30","เกิน 31-60"], headerBg:"bg-green-700" },
   { key:"suspect", label:"สงสัยจะเสีย", buckets:["เกิน 61-90","เกิน >90","ระงับสัญญา","สิ้นสุดสัญญา"],    headerBg:"bg-orange-700" },
   { key:"bad",     label:"หนี้เสีย",    buckets:["หนี้เสีย"],                                                headerBg:"bg-gray-800" },
 ];
-type MoneyBreakdown = { principal:number; interest:number; fee:number; penalty:number; unlockFee:number; discount:number; overpaid:number; badDebt:number; total:number };
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+type MoneyBreakdown = {
+  principal:number; interest:number; fee:number; penalty:number;
+  unlockFee:number; discount:number; overpaid:number; badDebt:number; total:number;
+};
 type SummaryCell = { contractCount:number; paid:MoneyBreakdown; due:MoneyBreakdown };
 type SummaryRow  = { approveMonth:string; buckets:Record<string,SummaryCell>; totalCount:number; totalPaid:MoneyBreakdown; totalDue:MoneyBreakdown };
 type TabKey      = "count"|"paid"|"due";
 type PaidBadgeKey = "principal"|"interest"|"fee"|"penalty"|"discount"|"overpaid";
 type DueBadgeKey  = "principal"|"interest"|"fee"|"penalty";
+type GrandTotal   = { bucketTotals:Record<string,{count:number;paid:MoneyBreakdown;due:MoneyBreakdown}>; totalCount:number; totalPaid:MoneyBreakdown; totalDue:MoneyBreakdown };
 
+// ─── Badge items ──────────────────────────────────────────────────────────────
 const PAID_BADGE_ITEMS: Array<{key:PaidBadgeKey;label:string;icon:React.ReactNode;canToggle:boolean}> = [
   { key:"principal", label:"เงินต้น",      icon:<Banknote   className="w-3.5 h-3.5"/>, canToggle:true  },
   { key:"interest",  label:"ดอกเบี้ย",     icon:<Percent    className="w-3.5 h-3.5"/>, canToggle:true  },
@@ -50,11 +61,22 @@ const DUE_BADGE_ITEMS: Array<{key:DueBadgeKey;label:string;icon:React.ReactNode;
   { key:"penalty",   label:"ค่าปรับ",      icon:<Gavel    className="w-3.5 h-3.5"/>, canToggle:true },
 ];
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 function computePaidTotal(m:MoneyBreakdown, v:Record<PaidBadgeKey,boolean>):number {
   return (v.principal?m.principal:0)+(v.interest?m.interest:0)+(v.fee?m.fee:0)+(v.penalty?m.penalty:0)+(v.overpaid?m.overpaid:0);
 }
 function computeDueTotal(m:MoneyBreakdown, v:Record<DueBadgeKey,boolean>):number {
   return (v.principal?m.principal:0)+(v.interest?m.interest:0)+(v.fee?m.fee:0)+(v.penalty?m.penalty:0);
+}
+function addMoney(a:MoneyBreakdown, b:MoneyBreakdown):MoneyBreakdown {
+  return {
+    principal:a.principal+b.principal, interest:a.interest+b.interest, fee:a.fee+b.fee,
+    penalty:a.penalty+b.penalty, unlockFee:a.unlockFee+b.unlockFee, discount:a.discount+b.discount,
+    overpaid:a.overpaid+b.overpaid, badDebt:a.badDebt+b.badDebt, total:a.total+b.total,
+  };
+}
+function emptyMoney():MoneyBreakdown {
+  return {principal:0,interest:0,fee:0,penalty:0,unlockFee:0,discount:0,overpaid:0,badDebt:0,total:0};
 }
 
 function bucketPillClasses(b:string):string {
@@ -95,6 +117,7 @@ function fmtMonthYear(ym:string):string {
   return`${MONTHS[parseInt(m,10)-1]??m} ${(parseInt(y,10)+543).toString().slice(-2)}`;
 }
 
+// ─── Sub-components ───────────────────────────────────────────────────────────
 function MultiSelectFilter({label,selected,onChange,options,placeholder="ทั้งหมด"}:{label:string;selected:Set<string>;onChange:(v:Set<string>)=>void;options:string[];placeholder?:string}) {
   const[open,setOpen]=useState(false);
   const toggle=(s:string)=>{const n=new Set(selected);if(n.has(s))n.delete(s);else n.add(s);onChange(n);};
@@ -162,21 +185,29 @@ function DateRangeFilter({label,dateFrom,setDateFrom,dateTo,setDateTo,monthYear,
   );
 }
 
+// ─── Main Component ───────────────────────────────────────────────────────────
 export default function MonthlySummary() {
   const{can}=useAppAuth();const{section}=useSection();const{setActions}=useNavActions();
   const canView=can("debt_report","view");const canExport=can("debt_report","export");
   const[tab,setTab]=useState<TabKey>("count");
+
+  // per-tab filter state
   const[countProductType,setCountProductType]=useState<Set<string>>(new Set());
   const[paidDateFrom,setPaidDateFrom]=useState("");const[paidDateTo,setPaidDateTo]=useState("");
   const[paidMonthYear,setPaidMonthYear]=useState("");const[paidProductType,setPaidProductType]=useState<Set<string>>(new Set());
   const[dueDateFrom,setDueDateFrom]=useState("");const[dueDateTo,setDueDateTo]=useState("");
   const[dueMonthYear,setDueMonthYear]=useState("");const[dueProductType,setDueProductType]=useState<Set<string>>(new Set());
   const[filterOpen,setFilterOpen]=useState(true);
+
+  // badge visibility (eye toggle ใน badge — มีผลต่อยอดรวมใน badge และตาราง)
   const[paidVis,setPaidVis]=useState<Record<PaidBadgeKey,boolean>>({principal:true,interest:true,fee:true,penalty:true,discount:false,overpaid:true});
   const[dueVis,setDueVis]=useState<Record<DueBadgeKey,boolean>>({principal:true,interest:true,fee:true,penalty:true});
+
+  // bucket eye toggle — แสดง 0 แทนซ่อนคอลัมน์
   const[hiddenBuckets,setHiddenBuckets]=useState<Set<string>>(new Set());
   const toggleBucket=useCallback((b:string)=>{setHiddenBuckets((p)=>{const n=new Set(p);if(n.has(b))n.delete(b);else n.add(b);return n;});},[]);
   const toggleGroup=useCallback((g:ColGroup)=>{setHiddenBuckets((p)=>{const n=new Set(p);const allH=g.buckets.every((b)=>n.has(b));if(allH)g.buckets.forEach((b)=>n.delete(b));else g.buckets.forEach((b)=>n.add(b));return n;});},[]);
+
   const queryInput=useMemo(()=>{
     if(!section)return null;
     return{section,
@@ -187,15 +218,16 @@ export default function MonthlySummary() {
       dueProductType:dueProductType.size===1?Array.from(dueProductType)[0]:undefined,
     };
   },[section,countProductType,paidDateFrom,paidDateTo,paidMonthYear,paidProductType,dueDateFrom,dueDateTo,dueMonthYear,dueProductType]);
+
   const query=trpc.monthlySummary.get.useQuery(queryInput as any,{enabled:canView&&!!queryInput});
   const{countRows=[],paidRows=[],dueRows=[],productTypes=[]}=(query.data??{}) as{countRows:SummaryRow[];paidRows:SummaryRow[];dueRows:SummaryRow[];productTypes:string[]};
   const rows=tab==="count"?countRows:tab==="paid"?paidRows:dueRows;
-  const visibleBuckets=useMemo(()=>DEBT_BUCKETS.filter((b)=>!hiddenBuckets.has(b)),[hiddenBuckets]);
+
+  // grand total คำนวณจากทุก bucket (ไม่กรองตาม hidden — badge แสดงยอดจริงทั้งหมด)
   const grandTotal=useMemo(()=>{
-    const em=():MoneyBreakdown=>({principal:0,interest:0,fee:0,penalty:0,unlockFee:0,discount:0,overpaid:0,badDebt:0,total:0});
     const bt:Record<string,{count:number;paid:MoneyBreakdown;due:MoneyBreakdown}>={};
-    for(const b of DEBT_BUCKETS)bt[b]={count:0,paid:em(),due:em()};
-    let totalCount=0;const totalPaid=em();const totalDue=em();
+    for(const b of DEBT_BUCKETS)bt[b]={count:0,paid:emptyMoney(),due:emptyMoney()};
+    let totalCount=0;const totalPaid=emptyMoney();const totalDue=emptyMoney();
     for(const row of rows){
       totalCount+=row.totalCount;
       for(const k of Object.keys(totalPaid)as(keyof MoneyBreakdown)[]){totalPaid[k]+=row.totalPaid[k];totalDue[k]+=row.totalDue[k];}
@@ -203,23 +235,49 @@ export default function MonthlySummary() {
     }
     return{bucketTotals:bt,totalCount,totalPaid,totalDue};
   },[rows]);
-  const grandBadgePaid=useMemo(()=>{const r:MoneyBreakdown={principal:0,interest:0,fee:0,penalty:0,unlockFee:0,discount:0,overpaid:0,badDebt:0,total:0};for(const b of visibleBuckets){const bt=grandTotal.bucketTotals[b];if(!bt)continue;for(const k of Object.keys(r)as(keyof MoneyBreakdown)[])r[k]+=bt.paid[k];}return r;},[grandTotal,visibleBuckets]);
-  const grandBadgeDue=useMemo(()=>{const r:MoneyBreakdown={principal:0,interest:0,fee:0,penalty:0,unlockFee:0,discount:0,overpaid:0,badDebt:0,total:0};for(const b of visibleBuckets){const bt=grandTotal.bucketTotals[b];if(!bt)continue;for(const k of Object.keys(r)as(keyof MoneyBreakdown)[])r[k]+=bt.due[k];}return r;},[grandTotal,visibleBuckets]);
+
+  // badge totals — รวมจากทุก bucket (ไม่ขึ้นกับ hiddenBuckets)
+  const grandBadgePaid=useMemo(()=>{let r=emptyMoney();for(const b of DEBT_BUCKETS){const bt=grandTotal.bucketTotals[b];if(bt)r=addMoney(r,bt.paid);}return r;},[grandTotal]);
+  const grandBadgeDue=useMemo(()=>{let r=emptyMoney();for(const b of DEBT_BUCKETS){const bt=grandTotal.bucketTotals[b];if(bt)r=addMoney(r,bt.due);}return r;},[grandTotal]);
+
   const countFilterCount=countProductType.size>0?1:0;
   const paidFilterCount=[paidDateFrom||paidDateTo,paidMonthYear,paidProductType.size>0].filter(Boolean).length;
   const dueFilterCount=[dueDateFrom||dueDateTo,dueMonthYear,dueProductType.size>0].filter(Boolean).length;
   const activeFilterCount=tab==="count"?countFilterCount:tab==="paid"?paidFilterCount:dueFilterCount;
+
   const handleExport=useCallback(()=>{
     if(!canExport){toast.error("คุณไม่มีสิทธิ์ Export");return;}
-    try{const wb=XLSX.utils.book_new();const headers=["เดือน-ปีที่อนุมัติ","รวมสัญญา",...DEBT_BUCKETS];const wsData:(string|number)[][]=[headers];for(const row of rows)wsData.push([fmtMonthYear(row.approveMonth),row.totalCount,...DEBT_BUCKETS.map((b)=>row.buckets[b]?.contractCount??0)]);const ws=XLSX.utils.aoa_to_sheet(wsData);XLSX.utils.book_append_sheet(wb,ws,"สรุปรายเดือน");XLSX.writeFile(wb,`monthly_summary_${new Date().toISOString().slice(0,10)}.xlsx`);toast.success("Export สำเร็จ");}catch{toast.error("Export ล้มเหลว");}
+    try{
+      const wb=XLSX.utils.book_new();
+      const headers=["เดือน-ปีที่อนุมัติ","รวม",...DEBT_BUCKETS];
+      const wsData:(string|number)[][]=[headers];
+      for(const row of rows)wsData.push([fmtMonthYear(row.approveMonth),row.totalCount,...DEBT_BUCKETS.map((b)=>row.buckets[b]?.contractCount??0)]);
+      const ws=XLSX.utils.aoa_to_sheet(wsData);
+      XLSX.utils.book_append_sheet(wb,ws,"สรุปรายเดือน");
+      XLSX.writeFile(wb,`monthly_summary_${new Date().toISOString().slice(0,10)}.xlsx`);
+      toast.success("Export สำเร็จ");
+    }catch{toast.error("Export ล้มเหลว");}
   },[canExport,rows]);
+
+  // ใช้ ref เพื่อหลีกเลี่ยง infinite loop ใน useEffect
+  const refetchRef=useRef(query.refetch);
+  const handleExportRef=useRef(handleExport);
+  const isFetchingRef=useRef(query.isFetching);
+  const canExportRef=useRef(canExport);
+  refetchRef.current=query.refetch;
+  handleExportRef.current=handleExport;
+  isFetchingRef.current=query.isFetching;
+  canExportRef.current=canExport;
+
   useEffect(()=>{
-    setActions(<div className="flex items-center gap-1.5">
-      <Button variant="outline" size="sm" onClick={()=>query.refetch()} disabled={query.isFetching} className="h-8 px-2.5 text-xs"><RefreshCw className={`w-3.5 h-3.5 mr-1 ${query.isFetching?"animate-spin":""}`}/><span className="hidden sm:inline">รีเฟรช</span></Button>
-      {canExport&&<Button variant="outline" size="sm" onClick={handleExport} className="h-8 px-2.5 text-xs"><Download className="w-3.5 h-3.5 mr-1"/><span className="hidden sm:inline">Export</span></Button>}
-    </div>);
+    setActions(
+      <div className="flex items-center gap-1.5">
+        <Button variant="outline" size="sm" onClick={()=>refetchRef.current()} className="h-8 px-2.5 text-xs"><RefreshCw className="w-3.5 h-3.5 mr-1"/><span className="hidden sm:inline">รีเฟรช</span></Button>
+        {canExportRef.current&&<Button variant="outline" size="sm" onClick={()=>handleExportRef.current()} className="h-8 px-2.5 text-xs"><Download className="w-3.5 h-3.5 mr-1"/><span className="hidden sm:inline">Export</span></Button>}
+      </div>
+    );
     return()=>setActions(null);
-  },[setActions,query.isFetching,query.refetch,canExport,handleExport]);
+  },[setActions]);
 
   return(
     <AppShell>
@@ -278,87 +336,187 @@ export default function MonthlySummary() {
           :query.isLoading?(<div className="flex items-center justify-center h-full gap-2 text-gray-400"><Spinner className="w-5 h-5"/><span className="text-sm">กำลังโหลด...</span></div>)
           :query.error?(<div className="flex flex-col items-center justify-center h-full gap-3 text-red-500"><span className="text-sm">โหลดข้อมูลล้มเหลว: {query.error.message}</span><Button variant="outline" size="sm" onClick={()=>query.refetch()}><RefreshCw className="w-4 h-4 mr-1"/>ลองใหม่</Button></div>)
           :rows.length===0?(<div className="flex items-center justify-center h-full text-gray-400 text-sm">ไม่มีข้อมูล</div>)
-          :(<SummaryTable tab={tab} rows={rows} grandTotal={grandTotal} visibleBuckets={visibleBuckets} hiddenBuckets={hiddenBuckets} toggleBucket={toggleBucket} toggleGroup={toggleGroup} paidVis={paidVis} dueVis={dueVis}/>)}
+          :(<SummaryTable tab={tab} rows={rows} grandTotal={grandTotal} hiddenBuckets={hiddenBuckets} toggleBucket={toggleBucket} toggleGroup={toggleGroup} paidVis={paidVis} dueVis={dueVis}/>)}
         </div>
       </div>
     </AppShell>
   );
 }
 
-type GrandTotal={bucketTotals:Record<string,{count:number;paid:MoneyBreakdown;due:MoneyBreakdown}>;totalCount:number;totalPaid:MoneyBreakdown;totalDue:MoneyBreakdown};
-
-function SummaryTable({tab,rows,grandTotal,visibleBuckets,hiddenBuckets,toggleBucket,toggleGroup,paidVis,dueVis}:{
-  tab:TabKey;rows:SummaryRow[];grandTotal:GrandTotal;visibleBuckets:readonly string[];hiddenBuckets:Set<string>;
-  toggleBucket:(b:string)=>void;toggleGroup:(g:ColGroup)=>void;paidVis:Record<PaidBadgeKey,boolean>;dueVis:Record<DueBadgeKey,boolean>;
+// ─── SummaryTable ─────────────────────────────────────────────────────────────
+function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGroup,paidVis,dueVis}:{
+  tab:TabKey;rows:SummaryRow[];grandTotal:GrandTotal;hiddenBuckets:Set<string>;
+  toggleBucket:(b:string)=>void;toggleGroup:(g:ColGroup)=>void;
+  paidVis:Record<PaidBadgeKey,boolean>;dueVis:Record<DueBadgeKey,boolean>;
 }) {
+  // paid tab: "หนี้เสีย" แยกเป็น 2 คอลัมน์
   const isPaidBadDebt=(b:string)=>tab==="paid"&&b==="หนี้เสีย";
-  const bucketSpan=(b:string)=>isPaidBadDebt(b)?2:1;
-  const minWidth=useMemo(()=>{let w=130+90;for(const b of visibleBuckets)w+=isPaidBadDebt(b)?240:120;return w+130;},[visibleBuckets,tab]);// eslint-disable-line react-hooks/exhaustive-deps
+  const bucketColSpan=(b:string)=>isPaidBadDebt(b)?2:1;
+
+  // helper: คำนวณค่าในเซลล์ — ถ้า hidden ให้ return 0
+  const cellCountVal=(b:string,cell:SummaryCell|undefined)=>hiddenBuckets.has(b)?0:(cell?.contractCount??0);
+  const cellPaidVal=(b:string,cell:SummaryCell|undefined)=>hiddenBuckets.has(b)?0:(cell?computePaidTotal(cell.paid,paidVis):0);
+  const cellPaidBadDebtVal=(b:string,cell:SummaryCell|undefined)=>hiddenBuckets.has(b)?0:(cell?.paid.badDebt??0);
+  const cellDueVal=(b:string,cell:SummaryCell|undefined)=>hiddenBuckets.has(b)?0:(cell?computeDueTotal(cell.due,dueVis):0);
+
+  // grand total cell helpers
+  const gtCountVal=(b:string)=>{const bt=grandTotal.bucketTotals[b];return hiddenBuckets.has(b)?0:(bt?.count??0);};
+  const gtPaidVal=(b:string)=>{const bt=grandTotal.bucketTotals[b];return hiddenBuckets.has(b)?0:(bt?computePaidTotal(bt.paid,paidVis):0);};
+  const gtPaidBadDebtVal=(b:string)=>{const bt=grandTotal.bucketTotals[b];return hiddenBuckets.has(b)?0:(bt?.paid.badDebt??0);};
+  const gtDueVal=(b:string)=>{const bt=grandTotal.bucketTotals[b];return hiddenBuckets.has(b)?0:(bt?computeDueTotal(bt.due,dueVis):0);};
+
+  // คำนวณ minWidth: 130(เดือน) + 90(รวม) + buckets + 2 subtotal cols + 130(รวมทั้งหมด)
+  const minWidth=useMemo(()=>{
+    let w=130+90;
+    for(const b of DEBT_BUCKETS)w+=isPaidBadDebt(b)?240:120;
+    // +2 subtotal columns (รวมปกติ + รวมสงสัย)
+    w+=120*2+130;
+    return w;
+  },[tab]);// eslint-disable-line react-hooks/exhaustive-deps
+
+  // คำนวณ subtotal ปกติ และ สงสัย ต่อ row
+  const normalBuckets=COL_GROUPS[0].buckets as readonly string[];
+  const suspectBuckets=COL_GROUPS[1].buckets as readonly string[];
+
+  function rowNormalCount(row:SummaryRow):number{return normalBuckets.reduce((s,b)=>s+cellCountVal(b,row.buckets[b]),0);}
+  function rowNormalPaid(row:SummaryRow):number{return normalBuckets.reduce((s,b)=>s+cellPaidVal(b,row.buckets[b]),0);}
+  function rowNormalDue(row:SummaryRow):number{return normalBuckets.reduce((s,b)=>s+cellDueVal(b,row.buckets[b]),0);}
+  function rowSuspectCount(row:SummaryRow):number{return suspectBuckets.reduce((s,b)=>s+cellCountVal(b,row.buckets[b]),0);}
+  function rowSuspectPaid(row:SummaryRow):number{return suspectBuckets.reduce((s,b)=>s+cellPaidVal(b,row.buckets[b]),0);}
+  function rowSuspectDue(row:SummaryRow):number{return suspectBuckets.reduce((s,b)=>s+cellDueVal(b,row.buckets[b]),0);}
+
+  // grand total subtotals
+  const gtNormalCount=normalBuckets.reduce((s,b)=>s+gtCountVal(b),0);
+  const gtNormalPaid=normalBuckets.reduce((s,b)=>s+gtPaidVal(b),0);
+  const gtNormalDue=normalBuckets.reduce((s,b)=>s+gtDueVal(b),0);
+  const gtSuspectCount=suspectBuckets.reduce((s,b)=>s+gtCountVal(b),0);
+  const gtSuspectPaid=suspectBuckets.reduce((s,b)=>s+gtPaidVal(b),0);
+  const gtSuspectDue=suspectBuckets.reduce((s,b)=>s+gtDueVal(b),0);
+
+  // grand row total
+  function rowTotal(row:SummaryRow):number{
+    if(tab==="count")return row.totalCount;
+    if(tab==="paid")return computePaidTotal(row.totalPaid,paidVis);
+    return computeDueTotal(row.totalDue,dueVis);
+  }
+  const gtTotal=tab==="count"?grandTotal.totalCount:tab==="paid"?computePaidTotal(grandTotal.totalPaid,paidVis):computeDueTotal(grandTotal.totalDue,dueVis);
+
+  // sub-header label
+  const subLabel=tab==="count"?"จำนวน":tab==="paid"?"ยอดชำระ":"ยอดค้าง";
+
+  // render cell value
+  function renderCount(v:number){return v>0?(<span className="inline-flex items-center justify-center bg-slate-200 text-slate-700 rounded-full px-2.5 py-0.5 text-xs font-bold">{v.toLocaleString()}</span>):(<span className="text-gray-300">—</span>);}
+  function renderMoney(v:number,colorClass:string){return<span className={v>0?colorClass:"text-gray-300"}>{v>0?fmtMoney(v):"0.00"}</span>;}
+
   return(
     <table className="w-full text-sm border-collapse" style={{minWidth:`${minWidth}px`}}>
       <thead className="sticky top-0 z-20">
+        {/* Row 1: group headers */}
         <tr>
           <th rowSpan={3} className="sticky left-0 z-30 px-3 py-2 text-left font-semibold whitespace-nowrap bg-slate-800 text-white border-r border-slate-600 min-w-[130px]">เดือน-ปีที่อนุมัติ</th>
-          <th rowSpan={3} className="sticky left-[130px] z-30 px-3 py-2 text-right font-semibold whitespace-nowrap bg-slate-700 text-white border-r border-slate-500 min-w-[90px]">สัญญา</th>
-          {COL_GROUPS.map((g)=>{
-            const vis=g.buckets.filter((b)=>!hiddenBuckets.has(b));if(vis.length===0)return null;
-            const span=vis.reduce((a,b)=>a+bucketSpan(b),0);const allH=g.buckets.every((b)=>hiddenBuckets.has(b));
+          <th rowSpan={3} className="sticky left-[130px] z-30 px-3 py-2 text-right font-semibold whitespace-nowrap bg-slate-700 text-white border-r border-slate-500 min-w-[90px]">รวม</th>
+          {COL_GROUPS.map((g,gi)=>{
+            // colSpan = buckets + 1 subtotal col (ยกเว้น bad group ไม่มี subtotal)
+            const hasSub=gi<2;// normal และ suspect มี subtotal
+            const bucketSpan=g.buckets.reduce((a,b)=>a+bucketColSpan(b),0);
+            const span=bucketSpan+(hasSub?1:0);
+            const allH=g.buckets.every((b)=>hiddenBuckets.has(b));
             return(<th key={g.key} colSpan={span} className={`px-2 py-1.5 text-center text-xs font-bold text-white border-r border-white/20 ${g.headerBg}`}><button type="button" onClick={()=>toggleGroup(g)} className="flex items-center justify-center gap-1.5 mx-auto hover:opacity-80 transition-opacity" title={allH?`แสดง${g.label}`:`ซ่อน${g.label}`}>{allH?<EyeOff className="w-3 h-3"/>:<Eye className="w-3 h-3"/>}{g.label}</button></th>);
           })}
           <th rowSpan={3} className="px-3 py-2 text-right font-semibold whitespace-nowrap text-white bg-slate-800 min-w-[130px]">รวมทั้งหมด</th>
         </tr>
+        {/* Row 2: bucket names + subtotal labels */}
         <tr>
-          {visibleBuckets.map((b)=>(
-            <th key={b} colSpan={bucketSpan(b)} className={`px-2 py-1.5 text-center text-xs font-semibold text-white whitespace-nowrap min-w-[120px] border-r border-white/10 ${bucketHeaderBg(b)}`}>
-              <div className="flex items-center justify-center gap-1">
-                <button type="button" onClick={()=>toggleBucket(b)} className="hover:opacity-80 transition-opacity" title={hiddenBuckets.has(b)?`แสดง${b}`:`ซ่อน${b}`}>{hiddenBuckets.has(b)?<EyeOff className="w-3 h-3"/>:<Eye className="w-3 h-3"/>}</button>
-                <span className={`inline-block px-1.5 py-0.5 rounded-full text-[10px] border ${bucketPillClasses(b)}`}>{b}</span>
-              </div>
-            </th>
-          ))}
-        </tr>
-        <tr>
-          {visibleBuckets.map((b)=>{
-            if(isPaidBadDebt(b))return(<React.Fragment key={b}><th className={`px-2 py-1 text-center text-[10px] font-medium text-white/90 whitespace-nowrap border-r border-white/10 ${bucketHeaderBg(b)}`}>ยอดชำระ</th><th className={`px-2 py-1 text-center text-[10px] font-medium text-red-200 whitespace-nowrap border-r border-white/10 ${bucketHeaderBg(b)}`}>หนี้เสีย</th></React.Fragment>);
-            const sub=tab==="count"?"สัญญา":tab==="paid"?"ยอดชำระ":"ยอดค้าง";
-            return<th key={b} className={`px-2 py-1 text-center text-[10px] font-medium text-white/80 whitespace-nowrap border-r border-white/10 ${bucketHeaderBg(b)}`}>{sub}</th>;
+          {COL_GROUPS.map((g,gi)=>{
+            const hasSub=gi<2;
+            const subLabel2=gi===0?"รวม(ปกติ)":"รวม(สงสัย)";
+            const subBg=gi===0?"bg-green-800":"bg-orange-800";
+            return(<React.Fragment key={g.key}>
+              {g.buckets.map((b)=>(
+                <th key={b} colSpan={bucketColSpan(b)} className={`px-2 py-1.5 text-center text-xs font-semibold text-white whitespace-nowrap min-w-[120px] border-r border-white/10 ${bucketHeaderBg(b)}`}>
+                  <div className="flex items-center justify-center gap-1">
+                    <button type="button" onClick={()=>toggleBucket(b)} className="hover:opacity-80 transition-opacity" title={hiddenBuckets.has(b)?`แสดง${b}`:`ซ่อน${b}`}>{hiddenBuckets.has(b)?<EyeOff className="w-3 h-3"/>:<Eye className="w-3 h-3"/>}</button>
+                    <span className={`inline-block px-1.5 py-0.5 rounded-full text-[10px] border ${bucketPillClasses(b)}`}>{b}</span>
+                  </div>
+                </th>
+              ))}
+              {hasSub&&<th rowSpan={2} className={`px-2 py-1.5 text-center text-xs font-bold text-white whitespace-nowrap min-w-[120px] border-r border-white/20 ${subBg}`}>{subLabel2}</th>}
+            </React.Fragment>);
           })}
+        </tr>
+        {/* Row 3: sub-label per bucket */}
+        <tr>
+          {COL_GROUPS.map((g)=>(
+            <React.Fragment key={g.key}>
+              {g.buckets.map((b)=>{
+                if(isPaidBadDebt(b))return(<React.Fragment key={b}><th className={`px-2 py-1 text-center text-[10px] font-medium text-white/90 whitespace-nowrap border-r border-white/10 ${bucketHeaderBg(b)}`}>ยอดชำระ</th><th className={`px-2 py-1 text-center text-[10px] font-medium text-red-200 whitespace-nowrap border-r border-white/10 ${bucketHeaderBg(b)}`}>หนี้เสีย</th></React.Fragment>);
+                return<th key={b} className={`px-2 py-1 text-center text-[10px] font-medium text-white/80 whitespace-nowrap border-r border-white/10 ${bucketHeaderBg(b)}`}>{subLabel}</th>;
+              })}
+            </React.Fragment>
+          ))}
         </tr>
       </thead>
       <tbody className="divide-y divide-gray-100">
         {rows.map((row)=>(
           <tr key={row.approveMonth} className="hover:bg-blue-50/30 transition-colors">
             <td className="sticky left-0 z-10 px-3 py-2.5 font-medium text-slate-800 whitespace-nowrap border-r border-gray-200 bg-white">{fmtMonthYear(row.approveMonth)}</td>
-            <td className="sticky left-[130px] z-10 px-3 py-2.5 text-right border-r border-gray-200 bg-white"><span className="inline-flex items-center justify-center bg-slate-200 text-slate-700 rounded-full px-2.5 py-0.5 text-xs font-bold">{row.totalCount.toLocaleString()}</span></td>
-            {visibleBuckets.map((b)=>{
-              const cell=row.buckets[b];const cellBg=bucketCellBg(b);
-              if(tab==="count"){const count=cell?.contractCount??0;return<td key={b} className={`px-3 py-2.5 text-right ${cellBg} ${count>0?"text-slate-700 font-medium":"text-gray-300"}`}>{count>0?count.toLocaleString():"—"}</td>;}
-              if(tab==="paid"){
-                if(isPaidBadDebt(b)){const pv=cell?computePaidTotal(cell.paid,paidVis):0;const bv=cell?.paid.badDebt??0;return(<React.Fragment key={b}><td className={`px-3 py-2.5 text-right font-medium ${cellBg} ${pv>0?"text-green-800":"text-gray-300"}`}>{pv>0?fmtMoney(pv):"—"}</td><td className={`px-3 py-2.5 text-right font-medium ${cellBg} ${bv>0?"text-red-700":"text-gray-300"}`}>{bv>0?fmtMoney(bv):"—"}</td></React.Fragment>);}
-                const val=cell?computePaidTotal(cell.paid,paidVis):0;return<td key={b} className={`px-3 py-2.5 text-right font-medium ${cellBg} ${val>0?"text-green-800":"text-gray-300"}`}>{val>0?fmtMoney(val):"—"}</td>;
-              }
-              const val=cell?computeDueTotal(cell.due,dueVis):0;return<td key={b} className={`px-3 py-2.5 text-right font-medium ${cellBg} ${val>0?"text-orange-800":"text-gray-300"}`}>{val>0?fmtMoney(val):"—"}</td>;
+            <td className="sticky left-[130px] z-10 px-3 py-2.5 text-right border-r border-gray-200 bg-white">
+              {tab==="count"?renderCount(row.totalCount):tab==="paid"?renderMoney(computePaidTotal(row.totalPaid,paidVis),"text-green-800 font-medium"):renderMoney(computeDueTotal(row.totalDue,dueVis),"text-orange-800 font-medium")}
+            </td>
+            {COL_GROUPS.map((g,gi)=>{
+              const hasSub=gi<2;
+              return(<React.Fragment key={g.key}>
+                {g.buckets.map((b)=>{
+                  const cell=row.buckets[b];const cellBg=bucketCellBg(b);
+                  if(tab==="count"){const v=cellCountVal(b,cell);return<td key={b} className={`px-3 py-2.5 text-right ${cellBg}`}>{renderCount(v)}</td>;}
+                  if(tab==="paid"){
+                    if(isPaidBadDebt(b)){const pv=cellPaidVal(b,cell);const bv=cellPaidBadDebtVal(b,cell);return(<React.Fragment key={b}><td className={`px-3 py-2.5 text-right ${cellBg}`}>{renderMoney(pv,"text-green-800 font-medium")}</td><td className={`px-3 py-2.5 text-right ${cellBg}`}>{renderMoney(bv,"text-red-700 font-medium")}</td></React.Fragment>);}
+                    const v=cellPaidVal(b,cell);return<td key={b} className={`px-3 py-2.5 text-right ${cellBg}`}>{renderMoney(v,"text-green-800 font-medium")}</td>;
+                  }
+                  const v=cellDueVal(b,cell);return<td key={b} className={`px-3 py-2.5 text-right ${cellBg}`}>{renderMoney(v,"text-orange-800 font-medium")}</td>;
+                })}
+                {hasSub&&(()=>{
+                  const subBg=gi===0?"bg-green-50/60":"bg-orange-50/60";
+                  if(tab==="count"){const v=gi===0?rowNormalCount(row):rowSuspectCount(row);return<td className={`px-3 py-2.5 text-right font-bold ${subBg} border-r border-gray-200`}>{renderCount(v)}</td>;}
+                  if(tab==="paid"){const v=gi===0?rowNormalPaid(row):rowSuspectPaid(row);return<td className={`px-3 py-2.5 text-right font-bold ${subBg} border-r border-gray-200`}>{renderMoney(v,"text-green-900")}</td>;}
+                  const v=gi===0?rowNormalDue(row):rowSuspectDue(row);return<td className={`px-3 py-2.5 text-right font-bold ${subBg} border-r border-gray-200`}>{renderMoney(v,"text-orange-900")}</td>;
+                })()}
+              </React.Fragment>);
             })}
-            {tab==="count"&&<td className="px-3 py-2.5 text-right bg-slate-100/60"><span className="inline-flex items-center justify-center bg-slate-300 text-slate-800 rounded-full px-2.5 py-0.5 text-xs font-bold">{row.totalCount.toLocaleString()}</span></td>}
-            {tab==="paid"&&<td className="px-3 py-2.5 text-right font-bold text-green-900 bg-green-50/50">{fmtMoney(computePaidTotal(row.totalPaid,paidVis))}</td>}
-            {tab==="due"&&<td className="px-3 py-2.5 text-right font-bold text-orange-900 bg-orange-50/50">{fmtMoney(computeDueTotal(row.totalDue,dueVis))}</td>}
+            <td className="px-3 py-2.5 text-right font-bold bg-slate-50">
+              {tab==="count"?renderCount(row.totalCount):tab==="paid"?renderMoney(rowTotal(row),"text-green-900"):renderMoney(rowTotal(row),"text-orange-900")}
+            </td>
           </tr>
         ))}
+        {/* Grand total row */}
         <tr className="border-t-2 border-slate-400 bg-slate-100 font-bold sticky bottom-0 z-10">
           <td className="sticky left-0 z-20 px-3 py-2.5 text-slate-800 whitespace-nowrap border-r border-slate-300 bg-slate-200">รวมทั้งหมด</td>
-          <td className="sticky left-[130px] z-20 px-3 py-2.5 text-right border-r border-slate-300 bg-slate-200"><span className="inline-flex items-center justify-center bg-slate-400 text-white rounded-full px-2.5 py-0.5 text-xs font-bold">{grandTotal.totalCount.toLocaleString()}</span></td>
-          {visibleBuckets.map((b)=>{
-            const bt=grandTotal.bucketTotals[b];const cellBg=bucketCellBg(b);
-            if(tab==="count")return<td key={b} className={`px-3 py-2.5 text-right ${cellBg}`}><span className="inline-flex items-center justify-center bg-slate-200 text-slate-800 rounded-full px-2.5 py-0.5 text-xs font-bold">{bt.count.toLocaleString()}</span></td>;
-            if(tab==="paid"){
-              if(isPaidBadDebt(b)){const pv=computePaidTotal(bt.paid,paidVis);const bv=bt.paid.badDebt;return(<React.Fragment key={b}><td className={`px-3 py-2.5 text-right ${cellBg} ${pv>0?"text-green-900":"text-gray-400"}`}>{fmtMoney(pv)}</td><td className={`px-3 py-2.5 text-right font-bold ${cellBg} ${bv>0?"text-red-700":"text-gray-400"}`}>{fmtMoney(bv)}</td></React.Fragment>);}
-              const val=computePaidTotal(bt.paid,paidVis);return<td key={b} className={`px-3 py-2.5 text-right ${cellBg} ${val>0?"text-green-900":"text-gray-400"}`}>{fmtMoney(val)}</td>;
-            }
-            const val=computeDueTotal(bt.due,dueVis);return<td key={b} className={`px-3 py-2.5 text-right ${cellBg} ${val>0?"text-orange-900":"text-gray-400"}`}>{fmtMoney(val)}</td>;
+          <td className="sticky left-[130px] z-20 px-3 py-2.5 text-right border-r border-slate-300 bg-slate-200">
+            {tab==="count"?(<span className="inline-flex items-center justify-center bg-slate-400 text-white rounded-full px-2.5 py-0.5 text-xs font-bold">{grandTotal.totalCount.toLocaleString()}</span>):tab==="paid"?renderMoney(computePaidTotal(grandTotal.totalPaid,paidVis),"text-green-900"):renderMoney(computeDueTotal(grandTotal.totalDue,dueVis),"text-orange-900")}
+          </td>
+          {COL_GROUPS.map((g,gi)=>{
+            const hasSub=gi<2;
+            return(<React.Fragment key={g.key}>
+              {g.buckets.map((b)=>{
+                const cellBg=bucketCellBg(b);
+                if(tab==="count"){const v=gtCountVal(b);return<td key={b} className={`px-3 py-2.5 text-right ${cellBg}`}><span className="inline-flex items-center justify-center bg-slate-200 text-slate-800 rounded-full px-2.5 py-0.5 text-xs font-bold">{v.toLocaleString()}</span></td>;}
+                if(tab==="paid"){
+                  if(isPaidBadDebt(b)){const pv=gtPaidVal(b);const bv=gtPaidBadDebtVal(b);return(<React.Fragment key={b}><td className={`px-3 py-2.5 text-right ${cellBg}`}>{renderMoney(pv,"text-green-900")}</td><td className={`px-3 py-2.5 text-right ${cellBg}`}>{renderMoney(bv,"text-red-700")}</td></React.Fragment>);}
+                  const v=gtPaidVal(b);return<td key={b} className={`px-3 py-2.5 text-right ${cellBg}`}>{renderMoney(v,"text-green-900")}</td>;
+                }
+                const v=gtDueVal(b);return<td key={b} className={`px-3 py-2.5 text-right ${cellBg}`}>{renderMoney(v,"text-orange-900")}</td>;
+              })}
+              {hasSub&&(()=>{
+                const subBg=gi===0?"bg-green-100":"bg-orange-100";
+                if(tab==="count"){const v=gi===0?gtNormalCount:gtSuspectCount;return<td className={`px-3 py-2.5 text-right font-bold ${subBg} border-r border-slate-300`}><span className="inline-flex items-center justify-center bg-slate-300 text-slate-800 rounded-full px-2.5 py-0.5 text-xs font-bold">{v.toLocaleString()}</span></td>;}
+                if(tab==="paid"){const v=gi===0?gtNormalPaid:gtSuspectPaid;return<td className={`px-3 py-2.5 text-right font-bold ${subBg} border-r border-slate-300`}>{renderMoney(v,"text-green-900")}</td>;}
+                const v=gi===0?gtNormalDue:gtSuspectDue;return<td className={`px-3 py-2.5 text-right font-bold ${subBg} border-r border-slate-300`}>{renderMoney(v,"text-orange-900")}</td>;
+              })()}
+            </React.Fragment>);
           })}
-          {tab==="count"&&<td className="px-3 py-2.5 text-right bg-slate-200"><span className="inline-flex items-center justify-center bg-slate-500 text-white rounded-full px-2.5 py-0.5 text-xs font-bold">{grandTotal.totalCount.toLocaleString()}</span></td>}
-          {tab==="paid"&&<td className="px-3 py-2.5 text-right font-bold text-green-900 bg-green-100">{fmtMoney(computePaidTotal(grandTotal.totalPaid,paidVis))}</td>}
-          {tab==="due"&&<td className="px-3 py-2.5 text-right font-bold text-orange-900 bg-orange-100">{fmtMoney(computeDueTotal(grandTotal.totalDue,dueVis))}</td>}
+          <td className="px-3 py-2.5 text-right font-bold bg-slate-200">
+            {tab==="count"?(<span className="inline-flex items-center justify-center bg-slate-500 text-white rounded-full px-2.5 py-0.5 text-xs font-bold">{grandTotal.totalCount.toLocaleString()}</span>):tab==="paid"?renderMoney(gtTotal,"text-green-900"):renderMoney(gtTotal,"text-orange-900")}
+          </td>
         </tr>
       </tbody>
     </table>

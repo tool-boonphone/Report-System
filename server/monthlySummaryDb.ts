@@ -146,6 +146,8 @@ async function loadContracts(
   const conditions = [
     sql`${contracts.section} = ${section}`,
     sql`${contracts.approveDate} IS NOT NULL`,
+    // ตัดสัญญาสถานะ "ยกเลิกสัญญา" ออก (contract-level status ไม่ใช่ debt_status bucket)
+    sql`COALESCE(${contracts.status}, '') != ${'ยกเลิกสัญญา'}`,
   ];
   if (productType) {
     conditions.push(sql`${contracts.productType} = ${productType}`);
