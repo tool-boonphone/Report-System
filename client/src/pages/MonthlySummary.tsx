@@ -590,7 +590,7 @@ export default function MonthlySummary() {
         )}
 
         {/* ── Table area ────────────────────────────────────────────────── */}
-        <div className="overflow-auto" style={{maxHeight:`calc(100vh - 56px - ${headerH}px)`}}>
+        <div className="pb-12">
           {!canView?(<div className="flex items-center justify-center h-full text-gray-400 text-sm">คุณไม่มีสิทธิ์ดูข้อมูลนี้</div>)
           :query.isLoading?(<div className="flex items-center justify-center h-full gap-2 text-gray-400"><Spinner className="w-5 h-5"/><span className="text-sm">กำลังโหลด...</span></div>)
           :query.error?(<div className="flex flex-col items-center justify-center h-full gap-3 text-red-500"><span className="text-sm">โหลดข้อมูลล้มเหลว: {query.error.message}</span><Button variant="outline" size="sm" onClick={()=>query.refetch()}>ลองใหม่</Button></div>)

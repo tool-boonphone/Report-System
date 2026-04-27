@@ -52,7 +52,7 @@ export function AppShell({
       <div className="flex flex-1 min-h-0 relative">
         {/* Main content — transition margin เมื่อ panel เปิด */}
         <main
-          className="flex-1 min-w-0 overflow-y-auto transition-all duration-300"
+          className="flex-1 min-w-0 overflow-y-auto overflow-x-auto transition-all duration-300"
           style={aiChatOpen ? { marginRight: "400px" } : {}}
         >
           {children}
