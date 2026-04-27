@@ -423,7 +423,7 @@ export default function MonthlySummary() {
 
   return(
     <AppShell>
-      <div className="flex flex-col" style={{height:"calc(100dvh - 56px)"}}>
+      <div className="flex flex-col">
         {/* ── Tab switcher + Export ─────────────────────────────────────── */}
         <div className="bg-white border-b border-gray-200 px-4 flex items-center gap-0">
           {(["count","paid","due"]as TabKey[]).map((t)=>{
@@ -581,7 +581,7 @@ export default function MonthlySummary() {
         )}
 
         {/* ── Table area ────────────────────────────────────────────────── */}
-        <div className="flex-1 min-h-0 overflow-auto">
+        <div className="overflow-x-auto pb-12">
           {!canView?(<div className="flex items-center justify-center h-full text-gray-400 text-sm">คุณไม่มีสิทธิ์ดูข้อมูลนี้</div>)
           :query.isLoading?(<div className="flex items-center justify-center h-full gap-2 text-gray-400"><Spinner className="w-5 h-5"/><span className="text-sm">กำลังโหลด...</span></div>)
           :query.error?(<div className="flex flex-col items-center justify-center h-full gap-3 text-red-500"><span className="text-sm">โหลดข้อมูลล้มเหลว: {query.error.message}</span><Button variant="outline" size="sm" onClick={()=>query.refetch()}>ลองใหม่</Button></div>)
@@ -677,8 +677,9 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
   },[tab]);// eslint-disable-line react-hooks/exhaustive-deps
 
   return(
+    <>
     <table className="w-full text-sm border-collapse" style={{minWidth:`${minWidth}px`}}>
-      <thead className="sticky top-0 z-20">
+      <thead className="sticky top-[56px] z-20">
         {/* ── Row 1: group headers ──────────────────────────────────────── */}
         <tr>
           {/* เดือน-ปีที่อนุมัติ */}
@@ -768,35 +769,6 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
           ))}
         </tr>
       </thead>
-      <tfoot className="sticky bottom-0 z-10">
-        {/* ── Grand total row ────────────────────────────────────────────── */}
-        <tr className="border-t-2 border-slate-400 bg-slate-100 font-bold">
-          <td className="sticky left-0 z-20 px-3 py-2.5 text-slate-800 whitespace-nowrap border-r border-slate-300 bg-slate-200">รวมทั้งหมด</td>
-          <td className="sticky left-[130px] z-20 px-3 py-2.5 text-right border-r border-slate-300 bg-slate-200">
-            {tab==="count"?(<span className="inline-flex items-center justify-center bg-slate-400 text-white rounded-full px-2.5 py-0.5 text-xs font-bold">{gtContractTotal.toLocaleString()}</span>):tab==="paid"?renderMoney(gtPaidTotal,"text-green-900"):renderMoney(gtDueTotal,"text-orange-900")}
-          </td>
-          {COL_GROUPS.map((g,gi)=>(
-            <React.Fragment key={g.key}>
-              {g.buckets.map((b)=>{
-                const cellBg=bucketCellBg(b);
-                if(tab==="count"){const v=gtCountVal(b);return<td key={b} className={`px-3 py-2.5 text-right ${cellBg} bg-slate-100`}><span className="inline-flex items-center justify-center bg-slate-200 text-slate-800 rounded-full px-2.5 py-0.5 text-xs font-bold">{v.toLocaleString()}</span></td>;}
-                if(tab==="paid"){
-                  if(isBadDebtExpanded(b)){const install=gtPaidBadDebtInstall(b);const sale=gtPaidBadDebt(b);const total=install+sale;return(<React.Fragment key={b}><td className={`px-3 py-2.5 text-right ${cellBg} bg-slate-100`}>{renderMoney(install,"text-green-900")}</td><td className={`px-3 py-2.5 text-right ${cellBg} bg-slate-100`}>{renderMoney(sale,"text-red-700")}</td><td className={`px-3 py-2.5 text-right font-bold ${cellBg} bg-slate-100`}>{renderMoney(total,"text-gray-900")}</td></React.Fragment>);}
-                  const v=gtPaidVal(b);return<td key={b} className={`px-3 py-2.5 text-right ${cellBg} bg-slate-100`}>{renderMoney(v,"text-green-900")}</td>;
-                }
-                if(isBadDebtExpanded(b)){const install=gtDueBadDebtInstall(b);const sale=0;const total=install+sale;return(<React.Fragment key={b}><td className={`px-3 py-2.5 text-right ${cellBg} bg-slate-100`}>{renderMoney(install,"text-orange-900")}</td><td className={`px-3 py-2.5 text-right ${cellBg} bg-slate-100`}>{renderMoney(sale,"text-red-700")}</td><td className={`px-3 py-2.5 text-right font-bold ${cellBg} bg-slate-100`}>{renderMoney(total,"text-gray-900")}</td></React.Fragment>);}
-                const v=gtDueVal(b);return<td key={b} className={`px-3 py-2.5 text-right ${cellBg} bg-slate-100`}>{renderMoney(v,"text-orange-900")}</td>;
-              })}
-              {g.hasSubtotal&&(()=>{
-                const subBg=gi===0?"bg-green-100":"bg-orange-100";
-                if(tab==="count"){const v=gi===0?gtNormalCount:gtSuspectCount;return<td className={`px-3 py-2.5 text-right font-bold ${subBg} border-r border-slate-300`}><span className="inline-flex items-center justify-center bg-slate-300 text-slate-800 rounded-full px-2.5 py-0.5 text-xs font-bold">{v.toLocaleString()}</span></td>;}
-                if(tab==="paid"){const v=gi===0?gtNormalPaid:gtSuspectPaid;return<td className={`px-3 py-2.5 text-right font-bold ${subBg} border-r border-slate-300`}>{renderMoney(v,"text-green-900")}</td>;}
-                const v=gi===0?gtNormalDue:gtSuspectDue;return<td className={`px-3 py-2.5 text-right font-bold ${subBg} border-r border-slate-300`}>{renderMoney(v,"text-orange-900")}</td>;
-              })()}
-            </React.Fragment>
-          ))}
-        </tr>
-      </tfoot>
       <tbody className="divide-y divide-gray-100">
         {rows.map((row)=>(
           <tr key={row.approveMonth} className="hover:bg-blue-50/30 transition-colors">
@@ -867,8 +839,41 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
             ))}
           </tr>
         ))}
-        {/* grand total moved to tfoot above */}
       </tbody>
     </table>
+    {/* ── Fixed Grand Total Bar ─────────────────────────────────────── */}
+    <div className="fixed bottom-0 left-0 right-0 z-40 overflow-x-auto border-t-2 border-slate-400 bg-slate-100 shadow-[0_-2px_8px_rgba(0,0,0,0.12)]">
+      <table className="text-sm font-bold" style={{minWidth:`${minWidth}px`}}>
+        <tbody>
+          <tr>
+            <td className="sticky left-0 z-20 px-3 py-2.5 text-slate-800 whitespace-nowrap border-r border-slate-300 bg-slate-200 min-w-[130px]">รวมทั้งหมด</td>
+            <td className="sticky left-[130px] z-20 px-3 py-2.5 text-right border-r border-slate-300 bg-slate-200 min-w-[90px]">
+              {tab==="count"?(<span className="inline-flex items-center justify-center bg-slate-400 text-white rounded-full px-2.5 py-0.5 text-xs font-bold">{gtContractTotal.toLocaleString()}</span>):tab==="paid"?renderMoney(gtPaidTotal,"text-green-900"):renderMoney(gtDueTotal,"text-orange-900")}
+            </td>
+            {COL_GROUPS.map((g,gi)=>(
+              <React.Fragment key={g.key}>
+                {g.buckets.map((b)=>{
+                  const cellBg=bucketCellBg(b);
+                  if(tab==="count"){const v=gtCountVal(b);return<td key={b} className={`px-3 py-2.5 text-right ${cellBg} bg-slate-100 min-w-[120px]`}><span className="inline-flex items-center justify-center bg-slate-200 text-slate-800 rounded-full px-2.5 py-0.5 text-xs font-bold">{v.toLocaleString()}</span></td>;}
+                  if(tab==="paid"){
+                    if(isBadDebtExpanded(b)){const install=gtPaidBadDebtInstall(b);const sale=gtPaidBadDebt(b);const total=install+sale;return(<React.Fragment key={b}><td className={`px-3 py-2.5 text-right ${cellBg} bg-slate-100 min-w-[120px]`}>{renderMoney(install,"text-green-900")}</td><td className={`px-3 py-2.5 text-right ${cellBg} bg-slate-100 min-w-[120px]`}>{renderMoney(sale,"text-red-700")}</td><td className={`px-3 py-2.5 text-right font-bold ${cellBg} bg-slate-100 min-w-[120px]`}>{renderMoney(total,"text-gray-900")}</td></React.Fragment>);}
+                    const v=gtPaidVal(b);return<td key={b} className={`px-3 py-2.5 text-right ${cellBg} bg-slate-100 min-w-[120px]`}>{renderMoney(v,"text-green-900")}</td>;
+                  }
+                  if(isBadDebtExpanded(b)){const install=gtDueBadDebtInstall(b);const sale=0;const total=install+sale;return(<React.Fragment key={b}><td className={`px-3 py-2.5 text-right ${cellBg} bg-slate-100 min-w-[120px]`}>{renderMoney(install,"text-orange-900")}</td><td className={`px-3 py-2.5 text-right ${cellBg} bg-slate-100 min-w-[120px]`}>{renderMoney(sale,"text-red-700")}</td><td className={`px-3 py-2.5 text-right font-bold ${cellBg} bg-slate-100 min-w-[120px]`}>{renderMoney(total,"text-gray-900")}</td></React.Fragment>);}
+                  const v=gtDueVal(b);return<td key={b} className={`px-3 py-2.5 text-right ${cellBg} bg-slate-100 min-w-[120px]`}>{renderMoney(v,"text-orange-900")}</td>;
+                })}
+                {g.hasSubtotal&&(()=>{
+                  const subBg=gi===0?"bg-green-100":"bg-orange-100";
+                  if(tab==="count"){const v=gi===0?gtNormalCount:gtSuspectCount;return<td className={`px-3 py-2.5 text-right font-bold ${subBg} border-r border-slate-300 min-w-[120px]`}><span className="inline-flex items-center justify-center bg-slate-300 text-slate-800 rounded-full px-2.5 py-0.5 text-xs font-bold">{v.toLocaleString()}</span></td>;}
+                  if(tab==="paid"){const v=gi===0?gtNormalPaid:gtSuspectPaid;return<td className={`px-3 py-2.5 text-right font-bold ${subBg} border-r border-slate-300 min-w-[120px]`}>{renderMoney(v,"text-green-900")}</td>;}
+                  const v=gi===0?gtNormalDue:gtSuspectDue;return<td className={`px-3 py-2.5 text-right font-bold ${subBg} border-r border-slate-300 min-w-[120px]`}>{renderMoney(v,"text-orange-900")}</td>;
+                })()}
+              </React.Fragment>
+            ))}
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    </>
   );
 }
