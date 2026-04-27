@@ -272,6 +272,8 @@ async function queryPaid(
         SUM(CAST(pt.amount AS DECIMAL(18,2)))                                       AS total_paid
       FROM payment_transactions pt
       WHERE ${paidFilter}
+        AND (JSON_EXTRACT(pt.raw_json, '$.source') IS NULL OR JSON_EXTRACT(pt.raw_json, '$.source') != '"installment"')
+        AND JSON_EXTRACT(pt.raw_json, '$.receipt_no') IS NOT NULL
       GROUP BY pt.contract_external_id
     ) paid_agg ON paid_agg.contract_external_id = c.external_id
     -- ยอดขายเครื่อง: ดึงจาก contracts โดยตรง กรองตาม bad_debt_date
