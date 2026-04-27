@@ -50,14 +50,14 @@ const DEBT_BUCKETS = [
 type DebtBucket = (typeof DEBT_BUCKETS)[number];
 
 // กลุ่มสำหรับ header (ตาม spec)
-// normal: เกิน 1-7 / เกิน 8-14 / เกิน 15-30 / เกิน 31-60 + รวม
+// normal: ปกติ / เกิน 1-7 / เกิน 8-14 / เกิน 15-30 / เกิน 31-60 + รวม
 // suspect: เกิน 61-90 / เกิน >90 + รวม
 // standalone: ระงับสัญญา | สิ้นสุดสัญญา | หนี้เสีย
 type ColGroup = { key: string; label: string; buckets: DebtBucket[]; headerBg: string; hasSubtotal: boolean };
 const COL_GROUPS: ColGroup[] = [
-  { key:"normal",     label:"กลุ่ม ปกติ",                 buckets:["เกิน 1-7","เกิน 8-14","เกิน 15-30","เกิน 31-60"], headerBg:"bg-green-700",  hasSubtotal:true  },
-  { key:"suspect",    label:"กลุ่ม สงสัยจะเป็นหนี้เสีย", buckets:["เกิน 61-90","เกิน >90"],                           headerBg:"bg-orange-700", hasSubtotal:true  },
-  { key:"standalone", label:"",                            buckets:["ระงับสัญญา","สิ้นสุดสัญญา","หนี้เสีย"],           headerBg:"bg-gray-700",   hasSubtotal:false },
+  { key:"normal",     label:"ปกติ",         buckets:["ปกติ","เกิน 1-7","เกิน 8-14","เกิน 15-30","เกิน 31-60"], headerBg:"bg-green-700",  hasSubtotal:true  },
+  { key:"suspect",    label:"สงสัยจะเสีย", buckets:["เกิน 61-90","เกิน >90"],                                   headerBg:"bg-orange-700", hasSubtotal:true  },
+  { key:"standalone", label:"",             buckets:["ระงับสัญญา","สิ้นสุดสัญญา","หนี้เสีย"],                   headerBg:"bg-gray-700",   hasSubtotal:false },
 ];
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -618,8 +618,9 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
   sortDir:SortDir;onToggleSort:()=>void;
   hiddenRows:Set<string>;toggleRow:(month:string)=>void;
 }) {
-  // "หนี้เสีย" bucket ใน paid/due tab แยกเป็น 3 sub-cols: ค่างวด | ขายเครื่อง | รวม
-  const isBadDebtExpanded=(b:string)=>(tab==="paid"||tab==="due")&&b==="หนี้เสีย";
+  // "หนี้เสีย" bucket ใน paid tab เท่านั้น แยกเป็น 3 sub-cols: ค่างวด | หนี้เสีย | รวม
+  // count tab และ due tab = 1 col เดียว
+  const isBadDebtExpanded=(b:string)=>tab==="paid"&&b==="หนี้เสีย";
   const bucketColSpan=(b:string)=>isBadDebtExpanded(b)?3:1;
 
   // cell value helpers
@@ -639,7 +640,7 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
   const gtDueVal=(b:string)=>{const bt=grandTotal.bucketTotals[b];return hiddenBuckets.has(b)?0:(bt?computeDueTotal(bt.due,dueVis):0);};
   const gtDueBadDebtInstall=(b:string)=>{const bt=grandTotal.bucketTotals[b];return hiddenBuckets.has(b)?0:(bt?.due.total??0);};
 
-  // subtotal buckets (ตาม spec: normal = เกิน 1-7..31-60, suspect = เกิน 61-90..>90)
+  // subtotal buckets (ตาม spec: normal = ปกติ+เกิน 1-7..31-60, suspect = เกิน 61-90..>90)
   const normalBuckets=COL_GROUPS[0].buckets as readonly string[];
   const suspectBuckets=COL_GROUPS[1].buckets as readonly string[];
 
@@ -702,16 +703,18 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
               </button>
             </div>
           </th>
-          {/* สัญญา */}
-          <th rowSpan={3} className="sticky left-[130px] z-30 px-3 py-2 text-right font-semibold whitespace-nowrap bg-slate-700 text-white border-r border-slate-500 min-w-[90px]">สัญญา</th>
+          {/* สัญญา / ยอดชำระ / ยอดค้างชำระ — ตาม tab */}
+          <th rowSpan={3} className="sticky left-[130px] z-30 px-3 py-2 text-right font-semibold whitespace-nowrap bg-slate-700 text-white border-r border-slate-500 min-w-[90px]">
+            {tab==="count"?"สัญญา":tab==="paid"?"ยอดชำระ":"ยอดค้างชำระ"}
+          </th>
           {/* กลุ่ม headers */}
           {COL_GROUPS.map((g)=>{
             const bucketSpan=g.buckets.reduce((a,b)=>a+bucketColSpan(b),0);
             const span=bucketSpan+(g.hasSubtotal?1:0);
             if(!g.label){
-              // standalone group — render each bucket as its own th (rowSpan=2)
+              // standalone group — render each bucket as its own th (rowSpan=3 = all 3 header rows)
               return g.buckets.map((b)=>(
-                <th key={b} rowSpan={2} colSpan={bucketColSpan(b)}
+                <th key={b} rowSpan={3} colSpan={bucketColSpan(b)}
                   className={`px-2 py-1.5 text-center text-xs font-bold text-white border-r border-white/20 ${bucketHeaderBg(b)}`}>
                   <button type="button" onClick={()=>toggleBucket(b)} className="flex items-center justify-center gap-1.5 mx-auto hover:opacity-80 transition-opacity">
                     {hiddenBuckets.has(b)?<EyeOff className="w-3 h-3"/>:<Eye className="w-3 h-3"/>}
@@ -762,15 +765,16 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
             <React.Fragment key={g.key}>
               {g.buckets.map((b)=>{
                 if(isBadDebtExpanded(b)){
+                  // paid tab: หนี้เสีย แยกเป็น 3 sub-cols: ค่างวด | หนี้เสีย | รวม
                   return(
                     <React.Fragment key={b}>
                       <th className={`px-2 py-1 text-center text-[10px] font-medium text-white/90 whitespace-nowrap border-r border-white/10 min-w-[120px] ${bucketHeaderBg(b)}`}>ค่างวด</th>
-                      <th className={`px-2 py-1 text-center text-[10px] font-medium text-red-200 whitespace-nowrap border-r border-white/10 min-w-[120px] ${bucketHeaderBg(b)}`}>ขายเครื่อง</th>
+                      <th className={`px-2 py-1 text-center text-[10px] font-medium text-red-200 whitespace-nowrap border-r border-white/10 min-w-[120px] ${bucketHeaderBg(b)}`}>หนี้เสีย</th>
                       <th className={`px-2 py-1 text-center text-[10px] font-medium text-white/80 whitespace-nowrap border-r border-white/10 min-w-[120px] ${bucketHeaderBg(b)}`}>รวม</th>
                     </React.Fragment>
                   );
                 }
-                if(!g.label)return null; // standalone already has rowSpan=2
+                if(!g.label)return null; // standalone already has rowSpan=3 (rendered in row 1)
                 const subLabel=tab==="count"?"จำนวน":tab==="paid"?"ยอดชำระ":"ยอดค้าง";
                 return<th key={b} className={`px-2 py-1 text-center text-[10px] font-medium text-white/80 whitespace-nowrap border-r border-white/10 ${bucketHeaderBg(b)}`}>{subLabel}</th>;
               })}
