@@ -411,9 +411,9 @@ export default function MonthlySummary() {
 
   useEffect(()=>{
     setActions(
-      <Button variant="outline" size="sm" onClick={()=>refetchRef.current()} className="h-8 px-2.5 text-xs">
-        <RefreshCw className="w-3.5 h-3.5 mr-1"/><span className="hidden sm:inline">รีเฟรช</span>
-      </Button>
+      <div className="flex items-center gap-2">
+        <SyncStatusBar/>
+      </div>
     );
     return()=>setActions(null);
   },[setActions]);
@@ -421,8 +421,6 @@ export default function MonthlySummary() {
   return(
     <AppShell>
       <div className="flex flex-col h-full min-h-0">
-        <SyncStatusBar/>
-
         {/* ── Tab switcher + Export ─────────────────────────────────────── */}
         <div className="bg-white border-b border-gray-200 px-4 flex items-center gap-0">
           {(["count","paid","due"]as TabKey[]).map((t)=>{
