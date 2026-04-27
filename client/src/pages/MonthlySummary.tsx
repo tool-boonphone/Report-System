@@ -439,7 +439,9 @@ export default function MonthlySummary() {
 
   return(
     <AppShell>
-      <div className="flex flex-col" ref={headerRef}>
+      <div className="flex flex-col h-full">
+      {/* ── Sticky header area (ไม่เลื่อนตามแนวนอน) ──────────────────── */}
+      <div className="flex-none" ref={headerRef}>
         {/* ── Tab switcher + Export ─────────────────────────────────────── */}
         <div className="bg-white border-b border-gray-200 px-4 flex items-center gap-0">
           {(["count","paid","due"]as TabKey[]).map((t)=>{
@@ -598,8 +600,9 @@ export default function MonthlySummary() {
           </div>
         )}
 
-        {/* ── Table area ────────────────────────────────────────────────── */}
-        <div className="pb-12">
+      </div>
+        {/* ── Table area (scroll แนวนอนเฉพาะส่วนนี้) ──────────────────── */}
+        <div className="flex-1 overflow-x-auto overflow-y-auto pb-12">
           {!canView?(<div className="flex items-center justify-center h-full text-gray-400 text-sm">คุณไม่มีสิทธิ์ดูข้อมูลนี้</div>)
           :query.isLoading?(<div className="flex items-center justify-center h-full gap-2 text-gray-400"><Spinner className="w-5 h-5"/><span className="text-sm">กำลังโหลด...</span></div>)
           :query.error?(<div className="flex flex-col items-center justify-center h-full gap-3 text-red-500"><span className="text-sm">โหลดข้อมูลล้มเหลว: {query.error.message}</span><Button variant="outline" size="sm" onClick={()=>query.refetch()}>ลองใหม่</Button></div>)
@@ -766,11 +769,10 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
                 }
                 return(
                   <th key={b} rowSpan={3} colSpan={1}
-                    className={`px-2 py-3 align-middle text-center text-xs font-semibold text-white whitespace-nowrap min-w-[120px] border-r border-white/20 ${bucketHeaderBg(b)}`}>
+                    onClick={()=>toggleBucket(b)}
+                    className={`px-2 py-3 align-middle text-center text-xs font-semibold text-white whitespace-nowrap min-w-[120px] border-r border-white/20 cursor-pointer select-none ${bucketHeaderBg(b)}`}>
                     <div className="flex items-center justify-center gap-1">
-                      <button type="button" onClick={()=>toggleBucket(b)} className="hover:opacity-80 transition-opacity">
-                        {hiddenBuckets.has(b)?<EyeOff className="w-3 h-3"/>:<Eye className="w-3 h-3"/>}
-                      </button>
+                      <span className="pointer-events-none">{hiddenBuckets.has(b)?<EyeOff className="w-3 h-3"/>:<Eye className="w-3 h-3"/>}</span>
                       <span className={`inline-block px-1.5 py-0.5 rounded-full text-[10px] border ${bucketPillClasses(b)}`}>{b}</span>
                     </div>
                   </th>
@@ -779,10 +781,12 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
             }
             const allH=g.buckets.every((b)=>hiddenBuckets.has(b));
             return(
-              <th key={g.key} colSpan={span} className={`px-2 py-1.5 text-center text-xs font-bold text-white border-r border-white/20 ${g.headerBg}`}>
-                <button type="button" onClick={()=>toggleGroup(g)} className="flex items-center justify-center gap-1.5 mx-auto hover:opacity-80 transition-opacity">
+              <th key={g.key} colSpan={span}
+                onClick={()=>toggleGroup(g)}
+                className={`px-2 py-1.5 text-center text-xs font-bold text-white border-r border-white/20 cursor-pointer select-none ${g.headerBg}`}>
+                <div className="flex items-center justify-center gap-1.5 mx-auto pointer-events-none">
                   {allH?<EyeOff className="w-3 h-3"/>:<Eye className="w-3 h-3"/>}{g.label}
-                </button>
+                </div>
               </th>
             );
           })}
@@ -797,11 +801,10 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
               <React.Fragment key={g.key}>
                 {g.buckets.map((b)=>(
                   <th key={b} colSpan={bucketColSpan(b)}
-                    className={`px-2 py-1.5 text-center text-xs font-semibold text-white whitespace-nowrap min-w-[120px] border-r border-white/10 ${bucketHeaderBg(b)}`}>
-                    <div className="flex items-center justify-center gap-1">
-                      <button type="button" onClick={()=>toggleBucket(b)} className="hover:opacity-80 transition-opacity">
-                        {hiddenBuckets.has(b)?<EyeOff className="w-3 h-3"/>:<Eye className="w-3 h-3"/>}
-                      </button>
+                    onClick={()=>toggleBucket(b)}
+                    className={`px-2 py-1.5 text-center text-xs font-semibold text-white whitespace-nowrap min-w-[120px] border-r border-white/10 cursor-pointer select-none ${bucketHeaderBg(b)}`}>
+                    <div className="flex items-center justify-center gap-1 pointer-events-none">
+                      {hiddenBuckets.has(b)?<EyeOff className="w-3 h-3"/>:<Eye className="w-3 h-3"/>}
                       <span className={`inline-block px-1.5 py-0.5 rounded-full text-[10px] border ${bucketPillClasses(b)}`}>{b}</span>
                     </div>
                   </th>
