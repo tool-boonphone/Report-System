@@ -311,8 +311,8 @@ export default function MonthlySummary() {
   const[headerH,setHeaderH]=useState(96);
   useEffect(()=>{
     const el=headerRef.current;if(!el)return;
-    const ro=new ResizeObserver(()=>setHeaderH(el.getBoundingClientRect().height));
-    ro.observe(el);setHeaderH(el.getBoundingClientRect().height);
+    const ro=new ResizeObserver(()=>setHeaderH(el.offsetHeight));
+    ro.observe(el);setHeaderH(el.offsetHeight);
     return()=>ro.disconnect();
   },[]);
 
@@ -438,10 +438,10 @@ export default function MonthlySummary() {
   },[setActions]);
 
   return(
-    <AppShell>
-      <div className="flex flex-col">
-      {/* ── Sticky header area (ไม่เลื่อนตามแนวนอน) ──────────────────── */}
-      <div className="sticky top-14 z-30 bg-white" ref={headerRef}>
+    <AppShell fullHeight>
+      <div className="flex flex-col h-full">
+      {/* ── Header area (ไม่เลื่อนตามแนวนอน) ──────────────────── */}
+      <div className="flex-shrink-0 bg-white" ref={headerRef}>
         {/* ── Tab switcher + Export ─────────────────────────────────────── */}
         <div className="bg-white border-b border-gray-200 px-4 flex items-center gap-0">
           {(["count","paid","due"]as TabKey[]).map((t)=>{
@@ -602,7 +602,7 @@ export default function MonthlySummary() {
 
       </div>
         {/* ── Table area (scroll แนวนอนและแนวตั้งเฉพาะส่วนนี้) ──────── */}
-        <div className="overflow-x-auto">
+        <div className="flex-1 min-h-0 overflow-x-auto overflow-y-auto">
           {!canView?(<div className="flex items-center justify-center h-full text-gray-400 text-sm">คุณไม่มีสิทธิ์ดูข้อมูลนี้</div>)
           :query.isLoading?(<div className="flex items-center justify-center h-full gap-2 text-gray-400"><Spinner className="w-5 h-5"/><span className="text-sm">กำลังโหลด...</span></div>)
           :query.error?(<div className="flex flex-col items-center justify-center h-full gap-3 text-red-500"><span className="text-sm">โหลดข้อมูลล้มเหลว: {query.error.message}</span><Button variant="outline" size="sm" onClick={()=>query.refetch()}>ลองใหม่</Button></div>)
@@ -616,7 +616,7 @@ export default function MonthlySummary() {
               showBadDebtSale={showBadDebtSale} setShowBadDebtSale={setShowBadDebtSale}
               sortDir={sortDir} onToggleSort={()=>setSortDir((d)=>d==="asc"?"desc":"asc")}
               hiddenRows={hiddenRows} toggleRow={toggleRow}
-              stickyTop={56+headerH}
+              stickyTop={0}
             />
           )}
         </div>
