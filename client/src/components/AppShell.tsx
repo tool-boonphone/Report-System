@@ -46,13 +46,13 @@ export function AppShell({
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
+    <div className="h-screen bg-gray-50 flex flex-col overflow-hidden">
       <TopNav />
       {/* Content area: flex row เพื่อรองรับ side-by-side AI panel */}
       <div className="flex flex-1 min-h-0 relative">
         {/* Main content — transition margin เมื่อ panel เปิด */}
         <main
-          className="flex-1 min-w-0 transition-all duration-300"
+          className="flex-1 min-w-0 overflow-y-auto transition-all duration-300"
           style={aiChatOpen ? { marginRight: "400px" } : {}}
         >
           {children}

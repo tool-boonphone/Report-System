@@ -679,7 +679,7 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
   return(
     <>
     <table className="w-full text-sm border-collapse" style={{minWidth:`${minWidth}px`}}>
-      <thead className="sticky top-[56px] z-20">
+      <thead className="sticky top-0 z-20">
         {/* ── Row 1: group headers ──────────────────────────────────────── */}
         <tr>
           {/* เดือน-ปีที่อนุมัติ */}
