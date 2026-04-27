@@ -712,9 +712,11 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
             const bucketSpan=g.buckets.reduce((a,b)=>a+bucketColSpan(b),0);
             const span=bucketSpan+(g.hasSubtotal?1:0);
             if(!g.label){
-              // standalone group — render each bucket as its own th (rowSpan=3 = all 3 header rows)
+              // standalone group
+              // - bucket ที่ไม่ขยาย sub-cols: rowSpan=3 (ครอบทุก row)
+              // - bucket ที่ขยาย sub-cols (หนี้เสีย paid tab): rowSpan=2 และ row 3 จะ render sub-cols
               return g.buckets.map((b)=>(
-                <th key={b} rowSpan={3} colSpan={bucketColSpan(b)}
+                <th key={b} rowSpan={isBadDebtExpanded(b)?2:3} colSpan={bucketColSpan(b)}
                   className={`px-2 py-1.5 text-center text-xs font-bold text-white border-r border-white/20 ${bucketHeaderBg(b)}`}>
                   <button type="button" onClick={()=>toggleBucket(b)} className="flex items-center justify-center gap-1.5 mx-auto hover:opacity-80 transition-opacity">
                     {hiddenBuckets.has(b)?<EyeOff className="w-3 h-3"/>:<Eye className="w-3 h-3"/>}
@@ -774,7 +776,8 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
                     </React.Fragment>
                   );
                 }
-                if(!g.label)return null; // standalone already has rowSpan=3 (rendered in row 1)
+                // standalone ที่ไม่ขยาย sub-cols มี rowSpan=3 แล้ว ไม่ต้อง render อีก
+                if(!g.label && !isBadDebtExpanded(b))return null;
                 // row 3: ไม่แสดง sub-label ใต้ bucket (ตาม spec)
                 return<th key={b} className={`px-2 py-1 text-center text-[10px] font-medium text-white/80 whitespace-nowrap border-r border-white/10 ${bucketHeaderBg(b)}`}></th>;
               })}
