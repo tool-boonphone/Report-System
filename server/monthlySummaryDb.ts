@@ -1,18 +1,16 @@
 /**
- * Monthly Summary DB helpers — SQL-aggregate version.
+ * Monthly Summary DB helpers — SQL-aggregate version (Phase 83).
  *
- * แทนที่จะดึง raw rows มา loop ใน Node.js
- * ใช้ SQL subquery + CASE WHEN + GROUP BY + SUM() ใน DB โดยตรง
- * ลดเวลาจาก ~15s → ~750ms
- *
- * 3 แถบ (tab) — แต่ละแถบมี filter ของตัวเอง:
- *   1. จำนวนสัญญา    — filter: countProductType
- *   2. ยอดที่ชำระแล้ว — filter: paidAtFrom/paidAtTo | paidAtMonth + paidProductType
- *   3. ยอดที่ค้างชำระ  — filter: dueAtFrom/dueAtTo | dueAtMonth + dueProductType
+ * 3 แถบ (tab):
+ *   1. จำนวนสัญญา    — filter: approveDate (exact), approveMonths (multi), countProductType, countDeviceFamily (iOS/Android)
+ *   2. ยอดที่ชำระแล้ว — filter: paidAtDate (exact), paidAtMonths (multi), paidProductType, paidDeviceFamily
+ *   3. ยอดที่ค้างชำระ  — filter: dueAtDate (exact), dueAtMonths (multi), dueProductType, dueDeviceFamily
  *
  * Bucket (debt_status) ใช้ logic เดียวกับ DebtReport:
  *   ปกติ / เกิน 1-7 / เกิน 8-14 / เกิน 15-30 / เกิน 31-60 /
  *   เกิน 61-90 / เกิน >90 / ระงับสัญญา / สิ้นสุดสัญญา / หนี้เสีย
+ *
+ * iOS = device IN ('iPhone','iPad') | Android = device NOT IN ('iPhone','iPad') AND device IS NOT NULL
  */
 import type { SectionKey } from "../shared/const";
 import { getDb } from "./db";
@@ -21,7 +19,7 @@ import { sql } from "drizzle-orm";
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-/** ยอดเงินแยก 9 รายการ */
+/** ยอดเงินแยกรายการ */
 export type MoneyBreakdown = {
   principal: number;
   interest: number;
@@ -30,7 +28,8 @@ export type MoneyBreakdown = {
   unlockFee: number;   // paid side เท่านั้น
   discount: number;    // paid side เท่านั้น
   overpaid: number;    // paid side เท่านั้น
-  badDebt: number;     // paid side เท่านั้น — ยอดขายเครื่อง
+  badDebt: number;     // paid side เท่านั้น — ยอดขายเครื่อง (bad_debt_amount)
+  badDebtInstallment: number; // paid side — ยอดค่างวดหนี้เสีย (total_paid สำหรับ bucket หนี้เสีย)
   total: number;
 };
 
@@ -50,15 +49,21 @@ export type MonthlySummaryRow = {
 
 export type MonthlySummaryParams = {
   section: SectionKey;
+  // Tab 1: จำนวนสัญญา
+  countApproveDate?: string;       // exact date YYYY-MM-DD
+  countApproveMonths?: string[];   // multi YYYY-MM
   countProductType?: string;
-  paidAtFrom?: string;
-  paidAtTo?: string;
-  paidAtMonth?: string;
+  countDeviceFamily?: string;      // "iOS" | "Android"
+  // Tab 2: ยอดชำระแล้ว
+  paidAtDate?: string;             // exact date YYYY-MM-DD
+  paidAtMonths?: string[];         // multi YYYY-MM
   paidProductType?: string;
-  dueAtFrom?: string;
-  dueAtTo?: string;
-  dueAtMonth?: string;
+  paidDeviceFamily?: string;
+  // Tab 3: ยอดค้างชำระ
+  dueAtDate?: string;              // exact date YYYY-MM-DD
+  dueAtMonths?: string[];          // multi YYYY-MM
   dueProductType?: string;
+  dueDeviceFamily?: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -82,7 +87,7 @@ export type DebtBucket = (typeof DEBT_BUCKETS)[number];
 // Helpers
 // ---------------------------------------------------------------------------
 function emptyMoney(): MoneyBreakdown {
-  return { principal: 0, interest: 0, fee: 0, penalty: 0, unlockFee: 0, discount: 0, overpaid: 0, badDebt: 0, total: 0 };
+  return { principal: 0, interest: 0, fee: 0, penalty: 0, unlockFee: 0, discount: 0, overpaid: 0, badDebt: 0, badDebtInstallment: 0, total: 0 };
 }
 function emptyCell(): MonthlySummaryCell {
   return { contractCount: 0, paid: emptyMoney(), due: emptyMoney() };
@@ -125,12 +130,30 @@ function maxOverdueSubquery(section: string): string {
   ) max_overdue`;
 }
 
-function contractWhere(section: string, productType?: string): string {
+/** Build WHERE clause for contracts table */
+function contractWhere(section: string, opts: {
+  productType?: string;
+  deviceFamily?: string;
+  approveDate?: string;
+  approveMonths?: string[];
+}): string {
   let w = `c.section = '${section}'
     AND c.approve_date IS NOT NULL
     AND COALESCE(c.status, '') != 'ยกเลิกสัญญา'`;
-  if (productType) {
-    w += `\n    AND c.product_type = '${productType.replace(/'/g, "''")}'`;
+
+  if (opts.productType) {
+    w += `\n    AND c.product_type = '${opts.productType.replace(/'/g, "''")}'`;
+  }
+  if (opts.deviceFamily === "iOS") {
+    w += `\n    AND c.device IN ('iPhone', 'iPad')`;
+  } else if (opts.deviceFamily === "Android") {
+    w += `\n    AND c.device NOT IN ('iPhone', 'iPad') AND c.device IS NOT NULL AND c.device != ''`;
+  }
+  if (opts.approveDate) {
+    w += `\n    AND DATE(c.approve_date) = '${opts.approveDate}'`;
+  } else if (opts.approveMonths && opts.approveMonths.length > 0) {
+    const list = opts.approveMonths.map((m) => `'${m}'`).join(",");
+    w += `\n    AND DATE_FORMAT(c.approve_date, '%Y-%m') IN (${list})`;
   }
   return w;
 }
@@ -138,7 +161,12 @@ function contractWhere(section: string, productType?: string): string {
 // ---------------------------------------------------------------------------
 // Query 1: Count tab
 // ---------------------------------------------------------------------------
-async function queryCount(section: SectionKey, productType?: string): Promise<Array<{
+async function queryCount(section: SectionKey, opts: {
+  productType?: string;
+  deviceFamily?: string;
+  approveDate?: string;
+  approveMonths?: string[];
+}): Promise<Array<{
   approve_month: string;
   bucket: string;
   contract_count: number;
@@ -153,7 +181,7 @@ async function queryCount(section: SectionKey, productType?: string): Promise<Ar
     FROM contracts c
     LEFT JOIN ${maxOverdueSubquery(section)}
            ON max_overdue.contract_external_id = c.external_id
-    WHERE ${contractWhere(section, productType)}
+    WHERE ${contractWhere(section, opts)}
     GROUP BY approve_month, bucket
     ORDER BY approve_month DESC
   `;
@@ -167,10 +195,10 @@ async function queryCount(section: SectionKey, productType?: string): Promise<Ar
 async function queryPaid(
   section: SectionKey,
   opts: {
-    paidAtFrom?: string;
-    paidAtTo?: string;
-    paidAtMonth?: string;
+    paidAtDate?: string;
+    paidAtMonths?: string[];
     productType?: string;
+    deviceFamily?: string;
   },
 ): Promise<Array<{
   approve_month: string;
@@ -189,17 +217,13 @@ async function queryPaid(
   const db = await getDb();
   if (!db) return [];
 
+  // Build paid_at filter
   let paidFilter = `pt.section = '${section}'`;
-  if (opts.paidAtMonth) {
-    const parts = opts.paidAtMonth.split("-");
-    const y = parts[0]; const m = parts[1];
-    const from = `${y}-${m}-01`;
-    const lastDay = new Date(Number(y), Number(m), 0).getDate();
-    const to = `${y}-${m}-${String(lastDay).padStart(2, "0")}`;
-    paidFilter += `\n      AND pt.paid_at BETWEEN '${from}' AND '${to}'`;
-  } else if (opts.paidAtFrom || opts.paidAtTo) {
-    if (opts.paidAtFrom) paidFilter += `\n      AND pt.paid_at >= '${opts.paidAtFrom}'`;
-    if (opts.paidAtTo)   paidFilter += `\n      AND pt.paid_at <= '${opts.paidAtTo}'`;
+  if (opts.paidAtDate) {
+    paidFilter += `\n      AND DATE(pt.paid_at) = '${opts.paidAtDate}'`;
+  } else if (opts.paidAtMonths && opts.paidAtMonths.length > 0) {
+    const list = opts.paidAtMonths.map((m) => `'${m}'`).join(",");
+    paidFilter += `\n      AND DATE_FORMAT(pt.paid_at, '%Y-%m') IN (${list})`;
   }
 
   const q = `
@@ -235,7 +259,7 @@ async function queryPaid(
       WHERE ${paidFilter}
       GROUP BY pt.contract_external_id
     ) paid_agg ON paid_agg.contract_external_id = c.external_id
-    WHERE ${contractWhere(section, opts.productType)}
+    WHERE ${contractWhere(section, { productType: opts.productType, deviceFamily: opts.deviceFamily })}
     GROUP BY approve_month, bucket
     ORDER BY approve_month DESC
   `;
@@ -249,10 +273,10 @@ async function queryPaid(
 async function queryDue(
   section: SectionKey,
   opts: {
-    dueAtFrom?: string;
-    dueAtTo?: string;
-    dueAtMonth?: string;
+    dueAtDate?: string;
+    dueAtMonths?: string[];
     productType?: string;
+    deviceFamily?: string;
   },
 ): Promise<Array<{
   approve_month: string;
@@ -270,16 +294,11 @@ async function queryDue(
   let dueFilter = `i2.section = '${section}'
       AND COALESCE(i2.paid_amount, 0) < COALESCE(i2.amount, 0)
       AND COALESCE(i2.amount, 0) > 0`;
-  if (opts.dueAtMonth) {
-    const parts = opts.dueAtMonth.split("-");
-    const y = parts[0]; const m = parts[1];
-    const from = `${y}-${m}-01`;
-    const lastDay = new Date(Number(y), Number(m), 0).getDate();
-    const to = `${y}-${m}-${String(lastDay).padStart(2, "0")}`;
-    dueFilter += `\n      AND i2.due_date BETWEEN '${from}' AND '${to}'`;
-  } else if (opts.dueAtFrom || opts.dueAtTo) {
-    if (opts.dueAtFrom) dueFilter += `\n      AND i2.due_date >= '${opts.dueAtFrom}'`;
-    if (opts.dueAtTo)   dueFilter += `\n      AND i2.due_date <= '${opts.dueAtTo}'`;
+  if (opts.dueAtDate) {
+    dueFilter += `\n      AND DATE(i2.due_date) = '${opts.dueAtDate}'`;
+  } else if (opts.dueAtMonths && opts.dueAtMonths.length > 0) {
+    const list = opts.dueAtMonths.map((m) => `'${m}'`).join(",");
+    dueFilter += `\n      AND DATE_FORMAT(i2.due_date, '%Y-%m') IN (${list})`;
   }
 
   const q = `
@@ -307,7 +326,7 @@ async function queryDue(
       WHERE ${dueFilter}
       GROUP BY i2.contract_external_id
     ) due_agg ON due_agg.contract_external_id = c.external_id
-    WHERE ${contractWhere(section, opts.productType)}
+    WHERE ${contractWhere(section, { productType: opts.productType, deviceFamily: opts.deviceFamily })}
     GROUP BY approve_month, bucket
     ORDER BY approve_month DESC
   `;
@@ -325,18 +344,23 @@ export async function getMonthlySummary(
 
   // Run 3 queries in parallel
   const [countRows, paidRows, dueRows] = await Promise.all([
-    queryCount(section, params.countProductType),
+    queryCount(section, {
+      productType:    params.countProductType,
+      deviceFamily:   params.countDeviceFamily,
+      approveDate:    params.countApproveDate,
+      approveMonths:  params.countApproveMonths,
+    }),
     queryPaid(section, {
-      paidAtFrom:  params.paidAtFrom,
-      paidAtTo:    params.paidAtTo,
-      paidAtMonth: params.paidAtMonth,
-      productType: params.paidProductType,
+      paidAtDate:    params.paidAtDate,
+      paidAtMonths:  params.paidAtMonths,
+      productType:   params.paidProductType,
+      deviceFamily:  params.paidDeviceFamily,
     }),
     queryDue(section, {
-      dueAtFrom:   params.dueAtFrom,
-      dueAtTo:     params.dueAtTo,
-      dueAtMonth:  params.dueAtMonth,
-      productType: params.dueProductType,
+      dueAtDate:    params.dueAtDate,
+      dueAtMonths:  params.dueAtMonths,
+      productType:  params.dueProductType,
+      deviceFamily: params.dueDeviceFamily,
     }),
   ]);
 
@@ -358,30 +382,32 @@ export async function getMonthlySummary(
   const paidMap = new Map<CellKey, MoneyBreakdown>();
   for (const r of paidRows) {
     paidMap.set(`${r.approve_month}|${r.bucket}`, {
-      principal: n(r.principal_paid),
-      interest:  n(r.interest_paid),
-      fee:       n(r.fee_paid),
-      penalty:   n(r.penalty_paid),
-      unlockFee: n(r.unlock_fee_paid),
-      discount:  n(r.discount_amount),
-      overpaid:  n(r.overpaid_amount),
-      badDebt:   n(r.bad_debt_amount),
-      total:     n(r.total_paid),
+      principal:          n(r.principal_paid),
+      interest:           n(r.interest_paid),
+      fee:                n(r.fee_paid),
+      penalty:            n(r.penalty_paid),
+      unlockFee:          n(r.unlock_fee_paid),
+      discount:           n(r.discount_amount),
+      overpaid:           n(r.overpaid_amount),
+      badDebt:            n(r.bad_debt_amount),        // ยอดขายเครื่อง
+      badDebtInstallment: n(r.total_paid),             // ยอดค่างวดหนี้เสีย (total_paid ของ bucket หนี้เสีย)
+      total:              n(r.total_paid),
     });
   }
 
   const dueMap = new Map<CellKey, MoneyBreakdown>();
   for (const r of dueRows) {
     dueMap.set(`${r.approve_month}|${r.bucket}`, {
-      principal: n(r.principal_due),
-      interest:  n(r.interest_due),
-      fee:       n(r.fee_due),
-      penalty:   n(r.penalty_due),
-      unlockFee: 0,
-      discount:  0,
-      overpaid:  0,
-      badDebt:   0,
-      total:     n(r.total_due),
+      principal:          n(r.principal_due),
+      interest:           n(r.interest_due),
+      fee:                n(r.fee_due),
+      penalty:            n(r.penalty_due),
+      unlockFee:          0,
+      discount:           0,
+      overpaid:           0,
+      badDebt:            0,
+      badDebtInstallment: 0,
+      total:              n(r.total_due),
     });
   }
 

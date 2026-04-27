@@ -1,15 +1,15 @@
 /**
- * Monthly Summary router.
+ * Monthly Summary router (Phase 83).
  *
  * Return type (flat — เพื่อหลีกเลี่ยง superjson depth limit):
- *   rows: FlatRow[]
+ *   rowsJson: string  (JSON.stringify of FlatRow[])
  *   productTypes: string[]
  *
  * FlatRow = {
  *   approveMonth: string
  *   bucket: string  // "ปกติ"|"เกิน 1-7"|...|"__total__"
  *   contractCount: number
- *   paidPrincipal/Interest/Fee/Penalty/UnlockFee/Discount/Overpaid/BadDebt/Total: number
+ *   paidPrincipal/Interest/Fee/Penalty/UnlockFee/Discount/Overpaid/BadDebt/BadDebtInstallment/Total: number
  *   duePrincipal/Interest/Fee/Penalty/Total: number
  * }
  */
@@ -23,22 +23,29 @@ import { sql } from "drizzle-orm";
 const debtViewProcedure = requirePermission("debt_report", "view");
 const SectionEnum = z.enum(SECTIONS);
 const DateStr = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "date must be YYYY-MM-DD").optional();
-const MonthStr = z.string().regex(/^\d{4}-\d{2}$/, "month must be YYYY-MM").optional();
+const MonthStr = z.string().regex(/^\d{4}-\d{2}$/, "month must be YYYY-MM");
+const DeviceFamily = z.enum(["iOS", "Android"]).optional();
 
 export const monthlySummaryRouter = router({
   get: debtViewProcedure
     .input(
       z.object({
         section: SectionEnum,
-        countProductType: z.string().optional(),
-        paidAtFrom:      DateStr,
-        paidAtTo:        DateStr,
-        paidAtMonth:     MonthStr,
-        paidProductType: z.string().optional(),
-        dueAtFrom:       DateStr,
-        dueAtTo:         DateStr,
-        dueAtMonth:      MonthStr,
-        dueProductType:  z.string().optional(),
+        // Tab 1: จำนวนสัญญา
+        countApproveDate:    DateStr,
+        countApproveMonths:  z.array(MonthStr).optional(),
+        countProductType:    z.string().optional(),
+        countDeviceFamily:   DeviceFamily,
+        // Tab 2: ยอดชำระแล้ว
+        paidAtDate:          DateStr,
+        paidAtMonths:        z.array(MonthStr).optional(),
+        paidProductType:     z.string().optional(),
+        paidDeviceFamily:    DeviceFamily,
+        // Tab 3: ยอดค้างชำระ
+        dueAtDate:           DateStr,
+        dueAtMonths:         z.array(MonthStr).optional(),
+        dueProductType:      z.string().optional(),
+        dueDeviceFamily:     DeviceFamily,
       }),
     )
     .query(async ({ input }) => {
@@ -59,13 +66,14 @@ export const monthlySummaryRouter = router({
         }),
       ]);
 
-      // Flatten nested MonthlySummaryRow[] → flat rows เพื่อหลีกเลี่ยง superjson depth limit
+      // Flatten nested MonthlySummaryRow[] → flat rows
       const flatRows: {
         approveMonth: string;
         bucket: string;
         contractCount: number;
         paidPrincipal: number; paidInterest: number; paidFee: number; paidPenalty: number;
-        paidUnlockFee: number; paidDiscount: number; paidOverpaid: number; paidBadDebt: number; paidTotal: number;
+        paidUnlockFee: number; paidDiscount: number; paidOverpaid: number;
+        paidBadDebt: number; paidBadDebtInstallment: number; paidTotal: number;
         duePrincipal: number; dueInterest: number; dueFee: number; duePenalty: number; dueTotal: number;
       }[] = [];
 
@@ -85,6 +93,7 @@ export const monthlySummaryRouter = router({
             paidDiscount: cell.paid.discount,
             paidOverpaid: cell.paid.overpaid,
             paidBadDebt: cell.paid.badDebt,
+            paidBadDebtInstallment: cell.paid.badDebtInstallment,
             paidTotal: cell.paid.total,
             duePrincipal: cell.due.principal,
             dueInterest: cell.due.interest,
@@ -106,6 +115,7 @@ export const monthlySummaryRouter = router({
           paidDiscount: row.totalPaid.discount,
           paidOverpaid: row.totalPaid.overpaid,
           paidBadDebt: row.totalPaid.badDebt,
+          paidBadDebtInstallment: row.totalPaid.badDebtInstallment,
           paidTotal: row.totalPaid.total,
           duePrincipal: row.totalDue.principal,
           dueInterest: row.totalDue.interest,
@@ -115,8 +125,6 @@ export const monthlySummaryRouter = router({
         });
       }
 
-      // ส่ง data เป็น JSON string เพื่อ bypass superjson depth limit
-      // client จะ JSON.parse เอง
       return {
         rowsJson: JSON.stringify(flatRows),
         productTypes: productTypesResult,

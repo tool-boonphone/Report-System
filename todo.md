@@ -913,3 +913,14 @@ Task list:
 - [x] P82-4: แก้ productTypes query extraction ใน monthlySummary.ts router (1 จุด)
 - [x] P82-5: ลบ test files (test-monthly.mjs, test-monthly2.mjs)
 - [x] P82-6: Commit + push GitHub + checkpoint
+
+### Phase 83 — Monthly Summary: Column Restructure + Filters + UX
+- [x] Column structure: สัญญา | กลุ่มปกติ[เกิน1-7|8-14|15-30|31-60|รวม] | กลุ่มสงสัย[เกิน61-90|>90|รวม] | ระงับ | สิ้นสุด | หนี้เสีย
+- [x] แถบ paid/due: กลุ่มหนี้เสีย → 3 sub-cols (ค่างวด | ขายเครื่อง | รวม)
+- [x] Filter: วันที่อนุมัติ (exact), เดือน-ปี (multi-select), iOS/Android toggle, ประเภทสินค้า
+- [x] ลบ refresh ออกจากแต่ละแถบ (เหลือแค่ใน nav)
+- [x] Export Excel สีเขียว ใน nav row เดียวกับแถบ
+- [x] Sticky header (ไม่ถึง nav)
+- [x] Sort เดือน asc/desc toggle, eye toggle รายเดือน + ทั้งหมด
+- [x] ตัด "รวมทั้งหมด" คอลัมน์ขวาสุดออก
+- [x] Grand total row sticky bottom
