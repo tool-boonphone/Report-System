@@ -1,19 +1,24 @@
 /**
  * Monthly Summary router.
  *
- * getMonthlySummary: ดึงข้อมูลสรุปรายเดือน group by approve_date + debt_status bucket
- *   - section: Boonphone | Fastfone365
- *   - แต่ละแถบมี filter ของตัวเอง:
- *       count tab  → countProductType
- *       paid tab   → paidAtFrom/paidAtTo/paidAtMonth + paidProductType
- *       due tab    → dueAtFrom/dueAtTo/dueAtMonth + dueProductType
+ * Return type (flat — เพื่อหลีกเลี่ยง superjson depth limit):
+ *   rows: FlatRow[]
+ *   productTypes: string[]
  *
- * Protected by permissionProcedure('debt_report', 'view') — ใช้สิทธิ์เดียวกับ debt report
+ * FlatRow = {
+ *   approveMonth: string
+ *   bucket: string  // "ปกติ"|"เกิน 1-7"|...|"__total__"
+ *   contractCount: number
+ *   paidPrincipal/Interest/Fee/Penalty/UnlockFee/Discount/Overpaid/BadDebt/Total: number
+ *   duePrincipal/Interest/Fee/Penalty/Total: number
+ * }
  */
 import { z } from "zod";
 import { requirePermission, router } from "../_core/trpc";
-import { getMonthlySummary } from "../monthlySummaryDb";
+import { getMonthlySummary, DEBT_BUCKETS } from "../monthlySummaryDb";
 import { SECTIONS } from "../../shared/const";
+import { getDb } from "../db";
+import { sql } from "drizzle-orm";
 
 const debtViewProcedure = requirePermission("debt_report", "view");
 const SectionEnum = z.enum(SECTIONS);
@@ -25,30 +30,96 @@ export const monthlySummaryRouter = router({
     .input(
       z.object({
         section: SectionEnum,
-
-        // --- แถบจำนวนสัญญา ---
         countProductType: z.string().optional(),
-
-        // --- แถบยอดชำระแล้ว ---
-        /** วันที่รับชำระ from (YYYY-MM-DD) */
         paidAtFrom:      DateStr,
-        /** วันที่รับชำระ to (YYYY-MM-DD) */
         paidAtTo:        DateStr,
-        /** เดือน-ปีที่ชำระ (YYYY-MM) — override paidAtFrom/paidAtTo */
         paidAtMonth:     MonthStr,
         paidProductType: z.string().optional(),
-
-        // --- แถบยอดค้างชำระ ---
-        /** วันที่ต้องชำระ from (YYYY-MM-DD) */
         dueAtFrom:       DateStr,
-        /** วันที่ต้องชำระ to (YYYY-MM-DD) */
         dueAtTo:         DateStr,
-        /** เดือน-ปีที่ต้องชำระ (YYYY-MM) — override dueAtFrom/dueAtTo */
         dueAtMonth:      MonthStr,
         dueProductType:  z.string().optional(),
       }),
     )
     .query(async ({ input }) => {
-      return getMonthlySummary(input);
+      const [summaryRows, productTypesResult] = await Promise.all([
+        getMonthlySummary(input),
+        getDb().then(async (db) => {
+          if (!db) return [] as string[];
+          const r = await db.execute(sql.raw(`
+            SELECT DISTINCT product_type
+            FROM contracts
+            WHERE section = '${input.section}'
+              AND product_type IS NOT NULL
+              AND product_type != ''
+            ORDER BY product_type
+          `));
+          const rows: any[] = (r as any).rows ?? (r as any) ?? [];
+          return rows.map((x: any) => String(x.product_type ?? "")).filter(Boolean);
+        }),
+      ]);
+
+      // Flatten nested MonthlySummaryRow[] → flat rows เพื่อหลีกเลี่ยง superjson depth limit
+      const flatRows: {
+        approveMonth: string;
+        bucket: string;
+        contractCount: number;
+        paidPrincipal: number; paidInterest: number; paidFee: number; paidPenalty: number;
+        paidUnlockFee: number; paidDiscount: number; paidOverpaid: number; paidBadDebt: number; paidTotal: number;
+        duePrincipal: number; dueInterest: number; dueFee: number; duePenalty: number; dueTotal: number;
+      }[] = [];
+
+      for (const row of summaryRows) {
+        for (const bucket of DEBT_BUCKETS) {
+          const cell = row.buckets[bucket];
+          if (!cell) continue;
+          flatRows.push({
+            approveMonth: row.approveMonth,
+            bucket,
+            contractCount: cell.contractCount,
+            paidPrincipal: cell.paid.principal,
+            paidInterest: cell.paid.interest,
+            paidFee: cell.paid.fee,
+            paidPenalty: cell.paid.penalty,
+            paidUnlockFee: cell.paid.unlockFee,
+            paidDiscount: cell.paid.discount,
+            paidOverpaid: cell.paid.overpaid,
+            paidBadDebt: cell.paid.badDebt,
+            paidTotal: cell.paid.total,
+            duePrincipal: cell.due.principal,
+            dueInterest: cell.due.interest,
+            dueFee: cell.due.fee,
+            duePenalty: cell.due.penalty,
+            dueTotal: cell.due.total,
+          });
+        }
+        // "__total__" row สำหรับแต่ละเดือน
+        flatRows.push({
+          approveMonth: row.approveMonth,
+          bucket: "__total__",
+          contractCount: row.totalCount,
+          paidPrincipal: row.totalPaid.principal,
+          paidInterest: row.totalPaid.interest,
+          paidFee: row.totalPaid.fee,
+          paidPenalty: row.totalPaid.penalty,
+          paidUnlockFee: row.totalPaid.unlockFee,
+          paidDiscount: row.totalPaid.discount,
+          paidOverpaid: row.totalPaid.overpaid,
+          paidBadDebt: row.totalPaid.badDebt,
+          paidTotal: row.totalPaid.total,
+          duePrincipal: row.totalDue.principal,
+          dueInterest: row.totalDue.interest,
+          dueFee: row.totalDue.fee,
+          duePenalty: row.totalDue.penalty,
+          dueTotal: row.totalDue.total,
+        });
+      }
+
+      // ส่ง data เป็น JSON string เพื่อ bypass superjson depth limit
+      // client จะ JSON.parse เอง
+      return {
+        rowsJson: JSON.stringify(flatRows),
+        productTypes: productTypesResult,
+      };
     }),
 });

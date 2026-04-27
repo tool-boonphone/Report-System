@@ -45,6 +45,34 @@ type PaidBadgeKey = "principal"|"interest"|"fee"|"penalty"|"discount"|"overpaid"
 type DueBadgeKey  = "principal"|"interest"|"fee"|"penalty";
 type GrandTotal   = { bucketTotals:Record<string,{count:number;paid:MoneyBreakdown;due:MoneyBreakdown}>; totalCount:number; totalPaid:MoneyBreakdown; totalDue:MoneyBreakdown };
 
+// Flat row type (matches router return — หลีกเลี่ยง superjson depth limit)
+type FlatRow = {
+  approveMonth:string; bucket:string; contractCount:number;
+  paidPrincipal:number; paidInterest:number; paidFee:number; paidPenalty:number;
+  paidUnlockFee:number; paidDiscount:number; paidOverpaid:number; paidBadDebt:number; paidTotal:number;
+  duePrincipal:number; dueInterest:number; dueFee:number; duePenalty:number; dueTotal:number;
+};
+
+/** Group flat rows จาก router → SummaryRow[] */
+function groupFlatRows(flatRows:FlatRow[]):SummaryRow[] {
+  const monthMap=new Map<string,SummaryRow>();
+  for(const fr of flatRows){
+    if(fr.bucket==="__total__"){
+      const row=monthMap.get(fr.approveMonth);
+      if(row){
+        row.totalCount=fr.contractCount;
+        row.totalPaid={principal:fr.paidPrincipal,interest:fr.paidInterest,fee:fr.paidFee,penalty:fr.paidPenalty,unlockFee:fr.paidUnlockFee,discount:fr.paidDiscount,overpaid:fr.paidOverpaid,badDebt:fr.paidBadDebt,total:fr.paidTotal};
+        row.totalDue={principal:fr.duePrincipal,interest:fr.dueInterest,fee:fr.dueFee,penalty:fr.duePenalty,unlockFee:0,discount:0,overpaid:0,badDebt:0,total:fr.dueTotal};
+      }
+      continue;
+    }
+    if(!monthMap.has(fr.approveMonth))monthMap.set(fr.approveMonth,{approveMonth:fr.approveMonth,buckets:{},totalCount:0,totalPaid:emptyMoney(),totalDue:emptyMoney()});
+    const row=monthMap.get(fr.approveMonth)!;
+    row.buckets[fr.bucket]={contractCount:fr.contractCount,paid:{principal:fr.paidPrincipal,interest:fr.paidInterest,fee:fr.paidFee,penalty:fr.paidPenalty,unlockFee:fr.paidUnlockFee,discount:fr.paidDiscount,overpaid:fr.paidOverpaid,badDebt:fr.paidBadDebt,total:fr.paidTotal},due:{principal:fr.duePrincipal,interest:fr.dueInterest,fee:fr.dueFee,penalty:fr.duePenalty,unlockFee:0,discount:0,overpaid:0,badDebt:0,total:fr.dueTotal}};
+  }
+  return Array.from(monthMap.values()).sort((a,b)=>b.approveMonth.localeCompare(a.approveMonth));
+}
+
 // ─── Badge items ──────────────────────────────────────────────────────────────
 const PAID_BADGE_ITEMS: Array<{key:PaidBadgeKey;label:string;icon:React.ReactNode;canToggle:boolean}> = [
   { key:"principal", label:"เงินต้น",      icon:<Banknote   className="w-3.5 h-3.5"/>, canToggle:true  },
@@ -220,8 +248,13 @@ export default function MonthlySummary() {
   },[section,countProductType,paidDateFrom,paidDateTo,paidMonthYear,paidProductType,dueDateFrom,dueDateTo,dueMonthYear,dueProductType]);
 
   const query=trpc.monthlySummary.get.useQuery(queryInput as any,{enabled:canView&&!!queryInput});
-  const{countRows=[],paidRows=[],dueRows=[],productTypes=[]}=(query.data??{}) as{countRows:SummaryRow[];paidRows:SummaryRow[];dueRows:SummaryRow[];productTypes:string[]};
-  const rows=tab==="count"?countRows:tab==="paid"?paidRows:dueRows;
+
+  // consume rowsJson (JSON string) จาก router — bypass superjson depth limit
+  const rowsJson:string=(query.data?.rowsJson??"[]") as string;
+  const productTypes:string[]=(query.data?.productTypes??[]) as string[];
+  const rows:SummaryRow[]=useMemo(()=>{
+    try{const flat:FlatRow[]=JSON.parse(rowsJson);return groupFlatRows(flat);}catch{return[];}
+  },[rowsJson]);
 
   // grand total คำนวณจากทุก bucket (ไม่กรองตาม hidden — badge แสดงยอดจริงทั้งหมด)
   const grandTotal=useMemo(()=>{
