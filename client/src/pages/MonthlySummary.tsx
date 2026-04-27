@@ -305,6 +305,15 @@ export default function MonthlySummary() {
   const[dueDeviceFamily,setDueDeviceFamily]=useState("");
 
   const[filterOpen,setFilterOpen]=useState(true);
+  // dynamic header height สำหรับ sticky thead
+  const headerRef=useRef<HTMLDivElement>(null);
+  const[headerH,setHeaderH]=useState(96);
+  useEffect(()=>{
+    const el=headerRef.current;if(!el)return;
+    const ro=new ResizeObserver(()=>setHeaderH(el.getBoundingClientRect().height));
+    ro.observe(el);setHeaderH(el.getBoundingClientRect().height);
+    return()=>ro.disconnect();
+  },[]);
 
   // badge visibility
   const[paidVis,setPaidVis]=useState<Record<PaidBadgeKey,boolean>>({principal:true,interest:true,fee:true,penalty:true,unlockFee:true,discount:false,overpaid:true});
@@ -423,7 +432,7 @@ export default function MonthlySummary() {
 
   return(
     <AppShell>
-      <div className="flex flex-col">
+      <div className="flex flex-col" ref={headerRef}>
         {/* ── Tab switcher + Export ─────────────────────────────────────── */}
         <div className="bg-white border-b border-gray-200 px-4 flex items-center gap-0">
           {(["count","paid","due"]as TabKey[]).map((t)=>{
@@ -581,7 +590,7 @@ export default function MonthlySummary() {
         )}
 
         {/* ── Table area ────────────────────────────────────────────────── */}
-        <div className="overflow-x-auto pb-12">
+        <div className="overflow-auto" style={{maxHeight:`calc(100vh - 56px - ${headerH}px)`}}>
           {!canView?(<div className="flex items-center justify-center h-full text-gray-400 text-sm">คุณไม่มีสิทธิ์ดูข้อมูลนี้</div>)
           :query.isLoading?(<div className="flex items-center justify-center h-full gap-2 text-gray-400"><Spinner className="w-5 h-5"/><span className="text-sm">กำลังโหลด...</span></div>)
           :query.error?(<div className="flex flex-col items-center justify-center h-full gap-3 text-red-500"><span className="text-sm">โหลดข้อมูลล้มเหลว: {query.error.message}</span><Button variant="outline" size="sm" onClick={()=>query.refetch()}>ลองใหม่</Button></div>)
