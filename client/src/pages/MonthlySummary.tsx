@@ -70,7 +70,7 @@ type SummaryCell = { contractCount:number; paid:MoneyBreakdown; due:MoneyBreakdo
 type SummaryRow  = { approveMonth:string; buckets:Record<string,SummaryCell>; totalCount:number; totalPaid:MoneyBreakdown; totalDue:MoneyBreakdown };
 type TabKey      = "count"|"paid"|"due";
 type PaidBadgeKey = "principal"|"interest"|"fee"|"penalty"|"unlockFee"|"discount"|"overpaid";
-type DueBadgeKey  = "principal"|"interest"|"fee"|"penalty";
+type DueBadgeKey  = "principal"|"interest"|"fee"|"penalty"|"unlockFee";
 type GrandTotal   = { bucketTotals:Record<string,{count:number;paid:MoneyBreakdown;due:MoneyBreakdown}>; totalCount:number; totalPaid:MoneyBreakdown; totalDue:MoneyBreakdown };
 type SortDir = "asc"|"desc";
 
@@ -123,6 +123,7 @@ const DUE_BADGE_ITEMS: Array<{key:DueBadgeKey;label:string;icon:React.ReactNode;
   { key:"interest",  label:"ดอกเบี้ย",     icon:<Percent  className="w-3.5 h-3.5"/>, canToggle:true },
   { key:"fee",       label:"ค่าดำเนินการ", icon:<Coins    className="w-3.5 h-3.5"/>, canToggle:true },
   { key:"penalty",   label:"ค่าปรับ",      icon:<Gavel    className="w-3.5 h-3.5"/>, canToggle:true },
+  { key:"unlockFee", label:"ค่าปลดล็อก",   icon:<Tag      className="w-3.5 h-3.5"/>, canToggle:true },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -130,7 +131,7 @@ function computePaidTotal(m:MoneyBreakdown, v:Record<PaidBadgeKey,boolean>):numb
   return (v.principal?m.principal:0)+(v.interest?m.interest:0)+(v.fee?m.fee:0)+(v.penalty?m.penalty:0)+(v.unlockFee?m.unlockFee:0)+(v.overpaid?m.overpaid:0);
 }
 function computeDueTotal(m:MoneyBreakdown, v:Record<DueBadgeKey,boolean>):number {
-  return (v.principal?m.principal:0)+(v.interest?m.interest:0)+(v.fee?m.fee:0)+(v.penalty?m.penalty:0);
+  return (v.principal?m.principal:0)+(v.interest?m.interest:0)+(v.fee?m.fee:0)+(v.penalty?m.penalty:0)+(v.unlockFee?m.unlockFee:0);
 }
 function addMoney(a:MoneyBreakdown, b:MoneyBreakdown):MoneyBreakdown {
   return {
@@ -317,7 +318,7 @@ export default function MonthlySummary() {
 
   // badge visibility
   const[paidVis,setPaidVis]=useState<Record<PaidBadgeKey,boolean>>({principal:true,interest:true,fee:true,penalty:true,unlockFee:true,discount:false,overpaid:true});
-  const[dueVis,setDueVis]=useState<Record<DueBadgeKey,boolean>>({principal:true,interest:true,fee:true,penalty:true});
+  const[dueVis,setDueVis]=useState<Record<DueBadgeKey,boolean>>({principal:true,interest:true,fee:true,penalty:true,unlockFee:true});
 
   // bucket eye toggle
   const[hiddenBuckets,setHiddenBuckets]=useState<Set<string>>(new Set());
@@ -368,18 +369,20 @@ export default function MonthlySummary() {
   // derive available months from rawRows for filter options
   const availableMonths=useMemo(()=>rawRows.map((r)=>r.approveMonth).sort((a,b)=>b.localeCompare(a)),[rawRows]);
 
-  // grand total
+  // grand total — คำนวณเฉพาะเดือนที่ไม่ได้ซ่อน (hiddenRows)
   const grandTotal=useMemo(()=>{
     const bt:Record<string,{count:number;paid:MoneyBreakdown;due:MoneyBreakdown}>={};
     for(const b of DEBT_BUCKETS)bt[b]={count:0,paid:emptyMoney(),due:emptyMoney()};
     let totalCount=0;const totalPaid=emptyMoney();const totalDue=emptyMoney();
     for(const row of rows){
+      // ข้ามเดือนที่ซ่อนอยู่ (hiddenRows)
+      if(hiddenRows.has(row.approveMonth))continue;
       totalCount+=row.totalCount;
       for(const k of Object.keys(totalPaid)as(keyof MoneyBreakdown)[]){totalPaid[k]+=row.totalPaid[k];totalDue[k]+=row.totalDue[k];}
       for(const b of DEBT_BUCKETS){const cell=row.buckets[b];if(!cell)continue;bt[b].count+=cell.contractCount;for(const k of Object.keys(totalPaid)as(keyof MoneyBreakdown)[]){bt[b].paid[k]+=cell.paid[k];bt[b].due[k]+=cell.due[k];}}
     }
     return{bucketTotals:bt,totalCount,totalPaid,totalDue};
-  },[rows]);
+  },[rows,hiddenRows]);
 
   const grandBadgePaid=useMemo(()=>{let r=emptyMoney();for(const b of DEBT_BUCKETS){const bt=grandTotal.bucketTotals[b];if(bt)r=addMoney(r,bt.paid);}return r;},[grandTotal]);
   const grandBadgeDue=useMemo(()=>{let r=emptyMoney();for(const b of DEBT_BUCKETS){const bt=grandTotal.bucketTotals[b];if(bt)r=addMoney(r,bt.due);}return r;},[grandTotal]);
@@ -563,7 +566,8 @@ export default function MonthlySummary() {
                 title={canToggle?(isOn?`ซ่อน${label}`:`แสดง${label}`):`${label} (ปิดเสมอ)`}
                 className={["flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border transition-colors",!canToggle?"opacity-40 cursor-not-allowed bg-gray-100 border-gray-200 text-gray-400":isOn?"bg-green-100 border-green-300 text-green-800 hover:bg-green-200":"bg-gray-100 border-gray-200 text-gray-400 hover:bg-gray-200"].join(" ")}>
                 {isOn?<Eye className="w-3 h-3"/>:<EyeOff className="w-3 h-3"/>}{icon}<span>{label}</span>
-                {isOn&&<span className="font-semibold ml-0.5">{fmtMoney(val)}</span>}
+                {/* แสดงตัวเลขเสมอ: เปิด=สีปกติ, ปิด=สีเทา */}
+                <span className={["font-semibold ml-0.5",!canToggle?"text-gray-300":isOn?"":"text-gray-400"].join(" ")}>{fmtMoney(val)}</span>
               </button>
             );})}
             <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border bg-green-700 border-green-800 text-white font-semibold">
@@ -580,7 +584,8 @@ export default function MonthlySummary() {
                 title={isOn?`ซ่อน${label}`:`แสดง${label}`}
                 className={["flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border transition-colors",isOn?"bg-orange-100 border-orange-300 text-orange-800 hover:bg-orange-200":"bg-gray-100 border-gray-200 text-gray-400 hover:bg-gray-200"].join(" ")}>
                 {isOn?<Eye className="w-3 h-3"/>:<EyeOff className="w-3 h-3"/>}{icon}<span>{label}</span>
-                {isOn&&<span className="font-semibold ml-0.5">{fmtMoney(val)}</span>}
+                {/* แสดงตัวเลขเสมอ: เปิด=สีปกติ, ปิด=สีเทา */}
+                <span className={["font-semibold ml-0.5",isOn?"":"text-gray-400"].join(" ")}>{fmtMoney(val)}</span>
               </button>
             );})}
             <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border bg-orange-700 border-orange-800 text-white font-semibold">
@@ -698,9 +703,7 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
               <button type="button" onClick={onToggleSort} className="flex items-center gap-1 hover:opacity-80 transition-opacity" title={sortDir==="asc"?"เรียงใหม่→เก่า":"เรียงเก่า→ใหม่"}>
                 เดือน-ปีที่อนุมัติ<SortIcon className="w-3.5 h-3.5 text-slate-300"/>
               </button>
-              <button type="button" onClick={toggleAll} className="ml-1 hover:opacity-80 transition-opacity" title={allHidden?"แสดงทั้งหมด":"ซ่อนทั้งหมด"}>
-                {allHidden?<EyeOff className="w-3.5 h-3.5 text-slate-400"/>:<Eye className="w-3.5 h-3.5 text-slate-400"/>}
-              </button>
+
             </div>
           </th>
           {/* สัญญา / ยอดชำระ / ยอดค้างชำระ — ตาม tab */}
