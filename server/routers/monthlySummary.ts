@@ -54,7 +54,7 @@ export const monthlySummaryRouter = router({
               AND product_type != ''
             ORDER BY product_type
           `));
-          const rows: any[] = (r as any).rows ?? (r as any) ?? [];
+          const rows: any[] = (r as any)[0] ?? [];
           return rows.map((x: any) => String(x.product_type ?? "")).filter(Boolean);
         }),
       ]);

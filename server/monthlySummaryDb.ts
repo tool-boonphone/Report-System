@@ -158,7 +158,7 @@ async function queryCount(section: SectionKey, productType?: string): Promise<Ar
     ORDER BY approve_month DESC
   `;
   const rows = await db.execute(sql.raw(q));
-  return (rows as any).rows ?? (rows as any) ?? [];
+  return (rows as any)[0] ?? [];
 }
 
 // ---------------------------------------------------------------------------
@@ -240,7 +240,7 @@ async function queryPaid(
     ORDER BY approve_month DESC
   `;
   const rows = await db.execute(sql.raw(q));
-  return (rows as any).rows ?? (rows as any) ?? [];
+  return (rows as any)[0] ?? [];
 }
 
 // ---------------------------------------------------------------------------
@@ -312,7 +312,7 @@ async function queryDue(
     ORDER BY approve_month DESC
   `;
   const rows = await db.execute(sql.raw(q));
-  return (rows as any).rows ?? (rows as any) ?? [];
+  return (rows as any)[0] ?? [];
 }
 
 // ---------------------------------------------------------------------------

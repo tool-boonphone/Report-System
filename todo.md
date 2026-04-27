@@ -906,3 +906,10 @@ Task list:
 - [x] P81-3: เพิ่มคอลัมน์รวม: รวม(ปกติ) = ปกติ+เกิน1-7+เกิน8-14+เกิน15-30+เกิน31-60, รวม(สงสัย) = เกิน61-90+เกิน>90, รวม = ทุก bucket ที่เปิดอยู่
 - [x] P81-4: ลบคำว่า "สัญญา" ออกจากชื่อคอลัมน์ bucket ทุกคอลัมน์ (เช่น "ปกติสัญญา" → "ปกติ")
 - [x] P81-5: ตรวจสอบ TypeScript + commit + push GitHub + checkpoint
+### Phase 82 — Fix: MonthlySummary "ไม่มีข้อมูล" bug (Drizzle execute result extraction)
+- [x] P82-1: Rewrite monthlySummaryDb.ts ให้ใช้ SQL GROUP BY + SUM() aggregate (ลดเวลา query จาก 12-21s → ~750ms)
+- [x] P82-2: Router ส่ง data เป็น rowsJson string เพื่อ bypass superjson depth limit
+- [x] P82-3: แก้ bug "ไม่มีข้อมูล" — เปลี่ยน `(rows as any).rows ?? (rows as any)` เป็น `(rows as any)[0]` ใน monthlySummaryDb.ts (3 จุด: queryCount/queryPaid/queryDue)
+- [x] P82-4: แก้ productTypes query extraction ใน monthlySummary.ts router (1 จุด)
+- [x] P82-5: ลบ test files (test-monthly.mjs, test-monthly2.mjs)
+- [x] P82-6: Commit + push GitHub + checkpoint
