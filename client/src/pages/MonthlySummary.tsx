@@ -320,6 +320,10 @@ export default function MonthlySummary() {
   const[paidVis,setPaidVis]=useState<Record<PaidBadgeKey,boolean>>({principal:true,interest:true,fee:true,penalty:true,unlockFee:true,discount:false,overpaid:true});
   const[dueVis,setDueVis]=useState<Record<DueBadgeKey,boolean>>({principal:true,interest:true,fee:true,penalty:true,unlockFee:true});
 
+  // bad debt sub-col toggles (ค่างวด / ขายเครื่อง)
+  const[showBadDebtInstall,setShowBadDebtInstall]=useState(true);
+  const[showBadDebtSale,setShowBadDebtSale]=useState(true);
+
   // bucket eye toggle
   const[hiddenBuckets,setHiddenBuckets]=useState<Set<string>>(new Set());
   const toggleBucket=useCallback((b:string)=>{setHiddenBuckets((p)=>{const n=new Set(p);if(n.has(b))n.delete(b);else n.add(b);return n;});},[]);
@@ -605,6 +609,8 @@ export default function MonthlySummary() {
               tab={tab} rows={rows} grandTotal={grandTotal}
               hiddenBuckets={hiddenBuckets} toggleBucket={toggleBucket} toggleGroup={toggleGroup} toggleAll={toggleAll}
               paidVis={paidVis} dueVis={dueVis}
+              showBadDebtInstall={showBadDebtInstall} setShowBadDebtInstall={setShowBadDebtInstall}
+              showBadDebtSale={showBadDebtSale} setShowBadDebtSale={setShowBadDebtSale}
               sortDir={sortDir} onToggleSort={()=>setSortDir((d)=>d==="asc"?"desc":"asc")}
               hiddenRows={hiddenRows} toggleRow={toggleRow}
             />
@@ -616,12 +622,14 @@ export default function MonthlySummary() {
 }
 
 // ─── SummaryTable ─────────────────────────────────────────────────────────────
-function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGroup,toggleAll,paidVis,dueVis,sortDir,onToggleSort,hiddenRows,toggleRow}:{
+function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGroup,toggleAll,paidVis,dueVis,sortDir,onToggleSort,hiddenRows,toggleRow,showBadDebtInstall,setShowBadDebtInstall,showBadDebtSale,setShowBadDebtSale}:{
   tab:TabKey;rows:SummaryRow[];grandTotal:GrandTotal;hiddenBuckets:Set<string>;
   toggleBucket:(b:string)=>void;toggleGroup:(g:ColGroup)=>void;toggleAll:()=>void;
   paidVis:Record<PaidBadgeKey,boolean>;dueVis:Record<DueBadgeKey,boolean>;
   sortDir:SortDir;onToggleSort:()=>void;
   hiddenRows:Set<string>;toggleRow:(month:string)=>void;
+  showBadDebtInstall:boolean;setShowBadDebtInstall:(v:boolean)=>void;
+  showBadDebtSale:boolean;setShowBadDebtSale:(v:boolean)=>void;
 }) {
   // "หนี้เสีย" bucket ใน paid tab เท่านั้น แยกเป็น 3 sub-cols: ค่างวด | หนี้เสีย | รวม
   // count tab และ due tab = 1 col เดียว
@@ -631,19 +639,25 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
   // cell value helpers
   const cellCountVal=(b:string,cell:SummaryCell|undefined)=>hiddenBuckets.has(b)?0:(cell?.contractCount??0);
   const cellPaidVal=(b:string,cell:SummaryCell|undefined)=>hiddenBuckets.has(b)?0:(cell?computePaidTotal(cell.paid,paidVis):0);
-  const cellPaidBadDebtInstall=(b:string,cell:SummaryCell|undefined)=>hiddenBuckets.has(b)?0:(cell?.paid.badDebtInstallment??0);
-  const cellPaidBadDebt=(b:string,cell:SummaryCell|undefined)=>hiddenBuckets.has(b)?0:(cell?.paid.badDebt??0);
+  const cellPaidBadDebtInstallRaw=(b:string,cell:SummaryCell|undefined)=>hiddenBuckets.has(b)?0:(cell?.paid.badDebtInstallment??0);
+  const cellPaidBadDebtRaw=(b:string,cell:SummaryCell|undefined)=>hiddenBuckets.has(b)?0:(cell?.paid.badDebt??0);
+  const cellPaidBadDebtInstall=(b:string,cell:SummaryCell|undefined)=>showBadDebtInstall?cellPaidBadDebtInstallRaw(b,cell):0;
+  const cellPaidBadDebt=(b:string,cell:SummaryCell|undefined)=>showBadDebtSale?cellPaidBadDebtRaw(b,cell):0;
   const cellDueVal=(b:string,cell:SummaryCell|undefined)=>hiddenBuckets.has(b)?0:(cell?computeDueTotal(cell.due,dueVis):0);
-  const cellDueBadDebtInstall=(b:string,cell:SummaryCell|undefined)=>hiddenBuckets.has(b)?0:(cell?.due.total??0);
+  const cellDueBadDebtInstallRaw=(b:string,cell:SummaryCell|undefined)=>hiddenBuckets.has(b)?0:(cell?.due.total??0);
   const cellDueBadDebt=(_b:string,_cell:SummaryCell|undefined)=>0; // due ไม่มี bad_debt_amount
+  const cellDueBadDebtInstall=(b:string,cell:SummaryCell|undefined)=>showBadDebtInstall?cellDueBadDebtInstallRaw(b,cell):0;
 
   // grand total helpers
   const gtCountVal=(b:string)=>{const bt=grandTotal.bucketTotals[b];return hiddenBuckets.has(b)?0:(bt?.count??0);};
   const gtPaidVal=(b:string)=>{const bt=grandTotal.bucketTotals[b];return hiddenBuckets.has(b)?0:(bt?computePaidTotal(bt.paid,paidVis):0);};
-  const gtPaidBadDebtInstall=(b:string)=>{const bt=grandTotal.bucketTotals[b];return hiddenBuckets.has(b)?0:(bt?.paid.badDebtInstallment??0);};
-  const gtPaidBadDebt=(b:string)=>{const bt=grandTotal.bucketTotals[b];return hiddenBuckets.has(b)?0:(bt?.paid.badDebt??0);};
+  const gtPaidBadDebtInstallRaw=(b:string)=>{const bt=grandTotal.bucketTotals[b];return hiddenBuckets.has(b)?0:(bt?.paid.badDebtInstallment??0);};
+  const gtPaidBadDebtRaw=(b:string)=>{const bt=grandTotal.bucketTotals[b];return hiddenBuckets.has(b)?0:(bt?.paid.badDebt??0);};
+  const gtPaidBadDebtInstall=(b:string)=>showBadDebtInstall?gtPaidBadDebtInstallRaw(b):0;
+  const gtPaidBadDebt=(b:string)=>showBadDebtSale?gtPaidBadDebtRaw(b):0;
   const gtDueVal=(b:string)=>{const bt=grandTotal.bucketTotals[b];return hiddenBuckets.has(b)?0:(bt?computeDueTotal(bt.due,dueVis):0);};
-  const gtDueBadDebtInstall=(b:string)=>{const bt=grandTotal.bucketTotals[b];return hiddenBuckets.has(b)?0:(bt?.due.total??0);};
+  const gtDueBadDebtInstallRaw=(b:string)=>{const bt=grandTotal.bucketTotals[b];return hiddenBuckets.has(b)?0:(bt?.due.total??0);};
+  const gtDueBadDebtInstall=(b:string)=>showBadDebtInstall?gtDueBadDebtInstallRaw(b):0;
 
   // subtotal buckets (ตาม spec: normal = ปกติ+เกิน 1-7..31-60, suspect = เกิน 61-90..>90)
   const normalBuckets=COL_GROUPS[0].buckets as readonly string[];
@@ -735,8 +749,16 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
                       </div>
                       {/* ส่วนล่าง: sub-cols ค่างวด | ขายเครื่อง | รวม */}
                       <div className="flex border-t border-white/20">
-                        <div className="flex-1 px-2 py-1.5 text-center text-[10px] font-semibold text-white/90 border-r border-white/10">ค่างวด</div>
-                        <div className="flex-1 px-2 py-1.5 text-center text-[10px] font-semibold text-red-200 border-r border-white/10">ขายเครื่อง</div>
+                        <button type="button" onClick={()=>setShowBadDebtInstall(!showBadDebtInstall)}
+                          title={showBadDebtInstall?"ซ่อนค่างวด":"แสดงค่างวด"}
+                          className={`flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-[10px] font-semibold border-r border-white/10 transition-colors hover:bg-white/10 ${showBadDebtInstall?"text-white/90":"text-white/40"}`}>
+                          {showBadDebtInstall?<Eye className="w-2.5 h-2.5"/>:<EyeOff className="w-2.5 h-2.5"/>}ค่างวด
+                        </button>
+                        <button type="button" onClick={()=>setShowBadDebtSale(!showBadDebtSale)}
+                          title={showBadDebtSale?"ซ่อนขายเครื่อง":"แสดงขายเครื่อง"}
+                          className={`flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-[10px] font-semibold border-r border-white/10 transition-colors hover:bg-white/10 ${showBadDebtSale?"text-red-200":"text-red-200/40"}`}>
+                          {showBadDebtSale?<Eye className="w-2.5 h-2.5"/>:<EyeOff className="w-2.5 h-2.5"/>}ขายเครื่อง
+                        </button>
                         <div className="flex-1 px-2 py-1.5 text-center text-[10px] font-semibold text-white/80">รวม</div>
                       </div>
                     </th>
@@ -833,13 +855,15 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
                   }
                   if(tab==="paid"){
                     if(isBadDebtExpanded(b)){
-                      const install=isHiddenRow?0:cellPaidBadDebtInstall(b,cell);
-                      const sale=isHiddenRow?0:cellPaidBadDebt(b,cell);
+                      const installRaw=isHiddenRow?0:cellPaidBadDebtInstallRaw(b,cell);
+                      const saleRaw=isHiddenRow?0:cellPaidBadDebtRaw(b,cell);
+                      const install=showBadDebtInstall?installRaw:0;
+                      const sale=showBadDebtSale?saleRaw:0;
                       const total=install+sale;
                       return(
                         <React.Fragment key={b}>
-                          <td className={`px-3 py-2.5 text-right ${cellBg}`}>{renderMoney(install,"text-green-800 font-medium")}</td>
-                          <td className={`px-3 py-2.5 text-right ${cellBg}`}>{renderMoney(sale,"text-red-700 font-medium")}</td>
+                          <td className={`px-3 py-2.5 text-right ${cellBg}`}>{!showBadDebtInstall?<span className="text-gray-300">{fmtMoney(installRaw)}</span>:renderMoney(install,"text-green-800 font-medium")}</td>
+                          <td className={`px-3 py-2.5 text-right ${cellBg}`}>{!showBadDebtSale?<span className="text-gray-300">{fmtMoney(saleRaw)}</span>:renderMoney(sale,"text-red-700 font-medium")}</td>
                           <td className={`px-3 py-2.5 text-right font-semibold ${cellBg}`}>{renderMoney(total,"text-gray-800")}</td>
                         </React.Fragment>
                       );
@@ -849,13 +873,15 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
                   }
                   // due tab
                   if(isBadDebtExpanded(b)){
-                    const install=isHiddenRow?0:cellDueBadDebtInstall(b,cell);
-                    const sale=isHiddenRow?0:cellDueBadDebt(b,cell);
+                    const installRaw=isHiddenRow?0:cellDueBadDebtInstallRaw(b,cell);
+                    const saleRaw=isHiddenRow?0:cellDueBadDebt(b,cell);
+                    const install=showBadDebtInstall?installRaw:0;
+                    const sale=showBadDebtSale?saleRaw:0;
                     const total=install+sale;
                     return(
                       <React.Fragment key={b}>
-                        <td className={`px-3 py-2.5 text-right ${cellBg}`}>{renderMoney(install,"text-orange-800 font-medium")}</td>
-                        <td className={`px-3 py-2.5 text-right ${cellBg}`}>{renderMoney(sale,"text-red-700 font-medium")}</td>
+                        <td className={`px-3 py-2.5 text-right ${cellBg}`}>{!showBadDebtInstall?<span className="text-gray-300">{fmtMoney(installRaw)}</span>:renderMoney(install,"text-orange-800 font-medium")}</td>
+                        <td className={`px-3 py-2.5 text-right ${cellBg}`}>{!showBadDebtSale?<span className="text-gray-300">{fmtMoney(saleRaw)}</span>:renderMoney(sale,"text-red-700 font-medium")}</td>
                         <td className={`px-3 py-2.5 text-right font-semibold ${cellBg}`}>{renderMoney(total,"text-gray-800")}</td>
                       </React.Fragment>
                     );
@@ -889,10 +915,10 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
                   const cellBg=bucketCellBg(b);
                   if(tab==="count"){const v=gtCountVal(b);return<td key={b} className={`px-3 py-2.5 text-right ${cellBg} bg-slate-100 min-w-[120px]`}><span className="inline-flex items-center justify-center bg-slate-200 text-slate-800 rounded-full px-2.5 py-0.5 text-xs font-bold">{v.toLocaleString()}</span></td>;}
                   if(tab==="paid"){
-                    if(isBadDebtExpanded(b)){const install=gtPaidBadDebtInstall(b);const sale=gtPaidBadDebt(b);const total=install+sale;return(<React.Fragment key={b}><td className={`px-3 py-2.5 text-right ${cellBg} bg-slate-100 min-w-[120px]`}>{renderMoney(install,"text-green-900")}</td><td className={`px-3 py-2.5 text-right ${cellBg} bg-slate-100 min-w-[120px]`}>{renderMoney(sale,"text-red-700")}</td><td className={`px-3 py-2.5 text-right font-bold ${cellBg} bg-slate-100 min-w-[120px]`}>{renderMoney(total,"text-gray-900")}</td></React.Fragment>);}
+                    if(isBadDebtExpanded(b)){const installRaw=gtPaidBadDebtInstallRaw(b);const saleRaw=gtPaidBadDebtRaw(b);const install=showBadDebtInstall?installRaw:0;const sale=showBadDebtSale?saleRaw:0;const total=install+sale;return(<React.Fragment key={b}><td className={`px-3 py-2.5 text-right ${cellBg} bg-slate-100 min-w-[120px]`}>{!showBadDebtInstall?<span className="text-gray-300">{fmtMoney(installRaw)}</span>:renderMoney(install,"text-green-900")}</td><td className={`px-3 py-2.5 text-right ${cellBg} bg-slate-100 min-w-[120px]`}>{!showBadDebtSale?<span className="text-gray-300">{fmtMoney(saleRaw)}</span>:renderMoney(sale,"text-red-700")}</td><td className={`px-3 py-2.5 text-right font-bold ${cellBg} bg-slate-100 min-w-[120px]`}>{renderMoney(total,"text-gray-900")}</td></React.Fragment>);}
                     const v=gtPaidVal(b);return<td key={b} className={`px-3 py-2.5 text-right ${cellBg} bg-slate-100 min-w-[120px]`}>{renderMoney(v,"text-green-900")}</td>;
                   }
-                  if(isBadDebtExpanded(b)){const install=gtDueBadDebtInstall(b);const sale=0;const total=install+sale;return(<React.Fragment key={b}><td className={`px-3 py-2.5 text-right ${cellBg} bg-slate-100 min-w-[120px]`}>{renderMoney(install,"text-orange-900")}</td><td className={`px-3 py-2.5 text-right ${cellBg} bg-slate-100 min-w-[120px]`}>{renderMoney(sale,"text-red-700")}</td><td className={`px-3 py-2.5 text-right font-bold ${cellBg} bg-slate-100 min-w-[120px]`}>{renderMoney(total,"text-gray-900")}</td></React.Fragment>);}
+                  if(isBadDebtExpanded(b)){const installRaw=gtDueBadDebtInstallRaw(b);const saleRaw=0;const install=showBadDebtInstall?installRaw:0;const sale=showBadDebtSale?saleRaw:0;const total=install+sale;return(<React.Fragment key={b}><td className={`px-3 py-2.5 text-right ${cellBg} bg-slate-100 min-w-[120px]`}>{!showBadDebtInstall?<span className="text-gray-300">{fmtMoney(installRaw)}</span>:renderMoney(install,"text-orange-900")}</td><td className={`px-3 py-2.5 text-right ${cellBg} bg-slate-100 min-w-[120px]`}>{renderMoney(sale,"text-red-700")}</td><td className={`px-3 py-2.5 text-right font-bold ${cellBg} bg-slate-100 min-w-[120px]`}>{renderMoney(total,"text-gray-900")}</td></React.Fragment>);}
                   const v=gtDueVal(b);return<td key={b} className={`px-3 py-2.5 text-right ${cellBg} bg-slate-100 min-w-[120px]`}>{renderMoney(v,"text-orange-900")}</td>;
                 })}
                 {g.hasSubtotal&&(()=>{
