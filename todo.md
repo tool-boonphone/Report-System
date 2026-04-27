@@ -890,3 +890,12 @@ Task list:
   - หนี้เสีย (group toggle) → ชำระ, หนี้เสีย
 - [x] P79-6: แยก bucket "หนี้เสีย" เป็น 2 คอลัมน์ในแถบยอดชำระแล้ว (ยอดชำระ / หนี้เสีย)
 - [x] P79-7: ตรวจสอบ TypeScript + commit + checkpoint
+
+### Phase 80 — Fix: MonthlySummary per-tab filters
+- [ ] P80-1: ปรับ monthlySummaryDb.ts — แยก query 3 เส้น (count/paid/due) แต่ละเส้นมี filter ของตัวเอง
+  - count: productType
+  - paid: paidAtFrom/paidAtTo + paidAtMonth (YYYY-MM) + productType
+  - due: dueAtFrom/dueAtTo + dueAtMonth (YYYY-MM) + productType
+- [ ] P80-2: ปรับ monthlySummary router — input schema แยกตาม tab
+- [ ] P80-3: ปรับ MonthlySummary.tsx — filter bar แยกตาม tab, เพิ่ม month-year picker, เพิ่ม due-date filter
+- [ ] P80-4: ตรวจสอบ TypeScript + commit + checkpoint

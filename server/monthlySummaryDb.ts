@@ -3,10 +3,10 @@
  *
  * หน้าสรุปรายเดือน: group by เดือนที่อนุมัติสัญญา (approve_date) + debt_status bucket
  *
- * 3 แถบ (tab):
- *   1. จำนวนสัญญา    — นับ contract ต่อ bucket ต่อเดือน
- *   2. ยอดที่ชำระแล้ว — SUM payment fields (principal/interest/fee/penalty/unlock/discount/overpaid/badDebt)
- *   3. ยอดที่ค้างชำระ  — SUM installment due fields ที่ยังไม่ชำระ
+ * 3 แถบ (tab) — แต่ละแถบมี filter ของตัวเอง:
+ *   1. จำนวนสัญญา    — filter: productType
+ *   2. ยอดที่ชำระแล้ว — filter: paidAtFrom/paidAtTo + paidAtMonth (YYYY-MM) + productType
+ *   3. ยอดที่ค้างชำระ  — filter: dueAtFrom/dueAtTo + dueAtMonth (YYYY-MM) + productType
  *
  * Bucket (debt_status) ใช้ logic เดียวกับ DebtReport:
  *   ปกติ / เกิน 1-7 / เกิน 8-14 / เกิน 15-30 / เกิน 31-60 /
@@ -32,10 +32,10 @@ export type MoneyBreakdown = {
   interest: number;    // ดอกเบี้ย
   fee: number;         // ค่าดำเนินการ
   penalty: number;     // ค่าปรับ
-  unlockFee: number;   // ค่าปลดล็อก
-  discount: number;    // ส่วนลด
-  overpaid: number;    // ชำระเกิน
-  badDebt: number;     // หนี้เสีย (ยอดขายเครื่อง)
+  unlockFee: number;   // ค่าปลดล็อก (paid side เท่านั้น)
+  discount: number;    // ส่วนลด (paid side เท่านั้น)
+  overpaid: number;    // ชำระเกิน (paid side เท่านั้น)
+  badDebt: number;     // หนี้เสีย — ยอดขายเครื่อง (paid side เท่านั้น)
   total: number;       // ยอดรวม
 };
 
@@ -55,13 +55,30 @@ export type MonthlySummaryRow = {
   totalDue: MoneyBreakdown;
 };
 
-/** Filter params */
+/** Filter params แยกตาม tab */
 export type MonthlySummaryParams = {
   section: SectionKey;
-  /** กรองตามวันที่รับชำระ (paid_at) YYYY-MM-DD */
+
+  // --- แถบจำนวนสัญญา ---
+  countProductType?: string;
+
+  // --- แถบยอดชำระแล้ว ---
+  /** วันที่รับชำระ from (YYYY-MM-DD) */
   paidAtFrom?: string;
+  /** วันที่รับชำระ to (YYYY-MM-DD) */
   paidAtTo?: string;
-  productType?: string;
+  /** เดือน-ปีที่ชำระ (YYYY-MM) — ถ้าระบุจะ override paidAtFrom/paidAtTo */
+  paidAtMonth?: string;
+  paidProductType?: string;
+
+  // --- แถบยอดค้างชำระ ---
+  /** วันที่ต้องชำระ from (YYYY-MM-DD) */
+  dueAtFrom?: string;
+  /** วันที่ต้องชำระ to (YYYY-MM-DD) */
+  dueAtTo?: string;
+  /** เดือน-ปีที่ต้องชำระ (YYYY-MM) — ถ้าระบุจะ override dueAtFrom/dueAtTo */
+  dueAtMonth?: string;
+  dueProductType?: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -81,6 +98,8 @@ export const DEBT_BUCKETS = [
   "หนี้เสีย",
 ] as const;
 export type DebtBucket = (typeof DEBT_BUCKETS)[number];
+
+const SUSPEND_CODES = ["SUSPEND", "TERMINATE", "CANCEL", "BADDEBT"];
 
 function bucketFromDays(days: number): DebtBucket {
   if (days <= 0) return "ปกติ";
@@ -115,36 +134,25 @@ function addMoney(a: MoneyBreakdown, b: MoneyBreakdown): MoneyBreakdown {
 }
 
 // ---------------------------------------------------------------------------
-// Main query
+// Helper: load contracts for a given section + optional productType filter
 // ---------------------------------------------------------------------------
-
-export async function getMonthlySummary(params: MonthlySummaryParams): Promise<{
-  rows: MonthlySummaryRow[];
-  productTypes: string[];
-}> {
+async function loadContracts(
+  section: SectionKey,
+  productType?: string,
+) {
   const db = await getDb();
-  if (!db) return { rows: [], productTypes: [] };
+  if (!db) return [];
 
-  const today = new Date();
-
-  // -----------------------------------------------------------------------
-  // Step 1: Load contracts (filtered)
-  // -----------------------------------------------------------------------
-  // Build WHERE conditions using Drizzle sql template (safe parameterized)
-  const contractConditions = [
-    sql`${contracts.section} = ${params.section}`,
+  const conditions = [
+    sql`${contracts.section} = ${section}`,
     sql`${contracts.approveDate} IS NOT NULL`,
   ];
-  if (params.productType) {
-    contractConditions.push(sql`${contracts.productType} = ${params.productType}`);
+  if (productType) {
+    conditions.push(sql`${contracts.productType} = ${productType}`);
   }
+  const where = conditions.reduce((acc, cond, i) => (i === 0 ? cond : sql`${acc} AND ${cond}`));
 
-  // Combine conditions with AND
-  const contractWhere = contractConditions.reduce(
-    (acc, cond, i) => (i === 0 ? cond : sql`${acc} AND ${cond}`)
-  );
-
-  const contractRowsRaw = await db.execute(sql`
+  const raw = await db.execute(sql`
     SELECT external_id,
            contract_no,
            DATE_FORMAT(approve_date,'%Y-%m') AS approve_month,
@@ -157,10 +165,10 @@ export async function getMonthlySummary(params: MonthlySummaryParams): Promise<{
            installment_count,
            CAST(installment_amount AS DECIMAL(18,2)) AS installment_amount
       FROM ${contracts}
-     WHERE ${contractWhere}
+     WHERE ${where}
      ORDER BY approve_date
   `);
-  const cRows: Array<{
+  return ((raw as any)[0] ?? raw) as Array<{
     external_id: string;
     contract_no: string | null;
     approve_month: string | null;
@@ -172,24 +180,47 @@ export async function getMonthlySummary(params: MonthlySummaryParams): Promise<{
     finance_amount: number | null;
     installment_count: number | null;
     installment_amount: number | null;
-  }> = (contractRowsRaw as any)[0] ?? contractRowsRaw;
+  }>;
+}
 
-  if (cRows.length === 0) return { rows: [], productTypes: [] };
+// ---------------------------------------------------------------------------
+// Helper: load installments for contract IDs + optional due-date filter
+// ---------------------------------------------------------------------------
+async function loadInstallments(
+  section: SectionKey,
+  contractIds: string[],
+  dueAtFrom?: string,
+  dueAtTo?: string,
+  dueAtMonth?: string,
+) {
+  if (contractIds.length === 0) return [];
+  const db = await getDb();
+  if (!db) return [];
 
-  const contractIds = cRows.map((c) => c.external_id);
+  // Resolve effective date range
+  let effectiveDueFrom = dueAtFrom;
+  let effectiveDueTo   = dueAtTo;
+  if (dueAtMonth) {
+    // YYYY-MM → first/last day of month
+    effectiveDueFrom = `${dueAtMonth}-01`;
+    const [y, m] = dueAtMonth.split("-").map(Number);
+    const lastDay = new Date(y, m, 0).getDate();
+    effectiveDueTo = `${dueAtMonth}-${String(lastDay).padStart(2, "0")}`;
+  }
 
-  // -----------------------------------------------------------------------
-  // Step 2: Load installments for these contracts
-  // -----------------------------------------------------------------------
-  const instConditions = [
-    sql`${installments.section} = ${params.section}`,
+  const conditions = [
+    sql`${installments.section} = ${section}`,
     sql`${installments.contractExternalId} IN (${sql.join(contractIds.map((id) => sql`${id}`), sql`, `)})`,
   ];
-  const instWhere = instConditions.reduce(
-    (acc, cond, i) => (i === 0 ? cond : sql`${acc} AND ${cond}`)
-  );
+  if (effectiveDueFrom) {
+    conditions.push(sql`DATE(${installments.dueDate}) >= ${effectiveDueFrom}`);
+  }
+  if (effectiveDueTo) {
+    conditions.push(sql`DATE(${installments.dueDate}) <= ${effectiveDueTo}`);
+  }
+  const where = conditions.reduce((acc, cond, i) => (i === 0 ? cond : sql`${acc} AND ${cond}`));
 
-  const instRowsRaw = await db.execute(sql`
+  const raw = await db.execute(sql`
     SELECT contract_external_id,
            period,
            due_date,
@@ -203,10 +234,10 @@ export async function getMonthlySummary(params: MonthlySummaryParams): Promise<{
            CAST(JSON_EXTRACT(raw_json, '$.unlock_fee_due') AS DECIMAL(18,2)) AS unlock_fee_due,
            JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.installment_status_code')) AS installment_status_code
       FROM ${installments}
-     WHERE ${instWhere}
+     WHERE ${where}
      ORDER BY contract_external_id, period
   `);
-  const iRows: Array<{
+  return ((raw as any)[0] ?? raw) as Array<{
     contract_external_id: string;
     period: number | null;
     due_date: string | null;
@@ -219,27 +250,46 @@ export async function getMonthlySummary(params: MonthlySummaryParams): Promise<{
     penalty_due: number | null;
     unlock_fee_due: number | null;
     installment_status_code: string | null;
-  }> = (instRowsRaw as any)[0] ?? instRowsRaw;
+  }>;
+}
 
-  // -----------------------------------------------------------------------
-  // Step 3: Load payments for these contracts (filtered by paid_at range)
-  // -----------------------------------------------------------------------
-  // Build payment WHERE
-  const payConditions = [
-    sql`${paymentTransactions.section} = ${params.section}`,
+// ---------------------------------------------------------------------------
+// Helper: load payments for contract IDs + optional paid-at filter
+// ---------------------------------------------------------------------------
+async function loadPayments(
+  section: SectionKey,
+  contractIds: string[],
+  paidAtFrom?: string,
+  paidAtTo?: string,
+  paidAtMonth?: string,
+) {
+  if (contractIds.length === 0) return [];
+  const db = await getDb();
+  if (!db) return [];
+
+  // Resolve effective date range
+  let effectivePaidFrom = paidAtFrom;
+  let effectivePaidTo   = paidAtTo;
+  if (paidAtMonth) {
+    effectivePaidFrom = `${paidAtMonth}-01`;
+    const [y, m] = paidAtMonth.split("-").map(Number);
+    const lastDay = new Date(y, m, 0).getDate();
+    effectivePaidTo = `${paidAtMonth}-${String(lastDay).padStart(2, "0")}`;
+  }
+
+  const conditions = [
+    sql`${paymentTransactions.section} = ${section}`,
     sql`${paymentTransactions.contractExternalId} IN (${sql.join(contractIds.map((id) => sql`${id}`), sql`, `)})`,
   ];
-  if (params.paidAtFrom) {
-    payConditions.push(sql`${paymentTransactions.paidAt} >= ${params.paidAtFrom}`);
+  if (effectivePaidFrom) {
+    conditions.push(sql`DATE(${paymentTransactions.paidAt}) >= ${effectivePaidFrom}`);
   }
-  if (params.paidAtTo) {
-    payConditions.push(sql`${paymentTransactions.paidAt} <= ${params.paidAtTo + " 23:59:59"}`);
+  if (effectivePaidTo) {
+    conditions.push(sql`DATE(${paymentTransactions.paidAt}) <= ${effectivePaidTo}`);
   }
-  const payWhere = payConditions.reduce(
-    (acc, cond, i) => (i === 0 ? cond : sql`${acc} AND ${cond}`)
-  );
+  const where = conditions.reduce((acc, cond, i) => (i === 0 ? cond : sql`${acc} AND ${cond}`));
 
-  const payRowsRaw = await db.execute(sql`
+  const raw = await db.execute(sql`
     SELECT contract_external_id,
            paid_at,
            CAST(amount AS DECIMAL(18,2)) AS total_paid_amount,
@@ -252,10 +302,10 @@ export async function getMonthlySummary(params: MonthlySummaryParams): Promise<{
            CAST(JSON_EXTRACT(raw_json, '$.overpaid_amount')   AS DECIMAL(18,2)) AS overpaid_amount,
            CAST(JSON_EXTRACT(raw_json, '$.bad_debt_amount')   AS DECIMAL(18,2)) AS bad_debt_amount
       FROM ${paymentTransactions}
-     WHERE ${payWhere}
+     WHERE ${where}
      ORDER BY contract_external_id, paid_at
   `);
-  const pRows: Array<{
+  return ((raw as any)[0] ?? raw) as Array<{
     contract_external_id: string;
     paid_at: string | null;
     total_paid_amount: number | null;
@@ -267,120 +317,58 @@ export async function getMonthlySummary(params: MonthlySummaryParams): Promise<{
     discount_amount: number | null;
     overpaid_amount: number | null;
     bad_debt_amount: number | null;
-  }> = (payRowsRaw as any)[0] ?? payRowsRaw;
+  }>;
+}
 
-  // -----------------------------------------------------------------------
-  // Step 4: Build lookup maps
-  // -----------------------------------------------------------------------
-  const instByContract = new Map<string, typeof iRows>();
-  for (const inst of iRows) {
-    const key = String(inst.contract_external_id);
-    const arr = instByContract.get(key) ?? [];
-    arr.push(inst);
-    instByContract.set(key, arr);
+// ---------------------------------------------------------------------------
+// Helper: derive debt_status bucket per contract
+// ---------------------------------------------------------------------------
+function deriveContractBucket(
+  c: { external_id: string; status: string | null },
+  instByContract: Map<string, Array<{ due_date: string | null; amount: number | null; paid_amount: number | null }>>,
+  today: Date,
+): DebtBucket {
+  const contractStatus = c.status ?? "";
+  if (contractStatus === "หนี้เสีย") return "หนี้เสีย";
+  if (contractStatus === "ระงับสัญญา") return "ระงับสัญญา";
+  if (contractStatus === "สิ้นสุดสัญญา") return "สิ้นสุดสัญญา";
+  if (contractStatus === "ยกเลิกสัญญา") return "หนี้เสีย";
+
+  const insts = instByContract.get(c.external_id) ?? [];
+  let maxDays = 0;
+  for (const inst of insts) {
+    if (!inst.due_date) continue;
+    const paidAmt = Number(inst.paid_amount ?? 0);
+    const dueAmt  = Number(inst.amount ?? 0);
+    if (paidAmt >= dueAmt && dueAmt > 0) continue;
+    const due = new Date(inst.due_date);
+    if (due > today) continue;
+    const days = Math.floor((today.getTime() - due.getTime()) / 86400000);
+    if (days > maxDays) maxDays = days;
   }
+  return bucketFromDays(maxDays);
+}
 
-  const payByContract = new Map<string, typeof pRows>();
-  for (const pay of pRows) {
-    const key = String(pay.contract_external_id);
-    const arr = payByContract.get(key) ?? [];
-    arr.push(pay);
-    payByContract.set(key, arr);
-  }
-
-  // -----------------------------------------------------------------------
-  // Step 5: Compute debt_status bucket per contract
-  // -----------------------------------------------------------------------
-  const SUSPEND_CODES = ["ระงับสัญญา", "หนี้เสีย", "ยกเลิกสัญญา"];
-
-  function deriveContractBucket(c: typeof cRows[0]): DebtBucket {
-    const contractStatus = c.status ?? "";
-    if (contractStatus === "หนี้เสีย") return "หนี้เสีย";
-    if (contractStatus === "ระงับสัญญา") return "ระงับสัญญา";
-    if (contractStatus === "สิ้นสุดสัญญา") return "สิ้นสุดสัญญา";
-    if (contractStatus === "ยกเลิกสัญญา") return "หนี้เสีย";
-
-    // Normal: find worst unpaid overdue installment
-    const insts = instByContract.get(c.external_id) ?? [];
-    let maxDays = 0;
-    for (const inst of insts) {
-      if (!inst.due_date) continue;
-      const paidAmt = Number(inst.paid_amount ?? 0);
-      const dueAmt  = Number(inst.amount ?? 0);
-      if (paidAmt >= dueAmt && dueAmt > 0) continue; // fully paid
-      const due = new Date(inst.due_date);
-      if (due > today) continue; // future installment
-      const days = Math.floor((today.getTime() - due.getTime()) / 86400000);
-      if (days > maxDays) maxDays = days;
-    }
-    return bucketFromDays(maxDays);
-  }
-
-  // -----------------------------------------------------------------------
-  // Step 6: Compute due amounts per contract
-  // -----------------------------------------------------------------------
-  function computeDue(c: typeof cRows[0]): MoneyBreakdown {
-    const insts = instByContract.get(c.external_id) ?? [];
-    const contractStatus = c.status ?? "";
-    const isSpecial = ["หนี้เสีย", "ระงับสัญญา", "ยกเลิกสัญญา", "สิ้นสุดสัญญา"].includes(contractStatus);
-
-    const result = emptyMoney();
-    for (const inst of insts) {
-      if (!inst.due_date) continue;
-      const due = new Date(inst.due_date);
-      if (due > today) continue; // future — not yet due
-
-      const paidAmt = Number(inst.paid_amount ?? 0);
-      const dueAmt  = Number(inst.amount ?? 0);
-      if (paidAmt >= dueAmt && dueAmt > 0) continue; // fully paid
-
-      if (isSpecial) {
-        const suspendCode = inst.installment_status_code ?? "";
-        if (SUSPEND_CODES.includes(suspendCode)) continue;
-      }
-
-      result.principal += Number(inst.principal_due ?? 0);
-      result.interest  += Number(inst.interest_due  ?? 0);
-      result.fee       += Number(inst.fee_due       ?? 0);
-      result.penalty   += Number(inst.penalty_due   ?? 0);
-      result.unlockFee += Number(inst.unlock_fee_due ?? 0);
-    }
-    result.total = result.principal + result.interest + result.fee + result.penalty + result.unlockFee;
-    return result;
-  }
-
-  // -----------------------------------------------------------------------
-  // Step 7: Compute paid amounts per contract
-  // -----------------------------------------------------------------------
-  function computePaid(c: typeof cRows[0]): MoneyBreakdown {
-    const pays = payByContract.get(c.external_id) ?? [];
-    const result = emptyMoney();
-    for (const p of pays) {
-      result.principal += Number(p.principal_paid  ?? 0);
-      result.interest  += Number(p.interest_paid   ?? 0);
-      result.fee       += Number(p.fee_paid        ?? 0);
-      result.penalty   += Number(p.penalty_paid    ?? 0);
-      result.unlockFee += Number(p.unlock_fee_paid ?? 0);
-      result.discount  += Number(p.discount_amount ?? 0);
-      result.overpaid  += Number(p.overpaid_amount ?? 0);
-      result.badDebt   += Number(p.bad_debt_amount ?? 0);
-      result.total     += Number(p.total_paid_amount ?? 0);
-    }
-    return result;
-  }
-
-  // -----------------------------------------------------------------------
-  // Step 8: Aggregate into month × bucket grid
-  // -----------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Helper: aggregate month×bucket grid from contracts + data maps
+// ---------------------------------------------------------------------------
+function buildGrid(
+  cRows: Array<{ external_id: string; approve_month: string | null; status: string | null }>,
+  instByContract: Map<string, Array<{ due_date: string | null; amount: number | null; paid_amount: number | null; principal_due: number | null; interest_due: number | null; fee_due: number | null; penalty_due: number | null; unlock_fee_due: number | null; installment_status_code: string | null }>>,
+  payByContract: Map<string, Array<{ total_paid_amount: number | null; principal_paid: number | null; interest_paid: number | null; fee_paid: number | null; penalty_paid: number | null; unlock_fee_paid: number | null; discount_amount: number | null; overpaid_amount: number | null; bad_debt_amount: number | null }>>,
+  today: Date,
+  computePaidFn: (contractId: string) => MoneyBreakdown,
+  computeDueFn: (contractId: string, status: string | null) => MoneyBreakdown,
+): MonthlySummaryRow[] {
   const monthMap = new Map<string, Map<string, MonthlySummaryCell>>();
 
   for (const c of cRows) {
     const month = c.approve_month;
     if (!month) continue;
 
-    const bucket = deriveContractBucket(c);
-    const paid   = computePaid(c);
-    const due    = computeDue(c);
+    const bucket = deriveContractBucket(c, instByContract, today);
+    const paid   = computePaidFn(c.external_id);
+    const due    = computeDueFn(c.external_id, c.status);
 
     if (!monthMap.has(month)) monthMap.set(month, new Map());
     const bucketMap = monthMap.get(month)!;
@@ -392,9 +380,6 @@ export async function getMonthlySummary(params: MonthlySummaryParams): Promise<{
     cell.due  = addMoney(cell.due, due);
   }
 
-  // -----------------------------------------------------------------------
-  // Step 9: Build final rows (sorted by month desc)
-  // -----------------------------------------------------------------------
   const rows: MonthlySummaryRow[] = [];
   const sortedMonths = Array.from(monthMap.keys()).sort((a, b) => b.localeCompare(a));
 
@@ -416,14 +401,171 @@ export async function getMonthlySummary(params: MonthlySummaryParams): Promise<{
     rows.push({ approveMonth: month, buckets: bucketsObj, totalCount, totalPaid, totalDue });
   }
 
+  return rows;
+}
+
+// ---------------------------------------------------------------------------
+// Main export: getMonthlySummary
+// ---------------------------------------------------------------------------
+
+export async function getMonthlySummary(params: MonthlySummaryParams): Promise<{
+  countRows: MonthlySummaryRow[];
+  paidRows: MonthlySummaryRow[];
+  dueRows: MonthlySummaryRow[];
+  productTypes: string[];
+}> {
+  const today = new Date();
+
   // -----------------------------------------------------------------------
-  // Step 10: Collect distinct product types for filter dropdown
+  // Load 3 sets of contracts (each with its own productType filter)
+  // -----------------------------------------------------------------------
+  const [countContracts, paidContracts, dueContracts] = await Promise.all([
+    loadContracts(params.section, params.countProductType),
+    loadContracts(params.section, params.paidProductType),
+    loadContracts(params.section, params.dueProductType),
+  ]);
+
+  // Collect all unique contract IDs across all tabs (for installment loading)
+  const allContractIds = Array.from(
+    new Set([
+      ...countContracts.map((c) => c.external_id),
+      ...paidContracts.map((c) => c.external_id),
+      ...dueContracts.map((c) => c.external_id),
+    ])
+  );
+
+  if (allContractIds.length === 0) {
+    return { countRows: [], paidRows: [], dueRows: [], productTypes: [] };
+  }
+
+  // -----------------------------------------------------------------------
+  // Load installments (for bucket derivation — no date filter needed for bucket)
+  // and filtered installments for due tab
+  // -----------------------------------------------------------------------
+  const [allInstallments, dueInstallments, paidPayments] = await Promise.all([
+    // All installments for bucket derivation (no date filter)
+    loadInstallments(params.section, allContractIds),
+    // Filtered installments for due tab
+    loadInstallments(
+      params.section,
+      dueContracts.map((c) => c.external_id),
+      params.dueAtFrom,
+      params.dueAtTo,
+      params.dueAtMonth,
+    ),
+    // Filtered payments for paid tab
+    loadPayments(
+      params.section,
+      paidContracts.map((c) => c.external_id),
+      params.paidAtFrom,
+      params.paidAtTo,
+      params.paidAtMonth,
+    ),
+  ]);
+
+  // -----------------------------------------------------------------------
+  // Build lookup maps
+  // -----------------------------------------------------------------------
+  // All installments map (for bucket derivation — used by all 3 tabs)
+  const allInstByContract = new Map<string, typeof allInstallments>();
+  for (const inst of allInstallments) {
+    const key = String(inst.contract_external_id);
+    const arr = allInstByContract.get(key) ?? [];
+    arr.push(inst);
+    allInstByContract.set(key, arr);
+  }
+
+  // Filtered installments map (for due tab)
+  const dueInstByContract = new Map<string, typeof dueInstallments>();
+  for (const inst of dueInstallments) {
+    const key = String(inst.contract_external_id);
+    const arr = dueInstByContract.get(key) ?? [];
+    arr.push(inst);
+    dueInstByContract.set(key, arr);
+  }
+
+  // Filtered payments map (for paid tab)
+  const payByContract = new Map<string, typeof paidPayments>();
+  for (const pay of paidPayments) {
+    const key = String(pay.contract_external_id);
+    const arr = payByContract.get(key) ?? [];
+    arr.push(pay);
+    payByContract.set(key, arr);
+  }
+
+  // -----------------------------------------------------------------------
+  // Compute functions
+  // -----------------------------------------------------------------------
+  function computePaid(contractId: string): MoneyBreakdown {
+    const pays = payByContract.get(contractId) ?? [];
+    const result = emptyMoney();
+    for (const p of pays) {
+      result.principal += Number(p.principal_paid  ?? 0);
+      result.interest  += Number(p.interest_paid   ?? 0);
+      result.fee       += Number(p.fee_paid        ?? 0);
+      result.penalty   += Number(p.penalty_paid    ?? 0);
+      result.unlockFee += Number(p.unlock_fee_paid ?? 0);
+      result.discount  += Number(p.discount_amount ?? 0);
+      result.overpaid  += Number(p.overpaid_amount ?? 0);
+      result.badDebt   += Number(p.bad_debt_amount ?? 0);
+      result.total     += Number(p.total_paid_amount ?? 0);
+    }
+    return result;
+  }
+
+  function computeDue(contractId: string, contractStatus: string | null): MoneyBreakdown {
+    const insts = dueInstByContract.get(contractId) ?? [];
+    const status = contractStatus ?? "";
+    const isSpecial = ["หนี้เสีย", "ระงับสัญญา", "ยกเลิกสัญญา", "สิ้นสุดสัญญา"].includes(status);
+
+    const result = emptyMoney();
+    for (const inst of insts) {
+      if (!inst.due_date) continue;
+      // When due-date filter is active, we trust the filtered set
+      // Still skip future installments when no filter is set
+      if (!params.dueAtFrom && !params.dueAtTo && !params.dueAtMonth) {
+        const due = new Date(inst.due_date);
+        if (due > today) continue;
+      }
+
+      const paidAmt = Number(inst.paid_amount ?? 0);
+      const dueAmt  = Number(inst.amount ?? 0);
+      if (paidAmt >= dueAmt && dueAmt > 0) continue;
+
+      if (isSpecial) {
+        const suspendCode = inst.installment_status_code ?? "";
+        if (SUSPEND_CODES.includes(suspendCode)) continue;
+      }
+
+      result.principal += Number(inst.principal_due ?? 0);
+      result.interest  += Number(inst.interest_due  ?? 0);
+      result.fee       += Number(inst.fee_due       ?? 0);
+      result.penalty   += Number(inst.penalty_due   ?? 0);
+      result.unlockFee += Number(inst.unlock_fee_due ?? 0);
+    }
+    result.total = result.principal + result.interest + result.fee + result.penalty + result.unlockFee;
+    return result;
+  }
+
+  // For count tab: no paid/due data needed (zeros)
+  const zeroPaid = (_: string) => emptyMoney();
+  const zeroDue  = (_: string, __: string | null) => emptyMoney();
+
+  // -----------------------------------------------------------------------
+  // Build 3 grids
+  // -----------------------------------------------------------------------
+  const countRows = buildGrid(countContracts, allInstByContract, new Map(), today, zeroPaid, zeroDue);
+  const paidRows  = buildGrid(paidContracts,  allInstByContract, payByContract, today, computePaid, zeroDue);
+  const dueRows   = buildGrid(dueContracts,   allInstByContract, new Map(), today, zeroPaid, computeDue);
+
+  // -----------------------------------------------------------------------
+  // Collect distinct product types (union of all 3 sets)
   // -----------------------------------------------------------------------
   const productTypeSet = new Set<string>();
-  for (const c of cRows) {
+  for (const c of [...countContracts, ...paidContracts, ...dueContracts]) {
     if (c.product_type) productTypeSet.add(c.product_type);
   }
   const productTypes = Array.from(productTypeSet).sort();
 
-  return { rows, productTypes };
+  return { countRows, paidRows, dueRows, productTypes };
 }
