@@ -17,9 +17,12 @@ import { AIChatPanel } from "./AIChatPanel";
 export function AppShell({
   children,
   requireSection = true,
+  fullHeight = false,
 }: {
   children: ReactNode;
   requireSection?: boolean;
+  /** เมื่อ true: main จะไม่ scroll ด้วยตัวเอง (ให้ children จัดการ scroll เอง เช่น MonthlySummary) */
+  fullHeight?: boolean;
 }) {
   const { isLoading, isAuthenticated } = useAppAuth();
   const { hasSection } = useSection();
@@ -52,7 +55,7 @@ export function AppShell({
       <div className="flex flex-1 min-h-0 relative">
         {/* Main content — transition margin เมื่อ panel เปิด */}
         <main
-          className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden transition-all duration-300"
+          className={`flex-1 min-w-0 transition-all duration-300 ${fullHeight ? 'overflow-hidden flex flex-col' : 'overflow-y-auto overflow-x-hidden'}`}
           style={aiChatOpen ? { marginRight: "400px" } : {}}
         >
           {children}

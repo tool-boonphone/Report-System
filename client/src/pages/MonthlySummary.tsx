@@ -438,8 +438,8 @@ export default function MonthlySummary() {
   },[setActions]);
 
   return(
-    <AppShell>
-      <div className="flex flex-col h-full">
+    <AppShell fullHeight>
+      <div className="flex flex-col flex-1 min-h-0">
       {/* ── Sticky header area (ไม่เลื่อนตามแนวนอน) ──────────────────── */}
       <div className="flex-none" ref={headerRef}>
         {/* ── Tab switcher + Export ─────────────────────────────────────── */}
@@ -601,8 +601,8 @@ export default function MonthlySummary() {
         )}
 
       </div>
-        {/* ── Table area (scroll แนวนอนเฉพาะส่วนนี้) ──────────────────── */}
-        <div className="flex-1 overflow-x-auto overflow-y-auto pb-12">
+        {/* ── Table area (scroll แนวนอนและแนวตั้งเฉพาะส่วนนี้) ──────── */}
+        <div className="flex-1 min-h-0 overflow-x-auto overflow-y-auto">
           {!canView?(<div className="flex items-center justify-center h-full text-gray-400 text-sm">คุณไม่มีสิทธิ์ดูข้อมูลนี้</div>)
           :query.isLoading?(<div className="flex items-center justify-center h-full gap-2 text-gray-400"><Spinner className="w-5 h-5"/><span className="text-sm">กำลังโหลด...</span></div>)
           :query.error?(<div className="flex flex-col items-center justify-center h-full gap-3 text-red-500"><span className="text-sm">โหลดข้อมูลล้มเหลว: {query.error.message}</span><Button variant="outline" size="sm" onClick={()=>query.refetch()}>ลองใหม่</Button></div>)
@@ -686,10 +686,52 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
   }
   const gtContractTotal=DEBT_BUCKETS.reduce((s,b)=>s+gtCountVal(b),0);
 
-  function rowPaidTotal(row:SummaryRow):number{return computePaidTotal(row.totalPaid,paidVis);}
-  function rowDueTotal(row:SummaryRow):number{return computeDueTotal(row.totalDue,dueVis);}
-  const gtPaidTotal=computePaidTotal(grandTotal.totalPaid,paidVis);
-  const gtDueTotal=computeDueTotal(grandTotal.totalDue,dueVis);
+  // rowPaidTotal คำนวณจาก bucket ที่ไม่ hidden เท่านั้น (ไม่ใช้ row.totalPaid)
+  function rowPaidTotal(row:SummaryRow):number{
+    if(hiddenRows.has(row.approveMonth))return 0;
+    return DEBT_BUCKETS.reduce((s,b)=>{
+      if(hiddenBuckets.has(b))return s;
+      const cell=row.buckets[b];
+      if(!cell)return s;
+      if(b==="หนี้เสีย"){
+        return s+(showBadDebtInstall?(cell.paid.badDebtInstallment??0):0)+(showBadDebtSale?(cell.paid.badDebt??0):0);
+      }
+      return s+computePaidTotal(cell.paid,paidVis);
+    },0);
+  }
+  // rowDueTotal คำนวณจาก bucket ที่ไม่ hidden เท่านั้น (ไม่ใช้ row.totalDue)
+  function rowDueTotal(row:SummaryRow):number{
+    if(hiddenRows.has(row.approveMonth))return 0;
+    return DEBT_BUCKETS.reduce((s,b)=>{
+      if(hiddenBuckets.has(b))return s;
+      const cell=row.buckets[b];
+      if(!cell)return s;
+      if(b==="หนี้เสีย"){
+        return s+(showBadDebtInstall?(cell.due.total??0):0);
+      }
+      return s+computeDueTotal(cell.due,dueVis);
+    },0);
+  }
+  // gtPaidTotal คำนวณจาก bucket ที่ไม่ hidden เท่านั้น
+  const gtPaidTotal=DEBT_BUCKETS.reduce((s,b)=>{
+    if(hiddenBuckets.has(b))return s;
+    const bt=grandTotal.bucketTotals[b];
+    if(!bt)return s;
+    if(b==="หนี้เสีย"){
+      return s+(showBadDebtInstall?(bt.paid.badDebtInstallment??0):0)+(showBadDebtSale?(bt.paid.badDebt??0):0);
+    }
+    return s+computePaidTotal(bt.paid,paidVis);
+  },0);
+  // gtDueTotal คำนวณจาก bucket ที่ไม่ hidden เท่านั้น
+  const gtDueTotal=DEBT_BUCKETS.reduce((s,b)=>{
+    if(hiddenBuckets.has(b))return s;
+    const bt=grandTotal.bucketTotals[b];
+    if(!bt)return s;
+    if(b==="หนี้เสีย"){
+      return s+(showBadDebtInstall?(bt.due.total??0):0);
+    }
+    return s+computeDueTotal(bt.due,dueVis);
+  },0);
 
   // render helpers
   function renderCount(v:number){return v>0?(<span className="inline-flex items-center justify-center bg-slate-200 text-slate-700 rounded-full px-2.5 py-0.5 text-xs font-bold">{v.toLocaleString()}</span>):(<span className="text-gray-300">—</span>);}
