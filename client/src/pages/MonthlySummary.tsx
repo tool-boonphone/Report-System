@@ -717,11 +717,13 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
               // - bucket ที่ขยาย sub-cols (หนี้เสีย paid tab): rowSpan=2 และ row 3 จะ render sub-cols
               return g.buckets.map((b)=>(
                 <th key={b} rowSpan={isBadDebtExpanded(b)?2:3} colSpan={bucketColSpan(b)}
-                  className={`px-2 py-1.5 text-center text-xs font-bold text-white border-r border-white/20 ${bucketHeaderBg(b)}`}>
-                  <button type="button" onClick={()=>toggleBucket(b)} className="flex items-center justify-center gap-1.5 mx-auto hover:opacity-80 transition-opacity">
-                    {hiddenBuckets.has(b)?<EyeOff className="w-3 h-3"/>:<Eye className="w-3 h-3"/>}
+                  className={`px-2 py-1.5 text-center text-xs font-semibold text-white whitespace-nowrap min-w-[120px] border-r border-white/20 ${bucketHeaderBg(b)}`}>
+                  <div className="flex items-center justify-center gap-1">
+                    <button type="button" onClick={()=>toggleBucket(b)} className="hover:opacity-80 transition-opacity">
+                      {hiddenBuckets.has(b)?<EyeOff className="w-3 h-3"/>:<Eye className="w-3 h-3"/>}
+                    </button>
                     <span className={`inline-block px-1.5 py-0.5 rounded-full text-[10px] border ${bucketPillClasses(b)}`}>{b}</span>
-                  </button>
+                  </div>
                 </th>
               ));
             }
@@ -770,9 +772,9 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
                   // paid tab: หนี้เสีย แยกเป็น 3 sub-cols: ค่างวด | หนี้เสีย | รวม
                   return(
                     <React.Fragment key={b}>
-                      <th className={`px-2 py-1 text-center text-[10px] font-medium text-white/90 whitespace-nowrap border-r border-white/10 min-w-[120px] ${bucketHeaderBg(b)}`}>ค่างวด</th>
-                      <th className={`px-2 py-1 text-center text-[10px] font-medium text-red-200 whitespace-nowrap border-r border-white/10 min-w-[120px] ${bucketHeaderBg(b)}`}>หนี้เสีย</th>
-                      <th className={`px-2 py-1 text-center text-[10px] font-medium text-white/80 whitespace-nowrap border-r border-white/10 min-w-[120px] ${bucketHeaderBg(b)}`}>รวม</th>
+                      <th className={`px-2 py-1.5 text-center text-xs font-semibold text-white/90 whitespace-nowrap border-r border-white/10 min-w-[120px] ${bucketHeaderBg(b)}`}>ค่างวด</th>
+                      <th className={`px-2 py-1.5 text-center text-xs font-semibold text-red-200 whitespace-nowrap border-r border-white/10 min-w-[120px] ${bucketHeaderBg(b)}`}>ขายเครื่อง</th>
+                      <th className={`px-2 py-1.5 text-center text-xs font-semibold text-white/80 whitespace-nowrap border-r border-white/10 min-w-[120px] ${bucketHeaderBg(b)}`}>รวม</th>
                     </React.Fragment>
                   );
                 }
@@ -856,11 +858,8 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
           </tr>
         ))}
       </tbody>
-    </table>
-    {/* ── Fixed Grand Total Bar ─────────────────────────────────────── */}
-    <div className="fixed bottom-0 left-0 right-0 z-40 overflow-x-auto border-t-2 border-slate-400 bg-slate-100 shadow-[0_-2px_8px_rgba(0,0,0,0.12)]">
-      <table className="text-sm font-bold" style={{minWidth:`${minWidth}px`}}>
-        <tbody>
+      {/* ── Sticky Grand Total tfoot ─────────────────────────────────── */}
+      <tfoot className="sticky bottom-0 z-20 border-t-2 border-slate-400 bg-slate-100 shadow-[0_-2px_8px_rgba(0,0,0,0.12)]">
           <tr>
             <td className="sticky left-0 z-20 px-3 py-2.5 text-slate-800 whitespace-nowrap border-r border-slate-300 bg-slate-200 min-w-[130px]">รวมทั้งหมด</td>
             <td className="sticky left-[130px] z-20 px-3 py-2.5 text-right border-r border-slate-300 bg-slate-200 min-w-[90px]">
@@ -887,9 +886,8 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
               </React.Fragment>
             ))}
           </tr>
-        </tbody>
-      </table>
-    </div>
+      </tfoot>
+    </table>
     </>
   );
 }
