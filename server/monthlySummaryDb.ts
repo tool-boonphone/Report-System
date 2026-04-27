@@ -211,19 +211,32 @@ async function queryPaid(
   unlock_fee_paid: number;
   discount_amount: number;
   overpaid_amount: number;
-  bad_debt_amount: number;
+  // ค่างวด = total_paid_amount (payment_transactions) - ยอดขายเครื่อง
+  installment_paid: number;
+  // ขายเครื่อง = contracts.bad_debt_amount (กรองตาม bad_debt_date ถ้ามี date filter)
+  device_sale_amount: number;
   total_paid: number;
 }>> {
   const db = await getDb();
   if (!db) return [];
 
-  // Build paid_at filter
+  // Build paid_at filter สำหรับ payment_transactions
   let paidFilter = `pt.section = '${section}'`;
   if (opts.paidAtDate) {
     paidFilter += `\n      AND DATE(pt.paid_at) = '${opts.paidAtDate}'`;
   } else if (opts.paidAtMonths && opts.paidAtMonths.length > 0) {
     const list = opts.paidAtMonths.map((m) => `'${m}'`).join(",");
     paidFilter += `\n      AND DATE_FORMAT(pt.paid_at, '%Y-%m') IN (${list})`;
+  }
+
+  // Build bad_debt_date filter สำหรับ ยอดขายเครื่อง
+  // ถ้ากรองเดือน/วัน ให้กรอง bad_debt_date ด้วย
+  let badDebtDateFilter = ``;
+  if (opts.paidAtDate) {
+    badDebtDateFilter = `AND DATE(c2.bad_debt_date) = '${opts.paidAtDate}'`;
+  } else if (opts.paidAtMonths && opts.paidAtMonths.length > 0) {
+    const list = opts.paidAtMonths.map((m) => `'${m}'`).join(",");
+    badDebtDateFilter = `AND DATE_FORMAT(c2.bad_debt_date, '%Y-%m') IN (${list})`;
   }
 
   const q = `
@@ -238,8 +251,11 @@ async function queryPaid(
       SUM(COALESCE(paid_agg.unlock_fee_paid, 0)) AS unlock_fee_paid,
       SUM(COALESCE(paid_agg.discount_amount, 0)) AS discount_amount,
       SUM(COALESCE(paid_agg.overpaid_amount, 0)) AS overpaid_amount,
-      SUM(COALESCE(paid_agg.bad_debt_amount, 0)) AS bad_debt_amount,
-      SUM(COALESCE(paid_agg.total_paid,      0)) AS total_paid
+      -- ค่างวด = total_paid - ยอดขายเครื่อง (bad_debt_amount ที่ตรงกับ date filter)
+      SUM(GREATEST(COALESCE(paid_agg.total_paid, 0) - COALESCE(bda.device_sale_amount, 0), 0)) AS installment_paid,
+      -- ขายเครื่อง = bad_debt_amount จาก contracts กรองตาม bad_debt_date
+      SUM(COALESCE(bda.device_sale_amount, 0)) AS device_sale_amount,
+      SUM(COALESCE(paid_agg.total_paid,    0)) AS total_paid
     FROM contracts c
     LEFT JOIN ${maxOverdueSubquery(section)}
            ON max_overdue.contract_external_id = c.external_id
@@ -253,12 +269,21 @@ async function queryPaid(
         SUM(CAST(JSON_EXTRACT(pt.raw_json, '$.unlock_fee_paid') AS DECIMAL(18,2))) AS unlock_fee_paid,
         SUM(CAST(JSON_EXTRACT(pt.raw_json, '$.discount_amount') AS DECIMAL(18,2))) AS discount_amount,
         SUM(CAST(JSON_EXTRACT(pt.raw_json, '$.overpaid_amount') AS DECIMAL(18,2))) AS overpaid_amount,
-        SUM(CAST(JSON_EXTRACT(pt.raw_json, '$.bad_debt_amount') AS DECIMAL(18,2))) AS bad_debt_amount,
         SUM(CAST(pt.amount AS DECIMAL(18,2)))                                       AS total_paid
       FROM payment_transactions pt
       WHERE ${paidFilter}
       GROUP BY pt.contract_external_id
     ) paid_agg ON paid_agg.contract_external_id = c.external_id
+    -- ยอดขายเครื่อง: ดึงจาก contracts โดยตรง กรองตาม bad_debt_date
+    LEFT JOIN (
+      SELECT c2.external_id,
+             CAST(c2.bad_debt_amount AS DECIMAL(18,2)) AS device_sale_amount
+      FROM contracts c2
+      WHERE c2.section = '${section}'
+        AND c2.bad_debt_amount > 0
+        AND c2.bad_debt_date IS NOT NULL
+        ${badDebtDateFilter}
+    ) bda ON bda.external_id = c.external_id
     WHERE ${contractWhere(section, { productType: opts.productType, deviceFamily: opts.deviceFamily })}
     GROUP BY approve_month, bucket
     ORDER BY approve_month DESC
@@ -389,8 +414,8 @@ export async function getMonthlySummary(
       unlockFee:          n(r.unlock_fee_paid),
       discount:           n(r.discount_amount),
       overpaid:           n(r.overpaid_amount),
-      badDebt:            n(r.bad_debt_amount),        // ยอดขายเครื่อง
-      badDebtInstallment: n(r.total_paid),             // ยอดค่างวดหนี้เสีย (total_paid ของ bucket หนี้เสีย)
+      badDebt:            n(r.device_sale_amount),     // ยอดขายเครื่อง (contracts.bad_debt_amount กรองตาม bad_debt_date)
+      badDebtInstallment: n(r.installment_paid),       // ค่างวด = total_paid - ยอดขายเครื่อง
       total:              n(r.total_paid),
     });
   }
