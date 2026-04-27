@@ -315,6 +315,9 @@ export default function MonthlySummary() {
   const toggleBucket=useCallback((b:string)=>{setHiddenBuckets((p)=>{const n=new Set(p);if(n.has(b))n.delete(b);else n.add(b);return n;});},[]);
   const toggleGroup=useCallback((g:ColGroup)=>{setHiddenBuckets((p)=>{const n=new Set(p);const allH=g.buckets.every((b)=>n.has(b));if(allH)g.buckets.forEach((b)=>n.delete(b));else g.buckets.forEach((b)=>n.add(b));return n;});},[]);
   const toggleAll=useCallback(()=>{setHiddenBuckets((p)=>{if(p.size===DEBT_BUCKETS.length)return new Set();return new Set(DEBT_BUCKETS);});},[]);
+  // row eye toggle (per-month)
+  const[hiddenRows,setHiddenRows]=useState<Set<string>>(new Set());
+  const toggleRow=useCallback((month:string)=>{setHiddenRows((p)=>{const n=new Set(p);if(n.has(month))n.delete(month);else n.add(month);return n;});},[]);
 
   // sort direction
   const[sortDir,setSortDir]=useState<SortDir>("asc");
@@ -420,7 +423,7 @@ export default function MonthlySummary() {
 
   return(
     <AppShell>
-      <div className="flex flex-col h-full min-h-0">
+      <div className="flex flex-col" style={{height:"calc(100dvh - 56px)"}}>
         {/* ── Tab switcher + Export ─────────────────────────────────────── */}
         <div className="bg-white border-b border-gray-200 px-4 flex items-center gap-0">
           {(["count","paid","due"]as TabKey[]).map((t)=>{
@@ -589,6 +592,7 @@ export default function MonthlySummary() {
               hiddenBuckets={hiddenBuckets} toggleBucket={toggleBucket} toggleGroup={toggleGroup} toggleAll={toggleAll}
               paidVis={paidVis} dueVis={dueVis}
               sortDir={sortDir} onToggleSort={()=>setSortDir((d)=>d==="asc"?"desc":"asc")}
+              hiddenRows={hiddenRows} toggleRow={toggleRow}
             />
           )}
         </div>
@@ -598,11 +602,12 @@ export default function MonthlySummary() {
 }
 
 // ─── SummaryTable ─────────────────────────────────────────────────────────────
-function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGroup,toggleAll,paidVis,dueVis,sortDir,onToggleSort}:{
+function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGroup,toggleAll,paidVis,dueVis,sortDir,onToggleSort,hiddenRows,toggleRow}:{
   tab:TabKey;rows:SummaryRow[];grandTotal:GrandTotal;hiddenBuckets:Set<string>;
   toggleBucket:(b:string)=>void;toggleGroup:(g:ColGroup)=>void;toggleAll:()=>void;
   paidVis:Record<PaidBadgeKey,boolean>;dueVis:Record<DueBadgeKey,boolean>;
   sortDir:SortDir;onToggleSort:()=>void;
+  hiddenRows:Set<string>;toggleRow:(month:string)=>void;
 }) {
   // "หนี้เสีย" bucket ใน paid/due tab แยกเป็น 3 sub-cols: ค่างวด | ขายเครื่อง | รวม
   const isBadDebtExpanded=(b:string)=>(tab==="paid"||tab==="due")&&b==="หนี้เสีย";
@@ -797,25 +802,31 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
           <tr key={row.approveMonth} className="hover:bg-blue-50/30 transition-colors">
             {/* เดือน-ปี */}
             <td className="sticky left-0 z-10 px-3 py-2.5 font-medium text-slate-800 whitespace-nowrap border-r border-gray-200 bg-white">
-              {fmtMonthYear(row.approveMonth)}
+              <div className="flex items-center gap-1.5">
+                <button type="button" onClick={()=>toggleRow(row.approveMonth)} className="shrink-0 hover:opacity-70 transition-opacity" title={hiddenRows.has(row.approveMonth)?"แสดงแถวนี้":"ซ่อนแถวนี้"}>
+                  {hiddenRows.has(row.approveMonth)?<EyeOff className="w-3.5 h-3.5 text-slate-400"/>:<Eye className="w-3.5 h-3.5 text-slate-400"/>}
+                </button>
+                <span className={hiddenRows.has(row.approveMonth)?"text-slate-400 line-through":undefined}>{fmtMonthYear(row.approveMonth)}</span>
+              </div>
             </td>
             {/* สัญญา (รวม) */}
             <td className="sticky left-[130px] z-10 px-3 py-2.5 text-right border-r border-gray-200 bg-white">
-              {tab==="count"?renderCount(rowContractTotal(row)):tab==="paid"?renderMoney(rowPaidTotal(row),"text-green-800 font-medium"):renderMoney(rowDueTotal(row),"text-orange-800 font-medium")}
+              {hiddenRows.has(row.approveMonth)?renderCount(0):tab==="count"?renderCount(rowContractTotal(row)):tab==="paid"?renderMoney(rowPaidTotal(row),"text-green-800 font-medium"):renderMoney(rowDueTotal(row),"text-orange-800 font-medium")}
             </td>
             {/* Bucket cells */}
             {COL_GROUPS.map((g,gi)=>(
               <React.Fragment key={g.key}>
                 {g.buckets.map((b)=>{
                   const cell=row.buckets[b];const cellBg=bucketCellBg(b);
+                  const isHiddenRow=hiddenRows.has(row.approveMonth);
                   if(tab==="count"){
-                    const v=cellCountVal(b,cell);
+                    const v=isHiddenRow?0:cellCountVal(b,cell);
                     return<td key={b} className={`px-3 py-2.5 text-right ${cellBg}`}>{renderCount(v)}</td>;
                   }
                   if(tab==="paid"){
                     if(isBadDebtExpanded(b)){
-                      const install=cellPaidBadDebtInstall(b,cell);
-                      const sale=cellPaidBadDebt(b,cell);
+                      const install=isHiddenRow?0:cellPaidBadDebtInstall(b,cell);
+                      const sale=isHiddenRow?0:cellPaidBadDebt(b,cell);
                       const total=install+sale;
                       return(
                         <React.Fragment key={b}>
@@ -825,13 +836,13 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
                         </React.Fragment>
                       );
                     }
-                    const v=cellPaidVal(b,cell);
+                    const v=isHiddenRow?0:cellPaidVal(b,cell);
                     return<td key={b} className={`px-3 py-2.5 text-right ${cellBg}`}>{renderMoney(v,"text-green-800 font-medium")}</td>;
                   }
                   // due tab
                   if(isBadDebtExpanded(b)){
-                    const install=cellDueBadDebtInstall(b,cell);
-                    const sale=cellDueBadDebt(b,cell);
+                    const install=isHiddenRow?0:cellDueBadDebtInstall(b,cell);
+                    const sale=isHiddenRow?0:cellDueBadDebt(b,cell);
                     const total=install+sale;
                     return(
                       <React.Fragment key={b}>
@@ -841,15 +852,16 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
                       </React.Fragment>
                     );
                   }
-                  const v=cellDueVal(b,cell);
+                  const v=isHiddenRow?0:cellDueVal(b,cell);
                   return<td key={b} className={`px-3 py-2.5 text-right ${cellBg}`}>{renderMoney(v,"text-orange-800 font-medium")}</td>;
                 })}
                 {/* Subtotal column */}
                 {g.hasSubtotal&&(()=>{
                   const subBg=gi===0?"bg-green-50/60":"bg-orange-50/60";
-                  if(tab==="count"){const v=gi===0?rowNormalCount(row):rowSuspectCount(row);return<td className={`px-3 py-2.5 text-right font-bold ${subBg} border-r border-gray-200`}>{renderCount(v)}</td>;}
-                  if(tab==="paid"){const v=gi===0?rowNormalPaid(row):rowSuspectPaid(row);return<td className={`px-3 py-2.5 text-right font-bold ${subBg} border-r border-gray-200`}>{renderMoney(v,"text-green-900")}</td>;}
-                  const v=gi===0?rowNormalDue(row):rowSuspectDue(row);return<td className={`px-3 py-2.5 text-right font-bold ${subBg} border-r border-gray-200`}>{renderMoney(v,"text-orange-900")}</td>;
+                  const isHiddenRow=hiddenRows.has(row.approveMonth);
+                  if(tab==="count"){const v=isHiddenRow?0:(gi===0?rowNormalCount(row):rowSuspectCount(row));return<td className={`px-3 py-2.5 text-right font-bold ${subBg} border-r border-gray-200`}>{renderCount(v)}</td>;}
+                  if(tab==="paid"){const v=isHiddenRow?0:(gi===0?rowNormalPaid(row):rowSuspectPaid(row));return<td className={`px-3 py-2.5 text-right font-bold ${subBg} border-r border-gray-200`}>{renderMoney(v,"text-green-900")}</td>;}
+                  const v=isHiddenRow?0:(gi===0?rowNormalDue(row):rowSuspectDue(row));return<td className={`px-3 py-2.5 text-right font-bold ${subBg} border-r border-gray-200`}>{renderMoney(v,"text-orange-900")}</td>;
                 })()}
               </React.Fragment>
             ))}
