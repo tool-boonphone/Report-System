@@ -775,8 +775,8 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
                   );
                 }
                 if(!g.label)return null; // standalone already has rowSpan=3 (rendered in row 1)
-                const subLabel=tab==="count"?"จำนวน":tab==="paid"?"ยอดชำระ":"ยอดค้าง";
-                return<th key={b} className={`px-2 py-1 text-center text-[10px] font-medium text-white/80 whitespace-nowrap border-r border-white/10 ${bucketHeaderBg(b)}`}>{subLabel}</th>;
+                // row 3: ไม่แสดง sub-label ใต้ bucket (ตาม spec)
+                return<th key={b} className={`px-2 py-1 text-center text-[10px] font-medium text-white/80 whitespace-nowrap border-r border-white/10 ${bucketHeaderBg(b)}`}></th>;
               })}
             </React.Fragment>
           ))}
