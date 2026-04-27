@@ -717,7 +717,7 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
               // - bucket ที่ขยาย sub-cols (หนี้เสีย paid tab): rowSpan=2 และ row 3 จะ render sub-cols
               return g.buckets.map((b)=>(
                 <th key={b} rowSpan={isBadDebtExpanded(b)?2:3} colSpan={bucketColSpan(b)}
-                  className={`px-2 py-1.5 text-center text-xs font-semibold text-white whitespace-nowrap min-w-[120px] border-r border-white/20 ${bucketHeaderBg(b)}`}>
+                  className={`px-2 py-3 align-middle text-center text-xs font-semibold text-white whitespace-nowrap min-w-[120px] border-r border-white/20 ${bucketHeaderBg(b)}`}>
                   <div className="flex items-center justify-center gap-1">
                     <button type="button" onClick={()=>toggleBucket(b)} className="hover:opacity-80 transition-opacity">
                       {hiddenBuckets.has(b)?<EyeOff className="w-3 h-3"/>:<Eye className="w-3 h-3"/>}
