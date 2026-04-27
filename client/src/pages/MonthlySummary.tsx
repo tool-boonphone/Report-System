@@ -713,19 +713,44 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
             const span=bucketSpan+(g.hasSubtotal?1:0);
             if(!g.label){
               // standalone group
-              // - bucket ที่ไม่ขยาย sub-cols: rowSpan=3 (ครอบทุก row)
-              // - bucket ที่ขยาย sub-cols (หนี้เสีย paid tab): rowSpan=2 และ row 3 จะ render sub-cols
-              return g.buckets.map((b)=>(
-                <th key={b} rowSpan={isBadDebtExpanded(b)?2:3} colSpan={bucketColSpan(b)}
-                  className={`px-2 py-3 align-middle text-center text-xs font-semibold text-white whitespace-nowrap min-w-[120px] border-r border-white/20 ${bucketHeaderBg(b)}`}>
-                  <div className="flex items-center justify-center gap-1">
-                    <button type="button" onClick={()=>toggleBucket(b)} className="hover:opacity-80 transition-opacity">
-                      {hiddenBuckets.has(b)?<EyeOff className="w-3 h-3"/>:<Eye className="w-3 h-3"/>}
-                    </button>
-                    <span className={`inline-block px-1.5 py-0.5 rounded-full text-[10px] border ${bucketPillClasses(b)}`}>{b}</span>
-                  </div>
-                </th>
-              ));
+              // - ทุก bucket ใช้ rowSpan=3 เพื่อให้ความสูงเท่ากัน
+              // - หนี้เสีย paid tab: rowSpan=3 แต่ colSpan=3 และ row 3 จะ render sub-cols ซ้อนทับ
+              return g.buckets.map((b)=>{
+                if(isBadDebtExpanded(b)){
+                  // paid tab: หนี้เสีย rowSpan=3 colSpan=3
+                  // ใช้ flex column: ชื่อ bucket ด้านบน + sub-cols ด้านล่าง
+                  return(
+                    <th key={b} rowSpan={3} colSpan={3}
+                      className={`px-0 py-0 text-center text-xs font-semibold text-white whitespace-nowrap min-w-[360px] border-r border-white/20 ${bucketHeaderBg(b)}`}
+                      style={{verticalAlign:'top'}}>
+                      {/* ส่วนบน: ชื่อ bucket + eye toggle */}
+                      <div className="flex items-center justify-center gap-1 px-2 py-3">
+                        <button type="button" onClick={()=>toggleBucket(b)} className="hover:opacity-80 transition-opacity">
+                          {hiddenBuckets.has(b)?<EyeOff className="w-3 h-3"/>:<Eye className="w-3 h-3"/>}
+                        </button>
+                        <span className={`inline-block px-1.5 py-0.5 rounded-full text-[10px] border ${bucketPillClasses(b)}`}>{b}</span>
+                      </div>
+                      {/* ส่วนล่าง: sub-cols ค่างวด | ขายเครื่อง | รวม */}
+                      <div className="flex border-t border-white/20">
+                        <div className="flex-1 px-2 py-1.5 text-center text-[10px] font-semibold text-white/90 border-r border-white/10">ค่างวด</div>
+                        <div className="flex-1 px-2 py-1.5 text-center text-[10px] font-semibold text-red-200 border-r border-white/10">ขายเครื่อง</div>
+                        <div className="flex-1 px-2 py-1.5 text-center text-[10px] font-semibold text-white/80">รวม</div>
+                      </div>
+                    </th>
+                  );
+                }
+                return(
+                  <th key={b} rowSpan={3} colSpan={1}
+                    className={`px-2 py-3 align-middle text-center text-xs font-semibold text-white whitespace-nowrap min-w-[120px] border-r border-white/20 ${bucketHeaderBg(b)}`}>
+                    <div className="flex items-center justify-center gap-1">
+                      <button type="button" onClick={()=>toggleBucket(b)} className="hover:opacity-80 transition-opacity">
+                        {hiddenBuckets.has(b)?<EyeOff className="w-3 h-3"/>:<Eye className="w-3 h-3"/>}
+                      </button>
+                      <span className={`inline-block px-1.5 py-0.5 rounded-full text-[10px] border ${bucketPillClasses(b)}`}>{b}</span>
+                    </div>
+                  </th>
+                );
+              });
             }
             const allH=g.buckets.every((b)=>hiddenBuckets.has(b));
             return(
@@ -763,23 +788,13 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
             );
           })}
         </tr>
-        {/* ── Row 3: sub-label per bucket ───────────────────────────────── */}
+        {/* ── Row 3: sub-label per bucket (หนี้เสีย paid tab ใช้ absolute overlay) ── */}
         <tr>
           {COL_GROUPS.map((g)=>(
             <React.Fragment key={g.key}>
               {g.buckets.map((b)=>{
-                if(isBadDebtExpanded(b)){
-                  // paid tab: หนี้เสีย แยกเป็น 3 sub-cols: ค่างวด | หนี้เสีย | รวม
-                  return(
-                    <React.Fragment key={b}>
-                      <th className={`px-2 py-1.5 text-center text-xs font-semibold text-white/90 whitespace-nowrap border-r border-white/10 min-w-[120px] ${bucketHeaderBg(b)}`}>ค่างวด</th>
-                      <th className={`px-2 py-1.5 text-center text-xs font-semibold text-red-200 whitespace-nowrap border-r border-white/10 min-w-[120px] ${bucketHeaderBg(b)}`}>ขายเครื่อง</th>
-                      <th className={`px-2 py-1.5 text-center text-xs font-semibold text-white/80 whitespace-nowrap border-r border-white/10 min-w-[120px] ${bucketHeaderBg(b)}`}>รวม</th>
-                    </React.Fragment>
-                  );
-                }
-                // standalone ที่ไม่ขยาย sub-cols มี rowSpan=3 แล้ว ไม่ต้อง render อีก
-                if(!g.label && !isBadDebtExpanded(b))return null;
+                // standalone ทุก bucket มี rowSpan=3 แล้ว ไม่ต้อง render ใน row 3
+                if(!g.label)return null;
                 // row 3: ไม่แสดง sub-label ใต้ bucket (ตาม spec)
                 return<th key={b} className={`px-2 py-1 text-center text-[10px] font-medium text-white/80 whitespace-nowrap border-r border-white/10 ${bucketHeaderBg(b)}`}></th>;
               })}
