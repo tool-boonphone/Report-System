@@ -22,7 +22,7 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Link, useLocation } from "wouter";
 
-type MenuCode = "contract" | "debt_overview" | "debt_report" | "bad_debt_summary" | "settings_users" | "settings_groups";
+type MenuCode = "contract" | "debt_overview" | "debt_report" | "bad_debt_summary" | "monthly_summary" | "settings_users" | "settings_groups";
 
 type NavItem = {
   label: string;
@@ -37,6 +37,7 @@ const MAIN_NAV: NavItem[] = [
   { label: "ภาพรวมหนี้", path: "/debt-overview", icon: TrendingDown, menuCode: "debt_overview" },
   { label: "รายงานหนี้", path: "/debt-report", icon: Banknote, menuCode: "debt_report" },
   { label: "สรุปหนี้เสีย", path: "/bad-debt-summary", icon: TrendingDown, menuCode: "bad_debt_summary" },
+  { label: "สรุปรายเดือน", path: "/monthly-summary", icon: Banknote, menuCode: "monthly_summary" },
 ];
 
 // Settings sub-menu: collapsed under the Settings icon button.

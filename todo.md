@@ -858,3 +858,23 @@ Task list:
 - [x] P75-6: แก้ไข `rowLineCount` ให้นับ total payments (vertical) แทน max splits per period (matrix)
 - [x] P75-7: แก้ไข `estimateSize` ให้คำนวณ height ตาม expand state
 - [x] P75-8: Commit + push GitHub + checkpoint
+
+### Phase 76 — Fix: Regression bug ใน target tab (ข้อมูลซ้อนทับ)
+- [x] P76-1: วิเคราะห์ root cause — outer row div หาย `flex` class ออกไปตอน refactor Phase 75
+- [x] P76-2: เพิ่ม `flex` กลับไปใน outer row div className ของ DebtReport.tsx
+- [x] P76-3: ตรวจสอบ TypeScript 0 errors + commit + checkpoint (4b807c11)
+
+### Phase 77 — Feature: รวมตาราง + เพิ่มคอลัมน์ หมายเหตุ/บันทึกโดย/บันทึกเมื่อ
+- [ ] P77-1: ตรวจสอบ API response ว่ามี field remark/createdBy/createdAt ใน payment records หรือไม่
+- [ ] P77-2: แก้ไข งวดผ่อน 2/12 ใน target tab (installmentCount column)
+- [ ] P77-3: เพิ่มคอลัมน์ หมายเหตุ/บันทึกโดย/บันทึกเมื่อ ใน detail rows ของ collected tab
+- [ ] P77-4: รวมตาราง 2 แบบเป็นหน้าเดียว (ตัด tab bar ออก เพิ่ม target columns ต่อจาก collected)
+- [ ] P77-5: ตรวจสอบ TypeScript + commit + checkpoint
+
+### Phase 78 — Feature: หน้าสรุปรายเดือน (Monthly Summary)
+- [x] P78-1: ตรวจสอบ DB schema — fields ที่จำเป็นสำหรับ group by เดือนที่อนุมัติ (approve_date, debt_status)
+- [x] P78-2: สร้าง tRPC procedure `monthlySummary.getAll` — query + group by approve_month + debt_status
+- [x] P78-3: สร้าง MonthlySummary.tsx — layout, filter bar, badge 9 รายการ, 3 แถบ tab switcher
+- [x] P78-4: สร้างตาราง 3 แถบ (จำนวนสัญญา/ยอดชำระแล้ว/ยอดค้างชำระ) พร้อม toggle column groups และ pin columns (เดือน+สัญญา)
+- [x] P78-5: เพิ่มเมนู "สรุปรายเดือน" ใน TopNav + register route
+- [x] P78-6: ตรวจสอบ TypeScript + commit + checkpoint
