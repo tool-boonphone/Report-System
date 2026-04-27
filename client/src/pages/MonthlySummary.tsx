@@ -57,6 +57,7 @@ type FlatRow = {
 function groupFlatRows(flatRows:FlatRow[]):SummaryRow[] {
   const monthMap=new Map<string,SummaryRow>();
   for(const fr of flatRows){
+    if(!fr||typeof fr.approveMonth!=="string"||!fr.approveMonth)continue;
     if(fr.bucket==="__total__"){
       const row=monthMap.get(fr.approveMonth);
       if(row){
@@ -139,7 +140,8 @@ function fmtMoney(n:number|null|undefined):string {
   if(num===0)return"0.00";
   return num.toLocaleString("th-TH",{minimumFractionDigits:2,maximumFractionDigits:2});
 }
-function fmtMonthYear(ym:string):string {
+function fmtMonthYear(ym:string|undefined|null):string {
+  if(!ym||typeof ym!=="string"||!ym.includes("-"))return ym??"";
   const[y,m]=ym.split("-");
   const MONTHS=["ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."];
   return`${MONTHS[parseInt(m,10)-1]??m} ${(parseInt(y,10)+543).toString().slice(-2)}`;
