@@ -58,11 +58,11 @@ export function AppShell({
 
   if (pageScroll) {
     return (
-      <div className="min-h-screen bg-gray-50 flex flex-col">
+      <div className="min-h-screen bg-gray-50">
         <TopNav />
-        <div className="flex flex-1 relative">
+        <div className="relative">
           <main
-            className="flex-1 min-w-0 transition-all duration-300"
+            className="w-full min-w-0 transition-all duration-300"
             style={aiChatOpen ? { marginRight: "400px" } : {}}
           >
             {children}

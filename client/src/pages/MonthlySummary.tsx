@@ -308,6 +308,8 @@ export default function MonthlySummary() {
   const[filterOpen,setFilterOpen]=useState(true);
   // dynamic header height สำหรับ sticky thead
   const headerRef=useRef<HTMLDivElement>(null);
+  // scroll container ref สำหรับ fixed thead
+  const scrollContainerRef=useRef<HTMLDivElement>(null);
   const[headerH,setHeaderH]=useState(96);
   useEffect(()=>{
     const el=headerRef.current;if(!el)return;
@@ -438,7 +440,7 @@ export default function MonthlySummary() {
   },[setActions]);
 
   return(
-    <AppShell pageScroll>
+    <AppShell>
       {/* ── Header area (เลื่อนขึ้นพร้อม page scroll) ──────────────────── */}
       <div className="bg-white" ref={headerRef}>
         {/* ── Tab switcher + Export ─────────────────────────────────────── */}
@@ -600,8 +602,10 @@ export default function MonthlySummary() {
         )}
 
       </div>
-      {/* ── Table area (scroll แนวนอนเท่านั้น, แนวตั้ง = page scroll) ──────── */}
-      <div className="overflow-x-auto">
+      {/* ── Table area ─────────────────────────────────────────────────────── */}
+      {/* overflow-y:clip ทำให้ div นี้ scroll แนวนอนเท่านั้น โดยไม่สร้าง vertical scroll container
+           ทำให้ main ของ AppShell เป็น vertical scroller → thead/tfoot CSS sticky ทำงานถูกต้อง */}
+      <div ref={scrollContainerRef} className="overflow-x-auto w-full" style={{overflowY:'clip'}}>
         {!canView?(<div className="flex items-center justify-center py-20 text-gray-400 text-sm">คุณไม่มีสิทธิ์ดูข้อมูลนี้</div>)
         :query.isLoading?(<div className="flex items-center justify-center py-20 gap-2 text-gray-400"><Spinner className="w-5 h-5"/><span className="text-sm">กำลังโหลด...</span></div>)
         :query.error?(<div className="flex flex-col items-center justify-center py-20 gap-3 text-red-500"><span className="text-sm">โหลดข้อมูลล้มเหลว: {query.error.message}</span><Button variant="outline" size="sm" onClick={()=>query.refetch()}>ลองใหม่</Button></div>)
@@ -750,10 +754,15 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
     return w;
   },[tab]);// eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── CSS sticky thead (ทำงานได้เพราะ div.overflow-x-auto ใช้ overflow-y:clip
+  //    ซึ่งไม่สร้าง vertical scroll container → main ของ AppShell เป็น vertical scroller)
+  const tableRef=useRef<HTMLTableElement>(null);
+  const theadRef=useRef<HTMLTableSectionElement>(null);
+
   return(
     <>
-    <table className="w-full text-sm border-collapse" style={{minWidth:`${minWidth}px`}}>
-      <thead className="sticky z-20" style={{top:`${stickyTop}px`}}>
+    <table ref={tableRef} className="w-full text-sm border-collapse" style={{minWidth:`${minWidth}px`}}>
+      <thead ref={theadRef} className="z-20" style={{position:'sticky',top:`${stickyTop}px`}}>
         {/* ── Row 1: group headers ──────────────────────────────────────── */}
         <tr>
           {/* เดือน-ปีที่อนุมัติ */}
