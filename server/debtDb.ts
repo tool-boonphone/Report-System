@@ -287,6 +287,8 @@ export function deriveBadDebtDate(
 
 type InstRawRow = {
   contract_external_id: string;
+  /** external_id of this installment row — numeric = payment-record row, "{id}-{period}" = installment base row */
+  external_id: string | null;
   period: number | null;
   due_date: string | null;
   amount: number | null;
@@ -642,59 +644,128 @@ export type PayRawRow = {
 };
 
 /**
+ * Determine if an installment row is a "payment-record" row (audit trail from
+ * payment system) vs an "installment-base" row (scheduled installment from API).
+ *
+ * Pattern:
+ *   INSTALLMENT_BASE: external_id = "{contractId}-{period}" (contains a dash)
+ *   PAYMENT_RECORD:   external_id = numeric string only (e.g. "177695")
+ *
+ * When external_id is null or unknown, fall back to amount-based heuristic.
+ */
+function isPaymentRecordRow(row: InstRawRow): boolean {
+  const extId = row.external_id;
+  if (!extId) return false;
+  // Numeric-only external_id = payment record from payment system
+  return /^\d+$/.test(extId);
+}
+
+/**
  * Deduplicate installments per period — merge all rows for the same period.
  *
- * DB may have 2 rows per (contract_external_id, period) when the Boonphone API
+ * DB may have 2 rows per (contract_external_id, period) when the Boonphone/Fastfone365 API
  * returns a split representation:
- *   Row A (paid row):   amount=0,    paid_amount=X  (records the payment)
- *   Row B (due row):    amount=X,    paid_amount=0  (records the scheduled amount)
+ *   INSTALLMENT_BASE row (ext_id="{id}-{period}"): amount=X, paid_amount=? (scheduled installment)
+ *   PAYMENT_RECORD row  (ext_id=numeric):           amount=0 or X, paid_amount=X (payment audit trail)
  *
- * Strategy: for each period, use the row with the LARGEST amount as the base
- * (for amount, due_date, principal_due, etc.), then SET paid_amount = SUM of
- * paid_amount across ALL rows for that period. This correctly reflects that the
- * installment has been paid even when the API splits the data across two rows.
+ * Strategy:
+ * 1. Identify rows by external_id pattern:
+ *    - INSTALLMENT_BASE: ext_id contains a dash (e.g. "23223-3")
+ *    - PAYMENT_RECORD:   ext_id is numeric only (e.g. "177695")
+ * 2. isPaid = true if ANY PAYMENT_RECORD row for this period has status="ยืนยันการชำระ"
+ *    OR if the INSTALLMENT_BASE row itself has status="ยืนยันการชำระ" AND no conflicting
+ *    PAYMENT_RECORD row with status="ยังไม่ถึงกำหนด" exists.
+ * 3. paid_amount = from the confirmed PAYMENT_RECORD row (if exists), else from INSTALLMENT_BASE.
+ * 4. amount = from INSTALLMENT_BASE row (largest amount among base rows).
+ * 5. due_date = EARLIEST due_date across all rows (payment records often carry the correct date).
  */
 function dedupInstByPeriod(list: InstRawRow[]): InstRawRow[] {
   if (list.length === 0) return list;
-  // Strategy:
-  // - Base row = row with the LARGEST amount (most complete metadata + correct paid_amount)
-  // - due_date = EARLIEST due_date across all rows for this period
-  //   (API sometimes sends a wrong future due_date in the base row while the
-  //    payment-record row carries the correct earlier date)
-  const byPeriod = new Map<number | null, { base: InstRawRow; minDueDate: Date | null; maxPaid: number }>();
+
+  const byPeriod = new Map<number | null, { base: InstRawRow; minDueDate: Date | null; confirmedPaymentRecord: InstRawRow | null; anyPayRecSeen: boolean }>();
+
   for (const row of list) {
     const p = row.period;
     const rowAmt = Number(row.amount ?? 0);
-    const rowPaid = Number(row.paid_amount ?? 0);
     const rowDue = row.due_date ? new Date(row.due_date) : null;
+    const isPayRec = isPaymentRecordRow(row);
+    const isConfirmed = row.inst_status === 'ยืนยันการชำระ';
+
     const existing = byPeriod.get(p);
     if (!existing) {
-      byPeriod.set(p, { base: row, minDueDate: rowDue, maxPaid: rowPaid });
+      byPeriod.set(p, {
+        base: row,
+        minDueDate: rowDue,
+        confirmedPaymentRecord: (isPayRec && isConfirmed) ? row : null,
+        anyPayRecSeen: isPayRec,
+      });
     } else {
-      // Keep the row with the larger amount as the base;
-      // if amounts are equal, prefer the row with higher paid_amount (more up-to-date)
+      // Track whether any PAY_REC row was seen for this period
+      if (isPayRec) existing.anyPayRecSeen = true;
+
+      // Update confirmedPaymentRecord: prefer PAYMENT_RECORD with status=ยืนยันการชำระ
+      if (isPayRec && isConfirmed && !existing.confirmedPaymentRecord) {
+        existing.confirmedPaymentRecord = row;
+      }
+
+      // Update base row: prefer INSTALLMENT_BASE rows; among them pick largest amount
+      const existIsPayRec = isPaymentRecordRow(existing.base);
       const existAmt = Number(existing.base.amount ?? 0);
-      const existPaid = Number(existing.base.paid_amount ?? 0);
-      if (rowAmt > existAmt || (rowAmt === existAmt && rowPaid > existPaid)) {
+      if (!isPayRec && existIsPayRec) {
+        // Replace payment-record base with installment-base row
+        existing.base = row;
+      } else if (!isPayRec && !existIsPayRec && rowAmt > existAmt) {
+        // Both are installment-base: pick larger amount
+        existing.base = row;
+      } else if (isPayRec && existIsPayRec && rowAmt > existAmt) {
+        // Both are payment-records: pick larger amount
         existing.base = row;
       }
+
       // Track the earliest due_date across all rows for this period
       if (rowDue && (!existing.minDueDate || rowDue < existing.minDueDate)) {
         existing.minDueDate = rowDue;
       }
-      // Track max paid_amount across all rows (payment-record rows may carry the actual paid amount
-      // while the base installment row shows paid=0 due to API inconsistency)
-      if (rowPaid > existing.maxPaid) {
-        existing.maxPaid = rowPaid;
-      }
     }
   }
-  // Build merged rows: base metadata + earliest due_date + max paid_amount
-  const merged: InstRawRow[] = Array.from(byPeriod.values()).map(({ base, minDueDate, maxPaid }) => ({
-    ...base,
-    due_date: minDueDate ? minDueDate.toISOString().slice(0, 10) : base.due_date,
-    paid_amount: maxPaid,
-  }));
+
+  // Build merged rows
+  const merged: InstRawRow[] = Array.from(byPeriod.values()).map(({ base, minDueDate, confirmedPaymentRecord, anyPayRecSeen }) => {
+    // Determine paid_amount and inst_status:
+    // Rule: When ANY payment-record row exists for this period, use the PAY_REC
+    // as the authoritative source for paid status — do NOT trust INST_BASE paid_amount
+    // because Boonphone/Fastfone365 API sometimes sends wrong paid_amount in INST_BASE
+    // (e.g. period 4 INST_BASE has paid=2094 but the actual payment is for period 3).
+    //
+    // - If a confirmed PAY_REC (status=ยืนยันการชำระ) exists → isPaid=true, paid=from PAY_REC
+    // - If PAY_REC exists but NOT confirmed → isPaid=false, paid=0 (override INST_BASE paid)
+    // - If NO PAY_REC at all → use INST_BASE paid_amount as-is (single-source data)
+    let paidAmount: number;
+    let instStatus: string | null;
+
+    if (confirmedPaymentRecord != null) {
+      // Confirmed PAY_REC exists → use its paid_amount (authoritative)
+      paidAmount = Number(confirmedPaymentRecord.paid_amount ?? 0);
+      instStatus = 'ยืนยันการชำระ';
+    } else if (anyPayRecSeen) {
+      // PAY_REC exists but NOT confirmed → override to unpaid (PAY_REC is authoritative)
+      // This handles the case where INST_BASE has wrong paid=X but PAY_REC says paid=0
+      paidAmount = 0;
+      instStatus = base.inst_status === 'ยืนยันการชำระ' ? 'ยังไม่ถึงกำหนด' : base.inst_status;
+    } else {
+      // No PAY_REC at all → use INST_BASE paid_amount as-is
+      paidAmount = Number(base.paid_amount ?? 0);
+      instStatus = base.inst_status;
+    }
+
+    return {
+      ...base,
+      due_date: minDueDate ? minDueDate.toISOString().slice(0, 10) : base.due_date,
+      paid_amount: paidAmount,
+      inst_status: instStatus,
+    };
+  });
+
   // Return sorted by period ascending
   return merged.sort((a, b) => (a.period ?? 0) - (b.period ?? 0));
 }
@@ -860,6 +931,7 @@ export async function listDebtTarget(params: { section: SectionKey }) {
   // installment_status_code, principal_due, interest_due, fee_due, penalty_due, unlock_fee_due
   const instRowsRaw = await db.execute(sql`
     SELECT contract_external_id,
+           external_id,
            period,
            due_date,
            CAST(amount AS DECIMAL(18,2))       AS amount,
@@ -884,6 +956,7 @@ export async function listDebtTarget(params: { section: SectionKey }) {
     if (!instByContract.has(key)) instByContract.set(key, []);
     instByContract.get(key)!.push({
       contract_external_id: key,
+      external_id: r.external_id != null ? String(r.external_id) : null,
       period: r.period != null ? Number(r.period) : null,
       due_date: r.due_date ?? null,
       amount: r.amount != null ? Number(r.amount) : null,
@@ -1187,15 +1260,37 @@ export async function listDebtTarget(params: { section: SectionKey }) {
         if (!tMap) { tMap = new Map<number, number>(); txrtTotalByContractPeriod.set(key, tMap); }
         tMap.set(period, (tMap.get(period) ?? 0) + totalPaidForPeriod);
       }
-      // Track overpaid amount for this period
+      // Phase 85: Validate overpaid against INST_BASE paid_amount.
+      // Suffix-based period assignment (TXRT-N → period N) can be wrong when a payment
+      // covers the REMAINING balance of an earlier period (e.g. TXRT-2 closes period 1
+      // remainder, not period 2). In that case the INST_BASE for period N will show
+      // paid_amount < amount (not fully paid), which means the suffix-based assignment
+      // is incorrect and the overpaid_amount belongs to a different period.
+      // Guard: only track overpaid for period N when INST_BASE[N] is actually fully paid.
+      // Special case: amount=0 means the period was already closed (isClosed) by the API,
+      // so paid_amount > 0 is sufficient to confirm the period was paid.
       const overpaid = Number(pr.overpaid_amount ?? 0);
       if (overpaid > 0) {
-        let periodMap = overpaidByContractPeriod.get(key);
-        if (!periodMap) {
-          periodMap = new Map<number, number>();
-          overpaidByContractPeriod.set(key, periodMap);
+        const instListForKey = instByContract.get(key) ?? [];
+        const instRow = instListForKey.find((r) => Number(r.period ?? 0) === period);
+        const instBaseAmount = instRow ? Number(instRow.amount ?? 0) : 0;
+        const instBasePaid = instRow ? Number(instRow.paid_amount ?? 0) : 0;
+        // Only track overpaid when the installment for this period is actually fully paid:
+        // - If amount=0 (isClosed period): paid_amount > 0 confirms it was settled.
+        // - If amount>0: paid_amount must be >= amount (within 0.5 rounding tolerance).
+        // If neither condition holds, the suffix-based period assignment is likely wrong
+        // (the payment closed an earlier period, not this one), so skip overpaid tracking.
+        const instIsPaid =
+          (instBaseAmount < 0.009 && instBasePaid > 0.009) ||
+          (instBaseAmount > 0.009 && instBasePaid >= instBaseAmount - 0.5);
+        if (instIsPaid) {
+          let periodMap = overpaidByContractPeriod.get(key);
+          if (!periodMap) {
+            periodMap = new Map<number, number>();
+            overpaidByContractPeriod.set(key, periodMap);
+          }
+          periodMap.set(period, (periodMap.get(period) ?? 0) + overpaid);
         }
-        periodMap.set(period, (periodMap.get(period) ?? 0) + overpaid);
       }
     }
 
@@ -1818,9 +1913,11 @@ export async function listDebtTarget(params: { section: SectionKey }) {
           if (Number(inst.period ?? 0) >= currentPeriodNo) return max; // skip current+future
           return Math.max(max, Number(inst.unlockFee ?? 0));
         }, 0);
-        // isArrears = true only when there are PRIOR periods with penalty/unlockFee
-        // (i.e. carry from previous periods). If currentPeriod is period 1 with no
-        // prior periods, isArrears = false even if it has its own penalty_due.
+        // isArrears = true ONLY when there are PRIOR periods with penalty/unlockFee carry.
+        // Phase 9Z + Bug1 fix: do NOT set isArrears just because currentPeriod is unpaid.
+        // isArrears is a UI signal that accumulated charges from PREVIOUS periods are
+        // being carried into the current period. A first-time overdue period (no prior carry)
+        // should NOT be flagged as isArrears — it is simply overdue (shown by dueDate color).
         const hasCarryFromPrior = priorPenalty > 0.005 || priorUnlockFee > 0.005;
         currentPeriod.isArrears = hasCarryFromPrior;
         // Total penalty = prior carry + currentPeriod's own penalty_due
@@ -2234,6 +2331,7 @@ export async function* listDebtTargetStream(params: {
   // --- Load installments ---
   const instRowsRaw = await db.execute(sql`
     SELECT contract_external_id,
+           external_id,
            period,
            due_date,
            CAST(amount AS DECIMAL(18,2))       AS amount,
@@ -2258,6 +2356,7 @@ export async function* listDebtTargetStream(params: {
     if (!instByContract.has(key)) instByContract.set(key, []);
     instByContract.get(key)!.push({
       contract_external_id: key,
+      external_id: r.external_id != null ? String(r.external_id) : null,
       period: r.period != null ? Number(r.period) : null,
       due_date: r.due_date ?? null,
       amount: r.amount != null ? Number(r.amount) : null,
@@ -2493,14 +2592,37 @@ export async function* listDebtTargetStream(params: {
         if (!tMap) { tMap = new Map<number, number>(); txrtTotalByContractPeriodStream.set(key, tMap); }
         tMap.set(period, (tMap.get(period) ?? 0) + totalPaidForPeriod);
       }
+      // Phase 85: Validate overpaid against INST_BASE paid_amount.
+      // Suffix-based period assignment (TXRT-N → period N) can be wrong when a payment
+      // covers the REMAINING balance of an earlier period (e.g. TXRT-2 closes period 1
+      // remainder, not period 2). In that case the INST_BASE for period N will show
+      // paid_amount < amount (not fully paid), which means the suffix-based assignment
+      // is incorrect and the overpaid_amount belongs to a different period.
+      // Guard: only track overpaid for period N when INST_BASE[N] is actually fully paid.
+      // Special case: amount=0 means the period was already closed (isClosed) by the API,
+      // so paid_amount > 0 is sufficient to confirm the period was paid.
       const overpaid = Number(pr.overpaid_amount ?? 0);
       if (overpaid > 0) {
-        let periodMap = overpaidByContractPeriod.get(key);
-        if (!periodMap) {
-          periodMap = new Map<number, number>();
-          overpaidByContractPeriod.set(key, periodMap);
+        const instListForKey = instByContract.get(key) ?? [];
+        const instRow = instListForKey.find((r) => Number(r.period ?? 0) === period);
+        const instBaseAmount = instRow ? Number(instRow.amount ?? 0) : 0;
+        const instBasePaid = instRow ? Number(instRow.paid_amount ?? 0) : 0;
+        // Only track overpaid when the installment for this period is actually fully paid:
+        // - If amount=0 (isClosed period): paid_amount > 0 confirms it was settled.
+        // - If amount>0: paid_amount must be >= amount (within 0.5 rounding tolerance).
+        // If neither condition holds, the suffix-based period assignment is likely wrong
+        // (the payment closed an earlier period, not this one), so skip overpaid tracking.
+        const instIsPaid =
+          (instBaseAmount < 0.009 && instBasePaid > 0.009) ||
+          (instBaseAmount > 0.009 && instBasePaid >= instBaseAmount - 0.5);
+        if (instIsPaid) {
+          let periodMap = overpaidByContractPeriod.get(key);
+          if (!periodMap) {
+            periodMap = new Map<number, number>();
+            overpaidByContractPeriod.set(key, periodMap);
+          }
+          periodMap.set(period, (periodMap.get(period) ?? 0) + overpaid);
         }
-        periodMap.set(period, (periodMap.get(period) ?? 0) + overpaid);
       }
     }
 
@@ -2862,6 +2984,8 @@ export async function* listDebtTargetStream(params: {
           if (Number(inst.period ?? 0) >= currentPeriodNo) return max;
           return Math.max(max, Number(inst.unlockFee ?? 0));
         }, 0);
+        // isArrears = true ONLY when there are PRIOR periods with penalty/unlockFee carry.
+        // Phase 9Z + Bug1 fix: do NOT set isArrears just because currentPeriod is unpaid.
         const hasCarryFromPrior = priorPenalty > 0.005 || priorUnlockFee > 0.005;
         currentPeriod.isArrears = hasCarryFromPrior;
         const ownPenalty = Number(currentPeriod.penalty ?? 0);
@@ -3092,6 +3216,7 @@ export async function* listDebtCollectedStream(params: {
       // Derive debtStatus using contract status + installment due_date/paid_amount
       const instForStatus: InstRawRow[] = instList.map((i) => ({
         contract_external_id: extId,
+        external_id: null,
         period: i.period,
         due_date: i.due_date,
         amount: i.amount,
