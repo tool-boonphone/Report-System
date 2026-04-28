@@ -924,3 +924,16 @@ Task list:
 - [x] Sort เดือน asc/desc toggle, eye toggle รายเดือน + ทั้งหมด
 - [x] ตัด "รวมทั้งหมด" คอลัมน์ขวาสุดออก
 - [x] Grand total row sticky bottom
+
+### Phase 84 — Fix: Pattern 2 isClosed ใช้วันที่ชำระ TXRTC เทียบกับวันดิวงวด N
+
+**Business Rule:**
+- ถ้าวันที่ชำระ TXRTC < วันดิวของงวด N (ยังไม่ถึงดิว) → งวด 1..N ยอดปกติ, งวด N+1+ ปิดค่างวดแล้ว
+- ถ้าวันที่ชำระ TXRTC ≥ วันดิวของงวด N (ถึงดิวแล้ว) → งวด 1..N ยอดปกติ, งวด N+1 ปิดค่างวดแล้ว
+
+- [ ] P84-1: อ่าน closedByContract logic ใน listDebtTarget และ listDebtTargetStream เพื่อเข้าใจว่า txrtcPaidDate ถูก collect ไว้แล้วหรือไม่
+- [ ] P84-2: เพิ่ม txrtcPaidDate (วันที่ชำระ TXRTC ล่าสุด) และ dueDate ของงวด N ใน closedByContract map
+- [ ] P84-3: ปรับ maxClosedPeriod calculation ให้ใช้ txrtcPaidDate vs dueDate(N) เพื่อตัดสินว่าปิดค่างวดตั้งแต่งวด N หรือ N+1
+- [ ] P84-4: แก้ไข listDebtTargetStream เช่นเดียวกัน
+- [ ] P84-5: ทดสอบ TypeScript + ตรวจสอบ CT1225-AYA013-19847-01 (ควร: งวด 1-3 ยอดปกติ, งวด 4-12 ปิดค่างวดแล้ว)
+- [ ] P84-6: Commit + push GitHub + checkpoint
