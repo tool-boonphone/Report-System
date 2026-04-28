@@ -570,10 +570,10 @@ export default function MonthlySummary() {
             {PAID_BADGE_ITEMS.map(({key,label,icon,canToggle})=>{const isOn=paidVis[key];const val=grandBadgePaid[key as keyof MoneyBreakdown];return(
               <button key={key} type="button" onClick={()=>{if(!canToggle)return;setPaidVis((p)=>({...p,[key]:!p[key]}));}}
                 title={canToggle?(isOn?`ซ่อน${label}`:`แสดง${label}`):`${label} (ปิดเสมอ)`}
-                className={["flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border transition-colors",!canToggle?"opacity-40 cursor-not-allowed bg-gray-100 border-gray-200 text-gray-400":isOn?"bg-green-100 border-green-300 text-green-800 hover:bg-green-200":"bg-gray-100 border-gray-200 text-gray-400 hover:bg-gray-200"].join(" ")}>
+                className={["flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border transition-colors",!canToggle?"opacity-70 cursor-not-allowed bg-gray-100 border-gray-200 text-gray-600":isOn?"bg-green-100 border-green-300 text-green-800 hover:bg-green-200":"bg-gray-100 border-gray-200 text-gray-400 hover:bg-gray-200"].join(" ")}>
                 {isOn?<Eye className="w-3 h-3"/>:<EyeOff className="w-3 h-3"/>}{icon}<span>{label}</span>
                 {/* แสดงตัวเลขเสมอ: เปิด=สีปกติ, ปิด=สีเทา */}
-                <span className={["font-semibold ml-0.5",!canToggle?"text-gray-300":isOn?"":"text-gray-400"].join(" ")}>{fmtMoney(val)}</span>
+                <span className={["font-semibold ml-0.5",!canToggle?"text-gray-500":isOn?"":"text-gray-400"].join(" ")}>{fmtMoney(val)}</span>
               </button>
             );})}
             <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border bg-green-700 border-green-800 text-white font-semibold">
@@ -642,16 +642,21 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
   const bucketColSpan=(b:string)=>isBadDebtExpanded(b)?3:1;
 
   // cell value helpers
+  // *Val = ค่าที่ใช้คำนวณผลรวม (return 0 เมื่อ hiddenBuckets)
+  // *Display = ค่าที่แสดงผลในเซลล์ (return ค่าจริงเสมอ ไม่สนใจ hiddenBuckets)
   const cellCountVal=(b:string,cell:SummaryCell|undefined)=>hiddenBuckets.has(b)?0:(cell?.contractCount??0);
+  const cellCountDisplay=(_b:string,cell:SummaryCell|undefined)=>(cell?.contractCount??0);
   const cellPaidVal=(b:string,cell:SummaryCell|undefined)=>hiddenBuckets.has(b)?0:(cell?computePaidTotal(cell.paid,paidVis):0);
-  const cellPaidBadDebtInstallRaw=(b:string,cell:SummaryCell|undefined)=>hiddenBuckets.has(b)?0:(cell?.paid.badDebtInstallment??0);
-  const cellPaidBadDebtRaw=(b:string,cell:SummaryCell|undefined)=>hiddenBuckets.has(b)?0:(cell?.paid.badDebt??0);
-  const cellPaidBadDebtInstall=(b:string,cell:SummaryCell|undefined)=>showBadDebtInstall?cellPaidBadDebtInstallRaw(b,cell):0;
-  const cellPaidBadDebt=(b:string,cell:SummaryCell|undefined)=>showBadDebtSale?cellPaidBadDebtRaw(b,cell):0;
+  const cellPaidDisplay=(_b:string,cell:SummaryCell|undefined)=>(cell?computePaidTotal(cell.paid,paidVis):0);
+  const cellPaidBadDebtInstallRaw=(_b:string,cell:SummaryCell|undefined)=>(cell?.paid.badDebtInstallment??0);
+  const cellPaidBadDebtRaw=(_b:string,cell:SummaryCell|undefined)=>(cell?.paid.badDebt??0);
+  const cellPaidBadDebtInstall=(b:string,cell:SummaryCell|undefined)=>showBadDebtInstall?(hiddenBuckets.has(b)?0:cellPaidBadDebtInstallRaw(b,cell)):0;
+  const cellPaidBadDebt=(b:string,cell:SummaryCell|undefined)=>showBadDebtSale?(hiddenBuckets.has(b)?0:cellPaidBadDebtRaw(b,cell)):0;
   const cellDueVal=(b:string,cell:SummaryCell|undefined)=>hiddenBuckets.has(b)?0:(cell?computeDueTotal(cell.due,dueVis):0);
-  const cellDueBadDebtInstallRaw=(b:string,cell:SummaryCell|undefined)=>hiddenBuckets.has(b)?0:(cell?.due.total??0);
+  const cellDueDisplay=(_b:string,cell:SummaryCell|undefined)=>(cell?computeDueTotal(cell.due,dueVis):0);
+  const cellDueBadDebtInstallRaw=(_b:string,cell:SummaryCell|undefined)=>(cell?.due.total??0);
   const cellDueBadDebt=(_b:string,_cell:SummaryCell|undefined)=>0; // due ไม่มี bad_debt_amount
-  const cellDueBadDebtInstall=(b:string,cell:SummaryCell|undefined)=>showBadDebtInstall?cellDueBadDebtInstallRaw(b,cell):0;
+  const cellDueBadDebtInstall=(b:string,cell:SummaryCell|undefined)=>showBadDebtInstall?(hiddenBuckets.has(b)?0:cellDueBadDebtInstallRaw(b,cell)):0;
 
   // grand total helpers
   const gtCountVal=(b:string)=>{const bt=grandTotal.bucketTotals[b];return hiddenBuckets.has(b)?0:(bt?.count??0);};
@@ -888,7 +893,11 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
             </td>
             {/* สัญญา (รวม) */}
             <td className="sticky left-[130px] z-10 px-3 py-2.5 text-right border-r border-gray-200 bg-white">
-              {hiddenRows.has(row.approveMonth)?renderCount(0):tab==="count"?renderCount(rowContractTotal(row)):tab==="paid"?renderMoney(rowPaidTotal(row),"text-green-800 font-medium"):renderMoney(rowDueTotal(row),"text-orange-800 font-medium")}
+              {hiddenRows.has(row.approveMonth)
+                ?tab==="count"?(<span className="inline-flex items-center justify-center bg-slate-200 text-slate-400 rounded-full px-2.5 py-0.5 text-xs font-bold">{DEBT_BUCKETS.reduce((s,b)=>s+(row.buckets[b]?.contractCount??0),0).toLocaleString()}</span>)
+                  :tab==="paid"?(<span className="text-gray-400">{fmtMoney(DEBT_BUCKETS.reduce((s,b)=>{const c=row.buckets[b];if(!c)return s;if(b==="หนี้เสีย")return s+(showBadDebtInstall?(c.paid.badDebtInstallment??0):0)+(showBadDebtSale?(c.paid.badDebt??0):0);return s+computePaidTotal(c.paid,paidVis);},0))}</span>)
+                  :(<span className="text-gray-400">{fmtMoney(DEBT_BUCKETS.reduce((s,b)=>{const c=row.buckets[b];if(!c)return s;if(b==="หนี้เสีย")return s+(showBadDebtInstall?(c.due.total??0):0);return s+computeDueTotal(c.due,dueVis);},0))}</span>)
+                :tab==="count"?renderCount(rowContractTotal(row)):tab==="paid"?renderMoney(rowPaidTotal(row),"text-green-800 font-medium"):renderMoney(rowDueTotal(row),"text-orange-800 font-medium")}
             </td>
             {/* Bucket cells */}
             {COL_GROUPS.map((g,gi)=>(
@@ -896,53 +905,91 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
                 {g.buckets.map((b)=>{
                   const cell=row.buckets[b];const cellBg=bucketCellBg(b);
                   const isHiddenRow=hiddenRows.has(row.approveMonth);
+                  // dimmed = ซ่อนแถวหรือซ่อน bucket → แสดงค่าจริงด้วยสีเทา
+                  const isBucketHidden=hiddenBuckets.has(b);
+                  const isDimmed=isHiddenRow||isBucketHidden;
                   if(tab==="count"){
-                    const v=isHiddenRow?0:cellCountVal(b,cell);
-                    return<td key={b} className={`px-3 py-2.5 text-right ${cellBg}`}>{renderCount(v)}</td>;
+                    const displayV=cellCountDisplay(b,cell);
+                    const calcV=isDimmed?0:cellCountVal(b,cell);
+                    if(isDimmed)return<td key={b} className={`px-3 py-2.5 text-right ${cellBg}`}><span className="inline-flex items-center justify-center bg-slate-200 text-slate-400 rounded-full px-2.5 py-0.5 text-xs font-bold">{displayV.toLocaleString()}</span></td>;
+                    return<td key={b} className={`px-3 py-2.5 text-right ${cellBg}`}>{renderCount(calcV)}</td>;
                   }
                   if(tab==="paid"){
                     if(isBadDebtExpanded(b)){
-                      const installRaw=isHiddenRow?0:cellPaidBadDebtInstallRaw(b,cell);
-                      const saleRaw=isHiddenRow?0:cellPaidBadDebtRaw(b,cell);
+                      // ค่าจริงสำหรับแสดงผล (ไม่สนใจ hidden)
+                      const installDisplay=cellPaidBadDebtInstallRaw(b,cell);
+                      const saleDisplay=cellPaidBadDebtRaw(b,cell);
+                      // ค่าสำหรับคำนวณ (0 เมื่อ hidden)
+                      const installRaw=isDimmed?0:installDisplay;
+                      const saleRaw=isDimmed?0:saleDisplay;
                       const install=showBadDebtInstall?installRaw:0;
                       const sale=showBadDebtSale?saleRaw:0;
                       const total=install+sale;
+                      if(isDimmed)return(
+                        <React.Fragment key={b}>
+                          <td className={`px-3 py-2.5 text-right ${cellBg}`}><span className="text-gray-400">{fmtMoney(installDisplay)}</span></td>
+                          <td className={`px-3 py-2.5 text-right ${cellBg}`}><span className="text-gray-400">{fmtMoney(saleDisplay)}</span></td>
+                          <td className={`px-3 py-2.5 text-right font-semibold ${cellBg}`}><span className="text-gray-400">{fmtMoney(installDisplay+saleDisplay)}</span></td>
+                        </React.Fragment>
+                      );
                       return(
                         <React.Fragment key={b}>
-                          <td className={`px-3 py-2.5 text-right ${cellBg}`}>{!showBadDebtInstall?<span className="text-gray-300">{fmtMoney(installRaw)}</span>:renderMoney(install,"text-green-800 font-medium")}</td>
-                          <td className={`px-3 py-2.5 text-right ${cellBg}`}>{!showBadDebtSale?<span className="text-gray-300">{fmtMoney(saleRaw)}</span>:renderMoney(sale,"text-red-700 font-medium")}</td>
+                          <td className={`px-3 py-2.5 text-right ${cellBg}`}>{!showBadDebtInstall?<span className="text-gray-300">{fmtMoney(installDisplay)}</span>:renderMoney(install,"text-green-800 font-medium")}</td>
+                          <td className={`px-3 py-2.5 text-right ${cellBg}`}>{!showBadDebtSale?<span className="text-gray-300">{fmtMoney(saleDisplay)}</span>:renderMoney(sale,"text-red-700 font-medium")}</td>
                           <td className={`px-3 py-2.5 text-right font-semibold ${cellBg}`}>{renderMoney(total,"text-gray-800")}</td>
                         </React.Fragment>
                       );
                     }
-                    const v=isHiddenRow?0:cellPaidVal(b,cell);
-                    return<td key={b} className={`px-3 py-2.5 text-right ${cellBg}`}>{renderMoney(v,"text-green-800 font-medium")}</td>;
+                    const displayV=cellPaidDisplay(b,cell);
+                    if(isDimmed)return<td key={b} className={`px-3 py-2.5 text-right ${cellBg}`}><span className="text-gray-400">{fmtMoney(displayV)}</span></td>;
+                    return<td key={b} className={`px-3 py-2.5 text-right ${cellBg}`}>{renderMoney(cellPaidVal(b,cell),"text-green-800 font-medium")}</td>;
                   }
                   // due tab
                   if(isBadDebtExpanded(b)){
-                    const installRaw=isHiddenRow?0:cellDueBadDebtInstallRaw(b,cell);
-                    const saleRaw=isHiddenRow?0:cellDueBadDebt(b,cell);
+                    const installDisplay=cellDueBadDebtInstallRaw(b,cell);
+                    const saleDisplay=cellDueBadDebt(b,cell);
+                    const installRaw=isDimmed?0:installDisplay;
+                    const saleRaw=isDimmed?0:saleDisplay;
                     const install=showBadDebtInstall?installRaw:0;
                     const sale=showBadDebtSale?saleRaw:0;
                     const total=install+sale;
+                    if(isDimmed)return(
+                      <React.Fragment key={b}>
+                        <td className={`px-3 py-2.5 text-right ${cellBg}`}><span className="text-gray-400">{fmtMoney(installDisplay)}</span></td>
+                        <td className={`px-3 py-2.5 text-right ${cellBg}`}><span className="text-gray-400">{fmtMoney(saleDisplay)}</span></td>
+                        <td className={`px-3 py-2.5 text-right font-semibold ${cellBg}`}><span className="text-gray-400">{fmtMoney(installDisplay+saleDisplay)}</span></td>
+                      </React.Fragment>
+                    );
                     return(
                       <React.Fragment key={b}>
-                        <td className={`px-3 py-2.5 text-right ${cellBg}`}>{!showBadDebtInstall?<span className="text-gray-300">{fmtMoney(installRaw)}</span>:renderMoney(install,"text-orange-800 font-medium")}</td>
-                        <td className={`px-3 py-2.5 text-right ${cellBg}`}>{!showBadDebtSale?<span className="text-gray-300">{fmtMoney(saleRaw)}</span>:renderMoney(sale,"text-red-700 font-medium")}</td>
+                        <td className={`px-3 py-2.5 text-right ${cellBg}`}>{!showBadDebtInstall?<span className="text-gray-300">{fmtMoney(installDisplay)}</span>:renderMoney(install,"text-orange-800 font-medium")}</td>
+                        <td className={`px-3 py-2.5 text-right ${cellBg}`}>{!showBadDebtSale?<span className="text-gray-300">{fmtMoney(saleDisplay)}</span>:renderMoney(sale,"text-red-700 font-medium")}</td>
                         <td className={`px-3 py-2.5 text-right font-semibold ${cellBg}`}>{renderMoney(total,"text-gray-800")}</td>
                       </React.Fragment>
                     );
                   }
-                  const v=isHiddenRow?0:cellDueVal(b,cell);
-                  return<td key={b} className={`px-3 py-2.5 text-right ${cellBg}`}>{renderMoney(v,"text-orange-800 font-medium")}</td>;
+                  const displayV=cellDueDisplay(b,cell);
+                  if(isDimmed)return<td key={b} className={`px-3 py-2.5 text-right ${cellBg}`}><span className="text-gray-400">{fmtMoney(displayV)}</span></td>;
+                  return<td key={b} className={`px-3 py-2.5 text-right ${cellBg}`}>{renderMoney(cellDueVal(b,cell),"text-orange-800 font-medium")}</td>;
                 })}
                 {/* Subtotal column */}
                 {g.hasSubtotal&&(()=>{
                   const subBg=gi===0?"bg-green-50/60":"bg-orange-50/60";
                   const isHiddenRow=hiddenRows.has(row.approveMonth);
-                  if(tab==="count"){const v=isHiddenRow?0:(gi===0?rowNormalCount(row):rowSuspectCount(row));return<td className={`px-3 py-2.5 text-right font-bold ${subBg} border-r border-gray-200`}>{renderCount(v)}</td>;}
-                  if(tab==="paid"){const v=isHiddenRow?0:(gi===0?rowNormalPaid(row):rowSuspectPaid(row));return<td className={`px-3 py-2.5 text-right font-bold ${subBg} border-r border-gray-200`}>{renderMoney(v,"text-green-900")}</td>;}
-                  const v=isHiddenRow?0:(gi===0?rowNormalDue(row):rowSuspectDue(row));return<td className={`px-3 py-2.5 text-right font-bold ${subBg} border-r border-gray-200`}>{renderMoney(v,"text-orange-900")}</td>;
+                  const buckets=gi===0?normalBuckets:suspectBuckets;
+                  if(tab==="count"){
+                    const calcV=isHiddenRow?0:(gi===0?rowNormalCount(row):rowSuspectCount(row));
+                    if(isHiddenRow){const displayV=buckets.reduce((s,b)=>s+(row.buckets[b]?.contractCount??0),0);return<td className={`px-3 py-2.5 text-right font-bold ${subBg} border-r border-gray-200`}><span className="inline-flex items-center justify-center bg-slate-200 text-slate-400 rounded-full px-2.5 py-0.5 text-xs font-bold">{displayV.toLocaleString()}</span></td>;}
+                    return<td className={`px-3 py-2.5 text-right font-bold ${subBg} border-r border-gray-200`}>{renderCount(calcV)}</td>;
+                  }
+                  if(tab==="paid"){
+                    const calcV=isHiddenRow?0:(gi===0?rowNormalPaid(row):rowSuspectPaid(row));
+                    if(isHiddenRow){const displayV=buckets.reduce((s,b)=>{const c=row.buckets[b];return s+(c?computePaidTotal(c.paid,paidVis):0);},0);return<td className={`px-3 py-2.5 text-right font-bold ${subBg} border-r border-gray-200`}><span className="text-gray-400">{fmtMoney(displayV)}</span></td>;}
+                    return<td className={`px-3 py-2.5 text-right font-bold ${subBg} border-r border-gray-200`}>{renderMoney(calcV,"text-green-900")}</td>;
+                  }
+                  const calcV=isHiddenRow?0:(gi===0?rowNormalDue(row):rowSuspectDue(row));
+                  if(isHiddenRow){const displayV=buckets.reduce((s,b)=>{const c=row.buckets[b];return s+(c?computeDueTotal(c.due,dueVis):0);},0);return<td className={`px-3 py-2.5 text-right font-bold ${subBg} border-r border-gray-200`}><span className="text-gray-400">{fmtMoney(displayV)}</span></td>;}
+                  return<td className={`px-3 py-2.5 text-right font-bold ${subBg} border-r border-gray-200`}>{renderMoney(calcV,"text-orange-900")}</td>;
                 })()}
               </React.Fragment>
             ))}
