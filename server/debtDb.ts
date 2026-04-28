@@ -299,6 +299,8 @@ type InstRawRow = {
   unlock_fee_due: number | null;
   /** Per-period status code extracted from raw_json.installment_status_code. */
   installment_status_code: string | null;
+  /** Remaining balance from raw_json.balance (0 = fully paid, includes discounts). Null when not fetched. */
+  balance: number | null;
 };
 
 /**
@@ -719,9 +721,11 @@ function deriveDebtStatus(
     if (Number.isNaN(dueMs)) continue;
     const paid = Number(it.paid_amount ?? 0);
     const amt = Number(it.amount ?? 0);
-    // Treat installment as unpaid when the status is not "เสร็จสมบูรณ์" / "ชำระครบ"
-    // and paid_amount < amount.
-    const outstanding = amt - paid;
+    // Prefer balance from raw_json (API-computed, already accounts for discounts/partial payments).
+    // Fall back to amount - paid_amount when balance is not available.
+    const outstanding = (it.balance !== null && it.balance !== undefined)
+      ? Number(it.balance)
+      : amt - paid;
     if (outstanding <= 0.001) continue;
     const days = Math.floor((today.getTime() - dueMs) / (1000 * 60 * 60 * 24));
     if (days > maxDays) maxDays = days;
@@ -773,7 +777,8 @@ export async function listDebtTarget(params: { section: SectionKey }) {
            CAST(JSON_EXTRACT(raw_json, '$.fee_due')       AS DECIMAL(18,2)) AS fee_due,
            CAST(JSON_EXTRACT(raw_json, '$.penalty_due')    AS DECIMAL(18,2)) AS penalty_due,
            CAST(JSON_EXTRACT(raw_json, '$.unlock_fee_due')  AS DECIMAL(18,2)) AS unlock_fee_due,
-           JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.installment_status_code')) AS installment_status_code
+           JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.installment_status_code')) AS installment_status_code,
+           CAST(JSON_EXTRACT(raw_json, '$.balance') AS DECIMAL(18,2)) AS balance
       FROM ${installments}
      WHERE ${installments.section} = ${params.section}
      ORDER BY contract_external_id, period
@@ -797,6 +802,7 @@ export async function listDebtTarget(params: { section: SectionKey }) {
       penalty_due: r.penalty_due != null ? Number(r.penalty_due) : null,
       unlock_fee_due: r.unlock_fee_due != null ? Number(r.unlock_fee_due) : null,
       installment_status_code: r.installment_status_code ?? null,
+      balance: r.balance != null ? Number(r.balance) : null,
     });
   }
 
@@ -1958,7 +1964,8 @@ export async function* listDebtTargetStream(params: {
            CAST(JSON_EXTRACT(raw_json, '$.fee_due')       AS DECIMAL(18,2)) AS fee_due,
            CAST(JSON_EXTRACT(raw_json, '$.penalty_due')    AS DECIMAL(18,2)) AS penalty_due,
            CAST(JSON_EXTRACT(raw_json, '$.unlock_fee_due')  AS DECIMAL(18,2)) AS unlock_fee_due,
-           JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.installment_status_code')) AS installment_status_code
+           JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.installment_status_code')) AS installment_status_code,
+           CAST(JSON_EXTRACT(raw_json, '$.balance') AS DECIMAL(18,2)) AS balance
       FROM ${installments}
      WHERE ${installments.section} = ${params.section}
      ORDER BY contract_external_id, period
@@ -1982,6 +1989,7 @@ export async function* listDebtTargetStream(params: {
       penalty_due: r.penalty_due != null ? Number(r.penalty_due) : null,
       unlock_fee_due: r.unlock_fee_due != null ? Number(r.unlock_fee_due) : null,
       installment_status_code: r.installment_status_code ?? null,
+      balance: r.balance != null ? Number(r.balance) : null,
     });
   }
 
@@ -2560,14 +2568,15 @@ export async function* listDebtCollectedStream(params: {
              CAST(amount AS DECIMAL(18,2)) AS amount,
              due_date,
              CAST(paid_amount AS DECIMAL(18,2)) AS paid_amount,
-             status
+             status,
+             CAST(JSON_EXTRACT(raw_json, '$.balance') AS DECIMAL(18,2)) AS balance
         FROM installments
        WHERE section = '${sectionLiteral}'
          AND contract_external_id IN (${batchIdsLiteral})
        ORDER BY contract_external_id, period
     `));
     const instRows: any[] = (instRaw as any)[0] ?? instRaw;
-    const instByContractRaw = new Map<string, Array<{ period: number | null; amount: number; due_date: string | null; paid_amount: number | null; status: string | null }>>();
+    const instByContractRaw = new Map<string, Array<{ period: number | null; amount: number; due_date: string | null; paid_amount: number | null; status: string | null; balance: number | null }>>();
     for (const r of instRows) {
       const key = String(r.contract_external_id ?? "");
       if (!instByContractRaw.has(key)) instByContractRaw.set(key, []);
@@ -2577,33 +2586,40 @@ export async function* listDebtCollectedStream(params: {
         due_date: r.due_date ?? null,
         paid_amount: r.paid_amount != null ? Number(r.paid_amount) : null,
         status: r.status ?? null,
+        balance: r.balance != null ? Number(r.balance) : null,
       });
     }
     // Dedup per period (DB may have 2 rows per period)
-    const instByContract = new Map<string, Array<{ period: number | null; amount: number; due_date: string | null; paid_amount: number | null; status: string | null }>>();
+    const instByContract = new Map<string, Array<{ period: number | null; amount: number; due_date: string | null; paid_amount: number | null; status: string | null; balance: number | null }>>();
     for (const [key, list] of Array.from(instByContractRaw.entries())) {
-      // Merge: base = row with highest amount; totalPaid = SUM of all paid_amounts per period
+      // Merge: base = row with highest amount; totalPaid = SUM of all paid_amounts per period;
+      // balance: take the MIN (0 wins — row with balance=0 means fully paid).
       // (Boonphone API splits paid/due into 2 rows: amount=0/paid=X and amount=X/paid=0)
-      const byPeriod = new Map<number | null, { base: { period: number | null; amount: number; due_date: string | null; paid_amount: number | null; status: string | null }; totalPaid: number }>();
+      const byPeriod = new Map<number | null, { base: { period: number | null; amount: number; due_date: string | null; paid_amount: number | null; status: string | null; balance: number | null }; totalPaid: number; minBalance: number | null }>();
       for (const row of list) {
         const p = row.period;
         const rowPaid = row.paid_amount != null ? Number(row.paid_amount) : 0;
+        const rowBalance = row.balance != null ? Number(row.balance) : null;
         const existing = byPeriod.get(p);
         if (!existing) {
-          byPeriod.set(p, { base: row, totalPaid: rowPaid });
+          byPeriod.set(p, { base: row, totalPaid: rowPaid, minBalance: rowBalance });
         } else {
           existing.totalPaid += rowPaid;
           if (row.amount > existing.base.amount) existing.base = row;
+          // Keep minimum balance (0 = fully paid wins over non-null values)
+          if (rowBalance !== null) {
+            existing.minBalance = existing.minBalance === null ? rowBalance : Math.min(existing.minBalance, rowBalance);
+          }
         }
       }
-      instByContract.set(key, Array.from(byPeriod.values()).map(({ base, totalPaid }) => ({ ...base, paid_amount: totalPaid })).sort((a, b) => (a.period ?? 0) - (b.period ?? 0)));
+      instByContract.set(key, Array.from(byPeriod.values()).map(({ base, totalPaid, minBalance }) => ({ ...base, paid_amount: totalPaid, balance: minBalance })).sort((a, b) => (a.period ?? 0) - (b.period ?? 0)));
     }
     // Fix out-of-order due_dates (Boonphone API bug) — same correction as listDebtTargetStream.
     // Without this, deriveDebtStatus receives wrong due_dates → wrong daysOverdue → wrong debtStatus label.
     // This is the root cause of the status mismatch between "ยอดเก็บหนี้" and "เป้าเก็บหนี้".
     for (const [key, list] of Array.from(instByContract.entries())) {
       const fixed = fixOutOfOrderDueDates(list as unknown as InstRawRow[]);
-      instByContract.set(key, fixed as unknown as Array<{ period: number | null; amount: number; due_date: string | null; paid_amount: number | null; status: string | null }>);
+      instByContract.set(key, fixed as unknown as Array<{ period: number | null; amount: number; due_date: string | null; paid_amount: number | null; status: string | null; balance: number | null }>);
     }
 
     // Query payments for this batch only (per-batch to avoid OOM with 222K rows)
@@ -2680,6 +2696,7 @@ export async function* listDebtCollectedStream(params: {
         penalty_due: null,
         unlock_fee_due: null,
         installment_status_code: null,
+        balance: (i as any).balance != null ? Number((i as any).balance) : null,
       }));
       const { label: debtStatus, daysOverdue } = deriveDebtStatus(ch.status ?? null, instForStatus, today);
       const c = {
