@@ -1567,8 +1567,8 @@ export default function DebtSummary() {
                               baseStyle.background = "#f0f9ff"; // sky-50
                               baseStyle.color = "#111827"; // gray-900 (ดำ)
                             } else {
-                              // งวดก่อนหน้า ยังไม่จ่าย (overdue): ดำ
-                              baseStyle.color = "#111827"; // gray-900 (ดำ)
+                              // งวดก่อนหน้า ยังไม่จ่าย (overdue): ส้ม (ถือว่าค้างชำระ)
+                              baseStyle.color = "#c2410c"; // orange-700
                             }
                             const tooltip = suspended
                               ? suspendLabel

@@ -955,3 +955,12 @@ Task list:
 - [ ] P85-2: วิเคราะห์ว่า backend ส่ง field อะไรมาให้ frontend ตัดสินสีได้ (isPaid, isPartialPaid, isCurrentPeriod, isFuturePeriod, isArrears, isClosed, isSuspended)
 - [ ] P85-3: Implement logic สีใหม่ใน frontend ตามเงื่อนไขที่กำหนด
 - [ ] P85-4: ตรวจสอบผลลัพธ์ในระบบ + commit + push GitHub + checkpoint
+
+### Phase 86 — Fix: สีตัวเลขงวดก่อนหน้าที่ไม่ได้จ่ายเลย → สีส้ม
+**Business Rule:**
+- งวดก่อนหน้า (overdue) ที่ยังไม่ได้จ่ายเลย (paid=0) → สีส้ม (ไม่ใช่สีดำ)
+- เดิม: งวดก่อนหน้า paid=0 → สีดำ (ผิด)
+- ใหม่: งวดก่อนหน้า paid=0 → สีส้ม (ถูกต้อง เพราะถือว่าค้างชำระ)
+- [x] P86-1: แก้ไข DebtReport.tsx — else branch สุดท้าย (overdue paid=0) จากสีดำเป็นสีส้ม
+- [x] P86-2: แก้ไข DebtSummary.tsx — else branch สุดท้าย (overdue paid=0) จากสีดำเป็นสีส้ม
+- [ ] P86-3: Commit + push GitHub + checkpoint
