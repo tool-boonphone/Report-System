@@ -975,4 +975,4 @@ Task list:
 ### Phase 88 — Fix: isCurrentPeriod ให้ BG สีฟ้าเสมอ (แม้ isPaid/isPartialPaid)
 - [x] P88-1: แก้ไข DebtReport.tsx — isCurrentPeriod ให้ BG sky-50 เสมอ ยกเว้น isArrears/dimmed
 - [x] P88-2: แก้ไข DebtSummary.tsx — isCurrentPeriod ให้ BG sky-50 เสมอ ยกเว้น isArrears/dimmed
-- [ ] P88-3: Commit + push GitHub + checkpoint
+- [x] P88-3: Commit + push GitHub + checkpoint
