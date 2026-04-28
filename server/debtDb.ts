@@ -1237,7 +1237,43 @@ export async function listDebtTarget(params: { section: SectionKey }) {
       if (totalPeriods > 0 && maxNormalPeriod >= totalPeriods) {
         closedByContract.set(key, -1); // -1 = Pattern 3: no isClosed
       } else {
-        closedByContract.set(key, maxNormalPeriod); // 0 = Pattern 1, N = Pattern 2
+        // Phase 84: Pattern 2 — ใช้ txrtcPaidDate vs dueDate(N) เพื่อตัดสิน boundary
+        //
+        // Business rule:
+        //   txrtcPaidDate < dueDate(N)  → ปิดค่างวดตั้งแต่งวด N   (ปิด N ด้วย)
+        //     stored as: closedByContract.set(key, N - 1)
+        //   txrtcPaidDate >= dueDate(N) → ปิดค่างวดตั้งแต่งวด N+1 (งวด N ยังปกติ)
+        //     stored as: closedByContract.set(key, N)
+        //
+        // Pattern 1 (maxNormalPeriod=0): ไม่มีงวดปกติ → ปิดค่างวดตั้งแต่งวด 1
+        //   stored as: closedByContract.set(key, 0) — ไม่เปลี่ยน
+        if (maxNormalPeriod > 0) {
+          // หา txrtcPaidDate ล่าสุด (earliest TXRTC date = วันที่ชำระปิดค่างวด)
+          const txrtcDates = closeDatesByContract.get(key) ?? [];
+          // ใช้ date ที่เก่าที่สุด (earliest) เพราะ TXRTC แรกคือวันที่ชำระปิดค่างวดจริง
+          const txrtcPaidDate = txrtcDates.length > 0
+            ? new Date(Math.min(...txrtcDates.map((d) => d.getTime())))
+            : null;
+          // หา dueDate ของงวด N (maxNormalPeriod)
+          const instList = instByContract.get(key) ?? [];
+          const periodNRow = instList.find((r) => Number(r.period ?? 0) === maxNormalPeriod);
+          const dueDateN = periodNRow?.due_date ? new Date(periodNRow.due_date) : null;
+          if (txrtcPaidDate && dueDateN && !isNaN(txrtcPaidDate.getTime()) && !isNaN(dueDateN.getTime())) {
+            if (txrtcPaidDate < dueDateN) {
+              // ชำระก่อนดิวงวด N → ปิดค่างวดตั้งแต่งวด N (ปิด N ด้วย)
+              closedByContract.set(key, maxNormalPeriod - 1);
+            } else {
+              // ชำระถึงหรือหลังดิวงวด N → ปิดค่างวดตั้งแต่งวด N+1 (งวด N ยังปกติ)
+              closedByContract.set(key, maxNormalPeriod);
+            }
+          } else {
+            // Fallback: ไม่มีวันที่ → ใช้ logic เดิม
+            closedByContract.set(key, maxNormalPeriod);
+          }
+        } else {
+          // Pattern 1: maxNormal=0 → ปิดค่างวดตั้งแต่งวด 2 (ไม่เปลี่ยน)
+          closedByContract.set(key, 0);
+        }
       }
     }
   }
@@ -2486,7 +2522,30 @@ export async function* listDebtTargetStream(params: {
       if (totalPeriods > 0 && maxNormalPeriod >= totalPeriods) {
         closedByContract.set(key, -1); // Pattern 3: ยอดปกติทั้งหมด
       } else {
-        closedByContract.set(key, maxNormalPeriod); // Pattern 1 (0) or Pattern 2 (N)
+        // Phase 84: Pattern 2 — ใช้ txrtcPaidDate vs dueDate(N) เพื่อตัดสิน boundary
+        if (maxNormalPeriod > 0) {
+          const txrtcDates = closeDatesByContract.get(key) ?? [];
+          const txrtcPaidDate = txrtcDates.length > 0
+            ? new Date(Math.min(...txrtcDates.map((d) => d.getTime())))
+            : null;
+          const instList = instByContract.get(key) ?? [];
+          const periodNRow = instList.find((r) => Number(r.period ?? 0) === maxNormalPeriod);
+          const dueDateN = periodNRow?.due_date ? new Date(periodNRow.due_date) : null;
+          if (txrtcPaidDate && dueDateN && !isNaN(txrtcPaidDate.getTime()) && !isNaN(dueDateN.getTime())) {
+            if (txrtcPaidDate < dueDateN) {
+              // ชำระก่อนดิวงวด N → ปิดค่างวดตั้งแต่งวด N (ปิด N ด้วย)
+              closedByContract.set(key, maxNormalPeriod - 1);
+            } else {
+              // ชำระถึงหรือหลังดิวงวด N → ปิดค่างวดตั้งแต่งวด N+1 (งวด N ยังปกติ)
+              closedByContract.set(key, maxNormalPeriod);
+            }
+          } else {
+            closedByContract.set(key, maxNormalPeriod);
+          }
+        } else {
+          // Pattern 1: maxNormal=0 → ปิดค่างวดตั้งแต่งวด 2
+          closedByContract.set(key, 0);
+        }
       }
     }
   }
