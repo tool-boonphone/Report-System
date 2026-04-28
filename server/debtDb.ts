@@ -1305,7 +1305,11 @@ export async function listDebtTarget(params: { section: SectionKey }) {
             periodMap = new Map<number, number>();
             overpaidByContractPeriod.set(key, periodMap);
           }
-          periodMap.set(period, (periodMap.get(period) ?? 0) + overpaid);
+          // Phase 85b fix: when priorIsPaid (TXRT-N closed prior period remainder),
+          // track at period-1 so carry-forward correctly applies overpaid at period N.
+          // (e.g. TXRT-2 closes period 1 remainder + overpaid 50 -> track at 1 -> apply at 2)
+          const trackPeriod = instIsPaid ? period : period - 1;
+          periodMap.set(trackPeriod, (periodMap.get(trackPeriod) ?? 0) + overpaid);
         }
       }
     }
@@ -2645,7 +2649,11 @@ export async function* listDebtTargetStream(params: {
             periodMap = new Map<number, number>();
             overpaidByContractPeriod.set(key, periodMap);
           }
-          periodMap.set(period, (periodMap.get(period) ?? 0) + overpaid);
+          // Phase 85b fix: when priorIsPaid (TXRT-N closed prior period remainder),
+          // track at period-1 so carry-forward correctly applies overpaid at period N.
+          // (e.g. TXRT-2 closes period 1 remainder + overpaid 50 -> track at 1 -> apply at 2)
+          const trackPeriod = instIsPaid ? period : period - 1;
+          periodMap.set(trackPeriod, (periodMap.get(trackPeriod) ?? 0) + overpaid);
         }
       }
     }
