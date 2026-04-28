@@ -970,4 +970,4 @@ Task list:
 - เงื่อนไข 2: งวดปัจจุบัน (isCurrentPeriod) → BG สีฟ้าเสมอ ยกเว้น isArrears (BG เหลือง) หรือ dimmed (BG เทา)
 - [x] P87-1: แก้ไข DebtReport.tsx — color logic ใหม่
 - [x] P87-2: แก้ไข DebtSummary.tsx — color logic ใหม่
-- [ ] P87-3: Commit + push GitHub + checkpoint
+- [x] P87-3: Commit + push GitHub + checkpoint
