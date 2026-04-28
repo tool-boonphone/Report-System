@@ -910,10 +910,20 @@ export async function listDebtTarget(params: { section: SectionKey }) {
   {
     // Load all payments: needed for (a) TXRTC close detection, (b) overpaid tracking,
     // (c) paidAts for bad-debt date derivation.
+    // Phase 78: include principal_paid, interest_paid, fee_paid, close_installment_amount, payment_id
+    // so that assignPayPeriods can be used to derive the correct installment period for each TXRT payment,
+    // replacing the receipt_no suffix parsing (which gives sequence number, not period number).
     const rawCloseData = await db.execute(sql`
       SELECT contract_external_id,
+             external_id AS payment_external_id,
              JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.receipt_no')) AS receipt_no,
              CAST(JSON_EXTRACT(raw_json, '$.overpaid_amount') AS DECIMAL(18,2)) AS overpaid_amount,
+             CAST(JSON_EXTRACT(raw_json, '$.principal_paid') AS DECIMAL(18,2)) AS principal_paid,
+             CAST(JSON_EXTRACT(raw_json, '$.interest_paid') AS DECIMAL(18,2)) AS interest_paid,
+             CAST(JSON_EXTRACT(raw_json, '$.fee_paid') AS DECIMAL(18,2)) AS fee_paid,
+             CAST(JSON_EXTRACT(raw_json, '$.close_installment_amount') AS DECIMAL(18,2)) AS close_installment_amount,
+             CAST(JSON_EXTRACT(raw_json, '$.bad_debt_amount') AS DECIMAL(18,2)) AS bad_debt_amount,
+             CAST(JSON_EXTRACT(raw_json, '$.payment_id') AS UNSIGNED) AS payment_id,
              CAST(amount AS DECIMAL(18,2)) AS total_paid_amount,
              paid_at
         FROM ${paymentTransactions}
@@ -922,9 +932,12 @@ export async function listDebtTarget(params: { section: SectionKey }) {
     `);
     const allPayRows: any[] = (rawCloseData as any)[0] ?? rawCloseData;
 
-    // Pass 1: collect paidAts, TXRTC close markers, and overpaid per period.
+    // Pass 1: collect paidAts, TXRTC close markers, and build per-contract payment lists
+    // for assignPayPeriods-based period derivation (Phase 78).
     const closeDatesByContract = new Map<string, Date[]>();
     // normalPeriodsByContractOuter and txrtTotalByContractPeriod are declared outside this block (Phase 67/68)
+    // Phase 78: group raw payment rows by contract for assignPayPeriods
+    const rawPaysByContract = new Map<string, PayRawRow[]>();
 
     for (const pr of allPayRows) {
       const key = String(pr.contract_external_id ?? "");
@@ -942,25 +955,85 @@ export async function listDebtTarget(params: { section: SectionKey }) {
           list.push(dt);
           closeDatesByContract.set(key, list);
         }
-      } else {
-        // Regular single-period payment: parse period using contract_no prefix strip (Phase 74)
-        const period = parseTxrtPeriod(receipt, key);
-        if (!Number.isFinite(period) || period <= 0) continue;
-        // Phase 67: use outer map directly (declared outside block)
-        const outerSet = normalPeriodsByContractOuter.get(key) ?? new Set<number>();
-        outerSet.add(period);
-        normalPeriodsByContractOuter.set(key, outerSet);
+      }
+      // Phase 78: collect all payments (TXRT + TXRTC) for assignPayPeriods
+      const payRow: PayRawRow = {
+        contract_external_id: key,
+        period: null,
+        paid_at: pr.paid_at ?? null,
+        total_paid_amount: pr.total_paid_amount != null ? Number(pr.total_paid_amount) : null,
+        principal_paid: pr.principal_paid != null ? Number(pr.principal_paid) : null,
+        interest_paid: pr.interest_paid != null ? Number(pr.interest_paid) : null,
+        fee_paid: pr.fee_paid != null ? Number(pr.fee_paid) : null,
+        penalty_paid: null,
+        unlock_fee_paid: null,
+        discount_amount: null,
+        overpaid_amount: pr.overpaid_amount != null ? Number(pr.overpaid_amount) : null,
+        close_installment_amount: pr.close_installment_amount != null ? Number(pr.close_installment_amount) : null,
+        bad_debt_amount: pr.bad_debt_amount != null ? Number(pr.bad_debt_amount) : null,
+        receipt_no: pr.receipt_no ?? null,
+        remark: null,
+        payment_id: pr.payment_id != null ? Number(pr.payment_id) : null,
+      };
+      const arr2 = rawPaysByContract.get(key) ?? [];
+      arr2.push(payRow);
+      rawPaysByContract.set(key, arr2);
+    }
 
-        // Phase 68: track total_paid_amount per TXRT suffix (to detect device sale payments)
-        const totalPaidForPeriod = Number(pr.total_paid_amount ?? 0);
+    // Phase 78: For each contract that has TXRTC (สิ้นสุดสัญญา), use assignPayPeriods
+    // to derive the correct installment period for each TXRT-N payment.
+    // This replaces parseTxrtPeriod suffix parsing which gives sequence number, not period number.
+    //
+    // Phase 78 fix: build baseline map (installment_amount per contract) BEFORE the loop
+    // so we can use it as fallback when installment.amount=0 (isClosed periods).
+    // Without this, assignPayPeriods cursor stalls on amount=0 rows and assigns
+    // subsequent TXRT payments to the wrong period, causing maxNormalPeriod to be too low.
+    const baselineByKeyPhase78 = new Map<string, number>();
+    for (const cr of cRows) {
+      const k = String(cr.external_id ?? "");
+      if (k && cr.installment_amount != null) {
+        baselineByKeyPhase78.set(k, Number(cr.installment_amount));
+      }
+    }
+
+    for (const key of Array.from(closeDatesByContract.keys())) {
+      const instList = instByContract.get(key) ?? [];
+      if (!instList.length) continue;
+      const contractNo = contractNoByExtId.get(key) ?? null;
+      const rawPays = rawPaysByContract.get(key) ?? [];
+      // Only process real payments (numeric external_id or TXRT receipt pattern)
+      const realPays = rawPays.filter((p) => {
+        const payExtId = String((p as any).payment_external_id ?? "");
+        const receiptNo = p.receipt_no ?? "";
+        return /^\d+$/.test(payExtId) || /^TXRT.*-\d+$/.test(receiptNo);
+      });
+      // Phase 78 fix: use installment_amount as fallback when amount=0 (isClosed periods)
+      // so assignPayPeriods cursor can advance past closed installments correctly.
+      const baselineAmt78 = baselineByKeyPhase78.get(key) ?? 0;
+      const assigned = assignPayPeriods(
+        realPays,
+        instList.map((i) => {
+          const amt = Number(i.amount ?? 0);
+          return { period: i.period, amount: amt > 0 ? amt : baselineAmt78 };
+        }),
+        contractNo,
+      );
+      // Build normalPeriodsByContractOuter from assignPayPeriods output (TXRT-N only, not TXRTC)
+      const outerSet = new Set<number>();
+      for (const ap of assigned) {
+        if (ap.isCloseRow || ap.isBadDebtRow) continue;
+        const period = ap.period;
+        if (period == null || period <= 0) continue;
+        outerSet.add(period);
+        // Phase 68: track total_paid_amount per period (for device sale detection)
+        const totalPaidForPeriod = Number(ap.total_paid_amount ?? 0);
         if (totalPaidForPeriod > 0) {
           let tMap = txrtTotalByContractPeriod.get(key);
           if (!tMap) { tMap = new Map<number, number>(); txrtTotalByContractPeriod.set(key, tMap); }
           tMap.set(period, (tMap.get(period) ?? 0) + totalPaidForPeriod);
         }
-
         // Track overpaid amount for this period
-        const overpaid = Number(pr.overpaid_amount ?? 0);
+        const overpaid = Number(ap.overpaid_amount ?? 0);
         if (overpaid > 0) {
           let periodMap = overpaidByContractPeriod.get(key);
           if (!periodMap) {
@@ -969,6 +1042,41 @@ export async function listDebtTarget(params: { section: SectionKey }) {
           }
           periodMap.set(period, (periodMap.get(period) ?? 0) + overpaid);
         }
+      }
+      if (outerSet.size > 0) normalPeriodsByContractOuter.set(key, outerSet);
+    }
+
+    // Phase 78 fallback: For contracts WITHOUT TXRTC (not in closeDatesByContract),
+    // still populate normalPeriodsByContractOuter for bad-debt suspendedFromPeriod (Phase 67/68).
+    // These contracts use parseTxrtPeriod (sequence number = period for non-TXRTC contracts).
+    for (const pr of allPayRows) {
+      const key = String(pr.contract_external_id ?? "");
+      if (!key) continue;
+      // Skip contracts already processed by assignPayPeriods above
+      if (closeDatesByContract.has(key)) continue;
+      const receipt = String(pr.receipt_no ?? "");
+      if (receipt.startsWith("TXRTC")) continue;
+      const period = parseTxrtPeriod(receipt, key);
+      if (!Number.isFinite(period) || period <= 0) continue;
+      const outerSet = normalPeriodsByContractOuter.get(key) ?? new Set<number>();
+      outerSet.add(period);
+      normalPeriodsByContractOuter.set(key, outerSet);
+      // Phase 68: track total_paid_amount per TXRT suffix
+      const totalPaidForPeriod = Number(pr.total_paid_amount ?? 0);
+      if (totalPaidForPeriod > 0) {
+        let tMap = txrtTotalByContractPeriod.get(key);
+        if (!tMap) { tMap = new Map<number, number>(); txrtTotalByContractPeriod.set(key, tMap); }
+        tMap.set(period, (tMap.get(period) ?? 0) + totalPaidForPeriod);
+      }
+      // Track overpaid amount for this period
+      const overpaid = Number(pr.overpaid_amount ?? 0);
+      if (overpaid > 0) {
+        let periodMap = overpaidByContractPeriod.get(key);
+        if (!periodMap) {
+          periodMap = new Map<number, number>();
+          overpaidByContractPeriod.set(key, periodMap);
+        }
+        periodMap.set(period, (periodMap.get(period) ?? 0) + overpaid);
       }
     }
 
@@ -1413,13 +1521,21 @@ export async function listDebtTarget(params: { section: SectionKey }) {
             // the API did NOT reduce the next period's amount, so we must apply overpaidApplied
             // to show the correct reduced baseline. Example: period 2 baseline=1990, overpaid
             // carry from period 1=1010 → display 980 (not 1990).
-            if (paidInFullButZeroedByApi && overpaidApplied > 0.009) {
+            //
+            // Phase 9AG fix: When overpaidApplied >= baseline (the entire period was covered
+            // by overpaid carry from a previous payment), do NOT reduce amount to 0.
+            // This happens when a single TXRT payment covers multiple periods (e.g. TXRT-1
+            // pays 2×baseline). The overpaid pool fully covers this period, so we should
+            // still display the full baseline so the collections team sees the monthly target.
+            if (paidInFullButZeroedByApi && overpaidApplied > 0.009 && overpaidApplied < baseline - 0.5) {
               // Phase 48: Apply carry in order: interest → fee → principal
               principal = Math.round(effectivePrincipal);
               interest  = Math.round(effectiveInterest);
               fee       = Math.round(effectiveFee);
               amount    = principal + interest + fee;
             }
+            // else: overpaidApplied >= baseline (full period covered by carry) OR overpaidApplied=0
+            // → keep amount = baseline (already set above at line 1519)
           } else {
             // Use API amount as source of truth (it already includes penalty+unlockFee)
             // Derive principal/interest/fee from formula scaled to fit (amount - penalty - unlockFee)
@@ -1482,6 +1598,15 @@ export async function listDebtTarget(params: { section: SectionKey }) {
           isArrears: (r as any)._hasArrears === true,
           // isCurrentPeriod: will be set to true for the current period in the arrears pass below
           isCurrentPeriod: false,
+          // isPaid: true when this period has been fully paid (principal reduced to 0).
+          // Conditions:
+          //   1. API sent amount=0 and paid>0 (API zeroed because fully paid)
+          //   2. paid >= rawAmount (paid amount covers the API amount)
+          // Note: isClosed periods are NOT isPaid — they use grey styling, not green.
+          isPaid: !isClosed && !isSuspended && (
+            (rawAmount <= 0.009 && paid > 0.009) ||
+            (rawAmount > 0.009 && paid >= rawAmount - 0.5)
+          ),
         };
       })
       .sort((a, b) => (a.period ?? 0) - (b.period ?? 0));
@@ -2075,10 +2200,19 @@ export async function* listDebtTargetStream(params: {
   }
 
   {
+    // Phase 78 (stream): same as listDebtTarget — use assignPayPeriods to derive correct period
+    // instead of parseTxrtPeriodStream suffix parsing.
     const rawCloseData = await db.execute(sql`
       SELECT contract_external_id,
+             external_id AS payment_external_id,
              JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.receipt_no')) AS receipt_no,
              CAST(JSON_EXTRACT(raw_json, '$.overpaid_amount') AS DECIMAL(18,2)) AS overpaid_amount,
+             CAST(JSON_EXTRACT(raw_json, '$.principal_paid') AS DECIMAL(18,2)) AS principal_paid,
+             CAST(JSON_EXTRACT(raw_json, '$.interest_paid') AS DECIMAL(18,2)) AS interest_paid,
+             CAST(JSON_EXTRACT(raw_json, '$.fee_paid') AS DECIMAL(18,2)) AS fee_paid,
+             CAST(JSON_EXTRACT(raw_json, '$.close_installment_amount') AS DECIMAL(18,2)) AS close_installment_amount,
+             CAST(JSON_EXTRACT(raw_json, '$.bad_debt_amount') AS DECIMAL(18,2)) AS bad_debt_amount,
+             CAST(JSON_EXTRACT(raw_json, '$.payment_id') AS UNSIGNED) AS payment_id,
              CAST(amount AS DECIMAL(18,2)) AS total_paid_amount,
              paid_at
         FROM ${paymentTransactions}
@@ -2087,6 +2221,8 @@ export async function* listDebtTargetStream(params: {
     `);
     const allPayRows: any[] = (rawCloseData as any)[0] ?? rawCloseData;
     const closeDatesByContract = new Map<string, Date[]>();
+    // Phase 78: group raw payment rows by contract for assignPayPeriods
+    const rawPaysByContractStream = new Map<string, PayRawRow[]>();
 
     for (const pr of allPayRows) {
       const key = String(pr.contract_external_id ?? "");
@@ -2104,21 +2240,74 @@ export async function* listDebtTargetStream(params: {
           list.push(dt);
           closeDatesByContract.set(key, list);
         }
-      } else {
-        // Phase 74: parse period using contract_no prefix strip
-        const period = parseTxrtPeriodStream(receipt, key);
-        if (!Number.isFinite(period) || period <= 0) continue;
-        const set = normalPeriodsByContract.get(key) ?? new Set<number>();
-        set.add(period);
-        normalPeriodsByContract.set(key, set);
-        // Phase 68: track total_paid_amount per TXRT suffix
-        const totalPaidForPeriod = Number(pr.total_paid_amount ?? 0);
+      }
+      // Phase 78: collect all payments for assignPayPeriods
+      const payRow: PayRawRow = {
+        contract_external_id: key,
+        period: null,
+        paid_at: pr.paid_at ?? null,
+        total_paid_amount: pr.total_paid_amount != null ? Number(pr.total_paid_amount) : null,
+        principal_paid: pr.principal_paid != null ? Number(pr.principal_paid) : null,
+        interest_paid: pr.interest_paid != null ? Number(pr.interest_paid) : null,
+        fee_paid: pr.fee_paid != null ? Number(pr.fee_paid) : null,
+        penalty_paid: null,
+        unlock_fee_paid: null,
+        discount_amount: null,
+        overpaid_amount: pr.overpaid_amount != null ? Number(pr.overpaid_amount) : null,
+        close_installment_amount: pr.close_installment_amount != null ? Number(pr.close_installment_amount) : null,
+        bad_debt_amount: pr.bad_debt_amount != null ? Number(pr.bad_debt_amount) : null,
+        receipt_no: pr.receipt_no ?? null,
+        remark: null,
+        payment_id: pr.payment_id != null ? Number(pr.payment_id) : null,
+      };
+      const arr2 = rawPaysByContractStream.get(key) ?? [];
+      arr2.push(payRow);
+      rawPaysByContractStream.set(key, arr2);
+    }
+
+    // Phase 78: For each contract with TXRTC (สิ้นสุดสัญญา), use assignPayPeriods
+    // Phase 78 fix: build baseline map for fallback when installment.amount=0 (isClosed periods)
+    const baselineByKeyPhase78Stream = new Map<string, number>();
+    for (const cr of cRows) {
+      const k = String(cr.external_id ?? "");
+      if (k && cr.installment_amount != null) {
+        baselineByKeyPhase78Stream.set(k, Number(cr.installment_amount));
+      }
+    }
+
+    for (const key of Array.from(closeDatesByContract.keys())) {
+      const instList = instByContract.get(key) ?? [];
+      if (!instList.length) continue;
+      const contractNo = contractNoByExtIdStream.get(key) ?? null;
+      const rawPays = rawPaysByContractStream.get(key) ?? [];
+      const realPays = rawPays.filter((p) => {
+        const payExtId = String((p as any).payment_external_id ?? "");
+        const receiptNo = p.receipt_no ?? "";
+        return /^\d+$/.test(payExtId) || /^TXRT.*-\d+$/.test(receiptNo);
+      });
+      // Phase 78 fix: use installment_amount as fallback when amount=0 (isClosed periods)
+      const baselineAmt78Stream = baselineByKeyPhase78Stream.get(key) ?? 0;
+      const assigned = assignPayPeriods(
+        realPays,
+        instList.map((i) => {
+          const amt = Number(i.amount ?? 0);
+          return { period: i.period, amount: amt > 0 ? amt : baselineAmt78Stream };
+        }),
+        contractNo,
+      );
+      const periodSet = new Set<number>();
+      for (const ap of assigned) {
+        if (ap.isCloseRow || ap.isBadDebtRow) continue;
+        const period = ap.period;
+        if (period == null || period <= 0) continue;
+        periodSet.add(period);
+        const totalPaidForPeriod = Number(ap.total_paid_amount ?? 0);
         if (totalPaidForPeriod > 0) {
           let tMap = txrtTotalByContractPeriodStream.get(key);
           if (!tMap) { tMap = new Map<number, number>(); txrtTotalByContractPeriodStream.set(key, tMap); }
           tMap.set(period, (tMap.get(period) ?? 0) + totalPaidForPeriod);
         }
-        const overpaid = Number(pr.overpaid_amount ?? 0);
+        const overpaid = Number(ap.overpaid_amount ?? 0);
         if (overpaid > 0) {
           let periodMap = overpaidByContractPeriod.get(key);
           if (!periodMap) {
@@ -2127,6 +2316,36 @@ export async function* listDebtTargetStream(params: {
           }
           periodMap.set(period, (periodMap.get(period) ?? 0) + overpaid);
         }
+      }
+      if (periodSet.size > 0) normalPeriodsByContract.set(key, periodSet);
+    }
+
+    // Phase 78 fallback: contracts WITHOUT TXRTC — use parseTxrtPeriodStream for bad-debt logic
+    for (const pr of allPayRows) {
+      const key = String(pr.contract_external_id ?? "");
+      if (!key) continue;
+      if (closeDatesByContract.has(key)) continue; // already processed by assignPayPeriods
+      const receipt = String(pr.receipt_no ?? "");
+      if (receipt.startsWith("TXRTC")) continue;
+      const period = parseTxrtPeriodStream(receipt, key);
+      if (!Number.isFinite(period) || period <= 0) continue;
+      const set = normalPeriodsByContract.get(key) ?? new Set<number>();
+      set.add(period);
+      normalPeriodsByContract.set(key, set);
+      const totalPaidForPeriod = Number(pr.total_paid_amount ?? 0);
+      if (totalPaidForPeriod > 0) {
+        let tMap = txrtTotalByContractPeriodStream.get(key);
+        if (!tMap) { tMap = new Map<number, number>(); txrtTotalByContractPeriodStream.set(key, tMap); }
+        tMap.set(period, (tMap.get(period) ?? 0) + totalPaidForPeriod);
+      }
+      const overpaid = Number(pr.overpaid_amount ?? 0);
+      if (overpaid > 0) {
+        let periodMap = overpaidByContractPeriod.get(key);
+        if (!periodMap) {
+          periodMap = new Map<number, number>();
+          overpaidByContractPeriod.set(key, periodMap);
+        }
+        periodMap.set(period, (periodMap.get(period) ?? 0) + overpaid);
       }
     }
 

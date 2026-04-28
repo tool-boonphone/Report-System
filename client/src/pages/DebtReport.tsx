@@ -158,6 +158,8 @@ type InstallmentCell = {
   isCurrentPeriod?: boolean;
   /** Phase 9AH: principal+interest+fee only (no penalty/unlockFee). Used for principalOnly display. */
   netAmount?: number;
+  /** True when this period has been fully paid (principal reduced to 0). Used for green text styling. */
+  isPaid?: boolean;
 };
 
 type PaymentCell = {
@@ -1771,6 +1773,11 @@ export default function DebtReport() {
                             const todayStr = new Date().toISOString().slice(0, 10);
                             const isFuturePeriod = !dimmed && !isArrears && !isCurrentPeriod &&
                               !!inst?.dueDate && inst.dueDate > todayStr;
+                            // isPaid: งวดที่ชำระครบแล้ว → ตัวหนังสือสีเขียว
+                            const isPaid = !dimmed && !!inst?.isPaid;
+                            // isOverdue: เลยดิวแล้ว ยังไม่ชำระ ไม่ใช่ isCurrentPeriod → ตัวหนังสือสีส้ม
+                            const isOverdue = !dimmed && !isPaid && !isCurrentPeriod && !isArrears &&
+                              !!inst?.dueDate && inst.dueDate <= todayStr && inst.dueDate !== '';
                             const baseStyle: Record<string, string | number> = {
                               width: gc.width,
                               textAlign:
@@ -1782,12 +1789,18 @@ export default function DebtReport() {
                               baseStyle.background = "#f3f4f6"; // gray-100
                               baseStyle.color = "#9ca3af"; // gray-400
                               baseStyle.fontStyle = "italic";
+                            } else if (isPaid) {
+                              // งวดที่ชำระครบแล้ว: ตัวหนังสือสีเขียว
+                              baseStyle.color = "#15803d"; // green-700
                             } else if (isArrears) {
                               // Arrears carry: amber-100 bg + amber-800 bold text
                               // to signal "this amount includes unpaid from prior periods"
                               baseStyle.background = "#fef3c7"; // amber-100
                               baseStyle.color = "#92400e"; // amber-800
                               baseStyle.fontWeight = "700";
+                            } else if (isOverdue) {
+                              // งวดค้างชำระ (เลยดิวแล้ว ยังไม่จ่าย): ตัวหนังสือสีส้ม
+                              baseStyle.color = "#c2410c"; // orange-700
                             } else if (isCurrentPeriod) {
                               // Current period: sky-50 BG to make it easy to spot
                               // without needing to read the due date column.
