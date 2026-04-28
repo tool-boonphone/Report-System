@@ -794,6 +794,10 @@ function deriveDebtStatus(
     // Skip payment-record rows (amount=0) — these are payment receipts, not installment schedules.
     // Only real installment rows (amount > 0) should be considered for overdue calculation.
     if (amt <= 0.001) continue;
+    // If paid_amount >= amount, the installment is fully paid regardless of what balance says.
+    // This handles cases where the API returns a stale balance (before payment was applied)
+    // but paid_amount has already been summed correctly via dedup logic.
+    if (paid >= amt - 0.001) continue;
     // Prefer balance from raw_json (API-computed, already accounts for discounts/partial payments).
     // Fall back to amount - paid_amount when balance is not available.
     const outstanding = (it.balance !== null && it.balance !== undefined)
