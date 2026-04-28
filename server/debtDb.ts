@@ -2982,7 +2982,11 @@ export async function* listDebtCollectedStream(params: {
       for (const row of list) {
         const p = row.period;
         const rowPaid = row.paid_amount != null ? Number(row.paid_amount) : 0;
-        const rowBalance = row.balance != null ? Number(row.balance) : null;
+        // Only use balance from real installment rows (amount > 0).
+        // Payment-record rows (amount=0) have balance=null which should NOT override
+        // the real installment's balance — doing so causes debtStatus to show overdue
+        // even when the installment is fully paid.
+        const rowBalance = (row.balance != null && row.amount > 0.001) ? Number(row.balance) : null;
         const existing = byPeriod.get(p);
         if (!existing) {
           byPeriod.set(p, { base: row, totalPaid: rowPaid, minBalance: rowBalance });
