@@ -377,7 +377,77 @@ export function assignPayPeriods(
       useSuffixPeriod = true; // will be applied selectively in Phase 75B
     } else {
       // No N-M format: use suffix-based period only when all N-only suffixes are unique
-      useSuffixPeriod = Array.from(suffixCounts.values()).every((c) => c === 1);
+      const allUnique = Array.from(suffixCounts.values()).every((c) => c === 1);
+      if (allUnique && suffixCounts.size > 0) {
+        // Phase 79B: Validate that TXRT suffixes actually match the amount-based period walk.
+        // If any suffix mismatches the amount-based cursor position, the suffix is a
+        // receipt sequence number (not a period number) — fall back to amount-based walk.
+        // This handles split-payment contracts where TXRT-2 and TXRT-3 both cover period 2
+        // (TXRT-2 pays partial, TXRT-3 pays the remainder), causing suffix 3 ≠ period 2.
+        const prefix79b = "TXRT" + contractNo.replace(/^CT/, "") + "-";
+        const txrtNOnly = payments
+          .filter((p) => {
+            const r = String(p.receipt_no ?? "");
+            if (!r.startsWith(prefix79b) || r.startsWith("TXRTC")) return false;
+            const suffix = r.slice(prefix79b.length);
+            const parts = suffix.split("-");
+            return parts.length === 1 && /^\d+$/.test(parts[0]);
+          })
+          .sort((a, b) => {
+            const getSuffix = (r: string) => parseInt(r.slice(prefix79b.length), 10);
+            return getSuffix(String(a.receipt_no ?? "")) - getSuffix(String(b.receipt_no ?? ""));
+          });
+        // Simulate amount-based cursor walk to get expected period for each TXRT.
+        // IMPORTANT: deduplicate installmentList by period first (take max amount per period)
+        // because the DB may return 2 rows per period (paid-row + due-row split).
+        // Using the raw list would cause the cursor to advance twice per period.
+        const scheduleCheck79b: Array<{ period: number; amount: number }> = [];
+        {
+          const periodAmtMap = new Map<number, number>();
+          for (const i of installmentList) {
+            if (i.period == null) continue;
+            const p = i.period as number;
+            const a = Number(i.amount) || 0;
+            periodAmtMap.set(p, Math.max(periodAmtMap.get(p) ?? 0, a));
+          }
+          for (const [p, a] of Array.from(periodAmtMap.entries()).sort((x, y) => x[0] - y[0])) {
+            scheduleCheck79b.push({ period: p, amount: a });
+          }
+        }
+        let cursorCheck = 0;
+        let coveredCheck = 0;
+        let suffixMatchesPeriod = true;
+        for (const tp of txrtNOnly) {
+          const r = String(tp.receipt_no ?? "");
+          const suffix79b = r.slice(prefix79b.length);
+          const suffixNum = parseInt(suffix79b, 10);
+          const expectedPeriod = scheduleCheck79b[cursorCheck]?.period ?? null;
+          if (expectedPeriod !== suffixNum) {
+            suffixMatchesPeriod = false;
+            break;
+          }
+          // Advance cursor using close_installment_amount (same as Phase 77)
+          const closeAmt79b = Number(tp.close_installment_amount ?? 0);
+          const pif79b =
+            Number(tp.principal_paid ?? 0) +
+            Number(tp.interest_paid ?? 0) +
+            Number(tp.fee_paid ?? 0);
+          const consumed79b = closeAmt79b > 0 ? closeAmt79b : pif79b > 0 ? pif79b : Number(tp.total_paid_amount ?? 0);
+          coveredCheck += consumed79b;
+          while (
+            cursorCheck < scheduleCheck79b.length - 1 &&
+            scheduleCheck79b[cursorCheck].amount > 0 &&
+            coveredCheck >= scheduleCheck79b[cursorCheck].amount - 0.5
+          ) {
+            coveredCheck -= scheduleCheck79b[cursorCheck].amount;
+            cursorCheck += 1;
+          }
+          if (coveredCheck < 0) coveredCheck = 0;
+        }
+        useSuffixPeriod = suffixMatchesPeriod;
+      } else {
+        useSuffixPeriod = allUnique;
+      }
     }
   }
 
@@ -1019,11 +1089,37 @@ export async function listDebtTarget(params: { section: SectionKey }) {
         contractNo,
       );
       // Build normalPeriodsByContractOuter from assignPayPeriods output (TXRT-N only, not TXRTC)
+      // Phase 79: Exclude TXRT payments that did NOT actually close any installment principal.
+      // A TXRT receipt with close_installment_amount=0 AND principal_paid=0 AND interest_paid=0
+      // is a zero-value or partial-fee-only payment that should NOT count as a "normal period"
+      // for maxNormalPeriod calculation. Including it inflates maxNormalPeriod and causes
+      // subsequent periods to be shown as normal instead of "ปิดค่างวดแล้ว".
       const outerSet = new Set<number>();
       for (const ap of assigned) {
         if (ap.isCloseRow || ap.isBadDebtRow) continue;
         const period = ap.period;
         if (period == null || period <= 0) continue;
+        // Phase 79: skip TXRT rows that did NOT actually close any installment principal.
+        // close_installment_amount is the authoritative field from the source system indicating
+        // how much of the current installment was closed by this payment.
+        // When close_installment_amount = 0, the payment did not close any installment period
+        // (e.g. TXRT-5 with 550 baht that has close_installment_amount=0, principal_paid=0,
+        // interest_paid=0 — it's a partial fee payment that doesn't advance the period cursor).
+        // Such rows must NOT be counted as normalPeriods, otherwise maxNormalPeriod is inflated
+        // and subsequent periods are shown as normal instead of "ปิดค่างวดแล้ว".
+        //
+        // Exception: when close_installment_amount is null (field not present in raw_json),
+        // fall back to principal_paid > 0 as the indicator. This handles older payment records
+        // that may not have the close_installment_amount field populated.
+        const closeAmt79 = ap.close_installment_amount;
+        const principalPaid79 = Number(ap.principal_paid ?? 0);
+        if (closeAmt79 !== null) {
+          // close_installment_amount is present: use it as authoritative indicator
+          if (Number(closeAmt79) === 0) continue;
+        } else {
+          // close_installment_amount is absent: fall back to principal_paid
+          if (principalPaid79 === 0) continue;
+        }
         outerSet.add(period);
         // Phase 68: track total_paid_amount per period (for device sale detection)
         const totalPaidForPeriod = Number(ap.total_paid_amount ?? 0);
