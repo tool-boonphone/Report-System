@@ -656,31 +656,26 @@ export type PayRawRow = {
  */
 function dedupInstByPeriod(list: InstRawRow[]): InstRawRow[] {
   if (list.length === 0) return list;
-  // Accumulate: base row = highest amount; totalPaid = sum of all paid_amounts
-  const byPeriod = new Map<number | null, { base: InstRawRow; totalPaid: number }>();
+  // Strategy: keep the row with the highest amount as the base (most complete metadata).
+  // Use ONLY that row's paid_amount — do NOT sum across rows because payment-record rows
+  // (amount=0 or lower) carry the same paid_amount as the real installment row, causing
+  // double-counting (e.g. period 2: real row paid=1500, payment-record row paid=1500 → sum=3000).
+  const byPeriod = new Map<number | null, InstRawRow>();
   for (const row of list) {
     const p = row.period;
     const rowAmt = Number(row.amount ?? 0);
-    const rowPaid = Number(row.paid_amount ?? 0);
     const existing = byPeriod.get(p);
     if (!existing) {
-      byPeriod.set(p, { base: row, totalPaid: rowPaid });
+      byPeriod.set(p, row);
     } else {
-      // Accumulate paid_amount across all rows for this period
-      existing.totalPaid += rowPaid;
-      // Keep the row with the larger amount as the base (more complete metadata)
-      if (rowAmt > Number(existing.base.amount ?? 0)) {
-        existing.base = row;
+      // Keep the row with the larger amount as the base (more complete metadata + correct paid_amount)
+      if (rowAmt > Number(existing.amount ?? 0)) {
+        byPeriod.set(p, row);
       }
     }
   }
-  // Build merged rows: base metadata + summed paid_amount
-  const merged: InstRawRow[] = Array.from(byPeriod.values()).map(({ base, totalPaid }) => ({
-    ...base,
-    paid_amount: totalPaid,
-  }));
   // Return sorted by period ascending
-  return merged.sort((a, b) => (a.period ?? 0) - (b.period ?? 0));
+  return Array.from(byPeriod.values()).sort((a, b) => (a.period ?? 0) - (b.period ?? 0));
 }
 
 /**
