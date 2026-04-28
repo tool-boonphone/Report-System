@@ -570,30 +570,45 @@ export type PayRawRow = {
 };
 
 /**
- * Deduplicate installments per period — keep the row with the most data.
+ * Deduplicate installments per period — merge all rows for the same period.
  *
- * DB may have 2 rows per (contract_external_id, period) when the API returns
- * duplicate installment_ids or when the sync upsert key collides.
- * Strategy: for each period, keep the row that has the largest `amount` value
- * (or the first row if amounts are equal). This is idempotent and safe.
+ * DB may have 2 rows per (contract_external_id, period) when the Boonphone API
+ * returns a split representation:
+ *   Row A (paid row):   amount=0,    paid_amount=X  (records the payment)
+ *   Row B (due row):    amount=X,    paid_amount=0  (records the scheduled amount)
+ *
+ * Strategy: for each period, use the row with the LARGEST amount as the base
+ * (for amount, due_date, principal_due, etc.), then SET paid_amount = SUM of
+ * paid_amount across ALL rows for that period. This correctly reflects that the
+ * installment has been paid even when the API splits the data across two rows.
  */
 function dedupInstByPeriod(list: InstRawRow[]): InstRawRow[] {
   if (list.length === 0) return list;
-  const byPeriod = new Map<number | null, InstRawRow>();
+  // Accumulate: base row = highest amount; totalPaid = sum of all paid_amounts
+  const byPeriod = new Map<number | null, { base: InstRawRow; totalPaid: number }>();
   for (const row of list) {
     const p = row.period;
+    const rowAmt = Number(row.amount ?? 0);
+    const rowPaid = Number(row.paid_amount ?? 0);
     const existing = byPeriod.get(p);
     if (!existing) {
-      byPeriod.set(p, row);
+      byPeriod.set(p, { base: row, totalPaid: rowPaid });
     } else {
-      // Keep row with larger amount (more complete data)
-      const existingAmt = Number(existing.amount ?? 0);
-      const rowAmt = Number(row.amount ?? 0);
-      if (rowAmt > existingAmt) byPeriod.set(p, row);
+      // Accumulate paid_amount across all rows for this period
+      existing.totalPaid += rowPaid;
+      // Keep the row with the larger amount as the base (more complete metadata)
+      if (rowAmt > Number(existing.base.amount ?? 0)) {
+        existing.base = row;
+      }
     }
   }
+  // Build merged rows: base metadata + summed paid_amount
+  const merged: InstRawRow[] = Array.from(byPeriod.values()).map(({ base, totalPaid }) => ({
+    ...base,
+    paid_amount: totalPaid,
+  }));
   // Return sorted by period ascending
-  return Array.from(byPeriod.values()).sort((a, b) => (a.period ?? 0) - (b.period ?? 0));
+  return merged.sort((a, b) => (a.period ?? 0) - (b.period ?? 0));
 }
 
 /**
@@ -2567,13 +2582,21 @@ export async function* listDebtCollectedStream(params: {
     // Dedup per period (DB may have 2 rows per period)
     const instByContract = new Map<string, Array<{ period: number | null; amount: number; due_date: string | null; paid_amount: number | null; status: string | null }>>();
     for (const [key, list] of Array.from(instByContractRaw.entries())) {
-      const byPeriod = new Map<number | null, { period: number | null; amount: number; due_date: string | null; paid_amount: number | null; status: string | null }>();
+      // Merge: base = row with highest amount; totalPaid = SUM of all paid_amounts per period
+      // (Boonphone API splits paid/due into 2 rows: amount=0/paid=X and amount=X/paid=0)
+      const byPeriod = new Map<number | null, { base: { period: number | null; amount: number; due_date: string | null; paid_amount: number | null; status: string | null }; totalPaid: number }>();
       for (const row of list) {
         const p = row.period;
+        const rowPaid = row.paid_amount != null ? Number(row.paid_amount) : 0;
         const existing = byPeriod.get(p);
-        if (!existing || row.amount > existing.amount) byPeriod.set(p, row);
+        if (!existing) {
+          byPeriod.set(p, { base: row, totalPaid: rowPaid });
+        } else {
+          existing.totalPaid += rowPaid;
+          if (row.amount > existing.base.amount) existing.base = row;
+        }
       }
-      instByContract.set(key, Array.from(byPeriod.values()).sort((a, b) => (a.period ?? 0) - (b.period ?? 0)));
+      instByContract.set(key, Array.from(byPeriod.values()).map(({ base, totalPaid }) => ({ ...base, paid_amount: totalPaid })).sort((a, b) => (a.period ?? 0) - (b.period ?? 0)));
     }
     // Fix out-of-order due_dates (Boonphone API bug) — same correction as listDebtTargetStream.
     // Without this, deriveDebtStatus receives wrong due_dates → wrong daysOverdue → wrong debtStatus label.
