@@ -1816,10 +1816,12 @@ export default function DebtReport() {
                               // งวดอนาคตที่ยังไม่จ่าย: เทา
                               baseStyle.color = "#9ca3af"; // gray-400
                             } else if (isPaid) {
-                              // งวดปัจจุบัน/ก่อนหน้าที่ชำระครบแล้ว: เขียว
+                              // งวดปัจจุบัน/ก่อนหน้าที่ชำระครบแล้ว: เขียว (ถ้าเป็นงวดปัจจุบันให้เพิ่ม BG ฟ้า)
+                              if (isCurrentPeriod) baseStyle.background = "#f0f9ff"; // sky-50
                               baseStyle.color = "#15803d"; // green-700
                             } else if (isPartialPaid) {
-                              // งวดปัจจุบัน/ก่อนหน้าที่จ่ายบางส่วน: ส้ม
+                              // งวดปัจจุบัน/ก่อนหน้าที่จ่ายบางส่วน: ส้ม (ถ้าเป็นงวดปัจจุบันให้เพิ่ม BG ฟ้า)
+                              if (isCurrentPeriod) baseStyle.background = "#f0f9ff"; // sky-50
                               baseStyle.color = "#c2410c"; // orange-700
                             } else if (isCurrentPeriod) {
                               // งวดปัจจุบัน ยังไม่จ่าย: sky-50 bg + ดำ
