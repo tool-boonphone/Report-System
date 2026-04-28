@@ -656,30 +656,51 @@ export type PayRawRow = {
  */
 function dedupInstByPeriod(list: InstRawRow[]): InstRawRow[] {
   if (list.length === 0) return list;
-  // Strategy: keep the row with the highest amount as the base (most complete metadata).
-  // Use ONLY that row's paid_amount — do NOT sum across rows because payment-record rows
-  // (amount=0 or lower) carry the same paid_amount as the real installment row, causing
-  // double-counting (e.g. period 2: real row paid=1500, payment-record row paid=1500 → sum=3000).
-  const byPeriod = new Map<number | null, InstRawRow>();
+  // Strategy:
+  // - Base row = row with the LARGEST amount (most complete metadata + correct paid_amount)
+  // - due_date = EARLIEST due_date across all rows for this period
+  //   (API sometimes sends a wrong future due_date in the base row while the
+  //    payment-record row carries the correct earlier date)
+  const byPeriod = new Map<number | null, { base: InstRawRow; minDueDate: Date | null; maxPaid: number }>();
   for (const row of list) {
     const p = row.period;
     const rowAmt = Number(row.amount ?? 0);
+    const rowPaid = Number(row.paid_amount ?? 0);
+    const rowDue = row.due_date ? new Date(row.due_date) : null;
     const existing = byPeriod.get(p);
     if (!existing) {
-      byPeriod.set(p, row);
+      byPeriod.set(p, { base: row, minDueDate: rowDue, maxPaid: rowPaid });
     } else {
-      // Keep the row with the larger amount as the base (more complete metadata + correct paid_amount)
-      if (rowAmt > Number(existing.amount ?? 0)) {
-        byPeriod.set(p, row);
+      // Keep the row with the larger amount as the base;
+      // if amounts are equal, prefer the row with higher paid_amount (more up-to-date)
+      const existAmt = Number(existing.base.amount ?? 0);
+      const existPaid = Number(existing.base.paid_amount ?? 0);
+      if (rowAmt > existAmt || (rowAmt === existAmt && rowPaid > existPaid)) {
+        existing.base = row;
+      }
+      // Track the earliest due_date across all rows for this period
+      if (rowDue && (!existing.minDueDate || rowDue < existing.minDueDate)) {
+        existing.minDueDate = rowDue;
+      }
+      // Track max paid_amount across all rows (payment-record rows may carry the actual paid amount
+      // while the base installment row shows paid=0 due to API inconsistency)
+      if (rowPaid > existing.maxPaid) {
+        existing.maxPaid = rowPaid;
       }
     }
   }
+  // Build merged rows: base metadata + earliest due_date + max paid_amount
+  const merged: InstRawRow[] = Array.from(byPeriod.values()).map(({ base, minDueDate, maxPaid }) => ({
+    ...base,
+    due_date: minDueDate ? minDueDate.toISOString().slice(0, 10) : base.due_date,
+    paid_amount: maxPaid,
+  }));
   // Return sorted by period ascending
-  return Array.from(byPeriod.values()).sort((a, b) => (a.period ?? 0) - (b.period ?? 0));
+  return merged.sort((a, b) => (a.period ?? 0) - (b.period ?? 0));
 }
 
 /**
- * Fix installments whose due_date is out-of-order relative to adjacent periods.
+ * Fix installment rows whose due_date is out-of-order relative to adjacent periods.
  *
  * Boonphone API occasionally sends a wrong due_date for a period (e.g. period 1
  * gets 2027-01-05 while period 2 is 2026-04-05).  This helper detects any
