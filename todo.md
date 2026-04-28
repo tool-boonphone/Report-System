@@ -964,3 +964,10 @@ Task list:
 - [x] P86-1: แก้ไข DebtReport.tsx — else branch สุดท้าย (overdue paid=0) จากสีดำเป็นสีส้ม
 - [x] P86-2: แก้ไข DebtSummary.tsx — else branch สุดท้าย (overdue paid=0) จากสีดำเป็นสีส้ม
 - [x] P86-3: Commit + push GitHub + checkpoint
+
+### Phase 87 — Fix: Color logic ใหม่สำหรับงวดอนาคตที่มียอดชำระ และ BG สีฟ้าสำหรับงวดปัจจุบัน
+- เงื่อนไข 1: งวดอนาคต (dueDate > today) ที่มียอดชำระ (isPaid หรือ isPartialPaid) → สีฟ้า (แทนสีเขียวตัวเอียง/ส้มตัวเอียง)
+- เงื่อนไข 2: งวดปัจจุบัน (isCurrentPeriod) → BG สีฟ้าเสมอ ยกเว้น isArrears (BG เหลือง) หรือ dimmed (BG เทา)
+- [x] P87-1: แก้ไข DebtReport.tsx — color logic ใหม่
+- [x] P87-2: แก้ไข DebtSummary.tsx — color logic ใหม่
+- [ ] P87-3: Commit + push GitHub + checkpoint

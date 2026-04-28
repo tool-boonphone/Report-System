@@ -1546,12 +1546,11 @@ export default function DebtSummary() {
                               baseStyle.color = "#92400e"; // amber-800
                               baseStyle.fontWeight = "700";
                             } else if (isFuturePeriod && isPaid) {
-                              // งวดอนาคตที่ชำระครบแล้ว: เขียวตัวเอียง
-                              baseStyle.color = "#15803d"; // green-700
-                              baseStyle.fontStyle = "italic";
+                              // งวดอนาคตที่ชำระครบแล้ว: ฟ้าตัวตรง
+                              baseStyle.color = "#0369a1"; // sky-700
                             } else if (isFuturePeriod && isPartialPaid) {
-                              // งวดอนาคตที่จ่ายบางส่วน: ส้มตัวเอียง
-                              baseStyle.color = "#c2410c"; // orange-700
+                              // งวดอนาคตที่จ่ายบางส่วน: ฟ้าตัวเอียง
+                              baseStyle.color = "#0369a1"; // sky-700
                               baseStyle.fontStyle = "italic";
                             } else if (isFuturePeriod) {
                               // งวดอนาคตที่ยังไม่จ่าย: เทา
