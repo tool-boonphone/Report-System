@@ -963,4 +963,4 @@ Task list:
 - ใหม่: งวดก่อนหน้า paid=0 → สีส้ม (ถูกต้อง เพราะถือว่าค้างชำระ)
 - [x] P86-1: แก้ไข DebtReport.tsx — else branch สุดท้าย (overdue paid=0) จากสีดำเป็นสีส้ม
 - [x] P86-2: แก้ไข DebtSummary.tsx — else branch สุดท้าย (overdue paid=0) จากสีดำเป็นสีส้ม
-- [ ] P86-3: Commit + push GitHub + checkpoint
+- [x] P86-3: Commit + push GitHub + checkpoint
