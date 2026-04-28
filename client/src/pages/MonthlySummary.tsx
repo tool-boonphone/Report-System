@@ -440,7 +440,7 @@ export default function MonthlySummary() {
   },[setActions]);
 
   return(
-    <AppShell>
+    <AppShell fullHeight>
       {/* ── Header area (เลื่อนขึ้นพร้อม page scroll) ──────────────────── */}
       <div className="bg-white" ref={headerRef}>
         {/* ── Tab switcher + Export ─────────────────────────────────────── */}
@@ -603,9 +603,12 @@ export default function MonthlySummary() {
 
       </div>
       {/* ── Table area ─────────────────────────────────────────────────────── */}
-      {/* overflow-y:clip ทำให้ div นี้ scroll แนวนอนเท่านั้น โดยไม่สร้าง vertical scroll container
-           ทำให้ main ของ AppShell เป็น vertical scroller → thead/tfoot CSS sticky ทำงานถูกต้อง */}
-      <div ref={scrollContainerRef} className="overflow-x-auto w-full" style={{overflowY:'clip'}}>
+      {/* Nested scroll structure:
+           - outer div: overflow-x-auto (horizontal scroll) + flex-1 min-h-0 + flex flex-col
+           - inner div: overflow-y-auto flex-1 min-h-0 (vertical scroll container)
+           → thead sticky top:0 + tfoot sticky bottom:0 ทำงานเทียบกับ inner div
+           → overflow-x อยู่ที่ outer div ไม่ทำให้ tfoot ถูก clip */}
+      <div ref={scrollContainerRef} className="overflow-x-auto overflow-y-auto flex-1 min-h-0 w-full">
         {!canView?(<div className="flex items-center justify-center py-20 text-gray-400 text-sm">คุณไม่มีสิทธิ์ดูข้อมูลนี้</div>)
         :query.isLoading?(<div className="flex items-center justify-center py-20 gap-2 text-gray-400"><Spinner className="w-5 h-5"/><span className="text-sm">กำลังโหลด...</span></div>)
         :query.error?(<div className="flex flex-col items-center justify-center py-20 gap-3 text-red-500"><span className="text-sm">โหลดข้อมูลล้มเหลว: {query.error.message}</span><Button variant="outline" size="sm" onClick={()=>query.refetch()}>ลองใหม่</Button></div>)
@@ -619,7 +622,8 @@ export default function MonthlySummary() {
             showBadDebtSale={showBadDebtSale} setShowBadDebtSale={setShowBadDebtSale}
             sortDir={sortDir} onToggleSort={()=>setSortDir((d)=>d==="asc"?"desc":"asc")}
             hiddenRows={hiddenRows} toggleRow={toggleRow}
-            stickyTop={56+headerH}
+            stickyTop={0}
+            scrollContainerRef={scrollContainerRef}
           />
         )}
       </div>
@@ -628,7 +632,7 @@ export default function MonthlySummary() {
 }
 
 // ─── SummaryTable ─────────────────────────────────────────────────────────────
-function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGroup,toggleAll,paidVis,dueVis,sortDir,onToggleSort,hiddenRows,toggleRow,showBadDebtInstall,setShowBadDebtInstall,showBadDebtSale,setShowBadDebtSale,stickyTop}:{
+function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGroup,toggleAll,paidVis,dueVis,sortDir,onToggleSort,hiddenRows,toggleRow,showBadDebtInstall,setShowBadDebtInstall,showBadDebtSale,setShowBadDebtSale,stickyTop,scrollContainerRef:scrollContainerProp}:{
   tab:TabKey;rows:SummaryRow[];grandTotal:GrandTotal;hiddenBuckets:Set<string>;
   toggleBucket:(b:string)=>void;toggleGroup:(g:ColGroup)=>void;toggleAll:()=>void;
   paidVis:Record<PaidBadgeKey,boolean>;dueVis:Record<DueBadgeKey,boolean>;
@@ -637,6 +641,7 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
   showBadDebtInstall:boolean;setShowBadDebtInstall:(v:boolean)=>void;
   showBadDebtSale:boolean;setShowBadDebtSale:(v:boolean)=>void;
   stickyTop:number;
+  scrollContainerRef?:React.RefObject<HTMLDivElement|null>;
 }) {
   // "หนี้เสีย" bucket ใน paid tab เท่านั้น แยกเป็น 3 sub-cols: ค่างวด | หนี้เสีย | รวม
   // count tab และ due tab = 1 col เดียว
@@ -754,10 +759,56 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
     return w;
   },[tab]);// eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── CSS sticky thead (ทำงานได้เพราะ div.overflow-x-auto ใช้ overflow-y:clip
-  //    ซึ่งไม่สร้าง vertical scroll container → main ของ AppShell เป็น vertical scroller)
+  // ── CSS sticky thead + JS sticky tfoot ────────────────────────────────────
+  // CSS sticky บน tfoot ไม่ทำงานเมื่อ scroll container มี overflow-x:auto
+  // จึงใช้ JS sticky: scroll event → translateY(scrollTop) บน tfoot
   const tableRef=useRef<HTMLTableElement>(null);
   const theadRef=useRef<HTMLTableSectionElement>(null);
+  const tfootRef=useRef<HTMLTableSectionElement>(null);
+  useEffect(()=>{
+    // ใช้ requestAnimationFrame เพื่อรอให้ DOM พร้อมก่อน attach listener
+    const tfootEl=tfootRef.current;
+    if(!tfootEl)return;
+    let rafId:number;
+    let attached=false;
+    let scrollCleanup:(()=>void)|undefined;
+    const updateTfoot=(c:HTMLDivElement)=>()=>{
+      const {scrollHeight,clientHeight}=c;
+      if(scrollHeight<=clientHeight){tfootEl.style.transform='';return;}
+      // reset transform ก่อนวัดตำแหน่งจริง
+      tfootEl.style.transform='';
+      const cRect=c.getBoundingClientRect();
+      const naturalBottom=tfootEl.getBoundingClientRect().bottom;
+      // needed > 0 → tfoot อยู่สูงกว่า bottom → translate ลง
+      // needed < 0 → tfoot อยู่ต่ำกว่า bottom → translate ขึ้น (overflow)
+      // needed = 0 → อยู่ที่ bottom พอดี
+      const needed=cRect.bottom-naturalBottom;
+      if(Math.abs(needed)>1){tfootEl.style.transform=`translateY(${needed}px)`;}
+    };
+    const tryAttach=()=>{
+      if(attached)return;
+      const c=scrollContainerProp?.current;
+      if(!c)return;
+      attached=true;
+      const fn=updateTfoot(c);
+      c.addEventListener('scroll',fn,{passive:true});
+      fn(); // initial call
+      scrollCleanup=()=>c.removeEventListener('scroll',fn);
+    };
+    // รอหลัง paint ครั้งแรกเพื่อให้ ref ถูก set
+    rafId=requestAnimationFrame(()=>{
+      tryAttach();
+      if(!attached){
+        setTimeout(()=>{
+          tryAttach();
+        },200);
+      }
+    });
+    return()=>{
+      cancelAnimationFrame(rafId);
+      scrollCleanup?.();
+    };
+  },[scrollContainerProp]);
 
   return(
     <>
@@ -957,7 +1008,7 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
         ))}
       </tbody>
       {/* ── Sticky Grand Total tfoot ─────────────────────────────────── */}
-      <tfoot className="sticky bottom-0 z-20 border-t-2 border-slate-400 bg-slate-100 shadow-[0_-2px_8px_rgba(0,0,0,0.12)]">
+      <tfoot ref={tfootRef} className="z-20 border-t-2 border-slate-400 bg-slate-100 shadow-[0_-2px_8px_rgba(0,0,0,0.12)]">
           <tr>
             <td className="sticky left-0 z-20 px-3 py-2.5 text-slate-800 whitespace-nowrap border-r border-slate-300 bg-slate-200 min-w-[130px]">รวมทั้งหมด</td>
             <td className="sticky left-[130px] z-20 px-3 py-2.5 text-right border-r border-slate-300 bg-slate-200 min-w-[90px]">
