@@ -791,6 +791,9 @@ function deriveDebtStatus(
     if (Number.isNaN(dueMs)) continue;
     const paid = Number(it.paid_amount ?? 0);
     const amt = Number(it.amount ?? 0);
+    // Skip payment-record rows (amount=0) — these are payment receipts, not installment schedules.
+    // Only real installment rows (amount > 0) should be considered for overdue calculation.
+    if (amt <= 0.001) continue;
     // Prefer balance from raw_json (API-computed, already accounts for discounts/partial payments).
     // Fall back to amount - paid_amount when balance is not available.
     const outstanding = (it.balance !== null && it.balance !== undefined)

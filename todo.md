@@ -976,3 +976,8 @@ Task list:
 - [x] P88-1: แก้ไข DebtReport.tsx — isCurrentPeriod ให้ BG sky-50 เสมอ ยกเว้น isArrears/dimmed
 - [x] P88-2: แก้ไข DebtSummary.tsx — isCurrentPeriod ให้ BG sky-50 เสมอ ยกเว้น isArrears/dimmed
 - [x] P88-3: Commit + push GitHub + checkpoint
+
+### Phase 89 — Bug: สถานะหนี้แสดงไม่ถูกต้องสำหรับสัญญาที่จ่ายครบทุกงวด
+- [ ] P89-1: ตรวจสอบ logic คำนวณ debtStatus ใน backend (debtDb.ts)
+- [ ] P89-2: แก้ไข debtStatus ให้ถูกต้องเมื่อจ่ายครบทุกงวด
+- [ ] P89-3: Commit + push GitHub + checkpoint
