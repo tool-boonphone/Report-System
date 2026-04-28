@@ -981,3 +981,8 @@ Task list:
 - [x] P89-1: ตรวจสอบ logic คำนวณ debtStatus ใน backend (debtDb.ts)
 - [x] P89-2: แก้ไข debtStatus ให้ถูกต้องเมื่อจ่ายครบทุกงวด
 - [x] P89-3: Commit + push GitHub + checkpoint
+
+### Phase 90 — Bug: isPaid แสดงสีเขียวทั้งที่ยอดยังไม่ครบ
+- [x] P90-1: ตรวจสอบ isPaid logic ใน stream function สำหรับสัญญา CT0126-AYA001-22247-01
+- [x] P90-2: แก้ไข isPaid logic ให้ถูกต้อง
+- [ ] P90-3: Commit + push GitHub + checkpoint
