@@ -978,6 +978,6 @@ Task list:
 - [x] P88-3: Commit + push GitHub + checkpoint
 
 ### Phase 89 — Bug: สถานะหนี้แสดงไม่ถูกต้องสำหรับสัญญาที่จ่ายครบทุกงวด
-- [ ] P89-1: ตรวจสอบ logic คำนวณ debtStatus ใน backend (debtDb.ts)
-- [ ] P89-2: แก้ไข debtStatus ให้ถูกต้องเมื่อจ่ายครบทุกงวด
-- [ ] P89-3: Commit + push GitHub + checkpoint
+- [x] P89-1: ตรวจสอบ logic คำนวณ debtStatus ใน backend (debtDb.ts)
+- [x] P89-2: แก้ไข debtStatus ให้ถูกต้องเมื่อจ่ายครบทุกงวด
+- [x] P89-3: Commit + push GitHub + checkpoint
