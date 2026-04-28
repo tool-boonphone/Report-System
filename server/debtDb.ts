@@ -2804,6 +2804,12 @@ export async function* listDebtTargetStream(params: {
           suspendedAt: isSuspended ? suspendedAt : null,
           isArrears: (r as any)._hasArrears === true,
           isCurrentPeriod: false,
+          // isPaid: true when this period has been fully paid (principal reduced to 0).
+          // Same logic as listDebtTarget — used for green text styling in frontend.
+          isPaid: !isClosed && !isSuspended && (
+            (rawAmount <= 0.009 && paid > 0.009) ||
+            (rawAmount > 0.009 && paid >= rawAmount - 0.5)
+          ),
         };
       })
       .sort((a, b) => (a.period ?? 0) - (b.period ?? 0));
