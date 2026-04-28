@@ -306,13 +306,14 @@ export default function MonthlySummary() {
   const[dueDeviceFamily,setDueDeviceFamily]=useState("");
 
   const[filterOpen,setFilterOpen]=useState(true);
-  // dynamic header height สำหรับ sticky thead
+  // dynamic stickyTop สำหรับ thead: TopNav (56px) + header area height
   const headerRef=useRef<HTMLDivElement>(null);
-  const[headerH,setHeaderH]=useState(96);
+  const[stickyTop,setStickyTop]=useState(56+96); // default: TopNav + ~96px header area
   useEffect(()=>{
     const el=headerRef.current;if(!el)return;
-    const ro=new ResizeObserver(()=>setHeaderH(el.offsetHeight));
-    ro.observe(el);setHeaderH(el.offsetHeight);
+    const update=()=>setStickyTop(56+el.offsetHeight);
+    const ro=new ResizeObserver(update);
+    ro.observe(el);update();
     return()=>ro.disconnect();
   },[]);
 
@@ -438,10 +439,10 @@ export default function MonthlySummary() {
   },[setActions]);
 
   return(
-    <AppShell fullHeight>
-      <div className="flex flex-col h-full">
+    <AppShell pageScroll>
+      <div>
       {/* ── Header area (ไม่เลื่อนตามแนวนอน) ──────────────────── */}
-      <div className="flex-shrink-0 bg-white" ref={headerRef}>
+      <div className="bg-white" ref={headerRef}>
         {/* ── Tab switcher + Export ─────────────────────────────────────── */}
         <div className="bg-white border-b border-gray-200 px-4 flex items-center gap-0">
           {(["count","paid","due"]as TabKey[]).map((t)=>{
@@ -601,8 +602,9 @@ export default function MonthlySummary() {
         )}
 
       </div>
-        {/* ── Table area (scroll แนวนอนและแนวตั้งเฉพาะส่วนนี้) ──────── */}
-        <div className="flex-1 min-h-0 overflow-x-auto overflow-y-auto">
+
+        {/* ── Table area (scroll แนวนอนเท่านั้น — vertical scroll ใช้ page scroll) ──────── */}
+        <div className="overflow-x-auto">
           {!canView?(<div className="flex items-center justify-center h-full text-gray-400 text-sm">คุณไม่มีสิทธิ์ดูข้อมูลนี้</div>)
           :query.isLoading?(<div className="flex items-center justify-center h-full gap-2 text-gray-400"><Spinner className="w-5 h-5"/><span className="text-sm">กำลังโหลด...</span></div>)
           :query.error?(<div className="flex flex-col items-center justify-center h-full gap-3 text-red-500"><span className="text-sm">โหลดข้อมูลล้มเหลว: {query.error.message}</span><Button variant="outline" size="sm" onClick={()=>query.refetch()}>ลองใหม่</Button></div>)
@@ -616,7 +618,7 @@ export default function MonthlySummary() {
               showBadDebtSale={showBadDebtSale} setShowBadDebtSale={setShowBadDebtSale}
               sortDir={sortDir} onToggleSort={()=>setSortDir((d)=>d==="asc"?"desc":"asc")}
               hiddenRows={hiddenRows} toggleRow={toggleRow}
-              stickyTop={0}
+              stickyTop={stickyTop}
             />
           )}
         </div>
