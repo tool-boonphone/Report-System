@@ -157,6 +157,8 @@ type InstallmentCell = {
   isCurrentPeriod?: boolean;
   /** Phase 9AH: principal+interest+fee only (no penalty/unlockFee). Used for principalOnly display. */
   netAmount?: number;
+  /** True when this period has been fully paid. Used for green text styling. */
+  isPaid?: boolean;
 };
 
 type PaymentCell = {
@@ -1513,11 +1515,19 @@ export default function DebtSummary() {
                               }
                             }
                             const isArrears = !dimmed && !!inst?.isArrears;
-                            const isCurrentPeriod = !dimmed && !!inst?.isCurrentPeriod;
+                            // Phase 53/66: ซ่อน BG สีฟ้าสำหรับสัญญาสถานะพิเศษ
+                            const isSpecialContractStatus = r.debtStatus === 'ระงับสัญญา' || r.debtStatus === 'สิ้นสุดสัญญา' || r.debtStatus === 'ขายเครื่อง' || r.debtStatus === 'หนี้เสีย';
+                            const isCurrentPeriod = !dimmed && !isSpecialContractStatus && !!inst?.isCurrentPeriod;
                             // Phase 9AI: future period = dueDate > today (not closed/suspended)
                             const todayStr = new Date().toISOString().slice(0, 10);
                             const isFuturePeriod = !dimmed && !isArrears && !isCurrentPeriod &&
                               !!inst?.dueDate && inst.dueDate > todayStr;
+                            // Phase 85: isPaid = ชำระครบแล้ว (ใช้ backend isPaid flag)
+                            const isPaid = !dimmed && !!inst?.isPaid;
+                            // Phase 85: isPartialPaid = จ่ายบางส่วน (paid > 0 แต่ยังไม่ครบ)
+                            const paidAmt = inst?.paid ?? 0;
+                            const amtForCheck = inst?.amount ?? 0;
+                            const isPartialPaid = !dimmed && !isPaid && paidAmt > 0.009 && amtForCheck > 0.009 && paidAmt < amtForCheck - 0.5;
                             const baseStyle: Record<string, string | number> = {
                               width: gc.width,
                               textAlign:
@@ -1525,23 +1535,40 @@ export default function DebtSummary() {
                                   ? "right"
                                   : "left",
                             };
+                            // Phase 85: Color priority
                             if (dimmed) {
                               baseStyle.background = "#f3f4f6"; // gray-100
                               baseStyle.color = "#9ca3af"; // gray-400
                               baseStyle.fontStyle = "italic";
                             } else if (isArrears) {
                               // Arrears carry: amber-100 bg + amber-800 bold text
-                              // to signal "this amount includes unpaid from prior periods"
                               baseStyle.background = "#fef3c7"; // amber-100
                               baseStyle.color = "#92400e"; // amber-800
                               baseStyle.fontWeight = "700";
-                            } else if (isCurrentPeriod) {
-                              // Current period: sky-50 BG to make it easy to spot
-                              // without needing to read the due date column.
-                              baseStyle.background = "#f0f9ff"; // sky-50
+                            } else if (isFuturePeriod && isPaid) {
+                              // งวดอนาคตที่ชำระครบแล้ว: เขียวตัวเอียง
+                              baseStyle.color = "#15803d"; // green-700
+                              baseStyle.fontStyle = "italic";
+                            } else if (isFuturePeriod && isPartialPaid) {
+                              // งวดอนาคตที่จ่ายบางส่วน: ส้มตัวเอียง
+                              baseStyle.color = "#c2410c"; // orange-700
+                              baseStyle.fontStyle = "italic";
                             } else if (isFuturePeriod) {
-                              // Phase 9AI: future periods dimmed with gray text
+                              // งวดอนาคตที่ยังไม่จ่าย: เทา
                               baseStyle.color = "#9ca3af"; // gray-400
+                            } else if (isPaid) {
+                              // งวดปัจจุบัน/ก่อนหน้าที่ชำระครบแล้ว: เขียว
+                              baseStyle.color = "#15803d"; // green-700
+                            } else if (isPartialPaid) {
+                              // งวดปัจจุบัน/ก่อนหน้าที่จ่ายบางส่วน: ส้ม
+                              baseStyle.color = "#c2410c"; // orange-700
+                            } else if (isCurrentPeriod) {
+                              // งวดปัจจุบัน ยังไม่จ่าย: sky-50 bg + ดำ
+                              baseStyle.background = "#f0f9ff"; // sky-50
+                              baseStyle.color = "#111827"; // gray-900 (ดำ)
+                            } else {
+                              // งวดก่อนหน้า ยังไม่จ่าย (overdue): ดำ
+                              baseStyle.color = "#111827"; // gray-900 (ดำ)
                             }
                             const tooltip = suspended
                               ? suspendLabel
