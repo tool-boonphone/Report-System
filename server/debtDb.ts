@@ -2079,8 +2079,8 @@ export async function listDebtCollected(params: { section: SectionKey }) {
     const rawPayments = payByContract.get(c.contractExternalId) ?? [];
     let tagged: Array<PayRawRow & { splitIndex: number; isCloseRow: boolean; isBadDebtRow: boolean }>;
 
-    const contractBadDebtAmount = (c as any).contractBadDebtAmount as number | null;
-    const contractBadDebtDate = (c as any).contractBadDebtDate as string | null;
+    let contractBadDebtAmount = (c as any).contractBadDebtAmount as number | null;
+    let contractBadDebtDate = (c as any).contractBadDebtDate as string | null;
 
     // Use only real payments from the API.
     // Real payments are identified by:
@@ -2094,6 +2094,29 @@ export async function listDebtCollected(params: { section: SectionKey }) {
       const isTxrtReceipt = receiptNo != null && /^TXRT.*-\d+$/.test(receiptNo);
       return isNumericPayExt || isTxrtReceipt;
     });
+
+    // Phase 87: Fallback bad debt detection via installment isSuspended.
+    // Both Boonphone and Fastfone365 do NOT store bad_debt_amount in contracts table.
+    // Detect bad debt from installment status=ยกเลิกสัญญา (isSuspended=true).
+    // When detected, the latest real payment (by paid_at) is the device-sale payment.
+    // isPhase87Fallback=true means badDebtPeriod should use firstSuspendedPeriod directly
+    // (skip deviceSalePaymentNS detection which assigns wrong period via assignPayPeriods).
+    let isPhase87Fallback = false;
+    if (contractBadDebtAmount == null || contractBadDebtAmount <= 0) {
+      const hasSuspendedInst = (c.installments as any[]).some((inst: any) => inst.isSuspended);
+      if (hasSuspendedInst && realPaymentsRaw.length > 0) {
+        // Sort real payments by paid_at descending, pick the latest
+        const sortedReal = [...realPaymentsRaw].sort((a, b) => {
+          const da = (a as any).paid_at ?? "";
+          const db2 = (b as any).paid_at ?? "";
+          return da < db2 ? 1 : da > db2 ? -1 : 0;
+        });
+        const latestPay = sortedReal[0];
+        contractBadDebtAmount = (latestPay as any).total_paid_amount ?? 0;
+        contractBadDebtDate = (latestPay as any).paid_at ?? null;
+        isPhase87Fallback = true;
+      }
+    }
 
     if (contractBadDebtAmount != null && contractBadDebtAmount > 0 && contractBadDebtDate) {
       // Contract has bad debt: build tooltip and create 1 bad debt row.
@@ -2124,16 +2147,34 @@ export async function listDebtCollected(params: { section: SectionKey }) {
 
       // Phase 70: badDebtPeriod = period ของ device sale payment ใน realAssignedForBadDebt
       // กฎ: หน้ายอดเก็บหนี้ลงยอดขายเครื่องงวดไหน หน้าเป้าเก็บหนี้ก็แสดง label หนี้เสียตั้งแต่งวดนั้นเป็นต้นไป
-      const deviceSalePaymentNS = realAssignedForBadDebt.find((p) => {
-        const totalPaid = (p as any).total_paid_amount as number | null;
-        return totalPaid != null && Math.abs(totalPaid - contractBadDebtAmount) <= 1;
-      });
+      // Phase 87: ถ้าเป็น fallback (isSuspended detection) ให้ใช้ firstSuspendedPeriod โดยตรง
+      // เพราะ assignPayPeriods assign period ผิดสำหรับ device sale payment ที่มียอดสูงกว่า installment amount
       let badDebtPeriod: number;
-      if (deviceSalePaymentNS?.period != null && deviceSalePaymentNS.period > 0) {
-        // ใช้ period ของ device sale payment โดยตรง
-        badDebtPeriod = deviceSalePaymentNS.period;
+      if (!isPhase87Fallback) {
+        const deviceSalePaymentNS = realAssignedForBadDebt.find((p) => {
+          const totalPaid = (p as any).total_paid_amount as number | null;
+          return totalPaid != null && Math.abs(totalPaid - contractBadDebtAmount) <= 1;
+        });
+        if (deviceSalePaymentNS?.period != null && deviceSalePaymentNS.period > 0) {
+          badDebtPeriod = deviceSalePaymentNS.period;
+        } else {
+          const firstSuspendedPeriod = c.installments
+            .filter((inst: any) => inst.isSuspended)
+            .map((inst: any) => inst.period ?? 0)
+            .filter((p: number) => p > 0)
+            .sort((a: number, b: number) => a - b)[0] ?? null;
+          if (firstSuspendedPeriod != null) {
+            badDebtPeriod = firstSuspendedPeriod;
+          } else {
+            let lastNormalPeriod = 0;
+            for (const p of normalPayments) {
+              if (p.period != null && p.period > lastNormalPeriod) lastNormalPeriod = p.period;
+            }
+            badDebtPeriod = lastNormalPeriod + 1;
+          }
+        }
       } else {
-        // Fallback: ใช้ firstSuspendedPeriod จาก installment.isSuspended
+        // Phase 87 fallback: use firstSuspendedPeriod directly
         const firstSuspendedPeriod = c.installments
           .filter((inst: any) => inst.isSuspended)
           .map((inst: any) => inst.period ?? 0)
