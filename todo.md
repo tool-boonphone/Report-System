@@ -985,4 +985,9 @@ Task list:
 ### Phase 90 — Bug: isPaid แสดงสีเขียวทั้งที่ยอดยังไม่ครบ
 - [x] P90-1: ตรวจสอบ isPaid logic ใน stream function สำหรับสัญญา CT0126-AYA001-22247-01
 - [x] P90-2: แก้ไข isPaid logic ให้ถูกต้อง
-- [ ] P90-3: Commit + push GitHub + checkpoint
+- [x] P90-3: Commit + push GitHub + checkpoint
+
+### Phase 91 — Bug: dedupInstByPeriod เลือก base row ผิด ทำให้ period 3 CT0126-PTE010-21961-01 แสดงเป็น unpaid ทั้งที่จ่ายแล้ว
+- [x] P91-1: ตรวจสอบ raw rows ของ period 3 พบว่า base row (amount=2094, paid=0) ถูกเลือก ทั้งที่ payment-record row (amount=0, paid=2094) มี paid_amount จริง
+- [x] P91-2: แก้ไข dedupInstByPeriod ให้ใช้ maxPaid (ค่า paid_amount สูงสุดข้าม rows) + minDueDate (วันครบกำหนดเร็วสุดข้าม rows)
+- [x] P91-3: Commit + push GitHub + checkpoint
