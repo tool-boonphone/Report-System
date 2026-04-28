@@ -991,3 +991,10 @@ Task list:
 - [x] P91-1: ตรวจสอบ raw rows ของ period 3 พบว่า base row (amount=2094, paid=0) ถูกเลือก ทั้งที่ payment-record row (amount=0, paid=2094) มี paid_amount จริง
 - [x] P91-2: แก้ไข dedupInstByPeriod ให้ใช้ maxPaid (ค่า paid_amount สูงสุดข้าม rows) + minDueDate (วันครบกำหนดเร็วสุดข้าม rows)
 - [x] P91-3: Commit + push GitHub + checkpoint
+
+## Phase 91 — Installment Cell Color Rules
+
+- [x] งวดปัจจุบัน (isCurrentPeriod) + ชำระบางส่วน (isPartialPaid) → ข้อความสีส้ม + BG ฟ้า (sky-50) เสมอ แม้ isArrears=true
+- [x] งวดอนาคต (isFuturePeriod) + ชำระครบ (isPaid) → ข้อความสีฟ้าตัวตรง
+- [x] งวดอนาคต (isFuturePeriod) + ชำระบางส่วน (isPartialPaid) → ข้อความสีฟ้าตัวเอียง
+- [x] แก้ไขทั้ง DebtReport.tsx และ DebtSummary.tsx

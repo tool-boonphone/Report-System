@@ -1535,13 +1535,32 @@ export default function DebtSummary() {
                                   ? "right"
                                   : "left",
                             };
-                            // Phase 85: Color priority
+                            // Phase 91: Color priority (top = highest priority)
+                            // 1. dimmed (isClosed / isSuspended) → เทา + ตัวเอียง
+                            // 2. isCurrentPeriod + isPartialPaid → BG ฟ้า (sky-50) + ส้ม (เสมอ แม้ isArrears=true)
+                            // 3. isCurrentPeriod + isPaid → BG ฟ้า (sky-50) + เขียว
+                            // 4. isArrears (ไม่ใช่ isCurrentPeriod+partial/paid) → amber bg + amber bold
+                            // 5. isFuturePeriod + isPaid → ฟ้าตัวตรง
+                            // 6. isFuturePeriod + isPartialPaid → ฟ้าตัวเอียง
+                            // 7. isFuturePeriod (paid=0) → เทา
+                            // 8. isPaid (งวดก่อนหน้า ชำระครบ) → เขียว
+                            // 9. isPartialPaid (งวดก่อนหน้า บางส่วน) → ส้ม
+                            // 10. isCurrentPeriod (paid=0) → sky-50 bg + ดำ
+                            // 11. งวดก่อนหน้า (paid=0, overdue) → ส้ม
                             if (dimmed) {
                               baseStyle.background = "#f3f4f6"; // gray-100
                               baseStyle.color = "#9ca3af"; // gray-400
                               baseStyle.fontStyle = "italic";
+                            } else if (isCurrentPeriod && isPartialPaid) {
+                              // งวดปัจจุบัน + ชำระบางส่วน: BG ฟ้า + ส้ม (เสมอ แม้ isArrears=true)
+                              baseStyle.background = "#f0f9ff"; // sky-50
+                              baseStyle.color = "#c2410c"; // orange-700
+                            } else if (isCurrentPeriod && isPaid) {
+                              // งวดปัจจุบัน + ชำระครบ: BG ฟ้า + เขียว
+                              baseStyle.background = "#f0f9ff"; // sky-50
+                              baseStyle.color = "#15803d"; // green-700
                             } else if (isArrears) {
-                              // Arrears carry: amber-100 bg + amber-800 bold text
+                              // Arrears carry (ไม่ใช่ currentPeriod+partial/paid): amber-100 bg + amber-800 bold
                               baseStyle.background = "#fef3c7"; // amber-100
                               baseStyle.color = "#92400e"; // amber-800
                               baseStyle.fontWeight = "700";
@@ -1556,12 +1575,10 @@ export default function DebtSummary() {
                               // งวดอนาคตที่ยังไม่จ่าย: เทา
                               baseStyle.color = "#9ca3af"; // gray-400
                             } else if (isPaid) {
-                              // งวดปัจจุบัน/ก่อนหน้าที่ชำระครบแล้ว: เขียว (ถ้าเป็นงวดปัจจุบันให้เพิ่ม BG ฟ้า)
-                              if (isCurrentPeriod) baseStyle.background = "#f0f9ff"; // sky-50
+                              // งวดก่อนหน้าที่ชำระครบแล้ว: เขียว
                               baseStyle.color = "#15803d"; // green-700
                             } else if (isPartialPaid) {
-                              // งวดปัจจุบัน/ก่อนหน้าที่จ่ายบางส่วน: ส้ม (ถ้าเป็นงวดปัจจุบันให้เพิ่ม BG ฟ้า)
-                              if (isCurrentPeriod) baseStyle.background = "#f0f9ff"; // sky-50
+                              // งวดก่อนหน้าที่จ่ายบางส่วน: ส้ม
                               baseStyle.color = "#c2410c"; // orange-700
                             } else if (isCurrentPeriod) {
                               // งวดปัจจุบัน ยังไม่จ่าย: sky-50 bg + ดำ
