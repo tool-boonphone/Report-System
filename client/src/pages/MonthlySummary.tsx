@@ -438,10 +438,9 @@ export default function MonthlySummary() {
   },[setActions]);
 
   return(
-    <AppShell fullHeight>
-      <div className="flex flex-col h-full">
-      {/* ── Header area (ไม่เลื่อนตามแนวนอน) ──────────────────── */}
-      <div className="flex-shrink-0 bg-white" ref={headerRef}>
+    <AppShell pageScroll>
+      {/* ── Header area (เลื่อนขึ้นพร้อม page scroll) ──────────────────── */}
+      <div className="bg-white" ref={headerRef}>
         {/* ── Tab switcher + Export ─────────────────────────────────────── */}
         <div className="bg-white border-b border-gray-200 px-4 flex items-center gap-0">
           {(["count","paid","due"]as TabKey[]).map((t)=>{
@@ -601,25 +600,24 @@ export default function MonthlySummary() {
         )}
 
       </div>
-        {/* ── Table area (scroll แนวนอนและแนวตั้งเฉพาะส่วนนี้) ──────── */}
-        <div className="flex-1 min-h-0 overflow-x-auto overflow-y-auto">
-          {!canView?(<div className="flex items-center justify-center h-full text-gray-400 text-sm">คุณไม่มีสิทธิ์ดูข้อมูลนี้</div>)
-          :query.isLoading?(<div className="flex items-center justify-center h-full gap-2 text-gray-400"><Spinner className="w-5 h-5"/><span className="text-sm">กำลังโหลด...</span></div>)
-          :query.error?(<div className="flex flex-col items-center justify-center h-full gap-3 text-red-500"><span className="text-sm">โหลดข้อมูลล้มเหลว: {query.error.message}</span><Button variant="outline" size="sm" onClick={()=>query.refetch()}>ลองใหม่</Button></div>)
-          :rows.length===0?(<div className="flex items-center justify-center h-full text-gray-400 text-sm">ไม่มีข้อมูล</div>)
-          :(
-            <SummaryTable
-              tab={tab} rows={rows} grandTotal={grandTotal}
-              hiddenBuckets={hiddenBuckets} toggleBucket={toggleBucket} toggleGroup={toggleGroup} toggleAll={toggleAll}
-              paidVis={paidVis} dueVis={dueVis}
-              showBadDebtInstall={showBadDebtInstall} setShowBadDebtInstall={setShowBadDebtInstall}
-              showBadDebtSale={showBadDebtSale} setShowBadDebtSale={setShowBadDebtSale}
-              sortDir={sortDir} onToggleSort={()=>setSortDir((d)=>d==="asc"?"desc":"asc")}
-              hiddenRows={hiddenRows} toggleRow={toggleRow}
-              stickyTop={0}
-            />
-          )}
-        </div>
+      {/* ── Table area (scroll แนวนอนเท่านั้น, แนวตั้ง = page scroll) ──────── */}
+      <div className="overflow-x-auto">
+        {!canView?(<div className="flex items-center justify-center py-20 text-gray-400 text-sm">คุณไม่มีสิทธิ์ดูข้อมูลนี้</div>)
+        :query.isLoading?(<div className="flex items-center justify-center py-20 gap-2 text-gray-400"><Spinner className="w-5 h-5"/><span className="text-sm">กำลังโหลด...</span></div>)
+        :query.error?(<div className="flex flex-col items-center justify-center py-20 gap-3 text-red-500"><span className="text-sm">โหลดข้อมูลล้มเหลว: {query.error.message}</span><Button variant="outline" size="sm" onClick={()=>query.refetch()}>ลองใหม่</Button></div>)
+        :rows.length===0?(<div className="flex items-center justify-center py-20 text-gray-400 text-sm">ไม่มีข้อมูล</div>)
+        :(
+          <SummaryTable
+            tab={tab} rows={rows} grandTotal={grandTotal}
+            hiddenBuckets={hiddenBuckets} toggleBucket={toggleBucket} toggleGroup={toggleGroup} toggleAll={toggleAll}
+            paidVis={paidVis} dueVis={dueVis}
+            showBadDebtInstall={showBadDebtInstall} setShowBadDebtInstall={setShowBadDebtInstall}
+            showBadDebtSale={showBadDebtSale} setShowBadDebtSale={setShowBadDebtSale}
+            sortDir={sortDir} onToggleSort={()=>setSortDir((d)=>d==="asc"?"desc":"asc")}
+            hiddenRows={hiddenRows} toggleRow={toggleRow}
+            stickyTop={56+headerH}
+          />
+        )}
       </div>
     </AppShell>
   );

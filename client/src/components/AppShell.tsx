@@ -18,11 +18,19 @@ export function AppShell({
   children,
   requireSection = true,
   fullHeight = false,
+  pageScroll = false,
 }: {
   children: ReactNode;
   requireSection?: boolean;
   /** เมื่อ true: main จะไม่ scroll ด้วยตัวเอง (ให้ children จัดการ scroll เอง เช่น MonthlySummary) */
   fullHeight?: boolean;
+  /**
+   * เมื่อ true: ใช้ page scroll (window scroll) แทน main scroll
+   * - root ใช้ min-h-screen แทน h-screen overflow-hidden
+   * - main ไม่มี overflow-y-auto → thead sticky ทำงานเทียบกับ viewport
+   * - ใช้สำหรับหน้าที่ต้องการ thead sticky ใต้ TopNav หลังเลื่อน page scroll
+   */
+  pageScroll?: boolean;
 }) {
   const { isLoading, isAuthenticated } = useAppAuth();
   const { hasSection } = useSection();
@@ -44,6 +52,23 @@ export function AppShell({
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+      </div>
+    );
+  }
+
+  if (pageScroll) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col">
+        <TopNav />
+        <div className="flex flex-1 relative">
+          <main
+            className="flex-1 min-w-0 transition-all duration-300"
+            style={aiChatOpen ? { marginRight: "400px" } : {}}
+          >
+            {children}
+          </main>
+          <AIChatPanel />
+        </div>
       </div>
     );
   }
