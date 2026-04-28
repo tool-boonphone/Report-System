@@ -2575,6 +2575,13 @@ export async function* listDebtCollectedStream(params: {
       }
       instByContract.set(key, Array.from(byPeriod.values()).sort((a, b) => (a.period ?? 0) - (b.period ?? 0)));
     }
+    // Fix out-of-order due_dates (Boonphone API bug) — same correction as listDebtTargetStream.
+    // Without this, deriveDebtStatus receives wrong due_dates → wrong daysOverdue → wrong debtStatus label.
+    // This is the root cause of the status mismatch between "ยอดเก็บหนี้" and "เป้าเก็บหนี้".
+    for (const [key, list] of Array.from(instByContract.entries())) {
+      const fixed = fixOutOfOrderDueDates(list as unknown as InstRawRow[]);
+      instByContract.set(key, fixed as unknown as Array<{ period: number | null; amount: number; due_date: string | null; paid_amount: number | null; status: string | null }>);
+    }
 
     // Query payments for this batch only (per-batch to avoid OOM with 222K rows)
     const payRaw = await db.execute(sql.raw(`
