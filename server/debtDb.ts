@@ -682,7 +682,7 @@ function isPaymentRecordRow(row: InstRawRow): boolean {
 function dedupInstByPeriod(list: InstRawRow[]): InstRawRow[] {
   if (list.length === 0) return list;
 
-  const byPeriod = new Map<number | null, { base: InstRawRow; minDueDate: Date | null; confirmedPaymentRecord: InstRawRow | null; anyPayRecSeen: boolean }>();
+  const byPeriod = new Map<number | null, { base: InstRawRow; minDueDate: Date | null; confirmedPaymentRecord: InstRawRow | null; anyPayRecSeen: boolean; maxPayRecPaid: number }>();
 
   for (const row of list) {
     const p = row.period;
@@ -690,6 +690,7 @@ function dedupInstByPeriod(list: InstRawRow[]): InstRawRow[] {
     const rowDue = row.due_date ? new Date(row.due_date) : null;
     const isPayRec = isPaymentRecordRow(row);
     const isConfirmed = row.inst_status === 'ยืนยันการชำระ';
+    const rowPaid = Number(row.paid_amount ?? 0);
 
     const existing = byPeriod.get(p);
     if (!existing) {
@@ -698,10 +699,15 @@ function dedupInstByPeriod(list: InstRawRow[]): InstRawRow[] {
         minDueDate: rowDue,
         confirmedPaymentRecord: (isPayRec && isConfirmed) ? row : null,
         anyPayRecSeen: isPayRec,
+        maxPayRecPaid: isPayRec ? rowPaid : 0,
       });
     } else {
       // Track whether any PAY_REC row was seen for this period
-      if (isPayRec) existing.anyPayRecSeen = true;
+      if (isPayRec) {
+        existing.anyPayRecSeen = true;
+        // Track max paid_amount from PAY_REC rows (for partial payment detection)
+        if (rowPaid > existing.maxPayRecPaid) existing.maxPayRecPaid = rowPaid;
+      }
 
       // Update confirmedPaymentRecord: prefer PAYMENT_RECORD with status=ยืนยันการชำระ
       if (isPayRec && isConfirmed && !existing.confirmedPaymentRecord) {
@@ -730,7 +736,7 @@ function dedupInstByPeriod(list: InstRawRow[]): InstRawRow[] {
   }
 
   // Build merged rows
-  const merged: InstRawRow[] = Array.from(byPeriod.values()).map(({ base, minDueDate, confirmedPaymentRecord, anyPayRecSeen }) => {
+  const merged: InstRawRow[] = Array.from(byPeriod.values()).map(({ base, minDueDate, confirmedPaymentRecord, anyPayRecSeen, maxPayRecPaid }) => {
     // Determine paid_amount and inst_status:
     // Rule: When ANY payment-record row exists for this period, use the PAY_REC
     // as the authoritative source for paid status — do NOT trust INST_BASE paid_amount
@@ -738,7 +744,9 @@ function dedupInstByPeriod(list: InstRawRow[]): InstRawRow[] {
     // (e.g. period 4 INST_BASE has paid=2094 but the actual payment is for period 3).
     //
     // - If a confirmed PAY_REC (status=ยืนยันการชำระ) exists → isPaid=true, paid=from PAY_REC
-    // - If PAY_REC exists but NOT confirmed → isPaid=false, paid=0 (override INST_BASE paid)
+    // - If PAY_REC exists but NOT confirmed → isPaid=false, paid=maxPayRecPaid (partial payment)
+    //   Phase 86 fix: use maxPayRecPaid instead of 0 to correctly show partial payments
+    //   (e.g. PAY_REC has paid=50 with status=เกินกำหนดชำระ → show paid=50, not 0)
     // - If NO PAY_REC at all → use INST_BASE paid_amount as-is (single-source data)
     let paidAmount: number;
     let instStatus: string | null;
@@ -748,9 +756,9 @@ function dedupInstByPeriod(list: InstRawRow[]): InstRawRow[] {
       paidAmount = Number(confirmedPaymentRecord.paid_amount ?? 0);
       instStatus = 'ยืนยันการชำระ';
     } else if (anyPayRecSeen) {
-      // PAY_REC exists but NOT confirmed → override to unpaid (PAY_REC is authoritative)
-      // This handles the case where INST_BASE has wrong paid=X but PAY_REC says paid=0
-      paidAmount = 0;
+      // PAY_REC exists but NOT confirmed → use maxPayRecPaid (PAY_REC is authoritative)
+      // Phase 86 fix: respect partial payments from PAY_REC (paid > 0 but not fully paid)
+      paidAmount = maxPayRecPaid;
       instStatus = base.inst_status === 'ยืนยันการชำระ' ? 'ยังไม่ถึงกำหนด' : base.inst_status;
     } else {
       // No PAY_REC at all → use INST_BASE paid_amount as-is
@@ -1266,24 +1274,32 @@ export async function listDebtTarget(params: { section: SectionKey }) {
       // remainder, not period 2). In that case the INST_BASE for period N will show
       // paid_amount < amount (not fully paid), which means the suffix-based assignment
       // is incorrect and the overpaid_amount belongs to a different period.
-      // Guard: only track overpaid for period N when INST_BASE[N] is actually fully paid.
-      // Special case: amount=0 means the period was already closed (isClosed) by the API,
-      // so paid_amount > 0 is sufficient to confirm the period was paid.
+      //
+      // Phase 85 revised: Two-step check:
+      // 1. If INST_BASE[period] is fully paid → track overpaid at period (normal case).
+      // 2. If INST_BASE[period] is NOT fully paid but INST_BASE[period-1] IS fully paid
+      //    → TXRT-N actually closed period N-1 remainder, so overpaid belongs to period N.
+      //    Track overpaid at period (same period N, which is where the carry lands).
+      // 3. If neither → skip (suffix assignment is wrong in an unresolvable way).
       const overpaid = Number(pr.overpaid_amount ?? 0);
       if (overpaid > 0) {
         const instListForKey = instByContract.get(key) ?? [];
         const instRow = instListForKey.find((r) => Number(r.period ?? 0) === period);
         const instBaseAmount = instRow ? Number(instRow.amount ?? 0) : 0;
         const instBasePaid = instRow ? Number(instRow.paid_amount ?? 0) : 0;
-        // Only track overpaid when the installment for this period is actually fully paid:
-        // - If amount=0 (isClosed period): paid_amount > 0 confirms it was settled.
-        // - If amount>0: paid_amount must be >= amount (within 0.5 rounding tolerance).
-        // If neither condition holds, the suffix-based period assignment is likely wrong
-        // (the payment closed an earlier period, not this one), so skip overpaid tracking.
         const instIsPaid =
           (instBaseAmount < 0.009 && instBasePaid > 0.009) ||
           (instBaseAmount > 0.009 && instBasePaid >= instBaseAmount - 0.5);
-        if (instIsPaid) {
+        // Phase 85 step 2: check prior period (period-1) when current period is not fully paid
+        const priorInstRow = !instIsPaid && period > 1
+          ? instListForKey.find((r) => Number(r.period ?? 0) === period - 1)
+          : null;
+        const priorBaseAmount = priorInstRow ? Number(priorInstRow.amount ?? 0) : 0;
+        const priorBasePaid = priorInstRow ? Number(priorInstRow.paid_amount ?? 0) : 0;
+        const priorIsPaid = priorInstRow &&
+          ((priorBaseAmount < 0.009 && priorBasePaid > 0.009) ||
+           (priorBaseAmount > 0.009 && priorBasePaid >= priorBaseAmount - 0.5));
+        if (instIsPaid || priorIsPaid) {
           let periodMap = overpaidByContractPeriod.get(key);
           if (!periodMap) {
             periodMap = new Map<number, number>();
@@ -2598,24 +2614,32 @@ export async function* listDebtTargetStream(params: {
       // remainder, not period 2). In that case the INST_BASE for period N will show
       // paid_amount < amount (not fully paid), which means the suffix-based assignment
       // is incorrect and the overpaid_amount belongs to a different period.
-      // Guard: only track overpaid for period N when INST_BASE[N] is actually fully paid.
-      // Special case: amount=0 means the period was already closed (isClosed) by the API,
-      // so paid_amount > 0 is sufficient to confirm the period was paid.
+      //
+      // Phase 85 revised: Two-step check:
+      // 1. If INST_BASE[period] is fully paid → track overpaid at period (normal case).
+      // 2. If INST_BASE[period] is NOT fully paid but INST_BASE[period-1] IS fully paid
+      //    → TXRT-N actually closed period N-1 remainder, so overpaid belongs to period N.
+      //    Track overpaid at period (same period N, which is where the carry lands).
+      // 3. If neither → skip (suffix assignment is wrong in an unresolvable way).
       const overpaid = Number(pr.overpaid_amount ?? 0);
       if (overpaid > 0) {
         const instListForKey = instByContract.get(key) ?? [];
         const instRow = instListForKey.find((r) => Number(r.period ?? 0) === period);
         const instBaseAmount = instRow ? Number(instRow.amount ?? 0) : 0;
         const instBasePaid = instRow ? Number(instRow.paid_amount ?? 0) : 0;
-        // Only track overpaid when the installment for this period is actually fully paid:
-        // - If amount=0 (isClosed period): paid_amount > 0 confirms it was settled.
-        // - If amount>0: paid_amount must be >= amount (within 0.5 rounding tolerance).
-        // If neither condition holds, the suffix-based period assignment is likely wrong
-        // (the payment closed an earlier period, not this one), so skip overpaid tracking.
         const instIsPaid =
           (instBaseAmount < 0.009 && instBasePaid > 0.009) ||
           (instBaseAmount > 0.009 && instBasePaid >= instBaseAmount - 0.5);
-        if (instIsPaid) {
+        // Phase 85 step 2: check prior period (period-1) when current period is not fully paid
+        const priorInstRow = !instIsPaid && period > 1
+          ? instListForKey.find((r) => Number(r.period ?? 0) === period - 1)
+          : null;
+        const priorBaseAmount = priorInstRow ? Number(priorInstRow.amount ?? 0) : 0;
+        const priorBasePaid = priorInstRow ? Number(priorInstRow.paid_amount ?? 0) : 0;
+        const priorIsPaid = priorInstRow &&
+          ((priorBaseAmount < 0.009 && priorBasePaid > 0.009) ||
+           (priorBaseAmount > 0.009 && priorBasePaid >= priorBaseAmount - 0.5));
+        if (instIsPaid || priorIsPaid) {
           let periodMap = overpaidByContractPeriod.get(key);
           if (!periodMap) {
             periodMap = new Map<number, number>();

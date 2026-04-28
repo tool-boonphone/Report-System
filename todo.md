@@ -998,3 +998,7 @@ Task list:
 - [x] งวดอนาคต (isFuturePeriod) + ชำระครบ (isPaid) → ข้อความสีฟ้าตัวตรง
 - [x] งวดอนาคต (isFuturePeriod) + ชำระบางส่วน (isPartialPaid) → ข้อความสีฟ้าตัวเอียง
 - [x] แก้ไขทั้ง DebtReport.tsx และ DebtSummary.tsx
+
+## Phase 92 — CT0126-AYA004-22260-01 Bug Fixes
+- [ ] Bug 1: overpaid 50 จาก TXRT-2 (1-2) ไม่ตัดที่งวด 2 ทั้งที่ INST_BASE งวด 1 ชำระครบแล้ว (paid=3177 >= amount=3177)
+- [ ] Bug 2: งวด 2 (past period + partial paid) ไม่แสดงสีส้ม
