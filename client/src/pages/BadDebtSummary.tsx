@@ -347,8 +347,9 @@ export default function BadDebtSummary() {
   }
 
   return (
-    <AppShell>
-      <div className="max-w-screen-2xl mx-auto px-4 py-4 space-y-4">
+    <AppShell fullHeight>
+      <div className="flex flex-col h-full">
+      <div className="px-4 py-4 space-y-4">
 
         {/* ── Tabs + Export Excel ── */}
         <div className="flex items-center justify-between border-b border-gray-200">
@@ -433,8 +434,10 @@ export default function BadDebtSummary() {
           <div className="flex justify-center py-16"><Spinner /></div>
         )}
 
+      </div>
         {/* ╔════════════════ TAB 1: รายการขายเครื่อง ════════════════ */}
         {!isLoading && activeTab === "list" && (
+          <div className="flex-1 min-h-0 overflow-x-auto overflow-y-auto">
           <div className="rounded-lg border border-gray-200 shadow-sm">
             <table className="w-full text-sm">              <thead className="bg-red-700 text-white sticky top-0 z-10">
                 <tr>
@@ -505,9 +508,11 @@ export default function BadDebtSummary() {
               )}
             </table>
           </div>
+          </div>
         )}
         {/* ╔════════════════ TAB 2: สรุปรายเดือน ════════════════ */}
         {!isLoading && activeTab === "monthly" && (
+          <div className="flex-1 min-h-0 overflow-x-auto overflow-y-auto">
           <div className="rounded-lg border border-gray-200 shadow-sm">
             <table className="w-full text-sm">
               <thead className="bg-blue-700 text-white sticky top-0 z-10">
@@ -564,9 +569,11 @@ export default function BadDebtSummary() {
               )}
             </table>
           </div>
+          </div>
         )}
         {/* ╔════════════════ TAB 3: สรุปรายปี ════════════════ */}
         {!isLoading && activeTab === "yearly" && (
+          <div className="flex-1 min-h-0 overflow-x-auto overflow-y-auto">
           <div className="rounded-lg border border-gray-200 shadow-sm">
             <table className="w-full text-sm">
               <thead className="bg-purple-700 text-white sticky top-0 z-10">
@@ -624,6 +631,7 @@ export default function BadDebtSummary() {
                 </tfoot>
               )}
             </table>
+          </div>
           </div>
         )}
 
