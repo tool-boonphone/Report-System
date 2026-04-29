@@ -287,6 +287,31 @@ export default function BadDebtSummary() {
     <AppShell>
       <div className="max-w-screen-2xl mx-auto px-4 py-4 space-y-4">
 
+        {/* ── Tabs + Export Excel ── */}
+        <div className="flex items-center justify-between border-b border-gray-200">
+          <div className="flex gap-0">
+            {tabs.map((t) => (
+              <button
+                key={t.key}
+                onClick={() => setActiveTab(t.key)}
+                className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === t.key ? "border-red-600 text-red-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+              >
+                {t.icon}
+                {t.label}
+              </button>
+            ))}
+          </div>
+          {canExport && (
+            <button
+              onClick={handleExport}
+              className="flex items-center gap-1.5 px-3 py-1.5 mb-1 rounded-md text-sm font-medium bg-green-600 text-white hover:bg-green-700 transition-colors"
+            >
+              <Download className="w-4 h-4" />
+              <span className="hidden sm:inline">Export Excel</span>
+            </button>
+          )}
+        </div>
+
         {/* ── Summary Cards ── */}
         {summary && (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
@@ -303,20 +328,6 @@ export default function BadDebtSummary() {
             <SummaryCard icon={<TrendingUp className="w-5 h-5 text-green-500" />} label="กำไร / เสมอ / ขาดทุน" value={`${summary.profitCount} / ${summary.breakEvenCount} / ${summary.lossCount}`} color="border-gray-100" />
           </div>
         )}
-
-        {/* ── Tabs ── */}
-        <div className="flex gap-0 border-b border-gray-200">
-          {tabs.map((t) => (
-            <button
-              key={t.key}
-              onClick={() => setActiveTab(t.key)}
-              className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === t.key ? "border-red-600 text-red-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}
-            >
-              {t.icon}
-              {t.label}
-            </button>
-          ))}
-        </div>
 
         {/* ── Filters ── */}
         <div className="flex flex-wrap gap-3 items-end">
