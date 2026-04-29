@@ -3305,8 +3305,8 @@ export async function* listDebtCollectedStream(params: {
       };
       // Use per-batch payments Map (loaded per batch to avoid OOM)
       const rawPayments = batchPayByContract.get(extId) ?? [];
-      const contractBadDebtAmount = c.contractBadDebtAmount as number | null;
-      const contractBadDebtDate = c.contractBadDebtDate as string | null;
+      let contractBadDebtAmount = c.contractBadDebtAmount as number | null;
+      let contractBadDebtDate = c.contractBadDebtDate as string | null;
       // Real payments: numeric pay_ext_id OR TXRT receipt pattern
       const realPaymentsRaw = rawPayments.filter((p) => {
         const payExtId = (p as any).payment_external_id as string | null;
@@ -3315,6 +3315,39 @@ export async function* listDebtCollectedStream(params: {
         const isTxrtReceipt = receiptNo != null && /^TXRT.*-\d+$/.test(receiptNo);
         return isNumericPayExt || isTxrtReceipt;
       });
+
+      // Phase 106 (Stream): Universal bad-debt rule — same as listDebtCollected.
+      // For ALL contracts that are bad-debt AND real payments exist:
+      //   - Find the LATEST paid_at date across all real payments.
+      //   - SUM all real payments on that latest date → bad_debt_amount.
+      //   - All other payments (earlier dates) → normal installment columns.
+      // This overrides the DB bad_debt_amount (which may be null or wrong).
+      //
+      // A contract is considered bad-debt if:
+      //   1. contract.status = "หนี้เสีย" (direct), OR
+      //   2. Any installment has status = "ยกเลิกสัญญา" | "หนี้เสีย" | "ระงับสัญญา"
+      //      (some contracts have status="สำเร็จ" but installments are cancelled)
+      const SUSPEND_CODES_STREAM = new Set(["ยกเลิกสัญญา", "หนี้เสีย", "ระงับสัญญา"]);
+      const hasSuspendedInstallment = c.installments.some((inst: any) => SUSPEND_CODES_STREAM.has(inst.status ?? ""));
+      const isBadDebtContract = c.status === "หนี้เสีย" || hasSuspendedInstallment;
+      if (isBadDebtContract && realPaymentsRaw.length > 0) {
+        const sortedReal = [...realPaymentsRaw].sort((a, b) => {
+          const da = ((a as any).paid_at ?? "").substring(0, 10);
+          const db2 = ((b as any).paid_at ?? "").substring(0, 10);
+          return da < db2 ? 1 : da > db2 ? -1 : 0;
+        });
+        const latestDate = ((sortedReal[0] as any).paid_at ?? "").substring(0, 10);
+        const latestDatePayments = sortedReal.filter(
+          (p) => ((p as any).paid_at ?? "").substring(0, 10) === latestDate,
+        );
+        const latestDateTotal = latestDatePayments.reduce(
+          (sum, p) => sum + Number((p as any).total_paid_amount ?? 0),
+          0,
+        );
+        contractBadDebtAmount = latestDateTotal;
+        contractBadDebtDate = latestDate || null;
+      }
+
       let tagged: Array<PayRawRow & { splitIndex: number; isCloseRow: boolean; isBadDebtRow: boolean }>;
       if (contractBadDebtAmount != null && contractBadDebtAmount > 0 && contractBadDebtDate) {
         let badDebtNote: string | null = null;
