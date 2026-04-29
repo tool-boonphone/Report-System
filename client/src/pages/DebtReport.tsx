@@ -1360,7 +1360,8 @@ export default function DebtReport() {
                   const summaryDiscount = filteredPayments.reduce((s, p) => s + (p.discount ?? 0), 0);
                   const summaryOverpaid = filteredPayments.reduce((s, p) => s + (p.overpaid ?? 0), 0);
                   const summaryBadDebt = filteredPayments.reduce((s, p) => s + (p.badDebt ?? 0), 0);
-                  const summaryTotal = filteredPayments.reduce((s, p) => s + (p.total ?? 0), 0);
+                  // Phase 89: summaryTotal must include badDebt because badDebtRow has total=0 but badDebt=contractBadDebtAmount
+                  const summaryTotal = filteredPayments.reduce((s, p) => s + (p.total ?? 0), 0) + summaryBadDebt;
                   // Latest period = max period with paidAt
                   const latestPay = filteredPayments.filter(p => p.paidAt).sort((a, b) => {
                     if ((a.paidAt ?? "") > (b.paidAt ?? "")) return -1;

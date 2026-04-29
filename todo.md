@@ -1002,3 +1002,8 @@ Task list:
 ## Phase 92 — CT0126-AYA004-22260-01 Bug Fixes
 - [ ] Bug 1: overpaid 50 จาก TXRT-2 (1-2) ไม่ตัดที่งวด 2 ทั้งที่ INST_BASE งวด 1 ชำระครบแล้ว (paid=3177 >= amount=3177)
 - [ ] Bug 2: งวด 2 (past period + partial paid) ไม่แสดงสีส้ม
+
+## Phase 93 — Fix: summaryTotal ในยอดเก็บหนี้ไม่รวม badDebt (CT0824-NRT001-00023-01)
+- [x] P93-1: Debug พบว่า badDebtRow มี total=0 แต่ badDebt=7000 → summaryTotal ไม่รวม 7,000
+- [x] P93-2: แก้ไข summaryTotal ใน DebtReport.tsx ให้รวม summaryBadDebt ด้วย
+- [x] P93-3: Commit + push GitHub + checkpoint
