@@ -1007,3 +1007,10 @@ Task list:
 - [x] P93-1: Debug พบว่า badDebtRow มี total=0 แต่ badDebt=7000 → summaryTotal ไม่รวม 7,000
 - [x] P93-2: แก้ไข summaryTotal ใน DebtReport.tsx ให้รวม summaryBadDebt ด้วย
 - [x] P93-3: Commit + push GitHub + checkpoint
+
+## Phase 94 — Feature: TopNav 2-Level Sub Menu
+- [ ] P94-1: อ่านโค้ด TopNav/AppShell ปัจจุบัน
+- [ ] P94-2: ปรับ TopNav ให้มี 2 เมนูหลัก: "สัญญา" (link ตรง) และ "รายงานหนี้" (dropdown)
+- [ ] P94-3: Dropdown "รายงานหนี้" มี submenu: ภาพรวม, เป้า-ยอดเก็บ, หนี้เสีย, สรุปรายเดือน
+- [ ] P94-4: Mobile hamburger รองรับ 2-level expand/collapse
+- [ ] P94-5: Commit + push GitHub + checkpoint
