@@ -1110,7 +1110,7 @@ Task list:
 - [x] P110-5: Commit + Push + Checkpoint
 
 ### Phase 111 — แก้ไข suspendedFromPeriod ให้ใช้ badDebtPeriod จากยอดเก็บหนี้โดยตรง
-- [ ] P111-1: อ่าน logic suspendedFromPeriod ใน listDebtTarget และ listDebtTargetStream
-- [ ] P111-2: แก้ไข: ใช้ badDebtPeriod จาก collected data แทน closeSum-based suspendedFromPeriod (N-1 → ป้ายกำกับเริ่มงวดที่ N)
-- [ ] P111-3: TypeScript check + restart server + ยืนยันผลด้วย CT1124-CCO015-2211-03
-- [ ] P111-4: Commit + Push + Checkpoint
+- [x] P111-1: อ่าน logic suspendedFromPeriod ใน listDebtTarget และ listDebtTargetStream
+- [x] P111-2: แก้ไข: ใช้ badDebtPeriod จาก collected data แทน closeSum-based suspendedFromPeriod (N-1 → ป้ายกำกับเริ่มงวดที่ N)
+- [x] P111-3: TypeScript check + restart server + ยืนยันผลด้วย CT1124-CCO015-2211-03
+- [x] P111-4: Commit + Push + Checkpoint
