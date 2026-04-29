@@ -641,6 +641,10 @@ export type PayRawRow = {
   receipt_no: string | null;
   remark: string | null;
   payment_id: number | null;
+  /** ผู้บันทึก (updated_by จาก raw_json หรือ installments) */
+  updated_by: string | null;
+  /** วันที่บันทึก (updated_at จาก raw_json หรือ installments) */
+  updated_at: string | null;
 };
 
 /**
@@ -1195,6 +1199,8 @@ export async function listDebtTarget(params: { section: SectionKey }) {
         receipt_no: pr.receipt_no ?? null,
         remark: null,
         payment_id: pr.payment_id != null ? Number(pr.payment_id) : null,
+        updated_by: (pr as any).updated_by ?? null,
+        updated_at: (pr as any).updated_at ?? null,
       };
       const arr2 = rawPaysByContract.get(key) ?? [];
       arr2.push(payRow);
@@ -2132,7 +2138,11 @@ export async function listDebtCollected(params: { section: SectionKey }) {
            NULL AS installment_external_id,
            JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.receipt_no')) AS receipt_no,
            JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.remark'))     AS remark,
-           status AS ff_status
+           status AS ff_status,
+           -- updated_at: Boonphone/FF365 direct payments have it in raw_json
+           JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.updated_at')) AS updated_at,
+           -- updated_by: only FF365 installment-source payments have it (via JOIN below)
+           NULL AS updated_by
       FROM ${paymentTransactions}
      WHERE ${paymentTransactions.section} = ${params.section}
      ORDER BY contract_external_id, paid_at, payment_id
@@ -2175,6 +2185,9 @@ export async function listDebtCollected(params: { section: SectionKey }) {
       remark: r.remark ?? null,
       // FF365 only: raw status from payment_transactions
       ff_status: r.ff_status ?? null,
+      // ผู้บันทึก / วันที่บันทึก จาก raw_json
+      updated_by: r.updated_by ?? null,
+      updated_at: r.updated_at ?? null,
     } as any);
   }
 
@@ -2419,6 +2432,9 @@ export async function listDebtCollected(params: { section: SectionKey }) {
         remark: p.remark ?? null,
         // tooltip สำหรับ bad debt rows: "ยอดขายเครื่อง X บาท (DD/MM/YYYY)"
         badDebtNote: (p as any).badDebtNote ?? null,
+        // ผู้บันทึก / วันที่บันทึก
+        updatedBy: (p as any).updated_by ?? null,
+        updatedAt: (p as any).updated_at ?? null,
       })),
     };
   });
@@ -2701,6 +2717,8 @@ export async function* listDebtTargetStream(params: {
         receipt_no: pr.receipt_no ?? null,
         remark: null,
         payment_id: pr.payment_id != null ? Number(pr.payment_id) : null,
+        updated_by: (pr as any).updated_by ?? null,
+        updated_at: (pr as any).updated_at ?? null,
       };
       const arr2 = rawPaysByContractStream.get(key) ?? [];
       arr2.push(payRow);
@@ -3432,7 +3450,9 @@ export async function* listDebtCollectedStream(params: {
              CAST(JSON_EXTRACT(raw_json, '$.payment_id')               AS UNSIGNED) AS payment_id,
              JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.receipt_no')) AS receipt_no,
              JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.remark'))     AS remark,
-             status AS ff_status
+             status AS ff_status,
+             JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.updated_at')) AS updated_at,
+             NULL AS updated_by
         FROM payment_transactions
        WHERE section = '${sectionLiteral}'
          AND contract_external_id IN (${batchIdsLiteral})
@@ -3463,6 +3483,8 @@ export async function* listDebtCollectedStream(params: {
         receipt_no: r.receipt_no ?? null,
         remark: r.remark ?? null,
         ff_status: r.ff_status ?? null,
+        updated_at: r.updated_at ?? null,
+        updated_by: r.updated_by ?? null,
       } as any);
     }
 
@@ -3697,6 +3719,8 @@ export async function* listDebtCollectedStream(params: {
           closeInstallmentAmount: p.close_installment_amount ?? 0, badDebt: p.bad_debt_amount ?? 0,
           total: p.total_paid_amount ?? 0, receiptNo: p.receipt_no ?? null, remark: p.remark ?? null,
           badDebtNote: (p as any).badDebtNote ?? null,
+          updatedBy: (p as any).updated_by ?? null,
+          updatedAt: (p as any).updated_at ?? null,
         })),
       };
       yieldBatch.push(row);

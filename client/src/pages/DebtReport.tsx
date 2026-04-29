@@ -96,6 +96,20 @@ function fmtDate(d: string | null | undefined) {
   return d.slice(0, 10);
 }
 
+/** Format datetime string as DD/MM/YYYY HH:mm (Thai-friendly) */
+function fmtDateTime(d: string | null | undefined) {
+  if (!d) return "-";
+  // Handle both "YYYY-MM-DD HH:mm:ss" and "YYYY-MM-DDTHH:mm:ss" formats
+  const dt = new Date(d.replace(" ", "T"));
+  if (isNaN(dt.getTime())) return d.slice(0, 16).replace("T", " ");
+  const day = String(dt.getDate()).padStart(2, "0");
+  const month = String(dt.getMonth() + 1).padStart(2, "0");
+  const year = dt.getFullYear();
+  const hh = String(dt.getHours()).padStart(2, "0");
+  const mm = String(dt.getMinutes()).padStart(2, "0");
+  return `${day}/${month}/${year} ${hh}:${mm}`;
+}
+
 /** Mapping: status label → Tailwind classes for the colored pill badge. */
 function statusPillClasses(status: string): string {
   // Colors taken from boonphone.co.th/mm.html reference palette.
@@ -184,6 +198,10 @@ type PaymentCell = {
   remark: string | null;
   /** tooltip สำหรับ bad debt rows: "ยอดขายเครื่อง X บาท (DD/MM/YYYY)" */
   badDebtNote?: string | null;
+  /** ผู้บันทึก (updated_by จาก API) */
+  updatedBy?: string | null;
+  /** วันที่บันทึก (updated_at จาก API) */
+  updatedAt?: string | null;
 };
 
 type TargetRow = {
@@ -920,6 +938,8 @@ export default function DebtReport() {
           { key: "overpaid", label: "ชำระเกิน", width: 80, align: "right" },
           { key: "badDebt", label: "หนี้เสีย", width: 80, align: "right" },
           { key: "total", label: "ยอดที่ชำระรวม", width: 100, align: "right" },
+          { key: "updatedBy", label: "บันทึกโดย", width: 120 },
+          { key: "updatedAt", label: "บันทึกเมื่อ", width: 130 },
         ];
 
   const GROUP_WIDTH = groupCols.reduce((s, c) => s + c.width, 0);
@@ -1597,6 +1617,10 @@ export default function DebtReport() {
                                 case "total":
                                   v = summaryTotal > 0 ? fmtMoney(summaryTotal) : "-";
                                   break;
+                                case "updatedBy":
+                                case "updatedAt":
+                                  v = "-";
+                                  break;
                               }
                               const isTotal = gc.key === "total";
                               return (
@@ -1667,6 +1691,12 @@ export default function DebtReport() {
                                     break;
                                   case "total":
                                     v = fmtMoney(pay.total);
+                                    break;
+                                  case "updatedBy":
+                                    v = pay.updatedBy ?? "-";
+                                    break;
+                                  case "updatedAt":
+                                    v = pay.updatedAt ? fmtDateTime(pay.updatedAt) : "-";
                                     break;
                                 }
                                 const isZeroish = v === fmtMoney(0) || v === "0" || v === "0.00";
