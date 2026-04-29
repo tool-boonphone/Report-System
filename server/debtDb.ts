@@ -1536,12 +1536,14 @@ export async function listDebtTarget(params: { section: SectionKey }) {
         } else {
           // No TXRT receipt_no → use close_installment_amount sum to compute suspendedFromPeriod
           // Phase 68B: sum(close_installment_amount of non-device-sale payments) / installment_amount
+          // Phase 111 Iron Rule: ใช้ badDebtPeriod จาก ยอดเก็บหนี้ โดยตรง
+          //   - closeSum = 0 (ไม่มี normal payments) → suspendedFromPeriod = 1
+          //   - closeSum > 0 (มี normal payments) → suspendedFromPeriod = closedPeriods + 1
+          //   ไม่ fallback ไป firstSuspended.period เพราะ installment_status อาจชี้งวดผิด
           const contractInstAmt = c.installment_amount != null ? Number(c.installment_amount) : 0;
-          const contractBadDebtAmt = c.bad_debt_amount != null ? Number(c.bad_debt_amount) : 0;
-          const payTotals = closePayTotalByContract.get(extId) ?? [];
           const closeSum = closeAmtSumByContract.get(extId) ?? 0;
           if (contractInstAmt > 0 && closeSum > 0) {
-            // Count how many full installments were closed
+            // มี normal payments: Count how many full installments were closed
             const closedPeriods = Math.round(closeSum / contractInstAmt);
             suspendedFromPeriod = closedPeriods + 1;
             // Find due_date of suspendedFromPeriod
@@ -1555,16 +1557,12 @@ export async function listDebtTarget(params: { section: SectionKey }) {
                 .sort((a, b) => (a.period ?? 0) - (b.period ?? 0))[0];
               suspendedAt = lastClosedRow?.due_date ?? null;
             }
-          } else if (firstSuspended?.period) {
-            // Phase 71B fallback: ใช้ firstSuspended ถ้าไม่มี TXRT และไม่มี close_installment_amount
-            suspendedFromPeriod = Number(firstSuspended.period);
-            suspendedAt = firstSuspended.due_date ?? null;
           } else {
+            // Phase 111: ไม่มี normal payments (closeSum=0) → bad-debt บันทึกที่งวด 1
+            // ไม่ใช้ firstSuspended.period เพราะ installment_status อาจชี้งวดผิด
             const firstPeriod = list.sort((a, b) => (a.period ?? 0) - (b.period ?? 0))[0];
-            if (firstPeriod) {
-              suspendedFromPeriod = 1;
-              suspendedAt = firstPeriod.due_date ?? null;
-            }
+            suspendedFromPeriod = 1;
+            suspendedAt = firstPeriod?.due_date ?? null;
           }
         }
       } else if (firstSuspended?.period) {
@@ -2844,9 +2842,14 @@ export async function* listDebtTargetStream(params: {
           }
         } else {
           // Phase 68B: No TXRT receipt_no → use close_installment_amount sum
+          // Phase 111 Iron Rule: ใช้ badDebtPeriod จาก ยอดเก็บหนี้ โดยตรง
+          //   - closeSum = 0 (ไม่มี normal payments) → suspendedFromPeriod = 1
+          //   - closeSum > 0 (มี normal payments) → suspendedFromPeriod = closedPeriods + 1
+          //   ไม่ fallback ไป firstSuspended.period เพราะ installment_status อาจชี้งวดผิด
           const contractInstAmt = c.installment_amount != null ? Number(c.installment_amount) : 0;
           const closeSum = closeAmtSumByContractStream.get(extId) ?? 0;
           if (contractInstAmt > 0 && closeSum > 0) {
+            // มี normal payments: Count how many full installments were closed
             const closedPeriods = Math.round(closeSum / contractInstAmt);
             suspendedFromPeriod = closedPeriods + 1;
             const suspendedPeriodRow = list
@@ -2859,16 +2862,12 @@ export async function* listDebtTargetStream(params: {
                 .sort((a, b) => (a.period ?? 0) - (b.period ?? 0))[0];
               suspendedAt = lastClosedRow?.due_date ?? null;
             }
-          } else if (firstSuspended?.period) {
-            // Phase 71B fallback: ใช้ firstSuspended ถ้าไม่มี TXRT และไม่มี close_installment_amount
-            suspendedFromPeriod = Number(firstSuspended.period);
-            suspendedAt = firstSuspended.due_date ?? null;
           } else {
+            // Phase 111: ไม่มี normal payments (closeSum=0) → bad-debt บันทึกที่งวด 1
+            // ไม่ใช้ firstSuspended.period เพราะ installment_status อาจชี้งวดผิด
             const firstPeriod = list.sort((a, b) => (a.period ?? 0) - (b.period ?? 0))[0];
-            if (firstPeriod) {
-              suspendedFromPeriod = 1;
-              suspendedAt = firstPeriod.due_date ?? null;
-            }
+            suspendedFromPeriod = 1;
+            suspendedAt = firstPeriod?.due_date ?? null;
           }
         }
       } else if (firstSuspended?.period) {
