@@ -45,6 +45,7 @@ import {
   Coins,
   Download,
   Gavel,
+  Info,
   LockOpen,
   Percent,
   Pin,
@@ -59,6 +60,12 @@ import {
   X,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -419,6 +426,8 @@ export default function DebtReport() {
   const [debtSetMode, setDebtSetMode] = useState(false);
   // ตัวกรอง "บันทึกโดย" (collected tab only)
   const [updatedByFilter, setUpdatedByFilter] = useState<string | null>(null);
+  // Color legend modal
+  const [showColorLegend, setShowColorLegend] = useState(false);
   // Pinned columns: set of LEFT_COLS keys that are sticky-left
   const [pinnedCols, setPinnedCols] = useState<Set<string>>(new Set());
   const [hoveredRow, setHoveredRow] = useState<number | null>(null);
@@ -1023,15 +1032,27 @@ export default function DebtReport() {
               ยอดเก็บหนี้
             </Button>
           </div>
-          {canExport && (
+          <div className="flex items-center gap-2">
+            {/* ปุ่ม i อธิบายสีตัวเลข */}
             <Button
-              className="bg-green-600 hover:bg-green-700 text-white"
-              onClick={handleExport}
+              variant="outline"
+              size="icon"
+              className="w-9 h-9 rounded-full border-gray-300 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+              onClick={() => setShowColorLegend(true)}
+              title="คำอธิบายสีและสัญลักษณ์"
             >
-              <Download className="w-4 h-4 mr-1.5" />
-              Export Excel
+              <Info className="w-4 h-4" />
             </Button>
-          )}
+            {canExport && (
+              <Button
+                className="bg-green-600 hover:bg-green-700 text-white"
+                onClick={handleExport}
+              >
+                <Download className="w-4 h-4 mr-1.5" />
+                Export Excel
+              </Button>
+            )}
+          </div>
         </div>
 
         {/* Toolbar: Search > ApproveDate > Date > DueDate > Status > ProductType > PrincipalOnly > ตั้งหนี้ (target) | บันทึกโดย (collected) */}
@@ -2152,6 +2173,203 @@ export default function DebtReport() {
           </div>
         )}
       </div>
+
+      {/* Color Legend Dialog */}
+      <Dialog open={showColorLegend} onOpenChange={setShowColorLegend}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <Info className="w-4 h-4 text-blue-500" />
+              {tab === "target" ? "คำอธิบายสีตัวเลข — เป้าเก็บหนี้" : "คำอธิบายสีตัวเลข — ยอดเก็บหนี้"}
+            </DialogTitle>
+          </DialogHeader>
+
+          {tab === "target" ? (
+            <div className="space-y-4 text-sm">
+              <p className="text-gray-500 text-xs">สีของตัวเลขแต่ละงวดบอกสถานะการชำระเงินของงวดนั้นๆ</p>
+              <table className="w-full border-collapse text-xs">
+                <thead>
+                  <tr className="bg-gray-100">
+                    <th className="text-left p-2 border border-gray-200 font-semibold">สี</th>
+                    <th className="text-left p-2 border border-gray-200 font-semibold">ความหมาย</th>
+                    <th className="text-left p-2 border border-gray-200 font-semibold">ตัวอย่าง</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td className="p-2 border border-gray-200">
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className="w-3 h-3 rounded-full bg-green-600 inline-block"></span>
+                        <span className="text-green-700 font-semibold">เขียว</span>
+                      </span>
+                    </td>
+                    <td className="p-2 border border-gray-200">ชำระครบแล้ว</td>
+                    <td className="p-2 border border-gray-200 text-gray-500">งวดที่ลูกค้าจ่ายเงินครบถ้วนแล้ว</td>
+                  </tr>
+                  <tr className="bg-gray-50">
+                    <td className="p-2 border border-gray-200">
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className="w-3 h-3 rounded-full bg-orange-500 inline-block"></span>
+                        <span className="text-orange-700 font-semibold">ส้ม</span>
+                      </span>
+                    </td>
+                    <td className="p-2 border border-gray-200">ค้างชำระ / เกินกำหนด</td>
+                    <td className="p-2 border border-gray-200 text-gray-500">งวดที่ผ่านวันครบกำหนดแล้วแต่ยังไม่ได้ชำระ</td>
+                  </tr>
+                  <tr>
+                    <td className="p-2 border border-gray-200">
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className="w-3 h-3 rounded-full bg-gray-900 inline-block"></span>
+                        <span className="text-gray-900 font-semibold">ดำ</span>
+                      </span>
+                    </td>
+                    <td className="p-2 border border-gray-200">ถึงกำหนดชำระวันนี้</td>
+                    <td className="p-2 border border-gray-200 text-gray-500">งวดปัจจุบันที่ยังไม่ได้ชำระ (ตรงกำหนดวันนี้)</td>
+                  </tr>
+                  <tr className="bg-gray-50">
+                    <td className="p-2 border border-gray-200">
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className="w-3 h-3 rounded-full bg-sky-500 inline-block"></span>
+                        <span className="text-sky-700 font-semibold">ฟ้า</span>
+                      </span>
+                    </td>
+                    <td className="p-2 border border-gray-200">ชำระล่วงหน้า</td>
+                    <td className="p-2 border border-gray-200 text-gray-500">งวดที่ยังไม่ถึงกำหนดแต่ชำระเงินมาแล้ว</td>
+                  </tr>
+                  <tr>
+                    <td className="p-2 border border-gray-200">
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className="w-3 h-3 rounded-full bg-gray-400 inline-block"></span>
+                        <span className="text-gray-500 font-semibold">เทา</span>
+                      </span>
+                    </td>
+                    <td className="p-2 border border-gray-200">ยังไม่ถึงกำหนดชำระ</td>
+                    <td className="p-2 border border-gray-200 text-gray-500">งวดในอนาคตที่ยังไม่ถึงวันกำหนดชำระ</td>
+                  </tr>
+                  <tr className="bg-gray-50">
+                    <td className="p-2 border border-gray-200">
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className="w-3 h-3 rounded-full bg-gray-300 inline-block border border-gray-400"></span>
+                        <span className="text-gray-400 font-semibold italic">เทาอ่อน (ตัวเอียง)</span>
+                      </span>
+                    </td>
+                    <td className="p-2 border border-gray-200">ปิดค่างวด / ระงับสัญญา</td>
+                    <td className="p-2 border border-gray-200 text-gray-500">งวดที่ถูกปิดค่างวดหรืออยู่ในสัญญาที่ระงับ/สิ้นสุด</td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <div className="mt-3">
+                <p className="text-xs font-semibold text-gray-600 mb-2">พื้นหลังแถว (Row Background)</p>
+                <table className="w-full border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-gray-100">
+                      <th className="text-left p-2 border border-gray-200 font-semibold">สีพื้นหลัง</th>
+                      <th className="text-left p-2 border border-gray-200 font-semibold">ความหมาย</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td className="p-2 border border-gray-200">
+                        <span className="inline-block w-16 h-5 rounded" style={{background: '#f0f9ff', border: '1px solid #bae6fd'}}></span>
+                        <span className="ml-2 text-sky-700">ฟ้าอ่อน</span>
+                      </td>
+                      <td className="p-2 border border-gray-200">งวดปัจจุบันที่ต้องชำระ (เดือนนี้)</td>
+                    </tr>
+                    <tr className="bg-gray-50">
+                      <td className="p-2 border border-gray-200">
+                        <span className="inline-block w-16 h-5 rounded" style={{background: '#fef3c7', border: '1px solid #fcd34d'}}></span>
+                        <span className="ml-2 text-amber-700">เหลืองอ่อน</span>
+                      </td>
+                      <td className="p-2 border border-gray-200">มีค่าปรับ/ค่าปลดล็อกค้างชำระสะสมจากงวดก่อนหน้า</td>
+                    </tr>
+                    <tr>
+                      <td className="p-2 border border-gray-200">
+                        <span className="inline-block w-16 h-5 rounded" style={{background: '#f3f4f6', border: '1px solid #d1d5db'}}></span>
+                        <span className="ml-2 text-gray-500">เทาอ่อน</span>
+                      </td>
+                      <td className="p-2 border border-gray-200">งวดที่ปิดค่างวดแล้ว / สัญญาระงับ</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4 text-sm">
+              <p className="text-gray-500 text-xs">สีของตัวเลขแต่ละรายการชำระเงินบอกสถานะของรายการนั้นๆ</p>
+              <table className="w-full border-collapse text-xs">
+                <thead>
+                  <tr className="bg-gray-100">
+                    <th className="text-left p-2 border border-gray-200 font-semibold">สี</th>
+                    <th className="text-left p-2 border border-gray-200 font-semibold">ความหมาย</th>
+                    <th className="text-left p-2 border border-gray-200 font-semibold">ตัวอย่าง</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td className="p-2 border border-gray-200">
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className="w-3 h-3 rounded-full bg-gray-900 inline-block"></span>
+                        <span className="text-gray-900 font-semibold">ดำ</span>
+                      </span>
+                    </td>
+                    <td className="p-2 border border-gray-200">ยอดชำระปกติ</td>
+                    <td className="p-2 border border-gray-200 text-gray-500">รายการชำระเงินทั่วไป</td>
+                  </tr>
+                  <tr className="bg-gray-50">
+                    <td className="p-2 border border-gray-200">
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className="w-3 h-3 rounded-full bg-red-500 inline-block"></span>
+                        <span className="text-red-600 font-semibold">แดง</span>
+                      </span>
+                    </td>
+                    <td className="p-2 border border-gray-200">ยอดหนี้เสีย</td>
+                    <td className="p-2 border border-gray-200 text-gray-500">รายการที่ถูกตัดสินเป็นหนี้เสีย</td>
+                  </tr>
+                  <tr>
+                    <td className="p-2 border border-gray-200">
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className="w-3 h-3 rounded-full bg-orange-500 inline-block"></span>
+                        <span className="text-orange-600 font-semibold">ส้ม</span>
+                      </span>
+                    </td>
+                    <td className="p-2 border border-gray-200">ยอดค่าปรับ / ค่าปลดล็อก</td>
+                    <td className="p-2 border border-gray-200 text-gray-500">รายการชำระที่มีค่าปรับหรือค่าปลดล็อก</td>
+                  </tr>
+                  <tr className="bg-gray-50">
+                    <td className="p-2 border border-gray-200">
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className="w-3 h-3 rounded-full bg-blue-500 inline-block"></span>
+                        <span className="text-blue-600 font-semibold">น้ำเงิน</span>
+                      </span>
+                    </td>
+                    <td className="p-2 border border-gray-200">ยอดชำระล่วงหน้า / ยอดเกิน</td>
+                    <td className="p-2 border border-gray-200 text-gray-500">ชำระเกินยอดที่ต้องชำระในงวดนั้น</td>
+                  </tr>
+                  <tr>
+                    <td className="p-2 border border-gray-200">
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className="w-3 h-3 rounded-full bg-green-500 inline-block"></span>
+                        <span className="text-green-600 font-semibold">เขียว</span>
+                      </span>
+                    </td>
+                    <td className="p-2 border border-gray-200">ยอดส่วนลด</td>
+                    <td className="p-2 border border-gray-200 text-gray-500">ยอดที่ได้รับส่วนลดจากราคาทุน</td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <div className="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                <p className="text-xs font-semibold text-blue-700 mb-1">หมายเหตุ</p>
+                <ul className="text-xs text-blue-600 space-y-1 list-disc list-inside">
+                  <li>รายการหนึ่งสัญญาอาจมีหลายสีในครั้งเดียวกัน เช่น ชำระปกติ + ค่าปรับ</li>
+                  <li>ตัวเลขสีแดงคือยอดหนี้เสียที่ถูกตัดสินและไม่ต้องชำระแล้ว</li>
+                </ul>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </AppShell>
   );
 }
