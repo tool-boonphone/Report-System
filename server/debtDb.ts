@@ -1043,11 +1043,13 @@ export async function listDebtTarget(params: { section: SectionKey }) {
   {
     // Extra query: get close_installment_amount for ALL payments (no receipt_no filter)
     // Phase 110: include paid_at so we can exclude bad-debt-date payments from closeSum
+    // Phase 112: include receipt_no so we can exclude payments belonging to other contracts
     const rawCloseAmtData = await db.execute(sql`
       SELECT contract_external_id,
              CAST(amount AS DECIMAL(18,2)) AS total_paid_amount,
              CAST(JSON_EXTRACT(raw_json, '$.close_installment_amount') AS DECIMAL(18,2)) AS close_installment_amount,
-             DATE(paid_at) AS paid_date
+             DATE(paid_at) AS paid_date,
+             JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.receipt_no')) AS receipt_no
         FROM ${paymentTransactions}
        WHERE ${paymentTransactions.section} = ${params.section}
          AND JSON_EXTRACT(raw_json, '$.close_installment_amount') IS NOT NULL
@@ -1081,6 +1083,12 @@ export async function listDebtTarget(params: { section: SectionKey }) {
         badDebtDateByContract.set(k, d);
       }
     }
+    // Build contractNo lookup for receipt_no validation
+    const contractNoByExtId = new Map<string, string>();
+    for (const cr of cRows) {
+      const k = String(cr.external_id ?? "");
+      if (k && cr.contract_no) contractNoByExtId.set(k, String(cr.contract_no));
+    }
     for (const row of closeAmtRows) {
       const key = String(row.contract_external_id ?? "");
       if (!key) continue;
@@ -1095,6 +1103,15 @@ export async function listDebtTarget(params: { section: SectionKey }) {
       }
       // Skip device sale payments (total ≈ bad_debt_amount)
       if (badDebt > 0 && Math.abs(totalPaid - badDebt) <= 1) continue;
+      // Phase 112: Skip payments whose receipt_no belongs to a different contract
+      // (e.g. TXRT0326-RBR002-2014-01-1 stored under contract 2133 CT1124-CCO015-2211-03)
+      if (row.receipt_no) {
+        const contractNo = contractNoByExtId.get(key);
+        if (contractNo) {
+          const expectedPrefix = "TXRT" + contractNo.replace(/^CT/, "") + "-";
+          if (!row.receipt_no.startsWith(expectedPrefix)) continue;
+        }
+      }
       closeAmtSumByContract.set(key, (closeAmtSumByContract.get(key) ?? 0) + closeAmt);
     }
   }
@@ -2473,11 +2490,13 @@ export async function* listDebtTargetStream(params: {
   {
     // Extra query: get close_installment_amount for ALL payments (no receipt_no filter)
     // Phase 110 (stream): include paid_at so we can exclude bad-debt-date payments from closeSum
+    // Phase 112 (stream): include receipt_no so we can exclude payments belonging to other contracts
     const rawCloseAmtData = await db.execute(sql`
       SELECT contract_external_id,
              CAST(amount AS DECIMAL(18,2)) AS total_paid_amount,
              CAST(JSON_EXTRACT(raw_json, '$.close_installment_amount') AS DECIMAL(18,2)) AS close_installment_amount,
-             DATE(paid_at) AS paid_date
+             DATE(paid_at) AS paid_date,
+             JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.receipt_no')) AS receipt_no
         FROM ${paymentTransactions}
        WHERE ${paymentTransactions.section} = ${params.section}
          AND JSON_EXTRACT(raw_json, '$.close_installment_amount') IS NOT NULL
@@ -2521,6 +2540,14 @@ export async function* listDebtTargetStream(params: {
       }
       // Skip device sale payments (total ≈ bad_debt_amount)
       if (badDebt > 0 && Math.abs(totalPaid - badDebt) <= 1) continue;
+      // Phase 112 (stream): Skip payments whose receipt_no belongs to a different contract
+      if (row.receipt_no) {
+        const contractNo = contractNoByExtIdStream.get(key);
+        if (contractNo) {
+          const expectedPrefix = "TXRT" + contractNo.replace(/^CT/, "") + "-";
+          if (!row.receipt_no.startsWith(expectedPrefix)) continue;
+        }
+      }
       closeAmtSumByContractStream.set(key, (closeAmtSumByContractStream.get(key) ?? 0) + closeAmt);
     }
   }
