@@ -113,13 +113,6 @@ export default function BadDebtSummary() {
   const rows = data?.rows ?? [];
   const summary = data?.summary;
 
-  /* ── approveMonth options ── */
-  const approveMonthOptions = useMemo(() => {
-    const set = new Set<string>();
-    rows.forEach((r) => { if (r.approveDate) set.add(r.approveDate.slice(0, 7)); });
-    return Array.from(set).sort().reverse();
-  }, [rows]);
-
   /* ── saleMonth options ── */
   const saleMonthOptions = useMemo(() => {
     const set = new Set<string>();
@@ -340,12 +333,7 @@ export default function BadDebtSummary() {
         <div className="flex flex-wrap gap-3 items-end">
           <div className="flex flex-col gap-1">
             <label className="text-xs text-gray-500">เดือนที่อนุมัติ</label>
-            <select value={approveMonth} onChange={(e) => setApproveMonth(e.target.value)} className="border rounded px-2 py-1.5 text-sm h-9 bg-white">
-              <option value="">ทุกเดือน</option>
-              {approveMonthOptions.map((ym) => (
-                <option key={ym} value={ym}>{fmtMonthLabel(ym)}</option>
-              ))}
-            </select>
+            <input type="month" value={approveMonth} onChange={(e) => setApproveMonth(e.target.value)} className="border rounded px-2 py-1.5 text-sm h-9" />
           </div>
           <div className="flex flex-col gap-1">
             <label className="text-xs text-gray-500">เดือนที่ขายเครื่อง</label>
@@ -379,19 +367,9 @@ export default function BadDebtSummary() {
 
         {/* ════════════════ TAB 1: รายการขายเครื่อง ════════════════ */}
         {!isLoading && activeTab === "list" && (
-          <div className="rounded-lg border border-gray-200 shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <div className="overflow-x-auto rounded-lg border border-gray-200 shadow-sm">
+            <table className="min-w-full text-sm">
               <thead className="bg-red-700 text-white sticky top-0 z-10">
-                {/* Group header row */}
-                <tr>
-                  <th colSpan={6} className="px-2 py-1 text-center text-xs font-semibold border-r border-red-500">ข้อมูลสัญญา</th>
-                  <th colSpan={3} className="px-2 py-1 text-center text-xs font-semibold border-r border-red-500">ต้นทุน</th>
-                  <th colSpan={3} className="px-2 py-1 text-center text-xs font-semibold border-r border-red-500">รายรับ</th>
-                  <th colSpan={1} className="px-2 py-1 text-center text-xs font-semibold border-r border-red-500">รวมรายรับ</th>
-                  <th colSpan={1} className="px-2 py-1 text-center text-xs font-semibold border-r border-red-500">วันที่ขาย</th>
-                  <th colSpan={1} className="px-2 py-1 text-center text-xs font-semibold">ผลลัพธ์</th>
-                </tr>
                 <tr>
                   <th className="px-2 py-2 text-center text-xs font-semibold w-10">#</th>
                   <Th label="วันที่อนุมัติ" col="approveDate" />
@@ -457,23 +435,13 @@ export default function BadDebtSummary() {
               )}
             </table>
           </div>
-          </div>
         )}
 
         {/* ════════════════ TAB 2: สรุปรายเดือน ════════════════ */}
         {!isLoading && activeTab === "monthly" && (
-          <div className="rounded-lg border border-gray-200 shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <div className="overflow-x-auto rounded-lg border border-gray-200 shadow-sm">
+            <table className="min-w-full text-sm">
               <thead className="bg-blue-700 text-white sticky top-0 z-10">
-                {/* Group header row */}
-                <tr>
-                  <th colSpan={2} className="px-2 py-1 text-center text-xs font-semibold border-r border-blue-500">ช่วงเวลา</th>
-                  <th colSpan={3} className="px-2 py-1 text-center text-xs font-semibold border-r border-blue-500">ต้นทุน</th>
-                  <th colSpan={2} className="px-2 py-1 text-center text-xs font-semibold border-r border-blue-500">รายรับ</th>
-                  <th colSpan={1} className="px-2 py-1 text-center text-xs font-semibold border-r border-blue-500">รวมรายรับ</th>
-                  <th colSpan={1} className="px-2 py-1 text-center text-xs font-semibold">ผลลัพธ์</th>
-                </tr>
                 <tr>
                   <th className="px-3 py-2 text-left text-xs font-semibold whitespace-nowrap">เดือน-ปีที่ขาย</th>
                   <th className="px-2 py-2 text-center text-xs font-semibold whitespace-nowrap">จำนวน</th>
@@ -485,7 +453,8 @@ export default function BadDebtSummary() {
                   <th className="px-2 py-2 text-center text-xs font-semibold whitespace-nowrap">รวมรายรับ</th>
                   <th className="px-2 py-2 text-center text-xs font-semibold whitespace-nowrap">กำไร/ขาดทุน</th>
                 </tr>
-              </thead>              <tbody>
+              </thead>
+              <tbody>
                 {monthlyRows.length === 0 ? (
                   <tr><td colSpan={9} className="text-center py-12 text-gray-400">ไม่พบข้อมูล</td></tr>
                 ) : (
@@ -521,23 +490,13 @@ export default function BadDebtSummary() {
               )}
             </table>
           </div>
-          </div>
         )}
 
         {/* ════════════════ TAB 3: สรุปรายปี ════════════════ */}
         {!isLoading && activeTab === "yearly" && (
-          <div className="rounded-lg border border-gray-200 shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <div className="overflow-x-auto rounded-lg border border-gray-200 shadow-sm">
+            <table className="min-w-full text-sm">
               <thead className="bg-purple-700 text-white sticky top-0 z-10">
-                {/* Group header row */}
-                <tr>
-                  <th colSpan={2} className="px-2 py-1 text-center text-xs font-semibold border-r border-purple-500">ช่วงเวลา</th>
-                  <th colSpan={3} className="px-2 py-1 text-center text-xs font-semibold border-r border-purple-500">ต้นทุน</th>
-                  <th colSpan={2} className="px-2 py-1 text-center text-xs font-semibold border-r border-purple-500">รายรับ</th>
-                  <th colSpan={1} className="px-2 py-1 text-center text-xs font-semibold border-r border-purple-500">รวมรายรับ</th>
-                  <th colSpan={1} className="px-2 py-1 text-center text-xs font-semibold">ผลลัพธ์</th>
-                </tr>
                 <tr>
                   <th className="px-3 py-2 text-left text-xs font-semibold whitespace-nowrap">ปีที่ขาย</th>
                   <th className="px-2 py-2 text-center text-xs font-semibold whitespace-nowrap">จำนวน</th>
@@ -549,7 +508,8 @@ export default function BadDebtSummary() {
                   <th className="px-2 py-2 text-center text-xs font-semibold whitespace-nowrap">รวมรายรับ</th>
                   <th className="px-2 py-2 text-center text-xs font-semibold whitespace-nowrap">กำไร/ขาดทุน</th>
                 </tr>
-              </thead>              <tbody>
+              </thead>
+              <tbody>
                 {yearlyRows.length === 0 ? (
                   <tr><td colSpan={9} className="text-center py-12 text-gray-400">ไม่พบข้อมูล</td></tr>
                 ) : (
@@ -586,7 +546,6 @@ export default function BadDebtSummary() {
                 </tfoot>
               )}
             </table>
-          </div>
           </div>
         )}
 
