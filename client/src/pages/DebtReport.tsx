@@ -1810,10 +1810,10 @@ export default function DebtReport() {
                                 }
                               }
                             }
-                            // Phase 93: งวดที่ชำระล่วงหน้าครบแล้ว (isFuturePeriod + isPaid) → แสดง 0 ทุกคอลัมน์
+                            // Phase 93: งวดที่ชำระล่วงหน้าครบแล้ว (isFuturePeriod + isPaid) → แสดง 0.00 ทุกคอลัมน์
                             // เพราะถูกหักออกจากการตั้งหนี้แล้ว (ไม่ใช่ dimmed เพราะยังต้องแสดงวันที่)
                             if (_isFuturePeriodPre && _isPaidPre && gc.key !== "period" && gc.key !== "dueDate") {
-                              v = "0";
+                              v = "0.00";
                               annotation = null;
                             }
                             const isArrears = !dimmed && !!inst?.isArrears;
