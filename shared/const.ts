@@ -23,6 +23,7 @@ export const MENU_CODES = [
   "debt_overview", // ภาพรวมหนี้ (ตารางสรุปรายเดือน)
   "debt_summary", // สรุปหนี้ (มุมมองย่อของรายงานหนี้)
   "debt_report", // รายงานหนี้
+  "suspected_bad_debt", // หนี้สงสัยจะเสีย
   "bad_debt_summary", // สรุปหนี้เสีย
   "monthly_summary", // สรุปรายเดือน (bucket × approve_month)
   "settings_users", // ตั้งค่า > จัดการผู้ใช้งาน
@@ -36,6 +37,7 @@ export const MENU_LABELS: Record<MenuCode, string> = {
   debt_overview: "ภาพรวมหนี้",
   debt_summary: "สรุปหนี้",
   debt_report: "รายงานหนี้",
+  suspected_bad_debt: "หนี้สงสัยจะเสีย",
   bad_debt_summary: "สรุปหนี้เสีย",
   monthly_summary: "สรุปรายเดือน",
   settings_users: "จัดการผู้ใช้งาน",

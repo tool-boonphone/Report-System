@@ -15,6 +15,7 @@ import DebtReport from "./pages/DebtReport";
 import DebtSummary from "./pages/DebtSummary";
 import DebtOverview from "./pages/DebtOverview";
 import MonthlySummary from "./pages/MonthlySummary";
+import SuspectedBadDebt from "./pages/SuspectedBadDebt";
 import UsersSettings from "./pages/settings/Users";
 import GroupsSettings from "./pages/settings/Groups";
 
@@ -29,6 +30,7 @@ function Router() {
       <Route path="/debt-overview" component={DebtOverview} />
       <Route path="/debt-summary" component={DebtSummary} />
       <Route path="/debt-report" component={DebtReport} />
+      <Route path="/suspected-bad-debt" component={SuspectedBadDebt} />
       <Route path="/bad-debt-summary" component={BadDebtSummary} />
       <Route path="/monthly-summary" component={MonthlySummary} />
       <Route path="/settings/users" component={UsersSettings} />

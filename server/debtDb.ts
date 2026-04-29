@@ -3519,3 +3519,167 @@ export async function* listDebtCollectedStream(params: {
     yield { rows: yieldBatch, meta: { hasPrincipalBreakdown: true } };
   }
 }
+
+/* ============================================================================
+ * listSuspectedBadDebt — Phase 105
+ *
+ * Returns contracts with debtStatus "เกิน 61-90" or "เกิน >90".
+ * Each row contains:
+ *   contractNo, approveDate, customerName, phone, model, device,
+ *   sellPrice, financeAmount, multiplier, commissionNet,
+ *   cost (= financeAmount + commissionNet),
+ *   paidInstallments (งวดที่ชำระ),
+ *   totalPaid (ยอดเก็บค่างวด — sum of real payments excl. device-sale),
+ *   debtValue (= cost - totalPaid),
+ *   debtStatus, daysOverdue
+ *
+ * totalPaid is computed from payment_transactions (numeric external_id only).
+ * ============================================================================ */
+export async function listSuspectedBadDebt(params: { section: SectionKey }): Promise<{
+  rows: Array<{
+    contractExternalId: string;
+    contractNo: string | null;
+    approveDate: string | null;
+    customerName: string | null;
+    phone: string | null;
+    model: string | null;
+    device: string | null;
+    sellPrice: number | null;
+    financeAmount: number | null;
+    multiplier: number | null;
+    commissionNet: number | null;
+    cost: number;
+    paidInstallments: number;
+    totalPaid: number;
+    debtValue: number;
+    debtStatus: string;
+    daysOverdue: number;
+  }>;
+}> {
+  const db = await getDb();
+  if (!db) return { rows: [] };
+
+  // --- Load contract headers ---
+  const contractRowsRaw = await db.execute(sql`
+    SELECT external_id,
+           contract_no,
+           approve_date,
+           customer_name,
+           phone,
+           model,
+           device,
+           CAST(sell_price AS DECIMAL(18,2))    AS sell_price,
+           CAST(finance_amount AS DECIMAL(18,2)) AS finance_amount,
+           CAST(multiplier AS DECIMAL(18,4))     AS multiplier,
+           CAST(commission_net AS DECIMAL(18,2)) AS commission_net,
+           paid_installments,
+           installment_count,
+           installment_amount,
+           status
+      FROM ${contracts}
+     WHERE ${contracts.section} = ${params.section}
+       AND ${contracts.status} NOT IN ('สำเร็จ', 'สิ้นสุดสัญญา', 'หนี้เสีย', 'ระงับสัญญา', 'ยกเลิกสัญญา')
+  `);
+  const cRows: Array<any> = (contractRowsRaw as any)[0] ?? contractRowsRaw;
+
+  // --- Load installments for overdue calculation ---
+  const instRowsRaw = await db.execute(sql`
+    SELECT contract_external_id,
+           external_id,
+           period,
+           due_date,
+           CAST(amount AS DECIMAL(18,2))       AS amount,
+           CAST(paid_amount AS DECIMAL(18,2))  AS paid_amount,
+           status AS inst_status,
+           CAST(JSON_EXTRACT(raw_json, '$.balance') AS DECIMAL(18,2)) AS balance
+      FROM ${installments}
+     WHERE ${installments.section} = ${params.section}
+     ORDER BY contract_external_id, period
+  `);
+  const iRows: Array<{
+    contract_external_id: string;
+    external_id: string | null;
+    period: number | null;
+    due_date: string | null;
+    amount: number | null;
+    paid_amount: number | null;
+    inst_status: string | null;
+    balance: number | null;
+  }> = (instRowsRaw as any)[0] ?? instRowsRaw;
+
+  // --- Load payment_transactions (real payments only — numeric external_id) ---
+  const payRowsRaw = await db.execute(sql`
+    SELECT contract_external_id,
+           CAST(amount AS DECIMAL(18,2)) AS amount
+      FROM ${paymentTransactions}
+     WHERE ${paymentTransactions.section} = ${params.section}
+       AND (${paymentTransactions.status} IS NULL
+            OR LOWER(${paymentTransactions.status}) IN ('active', 'paid', 'success', 'completed'))
+       AND ${paymentTransactions.externalId} REGEXP '^[0-9]+$'
+  `);
+  const payRows: Array<{ contract_external_id: string; amount: number | null }> =
+    (payRowsRaw as any)[0] ?? payRowsRaw;
+
+  // --- Index installments by contract ---
+  const instByContract = new Map<string, typeof iRows>();
+  for (const r of iRows) {
+    const key = r.contract_external_id;
+    if (!instByContract.has(key)) instByContract.set(key, []);
+    instByContract.get(key)!.push(r);
+  }
+
+  // --- Index payments by contract ---
+  const paidByContract = new Map<string, number>();
+  for (const p of payRows) {
+    const key = p.contract_external_id;
+    paidByContract.set(key, (paidByContract.get(key) ?? 0) + Number(p.amount ?? 0));
+  }
+
+  const today = new Date();
+  const SUSPECTED_STATUSES = new Set(["เกิน 61-90", "เกิน >90"]);
+
+  const rows: ReturnType<typeof listSuspectedBadDebt> extends Promise<{ rows: infer R }> ? R : never = [];
+
+  for (const c of cRows) {
+    const extId: string = c.external_id;
+    const instList = instByContract.get(extId) ?? [];
+
+    // Derive debt status using same logic as listDebtTarget
+    const { label: debtStatus, daysOverdue } = deriveDebtStatus(
+      c.status ?? null,
+      instList as any,
+      today,
+    );
+
+    // Only include suspected bad debt
+    if (!SUSPECTED_STATUSES.has(debtStatus)) continue;
+
+    const financeAmount = c.finance_amount != null ? Number(c.finance_amount) : null;
+    const commissionNet = c.commission_net != null ? Number(c.commission_net) : null;
+    const cost = (financeAmount ?? 0) + (commissionNet ?? 0);
+    const totalPaid = paidByContract.get(extId) ?? 0;
+    const debtValue = cost - totalPaid;
+
+    rows.push({
+      contractExternalId: extId,
+      contractNo: c.contract_no ?? null,
+      approveDate: c.approve_date ?? null,
+      customerName: c.customer_name ?? null,
+      phone: c.phone ?? null,
+      model: c.model ?? null,
+      device: c.device ?? null,
+      sellPrice: c.sell_price != null ? Number(c.sell_price) : null,
+      financeAmount,
+      multiplier: c.multiplier != null ? Number(c.multiplier) : null,
+      commissionNet,
+      cost,
+      paidInstallments: c.paid_installments != null ? Number(c.paid_installments) : 0,
+      totalPaid,
+      debtValue,
+      debtStatus,
+      daysOverdue,
+    });
+  }
+
+  return { rows };
+}

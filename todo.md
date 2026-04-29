@@ -1059,3 +1059,15 @@ Task list:
 - [ ] P104-1: ศึกษา logic คอลัมน์หนี้เสียใน debtDb.ts และ runner.ts
 - [ ] P104-2: แก้ไข logic ให้ยอดขายเครื่อง (bad_debt_amount) ลงคอลัมน์หนี้เสียในแถวที่เป็น latest real payment
 - [ ] P104-3: Commit + Push + Checkpoint
+
+## Phase 105 — หน้าหนี้สงสัยจะเสีย (Suspected Bad Debt)
+- [ ] P105-1: เพิ่ม menu code "suspected_bad_debt" ใน shared/const.ts
+- [ ] P105-2: เพิ่ม backend function listSuspectedBadDebt ใน debtDb.ts (filter debtStatus = "เกิน 61-90" | "เกิน >90")
+- [ ] P105-3: เพิ่ม router suspectedBadDebt.ts ใน server/routers/
+- [ ] P105-4: เพิ่ม route ใน server/routers.ts
+- [ ] P105-5: สร้างหน้า SuspectedBadDebt.tsx พร้อมกล่องสรุป (จำนวน, ต้นทุน, ยอดเก็บค่างวด, มูลค่าหนี้)
+- [ ] P105-6: ฟิลเตอร์: ค้นหา, เดือน-ปีที่อนุมัติ (select box), สถานะหนี้, iOS/Android, รุ่น (multi-select), มูลค่าหนี้ >
+- [ ] P105-7: ตาราง: sortable headers, sticky header ใต้ topnav, scroll ซ้าย-ขวา, pagination
+- [ ] P105-8: เพิ่มเมนูใน TopNav.tsx ก่อนหนี้เสีย + เพิ่ม mobile sidebar
+- [ ] P105-9: ย้าย Export button จาก topnav actions มาอยู่แนวเดียวกับแถบเมนู (ขวาสุด)
+- [ ] P105-10: Commit + Push + Checkpoint
