@@ -3578,7 +3578,7 @@ export async function listSuspectedBadDebt(params: { section: SectionKey }): Pro
            status
       FROM ${contracts}
      WHERE ${contracts.section} = ${params.section}
-       AND ${contracts.status} NOT IN ('สำเร็จ', 'สิ้นสุดสัญญา', 'หนี้เสีย', 'ระงับสัญญา', 'ยกเลิกสัญญา')
+       AND ${contracts.status} NOT IN ('สำเร็จ', 'สิ้นสุดสัญญา', 'ยกเลิกสัญญา')
   `);
   const cRows: Array<any> = (contractRowsRaw as any)[0] ?? contractRowsRaw;
 
@@ -3644,9 +3644,12 @@ export async function listSuspectedBadDebt(params: { section: SectionKey }): Pro
     const extId: string = c.external_id;
     const instList = instByContract.get(extId) ?? [];
 
-    // Derive debt status using same logic as listDebtTarget
+    // Derive debt status by computing daysOverdue directly from installments.
+    // NOTE: We pass null for contractStatus to bypass the terminal-status short-circuit
+    // in deriveDebtStatus (e.g. 'ระงับสัญญา' would return immediately without
+    // computing daysOverdue from installments). We want the real overdue days here.
     const { label: debtStatus, daysOverdue } = deriveDebtStatus(
-      c.status ?? null,
+      null, // bypass terminal check — compute from installments
       instList as any,
       today,
     );
