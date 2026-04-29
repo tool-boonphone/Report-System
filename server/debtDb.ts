@@ -1458,14 +1458,18 @@ export async function listDebtTarget(params: { section: SectionKey }) {
       }
     }
 
-    // Phase 113: Compute lastNormalPeriodByContract for bad-debt contracts WITHOUT TXRT receipts.
-    // These contracts have no entries in normalPeriodsByContractOuter (no TXRT-N receipts),
-    // so we cannot use maxTxrtPeriod. Instead, apply the same Iron Rule as listDebtCollectedStream:
+    // Phase 113 (revised): Compute lastNormalPeriodByContract for bad-debt contracts WITHOUT TXRT receipts.
+    // Use assignPayPeriods (same as collected side) to assign periods from installment schedule,
+    // then find lastNormalPeriod from normalPayments (payments NOT on latestDate).
+    // This correctly handles contracts where receipt_no is null (FF365 style).
+    //
+    // Iron Rule (same as listDebtCollectedStream):
     //   1. Find real payments (numeric external_id OR TXRT receipt pattern)
-    //   2. Find latestDate = latest paid_at date across all real payments
-    //   3. normalPayments = real payments with paid_at != latestDate
-    //   4. lastNormalPeriod = max period from normalPayments (0 if none)
-    //   5. suspendedFromPeriod = lastNormalPeriod + 1
+    //   2. Use assignPayPeriods to assign period from installment schedule
+    //   3. Find latestDate = latest paid_at date across all real payments
+    //   4. normalPayments = assigned payments with paid_at != latestDate
+    //   5. lastNormalPeriod = max period from normalPayments (0 if none)
+    //   6. suspendedFromPeriod = lastNormalPeriod + 1
     //
     // Only process bad-debt contracts that have no TXRT receipts
     // (contracts with TXRT receipts already have normalPeriodsByContractOuter populated).
@@ -1480,6 +1484,19 @@ export async function listDebtTarget(params: { section: SectionKey }) {
         return /^\d+$/.test(payExtId) || /^TXRT.*-\d+$/.test(receiptNo);
       });
       if (realPayments.length === 0) continue;
+      // Use assignPayPeriods to assign period from installment schedule
+      // (same as collected side — handles null receipt_no correctly)
+      const instList = instByContract.get(key) ?? [];
+      const contractNo = contractNoByExtId.get(key) ?? null;
+      const baselineAmt = baselineByKeyPhase78.get(key) ?? 0;
+      const assigned = assignPayPeriods(
+        realPayments,
+        instList.map((i) => {
+          const amt = Number(i.amount ?? 0);
+          return { period: i.period, amount: amt > 0 ? amt : baselineAmt };
+        }),
+        contractNo,
+      );
       // Find latestDate (latest paid_at across all real payments)
       const sortedReal = [...realPayments].sort((a, b) => {
         const da = (a.paid_at ?? "").substring(0, 10);
@@ -1488,19 +1505,14 @@ export async function listDebtTarget(params: { section: SectionKey }) {
       });
       const latestDate = (sortedReal[0]?.paid_at ?? "").substring(0, 10);
       if (!latestDate) continue;
-      // normalPayments = real payments NOT on latestDate
-      const normalPayments = realPayments.filter(
+      // normalPayments = assigned payments NOT on latestDate (excludes bad-debt payment)
+      const normalPayments = assigned.filter(
         (p) => (p.paid_at ?? "").substring(0, 10) !== latestDate,
       );
-      // lastNormalPeriod: use parseTxrtPeriod to derive period from receipt_no
-      // (same logic as Phase 78 fallback for non-TXRTC contracts)
+      // lastNormalPeriod = max period from normalPayments
       let lastNormalPeriod = 0;
       for (const p of normalPayments) {
-        const receipt = p.receipt_no ?? "";
-        const period = parseTxrtPeriod(receipt, key);
-        if (Number.isFinite(period) && period > 0 && period > lastNormalPeriod) {
-          lastNormalPeriod = period;
-        }
+        if (p.period != null && p.period > lastNormalPeriod) lastNormalPeriod = p.period;
       }
       lastNormalPeriodByContract.set(key, lastNormalPeriod);
     }
@@ -2809,10 +2821,18 @@ export async function* listDebtTargetStream(params: {
       }
     }
 
-    // Phase 113 (stream): Compute lastNormalPeriodByContractStream for bad-debt contracts WITHOUT TXRT receipts.
-    // Same Iron Rule as listDebtTarget Phase 113 and listDebtCollectedStream:
-    //   normalPayments = real payments excluding latestDate → lastNormalPeriod = max period from normalPayments
-    //   suspendedFromPeriod = lastNormalPeriod + 1
+    // Phase 113 (stream, revised): Compute lastNormalPeriodByContractStream for bad-debt contracts WITHOUT TXRT receipts.
+    // Use assignPayPeriods (same as collected side) to assign periods from installment schedule,
+    // then find lastNormalPeriod from normalPayments (payments NOT on latestDate).
+    // This correctly handles contracts where receipt_no is null (FF365 style).
+    //
+    // Iron Rule (same as listDebtCollectedStream):
+    //   1. Find real payments (numeric external_id OR TXRT receipt pattern)
+    //   2. Use assignPayPeriods to assign period from installment schedule
+    //   3. Find latestDate = latest paid_at date across all real payments
+    //   4. normalPayments = assigned payments with paid_at != latestDate
+    //   5. lastNormalPeriod = max period from normalPayments (0 if none)
+    //   6. suspendedFromPeriod = lastNormalPeriod + 1
     for (const [key, rawPays] of Array.from(rawPaysByContractStream.entries())) {
       // Skip if already handled by TXRT path (normalPeriodsByContract has entries)
       const txrtPeriods = normalPeriodsByContract.get(key);
@@ -2824,6 +2844,19 @@ export async function* listDebtTargetStream(params: {
         return /^\d+$/.test(payExtId) || /^TXRT.*-\d+$/.test(receiptNo);
       });
       if (realPayments.length === 0) continue;
+      // Use assignPayPeriods to assign period from installment schedule
+      // (same as collected side — handles null receipt_no correctly)
+      const instList = instByContract.get(key) ?? [];
+      const contractNo = contractNoByExtIdStream.get(key) ?? null;
+      const baselineAmt = baselineByKeyPhase78Stream.get(key) ?? 0;
+      const assigned = assignPayPeriods(
+        realPayments,
+        instList.map((i) => {
+          const amt = Number(i.amount ?? 0);
+          return { period: i.period, amount: amt > 0 ? amt : baselineAmt };
+        }),
+        contractNo,
+      );
       // Find latestDate (latest paid_at across all real payments)
       const sortedReal = [...realPayments].sort((a, b) => {
         const da = (a.paid_at ?? "").substring(0, 10);
@@ -2832,18 +2865,14 @@ export async function* listDebtTargetStream(params: {
       });
       const latestDate = (sortedReal[0]?.paid_at ?? "").substring(0, 10);
       if (!latestDate) continue;
-      // normalPayments = real payments NOT on latestDate
-      const normalPayments = realPayments.filter(
+      // normalPayments = assigned payments NOT on latestDate (excludes bad-debt payment)
+      const normalPayments = assigned.filter(
         (p) => (p.paid_at ?? "").substring(0, 10) !== latestDate,
       );
-      // lastNormalPeriod: use parseTxrtPeriodStream to derive period from receipt_no
+      // lastNormalPeriod = max period from normalPayments
       let lastNormalPeriod = 0;
       for (const p of normalPayments) {
-        const receipt = p.receipt_no ?? "";
-        const period = parseTxrtPeriodStream(receipt, key);
-        if (Number.isFinite(period) && period > 0 && period > lastNormalPeriod) {
-          lastNormalPeriod = period;
-        }
+        if (p.period != null && p.period > lastNormalPeriod) lastNormalPeriod = p.period;
       }
       lastNormalPeriodByContractStream.set(key, lastNormalPeriod);
     }
