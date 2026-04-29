@@ -2126,6 +2126,19 @@ export async function listDebtCollected(params: { section: SectionKey }) {
   // For FF365: updated_by/updated_at come from installments (linked via installmentExternalId in raw_json)
   // For Boonphone: updated_at is in raw_json directly; updated_by is not available
   const payRowsRaw = await db.execute(sql`
+    WITH inst_dates AS (
+      -- Pre-compute installment updated_by/updated_date for FF365 (Boonphone installments have no updated_by)
+      SELECT
+        contract_external_id,
+        section,
+        JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.updated_by')) AS updated_by,
+        DATE(JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.updated_at'))) AS updated_date
+      FROM installments
+      WHERE section = 'Fastfone365'
+        AND external_id LIKE CONCAT(contract_external_id, '-%')
+        AND JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.updated_by')) IS NOT NULL
+        AND JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.updated_by')) != 'null'
+    )
     SELECT pt.contract_external_id,
            pt.external_id AS payment_external_id,
            pt.paid_at,
@@ -2144,20 +2157,49 @@ export async function listDebtCollected(params: { section: SectionKey }) {
            JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.receipt_no')) AS receipt_no,
            JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.remark'))     AS remark,
            pt.status AS ff_status,
-           -- updated_at: FF365 ใช้จาก installments (match ด้วย contract_id-n pattern + DATE), Boonphone ใช้จาก raw_json
+           -- updated_at: Boonphone ใช้จาก raw_json; FF365 ใช้จาก installment ที่ใกล้ที่สุด
+           JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.updated_at')) AS updated_at,
+           -- updated_by: ใช้ MIN(CONCAT(updated_date, '||', updated_by)) เพื่อหา installment ที่ใกล้ payment_date มากที่สุด
+           -- Priority: date_match (±1 day) > next (>= payment_date)
            COALESCE(
-             JSON_UNQUOTE(JSON_EXTRACT(i.raw_json, '$.updated_at')),
-             JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.updated_at'))
-           ) AS updated_at,
-           -- updated_by: FF365 ใช้จาก installments (match ด้วย contract_id-n pattern + DATE)
-           JSON_UNQUOTE(JSON_EXTRACT(i.raw_json, '$.updated_by')) AS updated_by
+             SUBSTRING_INDEX(MIN(CASE
+               WHEN id.updated_date BETWEEN
+                 DATE(JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.payment_date'))) - INTERVAL 1 DAY
+                 AND DATE(JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.payment_date'))) + INTERVAL 1 DAY
+               THEN CONCAT(id.updated_date, '||', id.updated_by)
+               ELSE NULL
+             END), '||', -1),
+             SUBSTRING_INDEX(MIN(CASE
+               WHEN id.updated_date >= DATE(JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.payment_date')))
+               THEN CONCAT(id.updated_date, '||', id.updated_by)
+               ELSE NULL
+             END), '||', -1)
+           ) AS updated_by
       FROM payment_transactions pt
-      LEFT JOIN installments i
-             ON i.section = pt.section
-            AND i.contract_external_id = pt.contract_external_id
-            AND i.external_id LIKE CONCAT(pt.contract_external_id, '-%')
-            AND DATE(JSON_UNQUOTE(JSON_EXTRACT(i.raw_json, '$.updated_at'))) = DATE(JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.payment_date')))
+      LEFT JOIN inst_dates id
+             ON id.section = pt.section
+            AND id.contract_external_id = pt.contract_external_id
      WHERE pt.section = ${params.section}
+     GROUP BY
+           pt.contract_external_id,
+           pt.external_id,
+           pt.paid_at,
+           pt.amount,
+           JSON_EXTRACT(pt.raw_json, '$.principal_paid'),
+           JSON_EXTRACT(pt.raw_json, '$.interest_paid'),
+           JSON_EXTRACT(pt.raw_json, '$.fee_paid'),
+           JSON_EXTRACT(pt.raw_json, '$.penalty_paid'),
+           JSON_EXTRACT(pt.raw_json, '$.unlock_fee_paid'),
+           JSON_EXTRACT(pt.raw_json, '$.discount_amount'),
+           JSON_EXTRACT(pt.raw_json, '$.overpaid_amount'),
+           JSON_EXTRACT(pt.raw_json, '$.close_installment_amount'),
+           JSON_EXTRACT(pt.raw_json, '$.bad_debt_amount'),
+           JSON_EXTRACT(pt.raw_json, '$.payment_id'),
+           JSON_EXTRACT(pt.raw_json, '$.receipt_no'),
+           JSON_EXTRACT(pt.raw_json, '$.remark'),
+           pt.status,
+           JSON_EXTRACT(pt.raw_json, '$.updated_at'),
+           JSON_EXTRACT(pt.raw_json, '$.payment_date')
      ORDER BY pt.contract_external_id, pt.paid_at, CAST(JSON_EXTRACT(pt.raw_json, '$.payment_id') AS UNSIGNED)
   `);
   const pRows: any[] = (payRowsRaw as any)[0] ?? payRowsRaw;
@@ -3458,8 +3500,22 @@ export async function* listDebtCollectedStream(params: {
     }
 
     // Query payments for this batch only (per-batch to avoid OOM with 222K rows)
-    // LEFT JOIN installments to get updated_by/updated_at for FF365 (linked via installmentExternalId)
+    // Use CTE + MIN(CONCAT) approach to find updated_by from installments (FF365 only)
+    // Priority: date_match (±1 day) > next (>= payment_date)
     const payRaw = await db.execute(sql.raw(`
+      WITH inst_dates AS (
+        SELECT
+          contract_external_id,
+          section,
+          JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.updated_by')) AS updated_by,
+          DATE(JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.updated_at'))) AS updated_date
+        FROM installments
+        WHERE section = 'Fastfone365'
+          AND contract_external_id IN (${batchIdsLiteral})
+          AND external_id LIKE CONCAT(contract_external_id, '-%')
+          AND JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.updated_by')) IS NOT NULL
+          AND JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.updated_by')) != 'null'
+      )
       SELECT pt.contract_external_id,
              pt.external_id AS payment_external_id,
              pt.paid_at,
@@ -3477,19 +3533,47 @@ export async function* listDebtCollectedStream(params: {
              JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.receipt_no')) AS receipt_no,
              JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.remark'))     AS remark,
              pt.status AS ff_status,
+             JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.updated_at')) AS updated_at,
              COALESCE(
-               JSON_UNQUOTE(JSON_EXTRACT(i.raw_json, '$.updated_at')),
-               JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.updated_at'))
-             ) AS updated_at,
-             JSON_UNQUOTE(JSON_EXTRACT(i.raw_json, '$.updated_by')) AS updated_by
+               SUBSTRING_INDEX(MIN(CASE
+                 WHEN id.updated_date BETWEEN
+                   DATE(JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.payment_date'))) - INTERVAL 1 DAY
+                   AND DATE(JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.payment_date'))) + INTERVAL 1 DAY
+                 THEN CONCAT(id.updated_date, '||', id.updated_by)
+                 ELSE NULL
+               END), '||', -1),
+               SUBSTRING_INDEX(MIN(CASE
+                 WHEN id.updated_date >= DATE(JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.payment_date')))
+                 THEN CONCAT(id.updated_date, '||', id.updated_by)
+                 ELSE NULL
+               END), '||', -1)
+             ) AS updated_by
         FROM payment_transactions pt
-        LEFT JOIN installments i
-               ON i.section = pt.section
-              AND i.contract_external_id = pt.contract_external_id
-              AND i.external_id LIKE CONCAT(pt.contract_external_id, '-%')
-              AND DATE(JSON_UNQUOTE(JSON_EXTRACT(i.raw_json, '$.updated_at'))) = DATE(JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.payment_date')))
+        LEFT JOIN inst_dates id
+               ON id.section = pt.section
+              AND id.contract_external_id = pt.contract_external_id
        WHERE pt.section = '${sectionLiteral}'
          AND pt.contract_external_id IN (${batchIdsLiteral})
+       GROUP BY
+             pt.contract_external_id,
+             pt.external_id,
+             pt.paid_at,
+             pt.amount,
+             JSON_EXTRACT(pt.raw_json, '$.principal_paid'),
+             JSON_EXTRACT(pt.raw_json, '$.interest_paid'),
+             JSON_EXTRACT(pt.raw_json, '$.fee_paid'),
+             JSON_EXTRACT(pt.raw_json, '$.penalty_paid'),
+             JSON_EXTRACT(pt.raw_json, '$.unlock_fee_paid'),
+             JSON_EXTRACT(pt.raw_json, '$.discount_amount'),
+             JSON_EXTRACT(pt.raw_json, '$.overpaid_amount'),
+             JSON_EXTRACT(pt.raw_json, '$.close_installment_amount'),
+             JSON_EXTRACT(pt.raw_json, '$.bad_debt_amount'),
+             JSON_EXTRACT(pt.raw_json, '$.payment_id'),
+             JSON_EXTRACT(pt.raw_json, '$.receipt_no'),
+             JSON_EXTRACT(pt.raw_json, '$.remark'),
+             pt.status,
+             JSON_EXTRACT(pt.raw_json, '$.updated_at'),
+             JSON_EXTRACT(pt.raw_json, '$.payment_date')
        ORDER BY pt.contract_external_id, pt.paid_at, CAST(JSON_EXTRACT(pt.raw_json, '$.payment_id') AS UNSIGNED)
     `));
     const payRows: any[] = (payRaw as any)[0] ?? payRaw;

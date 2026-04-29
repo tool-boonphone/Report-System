@@ -668,35 +668,67 @@ async function computeAndStoreBadDebt(section: SectionKey): Promise<void> {
   // Map: externalId → Array<{ payment_external_id, paid_at, total_paid_amount, ff_status, updated_by, updated_at }>
   // payment_external_id: numeric string = real payment from API; "pay-*" prefix = synthetic from installments
   // real payments have total_paid_amount from raw_json; synthetic payments have null
-  // updated_by/updated_at: ดึงจาก installments.raw_json ผ่าน installment_external_id (FF365)
-  //   หรือจาก payment_transactions.raw_json โดยตรง (Boonphone)
+  // updated_by: FF365 ใช้ CTE + MIN(CONCAT) approach เพื่อหา installment ที่ใกล้ payment_date มากที่สุด
+  //   Boonphone: updated_by ยังไม่มีใน installments DB (ยังไม่ได้ sync)
   const payMap = new Map<string, Array<{ payment_external_id: string; paid_at: string | null; total_paid_amount: number; ff_status: string | null; updated_by: string | null; updated_at: string | null }>>();
 
   for (let i = 0; i < extIds.length; i += CHUNK) {
     const slice = extIds.slice(i, i + CHUNK);
     const inClause2 = slice.map((id) => sql`${id}`).reduce((acc, cur, idx) => idx === 0 ? cur : sql`${acc}, ${cur}`);
-    const payRows = await db.execute(sql`
+    // Use raw SQL for CTE support (Drizzle sql`` doesn't support WITH clause well)
+    const sectionLiteral = (section as string).replace(/'/g, "''");
+    const batchIdsLiteral = slice.map((id) => `'${String(id).replace(/'/g, "''")}'`).join(",");
+    const payRows = await db.execute(sql.raw(`
+      WITH inst_dates AS (
+        SELECT
+          contract_external_id,
+          section,
+          JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.updated_by')) AS updated_by,
+          DATE(JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.updated_at'))) AS updated_date
+        FROM installments
+        WHERE section = 'Fastfone365'
+          AND contract_external_id IN (${batchIdsLiteral})
+          AND external_id LIKE CONCAT(contract_external_id, '-%')
+          AND JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.updated_by')) IS NOT NULL
+          AND JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.updated_by')) != 'null'
+      )
       SELECT pt.contract_external_id,
              pt.external_id AS payment_external_id,
              pt.paid_at,
              CAST(JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.total_paid_amount')) AS DECIMAL(18,2)) AS total_paid_amount,
              pt.status AS ff_status,
+             JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.updated_at')) AS updated_at,
              COALESCE(
-               JSON_UNQUOTE(JSON_EXTRACT(inst.raw_json, '$.updated_by')),
-               JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.updated_by'))
-             ) AS updated_by,
-             COALESCE(
-               JSON_UNQUOTE(JSON_EXTRACT(inst.raw_json, '$.updated_at')),
-               JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.updated_at'))
-             ) AS updated_at
-        FROM ${paymentTransactions} pt
-        LEFT JOIN ${installments} inst
-          ON inst.section = pt.section
-         AND inst.external_id = JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.installmentExternalId'))
-       WHERE pt.section = ${section}
-         AND pt.contract_external_id IN (${inClause2})
+               SUBSTRING_INDEX(MIN(CASE
+                 WHEN id.updated_date BETWEEN
+                   DATE(JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.payment_date'))) - INTERVAL 1 DAY
+                   AND DATE(JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.payment_date'))) + INTERVAL 1 DAY
+                 THEN CONCAT(id.updated_date, '||', id.updated_by)
+                 ELSE NULL
+               END), '||', -1),
+               SUBSTRING_INDEX(MIN(CASE
+                 WHEN id.updated_date >= DATE(JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.payment_date')))
+                 THEN CONCAT(id.updated_date, '||', id.updated_by)
+                 ELSE NULL
+               END), '||', -1)
+             ) AS updated_by
+        FROM payment_transactions pt
+        LEFT JOIN inst_dates id
+               ON id.section = pt.section
+              AND id.contract_external_id = pt.contract_external_id
+       WHERE pt.section = '${sectionLiteral}'
+         AND pt.contract_external_id IN (${batchIdsLiteral})
+       GROUP BY
+             pt.contract_external_id,
+             pt.external_id,
+             pt.paid_at,
+             pt.amount,
+             JSON_EXTRACT(pt.raw_json, '$.total_paid_amount'),
+             pt.status,
+             JSON_EXTRACT(pt.raw_json, '$.updated_at'),
+             JSON_EXTRACT(pt.raw_json, '$.payment_date')
        ORDER BY pt.contract_external_id, pt.paid_at
-    `);
+    `));
     const rows: any[] = (payRows as any)[0] ?? payRows;
     for (const r of rows) {
       const extId = String(r.contract_external_id ?? "");
