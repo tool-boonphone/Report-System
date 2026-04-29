@@ -304,6 +304,20 @@ export default function BadDebtSummary() {
           </div>
         )}
 
+        {/* ── Tabs ── */}
+        <div className="flex gap-0 border-b border-gray-200">
+          {tabs.map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setActiveTab(t.key)}
+              className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === t.key ? "border-red-600 text-red-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+            >
+              {t.icon}
+              {t.label}
+            </button>
+          ))}
+        </div>
+
         {/* ── Filters ── */}
         <div className="flex flex-wrap gap-3 items-end">
           <div className="flex flex-col gap-1">
@@ -333,20 +347,6 @@ export default function BadDebtSummary() {
           <button onClick={() => { setApproveMonth(""); setSaleMonth(""); setFilterYear(""); }} className="h-9 px-3 text-sm border rounded hover:bg-gray-50 text-gray-600">
             ล้างตัวกรอง
           </button>
-        </div>
-
-        {/* ── Tabs ── */}
-        <div className="flex gap-0 border-b border-gray-200">
-          {tabs.map((t) => (
-            <button
-              key={t.key}
-              onClick={() => setActiveTab(t.key)}
-              className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === t.key ? "border-red-600 text-red-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}
-            >
-              {t.icon}
-              {t.label}
-            </button>
-          ))}
         </div>
 
         {/* ── Loading ── */}
