@@ -415,6 +415,10 @@ export default function DebtReport() {
   };
   // Switch: true = เฉพาะเงินต้น (แสดง penalty/unlockFee = 0 ทุกงวด), false = รวมค่าปรับ+ค่าปลดล็อก
   const [principalOnly, setPrincipalOnly] = useState(true);
+  // สวิต "ตั้งหนี้" (target tab only): เมื่อเปิด ซ่อนแถวที่ชำระครบ/ล่วงหน้า/ระงับ/สิ้นสุด/หนี้เสีย/ยังไม่ถึงดิว
+  const [debtSetMode, setDebtSetMode] = useState(false);
+  // ตัวกรอง "บันทึกโดย" (collected tab only)
+  const [updatedByFilter, setUpdatedByFilter] = useState<string | null>(null);
   // Pinned columns: set of LEFT_COLS keys that are sticky-left
   const [pinnedCols, setPinnedCols] = useState<Set<string>>(new Set());
   const [hoveredRow, setHoveredRow] = useState<number | null>(null);
@@ -553,6 +557,18 @@ export default function DebtReport() {
   //                         false = Fastfone365 (แสดง "-" แทน 0.00)
   const hasPrincipalBreakdown = streamData.collected?.hasPrincipalBreakdown !== false;
 
+  /* ---- updatedBy options (collected tab only) ---- */
+  const updatedByOptions = useMemo(() => {
+    if (tab !== "collected") return [];
+    const s = new Set<string>();
+    for (const r of activeRows as CollectedRow[]) {
+      for (const p of r.payments ?? []) {
+        if (p.updatedBy) s.add(p.updatedBy);
+      }
+    }
+    return Array.from(s).sort();
+  }, [activeRows, tab]);
+
   /* ---- Dynamic filter options (derived from ALL active rows, not filtered) ---- */
   const approveDateOptions = useMemo(() => {
     const s = new Set<string>();
@@ -632,7 +648,28 @@ export default function DebtReport() {
       if (statusFilter.size > 0 && !statusFilter.has(r.debtStatus)) return false;
       // 5. ประเภทเครื่อง
       if (productTypeFilter.size > 0 && !productTypeFilter.has(r.productType ?? "")) return false;
-      // 6. ค้นหา
+      // 6. บันทึกโดย (collected tab only) — กรองระดับ row: แสดงเฉพาะ row ที่มี payment ของคนนั้น
+      if (tab === "collected" && updatedByFilter) {
+        const hasMatch = (r as CollectedRow).payments?.some((p) => p.updatedBy === updatedByFilter) ?? false;
+        if (!hasMatch) return false;
+      }
+      // 7. ตั้งหนี้ (target tab only) — ซ่อน row ที่ทุก installment เป็น paid/closed/suspended/future
+      if (tab === "target" && debtSetMode) {
+        const todayStr = new Date().toISOString().slice(0, 10);
+        // Row ผ่านถ้ามี installment อย่างน้อย 1 งวดที่ต้องเก็บ (ส้มหรือดำ)
+        // = ไม่ใช่ closed, ไม่ใช่ suspended, ไม่ใช่ paid, ไม่ใช่ future (dueDate > today)
+        // และ contract status ไม่ใช่ ระงับสัญญา / สิ้นสุดสัญญา / หนี้เสีย
+        const specialStatus = r.debtStatus === "ระงับสัญญา" || r.debtStatus === "สิ้นสุดสัญญา" || r.debtStatus === "หนี้เสีย";
+        if (specialStatus) return false;
+        const hasCollectableInst = r.installments.some((inst) => {
+          if (inst.isClosed || inst.isSuspended) return false;
+          if (inst.isPaid) return false;
+          if (inst.dueDate && inst.dueDate > todayStr) return false;
+          return true;
+        });
+        if (!hasCollectableInst) return false;
+      }
+      // 8. ค้นหา
       if (!q) return true;
       return (
         (r.contractNo ?? "").toLowerCase().includes(q) ||
@@ -640,11 +677,11 @@ export default function DebtReport() {
         (r.phone ?? "").toLowerCase().includes(q)
       );
     });
-  }, [activeRows, search, statusFilter, approveDateFilter, dueDateFilter, productTypeFilter, dueDateExact, tab]);
+  }, [activeRows, search, statusFilter, approveDateFilter, dueDateFilter, productTypeFilter, dueDateExact, tab, updatedByFilter, debtSetMode]);
 
   /* ---- Pagination logic (Phase 33) ---- */
   // Reset to page 1 when filters change
-  useEffect(() => { setCurrentPage(1); }, [search, statusFilter, approveDateFilter, dueDateFilter, productTypeFilter, dueDateExact, tab]);
+  useEffect(() => { setCurrentPage(1); }, [search, statusFilter, approveDateFilter, dueDateFilter, productTypeFilter, dueDateExact, tab, updatedByFilter, debtSetMode]);
 
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
   const safePage = Math.min(currentPage, totalPages);
@@ -997,7 +1034,7 @@ export default function DebtReport() {
           )}
         </div>
 
-        {/* Toolbar: Search > Date > ApproveDate > DueDate > Status > ProductType > PrincipalOnly */}
+        {/* Toolbar: Search > ApproveDate > Date > DueDate > Status > ProductType > PrincipalOnly > ตั้งหนี้ (target) | บันทึกโดย (collected) */}
         <div className="flex flex-col gap-2 mb-2">
           <div className="flex flex-col md:flex-row md:items-center gap-2">
             <div className="relative flex-1 min-w-0">
@@ -1010,6 +1047,14 @@ export default function DebtReport() {
               />
             </div>
             <div className="flex flex-wrap items-center gap-2">
+              {/* เดือน-ปีที่อนุมัติ (ย้ายมาก่อน วว/ดด/ปปปป) */}
+              <MultiSelectFilter
+                label="เดือน-ปีที่อนุมัติ"
+                selected={approveDateFilter}
+                onChange={setApproveDateFilter}
+                options={approveDateOptions}
+                placeholder="ทุกเดือน-ปีที่อนุมัติ"
+              />
               {/* วันที่ (date picker) — target=วันที่ต้องชำระ, collected=วันที่ชำระ */}
               <div className="flex items-center gap-1.5">
                 <div className="relative flex items-center">
@@ -1033,14 +1078,6 @@ export default function DebtReport() {
                   </button>
                 )}
               </div>
-              {/* เดือน-ปีที่อนุมัติ */}
-              <MultiSelectFilter
-                label="เดือน-ปีที่อนุมัติ"
-                selected={approveDateFilter}
-                onChange={setApproveDateFilter}
-                options={approveDateOptions}
-                placeholder="ทุกเดือน-ปีที่อนุมัติ"
-              />
               {/* Phase 28: label changes based on tab — target=ต้องชำระ, collected=ชำระ */}
               <MultiSelectFilter
                 label={tab === "collected" ? "เดือน-ปีที่ชำระ" : "เดือน-ปีที่ต้องชำระ"}
@@ -1068,10 +1105,60 @@ export default function DebtReport() {
                   </label>
                 </div>
               )}
-              {(statusFilter.size > 0 || approveDateFilter.size > 0 || dueDateFilter.size > 0 || productTypeFilter.size > 0 || dueDateExact) && (
+              {/* ตั้งหนี้ (target tab only) — ซ่อนแถวที่ไม่ต้องเก็บ */}
+              {tab === "target" && (
+                <div
+                  className={`flex items-center gap-2 border rounded-md px-3 py-1.5 cursor-pointer select-none transition-colors ${
+                    debtSetMode
+                      ? "bg-orange-50 border-orange-300"
+                      : "bg-white border-gray-200"
+                  }`}
+                  onClick={() => setDebtSetMode((v) => !v)}
+                  title="เปิด: แสดงเฉพาะยอดค้างชำระและยอดที่ยังไม่ได้ชำระถึงงวดปัจจุบัน (ส้ม+ดำ)"
+                >
+                  <Switch
+                    id="debt-set-mode"
+                    checked={debtSetMode}
+                    onCheckedChange={setDebtSetMode}
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                  <label htmlFor="debt-set-mode" className={`text-xs cursor-pointer whitespace-nowrap ${
+                    debtSetMode ? "text-orange-700 font-medium" : "text-gray-600"
+                  }`}>
+                    ตั้งหนี้
+                  </label>
+                </div>
+              )}
+              {/* บันทึกโดย (collected tab only) */}
+              {tab === "collected" && updatedByOptions.length > 0 && (
+                <div className="relative">
+                  <select
+                    value={updatedByFilter ?? ""}
+                    onChange={(e) => setUpdatedByFilter(e.target.value || null)}
+                    className="h-9 pl-3 pr-7 rounded-md border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none"
+                    title="กรองตามผู้บันทึกรายการ"
+                  >
+                    <option value="">บันทึกโดย: ทั้งหมด</option>
+                    {updatedByOptions.map((name) => (
+                      <option key={name} value={name}>{name}</option>
+                    ))}
+                  </select>
+                  {updatedByFilter && (
+                    <button
+                      type="button"
+                      onClick={() => setUpdatedByFilter(null)}
+                      className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center justify-center w-5 h-5 rounded-full bg-gray-100 hover:bg-red-100 text-gray-400 hover:text-red-500"
+                      title="ล้างตัวกรองบันทึกโดย"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
+              )}
+              {(statusFilter.size > 0 || approveDateFilter.size > 0 || dueDateFilter.size > 0 || productTypeFilter.size > 0 || dueDateExact || updatedByFilter || debtSetMode) && (
                 <button
                   type="button"
-                  onClick={() => { setStatusFilter(new Set()); setApproveDateFilter(new Set()); setDueDateFilter(new Set()); setProductTypeFilter(new Set()); setDueDateExact(null); }}
+                  onClick={() => { setStatusFilter(new Set()); setApproveDateFilter(new Set()); setDueDateFilter(new Set()); setProductTypeFilter(new Set()); setDueDateExact(null); setUpdatedByFilter(null); setDebtSetMode(false); }}
                   className="text-xs text-gray-400 hover:text-red-500 underline"
                 >
                   ล้างฟิลเตอร์
@@ -1369,6 +1456,8 @@ export default function DebtReport() {
                       if (dueDateFilter.size > 0 && !(p.paidAt && dueDateFilter.has(p.paidAt.slice(0, 7)))) continue;
                       // Phase 30: skip payments whose paidAt date does not match dueDateExact
                       if (dueDateExact && p.paidAt?.slice(0, 10) !== dueDateExact) continue;
+                      // บันทึกโดย: ซ่อน payment ที่ไม่ใช่ของคนที่เลือก
+                      if (updatedByFilter && p.updatedBy !== updatedByFilter) continue;
                       filteredPayments.push(p);
                     }
                   }
