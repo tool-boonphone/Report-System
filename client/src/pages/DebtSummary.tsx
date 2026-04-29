@@ -1430,6 +1430,10 @@ export default function DebtSummary() {
                           const suspendLabel = inst?.suspendLabel ?? "ระงับสัญญา";
                           // Grey-out applies to both closed AND suspended cells.
                           const dimmed = closed || suspended;
+                          // Phase 93: pre-compute isFuturePeriod+isPaid before cell value block
+                          const _todayStrPre = new Date().toISOString().slice(0, 10);
+                          const _isFuturePeriodPre = !dimmed && !!inst?.dueDate && inst.dueDate > _todayStrPre;
+                          const _isPaidPre = !dimmed && !!inst?.isPaid;
                           // Phase 23: cell-level masking for dueDateFilter and dueDateExact
                           // If a filter is active and this period's dueDate doesn't match,
                           // render the cell as "-" (masked) instead of actual values.
@@ -1513,6 +1517,12 @@ export default function DebtSummary() {
                                   }
                                 }
                               }
+                            }
+                            // Phase 93: งวดที่ชำระล่วงหน้าครบแล้ว (isFuturePeriod + isPaid) → แสดง 0 ทุกคอลัมน์
+                            // เพราะถูกหักออกจากการตั้งหนี้แล้ว (ไม่ใช่ dimmed เพราะยังต้องแสดงวันที่)
+                            if (_isFuturePeriodPre && _isPaidPre && gc.key !== "period" && gc.key !== "dueDate") {
+                              v = "0";
+                              annotation = null;
                             }
                             const isArrears = !dimmed && !!inst?.isArrears;
                             // Phase 53/66: ซ่อน BG สีฟ้าสำหรับสัญญาสถานะพิเศษ
