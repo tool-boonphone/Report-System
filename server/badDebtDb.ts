@@ -1,12 +1,13 @@
 /**
- * Bad Debt Summary helpers (Phase 95).
+ * Bad Debt Summary helpers (Phase 97).
  *
  * สรุปกำไร/ขาดทุนจากหนี้เสีย:
  *   - ดึงสัญญาที่มีสถานะ "หนี้เสีย" (Fastfone365) หรือ "ระงับสัญญา" (Boonphone)
  *   - แยก: ยอดเก็บค่างวด (installmentPaid) vs ยอดขายเครื่อง (deviceSaleAmount)
- *   * คำนวณ: ต้นทุน = ยอดจัดไฟแนนซ์ + ค่าคอมมิชชั่น
+ *   - ต้นทุน = (ยอดจัดไฟแนนซ์ × ตัวคูณ) + ค่าคอมมิชชั่น
  *   - รวมรายรับ = ยอดเก็บค่างวด + ยอดขายเครื่อง
  *   - กำไร/ขาดทุน = รวมรายรับ - ต้นทุน
+ *   - ยอดเก็บค่างวด = totalPaid - deviceSaleAmount (ไม่รวมยอดสุดท้าย)
  */
 import { sql } from "drizzle-orm";
 import { contracts, paymentTransactions } from "../drizzle/schema";
@@ -26,6 +27,8 @@ export type BadDebtRow = {
   salePrice: number | null;
   /** ยอดจัดไฟแนนซ์ */
   financeAmount: number;
+  /** ตัวคูณ (multiplier) */
+  multiplier: number | null;
   /** ค่าคอมมิชชั่น */
   commissionNet: number;
   /** ยอดเก็บค่างวดปกติ (ไม่รวมยอดขายเครื่อง) */
@@ -34,7 +37,7 @@ export type BadDebtRow = {
   deviceSaleAmount: number;
   /** วันที่ขายเครื่อง (bad_debt_date จาก contracts) */
   saleDate: string | null;
-  /** ต้นทุน = financeAmount + commissionNet */
+  /** ต้นทุน = (financeAmount * multiplier) + commissionNet */
   cost: number;
   /** รวมรายรับ = installmentPaid + deviceSaleAmount */
   totalRevenue: number;
@@ -105,6 +108,7 @@ export async function getBadDebtSummary(params: {
       c.model                                                                  AS model,
       CAST(c.sell_price AS DECIMAL(18,2))                                      AS sale_price,
       CAST(c.finance_amount AS DECIMAL(18,2))                                  AS finance_amount,
+      CAST(COALESCE(c.multiplier, 1) AS DECIMAL(6,2))                         AS multiplier,
       CAST(COALESCE(c.commission_net, 0) AS DECIMAL(18,2))                    AS commission_net,
       CAST(COALESCE(c.bad_debt_amount, 0) AS DECIMAL(18,2))                   AS bad_debt_amount,
       c.bad_debt_date                                                          AS sale_date,
@@ -132,13 +136,16 @@ export async function getBadDebtSummary(params: {
 
   const allRows: BadDebtRow[] = rawArr.map((r: any) => {
     const financeAmount = Number(r.finance_amount ?? 0);
+    // ตัวคูณ: ถ้า null ให้ใช้ 1 เป็น default
+    const multiplier = r.multiplier != null ? Number(r.multiplier) : null;
+    const multiplierVal = multiplier ?? 1;
     const commissionNet = Number(r.commission_net ?? 0);
     const deviceSaleAmount = Number(r.bad_debt_amount ?? 0);
     const totalPaid = Number(r.total_paid ?? 0);
     // ยอดเก็บค่างวด = ยอดชำระทั้งหมด - ยอดขายเครื่อง (ไม่ต่ำกว่า 0)
     const installmentPaid = Math.max(0, totalPaid - deviceSaleAmount);
-    // ต้นทุน = ยอดจัดไฟแนนซ์ + ค่าคอมมิชชั่น
-    const cost = financeAmount + commissionNet;
+    // ต้นทุน = (ยอดจัดไฟแนนซ์ × ตัวคูณ) + ค่าคอมมิชชั่น
+    const cost = (financeAmount * multiplierVal) + commissionNet;
     // รวมรายรับ = ยอดเก็บค่างวด + ยอดขายเครื่อง
     const totalRevenue = installmentPaid + deviceSaleAmount;
     // กำไร/ขาดทุน = รวมรายรับ - ต้นทุน
@@ -154,6 +161,7 @@ export async function getBadDebtSummary(params: {
       model: r.model ?? null,
       salePrice: r.sale_price != null ? Number(r.sale_price) : null,
       financeAmount,
+      multiplier,
       commissionNet,
       installmentPaid,
       deviceSaleAmount,

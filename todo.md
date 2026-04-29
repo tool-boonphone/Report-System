@@ -1031,3 +1031,10 @@ Task list:
 - [ ] P95-4: แถบสรุปรายเดือน: group by sale month, filter ปี
 - [ ] P95-5: แถบสรุปรายปี: group by sale year
 - [ ] P95-6: TypeScript check + Commit + Push + Checkpoint
+
+## Phase 97 — BadDebtSummary fixes (2026-04-29)
+- [x] P97-1: เพิ่ม overflow-x-auto ให้ตารางเลื่อนซ้ายขวาได้ (ทุก tab)
+- [x] P97-2: เพิ่มคอลัมน์ตัวคูณ (multiplier) ต่อจากยอดจัดไฟแนนซ์ใน backend และ frontend
+- [x] P97-3: ต้นทุน = (ยอดจัดไฟแนนซ์ * ตัวคูณ) + ค่าคอมมิชชั่น
+- [x] P97-4: ยอดเก็บค่างวด = totalPaid - deviceSaleAmount (ไม่รวมยอดสุดท้าย) — backend ถูกต้องแล้ว
+- [ ] P97-5: Commit + Push + Checkpoint
