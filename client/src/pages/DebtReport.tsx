@@ -900,8 +900,11 @@ export default function DebtReport() {
           { key: "principal", label: "เงินต้น", width: 90, align: "right" },
           { key: "interest", label: "ดอกเบี้ย", width: 90, align: "right" },
           { key: "fee", label: "ค่าดำเนินการ", width: 95, align: "right" },
-          { key: "penalty", label: "ค่าปรับ", width: 80, align: "right" },
-          { key: "unlockFee", label: "ค่าปลดล็อก", width: 90, align: "right" },
+          // Phase 94: ซ่อน penalty/unlockFee เมื่อ principalOnly=true
+          ...(!principalOnly ? [
+            { key: "penalty", label: "ค่าปรับ", width: 80, align: "right" },
+            { key: "unlockFee", label: "ค่าปลดล็อก", width: 90, align: "right" },
+          ] : []),
           { key: "amount", label: "ยอดหนี้รวม", width: 115, align: "right" },
         ]
       : [

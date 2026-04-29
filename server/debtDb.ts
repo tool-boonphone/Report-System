@@ -948,8 +948,8 @@ export async function listDebtTarget(params: { section: SectionKey }) {
            CAST(JSON_EXTRACT(raw_json, '$.principal_due') AS DECIMAL(18,2)) AS principal_due,
            CAST(JSON_EXTRACT(raw_json, '$.interest_due')  AS DECIMAL(18,2)) AS interest_due,
            CAST(JSON_EXTRACT(raw_json, '$.fee_due')       AS DECIMAL(18,2)) AS fee_due,
-           CAST(JSON_EXTRACT(raw_json, '$.penalty_due')    AS DECIMAL(18,2)) AS penalty_due,
-           CAST(JSON_EXTRACT(raw_json, '$.unlock_fee_due')  AS DECIMAL(18,2)) AS unlock_fee_due,
+           CAST(COALESCE(JSON_EXTRACT(raw_json, '$.penalty_due'), JSON_EXTRACT(raw_json, '$.mulct'), 0) AS DECIMAL(18,2)) AS penalty_due,
+           CAST(COALESCE(JSON_EXTRACT(raw_json, '$.unlock_fee_due'), 0) AS DECIMAL(18,2)) AS unlock_fee_due,
            JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.installment_status_code')) AS installment_status_code,
            CAST(JSON_EXTRACT(raw_json, '$.balance') AS DECIMAL(18,2)) AS balance
       FROM ${installments}
@@ -2487,8 +2487,8 @@ export async function* listDebtTargetStream(params: {
            CAST(JSON_EXTRACT(raw_json, '$.principal_due') AS DECIMAL(18,2)) AS principal_due,
            CAST(JSON_EXTRACT(raw_json, '$.interest_due')  AS DECIMAL(18,2)) AS interest_due,
            CAST(JSON_EXTRACT(raw_json, '$.fee_due')       AS DECIMAL(18,2)) AS fee_due,
-           CAST(JSON_EXTRACT(raw_json, '$.penalty_due')    AS DECIMAL(18,2)) AS penalty_due,
-           CAST(JSON_EXTRACT(raw_json, '$.unlock_fee_due')  AS DECIMAL(18,2)) AS unlock_fee_due,
+           CAST(COALESCE(JSON_EXTRACT(raw_json, '$.penalty_due'), JSON_EXTRACT(raw_json, '$.mulct'), 0) AS DECIMAL(18,2)) AS penalty_due,
+           CAST(COALESCE(JSON_EXTRACT(raw_json, '$.unlock_fee_due'), 0) AS DECIMAL(18,2)) AS unlock_fee_due,
            JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.installment_status_code')) AS installment_status_code,
            CAST(JSON_EXTRACT(raw_json, '$.balance') AS DECIMAL(18,2)) AS balance
       FROM ${installments}
