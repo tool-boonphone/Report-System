@@ -1031,3 +1031,11 @@ Task list:
 - [ ] P95-4: แถบสรุปรายเดือน: group by sale month, filter ปี
 - [ ] P95-5: แถบสรุปรายปี: group by sale year
 - [ ] P95-6: TypeScript check + Commit + Push + Checkpoint
+
+## Phase 96 — BadDebtSummary UI Fixes
+- [ ] P96-1: ยอดเก็บค่างวดไม่รวมยอดขายเครื่อง (backend: installmentPaid = totalPaid - deviceSaleAmount)
+- [ ] P96-2: ตารางขยายตามจอ ไม่ fix ด้านข้าง
+- [ ] P96-3: group header สรุปรายเดือน/รายปี (colspan header เหมือนรายการขายเครื่อง)
+- [ ] P96-4: filter เดือนอนุมัติเป็น dropdown เหมือนเดือนที่ขายเครื่อง
+- [ ] P96-5: Full-Lock Table style (sticky header + sticky first col + full height)
+- [ ] P96-6: Commit + Push + Checkpoint
