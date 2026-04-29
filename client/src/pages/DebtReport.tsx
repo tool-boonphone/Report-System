@@ -1064,7 +1064,8 @@ export default function DebtReport() {
                     value={dueDateExact ?? ""}
                     onChange={(e) => setDueDateExact(e.target.value || null)}
                     className="h-9 pl-8 pr-2 rounded-md border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 w-[155px]"
-                    title={tab === "target" ? "กรองตามวันที่ที่ต้องชำระ" : "กรองตามวันที่ที่ชำระ"}
+                    title={tab === "target" ? "วันที่ต้องชำระ" : "วันที่ชำระ"}
+                    placeholder={tab === "target" ? "วันที่ต้องชำระ" : "วันที่ชำระ"}
                   />
                 </div>
                 {dueDateExact && (
@@ -1857,7 +1858,13 @@ export default function DebtReport() {
                           const dueDateExactMasked =
                             !!dueDateExact &&
                             inst?.dueDate?.slice(0, 10) !== dueDateExact;
-                          const isCellMasked = dueDateMonthMasked || dueDateExactMasked;
+                          // ตั้งหนี้ masking: ซ่อน installment ที่เป็น dimmed/isPaid/isFuturePeriod/advance
+                          const debtSetMasked = debtSetMode && tab === "target" && (
+                            dimmed || // isClosed / isSuspended
+                            _isPaidPre || // ชำระครบแล้ว (เขียว)
+                            _isFuturePeriodPre // ยังไม่ถึงดิว (เทา/ฟ้า-อนาคต)
+                          );
+                          const isCellMasked = dueDateMonthMasked || dueDateExactMasked || debtSetMasked;
                           return groupCols.map((gc) => {
                             let v: any = "";
                             let annotation: string | null = null;
