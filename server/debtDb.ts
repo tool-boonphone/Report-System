@@ -1293,78 +1293,83 @@ export async function listDebtTarget(params: { section: SectionKey }) {
       if (outerSet.size > 0) normalPeriodsByContractOuter.set(key, outerSet);
     }
 
-    // Phase 78 fallback: For contracts WITHOUT TXRTC (not in closeDatesByContract),
-    // still populate normalPeriodsByContractOuter for bad-debt suspendedFromPeriod (Phase 67/68).
-    // These contracts use parseTxrtPeriod (sequence number = period for non-TXRTC contracts).
-    // Phase 113 fix: also exclude payments on bad_debt_date (same Iron Rule as collected side)
-    // so that bad-debt contracts where ALL payments are on bad_debt_date get maxTxrtPeriod=0
-    // and suspendedFromPeriod=1 (not inflated by the bad-debt payment itself).
-    for (const pr of allPayRows) {
-      const key = String(pr.contract_external_id ?? "");
-      if (!key) continue;
-      // Skip contracts already processed by assignPayPeriods above
-      if (closeDatesByContract.has(key)) continue;
-      const receipt = String(pr.receipt_no ?? "");
-      if (receipt.startsWith("TXRTC")) continue;
-      // Phase 113 fix: skip payments on bad_debt_date (these are bad-debt payments, not normal installments)
-      const paidDateFallback = pr.paid_at ? String(pr.paid_at).slice(0, 10) : null;
-      const badDebtDateFallback = badDebtDateByContractOuter.get(key) ?? null;
-      if (paidDateFallback && badDebtDateFallback && paidDateFallback === badDebtDateFallback) continue;
-      const period = parseTxrtPeriod(receipt, key);
-      if (!Number.isFinite(period) || period <= 0) continue;
-      const outerSet = normalPeriodsByContractOuter.get(key) ?? new Set<number>();
-      outerSet.add(period);
-      normalPeriodsByContractOuter.set(key, outerSet);
-      // Phase 68: track total_paid_amount per TXRT suffix
-      const totalPaidForPeriod = Number(pr.total_paid_amount ?? 0);
-      if (totalPaidForPeriod > 0) {
-        let tMap = txrtTotalByContractPeriod.get(key);
-        if (!tMap) { tMap = new Map<number, number>(); txrtTotalByContractPeriod.set(key, tMap); }
-        tMap.set(period, (tMap.get(period) ?? 0) + totalPaidForPeriod);
-      }
-      // Phase 85: Validate overpaid against INST_BASE paid_amount.
-      // Suffix-based period assignment (TXRT-N → period N) can be wrong when a payment
-      // covers the REMAINING balance of an earlier period (e.g. TXRT-2 closes period 1
-      // remainder, not period 2). In that case the INST_BASE for period N will show
-      // paid_amount < amount (not fully paid), which means the suffix-based assignment
-      // is incorrect and the overpaid_amount belongs to a different period.
-      //
-      // Phase 85 revised: Two-step check:
-      // 1. If INST_BASE[period] is fully paid → track overpaid at period (normal case).
-      // 2. If INST_BASE[period] is NOT fully paid but INST_BASE[period-1] IS fully paid
-      //    → TXRT-N actually closed period N-1 remainder, so overpaid belongs to period N.
-      //    Track overpaid at period (same period N, which is where the carry lands).
-      // 3. If neither → skip (suffix assignment is wrong in an unresolvable way).
-      const overpaid = Number(pr.overpaid_amount ?? 0);
-      if (overpaid > 0) {
-        const instListForKey = instByContract.get(key) ?? [];
-        const instRow = instListForKey.find((r) => Number(r.period ?? 0) === period);
-        const instBaseAmount = instRow ? Number(instRow.amount ?? 0) : 0;
-        const instBasePaid = instRow ? Number(instRow.paid_amount ?? 0) : 0;
-        const instIsPaid =
-          (instBaseAmount < 0.009 && instBasePaid > 0.009) ||
-          (instBaseAmount > 0.009 && instBasePaid >= instBaseAmount - 0.5);
-        // Phase 85 step 2: check prior period (period-1) when current period is not fully paid
-        const priorInstRow = !instIsPaid && period > 1
-          ? instListForKey.find((r) => Number(r.period ?? 0) === period - 1)
-          : null;
-        const priorBaseAmount = priorInstRow ? Number(priorInstRow.amount ?? 0) : 0;
-        const priorBasePaid = priorInstRow ? Number(priorInstRow.paid_amount ?? 0) : 0;
-        const priorIsPaid = priorInstRow &&
-          ((priorBaseAmount < 0.009 && priorBasePaid > 0.009) ||
-           (priorBaseAmount > 0.009 && priorBasePaid >= priorBaseAmount - 0.5));
-        if (instIsPaid || priorIsPaid) {
-          let periodMap = overpaidByContractPeriod.get(key);
-          if (!periodMap) {
-            periodMap = new Map<number, number>();
-            overpaidByContractPeriod.set(key, periodMap);
+    // Phase 78 fallback (Iron Rule): For contracts WITHOUT TXRTC (not in closeDatesByContract),
+    // use assignPayPeriods to derive the correct installment period for each payment.
+    // This replaces the old parseTxrtPeriod suffix-based approach (TXRT-N → period N) which is
+    // WRONG when payments are partial or split across periods.
+    //
+    // Iron Rule (same as collected side):
+    //   1. Exclude payments on bad_debt_date (bad-debt payments are NOT normal installments)
+    //   2. Use assignPayPeriods to assign period from installment schedule
+    //   3. Only count periods where close_installment_amount > 0 (or principal_paid > 0 as fallback)
+    //   4. normalPeriodsByContractOuter = set of fully-paid periods
+    //   5. maxTxrtPeriod = max(normalPeriods) → suspendedFromPeriod = maxTxrtPeriod + 1
+    //
+    // Example CT1125: TXRT-1(2400)+TXRT-2(1711)+null(4111)=8222 → fills period 1(4111)+period 2(4111)
+    //   TXRT-3(2000) → partial period 3 → not counted → maxTxrtPeriod=2 → suspendedFromPeriod=3 ✅
+    // (Old parseTxrtPeriod gave maxTxrtPeriod=3 → suspendedFromPeriod=4 ❌)
+    {
+      // Group rawPaysByContract by key, skip contracts already processed by Phase 78 main
+      const processedByFallback = new Set<string>();
+      for (const [key, rawPays] of Array.from(rawPaysByContract.entries())) {
+        if (closeDatesByContract.has(key)) continue; // already processed by Phase 78 main
+        if (processedByFallback.has(key)) continue;
+        processedByFallback.add(key);
+        const instList = instByContract.get(key) ?? [];
+        if (!instList.length) continue;
+        const contractNo = contractNoByExtId.get(key) ?? null;
+        const badDebtDateFb = badDebtDateByContractOuter.get(key) ?? null;
+        // Iron Rule: exclude payments on bad_debt_date
+        const normalPays = rawPays.filter((p) => {
+          const receipt = p.receipt_no ?? "";
+          if (receipt.startsWith("TXRTC")) return false;
+          const paidDate = p.paid_at ? String(p.paid_at).slice(0, 10) : null;
+          return !(paidDate && badDebtDateFb && paidDate === badDebtDateFb);
+        });
+        if (!normalPays.length) continue;
+        const baselineAmtFb = baselineByKeyPhase78.get(key) ?? 0;
+        const assigned = assignPayPeriods(
+          normalPays,
+          instList.map((i) => {
+            const amt = Number(i.amount ?? 0);
+            return { period: i.period, amount: amt > 0 ? amt : baselineAmtFb };
+          }),
+          contractNo,
+        );
+        const outerSet = new Set<number>();
+        for (const ap of assigned) {
+          if (ap.isCloseRow || ap.isBadDebtRow) continue;
+          const period = ap.period;
+          if (period == null || period <= 0) continue;
+          // Phase 79: only count periods where close_installment_amount > 0
+          // (or principal_paid > 0 as fallback when close_installment_amount is absent)
+          const closeAmt79 = ap.close_installment_amount;
+          const principalPaid79 = Number(ap.principal_paid ?? 0);
+          if (closeAmt79 !== null) {
+            if (Number(closeAmt79) === 0) continue;
+          } else {
+            if (principalPaid79 === 0) continue;
           }
-          // Phase 85b fix: when priorIsPaid (TXRT-N closed prior period remainder),
-          // track at period-1 so carry-forward correctly applies overpaid at period N.
-          // (e.g. TXRT-2 closes period 1 remainder + overpaid 50 -> track at 1 -> apply at 2)
-          const trackPeriod = instIsPaid ? period : period - 1;
-          periodMap.set(trackPeriod, (periodMap.get(trackPeriod) ?? 0) + overpaid);
+          outerSet.add(period);
+          // Phase 68: track total_paid_amount per period (for device sale detection)
+          const totalPaidForPeriod = Number(ap.total_paid_amount ?? 0);
+          if (totalPaidForPeriod > 0) {
+            let tMap = txrtTotalByContractPeriod.get(key);
+            if (!tMap) { tMap = new Map<number, number>(); txrtTotalByContractPeriod.set(key, tMap); }
+            tMap.set(period, (tMap.get(period) ?? 0) + totalPaidForPeriod);
+          }
+          // Track overpaid amount for this period
+          const overpaid = Number(ap.overpaid_amount ?? 0);
+          if (overpaid > 0) {
+            let periodMap = overpaidByContractPeriod.get(key);
+            if (!periodMap) {
+              periodMap = new Map<number, number>();
+              overpaidByContractPeriod.set(key, periodMap);
+            }
+            periodMap.set(period, (periodMap.get(period) ?? 0) + overpaid);
+          }
         }
+        if (outerSet.size > 0) normalPeriodsByContractOuter.set(key, outerSet);
       }
     }
 
@@ -2757,72 +2762,77 @@ export async function* listDebtTargetStream(params: {
       if (periodSet.size > 0) normalPeriodsByContract.set(key, periodSet);
     }
 
-    // Phase 78 fallback: contracts WITHOUT TXRTC — use parseTxrtPeriodStream for bad-debt logic
-    // Phase 113 fix: also exclude payments on bad_debt_date (same Iron Rule as collected side)
-    for (const pr of allPayRows) {
-      const key = String(pr.contract_external_id ?? "");
-      if (!key) continue;
-      if (closeDatesByContract.has(key)) continue; // already processed by assignPayPeriods
-      const receipt = String(pr.receipt_no ?? "");
-      if (receipt.startsWith("TXRTC")) continue;
-      // Phase 113 fix: skip payments on bad_debt_date
-      const paidDateStream78 = pr.paid_at ? String(pr.paid_at).slice(0, 10) : null;
-      const badDebtDateStream78 = badDebtDateByContractStreamOuter.get(key) ?? null;
-      if (paidDateStream78 && badDebtDateStream78 && paidDateStream78 === badDebtDateStream78) continue;
-      const period = parseTxrtPeriodStream(receipt, key);
-      if (!Number.isFinite(period) || period <= 0) continue;
-      const set = normalPeriodsByContract.get(key) ?? new Set<number>();
-      set.add(period);
-      normalPeriodsByContract.set(key, set);
-      const totalPaidForPeriod = Number(pr.total_paid_amount ?? 0);
-      if (totalPaidForPeriod > 0) {
-        let tMap = txrtTotalByContractPeriodStream.get(key);
-        if (!tMap) { tMap = new Map<number, number>(); txrtTotalByContractPeriodStream.set(key, tMap); }
-        tMap.set(period, (tMap.get(period) ?? 0) + totalPaidForPeriod);
-      }
-      // Phase 85: Validate overpaid against INST_BASE paid_amount.
-      // Suffix-based period assignment (TXRT-N → period N) can be wrong when a payment
-      // covers the REMAINING balance of an earlier period (e.g. TXRT-2 closes period 1
-      // remainder, not period 2). In that case the INST_BASE for period N will show
-      // paid_amount < amount (not fully paid), which means the suffix-based assignment
-      // is incorrect and the overpaid_amount belongs to a different period.
-      //
-      // Phase 85 revised: Two-step check:
-      // 1. If INST_BASE[period] is fully paid → track overpaid at period (normal case).
-      // 2. If INST_BASE[period] is NOT fully paid but INST_BASE[period-1] IS fully paid
-      //    → TXRT-N actually closed period N-1 remainder, so overpaid belongs to period N.
-      //    Track overpaid at period (same period N, which is where the carry lands).
-      // 3. If neither → skip (suffix assignment is wrong in an unresolvable way).
-      const overpaid = Number(pr.overpaid_amount ?? 0);
-      if (overpaid > 0) {
-        const instListForKey = instByContract.get(key) ?? [];
-        const instRow = instListForKey.find((r) => Number(r.period ?? 0) === period);
-        const instBaseAmount = instRow ? Number(instRow.amount ?? 0) : 0;
-        const instBasePaid = instRow ? Number(instRow.paid_amount ?? 0) : 0;
-        const instIsPaid =
-          (instBaseAmount < 0.009 && instBasePaid > 0.009) ||
-          (instBaseAmount > 0.009 && instBasePaid >= instBaseAmount - 0.5);
-        // Phase 85 step 2: check prior period (period-1) when current period is not fully paid
-        const priorInstRow = !instIsPaid && period > 1
-          ? instListForKey.find((r) => Number(r.period ?? 0) === period - 1)
-          : null;
-        const priorBaseAmount = priorInstRow ? Number(priorInstRow.amount ?? 0) : 0;
-        const priorBasePaid = priorInstRow ? Number(priorInstRow.paid_amount ?? 0) : 0;
-        const priorIsPaid = priorInstRow &&
-          ((priorBaseAmount < 0.009 && priorBasePaid > 0.009) ||
-           (priorBaseAmount > 0.009 && priorBasePaid >= priorBaseAmount - 0.5));
-        if (instIsPaid || priorIsPaid) {
-          let periodMap = overpaidByContractPeriod.get(key);
-          if (!periodMap) {
-            periodMap = new Map<number, number>();
-            overpaidByContractPeriod.set(key, periodMap);
+    // Phase 78 fallback (Iron Rule, stream): For contracts WITHOUT TXRTC (not in closeDatesByContract),
+    // use assignPayPeriods to derive the correct installment period for each payment.
+    // This replaces the old parseTxrtPeriodStream suffix-based approach (TXRT-N → period N) which is
+    // WRONG when payments are partial or split across periods.
+    //
+    // Iron Rule (same as listDebtTarget fallback and collected side):
+    //   1. Exclude payments on bad_debt_date (bad-debt payments are NOT normal installments)
+    //   2. Use assignPayPeriods to assign period from installment schedule
+    //   3. Only count periods where close_installment_amount > 0 (or principal_paid > 0 as fallback)
+    //   4. normalPeriodsByContract = set of fully-paid periods
+    //   5. maxTxrtPeriod = max(normalPeriods) → suspendedFromPeriod = maxTxrtPeriod + 1
+    {
+      const processedByFallbackStream = new Set<string>();
+      for (const [key, rawPays] of Array.from(rawPaysByContractStream.entries())) {
+        if (closeDatesByContract.has(key)) continue; // already processed by Phase 78 main
+        if (processedByFallbackStream.has(key)) continue;
+        processedByFallbackStream.add(key);
+        const instList = instByContract.get(key) ?? [];
+        if (!instList.length) continue;
+        const contractNo = contractNoByExtIdStream.get(key) ?? null;
+        const badDebtDateFbS = badDebtDateByContractStreamOuter.get(key) ?? null;
+        // Iron Rule: exclude TXRTC and payments on bad_debt_date
+        const normalPaysS = rawPays.filter((p) => {
+          const receipt = p.receipt_no ?? "";
+          if (receipt.startsWith("TXRTC")) return false;
+          const paidDate = p.paid_at ? String(p.paid_at).slice(0, 10) : null;
+          return !(paidDate && badDebtDateFbS && paidDate === badDebtDateFbS);
+        });
+        if (!normalPaysS.length) continue;
+        const baselineAmtFbS = baselineByKeyPhase78Stream.get(key) ?? 0;
+        const assignedS = assignPayPeriods(
+          normalPaysS,
+          instList.map((i) => {
+            const amt = Number(i.amount ?? 0);
+            return { period: i.period, amount: amt > 0 ? amt : baselineAmtFbS };
+          }),
+          contractNo,
+        );
+        const periodSetS = new Set<number>();
+        for (const ap of assignedS) {
+          if (ap.isCloseRow || ap.isBadDebtRow) continue;
+          const period = ap.period;
+          if (period == null || period <= 0) continue;
+          // Phase 79: only count periods where close_installment_amount > 0
+          const closeAmt79S = ap.close_installment_amount;
+          const principalPaid79S = Number(ap.principal_paid ?? 0);
+          if (closeAmt79S !== null) {
+            if (Number(closeAmt79S) === 0) continue;
+          } else {
+            if (principalPaid79S === 0) continue;
           }
-          // Phase 85b fix: when priorIsPaid (TXRT-N closed prior period remainder),
-          // track at period-1 so carry-forward correctly applies overpaid at period N.
-          // (e.g. TXRT-2 closes period 1 remainder + overpaid 50 -> track at 1 -> apply at 2)
-          const trackPeriod = instIsPaid ? period : period - 1;
-          periodMap.set(trackPeriod, (periodMap.get(trackPeriod) ?? 0) + overpaid);
+          periodSetS.add(period);
+          // Phase 68: track total_paid_amount per period (for device sale detection)
+          const totalPaidForPeriod = Number(ap.total_paid_amount ?? 0);
+          if (totalPaidForPeriod > 0) {
+            let tMap = txrtTotalByContractPeriodStream.get(key);
+            if (!tMap) { tMap = new Map<number, number>(); txrtTotalByContractPeriodStream.set(key, tMap); }
+            tMap.set(period, (tMap.get(period) ?? 0) + totalPaidForPeriod);
+          }
+          // Track overpaid amount for this period
+          const overpaid = Number(ap.overpaid_amount ?? 0);
+          if (overpaid > 0) {
+            let periodMap = overpaidByContractPeriod.get(key);
+            if (!periodMap) {
+              periodMap = new Map<number, number>();
+              overpaidByContractPeriod.set(key, periodMap);
+            }
+            periodMap.set(period, (periodMap.get(period) ?? 0) + overpaid);
+          }
         }
+        if (periodSetS.size > 0) normalPeriodsByContract.set(key, periodSetS);
       }
     }
 
