@@ -1,5 +1,5 @@
 /**
- * BadDebtSummary — Phase 98 (sortable monthly/yearly headers, no min-w-max)
+ * BadDebtSummary — Phase 99 (no overflow-x-auto, fluid table layout)
  * หน้าสรุปกำไร/ขาดทุนจากหนี้เสีย แบ่งเป็น 3 แถบ:
  *   1. รายการขายเครื่อง
  *   2. สรุปรายเดือน
@@ -435,8 +435,8 @@ export default function BadDebtSummary() {
 
         {/* ╔════════════════ TAB 1: รายการขายเครื่อง ════════════════ */}
         {!isLoading && activeTab === "list" && (
-          <div className="rounded-lg border border-gray-200 shadow-sm overflow-x-auto">
-            <table className="w-full text-sm min-w-max">              <thead className="bg-red-700 text-white sticky top-0 z-10">
+          <div className="rounded-lg border border-gray-200 shadow-sm">
+            <table className="w-full text-sm">              <thead className="bg-red-700 text-white sticky top-0 z-10">
                 <tr>
                   <th className="px-2 py-2 text-center text-xs font-semibold w-10">#</th>
                   <Th label="วันที่อนุมัติ" col="approveDate" />
@@ -508,7 +508,7 @@ export default function BadDebtSummary() {
         )}
         {/* ╔════════════════ TAB 2: สรุปรายเดือน ════════════════ */}
         {!isLoading && activeTab === "monthly" && (
-          <div className="rounded-lg border border-gray-200 shadow-sm overflow-x-auto">
+          <div className="rounded-lg border border-gray-200 shadow-sm">
             <table className="w-full text-sm">
               <thead className="bg-blue-700 text-white sticky top-0 z-10">
                 {/* Group header row */}
@@ -567,7 +567,7 @@ export default function BadDebtSummary() {
         )}
         {/* ╔════════════════ TAB 3: สรุปรายปี ════════════════ */}
         {!isLoading && activeTab === "yearly" && (
-          <div className="rounded-lg border border-gray-200 shadow-sm overflow-x-auto">
+          <div className="rounded-lg border border-gray-200 shadow-sm">
             <table className="w-full text-sm">
               <thead className="bg-purple-700 text-white sticky top-0 z-10">
                 {/* Group header row */}
