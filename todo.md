@@ -1053,4 +1053,9 @@ Task list:
 ## Phase 103 — BadDebt: แก้สูตรต้นทุน + ตัดคอลัมน์ตัวคูณ
 - [x] P103-1: แก้ badDebtDb.ts — cost = financeAmount + commissionNet (ลบ multiplier ออกจากสูตร)
 - [x] P103-2: แก้ BadDebtSummary.tsx — ตัดคอลัมน์ตัวคูณออกจาก list tab (thead + tbody + tfoot + colSpan)
-- [ ] P103-3: Commit + Push + Checkpoint
+- [x] P103-3: Commit + Push + Checkpoint (commit b75144b)
+
+## Phase 104 — DebtCollection: แสดงยอดขายเครื่องในคอลัมน์หนี้เสีย
+- [ ] P104-1: ศึกษา logic คอลัมน์หนี้เสียใน debtDb.ts และ runner.ts
+- [ ] P104-2: แก้ไข logic ให้ยอดขายเครื่อง (bad_debt_amount) ลงคอลัมน์หนี้เสียในแถวที่เป็น latest real payment
+- [ ] P104-3: Commit + Push + Checkpoint
