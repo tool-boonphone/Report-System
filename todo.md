@@ -1071,3 +1071,12 @@ Task list:
 - [ ] P105-8: เพิ่มเมนูใน TopNav.tsx ก่อนหนี้เสีย + เพิ่ม mobile sidebar
 - [ ] P105-9: ย้าย Export button จาก topnav actions มาอยู่แนวเดียวกับแถบเมนู (ขวาสุด)
 - [ ] P105-10: Commit + Push + Checkpoint
+
+### Phase 106 Fix — Bad-Debt Rule in listDebtCollectedStream (2026-04-29)
+- [x] พบว่า Phase 106 logic ถูก implement ใน `listDebtCollected` เท่านั้น แต่ระบบใช้ `listDebtCollectedStream` สำหรับ streaming endpoint
+- [x] เพิ่ม Phase 106 logic ใน `listDebtCollectedStream` (server/debtDb.ts)
+- [x] แก้ไข condition จาก `c.status === "หนี้เสีย"` เป็น `isBadDebtContract` ซึ่งตรวจสอบทั้ง:
+  - contract.status === "หนี้เสีย" (direct)
+  - installments มี status = "ยกเลิกสัญญา" | "หนี้เสีย" | "ระงับสัญญา" (บาง contracts มี status="สำเร็จ" แต่ installments บางงวดถูกยกเลิก)
+- [x] ยืนยันผลลัพธ์ถูกต้อง: CT1124-BKK003-2988-01=3000, CT0824-NRT001-00023-01=7000, CT1124-SKA002-3314-01=7400
+- [x] Commit: dd6b58e
