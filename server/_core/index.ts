@@ -9,7 +9,7 @@ import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
 import { seedSuperAdmin } from "../authDb";
 import { handleContractsExport, handleDebtExport, handleBadDebtExport } from "../routers/exportExcel";
-import { handleDebtStreamTarget, handleDebtStreamCollected } from "../routers/debtStream";
+import { handleDebtStreamTarget, handleDebtStreamCollected, handleDebtCacheInvalidate } from "../routers/debtStream";
 import { startScheduler } from "../sync/scheduler";
 import { prewarmDebtCache } from "../debtPrewarm";
 import { createContext } from "./context";
@@ -51,6 +51,8 @@ async function startServer() {
   // Phase 33: Streaming debt data endpoints — bypass tRPC buffering to avoid proxy 503 timeout
   app.get("/api/debt/stream/target", handleDebtStreamTarget);
   app.get("/api/debt/stream/collected", handleDebtStreamCollected);
+  // Phase 88: Cache invalidation endpoint — admin can force-clear server cache
+  app.post("/api/debt/cache/invalidate", handleDebtCacheInvalidate);
   // tRPC API
   app.use(
     "/api/trpc",

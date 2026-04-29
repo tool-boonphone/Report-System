@@ -362,10 +362,9 @@ function MultiSelectFilter({
 }
 
 export default function DebtReport() {
-  const { can } = useAppAuth();
+  const { can, isSuperAdmin } = useAppAuth();
   const { section } = useSection();
   const { setActions } = useNavActions();
-
   const canView = can("debt_report", "view");
   const canExport = can("debt_report", "export");
 
@@ -439,12 +438,17 @@ export default function DebtReport() {
   // ทำให้ browser เห็น data ไหลมาตลอด ป้องกัน Cloudflare 100s timeout
   const fetchStream = useCallback(async (t: "target" | "collected") => {
     if (!canView || !section) return;
+    // Phase 88: clear old data immediately so UI doesn't show stale results
+    setStreamData((prev) => ({ ...prev, [t]: null }));
     setStreamLoading((prev) => ({ ...prev, [t]: true }));
     setStreamError((prev) => ({ ...prev, [t]: null }));
     setStreamProgress((prev) => ({ ...prev, [t]: 0 }));
     try {
-      const resp = await fetch(`/api/debt/stream/${t}?section=${encodeURIComponent(section)}`, {
+      // Phase 88: add cache-busting timestamp to prevent browser HTTP caching
+      const cacheBust = Date.now();
+      const resp = await fetch(`/api/debt/stream/${t}?section=${encodeURIComponent(section)}&_t=${cacheBust}`, {
         credentials: "include",
+        cache: "no-store",
         signal: AbortSignal.timeout(300_000), // 5 นาที timeout
       });
       if (!resp.ok) {
@@ -775,16 +779,52 @@ export default function DebtReport() {
     } catch (err) {
       toast.error((err as Error).message ?? "Export failed", { id: toastId });
     }
-  }, [section, tab, search, statusFilter, dueDateExact, dueDateFilter, approveDateFilter, productTypeFilter]);
+   }, [section, tab, search, statusFilter, dueDateExact, dueDateFilter, approveDateFilter, productTypeFilter]);
+
+  // Phase 88: Super Admin can force-clear server-side debt cache
+  const [isInvalidating, setIsInvalidating] = useState(false);
+  const handleInvalidateCache = React.useCallback(async () => {
+    if (!isSuperAdmin) return;
+    setIsInvalidating(true);
+    try {
+      const resp = await fetch("/api/debt/cache/invalidate", {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!resp.ok) {
+        const { error } = await resp.json().catch(() => ({ error: "Unknown error" }));
+        toast.error(`ล้าง cache ไม่สำเร็จ: ${error}`);
+        return;
+      }
+      toast.success("ล้าง server cache สำเร็จ — กำลังโหลดข้อมูลใหม่...");
+      // Re-fetch both tabs after cache invalidation
+      await fetchStream("target");
+      await fetchStream("collected");
+    } catch (err) {
+      toast.error(`เกิดข้อผิดพลาด: ${(err as Error).message}`);
+    } finally {
+      setIsInvalidating(false);
+    }
+  }, [isSuperAdmin, fetchStream]);
 
   useEffect(() => {
     setActions(
       <div className="flex items-center gap-2">
+        {isSuperAdmin && (
+          <button
+            onClick={handleInvalidateCache}
+            disabled={isInvalidating}
+            className="px-3 py-1.5 text-xs bg-amber-100 text-amber-800 border border-amber-300 rounded-lg hover:bg-amber-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            title="ล้าง server cache และโหลดข้อมูลใหม่จาก DB (Super Admin only)"
+          >
+            {isInvalidating ? "กำลังล้าง..." : "ล้าง Cache"}
+          </button>
+        )}
         <SyncStatusBar />
       </div>,
     );
     return () => setActions(null);
-  }, [setActions]);
+  }, [setActions, isSuperAdmin, handleInvalidateCache, isInvalidating]);
 
   /* ---- Virtual scroll ---- */
   const scrollRef = useRef<HTMLDivElement | null>(null);

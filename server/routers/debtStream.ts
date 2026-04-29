@@ -310,3 +310,27 @@ export async function handleDebtStreamCollected(
     }
   }
 }
+
+/** POST /api/debt/cache/invalidate — Phase 88: force-clear server-side debt cache */
+export async function handleDebtCacheInvalidate(
+  req: Request,
+  res: Response,
+): Promise<void> {
+  // Auth check — require Super Admin group (isSuperAdmin)
+  const appUser = await resolveUser(req);
+  if (!appUser) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+  // Only Super Admin group can invalidate cache
+  if (!appUser.group.isSuperAdmin) {
+    res.status(403).json({ error: "Forbidden — Super Admin only" });
+    return;
+  }
+
+  const { invalidateAllDebtCache } = await import("../debtCache");
+  invalidateAllDebtCache();
+
+  console.log(`[debtStream] Cache invalidated by user: ${appUser.username ?? appUser.id}`);
+  res.json({ ok: true, message: "Cache invalidated. Next request will recompute from DB." });
+}
