@@ -518,10 +518,13 @@ export async function handleBadDebtExport(req: Request, res: Response) {
       { header: "รุ่น", key: "model", width: 20 },
       { header: "ราคาขาย", key: "salePrice", width: 14 },
       { header: "ยอดจัดไฟแนนซ์", key: "financeAmount", width: 16 },
-      { header: "ยอดเก็บได้", key: "totalPaid", width: 14 },
+      { header: "ค่าคอมมิชชั่น", key: "commissionNet", width: 14 },
+      { header: "งวดที่ชำระ", key: "installments", width: 14 },
+      { header: "ยอดเก็บค่างวด", key: "installmentPaid", width: 14 },
+      { header: "ยอดขายเครื่อง", key: "deviceSaleAmount", width: 14 },
+      { header: "วันที่ขาย", key: "saleDate", width: 14 },
+      { header: "ต้นทุน", key: "cost", width: 14 },
       { header: "กำไร/ขาดทุน", key: "profitLoss", width: 14 },
-      { header: "งวด/ชำระแล้ว", key: "installments", width: 14 },
-      { header: "วันที่หนี้เสีย", key: "badDebtDate", width: 14 },
     ];
 
     ws.getRow(1).font = { bold: true };
@@ -543,10 +546,13 @@ export async function handleBadDebtExport(req: Request, res: Response) {
         model: r.model ?? "-",
         salePrice: r.salePrice ?? "",
         financeAmount: r.financeAmount,
-        totalPaid: r.totalPaid,
-        profitLoss: r.profitLoss,
+        commissionNet: r.commissionNet,
         installments: `${r.paidInstallments}/${r.installmentCount ?? "-"}`,
-        badDebtDate: r.badDebtDate ? r.badDebtDate.slice(0, 10) : "",
+        installmentPaid: r.installmentPaid,
+        deviceSaleAmount: r.deviceSaleAmount,
+        saleDate: r.saleDate ? r.saleDate.slice(0, 10) : "",
+        cost: r.cost,
+        profitLoss: r.profitLoss,
       }).commit();
     }
 

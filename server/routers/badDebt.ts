@@ -1,5 +1,5 @@
 /**
- * Bad Debt Summary router (Phase 9k).
+ * Bad Debt Summary router (Phase 95).
  * Endpoint: trpc.badDebt.summary
  * Permission: bad_debt_summary / view
  */
@@ -17,6 +17,7 @@ export const badDebtRouter = router({
       z.object({
         section: SectionEnum,
         approveMonth: z.string().optional(),
+        saleMonth: z.string().optional(),
       }),
     )
     .query(async ({ input }) => {

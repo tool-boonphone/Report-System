@@ -1,10 +1,12 @@
 /**
- * Bad Debt Summary helpers (Phase 9k).
+ * Bad Debt Summary helpers (Phase 95).
  *
  * สรุปกำไร/ขาดทุนจากหนี้เสีย:
  *   - ดึงสัญญาที่มีสถานะ "หนี้เสีย" (Fastfone365) หรือ "ระงับสัญญา" (Boonphone)
- *   - คำนวณ: ยอดที่เก็บได้ − ยอดจัดไฟแนนซ์ = กำไร/ขาดทุน
- *   - แสดงรายสัญญา + สรุปรวม
+ *   - แยก: ยอดเก็บค่างวด (installmentPaid) vs ยอดขายเครื่อง (deviceSaleAmount)
+ *   * คำนวณ: ต้นทุน = ยอดจัดไฟแนนซ์ + ค่าคอมมิชชั่น
+ *   - รวมรายรับ = ยอดเก็บค่างวด + ยอดขายเครื่อง
+ *   - กำไร/ขาดทุน = รวมรายรับ - ต้นทุน
  */
 import { sql } from "drizzle-orm";
 import { contracts, paymentTransactions } from "../drizzle/schema";
@@ -18,21 +20,39 @@ export type BadDebtRow = {
   phone: string | null;
   approveDate: string | null;
   productType: string | null;
+  /** รุ่นสินค้า — ดึงจาก column model โดยตรง */
   model: string | null;
+  /** ราคาขาย (sale_price) */
   salePrice: number | null;
+  /** ยอดจัดไฟแนนซ์ */
   financeAmount: number;
-  totalPaid: number;
-  profitLoss: number; // totalPaid - financeAmount (+ = กำไร, - = ขาดทุน)
-  badDebtDate: string | null; // วันที่บันทึกหนี้เสีย (last paid_at)
-  installmentCount: number | null;
+  /** ค่าคอมมิชชั่น */
+  commissionNet: number;
+  /** ยอดเก็บค่างวดปกติ (ไม่รวมยอดขายเครื่อง) */
+  installmentPaid: number;
+  /** ยอดขายเครื่อง (bad_debt_amount จาก contracts) */
+  deviceSaleAmount: number;
+  /** วันที่ขายเครื่อง (bad_debt_date จาก contracts) */
+  saleDate: string | null;
+  /** ต้นทุน = financeAmount + commissionNet */
+  cost: number;
+  /** รวมรายรับ = installmentPaid + deviceSaleAmount */
+  totalRevenue: number;
+  /** กำไร/ขาดทุน = totalRevenue - cost */
+  profitLoss: number;
+  /** งวดที่ชำระ */
   paidInstallments: number;
+  installmentCount: number | null;
 };
 
 export type BadDebtSummary = {
   contractCount: number;
   totalSalePrice: number;
   totalFinanceAmount: number;
-  totalPaid: number;
+  totalCommissionNet: number;
+  totalInstallmentPaid: number;
+  totalDeviceSaleAmount: number;
+  totalCost: number;
   totalProfitLoss: number;
   profitCount: number;
   lossCount: number;
@@ -43,13 +63,18 @@ export async function getBadDebtSummary(params: {
   section: SectionKey;
   /** Optional: filter by approve year-month YYYY-MM */
   approveMonth?: string;
+  /** Optional: filter by sale date year-month YYYY-MM (วันที่ขายเครื่อง) */
+  saleMonth?: string;
 }): Promise<{ rows: BadDebtRow[]; summary: BadDebtSummary }> {
   const db = await getDb();
   const emptySummary: BadDebtSummary = {
     contractCount: 0,
     totalSalePrice: 0,
     totalFinanceAmount: 0,
-    totalPaid: 0,
+    totalCommissionNet: 0,
+    totalInstallmentPaid: 0,
+    totalDeviceSaleAmount: 0,
+    totalCost: 0,
     totalProfitLoss: 0,
     profitCount: 0,
     lossCount: 0,
@@ -58,13 +83,11 @@ export async function getBadDebtSummary(params: {
   if (!db) return { rows: [], summary: emptySummary };
 
   // สถานะที่ถือว่า "หนี้เสีย" ในแต่ละ section
-  // Fastfone365: "หนี้เสีย" | Boonphone: "ระงับสัญญา"
   const badDebtStatuses =
     params.section === "Fastfone365"
       ? ["หนี้เสีย"]
       : ["ระงับสัญญา", "หนี้เสีย"];
 
-  // Build parameterized IN clause using sql.join
   const statusValues = sql.join(
     badDebtStatuses.map((s) => sql`${s}`),
     sql`, `,
@@ -78,22 +101,23 @@ export async function getBadDebtSummary(params: {
       c.customer_name                                                          AS customer_name,
       c.phone                                                                  AS phone,
       c.approve_date                                                           AS approve_date,
-      JSON_UNQUOTE(JSON_EXTRACT(c.raw_json, '$.product_type'))                AS product_type,
-      JSON_UNQUOTE(JSON_EXTRACT(c.raw_json, '$.model'))                       AS model,
-      CAST(JSON_UNQUOTE(JSON_EXTRACT(c.raw_json, '$.sale_price')) AS DECIMAL(18,2)) AS sale_price,
-      CAST(c.finance_amount AS DECIMAL(18,2))                                 AS finance_amount,
+      c.product_type                                                           AS product_type,
+      c.model                                                                  AS model,
+      CAST(c.sale_price AS DECIMAL(18,2))                                      AS sale_price,
+      CAST(c.finance_amount AS DECIMAL(18,2))                                  AS finance_amount,
+      CAST(COALESCE(c.commission_net, 0) AS DECIMAL(18,2))                    AS commission_net,
+      CAST(COALESCE(c.bad_debt_amount, 0) AS DECIMAL(18,2))                   AS bad_debt_amount,
+      c.bad_debt_date                                                          AS sale_date,
       COALESCE(pt_sum.total_paid, 0)                                          AS total_paid,
       COALESCE(pt_sum.pay_cnt, 0)                                             AS paid_installments,
-      c.installment_count                                                      AS installment_count,
-      pt_sum.last_paid_at                                                      AS bad_debt_date
+      c.installment_count                                                      AS installment_count
     FROM ${contracts} c
     LEFT JOIN (
       SELECT
         section,
         contract_external_id,
         SUM(CAST(amount AS DECIMAL(18,2))) AS total_paid,
-        COUNT(*) AS pay_cnt,
-        MAX(paid_at) AS last_paid_at
+        COUNT(*) AS pay_cnt
       FROM ${paymentTransactions}
       GROUP BY section, contract_external_id
     ) pt_sum
@@ -104,13 +128,22 @@ export async function getBadDebtSummary(params: {
     ORDER BY c.approve_date DESC, c.external_id DESC
   `);
 
-  // TiDB returns [rows, fields] or just rows depending on driver
   const rawArr: any[] = (rawRows as any)[0] ?? rawRows;
 
-  const rows: BadDebtRow[] = rawArr.map((r: any) => {
+  const allRows: BadDebtRow[] = rawArr.map((r: any) => {
     const financeAmount = Number(r.finance_amount ?? 0);
+    const commissionNet = Number(r.commission_net ?? 0);
+    const deviceSaleAmount = Number(r.bad_debt_amount ?? 0);
     const totalPaid = Number(r.total_paid ?? 0);
-    const profitLoss = totalPaid - financeAmount;
+    // ยอดเก็บค่างวด = ยอดชำระทั้งหมด - ยอดขายเครื่อง (ไม่ต่ำกว่า 0)
+    const installmentPaid = Math.max(0, totalPaid - deviceSaleAmount);
+    // ต้นทุน = ยอดจัดไฟแนนซ์ + ค่าคอมมิชชั่น
+    const cost = financeAmount + commissionNet;
+    // รวมรายรับ = ยอดเก็บค่างวด + ยอดขายเครื่อง
+    const totalRevenue = installmentPaid + deviceSaleAmount;
+    // กำไร/ขาดทุน = รวมรายรับ - ต้นทุน
+    const profitLoss = totalRevenue - cost;
+
     return {
       contractExternalId: String(r.contract_external_id ?? ""),
       contractNo: r.contract_no ?? null,
@@ -121,14 +154,23 @@ export async function getBadDebtSummary(params: {
       model: r.model ?? null,
       salePrice: r.sale_price != null ? Number(r.sale_price) : null,
       financeAmount,
-      totalPaid,
+      commissionNet,
+      installmentPaid,
+      deviceSaleAmount,
+      totalRevenue,
+      saleDate: r.sale_date ?? null,
+      cost,
       profitLoss,
-      badDebtDate: r.bad_debt_date ?? null,
+      paidInstallments: Number(r.paid_installments ?? 0),
       installmentCount:
         r.installment_count != null ? Number(r.installment_count) : null,
-      paidInstallments: Number(r.paid_installments ?? 0),
     };
   });
+
+  // กรอง saleMonth ถ้ามี (filter ที่ backend level)
+  const rows = params.saleMonth
+    ? allRows.filter((r) => (r.saleDate ?? "").startsWith(params.saleMonth!))
+    : allRows;
 
   // Summary
   const summary: BadDebtSummary = rows.reduce<BadDebtSummary>(
@@ -136,7 +178,10 @@ export async function getBadDebtSummary(params: {
       contractCount: acc.contractCount + 1,
       totalSalePrice: acc.totalSalePrice + (r.salePrice ?? 0),
       totalFinanceAmount: acc.totalFinanceAmount + r.financeAmount,
-      totalPaid: acc.totalPaid + r.totalPaid,
+      totalCommissionNet: acc.totalCommissionNet + r.commissionNet,
+      totalInstallmentPaid: acc.totalInstallmentPaid + r.installmentPaid,
+      totalDeviceSaleAmount: acc.totalDeviceSaleAmount + r.deviceSaleAmount,
+      totalCost: acc.totalCost + r.cost,
       totalProfitLoss: acc.totalProfitLoss + r.profitLoss,
       profitCount: acc.profitCount + (r.profitLoss > 0 ? 1 : 0),
       lossCount: acc.lossCount + (r.profitLoss < 0 ? 1 : 0),

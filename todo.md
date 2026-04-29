@@ -1014,3 +1014,20 @@ Task list:
 - [ ] P94-3: Dropdown "รายงานหนี้" มี submenu: ภาพรวม, เป้า-ยอดเก็บ, หนี้เสีย, สรุปรายเดือน
 - [ ] P94-4: Mobile hamburger รองรับ 2-level expand/collapse
 - [ ] P94-5: Commit + push GitHub + checkpoint
+
+## Phase 95 — BadDebtSummary Redesign + TopNav Icon Fix
+- [ ] P95-1: เปลี่ยนไอคอนเมนู "ภาพรวม" ใน TopNav ให้เหมาะสม
+- [ ] P95-2: อ่านโค้ด BadDebtSummary.tsx และ API ปัจจุบัน
+- [ ] P95-3: แก้รุ่นไม่แสดงผล (model field)
+- [ ] P95-4: เพิ่มฟิลเตอร์ "เดือนที่ขายเครื่อง"
+- [ ] P95-5: ปรับหัวตาราง: # | วันที่อนุมัติ | เลขที่สัญญา | ชื่อ-นามสกุล | เบอร์โทร | รุ่น | ราคา | ยอดจัดไฟแนนซ์ | ค่าคอมมิชชั่น | งวดที่ชำระ | ยอดเก็บค่างวด | ยอดขายเครื่อง | วันที่ขาย | ต้นทุน | กำไร/ขาดทุน
+- [ ] P95-6: คำนวณยอดเก็บค่างวด (ยอดปกติ ไม่รวม bad debt row) / ยอดขายเครื่อง (bad debt row) / วันที่ขาย / ต้นทุน (ยอดจัดไฟแนนซ์ + ค่าคอมมิชชั่น) / กำไรขาดทุน (ต้นทุน - ยอดขายเครื่อง)
+- [ ] P95-7: Commit + push GitHub + checkpoint
+
+## Phase 95 — BadDebtSummary 3-Tab Redesign
+- [ ] P95-1: ปรับ backend badDebtDb.ts: totalRevenue = installmentPaid + deviceSaleAmount, profitLoss = totalRevenue - cost
+- [ ] P95-2: เขียน BadDebtSummary.tsx ใหม่: 3 แถบ (รายการขายเครื่อง / สรุปรายเดือน / สรุปรายปี)
+- [ ] P95-3: แถบรายการขายเครื่อง: filter เดือนที่ขาย, หัวตาราง 16 คอลัมน์
+- [ ] P95-4: แถบสรุปรายเดือน: group by sale month, filter ปี
+- [ ] P95-5: แถบสรุปรายปี: group by sale year
+- [ ] P95-6: TypeScript check + Commit + Push + Checkpoint

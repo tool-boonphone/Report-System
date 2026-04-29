@@ -11,6 +11,7 @@ import {
   ChevronRight,
   FileText,
   KeyRound,
+  LayoutDashboard,
   LogOut,
   Menu as MenuIcon,
   Settings,
@@ -64,7 +65,7 @@ const MAIN_NAV: NavEntry[] = [
     icon: Banknote,
     childCodes: ["debt_overview", "debt_report", "bad_debt_summary", "monthly_summary"],
     children: [
-      { kind: "leaf", label: "ภาพรวม", path: "/debt-overview", icon: TrendingDown, menuCode: "debt_overview" },
+      { kind: "leaf", label: "ภาพรวม", path: "/debt-overview", icon: LayoutDashboard, menuCode: "debt_overview" },
       { kind: "leaf", label: "เป้า-ยอดเก็บ", path: "/debt-report", icon: Banknote, menuCode: "debt_report" },
       { kind: "leaf", label: "หนี้เสีย", path: "/bad-debt-summary", icon: TrendingDown, menuCode: "bad_debt_summary" },
       { kind: "leaf", label: "สรุปรายเดือน", path: "/monthly-summary", icon: Banknote, menuCode: "monthly_summary" },
