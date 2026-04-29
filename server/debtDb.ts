@@ -1047,6 +1047,9 @@ export async function listDebtTarget(params: { section: SectionKey }) {
   // suspendedFromPeriod = lastNormalPeriodByContract.get(extId) + 1
   // (0 means no normal payments → suspendedFromPeriod = 1)
   const lastNormalPeriodByContract = new Map<string, number>();
+  // Phase 113 fix: badDebtDateByContract moved to outer scope so Phase 78 fallback can exclude
+  // payments on bad_debt_date from normalPeriods (same Iron Rule as collected side).
+  const badDebtDateByContractOuter = new Map<string, string>(); // YYYY-MM-DD
 
   {
     // Extra query: get close_installment_amount for ALL payments (no receipt_no filter)
@@ -1089,6 +1092,7 @@ export async function listDebtTarget(params: { section: SectionKey }) {
           ? cr.bad_debt_date.toISOString().slice(0, 10)
           : String(cr.bad_debt_date).slice(0, 10);
         badDebtDateByContract.set(k, d);
+        badDebtDateByContractOuter.set(k, d); // Phase 113 fix: populate outer scope map
       }
     }
     // Build contractNo lookup for receipt_no validation
@@ -1292,6 +1296,9 @@ export async function listDebtTarget(params: { section: SectionKey }) {
     // Phase 78 fallback: For contracts WITHOUT TXRTC (not in closeDatesByContract),
     // still populate normalPeriodsByContractOuter for bad-debt suspendedFromPeriod (Phase 67/68).
     // These contracts use parseTxrtPeriod (sequence number = period for non-TXRTC contracts).
+    // Phase 113 fix: also exclude payments on bad_debt_date (same Iron Rule as collected side)
+    // so that bad-debt contracts where ALL payments are on bad_debt_date get maxTxrtPeriod=0
+    // and suspendedFromPeriod=1 (not inflated by the bad-debt payment itself).
     for (const pr of allPayRows) {
       const key = String(pr.contract_external_id ?? "");
       if (!key) continue;
@@ -1299,6 +1306,10 @@ export async function listDebtTarget(params: { section: SectionKey }) {
       if (closeDatesByContract.has(key)) continue;
       const receipt = String(pr.receipt_no ?? "");
       if (receipt.startsWith("TXRTC")) continue;
+      // Phase 113 fix: skip payments on bad_debt_date (these are bad-debt payments, not normal installments)
+      const paidDateFallback = pr.paid_at ? String(pr.paid_at).slice(0, 10) : null;
+      const badDebtDateFallback = badDebtDateByContractOuter.get(key) ?? null;
+      if (paidDateFallback && badDebtDateFallback && paidDateFallback === badDebtDateFallback) continue;
       const period = parseTxrtPeriod(receipt, key);
       if (!Number.isFinite(period) || period <= 0) continue;
       const outerSet = normalPeriodsByContractOuter.get(key) ?? new Set<number>();
@@ -2526,6 +2537,18 @@ export async function* listDebtTargetStream(params: {
   const closePayTotalByContractStream = new Map<string, number[]>();
   // Phase 113 (stream): lastNormalPeriodByContractStream — for bad-debt contracts with no TXRT receipts
   const lastNormalPeriodByContractStream = new Map<string, number>();
+  // Phase 113 fix (stream): badDebtDateByContractStreamOuter — outer scope so Phase 78 fallback
+  // can exclude payments on bad_debt_date from normalPeriods (same Iron Rule as collected side).
+  const badDebtDateByContractStreamOuter = new Map<string, string>(); // YYYY-MM-DD
+  for (const cr of cRows) {
+    const k = String(cr.external_id ?? "");
+    if (k && cr.bad_debt_date != null) {
+      const d = cr.bad_debt_date instanceof Date
+        ? cr.bad_debt_date.toISOString().slice(0, 10)
+        : String(cr.bad_debt_date).slice(0, 10);
+      badDebtDateByContractStreamOuter.set(k, d);
+    }
+  }
 
   // Phase 74: Build contractNo lookup for correct receipt period parsing (stream version)
   const contractNoByExtIdStream = new Map<string, string>();
@@ -2735,12 +2758,17 @@ export async function* listDebtTargetStream(params: {
     }
 
     // Phase 78 fallback: contracts WITHOUT TXRTC — use parseTxrtPeriodStream for bad-debt logic
+    // Phase 113 fix: also exclude payments on bad_debt_date (same Iron Rule as collected side)
     for (const pr of allPayRows) {
       const key = String(pr.contract_external_id ?? "");
       if (!key) continue;
       if (closeDatesByContract.has(key)) continue; // already processed by assignPayPeriods
       const receipt = String(pr.receipt_no ?? "");
       if (receipt.startsWith("TXRTC")) continue;
+      // Phase 113 fix: skip payments on bad_debt_date
+      const paidDateStream78 = pr.paid_at ? String(pr.paid_at).slice(0, 10) : null;
+      const badDebtDateStream78 = badDebtDateByContractStreamOuter.get(key) ?? null;
+      if (paidDateStream78 && badDebtDateStream78 && paidDateStream78 === badDebtDateStream78) continue;
       const period = parseTxrtPeriodStream(receipt, key);
       if (!Number.isFinite(period) || period <= 0) continue;
       const set = normalPeriodsByContract.get(key) ?? new Set<number>();
