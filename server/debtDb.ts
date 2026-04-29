@@ -2119,33 +2119,40 @@ export async function listDebtCollected(params: { section: SectionKey }) {
   const { rows: baseRows } = await listDebtTarget(params);
 
   // Both Boonphone and Fastfone365 use the same payment transactions endpoint.
-  // payment_transactions.raw_json contains the same fields for both sections.
+  // For FF365: updated_by/updated_at come from installments (linked via installmentExternalId in raw_json)
+  // For Boonphone: updated_at is in raw_json directly; updated_by is not available
   const payRowsRaw = await db.execute(sql`
-    SELECT contract_external_id,
-           external_id AS payment_external_id,
-           paid_at,
-           CAST(amount AS DECIMAL(18,2)) AS total_paid_amount,
-           CAST(JSON_EXTRACT(raw_json, '$.principal_paid')           AS DECIMAL(18,2)) AS principal_paid,
-           CAST(JSON_EXTRACT(raw_json, '$.interest_paid')            AS DECIMAL(18,2)) AS interest_paid,
-           CAST(JSON_EXTRACT(raw_json, '$.fee_paid')                 AS DECIMAL(18,2)) AS fee_paid,
-           CAST(JSON_EXTRACT(raw_json, '$.penalty_paid')             AS DECIMAL(18,2)) AS penalty_paid,
-           CAST(JSON_EXTRACT(raw_json, '$.unlock_fee_paid')          AS DECIMAL(18,2)) AS unlock_fee_paid,
-           CAST(JSON_EXTRACT(raw_json, '$.discount_amount')          AS DECIMAL(18,2)) AS discount_amount,
-           CAST(JSON_EXTRACT(raw_json, '$.overpaid_amount')          AS DECIMAL(18,2)) AS overpaid_amount,
-           CAST(JSON_EXTRACT(raw_json, '$.close_installment_amount') AS DECIMAL(18,2)) AS close_installment_amount,
-           CAST(JSON_EXTRACT(raw_json, '$.bad_debt_amount')          AS DECIMAL(18,2)) AS bad_debt_amount,
-           CAST(JSON_EXTRACT(raw_json, '$.payment_id')               AS UNSIGNED) AS payment_id,
+    SELECT pt.contract_external_id,
+           pt.external_id AS payment_external_id,
+           pt.paid_at,
+           CAST(pt.amount AS DECIMAL(18,2)) AS total_paid_amount,
+           CAST(JSON_EXTRACT(pt.raw_json, '$.principal_paid')           AS DECIMAL(18,2)) AS principal_paid,
+           CAST(JSON_EXTRACT(pt.raw_json, '$.interest_paid')            AS DECIMAL(18,2)) AS interest_paid,
+           CAST(JSON_EXTRACT(pt.raw_json, '$.fee_paid')                 AS DECIMAL(18,2)) AS fee_paid,
+           CAST(JSON_EXTRACT(pt.raw_json, '$.penalty_paid')             AS DECIMAL(18,2)) AS penalty_paid,
+           CAST(JSON_EXTRACT(pt.raw_json, '$.unlock_fee_paid')          AS DECIMAL(18,2)) AS unlock_fee_paid,
+           CAST(JSON_EXTRACT(pt.raw_json, '$.discount_amount')          AS DECIMAL(18,2)) AS discount_amount,
+           CAST(JSON_EXTRACT(pt.raw_json, '$.overpaid_amount')          AS DECIMAL(18,2)) AS overpaid_amount,
+           CAST(JSON_EXTRACT(pt.raw_json, '$.close_installment_amount') AS DECIMAL(18,2)) AS close_installment_amount,
+           CAST(JSON_EXTRACT(pt.raw_json, '$.bad_debt_amount')          AS DECIMAL(18,2)) AS bad_debt_amount,
+           CAST(JSON_EXTRACT(pt.raw_json, '$.payment_id')               AS UNSIGNED) AS payment_id,
            NULL AS installment_external_id,
-           JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.receipt_no')) AS receipt_no,
-           JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.remark'))     AS remark,
-           status AS ff_status,
-           -- updated_at: Boonphone/FF365 direct payments have it in raw_json
-           JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.updated_at')) AS updated_at,
-           -- updated_by: only FF365 installment-source payments have it (via JOIN below)
-           NULL AS updated_by
-      FROM ${paymentTransactions}
-     WHERE ${paymentTransactions.section} = ${params.section}
-     ORDER BY contract_external_id, paid_at, payment_id
+           JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.receipt_no')) AS receipt_no,
+           JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.remark'))     AS remark,
+           pt.status AS ff_status,
+           -- updated_at: FF365 ใช้จาก installments, Boonphone ใช้จาก raw_json
+           COALESCE(
+             JSON_UNQUOTE(JSON_EXTRACT(i.raw_json, '$.updated_at')),
+             JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.updated_at'))
+           ) AS updated_at,
+           -- updated_by: FF365 ใช้จาก installments ผ่าน installmentExternalId
+           JSON_UNQUOTE(JSON_EXTRACT(i.raw_json, '$.updated_by')) AS updated_by
+      FROM payment_transactions pt
+      LEFT JOIN installments i
+             ON i.section = pt.section
+            AND i.external_id = JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.installmentExternalId'))
+     WHERE pt.section = ${params.section}
+     ORDER BY pt.contract_external_id, pt.paid_at, pt.payment_id
   `);
   const pRows: any[] = (payRowsRaw as any)[0] ?? payRowsRaw;
 
@@ -3433,30 +3440,37 @@ export async function* listDebtCollectedStream(params: {
     }
 
     // Query payments for this batch only (per-batch to avoid OOM with 222K rows)
+    // LEFT JOIN installments to get updated_by/updated_at for FF365 (linked via installmentExternalId)
     const payRaw = await db.execute(sql.raw(`
-      SELECT contract_external_id,
-             external_id AS payment_external_id,
-             paid_at,
-             CAST(amount AS DECIMAL(18,2)) AS total_paid_amount,
-             CAST(JSON_EXTRACT(raw_json, '$.principal_paid')           AS DECIMAL(18,2)) AS principal_paid,
-             CAST(JSON_EXTRACT(raw_json, '$.interest_paid')            AS DECIMAL(18,2)) AS interest_paid,
-             CAST(JSON_EXTRACT(raw_json, '$.fee_paid')                 AS DECIMAL(18,2)) AS fee_paid,
-             CAST(JSON_EXTRACT(raw_json, '$.penalty_paid')             AS DECIMAL(18,2)) AS penalty_paid,
-             CAST(JSON_EXTRACT(raw_json, '$.unlock_fee_paid')          AS DECIMAL(18,2)) AS unlock_fee_paid,
-             CAST(JSON_EXTRACT(raw_json, '$.discount_amount')          AS DECIMAL(18,2)) AS discount_amount,
-             CAST(JSON_EXTRACT(raw_json, '$.overpaid_amount')          AS DECIMAL(18,2)) AS overpaid_amount,
-             CAST(JSON_EXTRACT(raw_json, '$.close_installment_amount') AS DECIMAL(18,2)) AS close_installment_amount,
-             CAST(JSON_EXTRACT(raw_json, '$.bad_debt_amount')          AS DECIMAL(18,2)) AS bad_debt_amount,
-             CAST(JSON_EXTRACT(raw_json, '$.payment_id')               AS UNSIGNED) AS payment_id,
-             JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.receipt_no')) AS receipt_no,
-             JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.remark'))     AS remark,
-             status AS ff_status,
-             JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.updated_at')) AS updated_at,
-             NULL AS updated_by
-        FROM payment_transactions
-       WHERE section = '${sectionLiteral}'
-         AND contract_external_id IN (${batchIdsLiteral})
-       ORDER BY contract_external_id, paid_at, payment_id
+      SELECT pt.contract_external_id,
+             pt.external_id AS payment_external_id,
+             pt.paid_at,
+             CAST(pt.amount AS DECIMAL(18,2)) AS total_paid_amount,
+             CAST(JSON_EXTRACT(pt.raw_json, '$.principal_paid')           AS DECIMAL(18,2)) AS principal_paid,
+             CAST(JSON_EXTRACT(pt.raw_json, '$.interest_paid')            AS DECIMAL(18,2)) AS interest_paid,
+             CAST(JSON_EXTRACT(pt.raw_json, '$.fee_paid')                 AS DECIMAL(18,2)) AS fee_paid,
+             CAST(JSON_EXTRACT(pt.raw_json, '$.penalty_paid')             AS DECIMAL(18,2)) AS penalty_paid,
+             CAST(JSON_EXTRACT(pt.raw_json, '$.unlock_fee_paid')          AS DECIMAL(18,2)) AS unlock_fee_paid,
+             CAST(JSON_EXTRACT(pt.raw_json, '$.discount_amount')          AS DECIMAL(18,2)) AS discount_amount,
+             CAST(JSON_EXTRACT(pt.raw_json, '$.overpaid_amount')          AS DECIMAL(18,2)) AS overpaid_amount,
+             CAST(JSON_EXTRACT(pt.raw_json, '$.close_installment_amount') AS DECIMAL(18,2)) AS close_installment_amount,
+             CAST(JSON_EXTRACT(pt.raw_json, '$.bad_debt_amount')          AS DECIMAL(18,2)) AS bad_debt_amount,
+             CAST(JSON_EXTRACT(pt.raw_json, '$.payment_id')               AS UNSIGNED) AS payment_id,
+             JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.receipt_no')) AS receipt_no,
+             JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.remark'))     AS remark,
+             pt.status AS ff_status,
+             COALESCE(
+               JSON_UNQUOTE(JSON_EXTRACT(i.raw_json, '$.updated_at')),
+               JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.updated_at'))
+             ) AS updated_at,
+             JSON_UNQUOTE(JSON_EXTRACT(i.raw_json, '$.updated_by')) AS updated_by
+        FROM payment_transactions pt
+        LEFT JOIN installments i
+               ON i.section = pt.section
+              AND i.external_id = JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.installmentExternalId'))
+       WHERE pt.section = '${sectionLiteral}'
+         AND pt.contract_external_id IN (${batchIdsLiteral})
+       ORDER BY pt.contract_external_id, pt.paid_at, pt.payment_id
     `));
     const payRows: any[] = (payRaw as any)[0] ?? payRaw;
     const batchPayByContract = new Map<string, PayRawRow[]>();
