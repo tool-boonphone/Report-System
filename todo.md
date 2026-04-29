@@ -1089,9 +1089,9 @@ Task list:
 
 ### Phase 108 — แก้ไขเมนูหนี้เสียทุกแถบ + สรุปรายเดือน ให้ใช้ Phase 106/107 rule
 
-- [ ] P108-1: อ่านโค้ดเมนูหนี้เสียทุกแถบ (badDebtDb.ts, badDebt router, BadDebt.tsx) เพื่อเข้าใจ data flow
-- [ ] P108-2: อ่านโค้ดสรุปรายเดือน (monthlySummary หรือ debtDb.ts ส่วน monthly) เพื่อเข้าใจ data flow
-- [ ] P108-3: แก้ไขเมนูหนี้เสียทุกแถบให้ใช้ Phase 106/107 (isBadDebtContract + latestDateTotal + dedup same-date)
-- [ ] P108-4: แก้ไขสรุปรายเดือนให้ใช้ Phase 106/107 (isBadDebtContract + latestDateTotal + dedup same-date)
-- [ ] P108-5: TypeScript check + restart server + ยืนยันผลถูกต้อง
-- [ ] P108-6: Commit + Push + Checkpoint
+- [x] P108-1: อ่านโค้ดเมนูหนี้เสียทุกแถบ (badDebtDb.ts, badDebt router, BadDebt.tsx) เพื่อเข้าใจ data flow
+- [x] P108-2: อ่านโค้ดสรุปรายเดือน (monthlySummary หรือ debtDb.ts ส่วน monthly) เพื่อเข้าใจ data flow
+- [x] P108-3: แก้ไข runner.ts: bad_debt_amount = sum ของทุก real payment ที่ paid_at = latestDate (Phase 106/107 rule)
+- [x] P108-4: รัน recompute-bad-debt.mjs อัปเดต DB (3,122/3,123 contracts) — badDebtDb.ts และ monthlySummaryDb.ts ถูกต้องอัตโนมัติเพราะใช้ contracts.bad_debt_amount
+- [x] P108-5: TypeScript check + restart server + ยืนยันผลถูกต้อง
+- [x] P108-6: Commit + Push + Checkpoint
