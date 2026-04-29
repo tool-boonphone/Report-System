@@ -120,6 +120,13 @@ export default function BadDebtSummary() {
     return Array.from(set).sort().reverse();
   }, [rows]);
 
+  /* ── approveMonth options (dropdown) ── */
+  const approveMonthOptions = useMemo(() => {
+    const set = new Set<string>();
+    rows.forEach((r) => { if (r.approveDate) set.add(r.approveDate.slice(0, 7)); });
+    return Array.from(set).sort().reverse();
+  }, [rows]);
+
   /* ── year options ── */
   const yearOptions = useMemo(() => {
     const set = new Set<string>();
@@ -228,23 +235,9 @@ export default function BadDebtSummary() {
 
   /* ── nav actions ── */
   useEffect(() => {
-    if (!canView) return;
-    const actions: React.ReactNode[] = [];
-    if (canExport) {
-      actions.push(
-        <button
-          key="export"
-          onClick={handleExport}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium bg-green-600 text-white hover:bg-green-700 transition-colors"
-        >
-          <Download className="w-4 h-4" />
-          <span className="hidden sm:inline">Export Excel</span>
-        </button>,
-      );
-    }
-    setActions(actions);
+    setActions([]);
     return () => setActions([]);
-  }, [canView, canExport, setActions, handleExport]);
+  }, [setActions]);
 
   /* ── SortIcon helper ── */
   const SortIcon = ({ col }: { col: SortKey }) => {
@@ -333,7 +326,12 @@ export default function BadDebtSummary() {
         <div className="flex flex-wrap gap-3 items-end">
           <div className="flex flex-col gap-1">
             <label className="text-xs text-gray-500">เดือนที่อนุมัติ</label>
-            <input type="month" value={approveMonth} onChange={(e) => setApproveMonth(e.target.value)} className="border rounded px-2 py-1.5 text-sm h-9" />
+            <select value={approveMonth} onChange={(e) => setApproveMonth(e.target.value)} className="border rounded px-2 py-1.5 text-sm h-9 bg-white">
+              <option value="">ทุกเดือน</option>
+              {approveMonthOptions.map((ym) => (
+                <option key={ym} value={ym}>{fmtMonthLabel(ym)}</option>
+              ))}
+            </select>
           </div>
           <div className="flex flex-col gap-1">
             <label className="text-xs text-gray-500">เดือนที่ขายเครื่อง</label>
@@ -367,8 +365,8 @@ export default function BadDebtSummary() {
 
         {/* ════════════════ TAB 1: รายการขายเครื่อง ════════════════ */}
         {!isLoading && activeTab === "list" && (
-          <div className="overflow-x-auto rounded-lg border border-gray-200 shadow-sm">
-            <table className="min-w-full text-sm">
+          <div className="rounded-lg border border-gray-200 shadow-sm">
+            <table className="w-full text-sm">
               <thead className="bg-red-700 text-white sticky top-0 z-10">
                 <tr>
                   <th className="px-2 py-2 text-center text-xs font-semibold w-10">#</th>
@@ -439,19 +437,24 @@ export default function BadDebtSummary() {
 
         {/* ════════════════ TAB 2: สรุปรายเดือน ════════════════ */}
         {!isLoading && activeTab === "monthly" && (
-          <div className="overflow-x-auto rounded-lg border border-gray-200 shadow-sm">
-            <table className="min-w-full text-sm">
+          <div className="rounded-lg border border-gray-200 shadow-sm">
+            <table className="w-full text-sm">
               <thead className="bg-blue-700 text-white sticky top-0 z-10">
+                {/* Group header row */}
                 <tr>
-                  <th className="px-3 py-2 text-left text-xs font-semibold whitespace-nowrap">เดือน-ปีที่ขาย</th>
-                  <th className="px-2 py-2 text-center text-xs font-semibold whitespace-nowrap">จำนวน</th>
-                  <th className="px-2 py-2 text-center text-xs font-semibold whitespace-nowrap">ยอดจัดไฟแนนซ์</th>
-                  <th className="px-2 py-2 text-center text-xs font-semibold whitespace-nowrap">ค่าคอมมิชชั่น</th>
-                  <th className="px-2 py-2 text-center text-xs font-semibold whitespace-nowrap">ต้นทุน</th>
-                  <th className="px-2 py-2 text-center text-xs font-semibold whitespace-nowrap">ยอดเก็บค่างวด</th>
-                  <th className="px-2 py-2 text-center text-xs font-semibold whitespace-nowrap">ยอดขายเครื่อง</th>
-                  <th className="px-2 py-2 text-center text-xs font-semibold whitespace-nowrap">รวมรายรับ</th>
-                  <th className="px-2 py-2 text-center text-xs font-semibold whitespace-nowrap">กำไร/ขาดทุน</th>
+                  <th rowSpan={2} className="px-3 py-2 text-left text-xs font-semibold whitespace-nowrap border-r border-blue-500">เดือน-ปีที่ขาย</th>
+                  <th rowSpan={2} className="px-2 py-2 text-center text-xs font-semibold whitespace-nowrap border-r border-blue-500">จำนวน</th>
+                  <th colSpan={3} className="px-2 py-1 text-center text-xs font-semibold border-b border-blue-500 border-r border-blue-500">ต้นทุน</th>
+                  <th colSpan={3} className="px-2 py-1 text-center text-xs font-semibold border-b border-blue-500 border-r border-blue-500">รายรับ</th>
+                  <th rowSpan={2} className="px-2 py-2 text-center text-xs font-semibold whitespace-nowrap">กำไร/ขาดทุน</th>
+                </tr>
+                <tr>
+                  <th className="px-2 py-1.5 text-center text-xs font-semibold whitespace-nowrap">ยอดจัดไฟแนนซ์</th>
+                  <th className="px-2 py-1.5 text-center text-xs font-semibold whitespace-nowrap">ค่าคอมมิชชั่น</th>
+                  <th className="px-2 py-1.5 text-center text-xs font-semibold whitespace-nowrap border-r border-blue-500">ต้นทุนรวม</th>
+                  <th className="px-2 py-1.5 text-center text-xs font-semibold whitespace-nowrap">ยอดเก็บค่างวด</th>
+                  <th className="px-2 py-1.5 text-center text-xs font-semibold whitespace-nowrap">ยอดขายเครื่อง</th>
+                  <th className="px-2 py-1.5 text-center text-xs font-semibold whitespace-nowrap border-r border-blue-500">รวมรายรับ</th>
                 </tr>
               </thead>
               <tbody>
@@ -494,19 +497,24 @@ export default function BadDebtSummary() {
 
         {/* ════════════════ TAB 3: สรุปรายปี ════════════════ */}
         {!isLoading && activeTab === "yearly" && (
-          <div className="overflow-x-auto rounded-lg border border-gray-200 shadow-sm">
-            <table className="min-w-full text-sm">
+          <div className="rounded-lg border border-gray-200 shadow-sm">
+            <table className="w-full text-sm">
               <thead className="bg-purple-700 text-white sticky top-0 z-10">
+                {/* Group header row */}
                 <tr>
-                  <th className="px-3 py-2 text-left text-xs font-semibold whitespace-nowrap">ปีที่ขาย</th>
-                  <th className="px-2 py-2 text-center text-xs font-semibold whitespace-nowrap">จำนวน</th>
-                  <th className="px-2 py-2 text-center text-xs font-semibold whitespace-nowrap">ยอดจัดไฟแนนซ์</th>
-                  <th className="px-2 py-2 text-center text-xs font-semibold whitespace-nowrap">ค่าคอมมิชชั่น</th>
-                  <th className="px-2 py-2 text-center text-xs font-semibold whitespace-nowrap">ต้นทุน</th>
-                  <th className="px-2 py-2 text-center text-xs font-semibold whitespace-nowrap">ยอดเก็บค่างวด</th>
-                  <th className="px-2 py-2 text-center text-xs font-semibold whitespace-nowrap">ยอดขายเครื่อง</th>
-                  <th className="px-2 py-2 text-center text-xs font-semibold whitespace-nowrap">รวมรายรับ</th>
-                  <th className="px-2 py-2 text-center text-xs font-semibold whitespace-nowrap">กำไร/ขาดทุน</th>
+                  <th rowSpan={2} className="px-3 py-2 text-left text-xs font-semibold whitespace-nowrap border-r border-purple-500">ปีที่ขาย</th>
+                  <th rowSpan={2} className="px-2 py-2 text-center text-xs font-semibold whitespace-nowrap border-r border-purple-500">จำนวน</th>
+                  <th colSpan={3} className="px-2 py-1 text-center text-xs font-semibold border-b border-purple-500 border-r border-purple-500">ต้นทุน</th>
+                  <th colSpan={3} className="px-2 py-1 text-center text-xs font-semibold border-b border-purple-500 border-r border-purple-500">รายรับ</th>
+                  <th rowSpan={2} className="px-2 py-2 text-center text-xs font-semibold whitespace-nowrap">กำไร/ขาดทุน</th>
+                </tr>
+                <tr>
+                  <th className="px-2 py-1.5 text-center text-xs font-semibold whitespace-nowrap">ยอดจัดไฟแนนซ์</th>
+                  <th className="px-2 py-1.5 text-center text-xs font-semibold whitespace-nowrap">ค่าคอมมิชชั่น</th>
+                  <th className="px-2 py-1.5 text-center text-xs font-semibold whitespace-nowrap border-r border-purple-500">ต้นทุนรวม</th>
+                  <th className="px-2 py-1.5 text-center text-xs font-semibold whitespace-nowrap">ยอดเก็บค่างวด</th>
+                  <th className="px-2 py-1.5 text-center text-xs font-semibold whitespace-nowrap">ยอดขายเครื่อง</th>
+                  <th className="px-2 py-1.5 text-center text-xs font-semibold whitespace-nowrap border-r border-purple-500">รวมรายรับ</th>
                 </tr>
               </thead>
               <tbody>
