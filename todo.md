@@ -1095,3 +1095,9 @@ Task list:
 - [x] P108-4: รัน recompute-bad-debt.mjs อัปเดต DB (3,122/3,123 contracts) — badDebtDb.ts และ monthlySummaryDb.ts ถูกต้องอัตโนมัติเพราะใช้ contracts.bad_debt_amount
 - [x] P108-5: TypeScript check + restart server + ยืนยันผลถูกต้อง
 - [x] P108-6: Commit + Push + Checkpoint
+
+### Phase 109 — แก้ไข Default Pagination (25/50/100/250/500)
+- [x] P109-1: แก้ไข default pageSize ในหน้าเป้าเก็บหนี้ (DebtSummary.tsx) ให้เริ่มต้นที่ 25 พร้อมตัวเลือก 25/50/100/250/500
+- [x] P109-2: แก้ไข default pageSize ในหน้ารายงานหนี้ (DebtReport.tsx) ให้เริ่มต้นที่ 25 พร้อมตัวเลือก 25/50/100/250/500
+- [x] P109-2b: แก้ไข default pageSize ในหน้าหนี้สงสัยจะเสีย (SuspectedBadDebt.tsx) ให้เริ่มต้นที่ 25 พร้อมตัวเลือก 25/50/100/250/500
+- [x] P109-3: Commit + Push + Checkpoint

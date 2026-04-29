@@ -402,7 +402,7 @@ export default function DebtSummary() {
   const [hoveredRow, setHoveredRow] = useState<number | null>(null);
   // Phase 33: Pagination state
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(100);
+  const [pageSize, setPageSize] = useState(25);
   const togglePin = (key: string) => {
     setPinnedCols((prev) => {
       const next = new Set(prev);
@@ -1790,7 +1790,7 @@ export default function DebtSummary() {
                 }}
                 className="border border-gray-300 rounded px-2 py-1 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-orange-400"
               >
-                {[50, 100, 200, 500].map((n) => (
+                {[25, 50, 100, 250, 500].map((n) => (
                   <option key={n} value={n}>{n} รายการ/หน้า</option>
                 ))}
               </select>

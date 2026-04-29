@@ -240,7 +240,7 @@ function Pagination({
           }}
           className="border rounded px-1.5 py-0.5 text-xs"
         >
-          {[50, 100, 500, 1000].map((s) => (
+          {[25, 50, 100, 250, 500].map((s) => (
             <option key={s} value={s}>
               {s}
             </option>
@@ -314,7 +314,7 @@ export default function SuspectedBadDebt() {
 
   /* ── pagination ── */
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(50);
+  const [pageSize, setPageSize] = useState(25);
 
   /* ── data ── */
   const { data, isLoading } = trpc.suspectedBadDebt.list.useQuery(
