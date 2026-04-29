@@ -2095,46 +2095,37 @@ export async function listDebtCollected(params: { section: SectionKey }) {
       return isNumericPayExt || isTxrtReceipt;
     });
 
-    // Phase 87: Fallback bad debt detection via installment isSuspended.
-    // Both Boonphone and Fastfone365 do NOT store bad_debt_amount in contracts table.
-    // Detect bad debt from installment status=ยกเลิกสัญญา (isSuspended=true).
-    // When detected, the latest real payment (by paid_at) is the device-sale payment.
-    // isPhase87Fallback=true means badDebtPeriod should use firstSuspendedPeriod directly
-    // (skip deviceSalePaymentNS detection which assigns wrong period via assignPayPeriods).
+    // Phase 106: Universal bad-debt rule (replaces Phase 87 + Phase 104).
+    // For ALL contracts with debtStatus = "หนี้เสีย":
+    //   - Find the LATEST paid_at date across all real payments.
+    //   - SUM all real payments on that latest date → bad_debt_amount.
+    //   - All other payments (earlier dates) → normal installment columns.
+    //   - No conditions, no exceptions.
+    //
+    // Special cases:
+    //   Ex.1: Only 1 payment → that payment = bad_debt_amount, other columns = 0.
+    //   Ex.2: Multiple payments, latest date has 1 payment → that payment = bad_debt_amount.
+    //   Ex.3: Multiple payments on the same latest date → SUM of all = bad_debt_amount.
     let isPhase87Fallback = false;
-    if (contractBadDebtAmount == null || contractBadDebtAmount <= 0) {
-      const hasSuspendedInst = (c.installments as any[]).some((inst: any) => inst.isSuspended);
-      if (hasSuspendedInst && realPaymentsRaw.length > 0) {
-        // Sort real payments by paid_at descending, pick the latest
-        const sortedReal = [...realPaymentsRaw].sort((a, b) => {
-          const da = (a as any).paid_at ?? "";
-          const db2 = (b as any).paid_at ?? "";
-          return da < db2 ? 1 : da > db2 ? -1 : 0;
-        });
-        const latestPay = sortedReal[0];
-        contractBadDebtAmount = (latestPay as any).total_paid_amount ?? 0;
-        contractBadDebtDate = (latestPay as any).paid_at ?? null;
-        isPhase87Fallback = true;
-      }
-    }
-
-    // Phase 104: Additional fallback for bad-debt contracts where bad_debt_amount = null
-    // and Phase 87 isSuspended detection did not fire.
-    // This covers cases where installment statuses are "ยืนยันการชำระ" (not "ยกเลิกสัญญา")
-    // but the contract is still marked as "หนี้เสีย" in the contracts table.
-    // Use the latest real payment (numeric external_id) as the device-sale amount.
-    if ((contractBadDebtAmount == null || contractBadDebtAmount <= 0) && c.debtStatus === "หนี้เสีย") {
+    if (c.debtStatus === "หนี้เสีย" && realPaymentsRaw.length > 0) {
+      // Find the latest paid_at date (date portion only, YYYY-MM-DD)
       const sortedReal = [...realPaymentsRaw].sort((a, b) => {
-        const da = (a as any).paid_at ?? "";
-        const db2 = (b as any).paid_at ?? "";
+        const da = ((a as any).paid_at ?? "").substring(0, 10);
+        const db2 = ((b as any).paid_at ?? "").substring(0, 10);
         return da < db2 ? 1 : da > db2 ? -1 : 0;
       });
-      const latestPay = sortedReal[0];
-      if (latestPay) {
-        contractBadDebtAmount = (latestPay as any).total_paid_amount ?? 0;
-        contractBadDebtDate = (latestPay as any).paid_at ?? null;
-        isPhase87Fallback = true;
-      }
+      const latestDate = ((sortedReal[0] as any).paid_at ?? "").substring(0, 10);
+      // Sum all payments on the latest date
+      const latestDatePayments = sortedReal.filter(
+        (p) => ((p as any).paid_at ?? "").substring(0, 10) === latestDate,
+      );
+      const latestDateTotal = latestDatePayments.reduce(
+        (sum, p) => sum + Number((p as any).total_paid_amount ?? 0),
+        0,
+      );
+      contractBadDebtAmount = latestDateTotal;
+      contractBadDebtDate = latestDate || null;
+      isPhase87Fallback = true; // use firstSuspendedPeriod for badDebtPeriod assignment
     }
 
     if (contractBadDebtAmount != null && contractBadDebtAmount > 0 && contractBadDebtDate) {
@@ -2146,68 +2137,37 @@ export async function listDebtCollected(params: { section: SectionKey }) {
       const year = d.getFullYear() + 543;
       badDebtNote = `ยอดขายเครื่อง ${contractBadDebtAmount.toLocaleString("th-TH", { minimumFractionDigits: 0, maximumFractionDigits: 0 })} บาท (${day}/${month}/${year})`;
 
-      // Assign periods from real payments, excluding the device-sale payment
-      // (total_paid ≈ bad_debt_amount, difference ≤ 1 baht).
+      // Phase 106: normalPayments = all real payments EXCEPT those on the latest date
+      // (the latest-date payments are the bad-debt / device-sale row).
       // Phase 63 fix: ใช้ installmentAmount เป็น fallback เมื่อ amount=0
-      // (listDebtTarget ตั้ง amount=0 สำหรับงวดที่ isClosed=true ซึ่งทำให้ assignPayPeriods ไม่ advance cursor)
       const baselineAmt = c.installmentAmount ?? 0;
+      // Filter out latest-date payments before assigning periods
+      const normalPaymentsRaw = realPaymentsRaw.filter(
+        (p) => ((p as any).paid_at ?? "").substring(0, 10) !== contractBadDebtDate,
+      );
       const realAssignedForBadDebt = assignPayPeriods(
-        realPaymentsRaw,
+        normalPaymentsRaw,
         c.installments.map((i: { period: number | null; amount: number | string }) => ({ period: i.period, amount: Number(i.amount) > 0 ? Number(i.amount) : baselineAmt })),
         c.contractNo ?? null,
       );
-      const normalPayments = realAssignedForBadDebt.filter((p) => {
-        const totalPaid = (p as any).total_paid_amount as number | null;
-        const isDeviceSalePayment =
-          totalPaid != null &&
-          Math.abs(totalPaid - contractBadDebtAmount) <= 1;
-        return !isDeviceSalePayment;
-      });
+      const normalPayments = realAssignedForBadDebt;
 
-      // Phase 70: badDebtPeriod = period ของ device sale payment ใน realAssignedForBadDebt
-      // กฎ: หน้ายอดเก็บหนี้ลงยอดขายเครื่องงวดไหน หน้าเป้าเก็บหนี้ก็แสดง label หนี้เสียตั้งแต่งวดนั้นเป็นต้นไป
-      // Phase 87: ถ้าเป็น fallback (isSuspended detection) ให้ใช้ firstSuspendedPeriod โดยตรง
-      // เพราะ assignPayPeriods assign period ผิดสำหรับ device sale payment ที่มียอดสูงกว่า installment amount
+      // Phase 106: badDebtPeriod = firstSuspendedPeriod if exists, else lastNormalPeriod + 1.
+      // isPhase87Fallback is always true in Phase 106 (all bad-debt contracts use this path).
       let badDebtPeriod: number;
-      if (!isPhase87Fallback) {
-        const deviceSalePaymentNS = realAssignedForBadDebt.find((p) => {
-          const totalPaid = (p as any).total_paid_amount as number | null;
-          return totalPaid != null && Math.abs(totalPaid - contractBadDebtAmount) <= 1;
-        });
-        if (deviceSalePaymentNS?.period != null && deviceSalePaymentNS.period > 0) {
-          badDebtPeriod = deviceSalePaymentNS.period;
-        } else {
-          const firstSuspendedPeriod = c.installments
-            .filter((inst: any) => inst.isSuspended)
-            .map((inst: any) => inst.period ?? 0)
-            .filter((p: number) => p > 0)
-            .sort((a: number, b: number) => a - b)[0] ?? null;
-          if (firstSuspendedPeriod != null) {
-            badDebtPeriod = firstSuspendedPeriod;
-          } else {
-            let lastNormalPeriod = 0;
-            for (const p of normalPayments) {
-              if (p.period != null && p.period > lastNormalPeriod) lastNormalPeriod = p.period;
-            }
-            badDebtPeriod = lastNormalPeriod + 1;
-          }
-        }
+      const firstSuspendedPeriod106 = c.installments
+        .filter((inst: any) => inst.isSuspended)
+        .map((inst: any) => inst.period ?? 0)
+        .filter((p: number) => p > 0)
+        .sort((a: number, b: number) => a - b)[0] ?? null;
+      if (firstSuspendedPeriod106 != null) {
+        badDebtPeriod = firstSuspendedPeriod106;
       } else {
-        // Phase 87 fallback: use firstSuspendedPeriod directly
-        const firstSuspendedPeriod = c.installments
-          .filter((inst: any) => inst.isSuspended)
-          .map((inst: any) => inst.period ?? 0)
-          .filter((p: number) => p > 0)
-          .sort((a: number, b: number) => a - b)[0] ?? null;
-        if (firstSuspendedPeriod != null) {
-          badDebtPeriod = firstSuspendedPeriod;
-        } else {
-          let lastNormalPeriod = 0;
-          for (const p of normalPayments) {
-            if (p.period != null && p.period > lastNormalPeriod) lastNormalPeriod = p.period;
-          }
-          badDebtPeriod = lastNormalPeriod + 1;
+        let lastNormalPeriod = 0;
+        for (const p of normalPayments) {
+          if (p.period != null && p.period > lastNormalPeriod) lastNormalPeriod = p.period;
         }
+        badDebtPeriod = lastNormalPeriod + 1;
       }
       // Phase 55: patch installments so periods < badDebtPeriod show normal amounts.
       // งวดที่ลูกค้าจ่ายปกติก่อนหนี้เสีย ให้ตั้งหนี้ตามปกติ
