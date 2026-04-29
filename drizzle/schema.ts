@@ -211,9 +211,13 @@ export const contracts = mysqlTable(
     // bad_debt_amount:       total proceeds from device sale (ยอดขายเครื่อง)
     // bad_debt_date:         date the bad-debt was recorded (YYYY-MM-DD)
     // suspended_from_period: first installment period that became suspended/bad-debt
+    // bad_debt_updated_by:   ผู้ทำรายการสุดท้าย (จาก installments.updated_by ของรายการล่าสุด)
+    // bad_debt_updated_at:   วันเวลาที่ทำรายการสุดท้าย (จาก installments.updated_at ของรายการล่าสุด)
     badDebtAmount: decimal("bad_debt_amount", { precision: 12, scale: 2 }),
     badDebtDate: varchar("bad_debt_date", { length: 20 }),
     suspendedFromPeriod: int("suspended_from_period"),
+    badDebtUpdatedBy: varchar("bad_debt_updated_by", { length: 128 }),
+    badDebtUpdatedAt: varchar("bad_debt_updated_at", { length: 32 }),
   },
   (t) => ({
     sectionExternalIdx: uniqueIndex("contracts_section_external_idx").on(

@@ -932,6 +932,8 @@ export async function listDebtTarget(params: { section: SectionKey }) {
            product_type,
            CAST(bad_debt_amount AS DECIMAL(18,2)) AS bad_debt_amount,
            bad_debt_date,
+           bad_debt_updated_by,
+           bad_debt_updated_at,
            CAST(commission_net AS DECIMAL(18,2)) AS commission_net
       FROM ${contracts}
      WHERE ${contracts.section} = ${params.section}
@@ -2098,6 +2100,8 @@ export async function listDebtTarget(params: { section: SectionKey }) {
       // bad debt info from contracts table (used by listDebtCollected for tooltip + real payment filtering)
       contractBadDebtAmount: c.bad_debt_amount != null ? Number(c.bad_debt_amount) : null,
       contractBadDebtDate: c.bad_debt_date ?? null,
+      contractBadDebtUpdatedBy: c.bad_debt_updated_by ?? null,
+      contractBadDebtUpdatedAt: c.bad_debt_updated_at ?? null,
       financeAmount: c.finance_amount != null ? Number(c.finance_amount) : null,
       commissionNet: c.commission_net != null ? Number(c.commission_net) : null,
     };
@@ -2140,17 +2144,19 @@ export async function listDebtCollected(params: { section: SectionKey }) {
            JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.receipt_no')) AS receipt_no,
            JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.remark'))     AS remark,
            pt.status AS ff_status,
-           -- updated_at: FF365 ใช้จาก installments, Boonphone ใช้จาก raw_json
+           -- updated_at: FF365 ใช้จาก installments (match ด้วย contract_id-n pattern + DATE), Boonphone ใช้จาก raw_json
            COALESCE(
              JSON_UNQUOTE(JSON_EXTRACT(i.raw_json, '$.updated_at')),
              JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.updated_at'))
            ) AS updated_at,
-           -- updated_by: FF365 ใช้จาก installments ผ่าน installmentExternalId
+           -- updated_by: FF365 ใช้จาก installments (match ด้วย contract_id-n pattern + DATE)
            JSON_UNQUOTE(JSON_EXTRACT(i.raw_json, '$.updated_by')) AS updated_by
       FROM payment_transactions pt
       LEFT JOIN installments i
              ON i.section = pt.section
-            AND i.external_id = JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.installmentExternalId'))
+            AND i.contract_external_id = pt.contract_external_id
+            AND i.external_id LIKE CONCAT(pt.contract_external_id, '-%')
+            AND DATE(JSON_UNQUOTE(JSON_EXTRACT(i.raw_json, '$.updated_at'))) = DATE(JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.payment_date')))
      WHERE pt.section = ${params.section}
      ORDER BY pt.contract_external_id, pt.paid_at, CAST(JSON_EXTRACT(pt.raw_json, '$.payment_id') AS UNSIGNED)
   `);
@@ -2307,6 +2313,10 @@ export async function listDebtCollected(params: { section: SectionKey }) {
         return inst;
       });
 
+      // updated_by/updated_at สำหรับ bad debt row: ดึงจาก contracts table ที่ sync ไว้แล้ว
+      const contractBadDebtUpdatedBy = (c as any).contractBadDebtUpdatedBy as string | null ?? null;
+      const contractBadDebtUpdatedAt = (c as any).contractBadDebtUpdatedAt as string | null ?? null;
+
       const badDebtRow: any = {
         contract_external_id: c.contractExternalId,
         period: badDebtPeriod,
@@ -2330,6 +2340,8 @@ export async function listDebtCollected(params: { section: SectionKey }) {
         ff_status: null,
         payment_external_id: null,
         badDebtNote,
+        updated_by: contractBadDebtUpdatedBy,
+        updated_at: contractBadDebtUpdatedAt,
       };
 
       tagged = [
@@ -2490,6 +2502,8 @@ export async function* listDebtTargetStream(params: {
            product_type,
            CAST(bad_debt_amount AS DECIMAL(18,2)) AS bad_debt_amount,
            bad_debt_date,
+           bad_debt_updated_by,
+           bad_debt_updated_at,
            CAST(commission_net AS DECIMAL(18,2)) AS commission_net
       FROM ${contracts}
      WHERE ${contracts.section} = ${params.section}
@@ -3306,6 +3320,8 @@ export async function* listDebtTargetStream(params: {
       installments: baseInstallments,
       contractBadDebtAmount: c.bad_debt_amount != null ? Number(c.bad_debt_amount) : null,
       contractBadDebtDate: c.bad_debt_date ?? null,
+      contractBadDebtUpdatedBy: c.bad_debt_updated_by ?? null,
+      contractBadDebtUpdatedAt: c.bad_debt_updated_at ?? null,
       financeAmount: c.finance_amount != null ? Number(c.finance_amount) : null,
       commissionNet: c.commission_net != null ? Number(c.commission_net) : null,
     };
@@ -3353,7 +3369,9 @@ export async function* listDebtCollectedStream(params: {
            status,
            product_type,
            CAST(bad_debt_amount AS DECIMAL(18,2)) AS bad_debt_amount,
-           bad_debt_date
+           bad_debt_date,
+           bad_debt_updated_by,
+           bad_debt_updated_at
       FROM ${contracts}
      WHERE ${contracts.section} = ${params.section}
        AND (status IS NULL OR status != 'ยกเลิกสัญญา')
@@ -3467,7 +3485,9 @@ export async function* listDebtCollectedStream(params: {
         FROM payment_transactions pt
         LEFT JOIN installments i
                ON i.section = pt.section
-              AND i.external_id = JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.installmentExternalId'))
+              AND i.contract_external_id = pt.contract_external_id
+              AND i.external_id LIKE CONCAT(pt.contract_external_id, '-%')
+              AND DATE(JSON_UNQUOTE(JSON_EXTRACT(i.raw_json, '$.updated_at'))) = DATE(JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.payment_date')))
        WHERE pt.section = '${sectionLiteral}'
          AND pt.contract_external_id IN (${batchIdsLiteral})
        ORDER BY pt.contract_external_id, pt.paid_at, CAST(JSON_EXTRACT(pt.raw_json, '$.payment_id') AS UNSIGNED)
@@ -3546,6 +3566,8 @@ export async function* listDebtCollectedStream(params: {
         daysOverdue,
         contractBadDebtAmount: ch.bad_debt_amount != null ? Number(ch.bad_debt_amount) : null,
         contractBadDebtDate: ch.bad_debt_date ?? null,
+        contractBadDebtUpdatedBy: ch.bad_debt_updated_by ?? null,
+        contractBadDebtUpdatedAt: ch.bad_debt_updated_at ?? null,
         installments: instList,
       };
       // Use per-batch payments Map (loaded per batch to avoid OOM)
@@ -3630,6 +3652,9 @@ export async function* listDebtCollectedStream(params: {
             badDebtPeriod = lastNormalPeriod + 1;
           }
         }
+        // updated_by/updated_at สำหรับ bad debt row: ดึงจาก contracts table ที่ sync ไว้แล้ว
+        const contractBadDebtUpdatedBy = (c as any).contractBadDebtUpdatedBy as string | null ?? null;
+        const contractBadDebtUpdatedAt = (c as any).contractBadDebtUpdatedAt as string | null ?? null;
         const badDebtRow: any = {
           contract_external_id: c.contractExternalId,
           period: badDebtPeriod, splitIndex: 0, isCloseRow: false, isBadDebtRow: true,
@@ -3638,6 +3663,8 @@ export async function* listDebtCollectedStream(params: {
           close_installment_amount: 0, bad_debt_amount: contractBadDebtAmount,
           total_paid_amount: 0, payment_id: null, receipt_no: null, remark: null,
           ff_status: null, payment_external_id: null, badDebtNote,
+          updated_by: contractBadDebtUpdatedBy,
+          updated_at: contractBadDebtUpdatedAt,
         };
         tagged = [...normalPayments.map((p) => ({ ...p, isBadDebtRow: false })), badDebtRow];
       } else {

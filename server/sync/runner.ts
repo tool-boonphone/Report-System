@@ -665,24 +665,37 @@ async function computeAndStoreBadDebt(section: SectionKey): Promise<void> {
   }
 
   // ---- 3) Fetch payments for these contracts ----
-  // Map: externalId → Array<{ payment_external_id, paid_at, total_paid_amount, ff_status }>
+  // Map: externalId → Array<{ payment_external_id, paid_at, total_paid_amount, ff_status, updated_by, updated_at }>
   // payment_external_id: numeric string = real payment from API; "pay-*" prefix = synthetic from installments
   // real payments have total_paid_amount from raw_json; synthetic payments have null
-  const payMap = new Map<string, Array<{ payment_external_id: string; paid_at: string | null; total_paid_amount: number; ff_status: string | null }>>();
+  // updated_by/updated_at: ดึงจาก installments.raw_json ผ่าน installment_external_id (FF365)
+  //   หรือจาก payment_transactions.raw_json โดยตรง (Boonphone)
+  const payMap = new Map<string, Array<{ payment_external_id: string; paid_at: string | null; total_paid_amount: number; ff_status: string | null; updated_by: string | null; updated_at: string | null }>>();
 
   for (let i = 0; i < extIds.length; i += CHUNK) {
     const slice = extIds.slice(i, i + CHUNK);
     const inClause2 = slice.map((id) => sql`${id}`).reduce((acc, cur, idx) => idx === 0 ? cur : sql`${acc}, ${cur}`);
     const payRows = await db.execute(sql`
-      SELECT contract_external_id,
-             external_id AS payment_external_id,
-             paid_at,
-             CAST(JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.total_paid_amount')) AS DECIMAL(18,2)) AS total_paid_amount,
-             status AS ff_status
-        FROM ${paymentTransactions}
-       WHERE section = ${section}
-         AND contract_external_id IN (${inClause2})
-       ORDER BY contract_external_id, paid_at
+      SELECT pt.contract_external_id,
+             pt.external_id AS payment_external_id,
+             pt.paid_at,
+             CAST(JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.total_paid_amount')) AS DECIMAL(18,2)) AS total_paid_amount,
+             pt.status AS ff_status,
+             COALESCE(
+               JSON_UNQUOTE(JSON_EXTRACT(inst.raw_json, '$.updated_by')),
+               JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.updated_by'))
+             ) AS updated_by,
+             COALESCE(
+               JSON_UNQUOTE(JSON_EXTRACT(inst.raw_json, '$.updated_at')),
+               JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.updated_at'))
+             ) AS updated_at
+        FROM ${paymentTransactions} pt
+        LEFT JOIN ${installments} inst
+          ON inst.section = pt.section
+         AND inst.external_id = JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.installmentExternalId'))
+       WHERE pt.section = ${section}
+         AND pt.contract_external_id IN (${inClause2})
+       ORDER BY pt.contract_external_id, pt.paid_at
     `);
     const rows: any[] = (payRows as any)[0] ?? payRows;
     for (const r of rows) {
@@ -694,13 +707,15 @@ async function computeAndStoreBadDebt(section: SectionKey): Promise<void> {
         paid_at: r.paid_at ?? null,
         total_paid_amount: Number(r.total_paid_amount ?? 0),
         ff_status: r.ff_status ?? null,
+        updated_by: r.updated_by ?? null,
+        updated_at: r.updated_at ?? null,
       });
     }
   }
 
   // ---- 4) Compute bad-debt per contract and UPDATE ----
   const BATCH = 200;
-  let batch: Array<{ externalId: string; amount: number; date: string | null; period: number }> = [];
+  let batch: Array<{ externalId: string; amount: number; date: string | null; period: number; updatedBy: string | null; updatedAt: string | null }> = [];
 
   async function flushBatch() {
     if (!batch.length) return;
@@ -709,7 +724,9 @@ async function computeAndStoreBadDebt(section: SectionKey): Promise<void> {
         UPDATE ${contracts}
            SET bad_debt_amount = ${row.amount},
                bad_debt_date   = ${row.date},
-               suspended_from_period = ${row.period}
+               suspended_from_period = ${row.period},
+               bad_debt_updated_by = ${row.updatedBy},
+               bad_debt_updated_at = ${row.updatedAt}
          WHERE section = ${section}
            AND external_id = ${row.externalId}
       `);
@@ -759,11 +776,19 @@ async function computeAndStoreBadDebt(section: SectionKey): Promise<void> {
     // bad_debt_date = วันที่ล่าสุด (slip date for bank reconciliation)
     const badDebtDate = latestDate ?? suspend.date;
 
+    // updated_by/updated_at = จากรายการชำระสุดท้ายของสัญญา (ใช้ latestDatePayments ซึ่งเป็นรายการของยอดขายเครื่อง)
+    // เลือกรายการที่มี updated_by ก่อน ถ้าไม่มีให้ใช้รายการแรก
+    const latestWithUpdatedBy = latestDatePayments.find((p) => p.updated_by) ?? latestDatePayments[0];
+    const badDebtUpdatedBy = latestWithUpdatedBy?.updated_by ?? null;
+    const badDebtUpdatedAt = latestWithUpdatedBy?.updated_at ?? null;
+
     batch.push({
       externalId: extId,
       amount: totalBadDebt,
       date: badDebtDate,
       period: suspend.period,
+      updatedBy: badDebtUpdatedBy,
+      updatedAt: badDebtUpdatedAt,
     });
 
     if (batch.length >= BATCH) await flushBatch();

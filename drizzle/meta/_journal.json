@@ -43,6 +43,13 @@
       "when": 1777045906562,
       "tag": "0005_square_black_queen",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1777500056431,
+      "tag": "0006_late_talisman",
+      "breakpoints": true
     }
   ]
 }
