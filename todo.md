@@ -1103,8 +1103,8 @@ Task list:
 - [x] P109-3: Commit + Push + Checkpoint
 
 ### Phase 110 — แก้ไขการนับงวดหนี้เสีย (bad-debt period rule)
-- [ ] P110-1: อ่าน debtDb.ts หา logic คำนวณ badDebtPeriod และ suspendedFromPeriod ใน listDebtCollectedStream และ listDebtTarget
-- [ ] P110-2: แก้ไข: ถ้าไม่มี normal payments → badDebtPeriod=1, suspendedFromPeriod=0 (เป้าเก็บหนี้ = 0/N)
-- [ ] P110-3: แก้ไข: ถ้ามี normal payments → badDebtPeriod=lastNormalPeriod+1 (เป้าเก็บหนี้ = lastNormalPeriod/N)
-- [ ] P110-4: TypeScript check + restart server + ยืนยันผลด้วย CT1124-CCO015-2211-03
-- [ ] P110-5: Commit + Push + Checkpoint
+- [x] P110-1: อ่าน debtDb.ts หา logic คำนวณ badDebtPeriod และ suspendedFromPeriod ใน listDebtCollectedStream และ listDebtTarget
+- [x] P110-2: แก้ไข: ถ้าไม่มี normal payments → badDebtPeriod=1, suspendedFromPeriod=0 (เป้าเก็บหนี้ = 0/N)
+- [x] P110-3: แก้ไข: ถ้ามี normal payments → badDebtPeriod=lastNormalPeriod+1 (เป้าเก็บหนี้ = lastNormalPeriod/N)
+- [x] P110-4: TypeScript check + restart server + ยืนยันผลด้วย CT1124-CCO015-2211-03
+- [x] P110-5: Commit + Push + Checkpoint
