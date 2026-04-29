@@ -1048,4 +1048,4 @@ Task list:
 ## Phase 101 — BadDebt: แยก installmentPaid vs deviceSaleAmount ด้วย external_id pattern
 - [x] P101-1: แก้ SQL query ใน badDebtDb.ts ให้แยกด้วย logic: device_sale = latest real payment, installment = total_real_paid - latest_real_paid
 - [x] P101-2: ลบ logic เดิมออก ใช้ค่าที่แยกจาก SQL แทน (ตรงกับ runner.ts computeAndStoreBadDebt)
-- [ ] P101-3: Commit + Push + Checkpoint
+- [x] P101-3: Commit + Push + Checkpoint (commit 346504d)
