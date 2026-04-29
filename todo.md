@@ -1044,3 +1044,8 @@ Task list:
 - [x] P98-2: เพิ่ม sort ให้หัวตาราง monthly tab (เดือน-ปี, จำนวน, ยอดจัดไฟแนนซ์, ค่าคอมมิชชั่น, ต้นทุนรวม, ยอดเก็บค่างวด, ยอดขายเครื่อง, รวมรายรับ, กำไร/ขาดทุน)
 - [x] P98-3: เพิ่ม sort ให้หัวตาราง yearly tab (ปีที่ขาย, จำนวน, ยอดจัดไฟแนนซ์, ค่าคอมมิชชั่น, ต้นทุนรวม, ยอดเก็บค่างวด, ยอดขายเครื่อง, รวมรายรับ, กำไร/ขาดทุน)
 - [x] P98-4: Commit + Push + Checkpoint (commit ab45e23)
+
+## Phase 101 — BadDebt: แยก installmentPaid vs deviceSaleAmount ด้วย external_id pattern
+- [x] P101-1: แก้ SQL query ใน badDebtDb.ts ให้แยกด้วย logic: device_sale = latest real payment, installment = total_real_paid - latest_real_paid
+- [x] P101-2: ลบ logic เดิมออก ใช้ค่าที่แยกจาก SQL แทน (ตรงกับ runner.ts computeAndStoreBadDebt)
+- [ ] P101-3: Commit + Push + Checkpoint

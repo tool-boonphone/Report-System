@@ -112,16 +112,47 @@ export async function getBadDebtSummary(params: {
       CAST(COALESCE(c.commission_net, 0) AS DECIMAL(18,2))                    AS commission_net,
       CAST(COALESCE(c.bad_debt_amount, 0) AS DECIMAL(18,2))                   AS bad_debt_amount,
       c.bad_debt_date                                                          AS sale_date,
-      COALESCE(pt_sum.total_paid, 0)                                          AS total_paid,
+      -- installment_paid = total real payments - latest real payment (device sale)
+      GREATEST(0, COALESCE(pt_sum.total_real_paid, 0) - COALESCE(pt_sum.latest_real_paid, 0)) AS installment_paid_raw,
+      COALESCE(pt_sum.latest_real_paid, 0)                                    AS device_sale_paid_raw,
       COALESCE(pt_sum.pay_cnt, 0)                                             AS paid_installments,
       c.installment_count                                                      AS installment_count
     FROM ${contracts} c
     LEFT JOIN (
-      SELECT
-        section,
-        contract_external_id,
-        SUM(CAST(amount AS DECIMAL(18,2))) AS total_paid,
-        COUNT(*) AS pay_cnt
+    /*
+     * แยก real payments (external_id ไม่ขึ้นต้น 'pay-') ออกจาก synthetic payments
+     * Real payments = ชำระเงินจริงจาก API (total_paid_amount มีค่า)
+     * Synthetic payments = สร้างโดย sync engine เพื่อ map งวด (total_paid_amount = null)
+     *
+     * Logic เดียวกับ runner.ts computeAndStoreBadDebt:
+     *   - bad_debt_amount = latest real payment (ยอดขายเครื่อง)
+     *   - installment_paid = SUM ของ real payments ทั้งหมด - bad_debt_amount
+     *     (= real payments ก่อน latest = ค่างวดที่เก็บได้จริง)
+     */
+    SELECT
+      section,
+      contract_external_id,
+      -- SUM ของ real payments ทั้งหมด (external_id ไม่ขึ้นต้น 'pay-')
+      SUM(CASE WHEN external_id NOT LIKE 'pay-%'
+               THEN CAST(COALESCE(JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.total_paid_amount')), amount) AS DECIMAL(18,2))
+               ELSE 0 END) AS total_real_paid,
+      -- latest real payment amount = bad_debt_amount (ยอดขายเครื่อง)
+      -- ใช้ MAX(paid_at) เพื่อหา latest แล้วเอา total_paid_amount ของ row นั้น
+      CAST(COALESCE(
+        JSON_UNQUOTE(JSON_EXTRACT(
+          SUBSTRING_INDEX(
+            GROUP_CONCAT(
+              CASE WHEN external_id NOT LIKE 'pay-%'
+                   THEN raw_json END
+              ORDER BY paid_at DESC SEPARATOR '|||'
+            ),
+            '|||', 1
+          ),
+          '$.total_paid_amount'
+        )),
+        0
+      ) AS DECIMAL(18,2)) AS latest_real_paid,
+      COUNT(CASE WHEN external_id NOT LIKE 'pay-%' THEN 1 END) AS pay_cnt
       FROM ${paymentTransactions}
       GROUP BY section, contract_external_id
     ) pt_sum
@@ -140,10 +171,10 @@ export async function getBadDebtSummary(params: {
     const multiplier = r.multiplier != null ? Number(r.multiplier) : null;
     const multiplierVal = multiplier ?? 1;
     const commissionNet = Number(r.commission_net ?? 0);
-    const deviceSaleAmount = Number(r.bad_debt_amount ?? 0);
-    const totalPaid = Number(r.total_paid ?? 0);
-    // ยอดเก็บค่างวด = ยอดชำระทั้งหมด - ยอดขายเครื่อง (ไม่ต่ำกว่า 0)
-    const installmentPaid = Math.max(0, totalPaid - deviceSaleAmount);
+    // ยอดขายเครื่อง = latest real payment (external_id NOT LIKE 'pay-%', เรียงตาม paid_at DESC)
+    const deviceSaleAmount = Number(r.device_sale_paid_raw ?? 0);
+    // ยอดเก็บค่างวด = SUM ของ real payments ทั้งหมด - latest real payment
+    const installmentPaid = Number(r.installment_paid_raw ?? 0);
     // ต้นทุน = (ยอดจัดไฟแนนซ์ × ตัวคูณ) + ค่าคอมมิชชั่น
     const cost = (financeAmount * multiplierVal) + commissionNet;
     // รวมรายรับ = ยอดเก็บค่างวด + ยอดขายเครื่อง
