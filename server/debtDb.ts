@@ -2152,7 +2152,7 @@ export async function listDebtCollected(params: { section: SectionKey }) {
              ON i.section = pt.section
             AND i.external_id = JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.installmentExternalId'))
      WHERE pt.section = ${params.section}
-     ORDER BY pt.contract_external_id, pt.paid_at, pt.payment_id
+     ORDER BY pt.contract_external_id, pt.paid_at, CAST(JSON_EXTRACT(pt.raw_json, '$.payment_id') AS UNSIGNED)
   `);
   const pRows: any[] = (payRowsRaw as any)[0] ?? payRowsRaw;
 
@@ -3470,7 +3470,7 @@ export async function* listDebtCollectedStream(params: {
               AND i.external_id = JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.installmentExternalId'))
        WHERE pt.section = '${sectionLiteral}'
          AND pt.contract_external_id IN (${batchIdsLiteral})
-       ORDER BY pt.contract_external_id, pt.paid_at, pt.payment_id
+       ORDER BY pt.contract_external_id, pt.paid_at, CAST(JSON_EXTRACT(pt.raw_json, '$.payment_id') AS UNSIGNED)
     `));
     const payRows: any[] = (payRaw as any)[0] ?? payRaw;
     const batchPayByContract = new Map<string, PayRawRow[]>();
