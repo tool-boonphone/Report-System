@@ -449,7 +449,6 @@ export default function BadDebtSummary() {
                   <th className="px-2 py-2 text-center text-xs font-semibold whitespace-nowrap">รุ่น</th>
                   <th className="px-2 py-2 text-center text-xs font-semibold whitespace-nowrap">ราคา</th>
                   <Th label="ยอดจัดไฟแนนซ์" col="financeAmount" />
-                  <th className="px-2 py-2 text-center text-xs font-semibold whitespace-nowrap">ตัวคูณ</th>
                   <Th label="ค่าคอมมิชชั่น" col="commissionNet" />
                   <Th label="ต้นทุน" col="cost" />
                   <th className="px-2 py-2 text-center text-xs font-semibold whitespace-nowrap">งวดที่ชำระ</th>
@@ -462,7 +461,7 @@ export default function BadDebtSummary() {
               </thead>
               <tbody>
                 {filteredRows.length === 0 ? (
-                  <tr><td colSpan={17} className="text-center py-12 text-gray-400">ไม่พบข้อมูล</td></tr>
+                  <tr><td colSpan={16} className="text-center py-12 text-gray-400">ไม่พบข้อมูล</td></tr>
                 ) : (
                   filteredRows.map((r, idx) => (
                     <tr key={r.contractExternalId} className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}>
@@ -474,7 +473,6 @@ export default function BadDebtSummary() {
                       <td className="px-2 py-2 whitespace-nowrap text-xs">{r.model ?? "-"}</td>
                       <td className="px-2 py-2 text-right whitespace-nowrap text-xs">{fmtMoney(r.salePrice)}</td>
                       <td className="px-2 py-2 text-right whitespace-nowrap text-xs">{fmtMoney(r.financeAmount)}</td>
-                      <td className="px-2 py-2 text-center whitespace-nowrap text-xs">{r.multiplier != null ? r.multiplier.toFixed(2) : "-"}</td>
                       <td className="px-2 py-2 text-right whitespace-nowrap text-xs">{fmtMoney(r.commissionNet)}</td>
                       <td className="px-2 py-2 text-right whitespace-nowrap text-xs font-medium text-orange-700">{fmtMoney(r.cost)}</td>
                       <td className="px-2 py-2 text-center whitespace-nowrap text-xs">
@@ -494,7 +492,6 @@ export default function BadDebtSummary() {
                   <tr>
                     <td colSpan={7} className="px-2 py-2 text-right text-gray-600">รวม {filteredRows.length} รายการ</td>
                     <td className="px-2 py-2 text-right">{fmtMoney(filteredRows.reduce((s, r) => s + r.financeAmount, 0))}</td>
-                    <td className="px-2 py-2"></td>
                     <td className="px-2 py-2 text-right">{fmtMoney(filteredRows.reduce((s, r) => s + r.commissionNet, 0))}</td>
                     <td className="px-2 py-2 text-right text-orange-700">{fmtMoney(filteredRows.reduce((s, r) => s + r.cost, 0))}</td>
                     <td className="px-2 py-2"></td>

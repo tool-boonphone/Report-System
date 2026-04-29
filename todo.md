@@ -1049,3 +1049,8 @@ Task list:
 - [x] P101-1: แก้ SQL query ใน badDebtDb.ts ให้แยกด้วย logic: device_sale = latest real payment, installment = total_real_paid - latest_real_paid
 - [x] P101-2: ลบ logic เดิมออก ใช้ค่าที่แยกจาก SQL แทน (ตรงกับ runner.ts computeAndStoreBadDebt)
 - [x] P101-3: Commit + Push + Checkpoint (commit 346504d)
+
+## Phase 103 — BadDebt: แก้สูตรต้นทุน + ตัดคอลัมน์ตัวคูณ
+- [x] P103-1: แก้ badDebtDb.ts — cost = financeAmount + commissionNet (ลบ multiplier ออกจากสูตร)
+- [x] P103-2: แก้ BadDebtSummary.tsx — ตัดคอลัมน์ตัวคูณออกจาก list tab (thead + tbody + tfoot + colSpan)
+- [ ] P103-3: Commit + Push + Checkpoint

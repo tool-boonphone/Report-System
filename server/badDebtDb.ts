@@ -27,8 +27,6 @@ export type BadDebtRow = {
   salePrice: number | null;
   /** ยอดจัดไฟแนนซ์ */
   financeAmount: number;
-  /** ตัวคูณ (multiplier) */
-  multiplier: number | null;
   /** ค่าคอมมิชชั่น */
   commissionNet: number;
   /** ยอดเก็บค่างวดปกติ (ไม่รวมยอดขายเครื่อง) */
@@ -37,7 +35,7 @@ export type BadDebtRow = {
   deviceSaleAmount: number;
   /** วันที่ขายเครื่อง (bad_debt_date จาก contracts) */
   saleDate: string | null;
-  /** ต้นทุน = (financeAmount * multiplier) + commissionNet */
+  /** ต้นทุน = financeAmount + commissionNet */
   cost: number;
   /** รวมรายรับ = installmentPaid + deviceSaleAmount */
   totalRevenue: number;
@@ -108,7 +106,6 @@ export async function getBadDebtSummary(params: {
       c.model                                                                  AS model,
       CAST(c.sell_price AS DECIMAL(18,2))                                      AS sale_price,
       CAST(c.finance_amount AS DECIMAL(18,2))                                  AS finance_amount,
-      CAST(COALESCE(c.multiplier, 1) AS DECIMAL(6,2))                         AS multiplier,
       CAST(COALESCE(c.commission_net, 0) AS DECIMAL(18,2))                    AS commission_net,
       CAST(COALESCE(c.bad_debt_amount, 0) AS DECIMAL(18,2))                   AS bad_debt_amount,
       c.bad_debt_date                                                          AS sale_date,
@@ -149,16 +146,13 @@ export async function getBadDebtSummary(params: {
 
   const allRows: BadDebtRow[] = rawArr.map((r: any) => {
     const financeAmount = Number(r.finance_amount ?? 0);
-    // ตัวคูณ: ถ้า null ให้ใช้ 1 เป็น default
-    const multiplier = r.multiplier != null ? Number(r.multiplier) : null;
-    const multiplierVal = multiplier ?? 1;
     const commissionNet = Number(r.commission_net ?? 0);
-    // ยอดขายเครื่อง = latest real payment (external_id NOT LIKE 'pay-%', เรียงตาม paid_at DESC)
+    // ยอดขายเครื่อง = bad_debt_amount จาก contracts (= latest real payment)
     const deviceSaleAmount = Number(r.device_sale_paid_raw ?? 0);
-    // ยอดเก็บค่างวด = SUM ของ real payments ทั้งหมด - latest real payment
+    // ยอดเก็บค่างวด = SUM ของ real payments ทั้งหมด - bad_debt_amount
     const installmentPaid = Number(r.installment_paid_raw ?? 0);
-    // ต้นทุน = (ยอดจัดไฟแนนซ์ × ตัวคูณ) + ค่าคอมมิชชั่น
-    const cost = (financeAmount * multiplierVal) + commissionNet;
+    // ต้นทุน = ยอดจัดไฟแนนซ์ + ค่าคอมมิชชั่น
+    const cost = financeAmount + commissionNet;
     // รวมรายรับ = ยอดเก็บค่างวด + ยอดขายเครื่อง
     const totalRevenue = installmentPaid + deviceSaleAmount;
     // กำไร/ขาดทุน = รวมรายรับ - ต้นทุน
@@ -174,7 +168,6 @@ export async function getBadDebtSummary(params: {
       model: r.model ?? null,
       salePrice: r.sale_price != null ? Number(r.sale_price) : null,
       financeAmount,
-      multiplier,
       commissionNet,
       installmentPaid,
       deviceSaleAmount,
