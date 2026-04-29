@@ -723,14 +723,14 @@ async function computeAndStoreBadDebt(section: SectionKey): Promise<void> {
     const payments = payMap.get(extId) ?? [];
 
     // Determine bad-debt amount and date from real payments.
-    // Both Boonphone and Fastfone365 use the same payment transactions API.
-    // Real payments (external_id is numeric) have total_paid_amount from the API.
-    // We use the LATEST real payment as bad_debt_amount (device-sale receipt).
+    // Phase 106/107 Iron Rules (confirmed 2026-04-29):
+    //   Rule 1: ถ้ามียอดชำระแค่ยอดเดียว → ยอดนั้นคือ bad_debt_amount
+    //   Rule 2: ยอดสุดท้ายที่ชำระเข้ามา (วันที่ล่าสุด) → คือ bad_debt_amount
+    //   Rule 3: ถ้าวันที่ล่าสุดมีหลาย payment → เอายอดรวมทั้งหมดของวันนั้น
     //
-    // Why latest, not sum?
-    //   - Earlier real payments are normal installment payments
-    //   - The last real payment is the device-sale amount (e.g. 8,000 from selling the device)
-    //   - bad_debt_amount should represent only the device-sale proceeds
+    // Example: CT1124-SKA002-3314-01
+    //   real payments วันที่ 2025-04-04: 2436, 2436, 2436, 92 (รวม 7,400) ← bad_debt_amount
+    //   real payment วันที่ 2024-12-24: 2,986 ← ค่างวดปกติ
     //
     // Example: CT0126-SRI001-21064-01
     //   real 103766: 1,499 (2026-02-10) = ชำระงวดปกติ
@@ -741,16 +741,23 @@ async function computeAndStoreBadDebt(section: SectionKey): Promise<void> {
 
     if (realBadDebtPayments.length === 0) continue;
 
-    // Sort by paid_at DESC to find the latest real payment
+    // Sort by paid_at DESC to find the latest date
     const sortedReal = [...realBadDebtPayments].sort((a, b) =>
       (b.paid_at ?? "").localeCompare(a.paid_at ?? "")
     );
-    const latestRealPayment = sortedReal[0];
-    const totalBadDebt = latestRealPayment.total_paid_amount;
-    // bad_debt_date = paid_at of the latest real payment (slip date for bank reconciliation)
-    const badDebtDate = latestRealPayment.paid_at
-      ? String(latestRealPayment.paid_at).substring(0, 10)
-      : suspend.date;
+    // latestDate = วันที่ล่าสุด (YYYY-MM-DD)
+    const latestDate = sortedReal[0].paid_at
+      ? String(sortedReal[0].paid_at).substring(0, 10)
+      : null;
+    // Rule 3: sum ของทุก real payment ที่วันที่ตรงกับ latestDate
+    const latestDatePayments = latestDate
+      ? realBadDebtPayments.filter((p) =>
+          p.paid_at ? String(p.paid_at).substring(0, 10) === latestDate : false
+        )
+      : [sortedReal[0]];
+    const totalBadDebt = latestDatePayments.reduce((sum, p) => sum + p.total_paid_amount, 0);
+    // bad_debt_date = วันที่ล่าสุด (slip date for bank reconciliation)
+    const badDebtDate = latestDate ?? suspend.date;
 
     batch.push({
       externalId: extId,

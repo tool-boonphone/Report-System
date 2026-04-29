@@ -1086,3 +1086,12 @@ Task list:
 - [x] P107-2: เพิ่ม filter: ตัด normal payment rows ที่ paidAt ตรงกับ latestDate ออก (เพราะยอดรวมวันนั้นถูกรวมไว้ใน bad-debt row แล้ว)
 - [x] P107-3: TypeScript check + restart server + ยืนยันผลลัพธ์
 - [x] P107-4: Commit + Push + Checkpoint
+
+### Phase 108 — แก้ไขเมนูหนี้เสียทุกแถบ + สรุปรายเดือน ให้ใช้ Phase 106/107 rule
+
+- [ ] P108-1: อ่านโค้ดเมนูหนี้เสียทุกแถบ (badDebtDb.ts, badDebt router, BadDebt.tsx) เพื่อเข้าใจ data flow
+- [ ] P108-2: อ่านโค้ดสรุปรายเดือน (monthlySummary หรือ debtDb.ts ส่วน monthly) เพื่อเข้าใจ data flow
+- [ ] P108-3: แก้ไขเมนูหนี้เสียทุกแถบให้ใช้ Phase 106/107 (isBadDebtContract + latestDateTotal + dedup same-date)
+- [ ] P108-4: แก้ไขสรุปรายเดือนให้ใช้ Phase 106/107 (isBadDebtContract + latestDateTotal + dedup same-date)
+- [ ] P108-5: TypeScript check + restart server + ยืนยันผลถูกต้อง
+- [ ] P108-6: Commit + Push + Checkpoint
