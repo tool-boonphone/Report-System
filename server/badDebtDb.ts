@@ -103,7 +103,7 @@ export async function getBadDebtSummary(params: {
       c.approve_date                                                           AS approve_date,
       c.product_type                                                           AS product_type,
       c.model                                                                  AS model,
-      CAST(c.sale_price AS DECIMAL(18,2))                                      AS sale_price,
+      CAST(c.sell_price AS DECIMAL(18,2))                                      AS sale_price,
       CAST(c.finance_amount AS DECIMAL(18,2))                                  AS finance_amount,
       CAST(COALESCE(c.commission_net, 0) AS DECIMAL(18,2))                    AS commission_net,
       CAST(COALESCE(c.bad_debt_amount, 0) AS DECIMAL(18,2))                   AS bad_debt_amount,
