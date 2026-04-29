@@ -300,9 +300,9 @@ export default function SuspectedBadDebt() {
 
   /* ── filters ── */
   const [search, setSearch] = useState("");
-  const [approveMonth, setApproveMonth] = useState("");
-  const [debtStatusFilter, setDebtStatusFilter] = useState("");
-  const [osFilter, setOsFilter] = useState(""); // "iOS" | "Android" | ""
+  const [approveMonth, setApproveMonth] = useState("__all__");
+  const [debtStatusFilter, setDebtStatusFilter] = useState("__all__");
+  const [osFilter, setOsFilter] = useState("__all__"); // "iOS" | "Android" | "__all__"
   const [modelFilter, setModelFilter] = useState<string[]>([]);
   const [debtValueMin, setDebtValueMin] = useState("");
   const [filterOpen, setFilterOpen] = useState(true);
@@ -368,17 +368,17 @@ export default function SuspectedBadDebt() {
     }
 
     // approveMonth filter
-    if (approveMonth) {
+    if (approveMonth && approveMonth !== "__all__") {
       rows = rows.filter((r) => r.approveDate?.startsWith(approveMonth));
     }
 
     // debtStatus filter
-    if (debtStatusFilter) {
+    if (debtStatusFilter && debtStatusFilter !== "__all__") {
       rows = rows.filter((r) => r.debtStatus === debtStatusFilter);
     }
 
     // iOS/Android filter
-    if (osFilter) {
+    if (osFilter && osFilter !== "__all__") {
       rows = rows.filter((r) => deriveOS(r.model) === osFilter);
     }
 
@@ -700,7 +700,7 @@ export default function SuspectedBadDebt() {
                   <SelectValue placeholder="เดือน-ปีที่อนุมัติ" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">ทั้งหมด</SelectItem>
+                  <SelectItem value="__all__">ทั้งหมด</SelectItem>
                   {approveMonthOptions.map((ym) => (
                     <SelectItem key={ym} value={ym}>
                       {fmtMonthLabel(ym)}
@@ -715,7 +715,7 @@ export default function SuspectedBadDebt() {
                   <SelectValue placeholder="สถานะหนี้" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">ทั้งหมด</SelectItem>
+                  <SelectItem value="__all__">ทั้งหมด</SelectItem>
                   <SelectItem value="เกิน 61-90">เกิน 61-90 วัน</SelectItem>
                   <SelectItem value="เกิน >90">เกิน {">"} 90 วัน</SelectItem>
                 </SelectContent>
@@ -727,7 +727,7 @@ export default function SuspectedBadDebt() {
                   <SelectValue placeholder="iOS / Android" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">ทั้งหมด</SelectItem>
+                  <SelectItem value="__all__">ทั้งหมด</SelectItem>
                   <SelectItem value="iOS">iOS</SelectItem>
                   <SelectItem value="Android">Android</SelectItem>
                 </SelectContent>
