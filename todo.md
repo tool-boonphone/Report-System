@@ -1114,3 +1114,9 @@ Task list:
 - [x] P111-2: แก้ไข: ใช้ badDebtPeriod จาก collected data แทน closeSum-based suspendedFromPeriod (N-1 → ป้ายกำกับเริ่มงวดที่ N)
 - [x] P111-3: TypeScript check + restart server + ยืนยันผลด้วย CT1124-CCO015-2211-03
 - [x] P111-4: Commit + Push + Checkpoint
+
+### Phase 112 — แก้ไข closeAmtSumByContract: exclude cross-contract receipt_no
+- [x] P112-1: ตรวจสอบ DB พบว่า TXRT0326-RBR002-2014-01-1 ถูกบันทึกใน contract CT1124-CCO015-2211-03 ด้วย ทำให้ closeSum > 0 แม้จะ exclude bad_debt_date แล้ว
+- [x] P112-2: แก้ไข closeAmtSumByContract และ closeAmtSumByContractStream ให้ include receipt_no และ skip payments ที่ receipt_no prefix ไม่ตรงกับ contract นี้
+- [x] P112-3: TypeScript check + restart server + ยืนยันผลด้วย CT1124-CCO015-2211-03 (เป้าเก็บหนี้ = 0/8, ป้ายกำกับเริ่มงวดที่ 1)
+- [x] P112-4: Commit + Push + Checkpoint
