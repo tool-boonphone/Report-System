@@ -1,5 +1,5 @@
 /**
- * BadDebtSummary — Phase 97 (multiplier column + overflow-x-auto)
+ * BadDebtSummary — Phase 98 (sortable monthly/yearly headers, no min-w-max)
  * หน้าสรุปกำไร/ขาดทุนจากหนี้เสีย แบ่งเป็น 3 แถบ:
  *   1. รายการขายเครื่อง
  *   2. สรุปรายเดือน
@@ -53,6 +53,8 @@ type SortKey =
   | "contractNo" | "approveDate" | "financeAmount" | "commissionNet"
   | "installmentPaid" | "deviceSaleAmount" | "totalRevenue" | "cost"
   | "profitLoss" | "saleDate";
+type MonthlySortKey = "ym" | "count" | "financeAmount" | "commissionNet" | "cost" | "installmentPaid" | "deviceSaleAmount" | "totalRevenue" | "profitLoss";
+type YearlySortKey = "year" | "count" | "financeAmount" | "commissionNet" | "cost" | "installmentPaid" | "deviceSaleAmount" | "totalRevenue" | "profitLoss";
 type SortDir = "asc" | "desc";
 type ActiveTab = "list" | "monthly" | "yearly";
 
@@ -104,6 +106,10 @@ export default function BadDebtSummary() {
   const [activeTab, setActiveTab] = useState<ActiveTab>("list");
   const [sortKey, setSortKey] = useState<SortKey>("saleDate");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [monthlySortKey, setMonthlySortKey] = useState<MonthlySortKey>("ym");
+  const [monthlySortDir, setMonthlySortDir] = useState<SortDir>("desc");
+  const [yearlySortKey, setYearlySortKey] = useState<YearlySortKey>("year");
+  const [yearlySortDir, setYearlySortDir] = useState<SortDir>("desc");
 
   const { data, isLoading } = trpc.badDebt.summary.useQuery(
     section ? { section, approveMonth: approveMonth || undefined, saleMonth: saleMonth || undefined } : (undefined as any),
@@ -168,8 +174,15 @@ export default function BadDebtSummary() {
       cur.profitLoss += r.profitLoss;
       map.set(ym, cur);
     });
-    return Array.from(map.values()).sort((a, b) => b.ym.localeCompare(a.ym));
-  }, [rows, filterYear]);
+    const raw = Array.from(map.values());
+    raw.sort((a, b) => {
+      const av: any = a[monthlySortKey as keyof typeof a] ?? "";
+      const bv: any = b[monthlySortKey as keyof typeof b] ?? "";
+      if (typeof av === "number" && typeof bv === "number") return monthlySortDir === "asc" ? av - bv : bv - av;
+      return monthlySortDir === "asc" ? String(av).localeCompare(String(bv), "th") : String(bv).localeCompare(String(av), "th");
+    });
+    return raw;
+  }, [rows, filterYear, monthlySortKey, monthlySortDir]);
 
   /* ── yearly summary ── */
   const yearlyRows = useMemo(() => {
@@ -192,14 +205,39 @@ export default function BadDebtSummary() {
       cur.profitLoss += r.profitLoss;
       map.set(year, cur);
     });
-    return Array.from(map.values()).sort((a, b) => b.year.localeCompare(a.year));
-  }, [rows, filterYear]);
+    const raw = Array.from(map.values());
+    raw.sort((a, b) => {
+      const av: any = a[yearlySortKey as keyof typeof a] ?? "";
+      const bv: any = b[yearlySortKey as keyof typeof b] ?? "";
+      if (typeof av === "number" && typeof bv === "number") return yearlySortDir === "asc" ? av - bv : bv - av;
+      return yearlySortDir === "asc" ? String(av).localeCompare(String(bv), "th") : String(bv).localeCompare(String(av), "th");
+    });
+    return raw;
+  }, [rows, filterYear, yearlySortKey, yearlySortDir]);
 
-  /* ── sort toggle ── */
+  /* ── sort toggle (list tab) ── */
   const toggleSort = useCallback((key: SortKey) => {
     setSortKey((prev) => {
       if (prev === key) { setSortDir((d) => (d === "asc" ? "desc" : "asc")); return key; }
       setSortDir("desc");
+      return key;
+    });
+  }, []);
+
+  /* ── sort toggle (monthly tab) ── */
+  const toggleMonthlySort = useCallback((key: MonthlySortKey) => {
+    setMonthlySortKey((prev) => {
+      if (prev === key) { setMonthlySortDir((d) => (d === "asc" ? "desc" : "asc")); return key; }
+      setMonthlySortDir("desc");
+      return key;
+    });
+  }, []);
+
+  /* ── sort toggle (yearly tab) ── */
+  const toggleYearlySort = useCallback((key: YearlySortKey) => {
+    setYearlySortKey((prev) => {
+      if (prev === key) { setYearlySortDir((d) => (d === "asc" ? "desc" : "asc")); return key; }
+      setYearlySortDir("desc");
       return key;
     });
   }, []);
@@ -244,8 +282,16 @@ export default function BadDebtSummary() {
     if (col !== sortKey) return <ChevronsUpDown className="w-3 h-3 opacity-40" />;
     return sortDir === "asc" ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />;
   };
+  const MonthlySortIcon = ({ col }: { col: MonthlySortKey }) => {
+    if (col !== monthlySortKey) return <ChevronsUpDown className="w-3 h-3 opacity-40" />;
+    return monthlySortDir === "asc" ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />;
+  };
+  const YearlySortIcon = ({ col }: { col: YearlySortKey }) => {
+    if (col !== yearlySortKey) return <ChevronsUpDown className="w-3 h-3 opacity-40" />;
+    return yearlySortDir === "asc" ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />;
+  };
 
-  /* ── Th helper ── */
+  /* ── Th helpers ── */
   const Th = ({ label, col, className = "" }: { label: string; col?: SortKey; className?: string }) => (
     <th
       className={`px-2 py-2 text-center text-xs font-semibold whitespace-nowrap select-none ${col ? "cursor-pointer hover:bg-white/10" : ""} ${className}`}
@@ -254,6 +300,30 @@ export default function BadDebtSummary() {
       <span className="inline-flex items-center gap-1 justify-center">
         {label}
         {col && <SortIcon col={col} />}
+      </span>
+    </th>
+  );
+  const ThM = ({ label, col, className = "", rowSpan }: { label: string; col?: MonthlySortKey; className?: string; rowSpan?: number }) => (
+    <th
+      rowSpan={rowSpan}
+      className={`px-2 py-2 text-center text-xs font-semibold whitespace-nowrap select-none ${col ? "cursor-pointer hover:bg-white/10" : ""} ${className}`}
+      onClick={col ? () => toggleMonthlySort(col) : undefined}
+    >
+      <span className="inline-flex items-center gap-1 justify-center">
+        {label}
+        {col && <MonthlySortIcon col={col} />}
+      </span>
+    </th>
+  );
+  const ThY = ({ label, col, className = "", rowSpan }: { label: string; col?: YearlySortKey; className?: string; rowSpan?: number }) => (
+    <th
+      rowSpan={rowSpan}
+      className={`px-2 py-2 text-center text-xs font-semibold whitespace-nowrap select-none ${col ? "cursor-pointer hover:bg-white/10" : ""} ${className}`}
+      onClick={col ? () => toggleYearlySort(col) : undefined}
+    >
+      <span className="inline-flex items-center gap-1 justify-center">
+        {label}
+        {col && <YearlySortIcon col={col} />}
       </span>
     </th>
   );
@@ -439,23 +509,23 @@ export default function BadDebtSummary() {
         {/* ╔════════════════ TAB 2: สรุปรายเดือน ════════════════ */}
         {!isLoading && activeTab === "monthly" && (
           <div className="rounded-lg border border-gray-200 shadow-sm overflow-x-auto">
-            <table className="w-full text-sm min-w-max">
+            <table className="w-full text-sm">
               <thead className="bg-blue-700 text-white sticky top-0 z-10">
                 {/* Group header row */}
                 <tr>
-                  <th rowSpan={2} className="px-3 py-2 text-left text-xs font-semibold whitespace-nowrap border-r border-blue-500">เดือน-ปีที่ขาย</th>
-                  <th rowSpan={2} className="px-2 py-2 text-center text-xs font-semibold whitespace-nowrap border-r border-blue-500">จำนวน</th>
+                  <ThM label="เดือน-ปีที่ขาย" col="ym" rowSpan={2} className="px-3 text-left border-r border-blue-500" />
+                  <ThM label="จำนวน" col="count" rowSpan={2} className="border-r border-blue-500" />
                   <th colSpan={3} className="px-2 py-1 text-center text-xs font-semibold border-b border-blue-500 border-r border-blue-500">ต้นทุน</th>
                   <th colSpan={3} className="px-2 py-1 text-center text-xs font-semibold border-b border-blue-500 border-r border-blue-500">รายรับ</th>
-                  <th rowSpan={2} className="px-2 py-2 text-center text-xs font-semibold whitespace-nowrap">กำไร/ขาดทุน</th>
+                  <ThM label="กำไร/ขาดทุน" col="profitLoss" rowSpan={2} />
                 </tr>
                 <tr>
-                  <th className="px-2 py-1.5 text-center text-xs font-semibold whitespace-nowrap">ยอดจัดไฟแนนซ์</th>
-                  <th className="px-2 py-1.5 text-center text-xs font-semibold whitespace-nowrap">ค่าคอมมิชชั่น</th>
-                  <th className="px-2 py-1.5 text-center text-xs font-semibold whitespace-nowrap border-r border-blue-500">ต้นทุนรวม</th>
-                  <th className="px-2 py-1.5 text-center text-xs font-semibold whitespace-nowrap">ยอดเก็บค่างวด</th>
-                  <th className="px-2 py-1.5 text-center text-xs font-semibold whitespace-nowrap">ยอดขายเครื่อง</th>
-                  <th className="px-2 py-1.5 text-center text-xs font-semibold whitespace-nowrap border-r border-blue-500">รวมรายรับ</th>
+                  <ThM label="ยอดจัดไฟแนนซ์" col="financeAmount" />
+                  <ThM label="ค่าคอมมิชชั่น" col="commissionNet" />
+                  <ThM label="ต้นทุนรวม" col="cost" className="border-r border-blue-500" />
+                  <ThM label="ยอดเก็บค่างวด" col="installmentPaid" />
+                  <ThM label="ยอดขายเครื่อง" col="deviceSaleAmount" />
+                  <ThM label="รวมรายรับ" col="totalRevenue" className="border-r border-blue-500" />
                 </tr>
               </thead>
               <tbody>
@@ -498,23 +568,23 @@ export default function BadDebtSummary() {
         {/* ╔════════════════ TAB 3: สรุปรายปี ════════════════ */}
         {!isLoading && activeTab === "yearly" && (
           <div className="rounded-lg border border-gray-200 shadow-sm overflow-x-auto">
-            <table className="w-full text-sm min-w-max">
+            <table className="w-full text-sm">
               <thead className="bg-purple-700 text-white sticky top-0 z-10">
                 {/* Group header row */}
                 <tr>
-                  <th rowSpan={2} className="px-3 py-2 text-left text-xs font-semibold whitespace-nowrap border-r border-purple-500">ปีที่ขาย</th>
-                  <th rowSpan={2} className="px-2 py-2 text-center text-xs font-semibold whitespace-nowrap border-r border-purple-500">จำนวน</th>
+                  <ThY label="ปีที่ขาย" col="year" rowSpan={2} className="px-3 text-left border-r border-purple-500" />
+                  <ThY label="จำนวน" col="count" rowSpan={2} className="border-r border-purple-500" />
                   <th colSpan={3} className="px-2 py-1 text-center text-xs font-semibold border-b border-purple-500 border-r border-purple-500">ต้นทุน</th>
                   <th colSpan={3} className="px-2 py-1 text-center text-xs font-semibold border-b border-purple-500 border-r border-purple-500">รายรับ</th>
-                  <th rowSpan={2} className="px-2 py-2 text-center text-xs font-semibold whitespace-nowrap">กำไร/ขาดทุน</th>
+                  <ThY label="กำไร/ขาดทุน" col="profitLoss" rowSpan={2} />
                 </tr>
                 <tr>
-                  <th className="px-2 py-1.5 text-center text-xs font-semibold whitespace-nowrap">ยอดจัดไฟแนนซ์</th>
-                  <th className="px-2 py-1.5 text-center text-xs font-semibold whitespace-nowrap">ค่าคอมมิชชั่น</th>
-                  <th className="px-2 py-1.5 text-center text-xs font-semibold whitespace-nowrap border-r border-purple-500">ต้นทุนรวม</th>
-                  <th className="px-2 py-1.5 text-center text-xs font-semibold whitespace-nowrap">ยอดเก็บค่างวด</th>
-                  <th className="px-2 py-1.5 text-center text-xs font-semibold whitespace-nowrap">ยอดขายเครื่อง</th>
-                  <th className="px-2 py-1.5 text-center text-xs font-semibold whitespace-nowrap border-r border-purple-500">รวมรายรับ</th>
+                  <ThY label="ยอดจัดไฟแนนซ์" col="financeAmount" />
+                  <ThY label="ค่าคอมมิชชั่น" col="commissionNet" />
+                  <ThY label="ต้นทุนรวม" col="cost" className="border-r border-purple-500" />
+                  <ThY label="ยอดเก็บค่างวด" col="installmentPaid" />
+                  <ThY label="ยอดขายเครื่อง" col="deviceSaleAmount" />
+                  <ThY label="รวมรายรับ" col="totalRevenue" className="border-r border-purple-500" />
                 </tr>
               </thead>
               <tbody>
