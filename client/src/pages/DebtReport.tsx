@@ -1827,22 +1827,28 @@ export default function DebtReport() {
                                   ? "right"
                                   : "left",
                             };
-                            // Phase 91: Color priority (top = highest priority)
+                            // Phase 92: Color priority (top = highest priority)
                             // 1. dimmed (isClosed / isSuspended) → เทา + ตัวเอียง
-                            // 2. isCurrentPeriod + isPartialPaid → BG ฟ้า (sky-50) + ส้ม (เสมอ แม้ isArrears=true)
-                            // 3. isCurrentPeriod + isPaid → BG ฟ้า (sky-50) + เขียว
-                            // 4. isArrears (ไม่ใช่ isCurrentPeriod+partial/paid) → amber bg + amber bold
-                            // 5. isFuturePeriod + isPaid → ฟ้าตัวตรง
-                            // 6. isFuturePeriod + isPartialPaid → ฟ้าตัวเอียง
-                            // 7. isFuturePeriod (paid=0) → เทา
-                            // 8. isPaid (งวดก่อนหน้า ชำระครบ) → เขียว
-                            // 9. isPartialPaid (งวดก่อนหน้า บางส่วน) → ส้ม
-                            // 10. isCurrentPeriod (paid=0) → sky-50 bg + ดำ
-                            // 11. งวดก่อนหน้า (paid=0, overdue) → ส้ม
+                            // 2. isSpecialContractStatus + isPartialPaid → ส้มเสมอ (ไม่สนใจ dueDate)
+                            // 3. isCurrentPeriod + isPartialPaid → BG ฟ้า (sky-50) + ส้ม (เสมอ แม้ isArrears=true)
+                            // 4. isCurrentPeriod + isPaid → BG ฟ้า (sky-50) + เขียว
+                            // 5. isArrears (ไม่ใช่ isCurrentPeriod+partial/paid) → amber bg + amber bold
+                            // 6. isFuturePeriod + isPaid → ฟ้าตัวตรง
+                            // 7. isFuturePeriod + isPartialPaid → ฟ้าตัวเอียง (สัญญาปกติเท่านั้น)
+                            // 8. isFuturePeriod (paid=0) → เทา
+                            // 9. isPaid (งวดก่อนหน้า ชำระครบ) → เขียว
+                            // 10. isPartialPaid (งวดก่อนหน้า บางส่วน) → ส้ม
+                            // 11. isCurrentPeriod (paid=0) → sky-50 bg + ดำ
+                            // 12. งวดก่อนหน้า (paid=0, overdue) → ส้ม
                             if (dimmed) {
                               baseStyle.background = "#f3f4f6"; // gray-100
                               baseStyle.color = "#9ca3af"; // gray-400
                               baseStyle.fontStyle = "italic";
+                            } else if (isSpecialContractStatus && isPartialPaid) {
+                              // Phase 92: งวดสุดท้ายที่ชำระไม่ครบใน special status → ส้มเสมอ
+                              // (ระงับสัญญา / สิ้นสุดสัญญา / หนี้เสีย / ขายเครื่อง)
+                              // ไม่สนใจว่า dueDate ผ่านไปแล้วหรือยัง
+                              baseStyle.color = "#c2410c"; // orange-700
                             } else if (isCurrentPeriod && isPartialPaid) {
                               // งวดปัจจุบัน + ชำระบางส่วน: BG ฟ้า + ส้ม (เสมอ แม้ isArrears=true)
                               baseStyle.background = "#f0f9ff"; // sky-50
