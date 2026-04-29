@@ -1042,10 +1042,12 @@ export async function listDebtTarget(params: { section: SectionKey }) {
 
   {
     // Extra query: get close_installment_amount for ALL payments (no receipt_no filter)
+    // Phase 110: include paid_at so we can exclude bad-debt-date payments from closeSum
     const rawCloseAmtData = await db.execute(sql`
       SELECT contract_external_id,
              CAST(amount AS DECIMAL(18,2)) AS total_paid_amount,
-             CAST(JSON_EXTRACT(raw_json, '$.close_installment_amount') AS DECIMAL(18,2)) AS close_installment_amount
+             CAST(JSON_EXTRACT(raw_json, '$.close_installment_amount') AS DECIMAL(18,2)) AS close_installment_amount,
+             DATE(paid_at) AS paid_date
         FROM ${paymentTransactions}
        WHERE ${paymentTransactions.section} = ${params.section}
          AND JSON_EXTRACT(raw_json, '$.close_installment_amount') IS NOT NULL
@@ -1061,13 +1063,23 @@ export async function listDebtTarget(params: { section: SectionKey }) {
       tList.push(totalPaid);
       closePayTotalByContract.set(key, tList);
     }
-    // Second pass: accumulate close_installment_amount, excluding device sale payments
-    // Device sale payment: total_paid_amount ≈ bad_debt_amount (within 1 baht)
-    // We need bad_debt_amount per contract — load it from cRows (already queried above)
+    // Second pass: accumulate close_installment_amount, excluding bad-debt payments
+    // Phase 110 Iron Rule: exclude payments on bad_debt_date from closeSum
+    // (bad-debt payments are NOT normal installment payments, even if they have close_installment_amount > 0)
+    // Also exclude device sale payments: total_paid_amount ≈ bad_debt_amount (within 1 baht)
+    // We need bad_debt_amount and bad_debt_date per contract — load from cRows
     const badDebtAmtByContract = new Map<string, number>();
+    const badDebtDateByContract = new Map<string, string>(); // YYYY-MM-DD
     for (const cr of cRows) {
       const k = String(cr.external_id ?? "");
       if (k && cr.bad_debt_amount != null) badDebtAmtByContract.set(k, Number(cr.bad_debt_amount));
+      if (k && cr.bad_debt_date != null) {
+        // Normalize to YYYY-MM-DD string
+        const d = cr.bad_debt_date instanceof Date
+          ? cr.bad_debt_date.toISOString().slice(0, 10)
+          : String(cr.bad_debt_date).slice(0, 10);
+        badDebtDateByContract.set(k, d);
+      }
     }
     for (const row of closeAmtRows) {
       const key = String(row.contract_external_id ?? "");
@@ -1075,7 +1087,13 @@ export async function listDebtTarget(params: { section: SectionKey }) {
       const totalPaid = Number(row.total_paid_amount ?? 0);
       const closeAmt = Number(row.close_installment_amount ?? 0);
       const badDebt = badDebtAmtByContract.get(key) ?? 0;
-      // Skip device sale payments
+      const badDebtDate = badDebtDateByContract.get(key) ?? null;
+      // Phase 110: Skip payments on bad_debt_date (these are bad-debt payments, not normal installments)
+      if (badDebtDate) {
+        const paidDate = row.paid_date ? String(row.paid_date).slice(0, 10) : null;
+        if (paidDate && paidDate === badDebtDate) continue;
+      }
+      // Skip device sale payments (total ≈ bad_debt_amount)
       if (badDebt > 0 && Math.abs(totalPaid - badDebt) <= 1) continue;
       closeAmtSumByContract.set(key, (closeAmtSumByContract.get(key) ?? 0) + closeAmt);
     }
@@ -2152,21 +2170,20 @@ export async function listDebtCollected(params: { section: SectionKey }) {
       );
       const normalPayments = realAssignedForBadDebt;
 
-      // Phase 106: badDebtPeriod = firstSuspendedPeriod if exists, else lastNormalPeriod + 1.
-      // isPhase87Fallback is always true in Phase 106 (all bad-debt contracts use this path).
+      // Phase 106/110: badDebtPeriod calculation (Iron Rule)
+      // Rule 1: ถ้าไม่มี normal payments เลย → badDebtPeriod = 1 (งวดแรก)
+      // Rule 2: ถ้ามี normal payments → badDebtPeriod = lastNormalPeriod + 1
+      // (ไม่ใช้ firstSuspendedPeriod จาก installments เพราะอาจชี้งวดผิด เช่น งวด 3 ทั้งที่ลูกค้าไม่เคยจ่ายเลย)
       let badDebtPeriod: number;
-      const firstSuspendedPeriod106 = c.installments
-        .filter((inst: any) => inst.isSuspended)
-        .map((inst: any) => inst.period ?? 0)
-        .filter((p: number) => p > 0)
-        .sort((a: number, b: number) => a - b)[0] ?? null;
-      if (firstSuspendedPeriod106 != null) {
-        badDebtPeriod = firstSuspendedPeriod106;
+      let lastNormalPeriod = 0;
+      for (const p of normalPayments) {
+        if (p.period != null && p.period > lastNormalPeriod) lastNormalPeriod = p.period;
+      }
+      if (lastNormalPeriod === 0) {
+        // ไม่มียอดชำระปกติเลย → bad-debt บันทึกที่งวด 1
+        badDebtPeriod = 1;
       } else {
-        let lastNormalPeriod = 0;
-        for (const p of normalPayments) {
-          if (p.period != null && p.period > lastNormalPeriod) lastNormalPeriod = p.period;
-        }
+        // มียอดชำระปกติ → bad-debt บันทึกที่งวดถัดไปต่อจากงวดสุดท้ายที่ชำระปกติ
         badDebtPeriod = lastNormalPeriod + 1;
       }
       // Phase 55: patch installments so periods < badDebtPeriod show normal amounts.
@@ -2457,10 +2474,12 @@ export async function* listDebtTargetStream(params: {
 
   {
     // Extra query: get close_installment_amount for ALL payments (no receipt_no filter)
+    // Phase 110 (stream): include paid_at so we can exclude bad-debt-date payments from closeSum
     const rawCloseAmtData = await db.execute(sql`
       SELECT contract_external_id,
              CAST(amount AS DECIMAL(18,2)) AS total_paid_amount,
-             CAST(JSON_EXTRACT(raw_json, '$.close_installment_amount') AS DECIMAL(18,2)) AS close_installment_amount
+             CAST(JSON_EXTRACT(raw_json, '$.close_installment_amount') AS DECIMAL(18,2)) AS close_installment_amount,
+             DATE(paid_at) AS paid_date
         FROM ${paymentTransactions}
        WHERE ${paymentTransactions.section} = ${params.section}
          AND JSON_EXTRACT(raw_json, '$.close_installment_amount') IS NOT NULL
@@ -2476,11 +2495,19 @@ export async function* listDebtTargetStream(params: {
       tList.push(totalPaid);
       closePayTotalByContractStream.set(key, tList);
     }
-    // Second pass: accumulate close_installment_amount, excluding device sale payments
+    // Second pass: accumulate close_installment_amount, excluding bad-debt-date payments and device sale payments
     const badDebtAmtByContractStream = new Map<string, number>();
+    const badDebtDateByContractStream = new Map<string, string>(); // YYYY-MM-DD
     for (const cr of cRows) {
       const k = String(cr.external_id ?? "");
       if (k && cr.bad_debt_amount != null) badDebtAmtByContractStream.set(k, Number(cr.bad_debt_amount));
+      if (k && cr.bad_debt_date != null) {
+        // Normalize to YYYY-MM-DD string
+        const d = cr.bad_debt_date instanceof Date
+          ? cr.bad_debt_date.toISOString().slice(0, 10)
+          : String(cr.bad_debt_date).slice(0, 10);
+        badDebtDateByContractStream.set(k, d);
+      }
     }
     for (const row of closeAmtRows) {
       const key = String(row.contract_external_id ?? "");
@@ -2488,7 +2515,14 @@ export async function* listDebtTargetStream(params: {
       const totalPaid = Number(row.total_paid_amount ?? 0);
       const closeAmt = Number(row.close_installment_amount ?? 0);
       const badDebt = badDebtAmtByContractStream.get(key) ?? 0;
-      if (badDebt > 0 && Math.abs(totalPaid - badDebt) <= 1) continue; // skip device sale
+      const badDebtDate = badDebtDateByContractStream.get(key) ?? null;
+      // Phase 110 (stream): Skip payments on bad_debt_date (these are bad-debt payments, not normal installments)
+      if (badDebtDate) {
+        const paidDate = row.paid_date ? String(row.paid_date).slice(0, 10) : null;
+        if (paidDate && paidDate === badDebtDate) continue;
+      }
+      // Skip device sale payments (total ≈ bad_debt_amount)
+      if (badDebt > 0 && Math.abs(totalPaid - badDebt) <= 1) continue;
       closeAmtSumByContractStream.set(key, (closeAmtSumByContractStream.get(key) ?? 0) + closeAmt);
     }
   }
@@ -3367,33 +3401,21 @@ export async function* listDebtCollectedStream(params: {
           const paidAt = ((p as any).paid_at ?? "").substring(0, 10);
           return paidAt !== contractBadDebtDate;
         });
-        // Phase 70: badDebtPeriod = period ของ device sale payment ใน realAssignedForBadDebt
-        // กฎ: หน้ายอดเก็บหนี้ลงยอดขายเครื่องงวดไหน หน้าเป้าเก็บหนี้ก็แสดง label หนี้เสียตั้งแต่งวดนั้นเป็นต้นไป
-        const deviceSalePayment = realAssignedForBadDebt.find((p) => {
-          const totalPaid = (p as any).total_paid_amount as number | null;
-          return totalPaid != null && Math.abs(totalPaid - contractBadDebtAmount) <= 1;
-        });
+        // Phase 110 Iron Rule: badDebtPeriod calculation
+        // Rule 1: ถ้าไม่มี normal payments เลย → badDebtPeriod = 1 (งวดแรก)
+        // Rule 2: ถ้ามี normal payments → badDebtPeriod = lastNormalPeriod + 1
+        // (ไม่ใช้ firstSuspendedPeriod จาก installments เพราะอาจชี้งวดผิด เช่น งวด 3 ทั้งที่ลูกค้าไม่เคยจ่ายเลย)
         let badDebtPeriod: number;
-        if (deviceSalePayment?.period != null && deviceSalePayment.period > 0) {
-          // ใช้ period ของ device sale payment โดยตรง
-          badDebtPeriod = deviceSalePayment.period;
-        } else {
-          // Fallback: ใช้ firstSuspendedPeriod จาก installment status
-          const suspendCodesForCollected = params.section === "Fastfone365"
-            ? ["ยกเลิกสัญญา", "หนี้เสีย", "ระงับสัญญา"]
-            : ["ระงับสัญญา", "หนี้เสีย"];
-          const firstSuspendedPeriod = c.installments
-            .filter((inst: any) => suspendCodesForCollected.includes(inst.status ?? ""))
-            .map((inst: any) => inst.period ?? 0)
-            .filter((p: number) => p > 0)
-            .sort((a: number, b: number) => a - b)[0] ?? null;
-          if (firstSuspendedPeriod != null) {
-            badDebtPeriod = firstSuspendedPeriod;
+        {
+          let lastNormalPeriod = 0;
+          for (const p of normalPayments) {
+            if (p.period != null && p.period > lastNormalPeriod) lastNormalPeriod = p.period;
+          }
+          if (lastNormalPeriod === 0) {
+            // ไม่มียอดชำระปกติเลย → bad-debt บันทึกที่งวด 1
+            badDebtPeriod = 1;
           } else {
-            let lastNormalPeriod = 0;
-            for (const p of normalPayments) {
-              if (p.period != null && p.period > lastNormalPeriod) lastNormalPeriod = p.period;
-            }
+            // มียอดชำระปกติ → bad-debt บันทึกที่งวดถัดไปต่อจากงวดสุดท้ายที่ชำระปกติ
             badDebtPeriod = lastNormalPeriod + 1;
           }
         }
