@@ -2118,6 +2118,25 @@ export async function listDebtCollected(params: { section: SectionKey }) {
       }
     }
 
+    // Phase 104: Additional fallback for bad-debt contracts where bad_debt_amount = null
+    // and Phase 87 isSuspended detection did not fire.
+    // This covers cases where installment statuses are "ยืนยันการชำระ" (not "ยกเลิกสัญญา")
+    // but the contract is still marked as "หนี้เสีย" in the contracts table.
+    // Use the latest real payment (numeric external_id) as the device-sale amount.
+    if ((contractBadDebtAmount == null || contractBadDebtAmount <= 0) && c.debtStatus === "หนี้เสีย") {
+      const sortedReal = [...realPaymentsRaw].sort((a, b) => {
+        const da = (a as any).paid_at ?? "";
+        const db2 = (b as any).paid_at ?? "";
+        return da < db2 ? 1 : da > db2 ? -1 : 0;
+      });
+      const latestPay = sortedReal[0];
+      if (latestPay) {
+        contractBadDebtAmount = (latestPay as any).total_paid_amount ?? 0;
+        contractBadDebtDate = (latestPay as any).paid_at ?? null;
+        isPhase87Fallback = true;
+      }
+    }
+
     if (contractBadDebtAmount != null && contractBadDebtAmount > 0 && contractBadDebtDate) {
       // Contract has bad debt: build tooltip and create 1 bad debt row.
       let badDebtNote: string | null = null;
