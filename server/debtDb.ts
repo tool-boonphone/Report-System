@@ -1039,6 +1039,14 @@ export async function listDebtTarget(params: { section: SectionKey }) {
   // Used when receipt_no is null (FF365 style) to compute suspendedFromPeriod via close amounts
   const closeAmtSumByContract = new Map<string, number>();
   const closePayTotalByContract = new Map<string, number[]>(); // list of total_paid_amount per payment
+  // Phase 113: rawPaysByContract moved to outer scope so per-contract loop can compute
+  // normalPayments Iron Rule (lastNormalPeriod+1) for bad-debt contracts without TXRT receipts.
+  const rawPaysByContract = new Map<string, PayRawRow[]>();
+  // Phase 113: lastNormalPeriodByContract — for bad-debt contracts with no TXRT receipts,
+  // stores the last period that had a normal (non-bad-debt-date) payment.
+  // suspendedFromPeriod = lastNormalPeriodByContract.get(extId) + 1
+  // (0 means no normal payments → suspendedFromPeriod = 1)
+  const lastNormalPeriodByContract = new Map<string, number>();
 
   {
     // Extra query: get close_installment_amount for ALL payments (no receipt_no filter)
@@ -1146,7 +1154,7 @@ export async function listDebtTarget(params: { section: SectionKey }) {
     const closeDatesByContract = new Map<string, Date[]>();
     // normalPeriodsByContractOuter and txrtTotalByContractPeriod are declared outside this block (Phase 67/68)
     // Phase 78: group raw payment rows by contract for assignPayPeriods
-    const rawPaysByContract = new Map<string, PayRawRow[]>();
+    // (rawPaysByContract is declared in outer scope — Phase 113)
 
     for (const pr of allPayRows) {
       const key = String(pr.contract_external_id ?? "");
@@ -1449,6 +1457,53 @@ export async function listDebtTarget(params: { section: SectionKey }) {
         }
       }
     }
+
+    // Phase 113: Compute lastNormalPeriodByContract for bad-debt contracts WITHOUT TXRT receipts.
+    // These contracts have no entries in normalPeriodsByContractOuter (no TXRT-N receipts),
+    // so we cannot use maxTxrtPeriod. Instead, apply the same Iron Rule as listDebtCollectedStream:
+    //   1. Find real payments (numeric external_id OR TXRT receipt pattern)
+    //   2. Find latestDate = latest paid_at date across all real payments
+    //   3. normalPayments = real payments with paid_at != latestDate
+    //   4. lastNormalPeriod = max period from normalPayments (0 if none)
+    //   5. suspendedFromPeriod = lastNormalPeriod + 1
+    //
+    // Only process bad-debt contracts that have no TXRT receipts
+    // (contracts with TXRT receipts already have normalPeriodsByContractOuter populated).
+    for (const [key, rawPays] of Array.from(rawPaysByContract.entries())) {
+      // Skip if already handled by TXRT path (normalPeriodsByContractOuter has entries)
+      const txrtPeriods = normalPeriodsByContractOuter.get(key);
+      if (txrtPeriods && txrtPeriods.size > 0) continue;
+      // Real payments: numeric external_id OR TXRT receipt pattern
+      const realPayments = rawPays.filter((p) => {
+        const payExtId = String((p as any).payment_external_id ?? "");
+        const receiptNo = p.receipt_no ?? "";
+        return /^\d+$/.test(payExtId) || /^TXRT.*-\d+$/.test(receiptNo);
+      });
+      if (realPayments.length === 0) continue;
+      // Find latestDate (latest paid_at across all real payments)
+      const sortedReal = [...realPayments].sort((a, b) => {
+        const da = (a.paid_at ?? "").substring(0, 10);
+        const db2 = (b.paid_at ?? "").substring(0, 10);
+        return da < db2 ? 1 : da > db2 ? -1 : 0;
+      });
+      const latestDate = (sortedReal[0]?.paid_at ?? "").substring(0, 10);
+      if (!latestDate) continue;
+      // normalPayments = real payments NOT on latestDate
+      const normalPayments = realPayments.filter(
+        (p) => (p.paid_at ?? "").substring(0, 10) !== latestDate,
+      );
+      // lastNormalPeriod: use parseTxrtPeriod to derive period from receipt_no
+      // (same logic as Phase 78 fallback for non-TXRTC contracts)
+      let lastNormalPeriod = 0;
+      for (const p of normalPayments) {
+        const receipt = p.receipt_no ?? "";
+        const period = parseTxrtPeriod(receipt, key);
+        if (Number.isFinite(period) && period > 0 && period > lastNormalPeriod) {
+          lastNormalPeriod = period;
+        }
+      }
+      lastNormalPeriodByContract.set(key, lastNormalPeriod);
+    }
   }
 
   const today = new Date();
@@ -1551,34 +1606,26 @@ export async function listDebtTarget(params: { section: SectionKey }) {
             suspendedAt = lastTxrtRow?.due_date ?? null;
           }
         } else {
-          // No TXRT receipt_no → use close_installment_amount sum to compute suspendedFromPeriod
-          // Phase 68B: sum(close_installment_amount of non-device-sale payments) / installment_amount
-          // Phase 111 Iron Rule: ใช้ badDebtPeriod จาก ยอดเก็บหนี้ โดยตรง
-          //   - closeSum = 0 (ไม่มี normal payments) → suspendedFromPeriod = 1
-          //   - closeSum > 0 (มี normal payments) → suspendedFromPeriod = closedPeriods + 1
-          //   ไม่ fallback ไป firstSuspended.period เพราะ installment_status อาจชี้งวดผิด
-          const contractInstAmt = c.installment_amount != null ? Number(c.installment_amount) : 0;
-          const closeSum = closeAmtSumByContract.get(extId) ?? 0;
-          if (contractInstAmt > 0 && closeSum > 0) {
-            // มี normal payments: Count how many full installments were closed
-            const closedPeriods = Math.round(closeSum / contractInstAmt);
-            suspendedFromPeriod = closedPeriods + 1;
-            // Find due_date of suspendedFromPeriod
-            const suspendedPeriodRow = list
-              .filter((r) => Number(r.period ?? 0) === suspendedFromPeriod)
+          // No TXRT receipt_no → Phase 113 Iron Rule: use normalPayments to find lastNormalPeriod
+          // (same logic as listDebtCollectedStream: latestDate excluded, lastNormalPeriod+1)
+          //   - lastNormalPeriod = 0 (no normal payments) → suspendedFromPeriod = 1
+          //   - lastNormalPeriod = N (has normal payments) → suspendedFromPeriod = N + 1
+          const lastNormalPeriod = lastNormalPeriodByContract.get(extId) ?? 0;
+          suspendedFromPeriod = lastNormalPeriod + 1;
+          // Find due_date of suspendedFromPeriod
+          const suspendedPeriodRow = list
+            .filter((r) => Number(r.period ?? 0) === suspendedFromPeriod)
+            .sort((a, b) => (a.period ?? 0) - (b.period ?? 0))[0];
+          suspendedAt = suspendedPeriodRow?.due_date ?? null;
+          if (!suspendedAt && lastNormalPeriod > 0) {
+            // Fallback: use due_date of lastNormalPeriod
+            const lastNormalRow = list
+              .filter((r) => Number(r.period ?? 0) === lastNormalPeriod)
               .sort((a, b) => (a.period ?? 0) - (b.period ?? 0))[0];
-            suspendedAt = suspendedPeriodRow?.due_date ?? null;
-            if (!suspendedAt && closedPeriods > 0) {
-              const lastClosedRow = list
-                .filter((r) => Number(r.period ?? 0) === closedPeriods)
-                .sort((a, b) => (a.period ?? 0) - (b.period ?? 0))[0];
-              suspendedAt = lastClosedRow?.due_date ?? null;
-            }
-          } else {
-            // Phase 111: ไม่มี normal payments (closeSum=0) → bad-debt บันทึกที่งวด 1
-            // ไม่ใช้ firstSuspended.period เพราะ installment_status อาจชี้งวดผิด
+            suspendedAt = lastNormalRow?.due_date ?? null;
+          } else if (!suspendedAt) {
+            // No normal payments → use due_date of period 1
             const firstPeriod = list.sort((a, b) => (a.period ?? 0) - (b.period ?? 0))[0];
-            suspendedFromPeriod = 1;
             suspendedAt = firstPeriod?.due_date ?? null;
           }
         }
@@ -2465,6 +2512,8 @@ export async function* listDebtTargetStream(params: {
   // Phase 68B: sum of close_installment_amount per contract (excluding device sale payments)
   const closeAmtSumByContractStream = new Map<string, number>();
   const closePayTotalByContractStream = new Map<string, number[]>();
+  // Phase 113 (stream): lastNormalPeriodByContractStream — for bad-debt contracts with no TXRT receipts
+  const lastNormalPeriodByContractStream = new Map<string, number>();
 
   // Phase 74: Build contractNo lookup for correct receipt period parsing (stream version)
   const contractNoByExtIdStream = new Map<string, string>();
@@ -2760,6 +2809,45 @@ export async function* listDebtTargetStream(params: {
       }
     }
 
+    // Phase 113 (stream): Compute lastNormalPeriodByContractStream for bad-debt contracts WITHOUT TXRT receipts.
+    // Same Iron Rule as listDebtTarget Phase 113 and listDebtCollectedStream:
+    //   normalPayments = real payments excluding latestDate → lastNormalPeriod = max period from normalPayments
+    //   suspendedFromPeriod = lastNormalPeriod + 1
+    for (const [key, rawPays] of Array.from(rawPaysByContractStream.entries())) {
+      // Skip if already handled by TXRT path (normalPeriodsByContract has entries)
+      const txrtPeriods = normalPeriodsByContract.get(key);
+      if (txrtPeriods && txrtPeriods.size > 0) continue;
+      // Real payments: numeric external_id OR TXRT receipt pattern
+      const realPayments = rawPays.filter((p) => {
+        const payExtId = String((p as any).payment_external_id ?? "");
+        const receiptNo = p.receipt_no ?? "";
+        return /^\d+$/.test(payExtId) || /^TXRT.*-\d+$/.test(receiptNo);
+      });
+      if (realPayments.length === 0) continue;
+      // Find latestDate (latest paid_at across all real payments)
+      const sortedReal = [...realPayments].sort((a, b) => {
+        const da = (a.paid_at ?? "").substring(0, 10);
+        const db2 = (b.paid_at ?? "").substring(0, 10);
+        return da < db2 ? 1 : da > db2 ? -1 : 0;
+      });
+      const latestDate = (sortedReal[0]?.paid_at ?? "").substring(0, 10);
+      if (!latestDate) continue;
+      // normalPayments = real payments NOT on latestDate
+      const normalPayments = realPayments.filter(
+        (p) => (p.paid_at ?? "").substring(0, 10) !== latestDate,
+      );
+      // lastNormalPeriod: use parseTxrtPeriodStream to derive period from receipt_no
+      let lastNormalPeriod = 0;
+      for (const p of normalPayments) {
+        const receipt = p.receipt_no ?? "";
+        const period = parseTxrtPeriodStream(receipt, key);
+        if (Number.isFinite(period) && period > 0 && period > lastNormalPeriod) {
+          lastNormalPeriod = period;
+        }
+      }
+      lastNormalPeriodByContractStream.set(key, lastNormalPeriod);
+    }
+
     // Pass 2 (Phase 62): 3-pattern isClosed logic based on TXRTC position
     // Pattern 1: maxNormal=0 → stored as 0 (งวด 1 ยอดปกติ, งวด 2+ ปิดค่างวด)
     // Pattern 2: 1 < maxNormal < totalPeriods → stored as N (งวด N+1+ ปิดค่างวด)
@@ -2868,32 +2956,26 @@ export async function* listDebtTargetStream(params: {
             suspendedAt = lastTxrtRow?.due_date ?? null;
           }
         } else {
-          // Phase 68B: No TXRT receipt_no → use close_installment_amount sum
-          // Phase 111 Iron Rule: ใช้ badDebtPeriod จาก ยอดเก็บหนี้ โดยตรง
-          //   - closeSum = 0 (ไม่มี normal payments) → suspendedFromPeriod = 1
-          //   - closeSum > 0 (มี normal payments) → suspendedFromPeriod = closedPeriods + 1
-          //   ไม่ fallback ไป firstSuspended.period เพราะ installment_status อาจชี้งวดผิด
-          const contractInstAmt = c.installment_amount != null ? Number(c.installment_amount) : 0;
-          const closeSum = closeAmtSumByContractStream.get(extId) ?? 0;
-          if (contractInstAmt > 0 && closeSum > 0) {
-            // มี normal payments: Count how many full installments were closed
-            const closedPeriods = Math.round(closeSum / contractInstAmt);
-            suspendedFromPeriod = closedPeriods + 1;
-            const suspendedPeriodRow = list
-              .filter((r) => Number(r.period ?? 0) === suspendedFromPeriod)
+          // No TXRT receipt_no → Phase 113 Iron Rule (stream): use normalPayments to find lastNormalPeriod
+          // (same logic as listDebtTarget Phase 113 and listDebtCollectedStream)
+          //   - lastNormalPeriod = 0 (no normal payments) → suspendedFromPeriod = 1
+          //   - lastNormalPeriod = N (has normal payments) → suspendedFromPeriod = N + 1
+          const lastNormalPeriod = lastNormalPeriodByContractStream.get(extId) ?? 0;
+          suspendedFromPeriod = lastNormalPeriod + 1;
+          // Find due_date of suspendedFromPeriod
+          const suspendedPeriodRow = list
+            .filter((r) => Number(r.period ?? 0) === suspendedFromPeriod)
+            .sort((a, b) => (a.period ?? 0) - (b.period ?? 0))[0];
+          suspendedAt = suspendedPeriodRow?.due_date ?? null;
+          if (!suspendedAt && lastNormalPeriod > 0) {
+            // Fallback: use due_date of lastNormalPeriod
+            const lastNormalRow = list
+              .filter((r) => Number(r.period ?? 0) === lastNormalPeriod)
               .sort((a, b) => (a.period ?? 0) - (b.period ?? 0))[0];
-            suspendedAt = suspendedPeriodRow?.due_date ?? null;
-            if (!suspendedAt && closedPeriods > 0) {
-              const lastClosedRow = list
-                .filter((r) => Number(r.period ?? 0) === closedPeriods)
-                .sort((a, b) => (a.period ?? 0) - (b.period ?? 0))[0];
-              suspendedAt = lastClosedRow?.due_date ?? null;
-            }
-          } else {
-            // Phase 111: ไม่มี normal payments (closeSum=0) → bad-debt บันทึกที่งวด 1
-            // ไม่ใช้ firstSuspended.period เพราะ installment_status อาจชี้งวดผิด
+            suspendedAt = lastNormalRow?.due_date ?? null;
+          } else if (!suspendedAt) {
+            // No normal payments → use due_date of period 1
             const firstPeriod = list.sort((a, b) => (a.period ?? 0) - (b.period ?? 0))[0];
-            suspendedFromPeriod = 1;
             suspendedAt = firstPeriod?.due_date ?? null;
           }
         }
