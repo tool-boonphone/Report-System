@@ -686,7 +686,7 @@ function isPaymentRecordRow(row: InstRawRow): boolean {
 function dedupInstByPeriod(list: InstRawRow[]): InstRawRow[] {
   if (list.length === 0) return list;
 
-  const byPeriod = new Map<number | null, { base: InstRawRow; minDueDate: Date | null; confirmedPaymentRecord: InstRawRow | null; anyPayRecSeen: boolean; maxPayRecPaid: number }>();
+  const byPeriod = new Map<number | null, { base: InstRawRow; minDueDate: Date | null; confirmedPaymentRecord: InstRawRow | null; anyPayRecSeen: boolean; maxPayRecPaid: number; maxPenaltyDue: number; maxUnlockFeeDue: number }>();
 
   for (const row of list) {
     const p = row.period;
@@ -696,6 +696,10 @@ function dedupInstByPeriod(list: InstRawRow[]): InstRawRow[] {
     const isConfirmed = row.inst_status === 'ยืนยันการชำระ';
     const rowPaid = Number(row.paid_amount ?? 0);
 
+    // Track penalty_due and unlock_fee_due from ANY row (PAYMENT_RECORD carries these for FF365)
+    const rowPenalty = Number((row as any).penalty_due ?? 0);
+    const rowUnlockFee = Number((row as any).unlock_fee_due ?? 0);
+
     const existing = byPeriod.get(p);
     if (!existing) {
       byPeriod.set(p, {
@@ -704,6 +708,8 @@ function dedupInstByPeriod(list: InstRawRow[]): InstRawRow[] {
         confirmedPaymentRecord: (isPayRec && isConfirmed) ? row : null,
         anyPayRecSeen: isPayRec,
         maxPayRecPaid: isPayRec ? rowPaid : 0,
+        maxPenaltyDue: rowPenalty,
+        maxUnlockFeeDue: rowUnlockFee,
       });
     } else {
       // Track whether any PAY_REC row was seen for this period
@@ -736,11 +742,18 @@ function dedupInstByPeriod(list: InstRawRow[]): InstRawRow[] {
       if (rowDue && (!existing.minDueDate || rowDue < existing.minDueDate)) {
         existing.minDueDate = rowDue;
       }
+
+      // Phase 9AJ fix: Merge penalty_due/unlock_fee_due — FF365 stores these in PAYMENT_RECORD
+      // rows (numeric ext_id) while INSTALLMENT_BASE rows (dash ext_id) have null for these fields.
+      // Take the MAX across all rows so we always get the real value regardless of which row
+      // carries it.
+      if (rowPenalty > existing.maxPenaltyDue) existing.maxPenaltyDue = rowPenalty;
+      if (rowUnlockFee > existing.maxUnlockFeeDue) existing.maxUnlockFeeDue = rowUnlockFee;
     }
   }
 
   // Build merged rows
-  const merged: InstRawRow[] = Array.from(byPeriod.values()).map(({ base, minDueDate, confirmedPaymentRecord, anyPayRecSeen, maxPayRecPaid }) => {
+  const merged: InstRawRow[] = Array.from(byPeriod.values()).map(({ base, minDueDate, confirmedPaymentRecord, anyPayRecSeen, maxPayRecPaid, maxPenaltyDue, maxUnlockFeeDue }) => {
     // Determine paid_amount and inst_status:
     // Rule: When ANY payment-record row exists for this period, use the PAY_REC
     // as the authoritative source for paid status — do NOT trust INST_BASE paid_amount
@@ -770,11 +783,19 @@ function dedupInstByPeriod(list: InstRawRow[]): InstRawRow[] {
       instStatus = base.inst_status;
     }
 
+    // Phase 9AJ fix: Override penalty_due/unlock_fee_due with the max value found across all
+    // rows for this period. This handles FF365's split-row pattern where PAYMENT_RECORD rows
+    // carry the real penalty/unlockFee while INSTALLMENT_BASE rows have null for these fields.
+    const mergedPenaltyDue = maxPenaltyDue > 0 ? maxPenaltyDue : (Number((base as any).penalty_due ?? 0));
+    const mergedUnlockFeeDue = maxUnlockFeeDue > 0 ? maxUnlockFeeDue : (Number((base as any).unlock_fee_due ?? 0));
+
     return {
       ...base,
       due_date: minDueDate ? minDueDate.toISOString().slice(0, 10) : base.due_date,
       paid_amount: paidAmount,
       inst_status: instStatus,
+      penalty_due: mergedPenaltyDue > 0 ? String(mergedPenaltyDue) : (base as any).penalty_due,
+      unlock_fee_due: mergedUnlockFeeDue > 0 ? String(mergedUnlockFeeDue) : (base as any).unlock_fee_due,
     };
   });
 
