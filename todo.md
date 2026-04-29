@@ -1037,4 +1037,4 @@ Task list:
 - [x] P97-2: เพิ่มคอลัมน์ตัวคูณ (multiplier) ต่อจากยอดจัดไฟแนนซ์ใน backend และ frontend
 - [x] P97-3: ต้นทุน = (ยอดจัดไฟแนนซ์ * ตัวคูณ) + ค่าคอมมิชชั่น
 - [x] P97-4: ยอดเก็บค่างวด = totalPaid - deviceSaleAmount (ไม่รวมยอดสุดท้าย) — backend ถูกต้องแล้ว
-- [ ] P97-5: Commit + Push + Checkpoint
+- [x] P97-5: Commit + Push + Checkpoint (commit 3358491)
