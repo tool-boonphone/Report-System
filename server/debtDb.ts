@@ -3361,9 +3361,11 @@ export async function* listDebtCollectedStream(params: {
           c.installments.map((i: { period: number | null; amount: number | string }) => ({ period: i.period, amount: Number(i.amount) || 0 })),
           c.contractNo ?? null,
         );
+        // Phase 107: ตัด payments ที่วันที่ตรงกับ latestDate (bad-debt date) ออกทั้งหมด
+        // เพราะยอดรวมของวันนั้นถูกรวมไว้ใน bad-debt row แล้ว ไม่ต้องแสดงซ้ำ
         const normalPayments = realAssignedForBadDebt.filter((p) => {
-          const totalPaid = (p as any).total_paid_amount as number | null;
-          return !(totalPaid != null && Math.abs(totalPaid - contractBadDebtAmount) <= 1);
+          const paidAt = ((p as any).paid_at ?? "").substring(0, 10);
+          return paidAt !== contractBadDebtDate;
         });
         // Phase 70: badDebtPeriod = period ของ device sale payment ใน realAssignedForBadDebt
         // กฎ: หน้ายอดเก็บหนี้ลงยอดขายเครื่องงวดไหน หน้าเป้าเก็บหนี้ก็แสดง label หนี้เสียตั้งแต่งวดนั้นเป็นต้นไป

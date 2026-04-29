@@ -1080,3 +1080,9 @@ Task list:
   - installments มี status = "ยกเลิกสัญญา" | "หนี้เสีย" | "ระงับสัญญา" (บาง contracts มี status="สำเร็จ" แต่ installments บางงวดถูกยกเลิก)
 - [x] ยืนยันผลลัพธ์ถูกต้อง: CT1124-BKK003-2988-01=3000, CT0824-NRT001-00023-01=7000, CT1124-SKA002-3314-01=7400
 - [x] Commit: dd6b58e
+
+### Phase 107 — Fix: ตัดแถว normal payments ที่วันที่ตรงกับ bad-debt date ออก (ป้องกันยอดซ้ำ)
+- [x] P107-1: อ่าน Phase 106 logic ใน listDebtCollectedStream ส่วน normal payments
+- [x] P107-2: เพิ่ม filter: ตัด normal payment rows ที่ paidAt ตรงกับ latestDate ออก (เพราะยอดรวมวันนั้นถูกรวมไว้ใน bad-debt row แล้ว)
+- [x] P107-3: TypeScript check + restart server + ยืนยันผลลัพธ์
+- [x] P107-4: Commit + Push + Checkpoint
