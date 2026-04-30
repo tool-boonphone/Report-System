@@ -751,10 +751,13 @@ export default function DebtReport() {
   /* ---- Summary totals (computed from filteredRows, respects all filters) ---- */
   const targetSummary = useMemo(() => {
     if (tab !== "target") return null;
+    const todayStr = new Date().toISOString().slice(0, 10);
     let principal = 0, interest = 0, fee = 0, penalty = 0, unlockFee = 0, total = 0;
     for (const r of filteredRows) {
       for (const inst of r.installments) {
         if (inst.isClosed || inst.isSuspended) continue;
+        // Phase 125: debtSetMode — ไม่รวมงวดที่ยังไม่ถึงกำหนด (future) ใน badge
+        if (debtSetMode && inst.dueDate && inst.dueDate > todayStr) continue;
         // Phase 23: dueDateFilter cell-mask — only sum periods whose dueDate month matches
         if (dueDateFilter.size > 0 && !(inst.dueDate && dueDateFilter.has(inst.dueDate.slice(0, 7)))) continue;
         // Phase 23: dueDateExact cell-mask — only sum periods whose dueDate matches exact date
@@ -768,7 +771,7 @@ export default function DebtReport() {
     }
     total = principal + interest + fee + penalty + unlockFee;
     return { principal, interest, fee, penalty, unlockFee, total };
-  }, [filteredRows, tab, principalOnly, dueDateFilter, dueDateExact]);
+  }, [filteredRows, tab, principalOnly, dueDateFilter, dueDateExact, debtSetMode]);
 
   const collectedSummary = useMemo(() => {
     if (tab !== "collected") return null;
