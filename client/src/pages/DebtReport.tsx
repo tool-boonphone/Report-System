@@ -756,7 +756,8 @@ export default function DebtReport() {
     for (const r of filteredRows) {
       for (const inst of r.installments) {
         if (inst.isClosed || inst.isSuspended) continue;
-        // Phase 125: debtSetMode — ไม่รวมงวดที่ยังไม่ถึงกำหนด (future) ใน badge
+        // Phase 125: debtSetMode — ไม่รวมงวดที่ชำระครบแล้ว (isPaid/เขียว) และงวดที่ยังไม่ถึงกำหนด (future/เทา) ใน badge
+        if (debtSetMode && inst.isPaid) continue;
         if (debtSetMode && inst.dueDate && inst.dueDate > todayStr) continue;
         // Phase 23: dueDateFilter cell-mask — only sum periods whose dueDate month matches
         if (dueDateFilter.size > 0 && !(inst.dueDate && dueDateFilter.has(inst.dueDate.slice(0, 7)))) continue;
