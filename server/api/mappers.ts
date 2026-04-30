@@ -276,9 +276,12 @@ type PaymentItem = {
   payment_method?: string;
   total_paid_amount?: number;
   created_at?: string;
+  updated_at?: string;  // วันเวลาที่บันทึก — ส่งมาจาก API (FF365 เท่านั้น)
+  updated_by?: string;  // ผู้บันทึก — ส่งมาจาก API ถ้ามี
 };
 
 export function mapPayment(section: SectionKey, it: PaymentItem) {
+  // เก็บ updated_at/updated_by ลง column โดยตรง เพื่อไม่ต้อง JOIN installments ทุกครั้งที่ query
   return {
     section,
     externalId: String(it.payment_id),
@@ -289,5 +292,7 @@ export function mapPayment(section: SectionKey, it: PaymentItem) {
     method: it.payment_method ?? null,
     status: it.payment_status ?? null,
     rawJson: it as any,
+    updatedAt: it.updated_at ? (toDate(it.updated_at) ?? null) : null,
+    updatedBy: it.updated_by ?? null,
   };
 }

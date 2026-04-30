@@ -291,6 +291,10 @@ export const paymentTransactions = mysqlTable(
     status: varchar("status", { length: 32 }),
     rawJson: json("raw_json"),
     syncedAt: timestamp("synced_at").defaultNow().notNull(),
+    /** ผู้บันทึก — join จาก installments ที่ใกล้ payment_date ที่สุด (FF365) หรือ null ถ้า API ไม่ส่ง */
+    updatedBy: varchar("updated_by", { length: 128 }),
+    /** วันเวลาที่บันทึก — จาก raw_json.$.updated_at */
+    updatedAt: varchar("updated_at", { length: 32 }),
   },
   (t) => ({
     sectionExternalIdx: uniqueIndex("payments_section_external_idx").on(

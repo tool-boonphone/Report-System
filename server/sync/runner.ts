@@ -688,73 +688,36 @@ async function computeAndStoreBadDebt(section: SectionKey): Promise<void> {
 
   for (let i = 0; i < extIds.length; i += CHUNK) {
     const slice = extIds.slice(i, i + CHUNK);
-    const inClause2 = slice.map((id) => sql`${id}`).reduce((acc, cur, idx) => idx === 0 ? cur : sql`${acc}, ${cur}`);
-    // Use raw SQL for CTE support (Drizzle sql`` doesn't support WITH clause well)
-    const sectionLiteral = (section as string).replace(/'/g, "''");
-    const batchIdsLiteral = slice.map((id) => `'${String(id).replace(/'/g, "''")}'`).join(",");
-    const payRows = await db.execute(sql.raw(`
-      WITH inst_dates AS (
-        SELECT
-          contract_external_id,
-          section,
-          JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.updated_by')) AS updated_by,
-          DATE(JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.updated_at'))) AS updated_date
-        FROM installments
-        WHERE section = '${sectionLiteral}'
-          AND contract_external_id IN (${batchIdsLiteral})
-          AND external_id LIKE CONCAT(contract_external_id, '-%')
-          AND JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.updated_by')) IS NOT NULL
-          AND JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.updated_by')) != 'null'
+    // ใช้ updated_by/updated_at จาก column โดยตรง แทน CTE JOIN installments
+    // (column ถูกบันทึกตอน sync payments จาก API แล้ว)
+    const payRows = await db
+      .select({
+        contractExternalId: paymentTransactions.contractExternalId,
+        externalId: paymentTransactions.externalId,
+        paidAt: paymentTransactions.paidAt,
+        amount: paymentTransactions.amount,
+        status: paymentTransactions.status,
+        updatedBy: paymentTransactions.updatedBy,
+        updatedAt: paymentTransactions.updatedAt,
+        rawJson: paymentTransactions.rawJson,
+      })
+      .from(paymentTransactions)
+      .where(
+        sql`${paymentTransactions.section} = ${section} AND ${paymentTransactions.contractExternalId} IN (${sql.raw(slice.map((id) => `'${String(id).replace(/'/g, "''")}'`).join(","))})`
       )
-      SELECT pt.contract_external_id,
-             pt.external_id AS payment_external_id,
-             pt.paid_at,
-             CAST(JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.total_paid_amount')) AS DECIMAL(18,2)) AS total_paid_amount,
-             pt.status AS ff_status,
-             JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.updated_at')) AS updated_at,
-             COALESCE(
-               SUBSTRING_INDEX(MIN(CASE
-                 WHEN id.updated_date BETWEEN
-                   DATE(JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.payment_date'))) - INTERVAL 1 DAY
-                   AND DATE(JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.payment_date'))) + INTERVAL 1 DAY
-                 THEN CONCAT(id.updated_date, '||', id.updated_by)
-                 ELSE NULL
-               END), '||', -1),
-               SUBSTRING_INDEX(MIN(CASE
-                 WHEN id.updated_date >= DATE(JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.payment_date')))
-                 THEN CONCAT(id.updated_date, '||', id.updated_by)
-                 ELSE NULL
-               END), '||', -1)
-             ) AS updated_by
-        FROM payment_transactions pt
-        LEFT JOIN inst_dates id
-               ON id.section = pt.section
-              AND id.contract_external_id = pt.contract_external_id
-       WHERE pt.section = '${sectionLiteral}'
-         AND pt.contract_external_id IN (${batchIdsLiteral})
-       GROUP BY
-             pt.contract_external_id,
-             pt.external_id,
-             pt.paid_at,
-             pt.amount,
-             JSON_EXTRACT(pt.raw_json, '$.total_paid_amount'),
-             pt.status,
-             JSON_EXTRACT(pt.raw_json, '$.updated_at'),
-             JSON_EXTRACT(pt.raw_json, '$.payment_date')
-       ORDER BY pt.contract_external_id, pt.paid_at
-    `));
-    const rows: any[] = (payRows as any)[0] ?? payRows;
-    for (const r of rows) {
-      const extId = String(r.contract_external_id ?? "");
+      .orderBy(paymentTransactions.contractExternalId, paymentTransactions.paidAt);
+    for (const r of payRows) {
+      const extId = String(r.contractExternalId ?? "");
       if (!extId) continue;
       if (!payMap.has(extId)) payMap.set(extId, []);
+      const raw: any = r.rawJson ?? {};
       payMap.get(extId)!.push({
-        payment_external_id: String(r.payment_external_id ?? ""),
-        paid_at: r.paid_at ?? null,
-        total_paid_amount: Number(r.total_paid_amount ?? 0),
-        ff_status: r.ff_status ?? null,
-        updated_by: r.updated_by ?? null,
-        updated_at: r.updated_at ?? null,
+        payment_external_id: String(r.externalId ?? ""),
+        paid_at: r.paidAt ?? null,
+        total_paid_amount: Number(raw.total_paid_amount ?? r.amount ?? 0),
+        ff_status: r.status ?? null,
+        updated_by: r.updatedBy ?? null,
+        updated_at: r.updatedAt ?? null,
       });
     }
   }

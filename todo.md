@@ -1197,3 +1197,10 @@ Task list:
 - [x] P123-1: วิเคราะห์ root cause — พบ hardcode `section = 'Fastfone365'` ใน runner.ts CTE ทำให้ Boonphone ไม่ได้ updated_by/updated_at
 - [x] P123-2: แก้ไข runner.ts บรรทัด 703 เปลี่ยน `'Fastfone365'` เป็น `'${sectionLiteral}'`
 - [x] P123-3: Commit + Push GitHub + Checkpoint
+
+## Phase 124 — ย้าย updated_by/updated_at ให้เก็บใน payment_transactions โดยตรง
+- [ ] P124-1: ตรวจสอบ API response ของ payment_transactions ว่ามี updated_by/updated_at หรือไม่ + ดู schema ปัจจุบัน
+- [ ] P124-2: เพิ่ม column updated_by/updated_at ใน payment_transactions schema + migration
+- [ ] P124-3: แก้ไข mappers.ts และ dbUpsert.ts ให้บันทึก updated_by/updated_at ลง payment_transactions โดยตรง
+- [ ] P124-4: แก้ไข runner.ts ให้ลบ CTE JOIN installments ออก ใช้ updated_by/updated_at จาก payment_transactions แทน
+- [ ] P124-5: Commit + Push GitHub + Checkpoint
