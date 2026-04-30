@@ -1139,3 +1139,26 @@ Task list:
 - [x] P113F-4: เพิ่ม internal backfill endpoint /api/internal/backfill-cache
 - [x] P113F-5: Backfill ใหม่ทั้งหมด — Boonphone: 45,398 target + 3,033 collected; Fastfone365: 170,589 target + 116,593 collected
 - [x] P113F-6: TypeScript 0 errors + Commit 539f6db + Push GitHub + Checkpoint
+
+### Phase 114 — Server-Side Pagination (แก้ 503 Cloudflare 64MB)
+
+- [ ] เพิ่ม tRPC procedure `debt.getTargetPage` — query จาก DB cache แบบ paginated (offset/limit + filter)
+- [ ] เพิ่ม tRPC procedure `debt.getCollectedPage` — query จาก DB cache แบบ paginated (offset/limit + filter)
+- [ ] เพิ่ม tRPC procedure `debt.getTargetSummary` + `debt.getCollectedSummary` — aggregate stats สำหรับ header
+- [ ] แก้ DebtReport.tsx ให้ใช้ server-side pagination แทน HTTP stream
+- [ ] คง filter/sort/search ทำงานถูกต้องด้วย server-side approach
+
+### Phase 114 — Fix HTTP 503 (Chunked tRPC Loading)
+- [x] แก้ไข HTTP 503 Service Unavailable เมื่อโหลดหน้ารายงานหนี้หลัง server restart
+  - สาเหตุ: `streamTargetFromCache` / `streamCollectedFromCache` โหลด ALL rows (~170k) ในครั้งเดียว → response ~64MB → Cloudflare timeout
+  - แนวทางแก้: เปลี่ยนจาก streaming HTTP endpoint เป็น chunked tRPC pagination (LIMIT/OFFSET)
+  - เพิ่ม `getTargetChunk()` + `getCollectedChunk()` ใน `server/sync/queryCacheDb.ts` — ดึง DISTINCT contract IDs แบบ paginated แล้ว JOIN ข้อมูลเฉพาะ chunk นั้น
+  - เพิ่ม `getTargetContractCount()` + `getCollectedContractCount()` สำหรับ total count
+  - เพิ่ม `debt.getTargetChunk` + `debt.getCollectedChunk` tRPC procedures ใน `server/routers/debt.ts`
+    - ถ้า in-memory cache warm → slice จาก cache (เร็วที่สุด)
+    - ถ้า in-memory cache ว่าง → query DB cache แบบ paginated
+    - ส่งกลับ `{ rows, totalContracts, hasMore }` ต่อ chunk
+  - อัปเดต `DebtReport.tsx` ให้ใช้ `trpc.useUtils().debt.getTargetChunk.fetch()` loop แทน `fetch()` streaming
+    - แต่ละ request ดึง 2,000 contracts (~2-5MB) แทน 64MB ในครั้งเดียว
+    - Progress bar แสดง contracts received / total แทน bytes
+  - TypeScript check ผ่านสะอาด (0 errors)

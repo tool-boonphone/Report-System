@@ -22,6 +22,10 @@ import {
   setCachedCollected,
   invalidateAllDebtCache,
 } from "../debtCache";
+import {
+  getTargetChunk,
+  getCollectedChunk,
+} from "../sync/queryCacheDb";
 import { SECTIONS } from "../../shared/const";
 
 const debtViewProcedure = requirePermission("debt_report", "view");
@@ -81,6 +85,82 @@ export const debtRouter = router({
       const result = await listDebtCollected(input);
       setCachedCollected(input.section, result);
       return result;
+    }),
+
+  /**
+   * Phase 114: Paginated chunk query for target (เป้าเก็บหนี้).
+   * Returns a slice of ~2,000 contracts from DB cache — small enough for Cloudflare.
+   * Frontend calls this in a loop until hasMore === false.
+   */
+  getTargetChunk: debtViewProcedure
+    .input(
+      z.object({
+        section: SectionEnum,
+        offset: z.number().int().min(0).default(0),
+        limit: z.number().int().min(1).max(5000).default(2000),
+      }),
+    )
+    .query(async ({ input }) => {
+      // Try in-memory cache first — if warm, slice from it (fastest)
+      const cached = getCachedTarget(input.section);
+      if (cached) {
+        const slice = cached.rows.slice(input.offset, input.offset + input.limit);
+        return {
+          rows: slice,
+          totalContracts: cached.rows.length,
+          hasMore: input.offset + input.limit < cached.rows.length,
+        };
+      }
+      // DB cache path — paginated query
+      const { rows, totalContracts } = await getTargetChunk({
+        section: input.section,
+        offset: input.offset,
+        limit: input.limit,
+      });
+      return {
+        rows,
+        totalContracts,
+        hasMore: input.offset + input.limit < totalContracts,
+      };
+    }),
+
+  /**
+   * Phase 114: Paginated chunk query for collected (ยอดเก็บหนี้).
+   * Returns a slice of ~2,000 contracts from DB cache — small enough for Cloudflare.
+   * Frontend calls this in a loop until hasMore === false.
+   */
+  getCollectedChunk: debtViewProcedure
+    .input(
+      z.object({
+        section: SectionEnum,
+        offset: z.number().int().min(0).default(0),
+        limit: z.number().int().min(1).max(5000).default(2000),
+      }),
+    )
+    .query(async ({ input }) => {
+      // Try in-memory cache first — if warm, slice from it (fastest)
+      const cached = getCachedCollected(input.section);
+      if (cached) {
+        const slice = cached.rows.slice(input.offset, input.offset + input.limit);
+        return {
+          rows: slice,
+          totalContracts: cached.rows.length,
+          hasMore: input.offset + input.limit < cached.rows.length,
+          hasPrincipalBreakdown: cached.hasPrincipalBreakdown,
+        };
+      }
+      // DB cache path — paginated query
+      const { rows, totalContracts, hasPrincipalBreakdown } = await getCollectedChunk({
+        section: input.section,
+        offset: input.offset,
+        limit: input.limit,
+      });
+      return {
+        rows,
+        totalContracts,
+        hasMore: input.offset + input.limit < totalContracts,
+        hasPrincipalBreakdown,
+      };
     }),
 
   /** Admin: clear all in-memory cache so next query recomputes from DB */

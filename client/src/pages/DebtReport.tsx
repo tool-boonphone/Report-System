@@ -453,72 +453,71 @@ export default function DebtReport() {
     });
   };
 
-  // Phase 33: ใช้ streaming fetch แทน tRPC เพื่อป้องกัน proxy 503 timeout
-  // Phase 43: True streaming — อ่าน chunks ระหว่างที่ server ส่งมา ป้องกัน Cloudflare 100s timeout
-  // Cache ใน state เพื่อไม่ต้องโหลดซ้ำเมื่อสลับ tab
+  // Phase 114: Chunked tRPC loading — แทน streaming HTTP ด้วย tRPC pagination
+  // แต่ละ request ดึง CHUNK_SIZE contracts (~2,000) ป้องกัน Cloudflare 503 timeout
+  const CHUNK_SIZE = 2000;
+  const utils = trpc.useUtils();
+
   const [streamData, setStreamData] = useState<{
     target: { rows: TargetRow[] } | null;
     collected: { rows: CollectedRow[]; hasPrincipalBreakdown: boolean } | null;
   }>({ target: null, collected: null });
   const [streamLoading, setStreamLoading] = useState<{ target: boolean; collected: boolean }>({ target: false, collected: false });
   const [streamError, setStreamError] = useState<{ target: string | null; collected: string | null }>({ target: null, collected: null });
-  // Phase 43: track bytes received for progress display
+  // Phase 114: track contracts received for progress display
   const [streamProgress, setStreamProgress] = useState<{ target: number; collected: number }>({ target: 0, collected: 0 });
+  const [streamTotal, setStreamTotal] = useState<{ target: number; collected: number }>({ target: 0, collected: 0 });
 
-  // Phase 43: True streaming fetch — อ่าน chunks ระหว่างที่ server ส่งมา
-  // ทำให้ browser เห็น data ไหลมาตลอด ป้องกัน Cloudflare 100s timeout
+  // Phase 114: Chunked fetch — เรียก tRPC ทีละ chunk จนครบ
   const fetchStream = useCallback(async (t: "target" | "collected") => {
     if (!canView || !section) return;
-    // Phase 88: clear old data immediately so UI doesn't show stale results
     setStreamData((prev) => ({ ...prev, [t]: null }));
     setStreamLoading((prev) => ({ ...prev, [t]: true }));
     setStreamError((prev) => ({ ...prev, [t]: null }));
     setStreamProgress((prev) => ({ ...prev, [t]: 0 }));
+    setStreamTotal((prev) => ({ ...prev, [t]: 0 }));
     try {
-      // Phase 88: add cache-busting timestamp to prevent browser HTTP caching
-      const cacheBust = Date.now();
-      const resp = await fetch(`/api/debt/stream/${t}?section=${encodeURIComponent(section)}&_t=${cacheBust}`, {
-        credentials: "include",
-        cache: "no-store",
-        signal: AbortSignal.timeout(300_000), // 5 นาที timeout
-      });
-      if (!resp.ok) {
-        const text = await resp.text().catch(() => resp.statusText);
-        throw new Error(`HTTP ${resp.status}: ${text}`);
+      const allRows: any[] = [];
+      let offset = 0;
+      let hasMore = true;
+      let hasPrincipalBreakdown = true;
+      let totalContracts = 0;
+
+      while (hasMore) {
+        let chunk: any;
+        if (t === "target") {
+          chunk = await utils.debt.getTargetChunk.fetch({
+            section: section as any,
+            offset,
+            limit: CHUNK_SIZE,
+          });
+        } else {
+          chunk = await utils.debt.getCollectedChunk.fetch({
+            section: section as any,
+            offset,
+            limit: CHUNK_SIZE,
+          });
+          hasPrincipalBreakdown = chunk.hasPrincipalBreakdown !== false;
+        }
+        allRows.push(...chunk.rows);
+        totalContracts = chunk.totalContracts;
+        hasMore = chunk.hasMore;
+        offset += CHUNK_SIZE;
+        setStreamProgress((prev) => ({ ...prev, [t]: allRows.length }));
+        setStreamTotal((prev) => ({ ...prev, [t]: totalContracts }));
       }
 
-      // Phase 43: อ่าน streaming response ทีละ chunk
-      const reader = resp.body?.getReader();
-      if (!reader) {
-        // Fallback: browser ไม่รองรับ ReadableStream
-        const json = await resp.json();
-        setStreamData((prev) => ({ ...prev, [t]: json }));
-        return;
+      if (t === "target") {
+        setStreamData((prev) => ({ ...prev, target: { rows: allRows as TargetRow[] } }));
+      } else {
+        setStreamData((prev) => ({ ...prev, collected: { rows: allRows as CollectedRow[], hasPrincipalBreakdown } }));
       }
-
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let bytesReceived = 0;
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        bytesReceived += value.byteLength;
-        buffer += decoder.decode(value, { stream: true });
-        // อัปเดต progress โดยประมาณจาก bytes ที่ได้รับ
-        setStreamProgress((prev) => ({ ...prev, [t]: bytesReceived }));
-      }
-      buffer += decoder.decode(); // flush
-
-      // Parse JSON ที่สมบูรณ์แล้ว
-      const json = JSON.parse(buffer);
-      setStreamData((prev) => ({ ...prev, [t]: json }));
     } catch (err: any) {
       setStreamError((prev) => ({ ...prev, [t]: err?.message ?? "เกิดข้อผิดพลาด" }));
     } finally {
       setStreamLoading((prev) => ({ ...prev, [t]: false }));
     }
-  }, [canView, section]);
+  }, [canView, section, utils]);
 
   // Auto-fetch when tab/section changes (only if not already loaded)
   useEffect(() => {
@@ -1313,26 +1312,25 @@ export default function DebtReport() {
                   ? "ครั้งถัดไปจะเร็วขึ้นมาก (ข้อมูลถูก cache ไว้)"
                   : "ข้อมูลมีปริมาณมาก กรุณารอสักครู่..."}
               </p>
-              {/* Phase 43: แสดง bytes ที่ได้รับระหว่างโหลด */}
+              {/* Phase 114: แสดง contracts ที่ได้รับระหว่างโหลด */}
               {(tab === "target" ? streamProgress.target : streamProgress.collected) > 0 && (
                 <p className="text-xs text-blue-600 mt-1">
-                  ได้รับข้อมูล {((tab === "target" ? streamProgress.target : streamProgress.collected) / 1024 / 1024).toFixed(1)} MB
+                  โหลดแล้ว {(tab === "target" ? streamProgress.target : streamProgress.collected).toLocaleString()} /
+                  {" "}{(tab === "target" ? streamTotal.target : streamTotal.collected).toLocaleString()} สัญญา
                 </p>
               )}
               <div className="mt-3 w-64 bg-gray-200 rounded-full h-2 overflow-hidden">
                 <div
                   className="h-full rounded-full transition-all duration-500"
                   style={{
-                    // Phase 43: Progress bar — ใช้ bytes ที่ได้รับเป็นตัวแสดง progress
-                    // FF365 ประมาณ 50MB, Boonphone ประมาณ 5MB
+                    // Phase 114: Progress bar — ใช้ contracts received / total
                     width: (() => {
-                      const bytes = tab === "target" ? streamProgress.target : streamProgress.collected;
-                      if (bytes > 0) {
-                        // คาดว่า total size จากเวลาที่ใช้ไป
-                        const estimatedTotal = elapsedSec > 5 ? (bytes / elapsedSec) * 90 : bytes * 3;
-                        return `${Math.min(95, Math.max(5, (bytes / estimatedTotal) * 100))}%`;
+                      const received = tab === "target" ? streamProgress.target : streamProgress.collected;
+                      const total = tab === "target" ? streamTotal.target : streamTotal.collected;
+                      if (total > 0) {
+                        return `${Math.min(98, Math.max(5, (received / total) * 100))}%`;
                       }
-                      // ยังไม่ได้รับ bytes — ใช้ elapsed time
+                      // ยังไม่รู้ total — ใช้ elapsed time
                       return elapsedSec < 5
                         ? `${Math.max(3, (elapsedSec / 5) * 20)}%`
                         : elapsedSec < 20
