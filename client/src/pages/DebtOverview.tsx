@@ -505,8 +505,32 @@ export default function DebtOverview() {
     setTargetBadgeVisibility((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
-  /* ---- Phase 121: tRPC chunk loop (แทน NDJSON stream ที่ถูก Cloudflare ตัดที่ ~24MB) ---- */
+  /* ---- Phase 122: tRPC chunk loop + retry (CHUNK_SIZE=500 เพื่อลด Cloudflare timeout) ---- */
   const utils = trpc.useUtils();
+  const fetchChunkWithRetry = useCallback(async (
+    t: "target" | "collected",
+    offset: number,
+    limit: number,
+    maxRetries = 3,
+  ) => {
+    let lastErr: unknown;
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        if (t === "target") {
+          return await utils.debt.getTargetChunk.fetch({ section: section as any, offset, limit });
+        } else {
+          return await utils.debt.getCollectedChunk.fetch({ section: section as any, offset, limit });
+        }
+      } catch (err) {
+        lastErr = err;
+        if (attempt < maxRetries - 1) {
+          await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, attempt)));
+        }
+      }
+    }
+    throw lastErr;
+  }, [utils, section]);
+
   const fetchStream = useCallback(async (t: "target" | "collected") => {
     if (!canView || !section) return;
     setStreamLoading((prev) => ({ ...prev, [t]: true }));
@@ -514,37 +538,20 @@ export default function DebtOverview() {
     setStreamProgress((prev) => ({ ...prev, [t]: 0 }));
     setStreamTotal((prev) => ({ ...prev, [t]: 0 }));
     try {
-      const CHUNK_SIZE = 2000;
+      const CHUNK_SIZE = 500; // ลดจาก 2000 เป็น 500 (~2MB ต่อ request) เพื่อลด Cloudflare timeout
       const rows: any[] = [];
       let hasPrincipalBreakdown = true;
       let offset = 0;
       let totalContracts = 0;
       while (true) {
-        let chunkRows: any[];
-        let chunkTotal: number;
-        let hasMore: boolean;
-        if (t === "target") {
-          const result = await utils.debt.getTargetChunk.fetch({
-            section: section as any,
-            offset,
-            limit: CHUNK_SIZE,
-          });
-          chunkRows = result.rows;
-          chunkTotal = result.totalContracts;
-          hasMore = result.hasMore;
-        } else {
-          const result = await utils.debt.getCollectedChunk.fetch({
-            section: section as any,
-            offset,
-            limit: CHUNK_SIZE,
-          });
-          chunkRows = result.rows;
-          chunkTotal = result.totalContracts;
-          hasMore = result.hasMore;
-          if (result.hasPrincipalBreakdown === false) hasPrincipalBreakdown = false;
+        const result = await fetchChunkWithRetry(t, offset, CHUNK_SIZE);
+        const chunkRows = result.rows as any[];
+        totalContracts = result.totalContracts;
+        const hasMore = result.hasMore;
+        if (t === "collected" && (result as any).hasPrincipalBreakdown === false) {
+          hasPrincipalBreakdown = false;
         }
         rows.push(...chunkRows);
-        totalContracts = chunkTotal;
         offset += CHUNK_SIZE;
         setStreamTotal((prev) => ({ ...prev, [t]: totalContracts }));
         setStreamProgress((prev) => ({ ...prev, [t]: rows.length }));
@@ -559,7 +566,7 @@ export default function DebtOverview() {
     } finally {
       setStreamLoading((prev) => ({ ...prev, [t]: false }));
     }
-  }, [canView, section, utils]);
+  }, [canView, section, fetchChunkWithRetry]);
 
   // Auto-fetch both streams on mount
   useEffect(() => {
