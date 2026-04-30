@@ -754,6 +754,9 @@ export default function DebtReport() {
     const todayStr = new Date().toISOString().slice(0, 10);
     let principal = 0, interest = 0, fee = 0, penalty = 0, unlockFee = 0, total = 0;
     for (const r of filteredRows) {
+      // Phase 125 fix: penalty/unlockFee ใช้เฉพาะ currentPeriod ของแต่ละสัญญา (ค่าปรับถูก accumulate ไว้ที่งวดนั้นแล้ว)
+      // เพื่อไม่ให้นับซ้ำจากทุกงวด
+      const currentPeriodInst = r.installments.find((i) => i.isCurrentPeriod) ?? null;
       for (const inst of r.installments) {
         if (inst.isClosed || inst.isSuspended) continue;
         // Phase 125: debtSetMode — ไม่รวมงวดที่ชำระครบแล้ว (isPaid/เขียว) และงวดที่ยังไม่ถึงกำหนด (future/เทา) ใน badge
@@ -766,8 +769,21 @@ export default function DebtReport() {
         principal += inst.principal ?? 0;
         interest += inst.interest ?? 0;
         fee += inst.fee ?? 0;
-        penalty += principalOnly ? 0 : (inst.penalty ?? 0);
-        unlockFee += principalOnly ? 0 : (inst.unlockFee ?? 0);
+        if (!principalOnly) {
+          // penalty/unlockFee: นับเฉพาะงวด currentPeriod ของสัญญานี้ (ป้องกันนับซ้ำ)
+          // ถ้าสัญญามี currentPeriod ให้นับเฉพาะงวดนั้น ถ้าไม่มีให้นับตามปกติ
+          if (currentPeriodInst) {
+            if (inst === currentPeriodInst) {
+              penalty += inst.penalty ?? 0;
+              unlockFee += inst.unlockFee ?? 0;
+            }
+            // งวดอื่นๆ ไม่นับ penalty/unlockFee (ถูก accumulate ไว้ที่ currentPeriod แล้ว)
+          } else {
+            // ไม่มี currentPeriod (เช่น ทุกงวดผ่านมาแล้วและยังไม่ปิด) — นับตามปกติ
+            penalty += inst.penalty ?? 0;
+            unlockFee += inst.unlockFee ?? 0;
+          }
+        }
       }
     }
     total = principal + interest + fee + penalty + unlockFee;
