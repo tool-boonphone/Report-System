@@ -453,22 +453,18 @@ export default function DebtReport() {
     });
   };
 
-  // Phase 114: Chunked tRPC loading — แทน streaming HTTP ด้วย tRPC pagination
-  // แต่ละ request ดึง CHUNK_SIZE contracts (~2,000) ป้องกัน Cloudflare 503 timeout
-  const CHUNK_SIZE = 2000;
-  const utils = trpc.useUtils();
-
+  // Phase 115: กลับมาใช้ HTTP streaming endpoint — tRPC buffer ทั้ง response ก่อนส่ง ทำให้ 503
+  // HTTP streaming ส่ง byte แรกทันที → Cloudflare ไม่ timeout แม้ data ใหญ่ 64MB
   const [streamData, setStreamData] = useState<{
     target: { rows: TargetRow[] } | null;
     collected: { rows: CollectedRow[]; hasPrincipalBreakdown: boolean } | null;
   }>({ target: null, collected: null });
   const [streamLoading, setStreamLoading] = useState<{ target: boolean; collected: boolean }>({ target: false, collected: false });
   const [streamError, setStreamError] = useState<{ target: string | null; collected: string | null }>({ target: null, collected: null });
-  // Phase 114: track contracts received for progress display
   const [streamProgress, setStreamProgress] = useState<{ target: number; collected: number }>({ target: 0, collected: 0 });
   const [streamTotal, setStreamTotal] = useState<{ target: number; collected: number }>({ target: 0, collected: 0 });
 
-  // Phase 114: Chunked fetch — เรียก tRPC ทีละ chunk จนครบ
+  // Phase 115: HTTP streaming fetch — ใช้ fetch() + ReadableStream แทน tRPC
   const fetchStream = useCallback(async (t: "target" | "collected") => {
     if (!canView || !section) return;
     setStreamData((prev) => ({ ...prev, [t]: null }));
@@ -477,47 +473,30 @@ export default function DebtReport() {
     setStreamProgress((prev) => ({ ...prev, [t]: 0 }));
     setStreamTotal((prev) => ({ ...prev, [t]: 0 }));
     try {
-      const allRows: any[] = [];
-      let offset = 0;
-      let hasMore = true;
-      let hasPrincipalBreakdown = true;
-      let totalContracts = 0;
-
-      while (hasMore) {
-        let chunk: any;
-        if (t === "target") {
-          chunk = await utils.debt.getTargetChunk.fetch({
-            section: section as any,
-            offset,
-            limit: CHUNK_SIZE,
-          });
-        } else {
-          chunk = await utils.debt.getCollectedChunk.fetch({
-            section: section as any,
-            offset,
-            limit: CHUNK_SIZE,
-          });
-          hasPrincipalBreakdown = chunk.hasPrincipalBreakdown !== false;
-        }
-        allRows.push(...chunk.rows);
-        totalContracts = chunk.totalContracts;
-        hasMore = chunk.hasMore;
-        offset += CHUNK_SIZE;
-        setStreamProgress((prev) => ({ ...prev, [t]: allRows.length }));
-        setStreamTotal((prev) => ({ ...prev, [t]: totalContracts }));
+      const url = `/api/debt/stream/${t}?section=${encodeURIComponent(section)}`;
+      const resp = await fetch(url, { credentials: "include" });
+      if (!resp.ok) {
+        const text = await resp.text();
+        throw new Error(`HTTP ${resp.status}: ${text.slice(0, 200)}`);
       }
-
+      // Read full response text (streaming HTTP keeps connection alive during transfer)
+      const text = await resp.text();
+      const parsed = JSON.parse(text);
+      const rows = parsed.rows ?? [];
+      setStreamProgress((prev) => ({ ...prev, [t]: rows.length }));
+      setStreamTotal((prev) => ({ ...prev, [t]: rows.length }));
       if (t === "target") {
-        setStreamData((prev) => ({ ...prev, target: { rows: allRows as TargetRow[] } }));
+        setStreamData((prev) => ({ ...prev, target: { rows: rows as TargetRow[] } }));
       } else {
-        setStreamData((prev) => ({ ...prev, collected: { rows: allRows as CollectedRow[], hasPrincipalBreakdown } }));
+        const hasPrincipalBreakdown = parsed.hasPrincipalBreakdown !== false;
+        setStreamData((prev) => ({ ...prev, collected: { rows: rows as CollectedRow[], hasPrincipalBreakdown } }));
       }
     } catch (err: any) {
       setStreamError((prev) => ({ ...prev, [t]: err?.message ?? "เกิดข้อผิดพลาด" }));
     } finally {
       setStreamLoading((prev) => ({ ...prev, [t]: false }));
     }
-  }, [canView, section, utils]);
+  }, [canView, section]);
 
   // Auto-fetch when tab/section changes (only if not already loaded)
   useEffect(() => {
