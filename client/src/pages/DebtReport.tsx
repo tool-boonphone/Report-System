@@ -379,7 +379,7 @@ function MultiSelectFilter({
 }
 
 export default function DebtReport() {
-  const { can, isSuperAdmin } = useAppAuth();
+  const { can, isSuperAdmin, isLoading: isAuthLoading } = useAppAuth();
   const { section } = useSection();
   const { setActions } = useNavActions();
   const canView = can("debt_report", "view");
@@ -531,14 +531,15 @@ export default function DebtReport() {
   }, [canView, section, fetchChunkWithRetry]);
 
   // Auto-fetch when tab/section changes (only if not already loaded)
+  // NOTE: isAuthLoading must be in deps so this re-runs after auth resolves
   useEffect(() => {
-    if (!canView || !section) return;
+    if (isAuthLoading || !canView || !section) return;
     if (tab === "target" && !streamData.target && !streamLoading.target) {
       fetchStream("target");
     } else if (tab === "collected" && !streamData.collected && !streamLoading.collected) {
       fetchStream("collected");
     }
-  }, [tab, section, canView]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [tab, section, canView, isAuthLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Reset stream data when section changes
   // ไม่ล้าง Global Cache เพราะแต่ละ section มี cache แยกกัน เพียง reset local UI state
