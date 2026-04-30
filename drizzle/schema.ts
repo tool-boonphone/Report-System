@@ -258,6 +258,10 @@ export const installments = mysqlTable(
     amount: decimal("amount", { precision: 12, scale: 2 }),
     paidAmount: decimal("paid_amount", { precision: 12, scale: 2 }).default("0"),
     status: varchar("status", { length: 32 }),
+    /** ผู้บันทึก — ดึงจาก contract?action=detail → installments[].updated_by (ทั้ง Boonphone และ FF365) */
+    updatedBy: varchar("updated_by", { length: 128 }),
+    /** วันเวลาที่บันทึก — ดึงจาก contract?action=detail → installments[].updated_at */
+    updatedAt: varchar("updated_at", { length: 32 }),
     rawJson: json("raw_json"),
     syncedAt: timestamp("synced_at").defaultNow().notNull(),
   },

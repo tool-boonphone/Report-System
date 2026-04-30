@@ -3470,21 +3470,22 @@ export async function* listDebtCollectedStream(params: {
     }
 
     // Query payments for this batch only (per-batch to avoid OOM with 222K rows)
-    // Use CTE + MIN(CONCAT) approach to find updated_by from installments (FF365 only)
+    // Use CTE + MIN(CONCAT) approach to find updated_by from installments (both Boonphone & FF365)
     // Priority: date_match (±1 day) > next (>= payment_date)
+    // updated_by/updated_at are now first-class columns (backfilled from contract?action=detail for both sections)
     const payRaw = await db.execute(sql.raw(`
       WITH inst_dates AS (
         SELECT
           contract_external_id,
           section,
-          JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.updated_by')) AS updated_by,
-          DATE(JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.updated_at'))) AS updated_date
+          updated_by,
+          DATE(updated_at) AS updated_date
         FROM installments
-        WHERE section = 'Fastfone365'
+        WHERE section = '${sectionLiteral}'
           AND contract_external_id IN (${batchIdsLiteral})
           AND external_id LIKE CONCAT(contract_external_id, '-%')
-          AND JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.updated_by')) IS NOT NULL
-          AND JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.updated_by')) != 'null'
+          AND updated_by IS NOT NULL
+          AND updated_by != 'null'
       )
       SELECT pt.contract_external_id,
              pt.external_id AS payment_external_id,

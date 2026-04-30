@@ -1214,3 +1214,10 @@ Task list:
 - [ ] P125-6: ติดตั้ง `@tanstack/react-virtual` (ถ้ายังไม่มี) และเพิ่ม Virtual Scroll ใน table ของ `DebtReport.tsx` แทน Pagination
 - [ ] P125-7: เพิ่ม Virtual Scroll ใน table ของ `DebtOverview.tsx` แทน Pagination
 - [ ] P125-8: Commit + Push GitHub + Checkpoint
+
+## Phase 126 — Fix Boonphone installments ไม่มี updated_by (root cause: mapInstallment ไม่ map field)
+- [ ] P126-1: เพิ่ม updated_by/updated_at ใน InstallmentItem interface และ mapInstallment function ใน mappers.ts
+- [ ] P126-2: ตรวจสอบว่า contract?action=installments ของ Boonphone ส่ง updated_by มาไหม (ถ้าไม่มี ต้องดึงจาก contract?action=detail)
+- [ ] P126-3: ถ้า bulk endpoint ไม่มี updated_by — เพิ่มขั้นตอน enrichInstallmentsWithUpdatedBy() ที่ดึงจาก contract?action=detail แล้ว upsert updated_by ลง installments
+- [ ] P126-4: Backfill ข้อมูล Boonphone installments ที่มีอยู่แล้ว
+- [ ] P126-5: Commit + Push GitHub + Checkpoint

@@ -241,6 +241,8 @@ type InstallmentItem = {
   total_paid_amount?: number;
   status?: string;
   installment_status_code?: string;
+  updated_by?: string;  // ผู้บันทึก — ส่งมาจาก contract?action=detail → installments[].updated_by (ทั้ง Boonphone และ FF365)
+  updated_at?: string;  // วันเวลาที่บันทึก
 };
 
 export function mapInstallment(section: SectionKey, it: InstallmentItem) {
@@ -259,6 +261,8 @@ export function mapInstallment(section: SectionKey, it: InstallmentItem) {
     paidAmount:
       toNumStr(it.paid_amount ?? it.paid ?? it.total_paid_amount) ?? "0",
     status: it.status ?? it.installment_status_code ?? null,
+    updatedBy: it.updated_by ?? null,
+    updatedAt: it.updated_at ? String(it.updated_at) : null,
     rawJson: it as any,
   };
 }

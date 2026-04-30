@@ -448,6 +448,17 @@ async function syncInstallments(
       }
     }
     if (buffer.length) rowCount += await upsertInstallments(buffer);
+    // Enrich installments with updated_by/updated_at from contract?action=detail
+    // Both Boonphone and FF365: bulk endpoint does NOT include updated_by — must fetch from detail.
+    try {
+      const enriched = await enrichInstallmentsWithUpdatedBy(client, section);
+      rowCount += enriched;
+    } catch (err: any) {
+      console.warn(
+        `[sync] ${section} installments updated_by backfill skipped:`,
+        err?.message ?? err,
+      );
+    }
     await finishSyncLog({ id: log.id, status: "success", rowCount });
     return rowCount;
   } catch (err: any) {
@@ -500,6 +511,106 @@ async function syncPayments(
     });
     throw err;
   }
+}
+
+/**
+ * Fetch `contract?action=detail&id=X` for every contract whose installments
+ * still have null updated_by in our DB and patch just those two columns.
+ *
+ * Both Boonphone and FF365 bulk installments endpoint omits updated_by/updated_at.
+ * The detail endpoint returns installments[].updated_by and .updated_at for
+ * paid periods. We only fetch detail for contracts that have at least one
+ * installment with null updated_by to avoid redundant API calls on re-sync.
+ */
+async function enrichInstallmentsWithUpdatedBy(
+  client: PartnerClient,
+  section: SectionKey,
+): Promise<number> {
+  const { getDb } = await import("../db");
+  const { installments } = await import("../../drizzle/schema");
+  const { and, eq, isNull, sql } = await import("drizzle-orm");
+  const db = await getDb();
+  if (!db) return 0;
+
+  // Find distinct contract IDs that have at least one installment with null updated_by
+  const rows = await db
+    .selectDistinct({ contractExternalId: installments.contractExternalId })
+    .from(installments)
+    .where(
+      and(
+        eq(installments.section, section),
+        isNull(installments.updatedBy),
+      ),
+    );
+  if (rows.length === 0) return 0;
+
+  const contractIds = rows.map((r) => r.contractExternalId);
+  const CONCURRENCY = 5;
+  const FLUSH_EVERY = 200;
+  // Map: contractExternalId → Array<{ period, updatedBy, updatedAt }>
+  const updates: Array<{ contractExternalId: string; period: number; updatedBy: string | null; updatedAt: string | null }> = [];
+  let flushed = 0;
+
+  async function flush() {
+    if (updates.length === 0) return;
+    const batch = updates.splice(0, updates.length);
+    for (const row of batch) {
+      if (!row.updatedBy && !row.updatedAt) continue; // skip if API has no data
+      await db!
+        .update(installments)
+        .set({
+          updatedBy: row.updatedBy,
+          updatedAt: row.updatedAt,
+          syncedAt: sql`CURRENT_TIMESTAMP`,
+        })
+        .where(
+          and(
+            eq(installments.section, section),
+            eq(installments.contractExternalId, row.contractExternalId),
+            eq(installments.period, row.period),
+          ),
+        );
+    }
+    flushed += batch.length;
+  }
+
+  let idx = 0;
+  async function worker() {
+    while (idx < contractIds.length) {
+      const my = idx++;
+      const contractExtId = contractIds[my];
+      try {
+        const data: any = await client.get("contract", {
+          action: "detail",
+          id: contractExtId,
+        });
+        const detailInsts: any[] = data?.contract?.installments ?? [];
+        for (const inst of detailInsts) {
+          const period = inst.no ?? inst.installment_no ?? inst.period;
+          const updatedBy = inst.updated_by ? String(inst.updated_by) : null;
+          const updatedAt = inst.updated_at ? String(inst.updated_at) : null;
+          if (period != null && (updatedBy || updatedAt)) {
+            updates.push({
+              contractExternalId: contractExtId,
+              period: Number(period),
+              updatedBy,
+              updatedAt,
+            });
+          }
+        }
+        if (updates.length >= FLUSH_EVERY) await flush();
+      } catch {
+        // swallow per-row errors; continue with next contract
+      }
+    }
+  }
+
+  await Promise.all(
+    Array.from({ length: CONCURRENCY }, () => worker()),
+  );
+  await flush();
+  console.log(`[sync] ${section} installments updated_by enriched: ${flushed} rows from ${contractIds.length} contracts`);
+  return flushed;
 }
 
 /**
