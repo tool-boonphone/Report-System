@@ -18,6 +18,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Spinner } from "@/components/ui/spinner";
+import { StreamLoadingOverlay } from "@/components/StreamLoadingOverlay";
 import { useNavActions } from "@/contexts/NavActionsContext";
 import { useSection } from "@/contexts/SectionContext";
 import { useAppAuth } from "@/hooks/useAppAuth";
@@ -421,52 +422,69 @@ export default function DebtSummary() {
   }>({ target: null, collected: null });
   const [streamLoading, setStreamLoading] = useState<{ target: boolean; collected: boolean }>({ target: false, collected: false });
   const [streamError, setStreamError] = useState<{ target: string | null; collected: string | null }>({ target: null, collected: null });
-  // Phase 43: track bytes received for progress display
+  // Phase 118: track contract count for progress display
   const [streamProgress, setStreamProgress] = useState<{ target: number; collected: number }>({ target: 0, collected: 0 });
-
-  // Phase 43: True streaming fetch — อ่าน chunks ระหว่างที่ server ส่งมา
-  // ทำให้ browser เห็น data ไหลมาตลอด ป้องกัน Cloudflare 100s timeout
+  const [streamTotal, setStreamTotal] = useState<{ target: number; collected: number }>({ target: 0, collected: 0 });
+  // Phase 118: NDJSON streaming fetch
   const fetchStream = useCallback(async (t: "target" | "collected") => {
     if (!canView || !section) return;
     setStreamLoading((prev) => ({ ...prev, [t]: true }));
     setStreamError((prev) => ({ ...prev, [t]: null }));
     setStreamProgress((prev) => ({ ...prev, [t]: 0 }));
+    setStreamTotal((prev) => ({ ...prev, [t]: 0 }));
     try {
       const resp = await fetch(`/api/debt/stream/${t}?section=${encodeURIComponent(section)}`, {
         credentials: "include",
-        signal: AbortSignal.timeout(300_000), // 5 นาที timeout
+        signal: AbortSignal.timeout(300_000),
       });
       if (!resp.ok) {
         const text = await resp.text().catch(() => resp.statusText);
         throw new Error(`HTTP ${resp.status}: ${text}`);
       }
-
-      // Phase 43: อ่าน streaming response ทีละ chunk
       const reader = resp.body?.getReader();
-      if (!reader) {
-        // Fallback: browser ไม่รองรับ ReadableStream
-        const json = await resp.json();
-        setStreamData((prev) => ({ ...prev, [t]: json }));
-        return;
-      }
-
+      if (!reader) throw new Error("ไม่รองรับ streaming");
       const decoder = new TextDecoder();
-      let buffer = "";
-      let bytesReceived = 0;
-
+      let lineBuffer = "";
+      const rows: any[] = [];
+      let hasPrincipalBreakdown = true;
+      let contractCount = 0;
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        bytesReceived += value.byteLength;
-        buffer += decoder.decode(value, { stream: true });
-        // อัปเดต progress โดยประมาณจาก bytes ที่ได้รับ
-        setStreamProgress((prev) => ({ ...prev, [t]: bytesReceived }));
+        lineBuffer += decoder.decode(value, { stream: true });
+        const splitLines = lineBuffer.split("\n");
+        lineBuffer = splitLines.pop() ?? "";
+        for (const line of splitLines) {
+          const trimmed = line.trim();
+          if (!trimmed) continue;
+          try {
+            const obj = JSON.parse(trimmed);
+            if (obj.type === "meta") {
+              setStreamTotal((prev) => ({ ...prev, [t]: obj.total ?? 0 }));
+              if (obj.hasPrincipalBreakdown === false) hasPrincipalBreakdown = false;
+            } else if (obj.type === "done") {
+              // stream complete
+            } else {
+              rows.push(obj);
+              contractCount++;
+              if (contractCount % 500 === 0) {
+                setStreamProgress((prev) => ({ ...prev, [t]: contractCount }));
+              }
+            }
+          } catch { /* skip malformed line */ }
+        }
       }
-      buffer += decoder.decode(); // flush
-
-      // Parse JSON ที่สมบูรณ์แล้ว
-      const json = JSON.parse(buffer);
-      setStreamData((prev) => ({ ...prev, [t]: json }));
+      if (lineBuffer.trim()) {
+        try {
+          const obj = JSON.parse(lineBuffer.trim());
+          if (obj.type !== "meta" && obj.type !== "done") rows.push(obj);
+        } catch { /* ignore */ }
+      }
+      setStreamProgress((prev) => ({ ...prev, [t]: rows.length }));
+      const result = t === "collected"
+        ? { rows, hasPrincipalBreakdown }
+        : { rows };
+      setStreamData((prev) => ({ ...prev, [t]: result }));
     } catch (err: any) {
       setStreamError((prev) => ({ ...prev, [t]: err?.message ?? "เกิดข้อผิดพลาด" }));
     } finally {
@@ -1092,55 +1110,14 @@ export default function DebtSummary() {
             </div>
           </div>
         ) : isLoading ? (
-          <div className="flex flex-col items-center justify-center py-20 gap-4">
-            <Spinner />
-            <div className="text-center">
-              <p className="text-sm font-medium text-gray-700">
-                {elapsedSec < 5
-                  ? "กำลังโหลดข้อมูล..."
-                  : elapsedSec < 20
-                  ? `กำลังโหลดข้อมูล... (${elapsedSec} วินาที)`
-                  : `กำลังประมวลผลข้อมูลจำนวนมาก... (${elapsedSec} วินาที)`}
-              </p>
-              {/* Phase 42: แสดง hint + progress bar ตั้งแต่วินาทีแรก */}
-              <p className="text-xs text-gray-500 mt-1">
-                {elapsedSec < 5
-                  ? "กำลังเชื่อมต่อ..."
-                  : elapsedSec < 20
-                  ? "ครั้งถัดไปจะเร็วขึ้นมาก (ข้อมูลถูก cache ไว้)"
-                  : "ข้อมูลมีปริมาณมาก กรุณารอสักครู่..."}
-              </p>
-              {/* Phase 43: แสดง bytes ที่ได้รับระหว่างโหลด */}
-              {(tab === "target" ? streamProgress.target : streamProgress.collected) > 0 && (
-                <p className="text-xs text-blue-600 mt-1">
-                  ได้รับข้อมูล {((tab === "target" ? streamProgress.target : streamProgress.collected) / 1024 / 1024).toFixed(1)} MB
-                </p>
-              )}
-              <div className="mt-3 w-64 bg-gray-200 rounded-full h-2 overflow-hidden">
-                <div
-                  className="h-full rounded-full transition-all duration-500"
-                  style={{
-                    // Phase 43: Progress bar — ใช้ bytes ที่ได้รับเป็นตัวแสดง progress
-                    // FF365 ประมาณ 50MB, Boonphone ประมาณ 5MB
-                    width: (() => {
-                      const bytes = tab === "target" ? streamProgress.target : streamProgress.collected;
-                      if (bytes > 0) {
-                        // คาดว่า total size จากเวลาที่ใช้ไป
-                        const estimatedTotal = elapsedSec > 5 ? (bytes / elapsedSec) * 90 : bytes * 3;
-                        return `${Math.min(95, Math.max(5, (bytes / estimatedTotal) * 100))}%`;
-                      }
-                      // ยังไม่ได้รับ bytes — ใช้ elapsed time
-                      return elapsedSec < 5
-                        ? `${Math.max(3, (elapsedSec / 5) * 20)}%`
-                        : elapsedSec < 20
-                        ? `${Math.min(70, 20 + ((elapsedSec - 5) / 15) * 50)}%`
-                        : `${Math.min(95, 70 + ((elapsedSec - 20) / 40) * 25)}%`;
-                    })(),
-                    background: tab === "target" ? "#b45309" : "#047857",
-                  }}
-                />
-              </div>
-            </div>
+          <div className="py-4">
+            <StreamLoadingOverlay
+              loading={true}
+              progress={tab === "target" ? streamProgress.target : streamProgress.collected}
+              total={tab === "target" ? streamTotal.target : streamTotal.collected}
+              label={`กำลังโหลดข้อมูล${tab === "target" ? "เป้าเก็บหนี้" : "ยอดเก็บหนี้"}...${elapsedSec > 0 ? ` (${elapsedSec} วินาที)` : ""}`}
+              elapsedSec={undefined}
+            />
           </div>
         ) : (
           <div

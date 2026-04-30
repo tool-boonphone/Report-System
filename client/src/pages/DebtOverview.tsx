@@ -38,6 +38,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
+import { StreamLoadingOverlay } from "@/components/StreamLoadingOverlay";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 
@@ -458,6 +459,7 @@ export default function DebtOverview() {
   const [streamLoading, setStreamLoading] = useState({ target: false, collected: false });
   const [streamError, setStreamError] = useState<{ target: string | null; collected: string | null }>({ target: null, collected: null });
   const [streamProgress, setStreamProgress] = useState({ target: 0, collected: 0 });
+  const [streamTotal, setStreamTotal] = useState({ target: 0, collected: 0 });
 
   /* ---- Filter state (เหมือน DebtReport collected tab) ---- */
   const [search, setSearch] = useState("");
@@ -502,12 +504,13 @@ export default function DebtOverview() {
     setTargetBadgeVisibility((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
-  /* ---- Fetch stream ---- */
+  /* ---- Fetch stream (NDJSON — Phase 118) ---- */
   const fetchStream = useCallback(async (t: "target" | "collected") => {
     if (!canView || !section) return;
     setStreamLoading((prev) => ({ ...prev, [t]: true }));
     setStreamError((prev) => ({ ...prev, [t]: null }));
     setStreamProgress((prev) => ({ ...prev, [t]: 0 }));
+    setStreamTotal((prev) => ({ ...prev, [t]: 0 }));
     try {
       const resp = await fetch(`/api/debt/stream/${t}?section=${encodeURIComponent(section)}`, {
         credentials: "include",
@@ -518,24 +521,50 @@ export default function DebtOverview() {
         throw new Error(`HTTP ${resp.status}: ${text}`);
       }
       const reader = resp.body?.getReader();
-      if (!reader) {
-        const json = await resp.json();
-        setStreamData((prev) => ({ ...prev, [t]: json }));
-        return;
-      }
+      if (!reader) throw new Error("ไม่รองรับ streaming");
       const decoder = new TextDecoder();
-      let buffer = "";
-      let bytesReceived = 0;
+      let lineBuffer = "";
+      const rows: any[] = [];
+      let hasPrincipalBreakdown = true;
+      let contractCount = 0;
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        bytesReceived += value.byteLength;
-        buffer += decoder.decode(value, { stream: true });
-        setStreamProgress((prev) => ({ ...prev, [t]: bytesReceived }));
+        lineBuffer += decoder.decode(value, { stream: true });
+        const lines = lineBuffer.split("\n");
+        lineBuffer = lines.pop() ?? "";
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed) continue;
+          try {
+            const obj = JSON.parse(trimmed);
+            if (obj.type === "meta") {
+              setStreamTotal((prev) => ({ ...prev, [t]: obj.total ?? 0 }));
+              if (obj.hasPrincipalBreakdown === false) hasPrincipalBreakdown = false;
+            } else if (obj.type === "done") {
+              // stream complete
+            } else {
+              rows.push(obj);
+              contractCount++;
+              if (contractCount % 500 === 0) {
+                setStreamProgress((prev) => ({ ...prev, [t]: contractCount }));
+              }
+            }
+          } catch { /* skip malformed line */ }
+        }
       }
-      buffer += decoder.decode();
-      const json = JSON.parse(buffer);
-      setStreamData((prev) => ({ ...prev, [t]: json }));
+      // flush remaining
+      if (lineBuffer.trim()) {
+        try {
+          const obj = JSON.parse(lineBuffer.trim());
+          if (obj.type !== "meta" && obj.type !== "done") rows.push(obj);
+        } catch { /* ignore */ }
+      }
+      setStreamProgress((prev) => ({ ...prev, [t]: rows.length }));
+      const result = t === "collected"
+        ? { rows, hasPrincipalBreakdown }
+        : { rows };
+      setStreamData((prev) => ({ ...prev, [t]: result }));
     } catch (err: any) {
       setStreamError((prev) => ({ ...prev, [t]: err?.message ?? "เกิดข้อผิดพลาด" }));
     } finally {
@@ -1016,15 +1045,25 @@ export default function DebtOverview() {
 
         {/* ---- Loading / Error ---- */}
         {isLoading && (
-          <div className="flex flex-col items-center justify-center py-16 gap-3 text-gray-500">
-            <Spinner className="w-8 h-8 text-blue-500" />
-            <div className="text-sm">
-              กำลังโหลดข้อมูล{elapsedSec > 0 ? ` (${elapsedSec}s)` : ""}…
-            </div>
-            <div className="text-xs text-gray-400 flex gap-4">
-              {streamLoading.target && <span>เป้าเก็บหนี้: {(streamProgress.target / 1024).toFixed(0)} KB</span>}
-              {streamLoading.collected && <span>ยอดเก็บหนี้: {(streamProgress.collected / 1024).toFixed(0)} KB</span>}
-            </div>
+          <div className="py-4">
+            {streamLoading.target && (
+              <StreamLoadingOverlay
+                loading={true}
+                progress={streamProgress.target}
+                total={streamTotal.target}
+                label={`กำลังโหลดข้อมูลเป้าเก็บหนี้...${elapsedSec > 0 ? ` (${elapsedSec} วินาที)` : ""}`}
+                elapsedSec={undefined}
+              />
+            )}
+            {streamLoading.collected && (
+              <StreamLoadingOverlay
+                loading={true}
+                progress={streamProgress.collected}
+                total={streamTotal.collected}
+                label={`กำลังโหลดข้อมูลยอดเก็บหนี้...${elapsedSec > 0 ? ` (${elapsedSec} วินาที)` : ""}`}
+                elapsedSec={undefined}
+              />
+            )}
           </div>
         )}
         {isError && !isLoading && (
