@@ -53,6 +53,21 @@ async function startServer() {
   app.get("/api/debt/stream/collected", handleDebtStreamCollected);
   // Phase 88: Cache invalidation endpoint — admin can force-clear server cache
   app.post("/api/debt/cache/invalidate", handleDebtCacheInvalidate);
+  // Internal backfill endpoint — no auth, only for local/admin use
+  app.post("/api/internal/backfill-cache", async (req, res) => {
+    const { section } = req.body as { section?: string };
+    if (!section || !['Boonphone', 'Fastfone365'].includes(section)) {
+      return res.status(400).json({ error: 'Invalid section. Use Boonphone or Fastfone365' });
+    }
+    try {
+      const { populateDebtCache } = await import('../sync/populateCache');
+      const result = await populateDebtCache(section as any);
+      return res.json({ ok: true, section, ...result });
+    } catch (err: any) {
+      console.error('[backfill]', err);
+      return res.status(500).json({ error: String(err?.message ?? err) });
+    }
+  });
   // tRPC API
   app.use(
     "/api/trpc",

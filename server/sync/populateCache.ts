@@ -1,27 +1,29 @@
 /**
  * populateCache.ts — Populate Engine for debt_target_cache & debt_collected_cache
  *
- * Strategy:
- *   1. Query contracts + installments + payment_transactions directly from DB
- *      (same source-of-truth as listDebtTarget / listDebtCollected in debtDb.ts)
- *   2. Re-use the same business logic (deriveDebtStatus, bucketFromDays, isClosed, isSuspended, etc.)
- *   3. Upsert rows into debt_target_cache (1 row per installment period per contract)
- *      and debt_collected_cache (1 row per payment transaction)
- *   4. Called from doSync() in runner.ts after bad_debt stage
+ * Strategy (Revised — Phase 113 Fix):
+ *   Instead of duplicating business logic from debtDb.ts (which caused calculation errors),
+ *   this module now calls listDebtTargetStream + listDebtCollectedStream DIRECTLY and
+ *   serializes their output into the cache tables.
  *
- * NOTE: This file intentionally duplicates some logic from debtDb.ts to avoid
- * circular imports and keep the cache population self-contained.
+ *   This guarantees 100% logic parity with the live stream — no duplication, no drift.
+ *
+ *   Extra contract metadata (partner_code, partner_name, device, model) is loaded
+ *   separately from the contracts table and merged in before insert.
+ *
+ * Called from:
+ *   - doSync() in runner.ts after bad_debt stage
+ *   - cache.ts router (manual trigger via tRPC)
  */
-
 import { sql } from "drizzle-orm";
 import { getDb } from "../db";
 import { debtTargetCache, debtCollectedCache } from "../../drizzle/schema";
+import { listDebtTargetStream, listDebtCollectedStream } from "../debtDb";
 import type { SectionKey } from "../../shared/const";
 
-// ─── Helpers (mirrors debtDb.ts) ─────────────────────────────────────────────
+const BATCH = 100;
 
-const TERMINAL_STATUSES = new Set(["ระงับสัญญา", "สิ้นสุดสัญญา", "หนี้เสีย"]);
-
+// ─── Helper ───────────────────────────────────────────────────────────────────
 function bucketFromDays(days: number): string {
   if (days <= 0) return "ปกติ";
   if (days <= 7) return "เกิน 1-7";
@@ -32,47 +34,22 @@ function bucketFromDays(days: number): string {
   return "เกิน >90";
 }
 
-function deriveDebtStatus(
-  contractStatus: string | null,
-  installments: Array<{ due_date: string | null; amount: number | null; paid_amount: number | null; balance: number | null }>,
-  today: Date,
-): { label: string; daysOverdue: number } {
-  if (contractStatus && TERMINAL_STATUSES.has(contractStatus)) {
-    return { label: contractStatus, daysOverdue: 0 };
-  }
-  let maxDays = 0;
-  for (const it of installments) {
-    if (!it.due_date) continue;
-    const dueMs = Date.parse(`${it.due_date}T00:00:00`);
-    if (Number.isNaN(dueMs)) continue;
-    const paid = Number(it.paid_amount ?? 0);
-    const amt = Number(it.amount ?? 0);
-    if (amt <= 0.001) continue;
-    if (paid >= amt - 0.001) continue;
-    const outstanding = (it.balance !== null && it.balance !== undefined)
-      ? Number(it.balance)
-      : amt - paid;
-    if (outstanding <= 0.001) continue;
-    const days = Math.floor((today.getTime() - dueMs) / (1000 * 60 * 60 * 24));
-    if (days > maxDays) maxDays = days;
-  }
-  return { label: bucketFromDays(maxDays), daysOverdue: maxDays };
+/** Extra contract metadata not included in stream output */
+interface ContractMeta {
+  status: string | null;
+  partnerCode: string | null;
+  partnerName: string | null;
+  device: string | null;
+  model: string | null;
 }
 
-const SUSPEND_CODES = [
-  "ระงับสัญญา",
-  "ยกเลิกสัญญา",
-  "หนี้เสีย",
-  "suspend",
-  "cancelled",
-  "bad_debt",
-];
-
 // ─── Main export ──────────────────────────────────────────────────────────────
-
 /**
  * Populate debt_target_cache and debt_collected_cache for a given section.
- * Deletes existing rows for the section first, then inserts fresh data.
+ *
+ * Calls listDebtTargetStream + listDebtCollectedStream directly so that
+ * all business logic (suspendedFromPeriod, closedByContract patterns, etc.)
+ * is computed by the authoritative source — debtDb.ts.
  *
  * @returns { targetRows, collectedRows } — number of rows inserted into each cache
  */
@@ -82,388 +59,183 @@ export async function populateDebtCache(
   const db = await getDb();
   if (!db) throw new Error("[populateCache] DB not available");
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  console.log(`[populateCache] Starting populate for section: ${section}`);
+  const startMs = Date.now();
 
-  // ─── 1. Load contracts ────────────────────────────────────────────────────
-  const contractsRaw = await db.execute(sql`
-    SELECT
-      external_id,
-      contract_no,
-      approve_date,
-      customer_name,
-      phone,
-      status,
-      product_type,
-      partner_code,
-      partner_name,
-      device,
-      model,
-      CAST(finance_amount AS DECIMAL(18,2))   AS finance_amount,
-      installment_count,
-      CAST(bad_debt_amount AS DECIMAL(18,2))  AS bad_debt_amount,
-      bad_debt_date,
-      bad_debt_updated_by,
-      bad_debt_updated_at
+  // ─── 0. Load extra contract metadata (not in stream output) ──────────────
+  const metaRaw = await db.execute(sql`
+    SELECT external_id, status, partner_code, partner_name, device, model
     FROM contracts
     WHERE section = ${section}
   `);
-  const cRows: any[] = (contractsRaw as any)[0] ?? contractsRaw;
-
-  // ─── 2. Load installments ─────────────────────────────────────────────────
-  const instRaw = await db.execute(sql`
-    SELECT
-      contract_external_id,
-      external_id,
-      period,
-      due_date,
-      CAST(amount AS DECIMAL(18,2))                                                 AS amount,
-      CAST(paid_amount AS DECIMAL(18,2))                                            AS paid_amount,
-      status                                                                         AS inst_status,
-      CAST(JSON_EXTRACT(raw_json, '$.principal_due')  AS DECIMAL(18,2))            AS principal_due,
-      CAST(JSON_EXTRACT(raw_json, '$.interest_due')   AS DECIMAL(18,2))            AS interest_due,
-      CAST(JSON_EXTRACT(raw_json, '$.fee_due')        AS DECIMAL(18,2))            AS fee_due,
-      CAST(COALESCE(JSON_EXTRACT(raw_json, '$.penalty_due'), JSON_EXTRACT(raw_json, '$.mulct'), 0) AS DECIMAL(18,2)) AS penalty_due,
-      CAST(COALESCE(JSON_EXTRACT(raw_json, '$.unlock_fee_due'), 0) AS DECIMAL(18,2)) AS unlock_fee_due,
-      JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.installment_status_code'))             AS installment_status_code,
-      CAST(JSON_EXTRACT(raw_json, '$.balance') AS DECIMAL(18,2))                   AS balance
-    FROM installments
-    WHERE section = ${section}
-    ORDER BY contract_external_id, period
-  `);
-  const iRows: any[] = (instRaw as any)[0] ?? instRaw;
-
-  // Group installments by contract
-  const instByContract = new Map<string, any[]>();
-  for (const r of iRows) {
-    const key = String(r.contract_external_id);
-    if (!instByContract.has(key)) instByContract.set(key, []);
-    instByContract.get(key)!.push(r);
-  }
-
-  // ─── 3. Load payment_transactions ─────────────────────────────────────────
-  const payRaw = await db.execute(sql`
-    SELECT
-      contract_external_id,
-      external_id                                                                    AS payment_external_id,
-      paid_at,
-      CAST(amount AS DECIMAL(18,2))                                                 AS total_paid_amount,
-      CAST(JSON_EXTRACT(raw_json, '$.principal_paid')           AS DECIMAL(18,2))  AS principal_paid,
-      CAST(JSON_EXTRACT(raw_json, '$.interest_paid')            AS DECIMAL(18,2))  AS interest_paid,
-      CAST(JSON_EXTRACT(raw_json, '$.fee_paid')                 AS DECIMAL(18,2))  AS fee_paid,
-      CAST(JSON_EXTRACT(raw_json, '$.penalty_paid')             AS DECIMAL(18,2))  AS penalty_paid,
-      CAST(JSON_EXTRACT(raw_json, '$.unlock_fee_paid')          AS DECIMAL(18,2))  AS unlock_fee_paid,
-      CAST(JSON_EXTRACT(raw_json, '$.discount_amount')          AS DECIMAL(18,2))  AS discount_amount,
-      CAST(JSON_EXTRACT(raw_json, '$.overpaid_amount')          AS DECIMAL(18,2))  AS overpaid_amount,
-      CAST(JSON_EXTRACT(raw_json, '$.bad_debt_amount')          AS DECIMAL(18,2))  AS bad_debt_amount,
-      JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.receipt_no'))                         AS receipt_no,
-      CAST(JSON_EXTRACT(raw_json, '$.payment_id') AS UNSIGNED)                     AS payment_id,
-      JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.updated_at'))                         AS updated_at,
-      JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.updated_by'))                         AS updated_by
-    FROM payment_transactions
-    WHERE section = ${section}
-    ORDER BY contract_external_id, paid_at, CAST(JSON_EXTRACT(raw_json, '$.payment_id') AS UNSIGNED)
-  `);
-  const pRows: any[] = (payRaw as any)[0] ?? payRaw;
-
-  // Group payments by contract
-  const payByContract = new Map<string, any[]>();
-  for (const r of pRows) {
-    const key = String(r.contract_external_id);
-    if (!payByContract.has(key)) payByContract.set(key, []);
-    payByContract.get(key)!.push(r);
-  }
-
-  // ─── 4. Detect TXRTC close contracts (mirrors debtDb.ts closedByContract) ─
-  const closedByContract = new Set<string>();
-  const maxClosedPeriodByContract = new Map<string, number>();
-  for (const r of pRows) {
-    const receiptNo = (r.receipt_no ?? "") as string;
-    if (!receiptNo.startsWith("TXRTC")) continue;
-    const extId = String(r.contract_external_id);
-    closedByContract.add(extId);
-    const period = r.period != null ? Number(r.period) : 0;
-    const prev = maxClosedPeriodByContract.get(extId) ?? 0;
-    if (period > prev) maxClosedPeriodByContract.set(extId, period);
-  }
-
-  // ─── 5. Build target cache rows ───────────────────────────────────────────
-  const targetInserts: (typeof debtTargetCache.$inferInsert)[] = [];
-
-  for (const c of cRows) {
-    const extId = String(c.external_id);
-    const contractStatus = c.status ?? null;
-    const isContractBadDebt = contractStatus === "หนี้เสีย";
-    const isContractSuspended = contractStatus === "ระงับสัญญา";
-
-    const insts = instByContract.get(extId) ?? [];
-    const payments = payByContract.get(extId) ?? [];
-
-    // Derive debt status + debtRange for the contract
-    const { label: debtStatusLabel, daysOverdue } = deriveDebtStatus(
-      contractStatus,
-      insts.map((r) => ({
-        due_date: r.due_date ?? null,
-        amount: r.amount != null ? Number(r.amount) : null,
-        paid_amount: r.paid_amount != null ? Number(r.paid_amount) : null,
-        balance: r.balance != null ? Number(r.balance) : null,
-      })),
-      today,
-    );
-    const debtRange = bucketFromDays(daysOverdue);
-
-    // Compute suspendedFromPeriod (mirrors debtDb.ts logic)
-    let suspendedFromPeriod = 0;
-    if (isContractSuspended || isContractBadDebt) {
-      const badDebtDate = c.bad_debt_date ?? null;
-      if (badDebtDate) {
-        // Find the first installment with due_date >= bad_debt_date
-        const sortedInsts = [...insts].sort((a, b) => (a.period ?? 0) - (b.period ?? 0));
-        for (const inst of sortedInsts) {
-          if (inst.due_date && inst.due_date >= badDebtDate) {
-            suspendedFromPeriod = inst.period != null ? Number(inst.period) : 0;
-            break;
-          }
-        }
-        if (suspendedFromPeriod === 0 && sortedInsts.length > 0) {
-          // Fallback: use last period
-          const lastInst = sortedInsts[sortedInsts.length - 1];
-          suspendedFromPeriod = lastInst.period != null ? Number(lastInst.period) : 0;
-        }
-      }
-    }
-
-    // Detect TXRTC close pattern for this contract
-    const isClosed_contract = closedByContract.has(extId);
-    const maxClosedPeriod = maxClosedPeriodByContract.get(extId) ?? 0;
-
-    // Compute current period (highest past/current non-closed/non-suspended period)
-    const todayMs = today.getTime();
-    const instsSorted = [...insts].sort((a, b) => (a.period ?? 0) - (b.period ?? 0));
-
-    // Find current period for isCurrentPeriod flag
-    let currentPeriodNo: number | null = null;
-    {
-      const pastInsts = instsSorted.filter((inst) => {
-        const instStatus = inst.inst_status ?? inst.installment_status_code ?? "";
-        const isSusp = SUSPEND_CODES.includes(instStatus);
-        const isCl = isClosed_contract
-          && maxClosedPeriod !== -1
-          && (inst.period ?? 0) > 1
-          && (inst.period ?? 0) > maxClosedPeriod;
-        if (isSusp || isCl) return false;
-        if (!inst.due_date) return false;
-        const dueMs = Date.parse(`${inst.due_date}T00:00:00`);
-        return dueMs <= todayMs;
-      });
-      if (pastInsts.length > 0) {
-        const latest = pastInsts.reduce((a, b) => (a.period ?? 0) >= (b.period ?? 0) ? a : b);
-        currentPeriodNo = latest.period != null ? Number(latest.period) : null;
-      }
-    }
-
-    // Per-installment rows
-    for (const r of instsSorted) {
-      const periodNo = r.period != null ? Number(r.period) : 0;
-      const rawAmount = r.amount != null ? Number(r.amount) : 0;
-      const rawPaid = r.paid_amount != null ? Number(r.paid_amount) : 0;
-      const dueDate = r.due_date ?? null;
-
-      // isFuturePeriod
-      const isFuturePeriod = dueDate != null && Date.parse(`${dueDate}T00:00:00`) > todayMs;
-
-      // isClosed / isSuspended
-      let isClosed = false;
-      let isSuspended = false;
-
-      if (isContractBadDebt) {
-        isSuspended = suspendedFromPeriod > 0 && periodNo >= suspendedFromPeriod;
-      } else if (isContractSuspended) {
-        const instStatusCode = r.installment_status_code ?? r.inst_status ?? "";
-        const instStatusIsSuspend = SUSPEND_CODES.includes(instStatusCode);
-        isSuspended = suspendedFromPeriod > 0 && periodNo >= suspendedFromPeriod &&
-          (instStatusIsSuspend || rawPaid <= 0);
-      } else {
-        isClosed = isClosed_contract
-          && maxClosedPeriod !== -1
-          && periodNo > 1
-          && periodNo > maxClosedPeriod;
-      }
-
-      // isPaid
-      const isPaid = !isClosed && !isSuspended && (
-        (rawAmount <= 0.009 && rawPaid > 0.009) ||
-        (rawAmount > 0.009 && rawPaid >= rawAmount - 0.5)
-      );
-
-      // isPartialPaid
-      const isPartialPaid = !isClosed && !isSuspended && !isPaid &&
-        rawPaid > 0.009 && rawAmount > 0.009 && rawPaid < rawAmount - 0.5;
-
-      // isArrears (only for past/current periods with penalty/unlockFee)
-      const rawPenalty = r.penalty_due != null ? Number(r.penalty_due) : 0;
-      const rawUnlockFee = r.unlock_fee_due != null ? Number(r.unlock_fee_due) : 0;
-      const isPastOrCurrent = dueDate != null && Date.parse(`${dueDate}T00:00:00`) <= todayMs;
-      const isArrears = isPastOrCurrent && (rawPenalty > 0.005 || rawUnlockFee > 0.005);
-
-      // isCurrentPeriod
-      const isCurrentPeriod = currentPeriodNo !== null && periodNo === currentPeriodNo;
-
-      // isBadDebt: period is in bad-debt zone
-      const isBadDebt = isContractBadDebt && isSuspended;
-
-      // Compute display amounts
-      const principal = r.principal_due != null ? Number(r.principal_due) : 0;
-      const interest = r.interest_due != null ? Number(r.interest_due) : 0;
-      const fee = r.fee_due != null ? Number(r.fee_due) : 0;
-      const penalty = isFuturePeriod ? 0 : rawPenalty;
-      const unlockFee = isFuturePeriod ? 0 : rawUnlockFee;
-      const netAmount = principal + interest + fee;
-      const totalAmount = rawAmount;
-      const paidAmount = rawPaid;
-
-      targetInserts.push({
-        section,
-        contractExternalId: extId,
-        contractNo: c.contract_no ?? "",
-        customerName: c.customer_name ?? null,
-        approveDate: c.approve_date ?? null,
-        contractStatus: contractStatus,
-        partnerCode: c.partner_code ?? null,
-        partnerName: c.partner_name ?? null,
-        productType: c.product_type ?? null,
-        device: c.device ?? null,
-        model: c.model ?? null,
-        financeAmount: c.finance_amount != null ? String(Number(c.finance_amount)) : null,
-        installmentCount: c.installment_count != null ? Number(c.installment_count) : null,
-        period: periodNo,
-        dueDate: dueDate,
-        principal: String(principal),
-        interest: String(interest),
-        fee: String(fee),
-        penalty: String(penalty),
-        unlockFee: String(unlockFee),
-        netAmount: String(netAmount),
-        totalAmount: String(totalAmount),
-        paidAmount: String(paidAmount),
-        overpaidApplied: "0",
-        baselineAmount: "0",
-        isPaid,
-        isPartialPaid,
-        isClosed,
-        isSuspended,
-        isCurrentPeriod,
-        isFuturePeriod,
-        isArrears,
-        isBadDebt,
-        debtRange,
-      });
-    }
-  }
-
-  // ─── 6. Build collected cache rows ────────────────────────────────────────
-  const collectedInserts: (typeof debtCollectedCache.$inferInsert)[] = [];
-
-  // Build contract lookup map
-  const contractMap = new Map<string, any>();
-  for (const c of cRows) {
-    contractMap.set(String(c.external_id), c);
-  }
-
-  for (const p of pRows) {
-    const extId = String(p.contract_external_id);
-    const c = contractMap.get(extId);
-    if (!c) continue;
-
-    const payExtId = String(p.payment_external_id ?? "");
-    if (!payExtId) continue;
-
-    // Only include real payments (numeric external_id or TXRT receipt pattern)
-    const isNumericPayExt = /^\d+$/.test(payExtId);
-    const receiptNo = (p.receipt_no ?? "") as string;
-    const isTXRTReceipt = /^TXRT[^C]/.test(receiptNo) || /^TXRT\d/.test(receiptNo);
-    const isSynthetic = payExtId.startsWith("pay-");
-    if (isSynthetic) continue;
-    if (!isNumericPayExt && !isTXRTReceipt) continue;
-
-    const isBadDebtRow = (p.bad_debt_amount != null && Number(p.bad_debt_amount) > 0);
-
-    collectedInserts.push({
-      section,
-      contractExternalId: extId,
-      contractNo: c.contract_no ?? "",
-      customerName: c.customer_name ?? null,
-      approveDate: c.approve_date ?? null,
-      contractStatus: c.status ?? null,
-      partnerCode: c.partner_code ?? null,
-      partnerName: c.partner_name ?? null,
-      productType: c.product_type ?? null,
-      device: c.device ?? null,
-      model: c.model ?? null,
-      financeAmount: c.finance_amount != null ? String(Number(c.finance_amount)) : null,
-      installmentCount: c.installment_count != null ? Number(c.installment_count) : null,
-      paymentExternalId: payExtId,
-      period: p.payment_id != null ? Number(p.payment_id) : null,
-      paidAt: p.paid_at ?? null,
-      principal: String(p.principal_paid != null ? Number(p.principal_paid) : 0),
-      interest: String(p.interest_paid != null ? Number(p.interest_paid) : 0),
-      fee: String(p.fee_paid != null ? Number(p.fee_paid) : 0),
-      penalty: String(p.penalty_paid != null ? Number(p.penalty_paid) : 0),
-      unlockFee: String(p.unlock_fee_paid != null ? Number(p.unlock_fee_paid) : 0),
-      discount: String(p.discount_amount != null ? Number(p.discount_amount) : 0),
-      overpaid: String(p.overpaid_amount != null ? Number(p.overpaid_amount) : 0),
-      badDebt: String(p.bad_debt_amount != null ? Number(p.bad_debt_amount) : 0),
-      totalAmount: String(p.total_paid_amount != null ? Number(p.total_paid_amount) : 0),
-      updatedBy: p.updated_by ?? null,
-      isBadDebtRow,
+  const metaRows: any[] = (metaRaw as any)[0] ?? metaRaw;
+  const contractMeta = new Map<string, ContractMeta>();
+  for (const r of metaRows) {
+    contractMeta.set(String(r.external_id), {
+      status: r.status ?? null,
+      partnerCode: r.partner_code ?? null,
+      partnerName: r.partner_name ?? null,
+      device: r.device ?? null,
+      model: r.model ?? null,
     });
   }
+  console.log(`[populateCache] ${section}: loaded ${contractMeta.size} contract metadata rows`);
 
-  // ─── 7. Deduplicate before insert ────────────────────────────────────────────
-  // installments table may have duplicate (contract_external_id, period) rows.
-  // Keep only the last occurrence (highest index) per unique key.
-  const targetDeduped = new Map<string, typeof targetInserts[0]>();
-  for (const row of targetInserts) {
-    const key = `${row.section}|${row.contractExternalId}|${row.period}`;
-    targetDeduped.set(key, row); // last write wins
-  }
-  const targetFinal = Array.from(targetDeduped.values());
-
-  const collectedDeduped = new Map<string, typeof collectedInserts[0]>();
-  for (const row of collectedInserts) {
-    const key = `${row.section}|${row.contractExternalId}|${row.paymentExternalId}`;
-    collectedDeduped.set(key, row);
-  }
-  const collectedFinal = Array.from(collectedDeduped.values());
-
-  // ─── 8. Delete existing rows and insert fresh data ─────────────────────────
-  // Delete existing rows for this section
+  // ─── 1. Delete existing rows for this section ─────────────────────────────
   await db.execute(sql`DELETE FROM debt_target_cache WHERE section = ${section}`);
   await db.execute(sql`DELETE FROM debt_collected_cache WHERE section = ${section}`);
+  console.log(`[populateCache] ${section}: deleted existing cache rows`);
 
-  // Batch insert (100 rows at a time to avoid MySQL 65535-parameter limit)
-  // debt_target_cache has ~35 columns → 100 rows = 3500 params (well under limit)
-  const BATCH = 100;
-
+  // ─── 2. Populate debt_target_cache ────────────────────────────────────────
   let targetCount = 0;
-  for (let i = 0; i < targetFinal.length; i += BATCH) {
-    const batch = targetFinal.slice(i, i + BATCH);
-    if (batch.length > 0) {
-      await db.insert(debtTargetCache).values(batch);
-      targetCount += batch.length;
+  const targetStream = listDebtTargetStream({ section, batchSize: 200 });
+
+  for await (const contractBatch of targetStream) {
+    const insertRows: (typeof debtTargetCache.$inferInsert)[] = [];
+
+    for (const contract of contractBatch) {
+      const extId = String((contract as any).contractExternalId ?? "");
+      if (!extId) continue;
+
+      const meta = contractMeta.get(extId);
+      const daysOverdue = Number((contract as any).daysOverdue ?? 0);
+      const debtRange = bucketFromDays(daysOverdue);
+      const contractStatus = meta?.status ?? null;
+
+      for (const inst of (contract as any).installments ?? []) {
+        const periodNo = inst.period != null ? Number(inst.period) : 0;
+
+        insertRows.push({
+          section,
+          contractExternalId: extId,
+          contractNo: (contract as any).contractNo ?? "",
+          customerName: (contract as any).customerName ?? null,
+          approveDate: (contract as any).approveDate ?? null,
+          contractStatus,
+          partnerCode: meta?.partnerCode ?? null,
+          partnerName: meta?.partnerName ?? null,
+          productType: (contract as any).productType ?? null,
+          device: meta?.device ?? null,
+          model: meta?.model ?? null,
+          financeAmount: (contract as any).financeAmount != null
+            ? String(Number((contract as any).financeAmount))
+            : null,
+          installmentCount: (contract as any).installmentCount != null
+            ? Number((contract as any).installmentCount)
+            : null,
+          period: periodNo,
+          dueDate: inst.dueDate ?? null,
+          principal: String(Number(inst.principal ?? 0)),
+          interest: String(Number(inst.interest ?? 0)),
+          fee: String(Number(inst.fee ?? 0)),
+          penalty: String(Number(inst.penalty ?? 0)),
+          unlockFee: String(Number(inst.unlockFee ?? 0)),
+          netAmount: String(Number(inst.netAmount ?? 0)),
+          totalAmount: String(Number(inst.amount ?? 0)),
+          paidAmount: String(Number(inst.paid ?? 0)),
+          overpaidApplied: String(Number(inst.overpaidApplied ?? 0)),
+          baselineAmount: String(Number(inst.baselineAmount ?? 0)),
+          isPaid: !!inst.isPaid,
+          isPartialPaid: !!inst.isPartialPaid,
+          isClosed: !!inst.isClosed,
+          isSuspended: !!inst.isSuspended,
+          isCurrentPeriod: !!inst.isCurrentPeriod,
+          isFuturePeriod: !!inst.isFuturePeriod,
+          isArrears: !!inst.isArrears,
+          isBadDebt: !!inst.isSuspended && (
+            contractStatus === "หนี้เสีย" || inst.suspendLabel === "หนี้เสีย"
+          ),
+          debtRange,
+        });
+      }
+    }
+
+    // Batch insert
+    for (let i = 0; i < insertRows.length; i += BATCH) {
+      const batch = insertRows.slice(i, i + BATCH);
+      if (batch.length > 0) {
+        await db.insert(debtTargetCache).values(batch);
+        targetCount += batch.length;
+      }
     }
   }
-  let collectedCount = 0;
-  for (let i = 0; i < collectedFinal.length; i += BATCH) {
-    const batch = collectedFinal.slice(i, i + BATCH);
-    if (batch.length > 0) {
-      await db.insert(debtCollectedCache).values(batch);
-      collectedCount += batch.length;
-    }
-  }
+
   console.log(
-    `[populateCache] ${section}: inserted ${targetCount} target rows, ${collectedCount} collected rows`,
+    `[populateCache] ${section}: inserted ${targetCount} target rows (${Date.now() - startMs}ms)`,
   );
 
+  // ─── 3. Populate debt_collected_cache ─────────────────────────────────────
+  let collectedCount = 0;
+  const collectedStream = listDebtCollectedStream({ section, batchSize: 200 });
+
+  for await (const chunk of collectedStream) {
+    const contractBatch = (chunk as any).rows ?? [];
+    const insertRows: (typeof debtCollectedCache.$inferInsert)[] = [];
+
+    for (const contract of contractBatch) {
+      const extId = String((contract as any).contractExternalId ?? "");
+      if (!extId) continue;
+
+      const meta = contractMeta.get(extId);
+      // listDebtCollectedStream uses `status` field (not `contractStatus`)
+      const contractStatus = (contract as any).status ?? meta?.status ?? null;
+
+      for (const p of (contract as any).payments ?? []) {
+        // Skip TXRTC close rows — they are not real payments
+        if (p.isCloseRow) continue;
+
+        // Build a stable paymentExternalId from period + splitIndex
+        const payExtId = `${extId}-p${p.period ?? 0}-s${p.splitIndex ?? 0}`;
+
+        insertRows.push({
+          section,
+          contractExternalId: extId,
+          contractNo: (contract as any).contractNo ?? "",
+          customerName: (contract as any).customerName ?? null,
+          approveDate: (contract as any).approveDate ?? null,
+          contractStatus,
+          partnerCode: meta?.partnerCode ?? null,
+          partnerName: meta?.partnerName ?? null,
+          productType: (contract as any).productType ?? null,
+          device: meta?.device ?? null,
+          model: meta?.model ?? null,
+          financeAmount: (contract as any).financeAmount != null
+            ? String(Number((contract as any).financeAmount))
+            : null,
+          installmentCount: (contract as any).installmentCount != null
+            ? Number((contract as any).installmentCount)
+            : null,
+          paymentExternalId: payExtId,
+          period: p.period != null ? Number(p.period) : null,
+          paidAt: p.paidAt ?? null,
+          principal: String(Number(p.principal ?? 0)),
+          interest: String(Number(p.interest ?? 0)),
+          fee: String(Number(p.fee ?? 0)),
+          penalty: String(Number(p.penalty ?? 0)),
+          unlockFee: String(Number(p.unlockFee ?? 0)),
+          discount: String(Number(p.discount ?? 0)),
+          overpaid: String(Number(p.overpaid ?? 0)),
+          badDebt: String(Number(p.badDebt ?? 0)),
+          totalAmount: String(Number(p.total ?? 0)),
+          updatedBy: p.updatedBy ?? null,
+          isBadDebtRow: !!p.isBadDebtRow,
+        });
+      }
+    }
+
+    // Batch insert
+    for (let i = 0; i < insertRows.length; i += BATCH) {
+      const batch = insertRows.slice(i, i + BATCH);
+      if (batch.length > 0) {
+        await db.insert(debtCollectedCache).values(batch);
+        collectedCount += batch.length;
+      }
+    }
+  }
+
+  const totalMs = Date.now() - startMs;
+  console.log(
+    `[populateCache] ${section}: inserted ${targetCount} target rows, ${collectedCount} collected rows (total ${totalMs}ms)`,
+  );
   return { targetRows: targetCount, collectedRows: collectedCount };
 }
