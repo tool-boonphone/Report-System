@@ -1608,17 +1608,14 @@ export async function listDebtTarget(params: { section: SectionKey }) {
     //   (per-period: override ทุก period ที่ installment_status_code เป็น ระงับสัญญา/หนี้เสีย)
     // ทั้งสองสถานะ: money fields = 0, ไม่นับเข้าเป้าเก็บหนี้
     //
-    // Suspend/bad-debt detection: FF365 uses "ยกเลิกสัญญา"; Boonphone uses "ระงับสัญญา"/"หนี้เสีย".
+    // Both Boonphone and FF365 use the same installment status codes (same underlying system)
+    // Verified from DB: both sections use "ระงับสัญญา" and "ยกเลิกสัญญา" — no "หนี้เสีย" in installments
     const contractStatus = c.status ?? null;
     const isContractSuspended = contractStatus === "ระงับสัญญา";
     const isContractBadDebt = contractStatus === "หนี้เสีย";
-    const isFF365Section = params.section === "Fastfone365";
     // Phase 69: declare suspendCodes outside if-block so it's accessible in baseInstallments.map
-    // FF365: "ระงับสัญญา" | "ยกเลิกสัญญา"  (FF365 stores status in i.status column, not raw_json)
-    // Boonphone: "ระงับสัญญา" | "หนี้เสีย"
-    const suspendCodes = isFF365Section
-      ? ["ระงับสัญญา", "ยกเลิกสัญญา"]
-      : ["ระงับสัญญา", "หนี้เสีย"];
+    // Same codes for both sections: "ระงับสัญญา" | "ยกเลิกสัญญา"
+    const suspendCodes = ["ระงับสัญญา", "ยกเลิกสัญญา"];
     let suspendedFromPeriod = 0; // > 0 → periods >= this render as suspended
     let suspendedAt: string | null = null;
     if (isContractSuspended || isContractBadDebt) {
@@ -3027,11 +3024,9 @@ export async function* listDebtTargetStream(params: {
     const contractStatus = c.status ?? null;
     const isContractSuspended = contractStatus === "ระงับสัญญา";
     const isContractBadDebt = contractStatus === "หนี้เสีย";
-    const isFF365SectionStream = params.section === "Fastfone365";
     // Phase 69: declare suspendCodes outside if-block so it's accessible in baseInstallments.map
-    const suspendCodes = isFF365SectionStream
-      ? ["ระงับสัญญา", "ยกเลิกสัญญา"]
-      : ["ระงับสัญญา", "หนี้เสีย"];
+    // Same codes for both sections: "ระงับสัญญา" | "ยกเลิกสัญญา" (verified from DB — no "หนี้เสีย" in installments)
+    const suspendCodes = ["ระงับสัญญา", "ยกเลิกสัญญา"];
     let suspendedFromPeriod = 0;
     let suspendedAt: string | null = null;
     if (isContractSuspended || isContractBadDebt) {
