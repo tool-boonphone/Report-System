@@ -11,6 +11,10 @@
  * Phase 43: True streaming — ส่ง rows ทีละ batch ระหว่างคำนวณ (ไม่รอ compute ทั้งหมด)
  * ทำให้ Cloudflare เห็น data ไหลมาตลอดและไม่ตัด connection ที่ 100s
  *
+ * Phase 113 Fix: ลบ waitForPrewarm ออก — ไม่รอ prewarm (75-90s) แต่ดึงจาก DB cache
+ * ทันที (~1-2s) เพื่อป้องกัน Cloudflare 503 เมื่อ server restart
+ * Priority: in-memory cache → DB cache → full stream (fallback)
+ *
  * Endpoints:
  *   GET /api/debt/stream/target?section=Fastfone365
  *   GET /api/debt/stream/collected?section=Fastfone365
@@ -26,12 +30,9 @@ import {
   setCachedTarget,
   getCachedCollected,
   setCachedCollected,
-  waitForPrewarmTarget,
-  waitForPrewarmCollected,
+  // waitForPrewarm removed: Phase 113 Fix — ไม่รอ prewarm เพื่อป้องกัน Cloudflare 503
 } from "../debtCache";
 import {
-  listDebtTarget,
-  listDebtCollected,
   listDebtTargetStream,
   listDebtCollectedStream,
 } from "../debtDb";
@@ -197,10 +198,10 @@ export async function handleDebtStreamTarget(
   }
 
   try {
-    // If prewarm is in progress, wait for it — avoids double-streaming and OOM
-    await waitForPrewarmTarget(section);
+    // Phase 113 Fix: ไม่รอ prewarm — ตรวจ in-memory cache ก่อน
+    // ถ้าไม่มีให้ดึงจาก DB cache ทันที (ไม่รอ prewarm 75-90s)
 
-    // Cache hit — stream immediately from cached array
+    // 1. In-memory cache hit — เร็วที่สุด (~ms)
     const cached = getCachedTarget(section);
     if (cached) {
       console.log(`[debtStream] HIT target for ${section}`);
@@ -209,12 +210,11 @@ export async function handleDebtStreamTarget(
       return;
     }
 
-    // Cache miss — stream from DB cache (fast path, ~1-3s vs 60-120s for full stream)
+    // 2. DB cache — fast path (~1-2s) ใช้เมื่อ in-memory ว่าง (เช่น หลัง server restart)
     console.log(`[debtStream] MISS target for ${section}, streaming from DB cache...`);
     startStreamResponse(res);
 
-    // Try DB cache first; fall back to full stream if DB cache is empty
-    const allRows: any[] = [];
+    const allRows: any[] = []; // eslint-disable-line @typescript-eslint/no-explicit-any
     let usedDbCache = false;
     const dbCacheGen = streamTargetFromCache({ section: section as SectionKey, batchSize: 200 });
     let first = true;
@@ -228,8 +228,8 @@ export async function handleDebtStreamTarget(
       }
     }
 
+    // 3. Fallback: DB cache ว่าง → full stream (ใช้เฉพาะกรณี DB cache ยังไม่ได้ populate)
     if (!usedDbCache) {
-      // DB cache empty — fall back to full stream
       console.log(`[debtStream] DB cache empty for ${section}, falling back to full stream...`);
       const gen = listDebtTargetStream({ section: section as SectionKey, batchSize: 100 });
       for await (const batch of gen) {
@@ -245,7 +245,7 @@ export async function handleDebtStreamTarget(
     res.write("]}");
     res.end();
 
-    // Cache the result for subsequent requests
+    // Populate in-memory cache for subsequent requests (background, non-blocking)
     setCachedTarget(section, { rows: allRows });
     console.log(`[debtStream] target for ${section} cached (${allRows.length} rows, dbCache=${usedDbCache})`);
   } catch (err) {
@@ -282,10 +282,10 @@ export async function handleDebtStreamCollected(
   }
 
   try {
-    // If prewarm is in progress, wait for it — avoids keep-alive whitespace corrupting JSON
-    await waitForPrewarmCollected(section);
+    // Phase 113 Fix: ไม่รอ prewarm — ตรวจ in-memory cache ก่อน
+    // ถ้าไม่มีให้ดึงจาก DB cache ทันที (ไม่รอ prewarm 75-90s)
 
-    // Cache hit — stream immediately from cached array
+    // 1. In-memory cache hit — เร็วที่สุด (~ms)
     const cached = getCachedCollected(section);
     if (cached) {
       console.log(`[debtStream] HIT collected for ${section}`);
@@ -296,11 +296,11 @@ export async function handleDebtStreamCollected(
       return;
     }
 
-    // Cache miss — stream from DB cache (fast path)
+    // 2. DB cache — fast path (~1-2s) ใช้เมื่อ in-memory ว่าง (เช่น หลัง server restart)
     console.log(`[debtStream] MISS collected for ${section}, streaming from DB cache...`);
     startStreamResponse(res);
 
-    const allRows: any[] = [];
+    const allRows: any[] = []; // eslint-disable-line @typescript-eslint/no-explicit-any
     let hasPrincipalBreakdown = true;
     let usedDbCache = false;
     const dbCacheGen = streamCollectedFromCache({ section: section as SectionKey, batchSize: 200 });
@@ -318,8 +318,8 @@ export async function handleDebtStreamCollected(
       }
     }
 
+    // 3. Fallback: DB cache ว่าง → full stream (ใช้เฉพาะกรณี DB cache ยังไม่ได้ populate)
     if (!usedDbCache) {
-      // DB cache empty — fall back to full stream
       console.log(`[debtStream] DB cache empty for ${section}, falling back to full stream...`);
       const gen = listDebtCollectedStream({ section: section as SectionKey, batchSize: 100 });
       for await (const chunk of gen) {
@@ -338,7 +338,7 @@ export async function handleDebtStreamCollected(
     res.write(`],\"hasPrincipalBreakdown\":${hasPrincipalBreakdown}}`);
     res.end();
 
-    // Cache the result for subsequent requests
+    // Populate in-memory cache for subsequent requests (background, non-blocking)
     setCachedCollected(section, { rows: allRows, hasPrincipalBreakdown });
     console.log(`[debtStream] collected for ${section} cached (${allRows.length} rows, dbCache=${usedDbCache})`);
   } catch (err) {
