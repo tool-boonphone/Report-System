@@ -464,8 +464,8 @@ export default function DebtReport() {
   const [streamProgress, setStreamProgress] = useState<{ target: number; collected: number }>({ target: 0, collected: 0 });
   const [streamTotal, setStreamTotal] = useState<{ target: number; collected: number }>({ target: 0, collected: 0 });
 
-  // Phase 116: HTTP streaming fetch — ใช้ ReadableStream เพื่ออ่าน X-Total-Contracts header
-  // และนับ rows ระหว่างโหลดเพื่อแสดง progress "X / Y สัญญา"
+  // Phase 117: NDJSON streaming fetch — อ่าน response ทีละบรรทัด (newline-delimited JSON)
+  // แก้ปัญหา Cloudflare buffer response ทั้งหมดก่อน forward → ตัดที่ ~24MB
   const fetchStream = useCallback(async (t: "target" | "collected") => {
     if (!canView || !section) return;
     setStreamData((prev) => ({ ...prev, [t]: null }));
@@ -480,39 +480,68 @@ export default function DebtReport() {
         const text = await resp.text();
         throw new Error(`HTTP ${resp.status}: ${text.slice(0, 200)}`);
       }
-      // Phase 116: อ่าน total contracts จาก header ทันทีเพื่อแสดง progress bar
-      const totalFromHeader = parseInt(resp.headers.get("X-Total-Contracts") ?? "0", 10);
-      if (totalFromHeader > 0) {
-        setStreamTotal((prev) => ({ ...prev, [t]: totalFromHeader }));
-      }
-      // อ่าน response แบบ streaming เพื่อนับ rows ระหว่างทาง
+      // Phase 117: อ่าน NDJSON ทีละบรรทัด
       const reader = resp.body!.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
-      let receivedContracts = 0;
+      const rows: any[] = []; // eslint-disable-line @typescript-eslint/no-explicit-any
+      let hasPrincipalBreakdown = true;
+      let metaReceived = false;
+
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
-        // นับ contracts จาก JSON separators (",{" หรือ "{" ตัวแรก)
-        // แต่ละ contract คือ object ใน rows array
-        const newContracts = (buffer.match(/,?\{"contractExternalId"/g) ?? []).length;
-        if (newContracts > receivedContracts) {
-          receivedContracts = newContracts;
-          setStreamProgress((prev) => ({ ...prev, [t]: receivedContracts }));
+
+        // แยกตาม newline และ parse ทีละบรรทัด
+        const lines = buffer.split("\n");
+        // เก็บบรรทัดสุดท้ายไว้ (อาจยังไม่ครบ)
+        buffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed) continue;
+          try {
+            const obj = JSON.parse(trimmed);
+            if (obj.type === "meta") {
+              // บรรทัดแรก: meta — อัปเดต total และ hasPrincipalBreakdown
+              if (obj.total > 0) setStreamTotal((prev) => ({ ...prev, [t]: obj.total }));
+              if (obj.hasPrincipalBreakdown != null) hasPrincipalBreakdown = obj.hasPrincipalBreakdown;
+              metaReceived = true;
+            } else if (obj.type === "done") {
+              // บรรทัดสุดท้าย: done — อัปเดต hasPrincipalBreakdown ถ้ามี
+              if (obj.hasPrincipalBreakdown != null) hasPrincipalBreakdown = obj.hasPrincipalBreakdown;
+            } else if (metaReceived) {
+              // บรรทัดข้อมูล: contract row
+              rows.push(obj);
+              // อัปเดต progress ทุก 500 rows
+              if (rows.length % 500 === 0) {
+                setStreamProgress((prev) => ({ ...prev, [t]: rows.length }));
+              }
+            }
+          } catch {
+            // ไม่ใช่ JSON ที่ถูกต้อง — ข้าม
+          }
         }
       }
-      // Decode remaining bytes
-      buffer += decoder.decode();
-      // Parse the complete JSON
-      const parsed = JSON.parse(buffer);
-      const rows = parsed.rows ?? [];
+
+      // ประมวลผลบรรทัดสุดท้ายที่ค้างใน buffer
+      if (buffer.trim()) {
+        try {
+          const obj = JSON.parse(buffer.trim());
+          if (obj.type === "done" && obj.hasPrincipalBreakdown != null) {
+            hasPrincipalBreakdown = obj.hasPrincipalBreakdown;
+          } else if (obj.type !== "meta" && obj.type !== "done") {
+            rows.push(obj);
+          }
+        } catch { /* ignore */ }
+      }
+
       setStreamProgress((prev) => ({ ...prev, [t]: rows.length }));
       setStreamTotal((prev) => ({ ...prev, [t]: rows.length }));
       if (t === "target") {
         setStreamData((prev) => ({ ...prev, target: { rows: rows as TargetRow[] } }));
       } else {
-        const hasPrincipalBreakdown = parsed.hasPrincipalBreakdown !== false;
         setStreamData((prev) => ({ ...prev, collected: { rows: rows as CollectedRow[], hasPrincipalBreakdown } }));
       }
     } catch (err: any) {

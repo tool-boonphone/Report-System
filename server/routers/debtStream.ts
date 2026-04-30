@@ -68,52 +68,49 @@ async function resolveUser(req: Request) {
 }
 
 /**
- * Set streaming headers and write the opening JSON bracket immediately.
- * Returns immediately — caller must write rows then close with `]...}`.
+ * Phase 117: NDJSON streaming — ส่ง JSON object ทีละบรรทัด (newline-delimited)
+ * แก้ปัญหา Cloudflare buffer response ทั้งหมดก่อน forward → ตัดที่ ~24MB
+ *
+ * Format:
+ *   Line 1: {"type":"meta","total":17721,"hasPrincipalBreakdown":true}
+ *   Line 2+: {"contractExternalId":"...","periods":[...]}
+ *   Last line: {"type":"done"}
+ *
+ * Frontend อ่านทีละบรรทัด parse แยกกัน — Cloudflare ไม่ต้องรอ close `]}`
  */
-function startStreamResponse(res: Response): void {
-  res.setHeader("Content-Type", "application/json; charset=utf-8");
+function startNDJSONResponse(res: Response, meta: Record<string, unknown>): void {
+  res.setHeader("Content-Type", "application/x-ndjson; charset=utf-8");
   res.setHeader("Transfer-Encoding", "chunked");
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Accel-Buffering", "no"); // ปิด nginx/Cloudflare buffering
   res.setHeader("Cache-Control", "no-cache");
-  // Write opening bracket immediately — proxy sees byte 1 and won't timeout
-  res.write('{"rows":[');
+  // Write meta line immediately — proxy sees byte 1 and won't timeout
+  res.write(JSON.stringify({ type: "meta", ...meta }) + "\n");
 }
 
 /**
- * Stream JSON response in chunks to keep the proxy connection alive.
- * Assumes `{"rows":[` has already been written by startStreamResponse().
+ * Phase 117: NDJSON — ส่ง rows ทีละบรรทัด (ใช้กับ in-memory cache path)
  */
-async function streamJsonRows(
+async function streamNDJSONRows(
   res: Response,
   rows: any[], // eslint-disable-line @typescript-eslint/no-explicit-any
-  meta: Record<string, unknown> = {},
 ): Promise<void> {
   return new Promise((resolve, reject) => {
-    const CHUNK_SIZE = 50; // rows per write
+    const CHUNK_SIZE = 100; // rows per write
     let i = 0;
-    let first = true;
 
     function writeChunk() {
       try {
         const end = Math.min(i + CHUNK_SIZE, rows.length);
         while (i < end) {
-          const prefix = first ? "" : ",";
-          first = false;
-          res.write(prefix + JSON.stringify(rows[i]));
+          res.write(JSON.stringify(rows[i]) + "\n");
           i++;
         }
 
         if (i < rows.length) {
-          // Schedule next chunk via setImmediate to yield to event loop
           setImmediate(writeChunk);
         } else {
-          // Done — append metadata fields and close
-          const metaStr = Object.entries(meta)
-            .map(([k, v]) => `,${JSON.stringify(k)}:${JSON.stringify(v)}`)
-            .join("");
-          res.write("]" + metaStr + "}");
+          res.write(JSON.stringify({ type: "done" }) + "\n");
           res.end();
           resolve();
         }
@@ -127,52 +124,36 @@ async function streamJsonRows(
 }
 
 /**
- * True streaming: iterate async generator and write rows as they arrive.
- * Phase 43: ส่ง rows ทีละ batch ระหว่างคำนวณ — Cloudflare เห็น data ไหลมาตลอด
+ * Phase 117: NDJSON — iterate async generator (target) and write rows as NDJSON lines
  */
-async function streamFromGenerator(
+async function streamNDJSONFromGenerator(
   res: Response,
   gen: AsyncGenerator<any[], void, unknown>,
-  meta: Record<string, unknown> = {},
 ): Promise<void> {
-  let first = true;
   for await (const batch of gen) {
     for (const row of batch) {
-      const prefix = first ? "" : ",";
-      first = false;
-      res.write(prefix + JSON.stringify(row));
+      res.write(JSON.stringify(row) + "\n");
     }
-    // Flush after each batch so Cloudflare sees data flowing
-    // (Express will flush automatically on next tick, but explicit helps)
   }
-  const metaStr = Object.entries(meta)
-    .map(([k, v]) => `,${JSON.stringify(k)}:${JSON.stringify(v)}`)
-    .join("");
-  res.write("]" + metaStr + "}");
+  res.write(JSON.stringify({ type: "done" }) + "\n");
   res.end();
 }
 
 /**
- * True streaming for collected: generator yields { rows, meta } objects
+ * Phase 117: NDJSON — iterate async generator (collected) and write rows as NDJSON lines
  */
-async function streamFromCollectedGenerator(
+async function streamNDJSONFromCollectedGenerator(
   res: Response,
   gen: AsyncGenerator<{ rows: any[]; meta?: Record<string, unknown> }, void, unknown>,
+  onMeta?: (meta: Record<string, unknown>) => void,
 ): Promise<void> {
-  let first = true;
-  let lastMeta: Record<string, unknown> = {};
   for await (const chunk of gen) {
     for (const row of chunk.rows) {
-      const prefix = first ? "" : ",";
-      first = false;
-      res.write(prefix + JSON.stringify(row));
+      res.write(JSON.stringify(row) + "\n");
     }
-    if (chunk.meta) lastMeta = { ...lastMeta, ...chunk.meta };
+    if (chunk.meta && onMeta) onMeta(chunk.meta);
   }
-  const metaStr = Object.entries(lastMeta)
-    .map(([k, v]) => `,${JSON.stringify(k)}:${JSON.stringify(v)}`)
-    .join("");
-  res.write("]" + metaStr + "}");
+  res.write(JSON.stringify({ type: "done" }) + "\n");
   res.end();
 }
 
@@ -207,31 +188,26 @@ export async function handleDebtStreamTarget(
     const cached = getCachedTarget(section);
     if (cached) {
       console.log(`[debtStream] HIT target for ${section}`);
-      // Phase 116: ส่ง total count ใน header เพื่อให้ frontend แสดง progress
-      res.setHeader("X-Total-Contracts", String(cached.rows.length));
-      startStreamResponse(res);
-      await streamJsonRows(res, cached.rows);
+      // Phase 117: NDJSON — meta line แรก แล้วตามด้วย rows ทีละบรรทัด
+      startNDJSONResponse(res, { total: cached.rows.length });
+      await streamNDJSONRows(res, cached.rows);
       return;
     }
 
     // 2. DB cache — fast path (~1-2s) ใช้เมื่อ in-memory ว่าง (เช่น หลัง server restart)
     console.log(`[debtStream] MISS target for ${section}, streaming from DB cache...`);
 
-    // Phase 116: ดึง total count ก่อน (query เล็กมาก ~50ms) เพื่อส่งใน header
+    // Phase 117: ดึง total count ก่อน (query เล็กมาก ~50ms) เพื่อส่งใน meta line
     const totalContracts = await getTargetContractCount(section as SectionKey);
-    res.setHeader("X-Total-Contracts", String(totalContracts));
-    startStreamResponse(res);
+    startNDJSONResponse(res, { total: totalContracts });
 
     const allRows: any[] = []; // eslint-disable-line @typescript-eslint/no-explicit-any
     let usedDbCache = false;
     const dbCacheGen = streamTargetFromCache({ section: section as SectionKey, batchSize: 500 });
-    let first = true;
     for await (const batch of dbCacheGen) {
       if (batch.length > 0) usedDbCache = true;
       for (const row of batch) {
-        const prefix = first ? "" : ",";
-        first = false;
-        res.write(prefix + JSON.stringify(row));
+        res.write(JSON.stringify(row) + "\n");
         allRows.push(row);
       }
     }
@@ -242,15 +218,13 @@ export async function handleDebtStreamTarget(
       const gen = listDebtTargetStream({ section: section as SectionKey, batchSize: 100 });
       for await (const batch of gen) {
         for (const row of batch) {
-          const prefix = first ? "" : ",";
-          first = false;
-          res.write(prefix + JSON.stringify(row));
+          res.write(JSON.stringify(row) + "\n");
           allRows.push(row);
         }
       }
     }
 
-    res.write("]}");
+    res.write(JSON.stringify({ type: "done" }) + "\n");
     res.end();
 
     // Populate in-memory cache for subsequent requests (background, non-blocking)
@@ -297,34 +271,27 @@ export async function handleDebtStreamCollected(
     const cached = getCachedCollected(section);
     if (cached) {
       console.log(`[debtStream] HIT collected for ${section}`);
-      // Phase 116: ส่ง total count ใน header เพื่อให้ frontend แสดง progress
-      res.setHeader("X-Total-Contracts", String(cached.rows.length));
-      startStreamResponse(res);
-      await streamJsonRows(res, cached.rows, {
-        hasPrincipalBreakdown: cached.hasPrincipalBreakdown,
-      });
+      // Phase 117: NDJSON — meta line แรก แล้วตามด้วย rows ทีละบรรทัด
+      startNDJSONResponse(res, { total: cached.rows.length, hasPrincipalBreakdown: cached.hasPrincipalBreakdown });
+      await streamNDJSONRows(res, cached.rows);
       return;
     }
 
     // 2. DB cache — fast path (~1-2s) ใช้เมื่อ in-memory ว่าง (เช่น หลัง server restart)
     console.log(`[debtStream] MISS collected for ${section}, streaming from DB cache...`);
 
-    // Phase 116: ดึง total count ก่อน (query เล็กมาก ~50ms) เพื่อส่งใน header
+    // Phase 117: ดึง total count ก่อน (query เล็กมาก ~50ms) เพื่อส่งใน meta line
     const totalContracts = await getCollectedContractCount(section as SectionKey);
-    res.setHeader("X-Total-Contracts", String(totalContracts));
-    startStreamResponse(res);
+    let hasPrincipalBreakdown = true;
+    startNDJSONResponse(res, { total: totalContracts, hasPrincipalBreakdown: true });
 
     const allRows: any[] = []; // eslint-disable-line @typescript-eslint/no-explicit-any
-    let hasPrincipalBreakdown = true;
     let usedDbCache = false;
     const dbCacheGen = streamCollectedFromCache({ section: section as SectionKey, batchSize: 500 });
-    let first = true;
     for await (const chunk of dbCacheGen) {
       if (chunk.rows.length > 0) usedDbCache = true;
       for (const row of chunk.rows) {
-        const prefix = first ? "" : ",";
-        first = false;
-        res.write(prefix + JSON.stringify(row));
+        res.write(JSON.stringify(row) + "\n");
         allRows.push(row);
       }
       if (chunk.meta?.hasPrincipalBreakdown != null) {
@@ -338,9 +305,7 @@ export async function handleDebtStreamCollected(
       const gen = listDebtCollectedStream({ section: section as SectionKey, batchSize: 100 });
       for await (const chunk of gen) {
         for (const row of chunk.rows) {
-          const prefix = first ? "" : ",";
-          first = false;
-          res.write(prefix + JSON.stringify(row));
+          res.write(JSON.stringify(row) + "\n");
           allRows.push(row);
         }
         if (chunk.meta?.hasPrincipalBreakdown != null) {
@@ -349,7 +314,7 @@ export async function handleDebtStreamCollected(
       }
     }
 
-    res.write(`],\"hasPrincipalBreakdown\":${hasPrincipalBreakdown}}`);
+    res.write(JSON.stringify({ type: "done", hasPrincipalBreakdown }) + "\n");
     res.end();
 
     // Populate in-memory cache for subsequent requests (background, non-blocking)
