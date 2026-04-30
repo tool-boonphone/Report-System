@@ -1176,3 +1176,14 @@ Task list:
 - [x] P120-4: แก้ queryCacheDb.ts streamTargetFromCache — ไม่ข้ามสัญญาที่ไม่มี installment rows และส่ง row ว่างแทน (Phase 120 root cause fix)
 - [x] P120-5: ตรวจสอบ DebtOverview.tsx และ DebtSummary.tsx — ไม่มี bug overwrite total (DebtOverview/Summary ไม่ได้ overwrite)
 - [x] P120-6: Commit + Push GitHub + Checkpoint
+
+## Phase 121 — Fix Incomplete Data (NDJSON → tRPC Chunk Loop)
+- [x] P121-1: เปลี่ยน fetchStream ใน DebtReport.tsx จาก NDJSON stream เป็น tRPC chunk loop (getTargetChunk/getCollectedChunk)
+- [x] P121-2: เปลี่ยน fetchStream ใน DebtOverview.tsx เช่นเดียวกัน
+- [x] P121-3: เปลี่ยน fetchStream ใน DebtSummary.tsx เช่นเดียวกัน
+- [x] P121-4: Commit + Push GitHub + Checkpoint (79e61e6a)
+
+## Phase 122 — Fix Service Unavailable (ลด chunk size + retry logic)
+- [x] P122-1: ลด CHUNK_SIZE จาก 2000 เป็น 500 (~2MB ต่อ request) ใน DebtReport.tsx, DebtOverview.tsx, DebtSummary.tsx
+- [x] P122-2: เพิ่ม fetchChunkWithRetry (max 3 ครั้ง, exponential backoff 1s/2s/4s) ใน 3 ไฟล์
+- [x] P122-3: Commit + Push GitHub + Checkpoint
