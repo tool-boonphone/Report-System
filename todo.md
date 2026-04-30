@@ -1131,3 +1131,11 @@ Task list:
 - [x] P113-7: แก้ไข server/routers/debtStream.ts ให้ใช้ streamTargetFromCache/streamCollectedFromCache จาก queryCacheDb แทน listDebtTargetStream/listDebtCollectedStream
 - [x] P113-8: ผลลัพธ์: Fastfone365 target stream เร็วขึ้นจาก 60-120s → 5.7s (~15-20x speedup)
 - [x] P113-9: TypeScript check ผ่าน 0 errors + Commit + Push GitHub + Checkpoint
+
+### Phase 113 Fix — แก้ไข populateCache.ts ที่ใช้ logic ผิด
+- [x] P113F-1: วิเคราะห์ root cause — populateCache.ts duplicate logic ผิด 2 จุด (closedByContract=Set แทน Map, suspendedFromPeriod ใช้ bad_debt_date แทน TXRT receipts)
+- [x] P113F-2: Rewrite populateCache.ts ให้เรียก listDebtTargetStream + listDebtCollectedStream โดยตรง (100% logic parity)
+- [x] P113F-3: แก้ section case sensitivity (Boonphone/Fastfone365 ไม่ใช่ boonphone/fastfone365)
+- [x] P113F-4: เพิ่ม internal backfill endpoint /api/internal/backfill-cache
+- [x] P113F-5: Backfill ใหม่ทั้งหมด — Boonphone: 45,398 target + 3,033 collected; Fastfone365: 170,589 target + 116,593 collected
+- [x] P113F-6: TypeScript 0 errors + Commit 539f6db + Push GitHub + Checkpoint
