@@ -3830,19 +3830,22 @@ export async function* listDebtCollectedStream(params: {
 }
 
 /* ============================================================================
- * listSuspectedBadDebt — Phase 105
+ * listSuspectedBadDebt — Phase 127 (rewritten to use cache tables)
  *
  * Returns contracts with debtStatus "เกิน 61-90" or "เกิน >90".
+ * Primary source: debt_target_cache (contract header + debt_range + dueDate for daysOverdue)
+ * Secondary:      debt_collected_cache (SUM total_amount = totalPaid, COUNT = paidInstallments)
+ * JOIN:           contracts (phone, sell_price, commission_net — not in cache)
+ *
  * Each row contains:
  *   contractNo, approveDate, customerName, phone, model, device,
- *   sellPrice, financeAmount, multiplier, commissionNet,
+ *   sellPrice, financeAmount, commissionNet,
  *   cost (= financeAmount + commissionNet),
- *   paidInstallments (งวดที่ชำระ),
- *   totalPaid (ยอดเก็บค่างวด — sum of real payments excl. device-sale),
+ *   paidInstallments (งวดที่ชำระ — COUNT non-bad-debt rows in collected cache),
+ *   totalPaid (ยอดเก็บค่างวด — SUM total_amount excl. bad_debt_row),
  *   debtValue (= cost - totalPaid),
- *   debtStatus, daysOverdue
- *
- * totalPaid is computed from payment_transactions (numeric external_id only).
+ *   debtStatus (= debt_range from cache),
+ *   daysOverdue (computed from earliest unpaid arrears due_date)
  * ============================================================================ */
 export async function listSuspectedBadDebt(params: { section: SectionKey }): Promise<{
   rows: Array<{
@@ -3868,127 +3871,129 @@ export async function listSuspectedBadDebt(params: { section: SectionKey }): Pro
   const db = await getDb();
   if (!db) return { rows: [] };
 
-  // --- Load contract headers ---
-  const contractRowsRaw = await db.execute(sql`
-    SELECT external_id,
-           contract_no,
-           approve_date,
-           customer_name,
-           phone,
-           model,
-           device,
-           CAST(sell_price AS DECIMAL(18,2))    AS sell_price,
-           CAST(finance_amount AS DECIMAL(18,2)) AS finance_amount,
-           CAST(multiplier AS DECIMAL(18,4))     AS multiplier,
-           CAST(commission_net AS DECIMAL(18,2)) AS commission_net,
-           paid_installments,
-           installment_count,
-           installment_amount,
-           status
-      FROM ${contracts}
-     WHERE ${contracts.section} = ${params.section}
-       AND ${contracts.status} NOT IN ('สำเร็จ', 'สิ้นสุดสัญญา', 'ยกเลิกสัญญา')
-  `);
-  const cRows: Array<any> = (contractRowsRaw as any)[0] ?? contractRowsRaw;
+  const { debtTargetCache, debtCollectedCache } = await import("../drizzle/schema");
 
-  // --- Load installments for overdue calculation ---
-  const instRowsRaw = await db.execute(sql`
-    SELECT contract_external_id,
-           external_id,
-           period,
-           due_date,
-           CAST(amount AS DECIMAL(18,2))       AS amount,
-           CAST(paid_amount AS DECIMAL(18,2))  AS paid_amount,
-           status AS inst_status,
-           CAST(JSON_EXTRACT(raw_json, '$.balance') AS DECIMAL(18,2)) AS balance
-      FROM ${installments}
-     WHERE ${installments.section} = ${params.section}
-     ORDER BY contract_external_id, period
+  // --- Step 1: Get distinct contracts from debt_target_cache where debt_range is suspected ---
+  // debt_range is contract-level (same value on all period rows for a contract)
+  // We pick the earliest arrears due_date for daysOverdue calculation
+  const suspectedRaw = await db.execute(sql`
+    SELECT
+      dtc.contract_external_id,
+      dtc.contract_no,
+      dtc.customer_name,
+      dtc.approve_date,
+      dtc.model,
+      dtc.device,
+      dtc.finance_amount,
+      dtc.installment_count,
+      dtc.debt_range,
+      -- Earliest unpaid arrears due_date for daysOverdue calculation
+      MIN(CASE WHEN dtc.is_arrears = 1 AND dtc.is_paid = 0 AND dtc.total_amount > 0
+               THEN dtc.due_date END) AS earliest_arrears_due
+    FROM debt_target_cache dtc
+    WHERE dtc.section = ${params.section}
+      AND dtc.debt_range IN ('เกิน 61-90', 'เกิน >90')
+    GROUP BY
+      dtc.contract_external_id,
+      dtc.contract_no,
+      dtc.customer_name,
+      dtc.approve_date,
+      dtc.model,
+      dtc.device,
+      dtc.finance_amount,
+      dtc.installment_count,
+      dtc.debt_range
+    ORDER BY dtc.approve_date DESC
   `);
-  const iRows: Array<{
-    contract_external_id: string;
-    external_id: string | null;
-    period: number | null;
-    due_date: string | null;
-    amount: number | null;
-    paid_amount: number | null;
-    inst_status: string | null;
-    balance: number | null;
-  }> = (instRowsRaw as any)[0] ?? instRowsRaw;
+  const suspectedRows: Array<any> = (suspectedRaw as any)[0] ?? suspectedRaw;
 
-  // --- Load payment_transactions (real payments only — numeric external_id) ---
-  const payRowsRaw = await db.execute(sql`
-    SELECT contract_external_id,
-           CAST(amount AS DECIMAL(18,2)) AS amount
-      FROM ${paymentTransactions}
-     WHERE ${paymentTransactions.section} = ${params.section}
-       AND (${paymentTransactions.status} IS NULL
-            OR LOWER(${paymentTransactions.status}) IN ('active', 'paid', 'success', 'completed'))
-       AND ${paymentTransactions.externalId} REGEXP '^[0-9]+$'
-  `);
-  const payRows: Array<{ contract_external_id: string; amount: number | null }> =
-    (payRowsRaw as any)[0] ?? payRowsRaw;
+  if (suspectedRows.length === 0) return { rows: [] };
 
-  // --- Index installments by contract ---
-  const instByContract = new Map<string, typeof iRows>();
-  for (const r of iRows) {
-    const key = r.contract_external_id;
-    if (!instByContract.has(key)) instByContract.set(key, []);
-    instByContract.get(key)!.push(r);
+  const contractIds = suspectedRows.map((r: any) => r.contract_external_id as string);
+
+  // --- Step 2: JOIN contracts for phone, sell_price, commission_net (not in cache) ---
+  const contractInfoRaw2 = await db.execute(
+    sql.raw(`
+      SELECT
+        external_id,
+        phone,
+        CAST(sell_price AS DECIMAL(18,2))     AS sell_price,
+        CAST(multiplier AS DECIMAL(18,4))     AS multiplier,
+        CAST(commission_net AS DECIMAL(18,2)) AS commission_net
+      FROM contracts
+      WHERE section = '${params.section}'
+        AND external_id IN (${contractIds.map((id) => `'${id.replace(/'/g, "''")}'`).join(",")})
+    `)
+  );
+  const contractInfoArr: Array<any> = (contractInfoRaw2 as any)[0] ?? contractInfoRaw2;
+  const contractInfoMap = new Map<string, any>();
+  for (const r of contractInfoArr) {
+    contractInfoMap.set(r.external_id, r);
   }
 
-  // --- Index payments by contract ---
-  const paidByContract = new Map<string, number>();
-  for (const p of payRows) {
-    const key = p.contract_external_id;
-    paidByContract.set(key, (paidByContract.get(key) ?? 0) + Number(p.amount ?? 0));
+  // --- Step 3: Get totalPaid and paidInstallments from debt_collected_cache ---
+  const collectedRaw = await db.execute(
+    sql.raw(`
+      SELECT
+        contract_external_id,
+        SUM(CASE WHEN is_bad_debt_row = 0 THEN CAST(total_amount AS DECIMAL(18,2)) ELSE 0 END) AS total_paid,
+        COUNT(CASE WHEN is_bad_debt_row = 0 THEN 1 END)                                         AS paid_installments
+      FROM debt_collected_cache
+      WHERE section = '${params.section}'
+        AND contract_external_id IN (${contractIds.map((id) => `'${id.replace(/'/g, "''")}'`).join(",")})
+      GROUP BY contract_external_id
+    `)
+  );
+  const collectedArr: Array<any> = (collectedRaw as any)[0] ?? collectedRaw;
+  const collectedMap = new Map<string, { totalPaid: number; paidInstallments: number }>();
+  for (const r of collectedArr) {
+    collectedMap.set(r.contract_external_id, {
+      totalPaid: Number(r.total_paid ?? 0),
+      paidInstallments: Number(r.paid_installments ?? 0),
+    });
   }
 
+  // --- Step 4: Assemble rows ---
   const today = new Date();
-  const SUSPECTED_STATUSES = new Set(["เกิน 61-90", "เกิน >90"]);
-
   const rows: ReturnType<typeof listSuspectedBadDebt> extends Promise<{ rows: infer R }> ? R : never = [];
 
-  for (const c of cRows) {
-    const extId: string = c.external_id;
-    const instList = instByContract.get(extId) ?? [];
+  for (const s of suspectedRows) {
+    const extId: string = s.contract_external_id;
+    const cInfo = contractInfoMap.get(extId);
+    const collected = collectedMap.get(extId) ?? { totalPaid: 0, paidInstallments: 0 };
 
-    // Derive debt status by computing daysOverdue directly from installments.
-    // NOTE: We pass null for contractStatus to bypass the terminal-status short-circuit
-    // in deriveDebtStatus (e.g. 'ระงับสัญญา' would return immediately without
-    // computing daysOverdue from installments). We want the real overdue days here.
-    const { label: debtStatus, daysOverdue } = deriveDebtStatus(
-      null, // bypass terminal check — compute from installments
-      instList as any,
-      today,
-    );
-
-    // Only include suspected bad debt
-    if (!SUSPECTED_STATUSES.has(debtStatus)) continue;
-
-    const financeAmount = c.finance_amount != null ? Number(c.finance_amount) : null;
-    const commissionNet = c.commission_net != null ? Number(c.commission_net) : null;
+    const financeAmount = s.finance_amount != null ? Number(s.finance_amount) : null;
+    const commissionNet = cInfo?.commission_net != null ? Number(cInfo.commission_net) : null;
     const cost = (financeAmount ?? 0) + (commissionNet ?? 0);
-    const totalPaid = paidByContract.get(extId) ?? 0;
+    const totalPaid = collected.totalPaid;
     const debtValue = cost - totalPaid;
+
+    // Compute daysOverdue from earliest_arrears_due
+    let daysOverdue = 0;
+    if (s.earliest_arrears_due) {
+      const dueMs = Date.parse(`${s.earliest_arrears_due}T00:00:00`);
+      if (!Number.isNaN(dueMs)) {
+        daysOverdue = Math.max(0, Math.floor((today.getTime() - dueMs) / (1000 * 60 * 60 * 24)));
+      }
+    }
 
     rows.push({
       contractExternalId: extId,
-      contractNo: c.contract_no ?? null,
-      approveDate: c.approve_date ?? null,
-      customerName: c.customer_name ?? null,
-      phone: c.phone ?? null,
-      model: c.model ?? null,
-      device: c.device ?? null,
-      sellPrice: c.sell_price != null ? Number(c.sell_price) : null,
+      contractNo: s.contract_no ?? null,
+      approveDate: s.approve_date ?? null,
+      customerName: s.customer_name ?? null,
+      phone: cInfo?.phone ?? null,
+      model: s.model ?? null,
+      device: s.device ?? null,
+      sellPrice: cInfo?.sell_price != null ? Number(cInfo.sell_price) : null,
       financeAmount,
-      multiplier: c.multiplier != null ? Number(c.multiplier) : null,
+      multiplier: cInfo?.multiplier != null ? Number(cInfo.multiplier) : null,
       commissionNet,
       cost,
-      paidInstallments: c.paid_installments != null ? Number(c.paid_installments) : 0,
+      paidInstallments: collected.paidInstallments,
       totalPaid,
       debtValue,
-      debtStatus,
+      debtStatus: s.debt_range ?? "เกิน >90",
       daysOverdue,
     });
   }

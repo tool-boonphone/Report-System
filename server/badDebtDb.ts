@@ -1,16 +1,19 @@
 /**
- * Bad Debt Summary helpers (Phase 97).
+ * Bad Debt Summary helpers — Phase 127 (rewritten to use cache tables).
+ *
+ * Primary source: debt_collected_cache (isBadDebtRow flag, payment breakdowns)
+ * Secondary:      debt_target_cache (contract header, financeAmount, installmentCount)
+ * JOIN:           contracts (phone, sell_price, commission_net, bad_debt_date — not in cache)
  *
  * สรุปกำไร/ขาดทุนจากหนี้เสีย:
- *   - ดึงสัญญาที่มีสถานะ "หนี้เสีย" (ทั้ง Boonphone และ Fastfone365 ใช้ status เดียวกัน)
- *   - แยก: ยอดเก็บค่างวด (installmentPaid) vs ยอดขายเครื่อง (deviceSaleAmount)
- *   - ต้นทุน = (ยอดจัดไฟแนนซ์ × ตัวคูณ) + ค่าคอมมิชชั่น
- *   - รวมรายรับ = ยอดเก็บค่างวด + ยอดขายเครื่อง
+ *   - ดึงสัญญาที่มีสถานะ "หนี้เสีย" (contract_status = 'หนี้เสีย' ใน debt_target_cache)
+ *   - deviceSaleAmount = SUM(bad_debt) WHERE is_bad_debt_row = 1 (debt_collected_cache)
+ *   - installmentPaid  = SUM(total_amount) WHERE is_bad_debt_row = 0 (debt_collected_cache)
+ *   - ต้นทุน = financeAmount + commissionNet
+ *   - รวมรายรับ = installmentPaid + deviceSaleAmount
  *   - กำไร/ขาดทุน = รวมรายรับ - ต้นทุน
- *   - ยอดเก็บค่างวด = totalPaid - deviceSaleAmount (ไม่รวมยอดสุดท้าย)
  */
 import { sql } from "drizzle-orm";
-import { contracts, paymentTransactions } from "../drizzle/schema";
 import type { SectionKey } from "../shared/const";
 import { getDb } from "./db";
 
@@ -21,9 +24,9 @@ export type BadDebtRow = {
   phone: string | null;
   approveDate: string | null;
   productType: string | null;
-  /** รุ่นสินค้า — ดึงจาก column model โดยตรง */
+  /** รุ่นสินค้า */
   model: string | null;
-  /** ราคาขาย (sale_price) */
+  /** ราคาขาย (sell_price) */
   salePrice: number | null;
   /** ยอดจัดไฟแนนซ์ */
   financeAmount: number;
@@ -31,7 +34,7 @@ export type BadDebtRow = {
   commissionNet: number;
   /** ยอดเก็บค่างวดปกติ (ไม่รวมยอดขายเครื่อง) */
   installmentPaid: number;
-  /** ยอดขายเครื่อง (bad_debt_amount จาก contracts) */
+  /** ยอดขายเครื่อง (SUM bad_debt จาก debt_collected_cache WHERE is_bad_debt_row=1) */
   deviceSaleAmount: number;
   /** วันที่ขายเครื่อง (bad_debt_date จาก contracts) */
   saleDate: string | null;
@@ -41,7 +44,7 @@ export type BadDebtRow = {
   totalRevenue: number;
   /** กำไร/ขาดทุน = totalRevenue - cost */
   profitLoss: number;
-  /** งวดที่ชำระ */
+  /** งวดที่ชำระ (COUNT non-bad-debt rows) */
   paidInstallments: number;
   installmentCount: number | null;
 };
@@ -83,107 +86,133 @@ export async function getBadDebtSummary(params: {
   };
   if (!db) return { rows: [], summary: emptySummary };
 
-  // Both sections use the same bad-debt status (same underlying system)
-  const badDebtStatuses = ["หนี้เสีย"];
+  // ─── Step 1: Get distinct bad-debt contracts from debt_target_cache ───────
+  // contract_status = 'หนี้เสีย' is stored on every period row for that contract
+  let approveFilter = "";
+  if (params.approveMonth) {
+    approveFilter = `AND DATE_FORMAT(dtc.approve_date, '%Y-%m') = '${params.approveMonth.replace(/'/g, "''")}'`;
+  }
 
-  const statusValues = sql.join(
-    badDebtStatuses.map((s) => sql`${s}`),
-    sql`, `,
+  const contractsRaw = await db.execute(
+    sql.raw(`
+      SELECT
+        dtc.contract_external_id,
+        dtc.contract_no,
+        dtc.customer_name,
+        dtc.approve_date,
+        dtc.product_type,
+        dtc.model,
+        CAST(dtc.finance_amount AS DECIMAL(18,2)) AS finance_amount,
+        dtc.installment_count
+      FROM debt_target_cache dtc
+      WHERE dtc.section = '${params.section}'
+        AND dtc.contract_status = 'หนี้เสีย'
+        ${approveFilter}
+      GROUP BY
+        dtc.contract_external_id,
+        dtc.contract_no,
+        dtc.customer_name,
+        dtc.approve_date,
+        dtc.product_type,
+        dtc.model,
+        dtc.finance_amount,
+        dtc.installment_count
+      ORDER BY dtc.approve_date DESC
+    `)
   );
+  const contractsArr: Array<any> = (contractsRaw as any)[0] ?? contractsRaw;
 
-  // Query: contracts + aggregated payments
-  const rawRows = await db.execute(sql`
-    SELECT
-      c.external_id                                                            AS contract_external_id,
-      c.contract_no                                                            AS contract_no,
-      c.customer_name                                                          AS customer_name,
-      c.phone                                                                  AS phone,
-      c.approve_date                                                           AS approve_date,
-      c.product_type                                                           AS product_type,
-      c.model                                                                  AS model,
-      CAST(c.sell_price AS DECIMAL(18,2))                                      AS sale_price,
-      CAST(c.finance_amount AS DECIMAL(18,2))                                  AS finance_amount,
-      CAST(COALESCE(c.commission_net, 0) AS DECIMAL(18,2))                    AS commission_net,
-      CAST(COALESCE(c.bad_debt_amount, 0) AS DECIMAL(18,2))                   AS bad_debt_amount,
-      c.bad_debt_date                                                          AS sale_date,
-      /*
-       * ยอดขายเครื่อง = bad_debt_amount ที่ runner.ts บันทึกไว้แล้ว (= latest real payment)
-       * ยอดเก็บค่างวด = SUM ของ real payments ทั้งหมด - bad_debt_amount
-       * ใช้ bad_debt_amount จาก contracts โดยตรง (ไม่ต้องคำนวณจาก payment_transactions)
-       */
-      CAST(COALESCE(c.bad_debt_amount, 0) AS DECIMAL(18,2))                   AS device_sale_paid_raw,
-      -- installment_paid = total real payments - device_sale (bad_debt_amount)
-      GREATEST(0, COALESCE(pt_sum.total_real_paid, 0) - COALESCE(c.bad_debt_amount, 0)) AS installment_paid_raw,
-      COALESCE(pt_sum.pay_cnt, 0)                                             AS paid_installments,
-      c.installment_count                                                      AS installment_count
-    FROM ${contracts} c
-    LEFT JOIN (
-    /*
-     * SUM ของ real payments (external_id ไม่ขึ้นต้น 'pay-')
-     * ไม่ใช้ GROUP_CONCAT ORDER BY เพราะ TiDB ไม่รองรับใน subquery ขนาดใหญ่
-     */
-    SELECT
-      section,
-      contract_external_id,
-      SUM(CASE WHEN external_id NOT LIKE 'pay-%'
-               THEN CAST(COALESCE(JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.total_paid_amount')), amount) AS DECIMAL(18,2))
-               ELSE 0 END) AS total_real_paid,
-      COUNT(CASE WHEN external_id NOT LIKE 'pay-%' THEN 1 END) AS pay_cnt
-      FROM ${paymentTransactions}
-      GROUP BY section, contract_external_id
-    ) pt_sum
-      ON pt_sum.contract_external_id = c.external_id
-     AND pt_sum.section = c.section
-    WHERE c.section = ${params.section}
-      AND c.status IN (${statusValues})
-    ORDER BY c.approve_date DESC, c.external_id DESC
-  `);
+  if (contractsArr.length === 0) return { rows: [], summary: emptySummary };
 
-  const rawArr: any[] = (rawRows as any)[0] ?? rawRows;
+  const contractIds = contractsArr.map((r: any) => r.contract_external_id as string);
+  const idsLiteral = contractIds.map((id) => `'${id.replace(/'/g, "''")}'`).join(",");
 
-  const allRows: BadDebtRow[] = rawArr.map((r: any) => {
-    const financeAmount = Number(r.finance_amount ?? 0);
-    const commissionNet = Number(r.commission_net ?? 0);
-    // ยอดขายเครื่อง = bad_debt_amount จาก contracts (= latest real payment)
-    const deviceSaleAmount = Number(r.device_sale_paid_raw ?? 0);
-    // ยอดเก็บค่างวด = SUM ของ real payments ทั้งหมด - bad_debt_amount
-    const installmentPaid = Number(r.installment_paid_raw ?? 0);
-    // ต้นทุน = ยอดจัดไฟแนนซ์ + ค่าคอมมิชชั่น
+  // ─── Step 2: Get payment aggregates from debt_collected_cache ─────────────
+  const collectedRaw = await db.execute(
+    sql.raw(`
+      SELECT
+        contract_external_id,
+        SUM(CASE WHEN is_bad_debt_row = 1 THEN CAST(bad_debt AS DECIMAL(18,2)) ELSE 0 END)        AS device_sale_amount,
+        SUM(CASE WHEN is_bad_debt_row = 0 THEN CAST(total_amount AS DECIMAL(18,2)) ELSE 0 END)    AS installment_paid,
+        COUNT(CASE WHEN is_bad_debt_row = 0 THEN 1 END)                                            AS paid_installments
+      FROM debt_collected_cache
+      WHERE section = '${params.section}'
+        AND contract_external_id IN (${idsLiteral})
+      GROUP BY contract_external_id
+    `)
+  );
+  const collectedArr: Array<any> = (collectedRaw as any)[0] ?? collectedRaw;
+  const collectedMap = new Map<string, { deviceSaleAmount: number; installmentPaid: number; paidInstallments: number }>();
+  for (const r of collectedArr) {
+    collectedMap.set(r.contract_external_id, {
+      deviceSaleAmount: Number(r.device_sale_amount ?? 0),
+      installmentPaid: Number(r.installment_paid ?? 0),
+      paidInstallments: Number(r.paid_installments ?? 0),
+    });
+  }
+
+  // ─── Step 3: JOIN contracts for phone, sell_price, commission_net, bad_debt_date ─
+  const contractInfoRaw = await db.execute(
+    sql.raw(`
+      SELECT
+        external_id,
+        phone,
+        CAST(sell_price AS DECIMAL(18,2))     AS sell_price,
+        CAST(commission_net AS DECIMAL(18,2)) AS commission_net,
+        bad_debt_date
+      FROM contracts
+      WHERE section = '${params.section}'
+        AND external_id IN (${idsLiteral})
+    `)
+  );
+  const contractInfoArr: Array<any> = (contractInfoRaw as any)[0] ?? contractInfoRaw;
+  const contractInfoMap = new Map<string, any>();
+  for (const r of contractInfoArr) {
+    contractInfoMap.set(r.external_id, r);
+  }
+
+  // ─── Step 4: Assemble rows ─────────────────────────────────────────────────
+  const allRows: BadDebtRow[] = contractsArr.map((c: any) => {
+    const extId: string = c.contract_external_id;
+    const cInfo = contractInfoMap.get(extId);
+    const collected = collectedMap.get(extId) ?? { deviceSaleAmount: 0, installmentPaid: 0, paidInstallments: 0 };
+
+    const financeAmount = Number(c.finance_amount ?? 0);
+    const commissionNet = cInfo?.commission_net != null ? Number(cInfo.commission_net) : 0;
+    const deviceSaleAmount = collected.deviceSaleAmount;
+    const installmentPaid = collected.installmentPaid;
     const cost = financeAmount + commissionNet;
-    // รวมรายรับ = ยอดเก็บค่างวด + ยอดขายเครื่อง
     const totalRevenue = installmentPaid + deviceSaleAmount;
-    // กำไร/ขาดทุน = รวมรายรับ - ต้นทุน
     const profitLoss = totalRevenue - cost;
 
     return {
-      contractExternalId: String(r.contract_external_id ?? ""),
-      contractNo: r.contract_no ?? null,
-      customerName: r.customer_name ?? null,
-      phone: r.phone ?? null,
-      approveDate: r.approve_date ?? null,
-      productType: r.product_type ?? null,
-      model: r.model ?? null,
-      salePrice: r.sale_price != null ? Number(r.sale_price) : null,
+      contractExternalId: extId,
+      contractNo: c.contract_no ?? null,
+      customerName: c.customer_name ?? null,
+      phone: cInfo?.phone ?? null,
+      approveDate: c.approve_date ?? null,
+      productType: c.product_type ?? null,
+      model: c.model ?? null,
+      salePrice: cInfo?.sell_price != null ? Number(cInfo.sell_price) : null,
       financeAmount,
       commissionNet,
       installmentPaid,
       deviceSaleAmount,
-      totalRevenue,
-      saleDate: r.sale_date ?? null,
+      saleDate: cInfo?.bad_debt_date ?? null,
       cost,
+      totalRevenue,
       profitLoss,
-      paidInstallments: Number(r.paid_installments ?? 0),
-      installmentCount:
-        r.installment_count != null ? Number(r.installment_count) : null,
+      paidInstallments: collected.paidInstallments,
+      installmentCount: c.installment_count != null ? Number(c.installment_count) : null,
     };
   });
 
-  // กรอง saleMonth ถ้ามี (filter ที่ backend level)
+  // ─── Step 5: Filter by saleMonth (bad_debt_date) ──────────────────────────
   const rows = params.saleMonth
     ? allRows.filter((r) => (r.saleDate ?? "").startsWith(params.saleMonth!))
     : allRows;
 
-  // Summary
+  // ─── Step 6: Summary ──────────────────────────────────────────────────────
   const summary: BadDebtSummary = rows.reduce<BadDebtSummary>(
     (acc, r) => ({
       contractCount: acc.contractCount + 1,

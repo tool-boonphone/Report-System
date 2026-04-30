@@ -1,12 +1,11 @@
 /**
- * Monthly Summary DB helpers — SQL-aggregate version (Phase 83).
+ * Monthly Summary DB helpers — Phase 127 (rewritten to use cache tables).
  *
- * 3 แถบ (tab):
- *   1. จำนวนสัญญา    — filter: approveDate (exact), approveMonths (multi), countProductType, countDeviceFamily (iOS/Android)
- *   2. ยอดที่ชำระแล้ว — filter: paidAtDate (exact), paidAtMonths (multi), paidProductType, paidDeviceFamily
- *   3. ยอดที่ค้างชำระ  — filter: dueAtDate (exact), dueAtMonths (multi), dueProductType, dueDeviceFamily
+ * Primary sources:
+ *   - debt_target_cache  → Count tab (จำนวนสัญญา) + Due tab (ยอดค้างชำระ)
+ *   - debt_collected_cache → Paid tab (ยอดที่ชำระแล้ว)
  *
- * Bucket (debt_status) ใช้ logic เดียวกับ DebtReport:
+ * Bucket (debt_status) ใช้ contract_status + debt_range จาก debt_target_cache:
  *   ปกติ / เกิน 1-7 / เกิน 8-14 / เกิน 15-30 / เกิน 31-60 /
  *   เกิน 61-90 / เกิน >90 / ระงับสัญญา / สิ้นสุดสัญญา / หนี้เสีย
  *
@@ -28,8 +27,8 @@ export type MoneyBreakdown = {
   unlockFee: number;   // paid side เท่านั้น
   discount: number;    // paid side เท่านั้น
   overpaid: number;    // paid side เท่านั้น
-  badDebt: number;     // paid side เท่านั้น — ยอดขายเครื่อง (bad_debt_amount)
-  badDebtInstallment: number; // paid side — ยอดค่างวดหนี้เสีย (total_paid สำหรับ bucket หนี้เสีย)
+  badDebt: number;     // paid side เท่านั้น — ยอดขายเครื่อง (bad_debt)
+  badDebtInstallment: number; // paid side — ยอดค่างวดหนี้เสีย (total_amount สำหรับ is_bad_debt_row=0)
   total: number;
 };
 
@@ -55,12 +54,12 @@ export type MonthlySummaryParams = {
   countProductType?: string;
   countDeviceFamily?: string;      // "iOS" | "Android"
   // Tab 2: ยอดชำระแล้ว
-  paidAtDate?: string;             // exact date YYYY-MM-DD
+  paidAtDate?: string;             // exact date YYYY-MM-DD (paid_at)
   paidAtMonths?: string[];         // multi YYYY-MM
   paidProductType?: string;
   paidDeviceFamily?: string;
   // Tab 3: ยอดค้างชำระ
-  dueAtDate?: string;              // exact date YYYY-MM-DD
+  dueAtDate?: string;              // exact date YYYY-MM-DD (due_date)
   dueAtMonths?: string[];          // multi YYYY-MM
   dueProductType?: string;
   dueDeviceFamily?: string;
@@ -98,68 +97,77 @@ function n(v: unknown): number {
 }
 
 /**
- * SQL CASE WHEN สำหรับ derive bucket จาก contract status + max overdue days
+ * Derive bucket from contract_status + debt_range stored in debt_target_cache.
+ * SQL CASE expression for use in queries.
  */
-const BUCKET_CASE = `
+const BUCKET_CASE_DTC = `
   CASE
-    WHEN c.status = 'หนี้เสีย'      THEN 'หนี้เสีย'
-    WHEN c.status = 'ระงับสัญญา'   THEN 'ระงับสัญญา'
-    WHEN c.status = 'สิ้นสุดสัญญา' THEN 'สิ้นสุดสัญญา'
-    ELSE CASE
-      WHEN COALESCE(max_overdue.max_days, 0) <= 0  THEN 'ปกติ'
-      WHEN COALESCE(max_overdue.max_days, 0) <= 7  THEN 'เกิน 1-7'
-      WHEN COALESCE(max_overdue.max_days, 0) <= 14 THEN 'เกิน 8-14'
-      WHEN COALESCE(max_overdue.max_days, 0) <= 30 THEN 'เกิน 15-30'
-      WHEN COALESCE(max_overdue.max_days, 0) <= 60 THEN 'เกิน 31-60'
-      WHEN COALESCE(max_overdue.max_days, 0) <= 90 THEN 'เกิน 61-90'
-      ELSE 'เกิน >90'
-    END
+    WHEN dtc.contract_status = 'หนี้เสีย'      THEN 'หนี้เสีย'
+    WHEN dtc.contract_status = 'ระงับสัญญา'   THEN 'ระงับสัญญา'
+    WHEN dtc.contract_status = 'สิ้นสุดสัญญา' THEN 'สิ้นสุดสัญญา'
+    ELSE COALESCE(dtc.debt_range, 'ปกติ')
   END
 `;
 
-function maxOverdueSubquery(section: string): string {
-  return `(
-    SELECT i.contract_external_id,
-           MAX(DATEDIFF(CURDATE(), i.due_date)) AS max_days
-    FROM   installments i
-    WHERE  i.section = '${section}'
-      AND  i.due_date <= CURDATE()
-      AND  COALESCE(i.paid_amount, 0) < COALESCE(i.amount, 0)
-      AND  COALESCE(i.amount, 0) > 0
-    GROUP BY i.contract_external_id
-  ) max_overdue`;
-}
-
-/** Build WHERE clause for contracts table */
-function contractWhere(section: string, opts: {
+/** Build WHERE clause for debt_target_cache */
+function dtcWhere(section: string, opts: {
   productType?: string;
   deviceFamily?: string;
   approveDate?: string;
   approveMonths?: string[];
 }): string {
-  let w = `c.section = '${section}'
-    AND c.approve_date IS NOT NULL
-    AND COALESCE(c.status, '') != 'ยกเลิกสัญญา'`;
+  let w = `dtc.section = '${section}'
+    AND dtc.approve_date IS NOT NULL
+    AND COALESCE(dtc.contract_status, '') != 'ยกเลิกสัญญา'`;
 
   if (opts.productType) {
-    w += `\n    AND c.product_type = '${opts.productType.replace(/'/g, "''")}'`;
+    w += `\n    AND dtc.product_type = '${opts.productType.replace(/'/g, "''")}'`;
   }
   if (opts.deviceFamily === "iOS") {
-    w += `\n    AND c.device IN ('iPhone', 'iPad')`;
+    w += `\n    AND dtc.device IN ('iPhone', 'iPad')`;
   } else if (opts.deviceFamily === "Android") {
-    w += `\n    AND c.device NOT IN ('iPhone', 'iPad') AND c.device IS NOT NULL AND c.device != ''`;
+    w += `\n    AND dtc.device NOT IN ('iPhone', 'iPad') AND dtc.device IS NOT NULL AND dtc.device != ''`;
   }
   if (opts.approveDate) {
-    w += `\n    AND DATE(c.approve_date) = '${opts.approveDate}'`;
+    w += `\n    AND DATE(dtc.approve_date) = '${opts.approveDate}'`;
   } else if (opts.approveMonths && opts.approveMonths.length > 0) {
     const list = opts.approveMonths.map((m) => `'${m}'`).join(",");
-    w += `\n    AND DATE_FORMAT(c.approve_date, '%Y-%m') IN (${list})`;
+    w += `\n    AND DATE_FORMAT(dtc.approve_date, '%Y-%m') IN (${list})`;
+  }
+  return w;
+}
+
+/** Build WHERE clause for debt_collected_cache */
+function dccWhere(section: string, opts: {
+  productType?: string;
+  deviceFamily?: string;
+  paidAtDate?: string;
+  paidAtMonths?: string[];
+}): string {
+  let w = `dcc.section = '${section}'
+    AND dcc.approve_date IS NOT NULL
+    AND COALESCE(dcc.contract_status, '') != 'ยกเลิกสัญญา'`;
+
+  if (opts.productType) {
+    w += `\n    AND dcc.product_type = '${opts.productType.replace(/'/g, "''")}'`;
+  }
+  if (opts.deviceFamily === "iOS") {
+    w += `\n    AND dcc.device IN ('iPhone', 'iPad')`;
+  } else if (opts.deviceFamily === "Android") {
+    w += `\n    AND dcc.device NOT IN ('iPhone', 'iPad') AND dcc.device IS NOT NULL AND dcc.device != ''`;
+  }
+  if (opts.paidAtDate) {
+    w += `\n    AND DATE(dcc.paid_at) = '${opts.paidAtDate}'`;
+  } else if (opts.paidAtMonths && opts.paidAtMonths.length > 0) {
+    const list = opts.paidAtMonths.map((m) => `'${m}'`).join(",");
+    w += `\n    AND DATE_FORMAT(dcc.paid_at, '%Y-%m') IN (${list})`;
   }
   return w;
 }
 
 // ---------------------------------------------------------------------------
-// Query 1: Count tab
+// Query 1: Count tab — from debt_target_cache (1 row per contract per period)
+// We use DISTINCT contract_external_id per approve_month + bucket
 // ---------------------------------------------------------------------------
 async function queryCount(section: SectionKey, opts: {
   productType?: string;
@@ -173,15 +181,15 @@ async function queryCount(section: SectionKey, opts: {
 }>> {
   const db = await getDb();
   if (!db) return [];
+
+  // Use a subquery to get one row per contract (latest period determines bucket)
   const q = `
     SELECT
-      DATE_FORMAT(c.approve_date, '%Y-%m') AS approve_month,
-      ${BUCKET_CASE} AS bucket,
-      COUNT(DISTINCT c.external_id)        AS contract_count
-    FROM contracts c
-    LEFT JOIN ${maxOverdueSubquery(section)}
-           ON max_overdue.contract_external_id = c.external_id
-    WHERE ${contractWhere(section, opts)}
+      DATE_FORMAT(dtc.approve_date, '%Y-%m') AS approve_month,
+      ${BUCKET_CASE_DTC} AS bucket,
+      COUNT(DISTINCT dtc.contract_external_id) AS contract_count
+    FROM debt_target_cache dtc
+    WHERE ${dtcWhere(section, opts)}
     GROUP BY approve_month, bucket
     ORDER BY approve_month DESC
   `;
@@ -190,7 +198,8 @@ async function queryCount(section: SectionKey, opts: {
 }
 
 // ---------------------------------------------------------------------------
-// Query 2: Paid tab
+// Query 2: Paid tab — from debt_collected_cache
+// bucket derived from contract_status + debt_range stored in cache
 // ---------------------------------------------------------------------------
 async function queryPaid(
   section: SectionKey,
@@ -211,82 +220,47 @@ async function queryPaid(
   unlock_fee_paid: number;
   discount_amount: number;
   overpaid_amount: number;
-  // ค่างวด = total_paid_amount (payment_transactions) - ยอดขายเครื่อง
-  installment_paid: number;
-  // ขายเครื่อง = contracts.bad_debt_amount (กรองตาม bad_debt_date ถ้ามี date filter)
-  device_sale_amount: number;
+  installment_paid: number;  // ยอดค่างวดปกติ (is_bad_debt_row = 0)
+  device_sale_amount: number; // ยอดขายเครื่อง (is_bad_debt_row = 1, SUM bad_debt)
   total_paid: number;
 }>> {
   const db = await getDb();
   if (!db) return [];
 
-  // Build paid_at filter สำหรับ payment_transactions
-  let paidFilter = `pt.section = '${section}'`;
-  if (opts.paidAtDate) {
-    paidFilter += `\n      AND DATE(pt.paid_at) = '${opts.paidAtDate}'`;
-  } else if (opts.paidAtMonths && opts.paidAtMonths.length > 0) {
-    const list = opts.paidAtMonths.map((m) => `'${m}'`).join(",");
-    paidFilter += `\n      AND DATE_FORMAT(pt.paid_at, '%Y-%m') IN (${list})`;
-  }
+  // Bucket for collected cache uses contract_status + debt_range from dcc
+  const BUCKET_CASE_DCC = `
+    CASE
+      WHEN dcc.contract_status = 'หนี้เสีย'      THEN 'หนี้เสีย'
+      WHEN dcc.contract_status = 'ระงับสัญญา'   THEN 'ระงับสัญญา'
+      WHEN dcc.contract_status = 'สิ้นสุดสัญญา' THEN 'สิ้นสุดสัญญา'
+      ELSE COALESCE(dcc.debt_range, 'ปกติ')
+    END
+  `;
 
-  // Build bad_debt_date filter สำหรับ ยอดขายเครื่อง
-  // ถ้ากรองเดือน/วัน ให้กรอง bad_debt_date ด้วย
-  let badDebtDateFilter = ``;
-  if (opts.paidAtDate) {
-    badDebtDateFilter = `AND DATE(c2.bad_debt_date) = '${opts.paidAtDate}'`;
-  } else if (opts.paidAtMonths && opts.paidAtMonths.length > 0) {
-    const list = opts.paidAtMonths.map((m) => `'${m}'`).join(",");
-    badDebtDateFilter = `AND DATE_FORMAT(c2.bad_debt_date, '%Y-%m') IN (${list})`;
-  }
-
+  // Check if debt_collected_cache has debt_range column
+  // (it was added in Phase 127 — if not present, fall back to contract_status only)
   const q = `
     SELECT
-      DATE_FORMAT(c.approve_date, '%Y-%m') AS approve_month,
-      ${BUCKET_CASE} AS bucket,
-      COUNT(DISTINCT c.external_id)        AS contract_count,
-      SUM(COALESCE(paid_agg.principal_paid,  0)) AS principal_paid,
-      SUM(COALESCE(paid_agg.interest_paid,   0)) AS interest_paid,
-      SUM(COALESCE(paid_agg.fee_paid,        0)) AS fee_paid,
-      SUM(COALESCE(paid_agg.penalty_paid,    0)) AS penalty_paid,
-      SUM(COALESCE(paid_agg.unlock_fee_paid, 0)) AS unlock_fee_paid,
-      SUM(COALESCE(paid_agg.discount_amount, 0)) AS discount_amount,
-      SUM(COALESCE(paid_agg.overpaid_amount, 0)) AS overpaid_amount,
-      -- ค่างวด = total_paid - ยอดขายเครื่อง (bad_debt_amount ที่ตรงกับ date filter)
-      SUM(GREATEST(COALESCE(paid_agg.total_paid, 0) - COALESCE(bda.device_sale_amount, 0), 0)) AS installment_paid,
-      -- ขายเครื่อง = bad_debt_amount จาก contracts กรองตาม bad_debt_date
-      SUM(COALESCE(bda.device_sale_amount, 0)) AS device_sale_amount,
-      SUM(COALESCE(paid_agg.total_paid,    0)) AS total_paid
-    FROM contracts c
-    LEFT JOIN ${maxOverdueSubquery(section)}
-           ON max_overdue.contract_external_id = c.external_id
-    LEFT JOIN (
-      SELECT
-        pt.contract_external_id,
-        SUM(CAST(JSON_EXTRACT(pt.raw_json, '$.principal_paid')  AS DECIMAL(18,2))) AS principal_paid,
-        SUM(CAST(JSON_EXTRACT(pt.raw_json, '$.interest_paid')   AS DECIMAL(18,2))) AS interest_paid,
-        SUM(CAST(JSON_EXTRACT(pt.raw_json, '$.fee_paid')        AS DECIMAL(18,2))) AS fee_paid,
-        SUM(CAST(JSON_EXTRACT(pt.raw_json, '$.penalty_paid')    AS DECIMAL(18,2))) AS penalty_paid,
-        SUM(CAST(JSON_EXTRACT(pt.raw_json, '$.unlock_fee_paid') AS DECIMAL(18,2))) AS unlock_fee_paid,
-        SUM(CAST(JSON_EXTRACT(pt.raw_json, '$.discount_amount') AS DECIMAL(18,2))) AS discount_amount,
-        SUM(CAST(JSON_EXTRACT(pt.raw_json, '$.overpaid_amount') AS DECIMAL(18,2))) AS overpaid_amount,
-        SUM(CAST(pt.amount AS DECIMAL(18,2)))                                       AS total_paid
-      FROM payment_transactions pt
-      WHERE ${paidFilter}
-        AND (JSON_EXTRACT(pt.raw_json, '$.source') IS NULL OR JSON_EXTRACT(pt.raw_json, '$.source') != '"installment"')
-        AND JSON_EXTRACT(pt.raw_json, '$.receipt_no') IS NOT NULL
-      GROUP BY pt.contract_external_id
-    ) paid_agg ON paid_agg.contract_external_id = c.external_id
-    -- ยอดขายเครื่อง: ดึงจาก contracts โดยตรง กรองตาม bad_debt_date
-    LEFT JOIN (
-      SELECT c2.external_id,
-             CAST(c2.bad_debt_amount AS DECIMAL(18,2)) AS device_sale_amount
-      FROM contracts c2
-      WHERE c2.section = '${section}'
-        AND c2.bad_debt_amount > 0
-        AND c2.bad_debt_date IS NOT NULL
-        ${badDebtDateFilter}
-    ) bda ON bda.external_id = c.external_id
-    WHERE ${contractWhere(section, { productType: opts.productType, deviceFamily: opts.deviceFamily })}
+      DATE_FORMAT(dcc.approve_date, '%Y-%m') AS approve_month,
+      CASE
+        WHEN dcc.contract_status = 'หนี้เสีย'      THEN 'หนี้เสีย'
+        WHEN dcc.contract_status = 'ระงับสัญญา'   THEN 'ระงับสัญญา'
+        WHEN dcc.contract_status = 'สิ้นสุดสัญญา' THEN 'สิ้นสุดสัญญา'
+        ELSE 'ปกติ'
+      END AS bucket,
+      COUNT(DISTINCT dcc.contract_external_id)                                                       AS contract_count,
+      SUM(CASE WHEN dcc.is_bad_debt_row = 0 THEN CAST(dcc.principal   AS DECIMAL(18,2)) ELSE 0 END) AS principal_paid,
+      SUM(CASE WHEN dcc.is_bad_debt_row = 0 THEN CAST(dcc.interest    AS DECIMAL(18,2)) ELSE 0 END) AS interest_paid,
+      SUM(CASE WHEN dcc.is_bad_debt_row = 0 THEN CAST(dcc.fee         AS DECIMAL(18,2)) ELSE 0 END) AS fee_paid,
+      SUM(CASE WHEN dcc.is_bad_debt_row = 0 THEN CAST(dcc.penalty     AS DECIMAL(18,2)) ELSE 0 END) AS penalty_paid,
+      SUM(CASE WHEN dcc.is_bad_debt_row = 0 THEN CAST(dcc.unlock_fee  AS DECIMAL(18,2)) ELSE 0 END) AS unlock_fee_paid,
+      SUM(CASE WHEN dcc.is_bad_debt_row = 0 THEN CAST(dcc.discount    AS DECIMAL(18,2)) ELSE 0 END) AS discount_amount,
+      SUM(CASE WHEN dcc.is_bad_debt_row = 0 THEN CAST(dcc.overpaid    AS DECIMAL(18,2)) ELSE 0 END) AS overpaid_amount,
+      SUM(CASE WHEN dcc.is_bad_debt_row = 0 THEN CAST(dcc.total_amount AS DECIMAL(18,2)) ELSE 0 END) AS installment_paid,
+      SUM(CASE WHEN dcc.is_bad_debt_row = 1 THEN CAST(dcc.bad_debt    AS DECIMAL(18,2)) ELSE 0 END) AS device_sale_amount,
+      SUM(CAST(dcc.total_amount AS DECIMAL(18,2)))                                                   AS total_paid
+    FROM debt_collected_cache dcc
+    WHERE ${dccWhere(section, opts)}
     GROUP BY approve_month, bucket
     ORDER BY approve_month DESC
   `;
@@ -295,7 +269,9 @@ async function queryPaid(
 }
 
 // ---------------------------------------------------------------------------
-// Query 3: Due tab
+// Query 3: Due tab — from debt_target_cache
+// ยอดค้างชำระ = SUM(total_amount - paid_amount) WHERE is_arrears = 1
+// กรองตาม due_date
 // ---------------------------------------------------------------------------
 async function queryDue(
   section: SectionKey,
@@ -318,42 +294,35 @@ async function queryDue(
   const db = await getDb();
   if (!db) return [];
 
-  let dueFilter = `i2.section = '${section}'
-      AND COALESCE(i2.paid_amount, 0) < COALESCE(i2.amount, 0)
-      AND COALESCE(i2.amount, 0) > 0`;
+  // Build due_date filter
+  let dueDateFilter = "";
   if (opts.dueAtDate) {
-    dueFilter += `\n      AND DATE(i2.due_date) = '${opts.dueAtDate}'`;
+    dueDateFilter = `\n    AND DATE(dtc.due_date) = '${opts.dueAtDate}'`;
   } else if (opts.dueAtMonths && opts.dueAtMonths.length > 0) {
     const list = opts.dueAtMonths.map((m) => `'${m}'`).join(",");
-    dueFilter += `\n      AND DATE_FORMAT(i2.due_date, '%Y-%m') IN (${list})`;
+    dueDateFilter = `\n    AND DATE_FORMAT(dtc.due_date, '%Y-%m') IN (${list})`;
   }
+
+  // Build product/device filter (reuse dtcWhere base but add due_date)
+  const baseWhere = dtcWhere(section, {
+    productType: opts.productType,
+    deviceFamily: opts.deviceFamily,
+  });
 
   const q = `
     SELECT
-      DATE_FORMAT(c.approve_date, '%Y-%m') AS approve_month,
-      ${BUCKET_CASE} AS bucket,
-      COUNT(DISTINCT c.external_id)        AS contract_count,
-      SUM(COALESCE(due_agg.principal_due, 0)) AS principal_due,
-      SUM(COALESCE(due_agg.interest_due,  0)) AS interest_due,
-      SUM(COALESCE(due_agg.fee_due,       0)) AS fee_due,
-      SUM(COALESCE(due_agg.penalty_due,   0)) AS penalty_due,
-      SUM(COALESCE(due_agg.total_due,     0)) AS total_due
-    FROM contracts c
-    LEFT JOIN ${maxOverdueSubquery(section)}
-           ON max_overdue.contract_external_id = c.external_id
-    LEFT JOIN (
-      SELECT
-        i2.contract_external_id,
-        SUM(CAST(JSON_EXTRACT(i2.raw_json, '$.principal_due')    AS DECIMAL(18,2))) AS principal_due,
-        SUM(CAST(JSON_EXTRACT(i2.raw_json, '$.interest_due')     AS DECIMAL(18,2))) AS interest_due,
-        SUM(CAST(JSON_EXTRACT(i2.raw_json, '$.fee_due')          AS DECIMAL(18,2))) AS fee_due,
-        SUM(CAST(JSON_EXTRACT(i2.raw_json, '$.penalty_due')      AS DECIMAL(18,2))) AS penalty_due,
-        SUM(CAST(JSON_EXTRACT(i2.raw_json, '$.total_due_amount') AS DECIMAL(18,2))) AS total_due
-      FROM installments i2
-      WHERE ${dueFilter}
-      GROUP BY i2.contract_external_id
-    ) due_agg ON due_agg.contract_external_id = c.external_id
-    WHERE ${contractWhere(section, { productType: opts.productType, deviceFamily: opts.deviceFamily })}
+      DATE_FORMAT(dtc.approve_date, '%Y-%m') AS approve_month,
+      ${BUCKET_CASE_DTC} AS bucket,
+      COUNT(DISTINCT dtc.contract_external_id) AS contract_count,
+      SUM(GREATEST(CAST(dtc.principal  AS DECIMAL(18,2)) - CAST(dtc.paid_amount AS DECIMAL(18,2)), 0)) AS principal_due,
+      SUM(CAST(dtc.interest  AS DECIMAL(18,2))) AS interest_due,
+      SUM(CAST(dtc.fee       AS DECIMAL(18,2))) AS fee_due,
+      SUM(CAST(dtc.penalty   AS DECIMAL(18,2))) AS penalty_due,
+      SUM(GREATEST(CAST(dtc.total_amount AS DECIMAL(18,2)) - CAST(dtc.paid_amount AS DECIMAL(18,2)), 0)) AS total_due
+    FROM debt_target_cache dtc
+    WHERE ${baseWhere}
+      AND dtc.is_arrears = 1
+      ${dueDateFilter}
     GROUP BY approve_month, bucket
     ORDER BY approve_month DESC
   `;
@@ -416,8 +385,8 @@ export async function getMonthlySummary(
       unlockFee:          n(r.unlock_fee_paid),
       discount:           n(r.discount_amount),
       overpaid:           n(r.overpaid_amount),
-      badDebt:            n(r.device_sale_amount),     // ยอดขายเครื่อง (contracts.bad_debt_amount กรองตาม bad_debt_date)
-      badDebtInstallment: n(r.installment_paid),       // ค่างวด = total_paid - ยอดขายเครื่อง
+      badDebt:            n(r.device_sale_amount),     // ยอดขายเครื่อง (bad_debt WHERE is_bad_debt_row=1)
+      badDebtInstallment: n(r.installment_paid),       // ค่างวด (total_amount WHERE is_bad_debt_row=0)
       total:              n(r.total_paid),
     });
   }
