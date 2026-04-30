@@ -2,7 +2,7 @@
  * Bad Debt Summary helpers (Phase 97).
  *
  * สรุปกำไร/ขาดทุนจากหนี้เสีย:
- *   - ดึงสัญญาที่มีสถานะ "หนี้เสีย" (Fastfone365) หรือ "ระงับสัญญา" (Boonphone)
+ *   - ดึงสัญญาที่มีสถานะ "หนี้เสีย" (ทั้ง Boonphone และ Fastfone365 ใช้ status เดียวกัน)
  *   - แยก: ยอดเก็บค่างวด (installmentPaid) vs ยอดขายเครื่อง (deviceSaleAmount)
  *   - ต้นทุน = (ยอดจัดไฟแนนซ์ × ตัวคูณ) + ค่าคอมมิชชั่น
  *   - รวมรายรับ = ยอดเก็บค่างวด + ยอดขายเครื่อง
@@ -83,11 +83,8 @@ export async function getBadDebtSummary(params: {
   };
   if (!db) return { rows: [], summary: emptySummary };
 
-  // สถานะที่ถือว่า "หนี้เสีย" ในแต่ละ section
-  const badDebtStatuses =
-    params.section === "Fastfone365"
-      ? ["หนี้เสีย"]
-      : ["ระงับสัญญา", "หนี้เสีย"];
+  // Both sections use the same bad-debt status (same underlying system)
+  const badDebtStatuses = ["หนี้เสีย"];
 
   const statusValues = sql.join(
     badDebtStatuses.map((s) => sql`${s}`),
