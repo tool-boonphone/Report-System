@@ -50,6 +50,13 @@
       "when": 1777500056431,
       "tag": "0006_late_talisman",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "5",
+      "when": 1777507931605,
+      "tag": "0007_fantastic_rocket_raccoon",
+      "breakpoints": true
     }
   ]
 }

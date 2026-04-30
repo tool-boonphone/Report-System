@@ -308,3 +308,128 @@ export const paymentTransactions = mysqlTable(
   }),
 );
 export type PaymentTransaction = typeof paymentTransactions.$inferSelect;
+
+/* =============================================================================
+ * Precomputed Cache Tables
+ * Built once per day (06:00 cron) from contracts + installments + payment_transactions.
+ * Frontend reads directly from these tables — no real-time calculation needed.
+ * ============================================================================= */
+
+/**
+ * debt_target_cache — เป้าเก็บหนี้ (1 row per installment period per contract)
+ * Stores all calculated fields needed to render the target table without any joins.
+ */
+export const debtTargetCache = mysqlTable(
+  "debt_target_cache",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    section: varchar("section", { length: 32 }).notNull(),
+    contractExternalId: varchar("contract_external_id", { length: 64 }).notNull(),
+    contractNo: varchar("contract_no", { length: 64 }).notNull(),
+    customerName: varchar("customer_name", { length: 255 }),
+    approveDate: varchar("approve_date", { length: 20 }),
+    contractStatus: varchar("contract_status", { length: 32 }),
+    partnerCode: varchar("partner_code", { length: 255 }),
+    partnerName: varchar("partner_name", { length: 255 }),
+    productType: varchar("product_type", { length: 64 }),
+    device: varchar("device", { length: 64 }),
+    model: varchar("model", { length: 128 }),
+    financeAmount: decimal("finance_amount", { precision: 12, scale: 2 }),
+    installmentCount: int("installment_count"),
+    // === Per-period fields ===
+    period: int("period").notNull(),
+    dueDate: varchar("due_date", { length: 20 }),
+    // Calculated amounts
+    principal: decimal("principal", { precision: 12, scale: 2 }).notNull().default("0"),
+    interest: decimal("interest", { precision: 12, scale: 2 }).notNull().default("0"),
+    fee: decimal("fee", { precision: 12, scale: 2 }).notNull().default("0"),
+    penalty: decimal("penalty", { precision: 12, scale: 2 }).notNull().default("0"),
+    unlockFee: decimal("unlock_fee", { precision: 12, scale: 2 }).notNull().default("0"),
+    netAmount: decimal("net_amount", { precision: 12, scale: 2 }).notNull().default("0"),
+    totalAmount: decimal("total_amount", { precision: 12, scale: 2 }).notNull().default("0"),
+    paidAmount: decimal("paid_amount", { precision: 12, scale: 2 }).notNull().default("0"),
+    overpaidApplied: decimal("overpaid_applied", { precision: 12, scale: 2 }).notNull().default("0"),
+    baselineAmount: decimal("baseline_amount", { precision: 12, scale: 2 }).notNull().default("0"),
+    // Status flags (stored as tinyint 0/1)
+    isPaid: boolean("is_paid").notNull().default(false),
+    isPartialPaid: boolean("is_partial_paid").notNull().default(false),
+    isClosed: boolean("is_closed").notNull().default(false),
+    isSuspended: boolean("is_suspended").notNull().default(false),
+    isCurrentPeriod: boolean("is_current_period").notNull().default(false),
+    isFuturePeriod: boolean("is_future_period").notNull().default(false),
+    isArrears: boolean("is_arrears").notNull().default(false),
+    isBadDebt: boolean("is_bad_debt").notNull().default(false),
+    // Debt range badge (เกิน 1-30, เกิน 31-60, ฯลฯ)
+    debtRange: varchar("debt_range", { length: 32 }),
+    // Bookkeeping
+    populatedAt: timestamp("populated_at").defaultNow().notNull(),
+  },
+  (t) => ({
+    sectionContractPeriodIdx: uniqueIndex("dtc_section_contract_period_idx").on(
+      t.section,
+      t.contractExternalId,
+      t.period,
+    ),
+    sectionDueDateIdx: index("dtc_section_due_date_idx").on(t.section, t.dueDate),
+    sectionApproveDateIdx: index("dtc_section_approve_date_idx").on(t.section, t.approveDate),
+    sectionStatusIdx: index("dtc_section_status_idx").on(t.section, t.contractStatus),
+    sectionDebtRangeIdx: index("dtc_section_debt_range_idx").on(t.section, t.debtRange),
+    sectionProductTypeIdx: index("dtc_section_product_type_idx").on(t.section, t.productType),
+  }),
+);
+export type DebtTargetCache = typeof debtTargetCache.$inferSelect;
+
+/**
+ * debt_collected_cache — ยอดเก็บหนี้ (1 row per payment transaction)
+ * Stores all calculated fields needed to render the collected table without any joins.
+ */
+export const debtCollectedCache = mysqlTable(
+  "debt_collected_cache",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    section: varchar("section", { length: 32 }).notNull(),
+    contractExternalId: varchar("contract_external_id", { length: 64 }).notNull(),
+    contractNo: varchar("contract_no", { length: 64 }).notNull(),
+    customerName: varchar("customer_name", { length: 255 }),
+    approveDate: varchar("approve_date", { length: 20 }),
+    contractStatus: varchar("contract_status", { length: 32 }),
+    partnerCode: varchar("partner_code", { length: 255 }),
+    partnerName: varchar("partner_name", { length: 255 }),
+    productType: varchar("product_type", { length: 64 }),
+    device: varchar("device", { length: 64 }),
+    model: varchar("model", { length: 128 }),
+    financeAmount: decimal("finance_amount", { precision: 12, scale: 2 }),
+    installmentCount: int("installment_count"),
+    // === Per-payment fields ===
+    paymentExternalId: varchar("payment_external_id", { length: 64 }).notNull(),
+    period: int("period"),
+    paidAt: varchar("paid_at", { length: 32 }),
+    // Calculated amounts
+    principal: decimal("principal", { precision: 12, scale: 2 }).notNull().default("0"),
+    interest: decimal("interest", { precision: 12, scale: 2 }).notNull().default("0"),
+    fee: decimal("fee", { precision: 12, scale: 2 }).notNull().default("0"),
+    penalty: decimal("penalty", { precision: 12, scale: 2 }).notNull().default("0"),
+    unlockFee: decimal("unlock_fee", { precision: 12, scale: 2 }).notNull().default("0"),
+    discount: decimal("discount", { precision: 12, scale: 2 }).notNull().default("0"),
+    overpaid: decimal("overpaid", { precision: 12, scale: 2 }).notNull().default("0"),
+    badDebt: decimal("bad_debt", { precision: 12, scale: 2 }).notNull().default("0"),
+    totalAmount: decimal("total_amount", { precision: 12, scale: 2 }).notNull().default("0"),
+    // Metadata
+    updatedBy: varchar("updated_by", { length: 128 }),
+    isBadDebtRow: boolean("is_bad_debt_row").notNull().default(false),
+    // Bookkeeping
+    populatedAt: timestamp("populated_at").defaultNow().notNull(),
+  },
+  (t) => ({
+    sectionPaymentIdx: uniqueIndex("dcc_section_payment_idx").on(
+      t.section,
+      t.paymentExternalId,
+    ),
+    sectionContractIdx: index("dcc_section_contract_idx").on(t.section, t.contractExternalId),
+    sectionPaidAtIdx: index("dcc_section_paid_at_idx").on(t.section, t.paidAt),
+    sectionApproveDateIdx: index("dcc_section_approve_date_idx").on(t.section, t.approveDate),
+    sectionProductTypeIdx: index("dcc_section_product_type_idx").on(t.section, t.productType),
+    sectionUpdatedByIdx: index("dcc_section_updated_by_idx").on(t.section, t.updatedBy),
+  }),
+);
+export type DebtCollectedCache = typeof debtCollectedCache.$inferSelect;

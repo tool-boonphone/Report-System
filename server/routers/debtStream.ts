@@ -35,6 +35,10 @@ import {
   listDebtTargetStream,
   listDebtCollectedStream,
 } from "../debtDb";
+import {
+  streamTargetFromCache,
+  streamCollectedFromCache,
+} from "../sync/queryCacheDb";
 import type { SectionKey } from "../../shared/const";
 import { SECTIONS } from "../../shared/const";
 
@@ -205,15 +209,17 @@ export async function handleDebtStreamTarget(
       return;
     }
 
-    // Cache miss (prewarm failed or not started) — TRUE STREAMING
-    console.log(`[debtStream] MISS target for ${section}, true-streaming...`);
+    // Cache miss — stream from DB cache (fast path, ~1-3s vs 60-120s for full stream)
+    console.log(`[debtStream] MISS target for ${section}, streaming from DB cache...`);
     startStreamResponse(res);
 
-    // Collect all rows while streaming (for cache fill)
+    // Try DB cache first; fall back to full stream if DB cache is empty
     const allRows: any[] = [];
-    const gen = listDebtTargetStream({ section: section as SectionKey, batchSize: 100 });
+    let usedDbCache = false;
+    const dbCacheGen = streamTargetFromCache({ section: section as SectionKey, batchSize: 200 });
     let first = true;
-    for await (const batch of gen) {
+    for await (const batch of dbCacheGen) {
+      if (batch.length > 0) usedDbCache = true;
       for (const row of batch) {
         const prefix = first ? "" : ",";
         first = false;
@@ -221,12 +227,27 @@ export async function handleDebtStreamTarget(
         allRows.push(row);
       }
     }
+
+    if (!usedDbCache) {
+      // DB cache empty — fall back to full stream
+      console.log(`[debtStream] DB cache empty for ${section}, falling back to full stream...`);
+      const gen = listDebtTargetStream({ section: section as SectionKey, batchSize: 100 });
+      for await (const batch of gen) {
+        for (const row of batch) {
+          const prefix = first ? "" : ",";
+          first = false;
+          res.write(prefix + JSON.stringify(row));
+          allRows.push(row);
+        }
+      }
+    }
+
     res.write("]}");
     res.end();
 
     // Cache the result for subsequent requests
     setCachedTarget(section, { rows: allRows });
-    console.log(`[debtStream] target for ${section} cached (${allRows.length} rows)`);
+    console.log(`[debtStream] target for ${section} cached (${allRows.length} rows, dbCache=${usedDbCache})`);
   } catch (err) {
     console.error("[debtStream] target error:", err);
     if (!res.headersSent) {
@@ -275,16 +296,17 @@ export async function handleDebtStreamCollected(
       return;
     }
 
-    // Cache miss (prewarm failed or not started) — TRUE STREAMING (no keep-alive needed)
-    console.log(`[debtStream] MISS collected for ${section}, true-streaming...`);
+    // Cache miss — stream from DB cache (fast path)
+    console.log(`[debtStream] MISS collected for ${section}, streaming from DB cache...`);
     startStreamResponse(res);
 
-    // Collect all rows while streaming (for cache fill)
     const allRows: any[] = [];
     let hasPrincipalBreakdown = true;
-    const gen = listDebtCollectedStream({ section: section as SectionKey, batchSize: 100 });
+    let usedDbCache = false;
+    const dbCacheGen = streamCollectedFromCache({ section: section as SectionKey, batchSize: 200 });
     let first = true;
-    for await (const chunk of gen) {
+    for await (const chunk of dbCacheGen) {
+      if (chunk.rows.length > 0) usedDbCache = true;
       for (const row of chunk.rows) {
         const prefix = first ? "" : ",";
         first = false;
@@ -295,12 +317,30 @@ export async function handleDebtStreamCollected(
         hasPrincipalBreakdown = chunk.meta.hasPrincipalBreakdown as boolean;
       }
     }
+
+    if (!usedDbCache) {
+      // DB cache empty — fall back to full stream
+      console.log(`[debtStream] DB cache empty for ${section}, falling back to full stream...`);
+      const gen = listDebtCollectedStream({ section: section as SectionKey, batchSize: 100 });
+      for await (const chunk of gen) {
+        for (const row of chunk.rows) {
+          const prefix = first ? "" : ",";
+          first = false;
+          res.write(prefix + JSON.stringify(row));
+          allRows.push(row);
+        }
+        if (chunk.meta?.hasPrincipalBreakdown != null) {
+          hasPrincipalBreakdown = chunk.meta.hasPrincipalBreakdown as boolean;
+        }
+      }
+    }
+
     res.write(`],\"hasPrincipalBreakdown\":${hasPrincipalBreakdown}}`);
     res.end();
 
     // Cache the result for subsequent requests
     setCachedCollected(section, { rows: allRows, hasPrincipalBreakdown });
-    console.log(`[debtStream] collected for ${section} cached (${allRows.length} rows)`);
+    console.log(`[debtStream] collected for ${section} cached (${allRows.length} rows, dbCache=${usedDbCache})`);
   } catch (err) {
     console.error("[debtStream] collected error:", err);
     if (!res.headersSent) {

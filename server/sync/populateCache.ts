@@ -157,12 +157,12 @@ export async function populateDebtCache(
       CAST(JSON_EXTRACT(raw_json, '$.overpaid_amount')          AS DECIMAL(18,2))  AS overpaid_amount,
       CAST(JSON_EXTRACT(raw_json, '$.bad_debt_amount')          AS DECIMAL(18,2))  AS bad_debt_amount,
       JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.receipt_no'))                         AS receipt_no,
-      period,
+      CAST(JSON_EXTRACT(raw_json, '$.payment_id') AS UNSIGNED)                     AS payment_id,
       JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.updated_at'))                         AS updated_at,
       JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.updated_by'))                         AS updated_by
     FROM payment_transactions
     WHERE section = ${section}
-    ORDER BY contract_external_id, paid_at
+    ORDER BY contract_external_id, paid_at, CAST(JSON_EXTRACT(raw_json, '$.payment_id') AS UNSIGNED)
   `);
   const pRows: any[] = (payRaw as any)[0] ?? payRaw;
 
@@ -403,7 +403,7 @@ export async function populateDebtCache(
       financeAmount: c.finance_amount != null ? String(Number(c.finance_amount)) : null,
       installmentCount: c.installment_count != null ? Number(c.installment_count) : null,
       paymentExternalId: payExtId,
-      period: p.period != null ? Number(p.period) : null,
+      period: p.payment_id != null ? Number(p.payment_id) : null,
       paidAt: p.paid_at ?? null,
       principal: String(p.principal_paid != null ? Number(p.principal_paid) : 0),
       interest: String(p.interest_paid != null ? Number(p.interest_paid) : 0),
@@ -419,32 +419,48 @@ export async function populateDebtCache(
     });
   }
 
-  // ─── 7. Delete existing rows and insert fresh data ─────────────────────────
+  // ─── 7. Deduplicate before insert ────────────────────────────────────────────
+  // installments table may have duplicate (contract_external_id, period) rows.
+  // Keep only the last occurrence (highest index) per unique key.
+  const targetDeduped = new Map<string, typeof targetInserts[0]>();
+  for (const row of targetInserts) {
+    const key = `${row.section}|${row.contractExternalId}|${row.period}`;
+    targetDeduped.set(key, row); // last write wins
+  }
+  const targetFinal = Array.from(targetDeduped.values());
+
+  const collectedDeduped = new Map<string, typeof collectedInserts[0]>();
+  for (const row of collectedInserts) {
+    const key = `${row.section}|${row.contractExternalId}|${row.paymentExternalId}`;
+    collectedDeduped.set(key, row);
+  }
+  const collectedFinal = Array.from(collectedDeduped.values());
+
+  // ─── 8. Delete existing rows and insert fresh data ─────────────────────────
   // Delete existing rows for this section
   await db.execute(sql`DELETE FROM debt_target_cache WHERE section = ${section}`);
   await db.execute(sql`DELETE FROM debt_collected_cache WHERE section = ${section}`);
 
-  // Batch insert (500 rows at a time to avoid packet size limits)
-  const BATCH = 500;
+  // Batch insert (100 rows at a time to avoid MySQL 65535-parameter limit)
+  // debt_target_cache has ~35 columns → 100 rows = 3500 params (well under limit)
+  const BATCH = 100;
 
   let targetCount = 0;
-  for (let i = 0; i < targetInserts.length; i += BATCH) {
-    const batch = targetInserts.slice(i, i + BATCH);
+  for (let i = 0; i < targetFinal.length; i += BATCH) {
+    const batch = targetFinal.slice(i, i + BATCH);
     if (batch.length > 0) {
       await db.insert(debtTargetCache).values(batch);
       targetCount += batch.length;
     }
   }
-
   let collectedCount = 0;
-  for (let i = 0; i < collectedInserts.length; i += BATCH) {
-    const batch = collectedInserts.slice(i, i + BATCH);
+  for (let i = 0; i < collectedFinal.length; i += BATCH) {
+    const batch = collectedFinal.slice(i, i + BATCH);
     if (batch.length > 0) {
       await db.insert(debtCollectedCache).values(batch);
       collectedCount += batch.length;
     }
   }
-
   console.log(
     `[populateCache] ${section}: inserted ${targetCount} target rows, ${collectedCount} collected rows`,
   );

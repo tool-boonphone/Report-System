@@ -1120,3 +1120,14 @@ Task list:
 - [x] P112-2: แก้ไข closeAmtSumByContract และ closeAmtSumByContractStream ให้ include receipt_no และ skip payments ที่ receipt_no prefix ไม่ตรงกับ contract นี้
 - [x] P112-3: TypeScript check + restart server + ยืนยันผลด้วย CT1124-CCO015-2211-03 (เป้าเก็บหนี้ = 0/8, ป้ายกำกับเริ่มงวดที่ 1)
 - [x] P112-4: Commit + Push + Checkpoint
+
+### Phase 113 — DB Cache System (Populate Engine + Stream from Cache)
+- [x] P113-1: สร้าง server/sync/populateCache.ts — Populate Engine สำหรับ debt_target_cache และ debt_collected_cache (dedup via Map, batch size=100)
+- [x] P113-2: เพิ่ม populateDebtCache เข้า doSync() ใน server/sync/runner.ts (ทำงานหลัง syncPayments)
+- [x] P113-3: สร้าง server/routers/cache.ts — tRPC router สำหรับ trigger populate cache และ query cache status
+- [x] P113-4: Register cacheRouter ใน server/routers.ts
+- [x] P113-5: Full Backfill ทั้ง 2 sections (Boonphone: 45,550 target + 3,037 collected; Fastfone365: 171,363 target + 119,594 collected; รวม 339,544 rows)
+- [x] P113-6: สร้าง server/sync/queryCacheDb.ts — DB Cache Query Engine (streamTargetFromCache, streamCollectedFromCache)
+- [x] P113-7: แก้ไข server/routers/debtStream.ts ให้ใช้ streamTargetFromCache/streamCollectedFromCache จาก queryCacheDb แทน listDebtTargetStream/listDebtCollectedStream
+- [x] P113-8: ผลลัพธ์: Fastfone365 target stream เร็วขึ้นจาก 60-120s → 5.7s (~15-20x speedup)
+- [x] P113-9: TypeScript check ผ่าน 0 errors + Commit + Push GitHub + Checkpoint
