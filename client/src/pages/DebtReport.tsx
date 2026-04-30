@@ -453,8 +453,10 @@ export default function DebtReport() {
     });
   };
 
-  // Phase 115: กลับมาใช้ HTTP streaming endpoint — tRPC buffer ทั้ง response ก่อนส่ง ทำให้ 503
-  // HTTP streaming ส่ง byte แรกทันที → Cloudflare ไม่ timeout แม้ data ใหญ่ 64MB
+  // Phase 121: เปลี่ยนจาก NDJSON stream เป็น tRPC chunk loop
+  // เหตุผล: Cloudflare ตัด response ที่ ~24MB ทำให้ NDJSON stream ได้ข้อมูลไม่ครบ (17,721 สัญญา ≈ 39.5MB)
+  // แนวทาง: ใช้ getTargetChunk/getCollectedChunk (2,000 สัญญาต่อ request ≈ 4.7MB) วนจนครบ total
+  const utils = trpc.useUtils();
   const [streamData, setStreamData] = useState<{
     target: { rows: TargetRow[] } | null;
     collected: { rows: CollectedRow[]; hasPrincipalBreakdown: boolean } | null;
@@ -464,8 +466,6 @@ export default function DebtReport() {
   const [streamProgress, setStreamProgress] = useState<{ target: number; collected: number }>({ target: 0, collected: 0 });
   const [streamTotal, setStreamTotal] = useState<{ target: number; collected: number }>({ target: 0, collected: 0 });
 
-  // Phase 117: NDJSON streaming fetch — อ่าน response ทีละบรรทัด (newline-delimited JSON)
-  // แก้ปัญหา Cloudflare buffer response ทั้งหมดก่อน forward → ตัดที่ ~24MB
   const fetchStream = useCallback(async (t: "target" | "collected") => {
     if (!canView || !section) return;
     setStreamData((prev) => ({ ...prev, [t]: null }));
@@ -474,84 +474,43 @@ export default function DebtReport() {
     setStreamProgress((prev) => ({ ...prev, [t]: 0 }));
     setStreamTotal((prev) => ({ ...prev, [t]: 0 }));
     try {
-      const url = `/api/debt/stream/${t}?section=${encodeURIComponent(section)}`;
-      const resp = await fetch(url, { credentials: "include" });
-      if (!resp.ok) {
-        const text = await resp.text();
-        throw new Error(`HTTP ${resp.status}: ${text.slice(0, 200)}`);
-      }
-      // Phase 117: อ่าน NDJSON ทีละบรรทัด
-      const reader = resp.body!.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
+      const CHUNK_SIZE = 2000; // ~4.7MB ต่อ request — ต่ำกว่า Cloudflare 24MB limit
       const rows: any[] = []; // eslint-disable-line @typescript-eslint/no-explicit-any
       let hasPrincipalBreakdown = true;
-      let metaReceived = false;
-
+      let offset = 0;
+      let totalContracts = 0;
+      // วน fetch จนครบ total
       while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-
-        // แยกตาม newline และ parse ทีละบรรทัด
-        const lines = buffer.split("\n");
-        // เก็บบรรทัดสุดท้ายไว้ (อาจยังไม่ครบ)
-        buffer = lines.pop() ?? "";
-
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed) continue;
-          try {
-            const obj = JSON.parse(trimmed);
-            if (obj.type === "meta") {
-              // บรรทัดแรก: meta — อัปเดต total และ hasPrincipalBreakdown
-              if (obj.total > 0) setStreamTotal((prev) => ({ ...prev, [t]: obj.total }));
-              if (obj.hasPrincipalBreakdown != null) hasPrincipalBreakdown = obj.hasPrincipalBreakdown;
-              metaReceived = true;
-            } else if (obj.type === "done") {
-              // บรรทัดสุดท้าย: done — อัปเดต hasPrincipalBreakdown ถ้ามี
-              if (obj.hasPrincipalBreakdown != null) hasPrincipalBreakdown = obj.hasPrincipalBreakdown;
-            } else if (metaReceived) {
-              // บรรทัดข้อมูล: contract row
-              rows.push(obj);
-              // อัปเดต progress ทุก 500 rows
-              if (rows.length % 500 === 0) {
-                setStreamProgress((prev) => ({ ...prev, [t]: rows.length }));
-              }
-            }
-          } catch {
-            // ไม่ใช่ JSON ที่ถูกต้อง — ข้าม
-          }
+        let chunkRows: any[];
+        let chunkTotal: number;
+        let hasMore: boolean;
+        if (t === "target") {
+          const result = await utils.debt.getTargetChunk.fetch({
+            section: section as any,
+            offset,
+            limit: CHUNK_SIZE,
+          });
+          chunkRows = result.rows;
+          chunkTotal = result.totalContracts;
+          hasMore = result.hasMore;
+        } else {
+          const result = await utils.debt.getCollectedChunk.fetch({
+            section: section as any,
+            offset,
+            limit: CHUNK_SIZE,
+          });
+          chunkRows = result.rows;
+          chunkTotal = result.totalContracts;
+          hasMore = result.hasMore;
+          if (result.hasPrincipalBreakdown === false) hasPrincipalBreakdown = false;
         }
+        rows.push(...chunkRows);
+        totalContracts = chunkTotal;
+        offset += CHUNK_SIZE;
+        setStreamTotal((prev) => ({ ...prev, [t]: totalContracts }));
+        setStreamProgress((prev) => ({ ...prev, [t]: rows.length }));
+        if (!hasMore) break;
       }
-
-      // ประมวลผลบรรทัดสุดท้ายที่ค้างใน buffer
-      if (buffer.trim()) {
-        try {
-          const obj = JSON.parse(buffer.trim());
-          if (obj.type === "done" && obj.hasPrincipalBreakdown != null) {
-            hasPrincipalBreakdown = obj.hasPrincipalBreakdown;
-          } else if (obj.type !== "meta" && obj.type !== "done") {
-            rows.push(obj);
-          }
-        } catch { /* ignore */ }
-      }
-
-      setStreamProgress((prev) => ({ ...prev, [t]: rows.length }));
-      // Phase 120 Fix: ไม่ overwrite streamTotal ด้วย rows.length
-      // ให้ใช้ meta total ที่ได้รับจาก server เป็นแหล่งความจริง
-      // ถ้า rows.length < meta total แสดง warning ใน console
-      setStreamTotal((prev) => {
-        const metaTotal = prev[t];
-        if (metaTotal > 0 && rows.length < metaTotal) {
-          console.warn(
-            `[DebtReport] ${t} stream incomplete: received ${rows.length} rows but meta total=${metaTotal}`,
-            `(missing ${metaTotal - rows.length} rows)`
-          );
-        }
-        // ถ้า meta total = 0 (ไม่ได้รับ meta line) ให้ใช้ rows.length แทน
-        return metaTotal > 0 ? prev : { ...prev, [t]: rows.length };
-      });
       if (t === "target") {
         setStreamData((prev) => ({ ...prev, target: { rows: rows as TargetRow[] } }));
       } else {
@@ -562,7 +521,7 @@ export default function DebtReport() {
     } finally {
       setStreamLoading((prev) => ({ ...prev, [t]: false }));
     }
-  }, [canView, section]);
+  }, [canView, section, utils]);
 
   // Auto-fetch when tab/section changes (only if not already loaded)
   useEffect(() => {

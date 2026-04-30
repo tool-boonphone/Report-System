@@ -79,7 +79,7 @@ export async function prewarmDebtCache(): Promise<void> {
     const targetPromise = collectStreamTarget(section)
       .then((targetResult) => {
         setCachedTarget(section, targetResult);
-        console.log(`[debtPrewarm] ✓ listTarget(${section}) cached in ${Date.now() - t0}ms`);
+        console.log(`[debtPrewarm] ✓ listTarget(${section}) cached ${targetResult.rows.length} rows in ${Date.now() - t0}ms`);
       })
       .catch((err) => {
         console.warn(`[debtPrewarm] ✗ listTarget(${section}) failed:`, err);
@@ -92,7 +92,7 @@ export async function prewarmDebtCache(): Promise<void> {
     const collectedPromise = collectStreamCollected(section)
       .then((collectedResult) => {
         setCachedCollected(section, collectedResult);
-        console.log(`[debtPrewarm] ✓ listCollected(${section}) cached in ${Date.now() - t1}ms`);
+        console.log(`[debtPrewarm] ✓ listCollected(${section}) cached ${collectedResult.rows.length} rows in ${Date.now() - t1}ms`);
       })
       .catch((err) => {
         console.warn(`[debtPrewarm] ✗ listCollected(${section}) failed:`, err);

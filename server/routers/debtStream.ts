@@ -187,7 +187,7 @@ export async function handleDebtStreamTarget(
     // 1. In-memory cache hit — เร็วที่สุด (~ms)
     const cached = getCachedTarget(section);
     if (cached) {
-      console.log(`[debtStream] HIT target for ${section}`);
+      console.log(`[debtStream] HIT target for ${section} (${cached.rows.length} rows in cache)`);
       // Phase 117: NDJSON — meta line แรก แล้วตามด้วย rows ทีละบรรทัด
       startNDJSONResponse(res, { total: cached.rows.length });
       await streamNDJSONRows(res, cached.rows);
@@ -275,8 +275,8 @@ export async function handleDebtStreamCollected(
     // 1. In-memory cache hit — เร็วที่สุด (~ms)
     const cached = getCachedCollected(section);
     if (cached) {
-      console.log(`[debtStream] HIT collected for ${section}`);
-      // Phase 117: NDJSON — meta line แรก แล้วตามด้วย rows ทีละบรรทัด
+      console.log(`[debtStream] HIT collected for ${section} (${cached.rows.length} rows in cache)`);
+      // Phase 117: NDJSON — meta line แรก แล้วย rows ทีละบรรทัด
       startNDJSONResponse(res, { total: cached.rows.length, hasPrincipalBreakdown: cached.hasPrincipalBreakdown });
       await streamNDJSONRows(res, cached.rows);
       return;

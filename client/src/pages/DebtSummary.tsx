@@ -425,7 +425,8 @@ export default function DebtSummary() {
   // Phase 118: track contract count for progress display
   const [streamProgress, setStreamProgress] = useState<{ target: number; collected: number }>({ target: 0, collected: 0 });
   const [streamTotal, setStreamTotal] = useState<{ target: number; collected: number }>({ target: 0, collected: 0 });
-  // Phase 118: NDJSON streaming fetch
+  // Phase 121: tRPC chunk loop (แทน NDJSON stream ที่ถูก Cloudflare ตัดที่ ~24MB)
+  const utils = trpc.useUtils();
   const fetchStream = useCallback(async (t: "target" | "collected") => {
     if (!canView || !section) return;
     setStreamLoading((prev) => ({ ...prev, [t]: true }));
@@ -433,54 +434,42 @@ export default function DebtSummary() {
     setStreamProgress((prev) => ({ ...prev, [t]: 0 }));
     setStreamTotal((prev) => ({ ...prev, [t]: 0 }));
     try {
-      const resp = await fetch(`/api/debt/stream/${t}?section=${encodeURIComponent(section)}`, {
-        credentials: "include",
-        signal: AbortSignal.timeout(300_000),
-      });
-      if (!resp.ok) {
-        const text = await resp.text().catch(() => resp.statusText);
-        throw new Error(`HTTP ${resp.status}: ${text}`);
-      }
-      const reader = resp.body?.getReader();
-      if (!reader) throw new Error("ไม่รองรับ streaming");
-      const decoder = new TextDecoder();
-      let lineBuffer = "";
+      const CHUNK_SIZE = 2000;
       const rows: any[] = [];
       let hasPrincipalBreakdown = true;
-      let contractCount = 0;
+      let offset = 0;
+      let totalContracts = 0;
       while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        lineBuffer += decoder.decode(value, { stream: true });
-        const splitLines = lineBuffer.split("\n");
-        lineBuffer = splitLines.pop() ?? "";
-        for (const line of splitLines) {
-          const trimmed = line.trim();
-          if (!trimmed) continue;
-          try {
-            const obj = JSON.parse(trimmed);
-            if (obj.type === "meta") {
-              setStreamTotal((prev) => ({ ...prev, [t]: obj.total ?? 0 }));
-              if (obj.hasPrincipalBreakdown === false) hasPrincipalBreakdown = false;
-            } else if (obj.type === "done") {
-              // stream complete
-            } else {
-              rows.push(obj);
-              contractCount++;
-              if (contractCount % 500 === 0) {
-                setStreamProgress((prev) => ({ ...prev, [t]: contractCount }));
-              }
-            }
-          } catch { /* skip malformed line */ }
+        let chunkRows: any[];
+        let chunkTotal: number;
+        let hasMore: boolean;
+        if (t === "target") {
+          const result = await utils.debt.getTargetChunk.fetch({
+            section: section as any,
+            offset,
+            limit: CHUNK_SIZE,
+          });
+          chunkRows = result.rows;
+          chunkTotal = result.totalContracts;
+          hasMore = result.hasMore;
+        } else {
+          const result = await utils.debt.getCollectedChunk.fetch({
+            section: section as any,
+            offset,
+            limit: CHUNK_SIZE,
+          });
+          chunkRows = result.rows;
+          chunkTotal = result.totalContracts;
+          hasMore = result.hasMore;
+          if (result.hasPrincipalBreakdown === false) hasPrincipalBreakdown = false;
         }
+        rows.push(...chunkRows);
+        totalContracts = chunkTotal;
+        offset += CHUNK_SIZE;
+        setStreamTotal((prev) => ({ ...prev, [t]: totalContracts }));
+        setStreamProgress((prev) => ({ ...prev, [t]: rows.length }));
+        if (!hasMore) break;
       }
-      if (lineBuffer.trim()) {
-        try {
-          const obj = JSON.parse(lineBuffer.trim());
-          if (obj.type !== "meta" && obj.type !== "done") rows.push(obj);
-        } catch { /* ignore */ }
-      }
-      setStreamProgress((prev) => ({ ...prev, [t]: rows.length }));
       const result = t === "collected"
         ? { rows, hasPrincipalBreakdown }
         : { rows };
@@ -490,7 +479,7 @@ export default function DebtSummary() {
     } finally {
       setStreamLoading((prev) => ({ ...prev, [t]: false }));
     }
-  }, [canView, section]);
+  }, [canView, section, utils]);
 
   // Auto-fetch when tab/section changes (only if not already loaded)
   useEffect(() => {
