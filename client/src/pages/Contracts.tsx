@@ -278,7 +278,15 @@ export default function Contracts() {
   // ----- One-shot fetch of all rows for the section -----
   const listQuery = trpc.contracts.listAll.useQuery(
     { section: section! },
-    { staleTime: 60_000, enabled: Boolean(section) },
+    {
+      // ข้อมูลสัญญาไม่ต้องการ real-time — staleTime: Infinity ป้องกัน
+      // background refetch ที่ทำให้ batch กับ auth.me แล้ว timeout (150s)
+      staleTime: Infinity,
+      gcTime: 10 * 60 * 1000, // keep in cache 10 minutes
+      enabled: Boolean(section),
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
+    },
   );
 
   const allRows = listQuery.data ?? [];
