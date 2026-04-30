@@ -3648,7 +3648,9 @@ export async function* listDebtCollectedStream(params: {
       //   1. contract.status = "หนี้เสีย" (direct), OR
       //   2. Any installment has status = "ยกเลิกสัญญา" | "หนี้เสีย" | "ระงับสัญญา"
       //      (some contracts have status="สำเร็จ" but installments are cancelled)
-      const SUSPEND_CODES_STREAM = new Set(["ยกเลิกสัญญา", "หนี้เสีย", "ระงับสัญญา"]);
+      // Phase 126 fix: "ระงับสัญญา" ≠ หนี้เสีย — สัญญาระงับมีรายการชำระปกติ ไม่ใช่ bad_debt
+      // เฉพาะ "หนี้เสีย" และ "ยกเลิกสัญญา" (FF365) เท่านั้นที่ถือเป็น bad_debt contract
+      const SUSPEND_CODES_STREAM = new Set(["ยกเลิกสัญญา", "หนี้เสีย"]);
       const hasSuspendedInstallment = c.installments.some((inst: any) => SUSPEND_CODES_STREAM.has(inst.status ?? ""));
       const isBadDebtContract = c.status === "หนี้เสีย" || hasSuspendedInstallment;
       if (isBadDebtContract && realPaymentsRaw.length > 0) {
