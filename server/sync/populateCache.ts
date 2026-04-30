@@ -218,6 +218,7 @@ export async function populateDebtCache(
           badDebt: String(Number(p.badDebt ?? 0)),
           totalAmount: String(Number(p.total ?? 0)),
           updatedBy: p.updatedBy ?? null,
+          updatedAt: p.updatedAt ?? null,
           isBadDebtRow: !!p.isBadDebtRow,
         });
       }

@@ -416,6 +416,7 @@ export const debtCollectedCache = mysqlTable(
     totalAmount: decimal("total_amount", { precision: 12, scale: 2 }).notNull().default("0"),
     // Metadata
     updatedBy: varchar("updated_by", { length: 128 }),
+    updatedAt: varchar("updated_at", { length: 32 }),
     isBadDebtRow: boolean("is_bad_debt_row").notNull().default(false),
     // Bookkeeping
     populatedAt: timestamp("populated_at").defaultNow().notNull(),

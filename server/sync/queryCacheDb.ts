@@ -305,6 +305,7 @@ export async function* streamCollectedFromCache(params: {
         CAST(bad_debt    AS DECIMAL(18,4)) AS bad_debt,
         CAST(total_amount AS DECIMAL(18,4)) AS total_amount,
         updated_by,
+        updated_at,
         is_bad_debt_row
       FROM debt_collected_cache
       WHERE section = ${section}
@@ -423,9 +424,8 @@ export async function* streamCollectedFromCache(params: {
         remark: null,
         badDebtNote: null,
         updatedBy: p.updated_by ?? null,
-        updatedAt: null,
+        updatedAt: p.updated_at ?? null,
       }));
-
       yieldBatch.push({
         contractExternalId: extId,
         contractNo: first.contract_no ?? null,
@@ -721,6 +721,7 @@ export async function getCollectedChunk(params: {
         CAST(bad_debt    AS DECIMAL(18,4)) AS bad_debt,
         CAST(total_amount AS DECIMAL(18,4)) AS total_amount,
         updated_by,
+        updated_at,
         is_bad_debt_row
       FROM debt_collected_cache
       WHERE section = ${section}
@@ -853,9 +854,8 @@ export async function getCollectedChunk(params: {
       remark: null,
       badDebtNote: null,
       updatedBy: p.updated_by ?? null,
-      updatedAt: null,
+      updatedAt: p.updated_at ?? null,
     }));
-
     result.push({
       contractExternalId: extId,
       contractNo: first.contract_no ?? null,

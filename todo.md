@@ -1162,3 +1162,9 @@ Task list:
     - แต่ละ request ดึง 2,000 contracts (~2-5MB) แทน 64MB ในครั้งเดียว
     - Progress bar แสดง contracts received / total แทน bytes
   - TypeScript check ผ่านสะอาด (0 errors)
+
+## Phase 119 — Bug fixes for DebtReport (จาก feedback 2026-04-30)
+
+- [ ] แก้ไขจำนวนสัญญาไม่ครบ — ยอดเก็บหนี้แสดง 500 สัญญา แต่เป้าเก็บหนี้แสดง 4,000 สัญญา (ควรเท่ากัน)
+- [ ] แก้ไขจำนวนสัญญาของ 2 แถบไม่เท่ากัน — target กับ collected ควรมีจำนวน distinct contracts เท่ากัน
+- [ ] แก้ไขคอลัมน์ บันทึกโดย/บันทึกเมื่อ มาไม่ครบ — บางแถวมีแค่อย่างเดียว หรือไม่มีเลย

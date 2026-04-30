@@ -1,0 +1,1 @@
+ALTER TABLE `debt_collected_cache` ADD `updated_at` varchar(32);
