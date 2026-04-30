@@ -700,7 +700,7 @@ async function computeAndStoreBadDebt(section: SectionKey): Promise<void> {
           JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.updated_by')) AS updated_by,
           DATE(JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.updated_at'))) AS updated_date
         FROM installments
-        WHERE section = 'Fastfone365'
+        WHERE section = '${sectionLiteral}'
           AND contract_external_id IN (${batchIdsLiteral})
           AND external_id LIKE CONCAT(contract_external_id, '-%')
           AND JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.updated_by')) IS NOT NULL

@@ -1187,3 +1187,13 @@ Task list:
 - [x] P122-1: ลด CHUNK_SIZE จาก 2000 เป็น 500 (~2MB ต่อ request) ใน DebtReport.tsx, DebtOverview.tsx, DebtSummary.tsx
 - [x] P122-2: เพิ่ม fetchChunkWithRetry (max 3 ครั้ง, exponential backoff 1s/2s/4s) ใน 3 ไฟล์
 - [x] P122-3: Commit + Push GitHub + Checkpoint
+
+## Phase 123 — Fix คอลัมน์ "บันทึกเมื่อ" ในหน้ายอดเก็บหนี้
+- [ ] P123-1: วิเคราะห์ field บันทึกเมื่อ ใน collected data pipeline (API → cache → chunk → UI)
+- [ ] P123-2: แก้ไขให้ field บันทึกเมื่อ ส่งข้อมูลครบถ้วนจาก server ถึง UI
+- [ ] P123-3: Commit + Push GitHub + Checkpoint
+
+## Phase 123 — Fix คอลัมน์ "บันทึกเมื่อ" ในหน้ายอดเก็บหนี้
+- [x] P123-1: วิเคราะห์ root cause — พบ hardcode `section = 'Fastfone365'` ใน runner.ts CTE ทำให้ Boonphone ไม่ได้ updated_by/updated_at
+- [x] P123-2: แก้ไข runner.ts บรรทัด 703 เปลี่ยน `'Fastfone365'` เป็น `'${sectionLiteral}'`
+- [ ] P123-3: Commit + Push GitHub + Checkpoint
