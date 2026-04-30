@@ -29,6 +29,7 @@ import {
 } from "./syncLog";
 import type { SectionKey, SyncTrigger } from "../../shared/const";
 import { invalidateDebtCache } from "../debtCache";
+import { populateDebtCache } from "./populateCache";
 
 const OVERALL_TIMEOUT_MS = 90 * 60 * 1000; // 90 minutes ceiling per section (Fastfone365 has 17k contracts)
 // A sync row older than this with status=in_progress is treated as abandoned.
@@ -221,6 +222,19 @@ async function doSync(
     });
     // Invalidate debt report cache so next request gets fresh data after sync
     invalidateDebtCache(section);
+
+    // Populate DB cache tables (debt_target_cache + debt_collected_cache)
+    // This runs after all sync stages so the cache reflects the latest data.
+    try {
+      const cacheResult = await populateDebtCache(section);
+      console.log(
+        `[runner] ${section}: cache populated — target=${cacheResult.targetRows}, collected=${cacheResult.collectedRows}`,
+      );
+    } catch (cacheErr: any) {
+      // Cache population failure is non-fatal — log and continue
+      console.error(`[runner] ${section}: cache population failed:`, cacheErr?.message ?? cacheErr);
+    }
+
     return { ok: true, rowCount: overallRows };
   } catch (err: any) {
     await finishSyncLog({
