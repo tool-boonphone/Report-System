@@ -292,7 +292,8 @@ export function mapPayment(section: SectionKey, it: PaymentItem) {
     method: it.payment_method ?? null,
     status: it.payment_status ?? null,
     rawJson: it as any,
-    updatedAt: it.updated_at ? (toDate(it.updated_at) ?? null) : null,
+    // เก็บ datetime เต็ม (YYYY-MM-DD HH:mm:ss) ไม่ใช่แค่ date เพื่อให้แสดงเวลาบันทึกได้
+    updatedAt: it.updated_at ? String(it.updated_at) : null,
     updatedBy: it.updated_by ?? null,
   };
 }
