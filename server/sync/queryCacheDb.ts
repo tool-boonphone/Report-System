@@ -72,57 +72,22 @@ function rederiveDaysOverdue(
 
 /**
  * Async generator that yields batches of TargetRow from debt_target_cache.
- * Each batch contains up to `batchSize` contracts (not rows).
+ * Phase 116: Uses LIMIT/OFFSET pagination per batch to avoid loading ALL rows at once.
+ * Each batch queries DB for `batchSize` contracts, yielding immediately after each query.
+ * This ensures the first byte is sent within ~1s (not after 30-60s full-table scan).
  */
 export async function* streamTargetFromCache(params: {
   section: SectionKey;
   batchSize?: number;
 }): AsyncGenerator<any[]> {
-  const { section, batchSize = 200 } = params;
+  const { section, batchSize = 500 } = params;
   const db = await getDb();
   if (!db) return;
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  // ── 1. Load all cache rows for this section ──────────────────────────────
-  const rawResult = await db.execute(sql`
-    SELECT
-      contract_external_id,
-      contract_no,
-      customer_name,
-      approve_date,
-      contract_status,
-      product_type,
-      installment_count,
-      period,
-      due_date,
-      CAST(principal    AS DECIMAL(18,4)) AS principal,
-      CAST(interest     AS DECIMAL(18,4)) AS interest,
-      CAST(fee          AS DECIMAL(18,4)) AS fee,
-      CAST(penalty      AS DECIMAL(18,4)) AS penalty,
-      CAST(unlock_fee   AS DECIMAL(18,4)) AS unlock_fee,
-      CAST(net_amount   AS DECIMAL(18,4)) AS net_amount,
-      CAST(total_amount AS DECIMAL(18,4)) AS total_amount,
-      CAST(paid_amount  AS DECIMAL(18,4)) AS paid_amount,
-      CAST(overpaid_applied AS DECIMAL(18,4)) AS overpaid_applied,
-      CAST(baseline_amount  AS DECIMAL(18,4)) AS baseline_amount,
-      is_paid,
-      is_partial_paid,
-      is_closed,
-      is_suspended,
-      is_current_period,
-      is_future_period,
-      is_arrears,
-      is_bad_debt,
-      debt_range
-    FROM debt_target_cache
-    WHERE section = ${section}
-    ORDER BY contract_external_id, period
-  `);
-  const rows: any[] = (rawResult as any)[0] ?? rawResult;
-
-  // ── 2. Load phone numbers from contracts (single JOIN-less query) ─────────
+  // ── 1. Load phone numbers once (small table) ─────────────────────────────────────────────
   const phoneResult = await db.execute(sql`
     SELECT external_id, phone
     FROM contracts
@@ -134,146 +99,162 @@ export async function* streamTargetFromCache(params: {
     phoneMap.set(String(r.external_id), r.phone ?? null);
   }
 
-  // ── 3. Group rows by contract ─────────────────────────────────────────────
-  const contractMap = new Map<string, any[]>();
-  const contractOrder: string[] = [];
-  for (const r of rows) {
-    const key = String(r.contract_external_id);
-    if (!contractMap.has(key)) {
-      contractMap.set(key, []);
-      contractOrder.push(key);
+  // ── 2. Get distinct contract IDs in order (paginated) ─────────────────────────────────
+  let offset = 0;
+  while (true) {
+    // Get next page of distinct contract IDs
+    const idResult = await db.execute(sql`
+      SELECT DISTINCT contract_external_id
+      FROM debt_target_cache
+      WHERE section = ${section}
+      ORDER BY contract_external_id
+      LIMIT ${batchSize} OFFSET ${offset}
+    `);
+    const idRows: any[] = (idResult as any)[0] ?? idResult;
+    if (idRows.length === 0) break;
+
+    const contractIds = idRows.map((r: any) => String(r.contract_external_id));
+    const idList = contractIds.map((id: string) => `'${id.replace(/'/g, "''")}'`).join(",");
+
+    // Fetch all installment rows for this batch of contracts
+    const rawResult = await db.execute(sql`
+      SELECT
+        contract_external_id,
+        contract_no,
+        customer_name,
+        approve_date,
+        contract_status,
+        product_type,
+        installment_count,
+        period,
+        due_date,
+        CAST(principal    AS DECIMAL(18,4)) AS principal,
+        CAST(interest     AS DECIMAL(18,4)) AS interest,
+        CAST(fee          AS DECIMAL(18,4)) AS fee,
+        CAST(penalty      AS DECIMAL(18,4)) AS penalty,
+        CAST(unlock_fee   AS DECIMAL(18,4)) AS unlock_fee,
+        CAST(net_amount   AS DECIMAL(18,4)) AS net_amount,
+        CAST(total_amount AS DECIMAL(18,4)) AS total_amount,
+        CAST(paid_amount  AS DECIMAL(18,4)) AS paid_amount,
+        CAST(overpaid_applied AS DECIMAL(18,4)) AS overpaid_applied,
+        CAST(baseline_amount  AS DECIMAL(18,4)) AS baseline_amount,
+        is_paid,
+        is_partial_paid,
+        is_closed,
+        is_suspended,
+        is_current_period,
+        is_future_period,
+        is_arrears,
+        is_bad_debt,
+        debt_range
+      FROM debt_target_cache
+      WHERE section = ${section}
+        AND contract_external_id IN (${sql.raw(idList)})
+      ORDER BY contract_external_id, period
+    `);
+    const rows: any[] = (rawResult as any)[0] ?? rawResult;
+
+    // Group rows by contract
+    const contractMap = new Map<string, any[]>();
+    for (const r of rows) {
+      const key = String(r.contract_external_id);
+      if (!contractMap.has(key)) contractMap.set(key, []);
+      contractMap.get(key)!.push(r);
     }
-    contractMap.get(key)!.push(r);
-  }
 
-  // ── 4. Yield batches ───────────────────────────────────────────────────────
-  let batch: any[] = [];
-  for (const extId of contractOrder) {
-    const instRows = contractMap.get(extId)!;
-    const first = instRows[0];
+    // Build TargetRow objects for this batch
+    const batch: any[] = [];
+    for (const extId of contractIds) {
+      const instRows = contractMap.get(extId) ?? [];
+      if (instRows.length === 0) continue;
+      const first = instRows[0];
 
-    // Re-derive daysOverdue from cached installment rows
-    const { debtStatus, daysOverdue } = rederiveDaysOverdue(
-      first.contract_status ?? null,
-      instRows.map((r) => ({
+      const { debtStatus, daysOverdue } = rederiveDaysOverdue(
+        first.contract_status ?? null,
+        instRows.map((r) => ({
+          dueDate: r.due_date ?? null,
+          totalAmount: String(r.total_amount ?? 0),
+          paidAmount: String(r.paid_amount ?? 0),
+          isClosed: !!r.is_closed,
+          isSuspended: !!r.is_suspended,
+        })),
+        today,
+      );
+
+      const totalAmount = instRows.reduce((s: number, r: any) => s + Number(r.total_amount ?? 0), 0);
+      const totalPaid = instRows.reduce((s: number, r: any) => s + Number(r.paid_amount ?? 0), 0);
+      const contractStatus = first.contract_status ?? null;
+      const suspendLabel = contractStatus === "หนี้เสีย" ? "หนี้เสีย"
+        : contractStatus === "ระงับสัญญา" ? "ระงับสัญญา"
+        : null;
+
+      const installments = instRows.map((r: any) => ({
+        period: r.period != null ? Number(r.period) : null,
         dueDate: r.due_date ?? null,
-        totalAmount: String(r.total_amount ?? 0),
-        paidAmount: String(r.paid_amount ?? 0),
+        principal: Number(r.principal ?? 0),
+        interest: Number(r.interest ?? 0),
+        fee: Number(r.fee ?? 0),
+        penalty: Number(r.penalty ?? 0),
+        unlockFee: Number(r.unlock_fee ?? 0),
+        amount: Number(r.total_amount ?? 0),
+        paid: Number(r.paid_amount ?? 0),
+        baselineAmount: Number(r.baseline_amount ?? 0),
+        overpaidApplied: Number(r.overpaid_applied ?? 0),
+        netAmount: Number(r.net_amount ?? 0),
         isClosed: !!r.is_closed,
         isSuspended: !!r.is_suspended,
-      })),
-      today,
-    );
+        suspendLabel: !!r.is_suspended ? suspendLabel : null,
+        suspendedAt: null,
+        isCurrentPeriod: !!r.is_current_period,
+        isFuturePeriod: !!r.is_future_period,
+        isArrears: !!r.is_arrears,
+        isPaid: !!r.is_paid,
+        isPartialPaid: !!r.is_partial_paid,
+      }));
 
-    // Compute contract-level totals
-    const totalAmount = instRows.reduce((s, r) => s + Number(r.total_amount ?? 0), 0);
-    const totalPaid = instRows.reduce((s, r) => s + Number(r.paid_amount ?? 0), 0);
-
-    const contractStatus = first.contract_status ?? null;
-    const suspendLabel = contractStatus === "หนี้เสีย" ? "หนี้เสีย"
-      : contractStatus === "ระงับสัญญา" ? "ระงับสัญญา"
-      : null;
-
-    // Build installments array
-    const installments = instRows.map((r) => ({
-      period: r.period != null ? Number(r.period) : null,
-      dueDate: r.due_date ?? null,
-      principal: Number(r.principal ?? 0),
-      interest: Number(r.interest ?? 0),
-      fee: Number(r.fee ?? 0),
-      penalty: Number(r.penalty ?? 0),
-      unlockFee: Number(r.unlock_fee ?? 0),
-      amount: Number(r.total_amount ?? 0),
-      paid: Number(r.paid_amount ?? 0),
-      baselineAmount: Number(r.baseline_amount ?? 0),
-      overpaidApplied: Number(r.overpaid_applied ?? 0),
-      netAmount: Number(r.net_amount ?? 0),
-      isClosed: !!r.is_closed,
-      isSuspended: !!r.is_suspended,
-      suspendLabel: !!r.is_suspended ? suspendLabel : null,
-      suspendedAt: null, // not stored in cache
-      isCurrentPeriod: !!r.is_current_period,
-      isFuturePeriod: !!r.is_future_period,
-      isArrears: !!r.is_arrears,
-      isPaid: !!r.is_paid,
-      isPartialPaid: !!r.is_partial_paid,
-    }));
-
-    const targetRow = {
-      contractExternalId: extId,
-      contractNo: first.contract_no ?? null,
-      approveDate: first.approve_date ?? null,
-      customerName: first.customer_name ?? null,
-      phone: phoneMap.get(extId) ?? null,
-      productType: first.product_type ?? null,
-      installmentCount: first.installment_count != null ? Number(first.installment_count) : null,
-      installmentAmount: null, // not stored in cache
-      totalAmount,
-      totalPaid,
-      remaining: Math.max(totalAmount - totalPaid, 0),
-      debtStatus,
-      daysOverdue,
-      installments,
-    };
-
-    batch.push(targetRow);
-    if (batch.length >= batchSize) {
-      yield batch;
-      batch = [];
-      await new Promise<void>((resolve) => setImmediate(resolve));
+      batch.push({
+        contractExternalId: extId,
+        contractNo: first.contract_no ?? null,
+        approveDate: first.approve_date ?? null,
+        customerName: first.customer_name ?? null,
+        phone: phoneMap.get(extId) ?? null,
+        productType: first.product_type ?? null,
+        installmentCount: first.installment_count != null ? Number(first.installment_count) : null,
+        installmentAmount: null,
+        totalAmount,
+        totalPaid,
+        remaining: Math.max(totalAmount - totalPaid, 0),
+        debtStatus,
+        daysOverdue,
+        installments,
+      });
     }
+
+    if (batch.length > 0) yield batch;
+    offset += batchSize;
+    // Yield to event loop between batches
+    await new Promise<void>((resolve) => setImmediate(resolve));
   }
-  if (batch.length > 0) yield batch;
 }
 
 // ─── Collected (ยอดเก็บหนี้) ──────────────────────────────────────────────────
 
 /**
  * Async generator that yields batches of CollectedRow from debt_collected_cache.
- * Each batch contains up to `batchSize` contracts (not rows).
+ * Phase 116: Uses LIMIT/OFFSET pagination per batch to avoid loading ALL rows at once.
  */
 export async function* streamCollectedFromCache(params: {
   section: SectionKey;
   batchSize?: number;
 }): AsyncGenerator<{ rows: any[]; meta: { hasPrincipalBreakdown: boolean } }> {
-  const { section, batchSize = 200 } = params;
+  const { section, batchSize = 500 } = params;
   const db = await getDb();
   if (!db) return;
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  // ── 1. Load all collected cache rows ─────────────────────────────────────
-  const rawResult = await db.execute(sql`
-    SELECT
-      contract_external_id,
-      contract_no,
-      customer_name,
-      approve_date,
-      contract_status,
-      product_type,
-      installment_count,
-      payment_external_id,
-      period,
-      paid_at,
-      CAST(principal   AS DECIMAL(18,4)) AS principal,
-      CAST(interest    AS DECIMAL(18,4)) AS interest,
-      CAST(fee         AS DECIMAL(18,4)) AS fee,
-      CAST(penalty     AS DECIMAL(18,4)) AS penalty,
-      CAST(unlock_fee  AS DECIMAL(18,4)) AS unlock_fee,
-      CAST(discount    AS DECIMAL(18,4)) AS discount,
-      CAST(overpaid    AS DECIMAL(18,4)) AS overpaid,
-      CAST(bad_debt    AS DECIMAL(18,4)) AS bad_debt,
-      CAST(total_amount AS DECIMAL(18,4)) AS total_amount,
-      updated_by,
-      is_bad_debt_row
-    FROM debt_collected_cache
-    WHERE section = ${section}
-    ORDER BY contract_external_id, paid_at, payment_external_id
-  `);
-  const rows: any[] = (rawResult as any)[0] ?? rawResult;
-
-  // ── 2. Load phone numbers from contracts ─────────────────────────────────
+  // ── 1. Load phone numbers once (small table) ─────────────────────────────────────────────
   const phoneResult = await db.execute(sql`
     SELECT external_id, phone
     FROM contracts
@@ -285,159 +266,190 @@ export async function* streamCollectedFromCache(params: {
     phoneMap.set(String(r.external_id), r.phone ?? null);
   }
 
-  // ── 3. Load target cache for contract-level totals + installments ─────────
-  const targetResult = await db.execute(sql`
-    SELECT
-      contract_external_id,
-      period,
-      due_date,
-      CAST(total_amount AS DECIMAL(18,4)) AS total_amount,
-      CAST(paid_amount  AS DECIMAL(18,4)) AS paid_amount,
-      CAST(principal    AS DECIMAL(18,4)) AS principal,
-      CAST(interest     AS DECIMAL(18,4)) AS interest,
-      CAST(fee          AS DECIMAL(18,4)) AS fee,
-      CAST(penalty      AS DECIMAL(18,4)) AS penalty,
-      CAST(unlock_fee   AS DECIMAL(18,4)) AS unlock_fee,
-      CAST(net_amount   AS DECIMAL(18,4)) AS net_amount,
-      CAST(overpaid_applied AS DECIMAL(18,4)) AS overpaid_applied,
-      CAST(baseline_amount  AS DECIMAL(18,4)) AS baseline_amount,
-      is_paid, is_partial_paid, is_closed, is_suspended,
-      is_current_period, is_future_period, is_arrears, is_bad_debt,
-      install_count_override AS installment_count_override
-    FROM (
-      SELECT *,
-        NULL AS install_count_override
+  // ── 2. Paginate through distinct contract IDs ─────────────────────────────────────────
+  let offset = 0;
+  while (true) {
+    const idResult = await db.execute(sql`
+      SELECT DISTINCT contract_external_id
+      FROM debt_collected_cache
+      WHERE section = ${section}
+      ORDER BY contract_external_id
+      LIMIT ${batchSize} OFFSET ${offset}
+    `);
+    const idRows: any[] = (idResult as any)[0] ?? idResult;
+    if (idRows.length === 0) break;
+
+    const contractIds = idRows.map((r: any) => String(r.contract_external_id));
+    const idList = contractIds.map((id: string) => `'${id.replace(/'/g, "''")}'`).join(",");
+
+    // Fetch collected rows for this batch
+    const rawResult = await db.execute(sql`
+      SELECT
+        contract_external_id,
+        contract_no,
+        customer_name,
+        approve_date,
+        contract_status,
+        product_type,
+        installment_count,
+        payment_external_id,
+        period,
+        paid_at,
+        CAST(principal   AS DECIMAL(18,4)) AS principal,
+        CAST(interest    AS DECIMAL(18,4)) AS interest,
+        CAST(fee         AS DECIMAL(18,4)) AS fee,
+        CAST(penalty     AS DECIMAL(18,4)) AS penalty,
+        CAST(unlock_fee  AS DECIMAL(18,4)) AS unlock_fee,
+        CAST(discount    AS DECIMAL(18,4)) AS discount,
+        CAST(overpaid    AS DECIMAL(18,4)) AS overpaid,
+        CAST(bad_debt    AS DECIMAL(18,4)) AS bad_debt,
+        CAST(total_amount AS DECIMAL(18,4)) AS total_amount,
+        updated_by,
+        is_bad_debt_row
+      FROM debt_collected_cache
+      WHERE section = ${section}
+        AND contract_external_id IN (${sql.raw(idList)})
+      ORDER BY contract_external_id, paid_at, payment_external_id
+    `);
+    const rows: any[] = (rawResult as any)[0] ?? rawResult;
+
+    // Fetch target rows for installments
+    const targetResult = await db.execute(sql`
+      SELECT
+        contract_external_id,
+        period,
+        due_date,
+        CAST(total_amount AS DECIMAL(18,4)) AS total_amount,
+        CAST(paid_amount  AS DECIMAL(18,4)) AS paid_amount,
+        CAST(principal    AS DECIMAL(18,4)) AS principal,
+        CAST(interest     AS DECIMAL(18,4)) AS interest,
+        CAST(fee          AS DECIMAL(18,4)) AS fee,
+        CAST(penalty      AS DECIMAL(18,4)) AS penalty,
+        CAST(unlock_fee   AS DECIMAL(18,4)) AS unlock_fee,
+        CAST(net_amount   AS DECIMAL(18,4)) AS net_amount,
+        CAST(overpaid_applied AS DECIMAL(18,4)) AS overpaid_applied,
+        CAST(baseline_amount  AS DECIMAL(18,4)) AS baseline_amount,
+        is_paid, is_partial_paid, is_closed, is_suspended,
+        is_current_period, is_future_period, is_arrears, is_bad_debt
       FROM debt_target_cache
       WHERE section = ${section}
-    ) sub
-    ORDER BY contract_external_id, period
-  `);
-  const targetRows: any[] = (targetResult as any)[0] ?? targetResult;
-  const targetByContract = new Map<string, any[]>();
-  for (const r of targetRows) {
-    const key = String(r.contract_external_id);
-    if (!targetByContract.has(key)) targetByContract.set(key, []);
-    targetByContract.get(key)!.push(r);
-  }
-
-  // ── 4. Group collected rows by contract ───────────────────────────────────
-  const contractMap = new Map<string, any[]>();
-  const contractOrder: string[] = [];
-  for (const r of rows) {
-    const key = String(r.contract_external_id);
-    if (!contractMap.has(key)) {
-      contractMap.set(key, []);
-      contractOrder.push(key);
+        AND contract_external_id IN (${sql.raw(idList)})
+      ORDER BY contract_external_id, period
+    `);
+    const targetRows: any[] = (targetResult as any)[0] ?? targetResult;
+    const targetByContract = new Map<string, any[]>();
+    for (const r of targetRows) {
+      const key = String(r.contract_external_id);
+      if (!targetByContract.has(key)) targetByContract.set(key, []);
+      targetByContract.get(key)!.push(r);
     }
-    contractMap.get(key)!.push(r);
-  }
 
-  // ── 5. Yield batches ───────────────────────────────────────────────────────
-  let yieldBatch: any[] = [];
-  for (const extId of contractOrder) {
-    const payRows = contractMap.get(extId)!;
-    const first = payRows[0];
+    // Group collected rows by contract
+    const contractMap = new Map<string, any[]>();
+    for (const r of rows) {
+      const key = String(r.contract_external_id);
+      if (!contractMap.has(key)) contractMap.set(key, []);
+      contractMap.get(key)!.push(r);
+    }
 
-    // Get installments from target cache
-    const instRows = targetByContract.get(extId) ?? [];
-    const contractStatus = first.contract_status ?? null;
-    const suspendLabel = contractStatus === "หนี้เสีย" ? "หนี้เสีย"
-      : contractStatus === "ระงับสัญญา" ? "ระงับสัญญา"
-      : null;
+    // Build CollectedRow objects for this batch
+    const yieldBatch: any[] = [];
+    for (const extId of contractIds) {
+      const payRows = contractMap.get(extId);
+      if (!payRows || payRows.length === 0) continue;
+      const first = payRows[0];
+      const instRows = targetByContract.get(extId) ?? [];
+      const contractStatus = first.contract_status ?? null;
+      const suspendLabel = contractStatus === "หนี้เสีย" ? "หนี้เสีย"
+        : contractStatus === "ระงับสัญญา" ? "ระงับสัญญา"
+        : null;
 
-    // Re-derive daysOverdue
-    const { debtStatus, daysOverdue } = rederiveDaysOverdue(
-      contractStatus,
-      instRows.map((r) => ({
+      const { debtStatus, daysOverdue } = rederiveDaysOverdue(
+        contractStatus,
+        instRows.map((r: any) => ({
+          dueDate: r.due_date ?? null,
+          totalAmount: String(r.total_amount ?? 0),
+          paidAmount: String(r.paid_amount ?? 0),
+          isClosed: !!r.is_closed,
+          isSuspended: !!r.is_suspended,
+        })),
+        today,
+      );
+
+      const totalAmount = instRows.reduce((s: number, r: any) => s + Number(r.total_amount ?? 0), 0);
+      const totalPaid = instRows.reduce((s: number, r: any) => s + Number(r.paid_amount ?? 0), 0);
+
+      const installments = instRows.map((r: any) => ({
+        period: r.period != null ? Number(r.period) : null,
         dueDate: r.due_date ?? null,
-        totalAmount: String(r.total_amount ?? 0),
-        paidAmount: String(r.paid_amount ?? 0),
+        principal: Number(r.principal ?? 0),
+        interest: Number(r.interest ?? 0),
+        fee: Number(r.fee ?? 0),
+        penalty: Number(r.penalty ?? 0),
+        unlockFee: Number(r.unlock_fee ?? 0),
+        amount: Number(r.total_amount ?? 0),
+        paid: Number(r.paid_amount ?? 0),
+        baselineAmount: Number(r.baseline_amount ?? 0),
+        overpaidApplied: Number(r.overpaid_applied ?? 0),
+        netAmount: Number(r.net_amount ?? 0),
         isClosed: !!r.is_closed,
         isSuspended: !!r.is_suspended,
-      })),
-      today,
-    );
+        suspendLabel: !!r.is_suspended ? suspendLabel : null,
+        suspendedAt: null,
+        isCurrentPeriod: !!r.is_current_period,
+        isFuturePeriod: !!r.is_future_period,
+        isArrears: !!r.is_arrears,
+        isPaid: !!r.is_paid,
+        isPartialPaid: !!r.is_partial_paid,
+      }));
 
-    // Compute contract-level totals from target cache
-    const totalAmount = instRows.reduce((s, r) => s + Number(r.total_amount ?? 0), 0);
-    const totalPaid = instRows.reduce((s, r) => s + Number(r.paid_amount ?? 0), 0);
+      const payments = payRows.map((p: any) => ({
+        period: p.period != null ? Number(p.period) : null,
+        splitIndex: 0,
+        isCloseRow: false,
+        isBadDebtRow: !!p.is_bad_debt_row,
+        paidAt: p.paid_at ?? null,
+        principal: Number(p.principal ?? 0),
+        interest: Number(p.interest ?? 0),
+        fee: Number(p.fee ?? 0),
+        penalty: Number(p.penalty ?? 0),
+        unlockFee: Number(p.unlock_fee ?? 0),
+        discount: Number(p.discount ?? 0),
+        overpaid: Number(p.overpaid ?? 0),
+        closeInstallmentAmount: 0,
+        badDebt: Number(p.bad_debt ?? 0),
+        total: Number(p.total_amount ?? 0),
+        receiptNo: null,
+        remark: null,
+        badDebtNote: null,
+        updatedBy: p.updated_by ?? null,
+        updatedAt: null,
+      }));
 
-    // Build installments from target cache
-    const installments = instRows.map((r) => ({
-      period: r.period != null ? Number(r.period) : null,
-      dueDate: r.due_date ?? null,
-      principal: Number(r.principal ?? 0),
-      interest: Number(r.interest ?? 0),
-      fee: Number(r.fee ?? 0),
-      penalty: Number(r.penalty ?? 0),
-      unlockFee: Number(r.unlock_fee ?? 0),
-      amount: Number(r.total_amount ?? 0),
-      paid: Number(r.paid_amount ?? 0),
-      baselineAmount: Number(r.baseline_amount ?? 0),
-      overpaidApplied: Number(r.overpaid_applied ?? 0),
-      netAmount: Number(r.net_amount ?? 0),
-      isClosed: !!r.is_closed,
-      isSuspended: !!r.is_suspended,
-      suspendLabel: !!r.is_suspended ? suspendLabel : null,
-      suspendedAt: null,
-      isCurrentPeriod: !!r.is_current_period,
-      isFuturePeriod: !!r.is_future_period,
-      isArrears: !!r.is_arrears,
-      isPaid: !!r.is_paid,
-      isPartialPaid: !!r.is_partial_paid,
-    }));
-
-    // Build payments array from collected cache
-    const payments = payRows.map((p) => ({
-      period: p.period != null ? Number(p.period) : null,
-      splitIndex: 0,          // not stored in cache — default 0
-      isCloseRow: false,      // not stored in cache — default false
-      isBadDebtRow: !!p.is_bad_debt_row,
-      paidAt: p.paid_at ?? null,
-      principal: Number(p.principal ?? 0),
-      interest: Number(p.interest ?? 0),
-      fee: Number(p.fee ?? 0),
-      penalty: Number(p.penalty ?? 0),
-      unlockFee: Number(p.unlock_fee ?? 0),
-      discount: Number(p.discount ?? 0),
-      overpaid: Number(p.overpaid ?? 0),
-      closeInstallmentAmount: 0, // not stored in cache
-      badDebt: Number(p.bad_debt ?? 0),
-      total: Number(p.total_amount ?? 0),
-      receiptNo: null,        // not stored in cache
-      remark: null,           // not stored in cache
-      badDebtNote: null,      // not stored in cache
-      updatedBy: p.updated_by ?? null,
-      updatedAt: null,        // not stored in cache
-    }));
-
-    const collectedRow = {
-      contractExternalId: extId,
-      contractNo: first.contract_no ?? null,
-      approveDate: first.approve_date ?? null,
-      customerName: first.customer_name ?? null,
-      phone: phoneMap.get(extId) ?? null,
-      productType: first.product_type ?? null,
-      installmentCount: first.installment_count != null ? Number(first.installment_count) : null,
-      installmentAmount: null,
-      totalAmount,
-      totalPaid,
-      remaining: Math.max(totalAmount - totalPaid, 0),
-      debtStatus,
-      daysOverdue,
-      installments,
-      payments,
-    };
-
-    yieldBatch.push(collectedRow);
-    if (yieldBatch.length >= batchSize) {
-      yield { rows: yieldBatch, meta: { hasPrincipalBreakdown: true } };
-      yieldBatch = [];
-      await new Promise<void>((resolve) => setImmediate(resolve));
+      yieldBatch.push({
+        contractExternalId: extId,
+        contractNo: first.contract_no ?? null,
+        approveDate: first.approve_date ?? null,
+        customerName: first.customer_name ?? null,
+        phone: phoneMap.get(extId) ?? null,
+        productType: first.product_type ?? null,
+        installmentCount: first.installment_count != null ? Number(first.installment_count) : null,
+        installmentAmount: null,
+        totalAmount,
+        totalPaid,
+        remaining: Math.max(totalAmount - totalPaid, 0),
+        debtStatus,
+        daysOverdue,
+        installments,
+        payments,
+      });
     }
-  }
-  if (yieldBatch.length > 0) {
-    yield { rows: yieldBatch, meta: { hasPrincipalBreakdown: true } };
+
+    if (yieldBatch.length > 0) {
+      yield { rows: yieldBatch, meta: { hasPrincipalBreakdown: true } };
+    }
+    offset += batchSize;
+    await new Promise<void>((resolve) => setImmediate(resolve));
   }
 }
 

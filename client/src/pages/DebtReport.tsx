@@ -464,7 +464,8 @@ export default function DebtReport() {
   const [streamProgress, setStreamProgress] = useState<{ target: number; collected: number }>({ target: 0, collected: 0 });
   const [streamTotal, setStreamTotal] = useState<{ target: number; collected: number }>({ target: 0, collected: 0 });
 
-  // Phase 115: HTTP streaming fetch — ใช้ fetch() + ReadableStream แทน tRPC
+  // Phase 116: HTTP streaming fetch — ใช้ ReadableStream เพื่ออ่าน X-Total-Contracts header
+  // และนับ rows ระหว่างโหลดเพื่อแสดง progress "X / Y สัญญา"
   const fetchStream = useCallback(async (t: "target" | "collected") => {
     if (!canView || !section) return;
     setStreamData((prev) => ({ ...prev, [t]: null }));
@@ -479,9 +480,32 @@ export default function DebtReport() {
         const text = await resp.text();
         throw new Error(`HTTP ${resp.status}: ${text.slice(0, 200)}`);
       }
-      // Read full response text (streaming HTTP keeps connection alive during transfer)
-      const text = await resp.text();
-      const parsed = JSON.parse(text);
+      // Phase 116: อ่าน total contracts จาก header ทันทีเพื่อแสดง progress bar
+      const totalFromHeader = parseInt(resp.headers.get("X-Total-Contracts") ?? "0", 10);
+      if (totalFromHeader > 0) {
+        setStreamTotal((prev) => ({ ...prev, [t]: totalFromHeader }));
+      }
+      // อ่าน response แบบ streaming เพื่อนับ rows ระหว่างทาง
+      const reader = resp.body!.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let receivedContracts = 0;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        // นับ contracts จาก JSON separators (",{" หรือ "{" ตัวแรก)
+        // แต่ละ contract คือ object ใน rows array
+        const newContracts = (buffer.match(/,?\{"contractExternalId"/g) ?? []).length;
+        if (newContracts > receivedContracts) {
+          receivedContracts = newContracts;
+          setStreamProgress((prev) => ({ ...prev, [t]: receivedContracts }));
+        }
+      }
+      // Decode remaining bytes
+      buffer += decoder.decode();
+      // Parse the complete JSON
+      const parsed = JSON.parse(buffer);
       const rows = parsed.rows ?? [];
       setStreamProgress((prev) => ({ ...prev, [t]: rows.length }));
       setStreamTotal((prev) => ({ ...prev, [t]: rows.length }));

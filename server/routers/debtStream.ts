@@ -39,6 +39,8 @@ import {
 import {
   streamTargetFromCache,
   streamCollectedFromCache,
+  getTargetContractCount,
+  getCollectedContractCount,
 } from "../sync/queryCacheDb";
 import type { SectionKey } from "../../shared/const";
 import { SECTIONS } from "../../shared/const";
@@ -205,6 +207,8 @@ export async function handleDebtStreamTarget(
     const cached = getCachedTarget(section);
     if (cached) {
       console.log(`[debtStream] HIT target for ${section}`);
+      // Phase 116: ส่ง total count ใน header เพื่อให้ frontend แสดง progress
+      res.setHeader("X-Total-Contracts", String(cached.rows.length));
       startStreamResponse(res);
       await streamJsonRows(res, cached.rows);
       return;
@@ -212,11 +216,15 @@ export async function handleDebtStreamTarget(
 
     // 2. DB cache — fast path (~1-2s) ใช้เมื่อ in-memory ว่าง (เช่น หลัง server restart)
     console.log(`[debtStream] MISS target for ${section}, streaming from DB cache...`);
+
+    // Phase 116: ดึง total count ก่อน (query เล็กมาก ~50ms) เพื่อส่งใน header
+    const totalContracts = await getTargetContractCount(section as SectionKey);
+    res.setHeader("X-Total-Contracts", String(totalContracts));
     startStreamResponse(res);
 
     const allRows: any[] = []; // eslint-disable-line @typescript-eslint/no-explicit-any
     let usedDbCache = false;
-    const dbCacheGen = streamTargetFromCache({ section: section as SectionKey, batchSize: 200 });
+    const dbCacheGen = streamTargetFromCache({ section: section as SectionKey, batchSize: 500 });
     let first = true;
     for await (const batch of dbCacheGen) {
       if (batch.length > 0) usedDbCache = true;
@@ -289,6 +297,8 @@ export async function handleDebtStreamCollected(
     const cached = getCachedCollected(section);
     if (cached) {
       console.log(`[debtStream] HIT collected for ${section}`);
+      // Phase 116: ส่ง total count ใน header เพื่อให้ frontend แสดง progress
+      res.setHeader("X-Total-Contracts", String(cached.rows.length));
       startStreamResponse(res);
       await streamJsonRows(res, cached.rows, {
         hasPrincipalBreakdown: cached.hasPrincipalBreakdown,
@@ -298,12 +308,16 @@ export async function handleDebtStreamCollected(
 
     // 2. DB cache — fast path (~1-2s) ใช้เมื่อ in-memory ว่าง (เช่น หลัง server restart)
     console.log(`[debtStream] MISS collected for ${section}, streaming from DB cache...`);
+
+    // Phase 116: ดึง total count ก่อน (query เล็กมาก ~50ms) เพื่อส่งใน header
+    const totalContracts = await getCollectedContractCount(section as SectionKey);
+    res.setHeader("X-Total-Contracts", String(totalContracts));
     startStreamResponse(res);
 
     const allRows: any[] = []; // eslint-disable-line @typescript-eslint/no-explicit-any
     let hasPrincipalBreakdown = true;
     let usedDbCache = false;
-    const dbCacheGen = streamCollectedFromCache({ section: section as SectionKey, batchSize: 200 });
+    const dbCacheGen = streamCollectedFromCache({ section: section as SectionKey, batchSize: 500 });
     let first = true;
     for await (const chunk of dbCacheGen) {
       if (chunk.rows.length > 0) usedDbCache = true;
