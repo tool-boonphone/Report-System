@@ -34,6 +34,22 @@ export const cacheRouter = router({
     }),
 
   /**
+   * Trigger populate asynchronously (fire-and-forget).
+   * Returns immediately; populate runs in background.
+   * Admin-only.
+   */
+  populateAsync: superAdminProcedure
+    .input(z.object({ section: sectionSchema }))
+    .mutation(async ({ input }) => {
+      const section = input.section as SectionKey;
+      // Fire and forget — do NOT await
+      populateDebtCache(section).catch((err: unknown) =>
+        console.error(`[cache.populateAsync] ${section} failed:`, err),
+      );
+      return { section, started: true, startedAt: new Date().toISOString() };
+    }),
+
+  /**
    * Get row counts for each section's cache tables.
    * Available to all authenticated users.
    */
