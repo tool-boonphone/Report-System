@@ -1168,3 +1168,11 @@ Task list:
 - [ ] แก้ไขจำนวนสัญญาไม่ครบ — ยอดเก็บหนี้แสดง 500 สัญญา แต่เป้าเก็บหนี้แสดง 4,000 สัญญา (ควรเท่ากัน)
 - [ ] แก้ไขจำนวนสัญญาของ 2 แถบไม่เท่ากัน — target กับ collected ควรมีจำนวน distinct contracts เท่ากัน
 - [ ] แก้ไขคอลัมน์ บันทึกโดย/บันทึกเมื่อ มาไม่ครบ — บางแถวมีแค่อย่างเดียว หรือไม่มีเลย
+
+## Phase 120 — Fix Incomplete NDJSON Streaming (2026-04-30)
+- [x] P120-1: แก้ bug line 541 DebtReport.tsx — ลบ `setStreamTotal((prev) => ({ ...prev, [t]: rows.length }))` ที่ overwrite total จาก meta
+- [x] P120-2: เพิ่ม warning log ใน fetchStream — ถ้า rows.length < meta total หลัง stream จบ ให้ log warning ใน console
+- [x] P120-3: ปรับปรุง server-side debtStream.ts — เพิ่ม logging DB count + discrepancy check + `actual` ใน done line
+- [x] P120-4: แก้ queryCacheDb.ts streamTargetFromCache — ไม่ข้ามสัญญาที่ไม่มี installment rows และส่ง row ว่างแทน (Phase 120 root cause fix)
+- [x] P120-5: ตรวจสอบ DebtOverview.tsx และ DebtSummary.tsx — ไม่มี bug overwrite total (DebtOverview/Summary ไม่ได้ overwrite)
+- [ ] P120-6: Commit + Push GitHub + Checkpoint

@@ -538,7 +538,20 @@ export default function DebtReport() {
       }
 
       setStreamProgress((prev) => ({ ...prev, [t]: rows.length }));
-      setStreamTotal((prev) => ({ ...prev, [t]: rows.length }));
+      // Phase 120 Fix: ไม่ overwrite streamTotal ด้วย rows.length
+      // ให้ใช้ meta total ที่ได้รับจาก server เป็นแหล่งความจริง
+      // ถ้า rows.length < meta total แสดง warning ใน console
+      setStreamTotal((prev) => {
+        const metaTotal = prev[t];
+        if (metaTotal > 0 && rows.length < metaTotal) {
+          console.warn(
+            `[DebtReport] ${t} stream incomplete: received ${rows.length} rows but meta total=${metaTotal}`,
+            `(missing ${metaTotal - rows.length} rows)`
+          );
+        }
+        // ถ้า meta total = 0 (ไม่ได้รับ meta line) ให้ใช้ rows.length แทน
+        return metaTotal > 0 ? prev : { ...prev, [t]: rows.length };
+      });
       if (t === "target") {
         setStreamData((prev) => ({ ...prev, target: { rows: rows as TargetRow[] } }));
       } else {

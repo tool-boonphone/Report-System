@@ -199,6 +199,7 @@ export async function handleDebtStreamTarget(
 
     // Phase 117: ดึง total count ก่อน (query เล็กมาก ~50ms) เพื่อส่งใน meta line
     const totalContracts = await getTargetContractCount(section as SectionKey);
+    console.log(`[debtStream] target MISS: DB count=${totalContracts} for ${section}`);
     startNDJSONResponse(res, { total: totalContracts });
 
     const allRows: any[] = []; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -224,7 +225,11 @@ export async function handleDebtStreamTarget(
       }
     }
 
-    res.write(JSON.stringify({ type: "done" }) + "\n");
+    // Phase 120: log discrepancy between meta total and actual rows sent
+    if (allRows.length !== totalContracts) {
+      console.warn(`[debtStream] target MISS discrepancy: meta total=${totalContracts} but sent ${allRows.length} rows (diff=${totalContracts - allRows.length}) for ${section}`);
+    }
+    res.write(JSON.stringify({ type: "done", actual: allRows.length }) + "\n");
     res.end();
 
     // Populate in-memory cache for subsequent requests (background, non-blocking)
@@ -282,6 +287,7 @@ export async function handleDebtStreamCollected(
 
     // Phase 117: ดึง total count ก่อน (query เล็กมาก ~50ms) เพื่อส่งใน meta line
     const totalContracts = await getCollectedContractCount(section as SectionKey);
+    console.log(`[debtStream] collected MISS: DB count=${totalContracts} for ${section}`);
     let hasPrincipalBreakdown = true;
     startNDJSONResponse(res, { total: totalContracts, hasPrincipalBreakdown: true });
 
@@ -314,9 +320,12 @@ export async function handleDebtStreamCollected(
       }
     }
 
-    res.write(JSON.stringify({ type: "done", hasPrincipalBreakdown }) + "\n");
+    // Phase 120: log discrepancy between meta total and actual rows sent
+    if (allRows.length !== totalContracts) {
+      console.warn(`[debtStream] collected MISS discrepancy: meta total=${totalContracts} but sent ${allRows.length} rows (diff=${totalContracts - allRows.length}) for ${section}`);
+    }
+    res.write(JSON.stringify({ type: "done", hasPrincipalBreakdown, actual: allRows.length }) + "\n");
     res.end();
-
     // Populate in-memory cache for subsequent requests (background, non-blocking)
     setCachedCollected(section, { rows: allRows, hasPrincipalBreakdown });
     console.log(`[debtStream] collected for ${section} cached (${allRows.length} rows, dbCache=${usedDbCache})`);

@@ -166,11 +166,12 @@ export async function* streamTargetFromCache(params: {
     const batch: any[] = [];
     for (const extId of contractIds) {
       const instRows = contractMap.get(extId) ?? [];
-      if (instRows.length === 0) continue;
-      const first = instRows[0];
+      // Phase 120 Fix: ไม่ข้ามสัญญาที่ไม่มี installment rows — ส่ง row ว่างแทน
+      // เพื่อให้ actual rows ที่ส่งตรงกับ total ที่ประกาศใน meta line
+      const first = instRows.length > 0 ? instRows[0] : null;
 
       const { debtStatus, daysOverdue } = rederiveDaysOverdue(
-        first.contract_status ?? null,
+        first?.contract_status ?? null,
         instRows.map((r) => ({
           dueDate: r.due_date ?? null,
           totalAmount: String(r.total_amount ?? 0),
@@ -183,7 +184,7 @@ export async function* streamTargetFromCache(params: {
 
       const totalAmount = instRows.reduce((s: number, r: any) => s + Number(r.total_amount ?? 0), 0);
       const totalPaid = instRows.reduce((s: number, r: any) => s + Number(r.paid_amount ?? 0), 0);
-      const contractStatus = first.contract_status ?? null;
+      const contractStatus = first?.contract_status ?? null;
       const suspendLabel = contractStatus === "หนี้เสีย" ? "หนี้เสีย"
         : contractStatus === "ระงับสัญญา" ? "ระงับสัญญา"
         : null;
@@ -214,12 +215,12 @@ export async function* streamTargetFromCache(params: {
 
       batch.push({
         contractExternalId: extId,
-        contractNo: first.contract_no ?? null,
-        approveDate: first.approve_date ?? null,
-        customerName: first.customer_name ?? null,
+        contractNo: first?.contract_no ?? null,
+        approveDate: first?.approve_date ?? null,
+        customerName: first?.customer_name ?? null,
         phone: phoneMap.get(extId) ?? null,
-        productType: first.product_type ?? null,
-        installmentCount: first.installment_count != null ? Number(first.installment_count) : null,
+        productType: first?.product_type ?? null,
+        installmentCount: first?.installment_count != null ? Number(first.installment_count) : null,
         installmentAmount: null,
         totalAmount,
         totalPaid,
@@ -360,7 +361,7 @@ export async function* streamCollectedFromCache(params: {
       if (!payRows || payRows.length === 0) continue;
       const first = payRows[0];
       const instRows = targetByContract.get(extId) ?? [];
-      const contractStatus = first.contract_status ?? null;
+      const contractStatus = first?.contract_status ?? null;
       const suspendLabel = contractStatus === "หนี้เสีย" ? "หนี้เสีย"
         : contractStatus === "ระงับสัญญา" ? "ระงับสัญญา"
         : null;
