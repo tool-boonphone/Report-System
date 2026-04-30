@@ -1221,3 +1221,11 @@ Task list:
 - [ ] P126-3: ถ้า bulk endpoint ไม่มี updated_by — เพิ่มขั้นตอน enrichInstallmentsWithUpdatedBy() ที่ดึงจาก contract?action=detail แล้ว upsert updated_by ลง installments
 - [ ] P126-4: Backfill ข้อมูล Boonphone installments ที่มีอยู่แล้ว
 - [ ] P126-5: Commit + Push GitHub + Checkpoint
+
+## Phase 127 — แก้ไขหน้า หนี้สงสัยจะเสีย / หนี้เสีย / สรุปรายเดือน ให้ดึงจาก debt_target_cache / debt_collected_cache
+
+- [x] P127-1: ศึกษา schema debt_target_cache / debt_collected_cache และ logic ปัจจุบันของ listSuspectedBadDebt, getBadDebtSummary, getMonthlySummary
+- [ ] P127-2: แก้ไข listSuspectedBadDebt ให้ดึงจาก debt_target_cache / debt_collected_cache
+- [ ] P127-3: แก้ไข getBadDebtSummary ให้ดึงจาก debt_target_cache / debt_collected_cache
+- [ ] P127-4: แก้ไข getMonthlySummary ให้ดึงจาก debt_target_cache / debt_collected_cache
+- [ ] P127-5: ตรวจสอบ TypeScript, test, commit, push GitHub, save checkpoint
