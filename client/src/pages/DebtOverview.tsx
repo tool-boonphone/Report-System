@@ -6,6 +6,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { SyncStatusBar } from "@/components/SyncStatusBar";
+import { useDebtCache } from "@/contexts/DebtCacheContext";
 import { useNavActions } from "@/contexts/NavActionsContext";
 import { useSection } from "@/contexts/SectionContext";
 import { useAppAuth } from "@/hooks/useAppAuth";
@@ -452,15 +453,16 @@ export default function DebtOverview() {
   const { setActions } = useNavActions();
   const canView = can("debt_overview", "view");
 
-  /* ---- Stream state ---- */
-  const [streamData, setStreamData] = useState<{
-    target: { rows: TargetRow[] } | null;
-    collected: { rows: CollectedRow[]; hasPrincipalBreakdown: boolean } | null;
-  }>({ target: null, collected: null });
+  /* ---- Phase 125: Global Cache ---- */
+  const debtCache = useDebtCache();
+  // Local loading/error/progress state (UI only — data lives in global cache)
   const [streamLoading, setStreamLoading] = useState({ target: false, collected: false });
   const [streamError, setStreamError] = useState<{ target: string | null; collected: string | null }>({ target: null, collected: null });
   const [streamProgress, setStreamProgress] = useState({ target: 0, collected: 0 });
   const [streamTotal, setStreamTotal] = useState({ target: 0, collected: 0 });
+  // อ่านข้อมูลจาก Global Cache
+  const cachedEntry = section ? debtCache.getCache(section as any) : { target: null, collected: null, loadedAt: 0 };
+  const streamData = { target: cachedEntry.target, collected: cachedEntry.collected };
 
   /* ---- Filter state (เหมือน DebtReport collected tab) ---- */
   const [search, setSearch] = useState("");
@@ -533,21 +535,27 @@ export default function DebtOverview() {
 
   const fetchStream = useCallback(async (t: "target" | "collected") => {
     if (!canView || !section) return;
+    // รีเซ็ต state ใน cache สำหรับ type นี้
+    debtCache.setLoadingState(section as any, t, { loading: true, progress: 0, total: 0, error: null });
     setStreamLoading((prev) => ({ ...prev, [t]: true }));
     setStreamError((prev) => ({ ...prev, [t]: null }));
     setStreamProgress((prev) => ({ ...prev, [t]: 0 }));
     setStreamTotal((prev) => ({ ...prev, [t]: 0 }));
     try {
       const CHUNK_SIZE = 500; // ลดจาก 2000 เป็น 500 (~2MB ต่อ request) เพื่อลด Cloudflare timeout
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const rows: any[] = [];
       let hasPrincipalBreakdown = true;
       let offset = 0;
       let totalContracts = 0;
+      // วน fetch จนครบ total
       while (true) {
         const result = await fetchChunkWithRetry(t, offset, CHUNK_SIZE);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const chunkRows = result.rows as any[];
         totalContracts = result.totalContracts;
         const hasMore = result.hasMore;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         if (t === "collected" && (result as any).hasPrincipalBreakdown === false) {
           hasPrincipalBreakdown = false;
         }
@@ -555,18 +563,25 @@ export default function DebtOverview() {
         offset += CHUNK_SIZE;
         setStreamTotal((prev) => ({ ...prev, [t]: totalContracts }));
         setStreamProgress((prev) => ({ ...prev, [t]: rows.length }));
+        debtCache.setLoadingState(section as any, t, { progress: rows.length, total: totalContracts });
         if (!hasMore) break;
       }
-      const result = t === "collected"
-        ? { rows, hasPrincipalBreakdown }
-        : { rows };
-      setStreamData((prev) => ({ ...prev, [t]: result }));
-    } catch (err: any) {
-      setStreamError((prev) => ({ ...prev, [t]: err?.message ?? "เกิดข้อผิดพลาด" }));
+      // บันทึกลง Global Cache
+      if (t === "target") {
+        debtCache.setTargetRows(section as any, rows as TargetRow[]);
+      } else {
+        debtCache.setCollectedRows(section as any, rows as CollectedRow[], hasPrincipalBreakdown);
+      }
+    } catch (err: unknown) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const msg = (err as any)?.message ?? "เกิดข้อผิดพลาด";
+      setStreamError((prev) => ({ ...prev, [t]: msg }));
+      debtCache.setLoadingState(section as any, t, { error: msg });
     } finally {
       setStreamLoading((prev) => ({ ...prev, [t]: false }));
+      debtCache.setLoadingState(section as any, t, { loading: false });
     }
-  }, [canView, section, fetchChunkWithRetry]);
+  }, [canView, section, fetchChunkWithRetry, debtCache]);
 
   // Auto-fetch both streams on mount
   useEffect(() => {
@@ -575,10 +590,13 @@ export default function DebtOverview() {
     if (!streamData.collected && !streamLoading.collected) fetchStream("collected");
   }, [section, canView]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Reset when section changes
+  // Reset local UI state when section changes
+  // ไม่ล้าง Global Cache เพราะแต่ละ section มี cache แยกกัน
   useEffect(() => {
-    setStreamData({ target: null, collected: null });
     setStreamError({ target: null, collected: null });
+    setStreamLoading({ target: false, collected: false });
+    setStreamProgress({ target: 0, collected: 0 });
+    setStreamTotal({ target: 0, collected: 0 });
   }, [section]);
 
   const isLoading = streamLoading.target || streamLoading.collected;
@@ -850,7 +868,8 @@ export default function DebtOverview() {
               variant="outline"
               size="sm"
               onClick={() => {
-                setStreamData({ target: null, collected: null });
+                // ล้าง Global Cache เพื่อ force refetch
+                if (section) debtCache.clearCache(section as any);
                 setStreamError({ target: null, collected: null });
                 setTimeout(() => {
                   fetchStream("target");

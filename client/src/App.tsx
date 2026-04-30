@@ -6,6 +6,7 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { SectionProvider } from "./contexts/SectionContext";
 import { NavActionsProvider } from "./contexts/NavActionsContext";
+import { DebtCacheProvider } from "./contexts/DebtCacheContext";
 import Login from "./pages/Login";
 import SelectSection from "./pages/SelectSection";
 import ChangePassword from "./pages/ChangePassword";
@@ -46,12 +47,14 @@ function App() {
     <ErrorBoundary>
       <ThemeProvider defaultTheme="light">
         <SectionProvider>
+          <DebtCacheProvider>
           <NavActionsProvider>
             <TooltipProvider>
               <Toaster richColors position="top-right" />
               <Router />
             </TooltipProvider>
           </NavActionsProvider>
+          </DebtCacheProvider>
         </SectionProvider>
       </ThemeProvider>
     </ErrorBoundary>

@@ -1199,8 +1199,18 @@ Task list:
 - [x] P123-3: Commit + Push GitHub + Checkpoint
 
 ## Phase 124 — ย้าย updated_by/updated_at ให้เก็บใน payment_transactions โดยตรง
-- [ ] P124-1: ตรวจสอบ API response ของ payment_transactions ว่ามี updated_by/updated_at หรือไม่ + ดู schema ปัจจุบัน
-- [ ] P124-2: เพิ่ม column updated_by/updated_at ใน payment_transactions schema + migration
-- [ ] P124-3: แก้ไข mappers.ts และ dbUpsert.ts ให้บันทึก updated_by/updated_at ลง payment_transactions โดยตรง
-- [ ] P124-4: แก้ไข runner.ts ให้ลบ CTE JOIN installments ออก ใช้ updated_by/updated_at จาก payment_transactions แทน
-- [ ] P124-5: Commit + Push GitHub + Checkpoint
+- [x] P124-1: ตรวจสอบ API response ของ payment_transactions ว่ามี updated_by/updated_at หรือไม่ + ดู schema ปัจจุบัน
+- [x] P124-2: เพิ่ม column updated_by/updated_at ใน payment_transactions schema + migration
+- [x] P124-3: แก้ไข mappers.ts และ dbUpsert.ts ให้บันทึก updated_by/updated_at ลง payment_transactions โดยตรง
+- [x] P124-4: แก้ไข runner.ts และ debtDb.ts ให้ลบ CTE JOIN installments ออก ใช้ updated_by/updated_at จาก payment_transactions แทน
+- [x] P124-5: Commit + Push GitHub + Checkpoint (b234c66f)
+
+## Phase 125 — Global Browser Cache + Virtual Scroll แทน Pagination
+- [ ] P125-1: สร้าง `client/src/contexts/DebtCacheContext.tsx` — Global store เก็บ target+collected rows ต่อ section พร้อม loadedAt timestamp
+- [ ] P125-2: เพิ่ม DebtCacheProvider ใน `client/src/App.tsx`
+- [ ] P125-3: แก้ไข `DebtReport.tsx` ให้ใช้ Global Cache แทน local state — ถ้า cache มีอยู่แล้วให้ใช้เลย ไม่ต้อง fetch ใหม่
+- [ ] P125-4: แก้ไข `DebtOverview.tsx` ให้ใช้ Global Cache แทน local state
+- [ ] P125-5: แก้ไข `DebtSummary.tsx` ให้ใช้ Global Cache แทน local state
+- [ ] P125-6: ติดตั้ง `@tanstack/react-virtual` (ถ้ายังไม่มี) และเพิ่ม Virtual Scroll ใน table ของ `DebtReport.tsx` แทน Pagination
+- [ ] P125-7: เพิ่ม Virtual Scroll ใน table ของ `DebtOverview.tsx` แทน Pagination
+- [ ] P125-8: Commit + Push GitHub + Checkpoint

@@ -19,19 +19,11 @@ import {
 } from "@/components/ui/popover";
 import { Spinner } from "@/components/ui/spinner";
 import { StreamLoadingOverlay } from "@/components/StreamLoadingOverlay";
+import { useDebtCache } from "@/contexts/DebtCacheContext";
 import { useNavActions } from "@/contexts/NavActionsContext";
 import { useSection } from "@/contexts/SectionContext";
 import { useAppAuth } from "@/hooks/useAppAuth";
 import { trpc } from "@/lib/trpc";
-import {
-  Pagination,
-  PaginationContent,
-  PaginationEllipsis,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
-} from "@/components/ui/pagination";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   BadgeDollarSign,
@@ -401,9 +393,6 @@ export default function DebtSummary() {
   // Pinned columns: set of LEFT_COLS keys that are sticky-left
   const [pinnedCols, setPinnedCols] = useState<Set<string>>(new Set());
   const [hoveredRow, setHoveredRow] = useState<number | null>(null);
-  // Phase 33: Pagination state
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
   const togglePin = (key: string) => {
     setPinnedCols((prev) => {
       const next = new Set(prev);
@@ -413,18 +402,15 @@ export default function DebtSummary() {
     });
   };
 
-  // Phase 33: ใช้ streaming fetch แทน tRPC เพื่อป้องกัน proxy 503 timeout
-  // Phase 43: True streaming — อ่าน chunks ระหว่างที่ server ส่งมา ป้องกัน Cloudflare 100s timeout
-  // Cache ใน state เพื่อไม่ต้องโหลดซ้ำเมื่อสลับ tab
-  const [streamData, setStreamData] = useState<{
-    target: { rows: TargetRow[] } | null;
-    collected: { rows: CollectedRow[]; hasPrincipalBreakdown: boolean } | null;
-  }>({ target: null, collected: null });
+  // Phase 125: Global Cache — ข้อมูลจะถูกเก็บไว้ใน DebtCacheContext ตลอด session
+  const debtCache = useDebtCache();
   const [streamLoading, setStreamLoading] = useState<{ target: boolean; collected: boolean }>({ target: false, collected: false });
   const [streamError, setStreamError] = useState<{ target: string | null; collected: string | null }>({ target: null, collected: null });
-  // Phase 118: track contract count for progress display
   const [streamProgress, setStreamProgress] = useState<{ target: number; collected: number }>({ target: 0, collected: 0 });
   const [streamTotal, setStreamTotal] = useState<{ target: number; collected: number }>({ target: 0, collected: 0 });
+  // อ่านข้อมูลจาก Global Cache
+  const cachedEntry = section ? debtCache.getCache(section as any) : { target: null, collected: null, loadedAt: 0 };
+  const streamData = { target: cachedEntry.target, collected: cachedEntry.collected };
   // Phase 122: tRPC chunk loop + retry (CHUNK_SIZE=500 เพื่อลด Cloudflare timeout)
   const utils = trpc.useUtils();
   const fetchChunkWithRetry = useCallback(async (
@@ -453,21 +439,27 @@ export default function DebtSummary() {
 
   const fetchStream = useCallback(async (t: "target" | "collected") => {
     if (!canView || !section) return;
+    // รีเซ็ต state ใน cache สำหรับ type นี้
+    debtCache.setLoadingState(section as any, t, { loading: true, progress: 0, total: 0, error: null });
     setStreamLoading((prev) => ({ ...prev, [t]: true }));
     setStreamError((prev) => ({ ...prev, [t]: null }));
     setStreamProgress((prev) => ({ ...prev, [t]: 0 }));
     setStreamTotal((prev) => ({ ...prev, [t]: 0 }));
     try {
       const CHUNK_SIZE = 500; // ลดจาก 2000 เป็น 500 (~2MB ต่อ request) เพื่อลด Cloudflare timeout
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const rows: any[] = [];
       let hasPrincipalBreakdown = true;
       let offset = 0;
       let totalContracts = 0;
+      // วน fetch จนครบ total
       while (true) {
         const result = await fetchChunkWithRetry(t, offset, CHUNK_SIZE);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const chunkRows = result.rows as any[];
         totalContracts = result.totalContracts;
         const hasMore = result.hasMore;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         if (t === "collected" && (result as any).hasPrincipalBreakdown === false) {
           hasPrincipalBreakdown = false;
         }
@@ -475,18 +467,25 @@ export default function DebtSummary() {
         offset += CHUNK_SIZE;
         setStreamTotal((prev) => ({ ...prev, [t]: totalContracts }));
         setStreamProgress((prev) => ({ ...prev, [t]: rows.length }));
+        debtCache.setLoadingState(section as any, t, { progress: rows.length, total: totalContracts });
         if (!hasMore) break;
       }
-      const result = t === "collected"
-        ? { rows, hasPrincipalBreakdown }
-        : { rows };
-      setStreamData((prev) => ({ ...prev, [t]: result }));
-    } catch (err: any) {
-      setStreamError((prev) => ({ ...prev, [t]: err?.message ?? "เกิดข้อผิดพลาด" }));
+      // บันทึกลง Global Cache
+      if (t === "target") {
+        debtCache.setTargetRows(section as any, rows as TargetRow[]);
+      } else {
+        debtCache.setCollectedRows(section as any, rows as CollectedRow[], hasPrincipalBreakdown);
+      }
+    } catch (err: unknown) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const msg = (err as any)?.message ?? "เกิดข้อผิดพลาด";
+      setStreamError((prev) => ({ ...prev, [t]: msg }));
+      debtCache.setLoadingState(section as any, t, { error: msg });
     } finally {
       setStreamLoading((prev) => ({ ...prev, [t]: false }));
+      debtCache.setLoadingState(section as any, t, { loading: false });
     }
-  }, [canView, section, fetchChunkWithRetry]);
+  }, [canView, section, fetchChunkWithRetry, debtCache]);
 
   // Auto-fetch when tab/section changes (only if not already loaded)
   useEffect(() => {
@@ -498,12 +497,13 @@ export default function DebtSummary() {
     }
   }, [tab, section, canView]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Reset stream data when section changes
+  // Reset local UI state when section changes
+  // ไม่ล้าง Global Cache เพราะแต่ละ section มี cache แยกกัน
   useEffect(() => {
-    setStreamData({ target: null, collected: null });
     setStreamError({ target: null, collected: null });
-    setCurrentPage(1);
-    setPageSize(100); // Reset to default 100 whenever section changes
+    setStreamLoading({ target: false, collected: false });
+    setStreamProgress({ target: 0, collected: 0 });
+    setStreamTotal({ target: 0, collected: 0 });
   }, [section]);
 
   const isLoading = tab === "target" ? streamLoading.target : streamLoading.collected;
@@ -623,38 +623,24 @@ export default function DebtSummary() {
     });
   }, [activeRows, search, statusFilter, approveDateFilter, dueDateFilter, productTypeFilter, dueDateExact, tab]);
 
-  /* ---- Pagination logic (Phase 33) ---- */
-  // Reset to page 1 when filters change
-  useEffect(() => { setCurrentPage(1); }, [search, statusFilter, approveDateFilter, dueDateFilter, productTypeFilter, dueDateExact, tab]);
-
-  const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
-  const safePage = Math.min(currentPage, totalPages);
-  const pagedRows = useMemo(() => {
-    const start = (safePage - 1) * pageSize;
-    return filteredRows.slice(start, start + pageSize);
-  }, [filteredRows, safePage, pageSize]);
-
   /* ---- Max periods for the repeating group block ---- */
+  // Phase 125: ใช้ filteredRows ทั้งหมดแทน pagedRows (ไม่มี pagination แล้ว)
   const maxPeriods = useMemo(() => {
     let max = 0;
-    for (const r of pagedRows) {
+    for (const r of filteredRows) {
       const n = r.installments.length;
       if (n > max) max = n;
     }
     // Cap at 36 to keep the DOM bounded; users can export for >36-งวด contracts.
     return Math.min(max, 36);
-  }, [pagedRows]);
+  }, [filteredRows]);
 
   /* ---- Per-row sub-rows: collected-tab payments grouped per period ---- */
-  /** For collected tab, count max sub-rows per period across all rows so we
-   * know how many cells the matrix needs in each group column. */
-  // Currently unused at the matrix level (each row sizes itself), kept for
-  // potential future use such as a global splitDepth-aware header.
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
    const _splitDepth = useMemo(() => {
     if (tab !== "collected") return new Map<number, number>();
     const m = new Map<number, number>();
-    for (const r of pagedRows as CollectedRow[]) {
+    for (const r of filteredRows as CollectedRow[]) {
       const perPeriod = new Map<number, number>();
       for (const p of r.payments ?? []) {
         if (p.period == null) continue;
@@ -786,12 +772,13 @@ export default function DebtSummary() {
   const SUB_ROW_HEIGHT = 32;
   // collected tab rows can have multiple sub-rows for split payments;
   // give the virtualizer an estimate per row for accurate scrollbar.
+  // Phase 125: ใช้ filteredRows ทั้งหมดแทน pagedRows
   const rowVirtualizer = useVirtualizer({
-    count: pagedRows.length,
+    count: filteredRows.length,
     getScrollElement: () => scrollRef.current,
     estimateSize: (i) => {
       if (tab !== "collected") return ROW_HEIGHT;
-      const r = pagedRows[i] as CollectedRow;
+      const r = filteredRows[i] as CollectedRow;
       const lines = rowLineCount(r);
       return ROW_HEIGHT + (lines - 1) * SUB_ROW_HEIGHT;
     },
@@ -876,8 +863,7 @@ export default function DebtSummary() {
 
   return (
     <AppShell>
-      {/* pb-16 reserves space for the fixed pagination bar at the bottom */}
-      <div className="w-full px-3 md:px-5 py-4 pb-16">
+      <div className="w-full px-3 md:px-5 py-4">
         {/* Tabs (moved to left, replacing title) + Export Excel on right */}
         <div className="flex items-center justify-between gap-2 mb-3">
           <div className="flex items-center gap-2">
@@ -1005,7 +991,7 @@ export default function DebtSummary() {
         <div className="flex flex-wrap items-start justify-between gap-2 mb-2">
           <div className="text-xs text-gray-500 self-center">
             ทั้งหมด {activeRows.length.toLocaleString("th-TH")} สัญญา · กรอง{" "}
-            {filteredRows.length.toLocaleString("th-TH")} รายการ · แสดงหน้า {safePage}/{totalPages} ·{" "}
+            {filteredRows.length.toLocaleString("th-TH")} รายการ ·{" "}
             {tab === "target" ? "ข้อมูลเป้าเก็บหนี้" : "ข้อมูลยอดเก็บหนี้"} ของงวดที่{" "}
             1–{maxPeriods || "-"}
           </div>
@@ -1221,7 +1207,7 @@ export default function DebtSummary() {
               {/* Body (virtualized) */}
               <div style={{ paddingTop, paddingBottom }}>
                 {virtualRows.map((vr) => {
-                  const r = pagedRows[vr.index];
+                  const r = filteredRows[vr.index];
                   // For collected tab, compute sub-row count to size the row.
                   const lineCount =
                     tab === "collected"
@@ -1765,89 +1751,7 @@ export default function DebtSummary() {
 
         )}
 
-        {/* ---- Pagination UI (Phase 33) — fixed bottom bar ---- */}
-        {!isError && !isLoading && filteredRows.length > 0 && (
-          <div className="fixed bottom-0 left-0 right-0 z-30 flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 border-t border-gray-200 bg-white shadow-[0_-2px_8px_rgba(0,0,0,0.08)]">
-            {/* Page size selector */}
-            <div className="flex items-center gap-2 text-xs text-gray-600">
-              <span>แสดง</span>
-              <select
-                value={pageSize}
-                onChange={(e) => {
-                  setPageSize(Number(e.target.value));
-                  setCurrentPage(1);
-                }}
-                className="border border-gray-300 rounded px-2 py-1 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-orange-400"
-              >
-                {[25, 50, 100, 250, 500].map((n) => (
-                  <option key={n} value={n}>{n} รายการ/หน้า</option>
-                ))}
-              </select>
-              <span className="text-gray-400">
-                ({((safePage - 1) * pageSize + 1).toLocaleString("th-TH")}–{Math.min(safePage * pageSize, filteredRows.length).toLocaleString("th-TH")} จาก {filteredRows.length.toLocaleString("th-TH")})
-              </span>
-            </div>
-
-            {/* Page number navigation */}
-            {totalPages > 1 && (
-              <Pagination className="w-auto mx-0">
-                <PaginationContent className="flex-wrap gap-1">
-                  <PaginationItem>
-                    <PaginationPrevious
-                      href="#"
-                      onClick={(e) => { e.preventDefault(); if (safePage > 1) setCurrentPage(safePage - 1); }}
-                      className={safePage <= 1 ? "pointer-events-none opacity-40" : ""}
-                    />
-                  </PaginationItem>
-
-                  {/* First page */}
-                  {safePage > 3 && (
-                    <>
-                      <PaginationItem>
-                        <PaginationLink href="#" onClick={(e) => { e.preventDefault(); setCurrentPage(1); }} isActive={safePage === 1}>1</PaginationLink>
-                      </PaginationItem>
-                      {safePage > 4 && <PaginationItem><PaginationEllipsis /></PaginationItem>}
-                    </>
-                  )}
-
-                  {/* Pages around current */}
-                  {Array.from({ length: totalPages }, (_, i) => i + 1)
-                    .filter((p) => p >= safePage - 2 && p <= safePage + 2)
-                    .map((p) => (
-                      <PaginationItem key={p}>
-                        <PaginationLink
-                          href="#"
-                          onClick={(e) => { e.preventDefault(); setCurrentPage(p); }}
-                          isActive={p === safePage}
-                          className={p === safePage ? "bg-orange-500 text-white border-orange-500 hover:bg-orange-600" : ""}
-                        >
-                          {p}
-                        </PaginationLink>
-                      </PaginationItem>
-                    ))}
-
-                  {/* Last page */}
-                  {safePage < totalPages - 2 && (
-                    <>
-                      {safePage < totalPages - 3 && <PaginationItem><PaginationEllipsis /></PaginationItem>}
-                      <PaginationItem>
-                        <PaginationLink href="#" onClick={(e) => { e.preventDefault(); setCurrentPage(totalPages); }} isActive={safePage === totalPages}>{totalPages}</PaginationLink>
-                      </PaginationItem>
-                    </>
-                  )}
-
-                  <PaginationItem>
-                    <PaginationNext
-                      href="#"
-                      onClick={(e) => { e.preventDefault(); if (safePage < totalPages) setCurrentPage(safePage + 1); }}
-                      className={safePage >= totalPages ? "pointer-events-none opacity-40" : ""}
-                    />
-                  </PaginationItem>
-                </PaginationContent>
-              </Pagination>
-            )}
-          </div>
-        )}
+        {/* Phase 125: Pagination removed — ใช้ Virtual Scroll กับ filteredRows ทั้งหมด */}
       </div>
     </AppShell>
   );
