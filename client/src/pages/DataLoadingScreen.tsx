@@ -213,16 +213,17 @@ export default function DataLoadingScreen() {
   }, [authLoading, isAuthenticated, section]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Navigate เมื่อโหลดเสร็จ ──────────────────────────────────────────────
+  // รอให้ครบทั้ง 3 ส่วนเป็น "done" เท่านั้น (ไม่ข้ามเมื่อ error)
 
   useEffect(() => {
     const allDone = LOAD_ITEMS.every(
-      (item) => statuses[item.key] === "done" || statuses[item.key] === "error",
+      (item) => statuses[item.key] === "done",
     );
     if (allDone && startedRef.current) {
-      // รอ 600ms เพื่อให้ผู้ใช้เห็น checkmark ก่อน navigate
+      // รอ 800ms เพื่อให้ผู้ใช้เห็น checkmark ก่อน navigate
       const timer = setTimeout(() => {
         navigate("/contracts", { replace: true });
-      }, 600);
+      }, 800);
       return () => clearTimeout(timer);
     }
   }, [statuses, navigate]);
@@ -245,8 +246,9 @@ export default function DataLoadingScreen() {
   // ─── Render ───────────────────────────────────────────────────────────────
 
   const allDone = LOAD_ITEMS.every(
-    (item) => statuses[item.key] === "done" || statuses[item.key] === "error",
+    (item) => statuses[item.key] === "done",
   );
+  const hasError = LOAD_ITEMS.some((item) => statuses[item.key] === "error");
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 flex items-center justify-center px-4">
@@ -344,6 +346,24 @@ export default function DataLoadingScreen() {
         <div className="text-center mt-6">
           {allDone ? (
             <p className="text-sm text-green-600 font-medium">โหลดข้อมูลเสร็จสิ้น กำลังเข้าสู่ระบบ...</p>
+          ) : hasError ? (
+            <div className="space-y-3">
+              <p className="text-sm text-red-500">เกิดข้อผิดพลาดระหว่างโหลดข้อมูล</p>
+              <button
+                onClick={() => {
+                  startedRef.current = false;
+                  setStatuses({ contracts: "idle", target: "idle", collected: "idle" });
+                  setLoaded({ contracts: 0, target: 0, collected: 0 });
+                  setTotal({ contracts: 0, target: 0, collected: 0 });
+                  setErrors({ contracts: null, target: null, collected: null });
+                  if (section) startPreload(section as SectionKey);
+                }}
+                className="px-4 py-2 text-sm font-medium text-white rounded-lg"
+                style={{ background: accent }}
+              >
+                ลองใหม่อีกครั้ง
+              </button>
+            </div>
           ) : (
             <p className="text-xs text-gray-400">ข้อมูลจะถูกเก็บ cache ไว้ตลอด session</p>
           )}
