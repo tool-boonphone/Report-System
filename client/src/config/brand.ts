@@ -9,6 +9,6 @@ export const BRAND_LOGOS: Record<SectionKey, string> = {
 };
 
 export const BRAND_ACCENT: Record<SectionKey, string> = {
-  Boonphone: "#1e40af", // blue-800
+  Boonphone: "#ec4899", // pink-500
   Fastfone365: "#c2410c", // orange-700
 };
