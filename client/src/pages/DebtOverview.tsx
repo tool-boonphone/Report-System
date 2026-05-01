@@ -19,6 +19,7 @@ import {
   CalendarDays,
   Check,
   ChevronDown,
+  ChevronUp,
   Coins,
   Eye,
   EyeOff,
@@ -591,6 +592,8 @@ export default function DebtOverview() {
   // Export loading state
   const [isExporting, setIsExporting] = useState(false);
   const [showColumnInfo, setShowColumnInfo] = useState(false);
+  // ซ่อน/ขยาย Badge section
+  const [badgesCollapsed, setBadgesCollapsed] = useState(false);
 
   const toggleBadge = (key: string) => {
     setBadgeVisibility((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -1218,7 +1221,24 @@ export default function DebtOverview() {
 
         {/* ---- Badges ---- */}
         {hasData && (
-          <div className="flex-shrink-0 bg-white border-b border-gray-200 px-4 py-3">
+          <div className="flex-shrink-0 bg-white border-b border-gray-200">
+            {/* Toggle badge button */}
+            <div className="flex items-center justify-between px-4 pt-2 pb-1">
+              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">สรุปยอด</span>
+              <button
+                onClick={() => setBadgesCollapsed((v) => !v)}
+                className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 px-2 py-0.5 rounded border border-gray-200 hover:bg-gray-50 transition-colors"
+                title={badgesCollapsed ? "ขยาย Badge" : "ซ่อน Badge"}
+              >
+                {badgesCollapsed ? (
+                  <><ChevronDown className="w-3.5 h-3.5" /> ขยาย</>
+                ) : (
+                  <><ChevronUp className="w-3.5 h-3.5" /> ซ่อน</>
+                )}
+              </button>
+            </div>
+            {!badgesCollapsed && (
+              <div className="px-4 pb-3">
             {/* เป้าเก็บหนี้ badges */}
             <BadgeRow
               title="เป้าเก็บหนี้"
@@ -1256,7 +1276,8 @@ export default function DebtOverview() {
               totalValue={grandCollected.total}
               totalColor="bg-green-600 text-white border-green-700"
             />
-
+              </div>
+            )}
           </div>
         )}
 
@@ -1437,14 +1458,7 @@ export default function DebtOverview() {
                           {fmtMoney(row.notYetDue)}
                         </td>
                       </tr>
-                      {/* Hidden month detail row */}
-                      {isHidden && (
-                        <tr className={isEven ? "bg-white" : "bg-slate-50/60"}>
-                          <td colSpan={10} className="px-6 py-1.5 text-xs text-gray-400 italic border-b border-gray-100">
-                            ซ่อนแล้ว — คลิกไอคอนตาเพื่อแสดงอีกครั้ง
-                          </td>
-                        </tr>
-                      )}
+
                       </React.Fragment>
                     );
                   })}

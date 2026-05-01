@@ -1285,8 +1285,13 @@ Task list:
 - [x] P132-4: Sticky footer — row รวมทั้งหมดต้องค้างอยู่ล่างสุดเสมอ
 - [x] P132-5: Horizontal scroll — ตารางต้องเลื่อนซ้าย-ขวาได้บนจอแคบ
 - [x] P132-6: ตัดข้อความ "ของสัญญาในเดือน-ปีนั้น" ออกจากคำอธิบาย column info dialog
-- [ ] P132-7: Commit + Push GitHub + Checkpoint
+- [x] P132-7: Commit + Push GitHub + Checkpoint
 
 ## Phase 132 เพิ่มเติม — DebtOverview เพิ่มฟิลเตอร์ปีที่อนุมัติ + ปรับ layout ตาราง
 - [x] P132-8: เพิ่มฟิลเตอร์ "ปีที่อนุมัติ" แบบ multi-select ต่อจาก "เดือน-ปีที่อนุมัติ"
 - [x] P132-9: ปรับ layout ตารางให้เหมือนหน้าสรุปรายเดือน (fullHeight, sticky thead, sticky tfoot)
+
+## Phase 133 — DebtOverview ปุ่มซ่อน Badge + ลบข้อความ "ซ่อนแล้ว"
+- [ ] P133-1: เพิ่มปุ่มซ่อน/ขยาย Badge ทั้งเป้าเก็บหนี้และยอดเก็บหนี้ (กดทีเดียวซ่อนทั้งคู่)
+- [ ] P133-2: ลบข้อความ "ซ่อนแล้ว — คลิกไอคอนตาเพื่อแสดงอีกครั้ง" ออกจาก hidden row
+- [ ] P133-3: Commit + Push GitHub + Checkpoint
