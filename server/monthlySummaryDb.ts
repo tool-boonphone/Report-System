@@ -507,7 +507,9 @@ async function queryNotYetDue(
   }
 
   /*
-   * penalty/unlockFee ดึงจากงวดล่าสุดของแต่ละสัญญา (MAX period WHERE is_future_period=1)
+   * penalty/unlockFee ดึงจากงวดล่าสุดของแต่ละสัญญา (MAX period WHERE due_date > CURDATE())
+   * หมายเหตุ: ใช้ due_date > CURDATE() แทน is_future_period เพราะ is_future_period ถูก populate
+   * ณ เวลา sync และอาจล้าสมัย ส่วน due_date > CURDATE() คำนวณ real-time เสมอ
    */
   const q = `
     SELECT
@@ -532,13 +534,17 @@ async function queryNotYetDue(
       SELECT dtc.section, dtc.contract_external_id, MAX(dtc.period) AS max_period
       FROM debt_target_cache dtc
       WHERE ${baseWhere}
-        AND dtc.is_future_period = 1
+        AND dtc.due_date > CURDATE()
+        AND COALESCE(dtc.is_closed, 0) = 0
+        AND COALESCE(dtc.is_paid, 0) = 0
         ${dueDateFilter}
       GROUP BY dtc.section, dtc.contract_external_id
     ) latest ON latest.section = base.section
              AND latest.contract_external_id = base.contract_external_id
     WHERE base.section = '${section}'
-      AND base.is_future_period = 1
+      AND base.due_date > CURDATE()
+      AND COALESCE(base.is_closed, 0) = 0
+      AND COALESCE(base.is_paid, 0) = 0
       AND COALESCE(base.contract_status, '') != 'ยกเลิกสัญญา'
       ${dueDateFilter.replace(/dtc\./g, "base.")}
     GROUP BY approve_month, bucket
