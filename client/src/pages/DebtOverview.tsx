@@ -826,14 +826,14 @@ export default function DebtOverview() {
         row.cost += fa + cn;
       }
 
-      // ยังไม่ถึงกำหนด: principal ของงวดที่ยังไม่ถึง dueDate (ทุกงวด isFuture)
+      // ยังไม่ถึงกำหนด: ยอดค่างวด (principal+interest+fee) ของงวดที่ยังไม่ถึง dueDate
       for (const inst of r.installments) {
         if (inst.isSuspended) continue;
         if (!inst.isClosed) {
           const dueStr = inst.dueDate ? inst.dueDate.slice(0, 10) : null;
           const isFuture = dueStr ? dueStr > todayStr : false;
           if (isFuture) {
-            row.notYetDue += inst.principal ?? 0;
+            row.notYetDue += (inst.principal ?? 0) + (inst.interest ?? 0) + (inst.fee ?? 0);
           }
         }
       }
