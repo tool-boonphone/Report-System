@@ -13,6 +13,7 @@
  *   duePrincipal/Interest/Fee/Penalty/UnlockFee/Total: number
  *   targetPrincipal/Interest/Fee/Penalty/UnlockFee/Total: number
  *   notYetDuePrincipal/Interest/Fee/Penalty/UnlockFee/Total: number
+ *   installTotalPrincipal/Interest/Fee/Total: number  (ยอดหนี้รวม = net_amount ทุกงวด)
  * }
  */
 import { z } from "zod";
@@ -38,7 +39,7 @@ export const monthlySummaryRouter = router({
         countApproveMonths:     z.array(MonthStr).optional(),
         countProductType:       z.string().optional(),
         countDeviceFamily:      DeviceFamily,
-        // Tab 2: ยอดที่ต้องชำระ
+        // Tab 2: เป้าเก็บหนี้ (เดิม: ยอดที่ต้องชำระ)
         targetDueDate:          DateStr,
         targetDueMonths:        z.array(MonthStr).optional(),
         targetApproveMonths:    z.array(MonthStr).optional(),
@@ -49,17 +50,21 @@ export const monthlySummaryRouter = router({
         paidAtMonths:           z.array(MonthStr).optional(),
         paidProductType:        z.string().optional(),
         paidDeviceFamily:       DeviceFamily,
-        // Tab 4: ยอดค้างชำระ
+        // Tab 4: หนี้ค้างชำระ (เดิม: ยอดค้างชำระ)
         dueAtDate:              DateStr,
         dueAtMonths:            z.array(MonthStr).optional(),
         dueProductType:         z.string().optional(),
         dueDeviceFamily:        DeviceFamily,
-        // Tab 5: ยอดที่ยังไม่ถึงกำหนด
+        // Tab 5: ยังไม่ถึงกำหนด (เดิม: ยอดที่ยังไม่ถึงกำหนด)
         notYetDueDueDate:       DateStr,
         notYetDueDueMonths:     z.array(MonthStr).optional(),
         notYetDueApproveMonths: z.array(MonthStr).optional(),
         notYetDueProductType:   z.string().optional(),
         notYetDueDeviceFamily:  DeviceFamily,
+        // Tab 6: ยอดหนี้รวม (installTotal)
+        installTotalApproveMonths: z.array(MonthStr).optional(),
+        installTotalProductType:   z.string().optional(),
+        installTotalDeviceFamily:  DeviceFamily,
       }),
     )
     .query(async ({ input }) => {
@@ -89,15 +94,17 @@ export const monthlySummaryRouter = router({
         paidPrincipal: number; paidInterest: number; paidFee: number; paidPenalty: number;
         paidUnlockFee: number; paidDiscount: number; paidOverpaid: number;
         paidBadDebt: number; paidBadDebtInstallment: number; paidTotal: number;
-        // due (ยอดค้างชำระ) — รวม unlockFee จากงวดล่าสุด
+        // due (หนี้ค้างชำระ) — รวม unlockFee จากงวดล่าสุด
         duePrincipal: number; dueInterest: number; dueFee: number;
         duePenalty: number; dueUnlockFee: number; dueTotal: number;
-        // target (ยอดที่ต้องชำระ)
+        // target (เป้าเก็บหนี้)
         targetPrincipal: number; targetInterest: number; targetFee: number;
         targetPenalty: number; targetUnlockFee: number; targetTotal: number;
-        // notYetDue (ยอดที่ยังไม่ถึงกำหนด)
+        // notYetDue (ยังไม่ถึงกำหนด)
         notYetDuePrincipal: number; notYetDueInterest: number; notYetDueFee: number;
         notYetDuePenalty: number; notYetDueUnlockFee: number; notYetDueTotal: number;
+        // installTotal (ยอดหนี้รวม = net_amount ทุกงวด)
+        installTotalPrincipal: number; installTotalInterest: number; installTotalFee: number; installTotalTotal: number;
       }[] = [];
 
       for (const row of summaryRows) {
@@ -140,6 +147,11 @@ export const monthlySummaryRouter = router({
             notYetDuePenalty:       cell.notYetDue.penalty,
             notYetDueUnlockFee:     cell.notYetDue.unlockFee,
             notYetDueTotal:         cell.notYetDue.total,
+            // installTotal
+            installTotalPrincipal:  cell.installTotal.principal,
+            installTotalInterest:   cell.installTotal.interest,
+            installTotalFee:        cell.installTotal.fee,
+            installTotalTotal:      cell.installTotal.total,
           });
         }
         // "__total__" row สำหรับแต่ละเดือน
@@ -179,6 +191,11 @@ export const monthlySummaryRouter = router({
           notYetDuePenalty:       row.totalNotYetDue.penalty,
           notYetDueUnlockFee:     row.totalNotYetDue.unlockFee,
           notYetDueTotal:         row.totalNotYetDue.total,
+          // installTotal
+          installTotalPrincipal:  row.totalInstallTotal.principal,
+          installTotalInterest:   row.totalInstallTotal.interest,
+          installTotalFee:        row.totalInstallTotal.fee,
+          installTotalTotal:      row.totalInstallTotal.total,
         });
       }
 

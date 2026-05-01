@@ -47,6 +47,7 @@ export type MonthlySummaryCell = {
   due: MoneyBreakdown;
   target: MoneyBreakdown;
   notYetDue: MoneyBreakdown;
+  installTotal: MoneyBreakdown; // ยอดหนี้รวม = SUM(net_amount) ทุกงวด (principal+interest+fee ไม่มีค่าปรับ/ค่าปลดล็อก)
 };
 
 export type MonthlySummaryRow = {
@@ -57,6 +58,7 @@ export type MonthlySummaryRow = {
   totalDue: MoneyBreakdown;
   totalTarget: MoneyBreakdown;
   totalNotYetDue: MoneyBreakdown;
+  totalInstallTotal: MoneyBreakdown; // ยอดหนี้รวม
 };
 
 export type MonthlySummaryParams = {
@@ -88,6 +90,10 @@ export type MonthlySummaryParams = {
   notYetDueApproveMonths?: string[]; // multi YYYY-MM (approve_date)
   notYetDueProductType?: string;
   notYetDueDeviceFamily?: string;
+  // Tab 6: ยอดหนี้รวม (installTotal)
+  installTotalApproveMonths?: string[]; // multi YYYY-MM (approve_date)
+  installTotalProductType?: string;
+  installTotalDeviceFamily?: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -114,7 +120,7 @@ function emptyMoney(): MoneyBreakdown {
   return { principal: 0, interest: 0, fee: 0, penalty: 0, unlockFee: 0, discount: 0, overpaid: 0, badDebt: 0, badDebtInstallment: 0, total: 0 };
 }
 function emptyCell(): MonthlySummaryCell {
-  return { contractCount: 0, paid: emptyMoney(), due: emptyMoney(), target: emptyMoney(), notYetDue: emptyMoney() };
+  return { contractCount: 0, paid: emptyMoney(), due: emptyMoney(), target: emptyMoney(), notYetDue: emptyMoney(), installTotal: emptyMoney() };
 }
 function n(v: unknown): number {
   const x = parseFloat(String(v ?? 0));
@@ -555,6 +561,66 @@ async function queryNotYetDue(
 }
 
 // ---------------------------------------------------------------------------
+// Query 6: InstallTotal tab — ยอดหนี้รวม
+// SUM(net_amount) ทุกงวด (principal+interest+fee ไม่มีค่าปรับ/ค่าปลดล็อก)
+// การจัดกลุ่ม bucket ใช้ contract_status ปัจจุบันของสัญญา
+// ---------------------------------------------------------------------------
+async function queryInstallTotal(
+  section: SectionKey,
+  opts: {
+    approveMonths?: string[];
+    productType?: string;
+    deviceFamily?: string;
+  },
+): Promise<Array<{
+  approve_month: string;
+  bucket: string;
+  contract_count: number;
+  principal_install: number;
+  interest_install: number;
+  fee_install: number;
+  total_install: number;
+}>> {
+  const db = await getDb();
+  if (!db) return [];
+
+  const baseWhere = dtcWhere(section, {
+    productType: opts.productType,
+    deviceFamily: opts.deviceFamily,
+    approveMonths: opts.approveMonths,
+  });
+
+  /*
+   * ยอดหนี้รวม = SUM(net_amount) ทุกงวด (is_future_period=0 และ =1)
+   * net_amount = principal + interest + fee (ไม่มี penalty/unlock_fee)
+   * จัดกลุ่ม bucket ตาม contract_status ปัจจุบันของสัญญา
+   * ใช้ DISTINCT contract_external_id เพื่อนับจำนวนสัญญา
+   */
+  const q = `
+    SELECT
+      DATE_FORMAT(dtc.approve_date, '%Y-%m') AS approve_month,
+      CASE
+        WHEN dtc.contract_status = 'หนี้เสีย'      THEN 'หนี้เสีย'
+        WHEN dtc.contract_status = 'ระงับสัญญา'   THEN 'ระงับสัญญา'
+        WHEN dtc.contract_status = 'สิ้นสุดสัญญา' THEN 'สิ้นสุดสัญญา'
+        ELSE COALESCE(dtc.debt_range, 'ปกติ')
+      END AS bucket,
+      COUNT(DISTINCT dtc.contract_external_id) AS contract_count,
+      SUM(CAST(dtc.principal AS DECIMAL(18,2))) AS principal_install,
+      SUM(CAST(dtc.interest  AS DECIMAL(18,2))) AS interest_install,
+      SUM(CAST(dtc.fee       AS DECIMAL(18,2))) AS fee_install,
+      SUM(CAST(dtc.net_amount AS DECIMAL(18,2))) AS total_install
+    FROM debt_target_cache dtc
+    WHERE ${baseWhere}
+      AND COALESCE(dtc.is_closed, 0) = 0
+    GROUP BY approve_month, bucket
+    ORDER BY approve_month DESC
+  `;
+  const rows = await db.execute(sql.raw(q));
+  return (rows as any)[0] ?? [];
+}
+
+// ---------------------------------------------------------------------------
 // Main export: getMonthlySummary
 // ---------------------------------------------------------------------------
 export async function getMonthlySummary(
@@ -562,8 +628,8 @@ export async function getMonthlySummary(
 ): Promise<MonthlySummaryRow[]> {
   const { section } = params;
 
-  // Run 5 queries in parallel
-  const [countRows, targetRows, paidRows, dueRows, notYetDueRows] = await Promise.all([
+  // Run 6 queries in parallel
+  const [countRows, targetRows, paidRows, dueRows, notYetDueRows, installTotalRows] = await Promise.all([
     queryCount(section, {
       productType:    params.countProductType,
       deviceFamily:   params.countDeviceFamily,
@@ -596,6 +662,11 @@ export async function getMonthlySummary(
       productType:    params.notYetDueProductType,
       deviceFamily:   params.notYetDueDeviceFamily,
     }),
+    queryInstallTotal(section, {
+      approveMonths:  params.installTotalApproveMonths,
+      productType:    params.installTotalProductType,
+      deviceFamily:   params.installTotalDeviceFamily,
+    }),
   ]);
 
   // Collect all approve_months
@@ -604,7 +675,8 @@ export async function getMonthlySummary(
   for (const r of targetRows)    monthSet.add(r.approve_month);
   for (const r of paidRows)      monthSet.add(r.approve_month);
   for (const r of dueRows)       monthSet.add(r.approve_month);
-  for (const r of notYetDueRows) monthSet.add(r.approve_month);
+  for (const r of notYetDueRows)    monthSet.add(r.approve_month);
+  for (const r of installTotalRows) monthSet.add(r.approve_month);
 
   const months = Array.from(monthSet).sort((a, b) => b.localeCompare(a));
 
@@ -679,14 +751,31 @@ export async function getMonthlySummary(
     });
   }
 
+  const installTotalMap = new Map<CellKey, MoneyBreakdown>();
+  for (const r of installTotalRows) {
+    installTotalMap.set(`${r.approve_month}|${r.bucket}`, {
+      principal:          n(r.principal_install),
+      interest:           n(r.interest_install),
+      fee:                n(r.fee_install),
+      penalty:            0,
+      unlockFee:          0,
+      discount:           0,
+      overpaid:           0,
+      badDebt:            0,
+      badDebtInstallment: 0,
+      total:              n(r.total_install),
+    });
+  }
+
   // Assemble MonthlySummaryRow[]
   return months.map((month) => {
     const buckets: Record<string, MonthlySummaryCell> = {};
     let totalCount = 0;
-    const totalPaid      = emptyMoney();
-    const totalDue       = emptyMoney();
-    const totalTarget    = emptyMoney();
-    const totalNotYetDue = emptyMoney();
+    const totalPaid         = emptyMoney();
+    const totalDue          = emptyMoney();
+    const totalTarget       = emptyMoney();
+    const totalNotYetDue    = emptyMoney();
+    const totalInstallTotal = emptyMoney();
 
     for (const bucket of DEBT_BUCKETS) {
       const key = `${month}|${bucket}`;
@@ -694,19 +783,21 @@ export async function getMonthlySummary(
       const paid          = paidMap.get(key)        ?? emptyMoney();
       const due           = dueMap.get(key)         ?? emptyMoney();
       const target        = targetMap.get(key)      ?? emptyMoney();
-      const notYetDue     = notYetDueMap.get(key)   ?? emptyMoney();
+      const notYetDue     = notYetDueMap.get(key)    ?? emptyMoney();
+      const installTotal  = installTotalMap.get(key)  ?? emptyMoney();
 
-      buckets[bucket] = { contractCount, paid, due, target, notYetDue };
+      buckets[bucket] = { contractCount, paid, due, target, notYetDue, installTotal };
       totalCount += contractCount;
 
       for (const k of Object.keys(totalPaid) as (keyof MoneyBreakdown)[]) {
-        (totalPaid      as any)[k] += paid[k];
-        (totalDue       as any)[k] += due[k];
-        (totalTarget    as any)[k] += target[k];
-        (totalNotYetDue as any)[k] += notYetDue[k];
+        (totalPaid         as any)[k] += paid[k];
+        (totalDue          as any)[k] += due[k];
+        (totalTarget       as any)[k] += target[k];
+        (totalNotYetDue    as any)[k] += notYetDue[k];
+        (totalInstallTotal as any)[k] += installTotal[k];
       }
     }
 
-    return { approveMonth: month, buckets, totalCount, totalPaid, totalDue, totalTarget, totalNotYetDue };
+    return { approveMonth: month, buckets, totalCount, totalPaid, totalDue, totalTarget, totalNotYetDue, totalInstallTotal };
   });
 }
