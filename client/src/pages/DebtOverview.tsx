@@ -390,7 +390,7 @@ function BadgeRow({
               className={[
                 "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all",
                 item.color,
-                !visible ? "opacity-40 line-through" : "",
+                !visible ? "opacity-40" : "",
                 canToggle ? "cursor-pointer hover:opacity-80" : "cursor-default",
               ].join(" ")}
               title={canToggle ? (visible ? "คลิกเพื่อซ่อน" : "คลิกเพื่อแสดง") : undefined}
@@ -916,19 +916,19 @@ export default function DebtOverview() {
                 </button>
               )}
             </div>
+            {/* เดือน-ปีที่ชำระ (สลับมาก่อน) */}
+            <MonthMultiSelect
+              label="เดือน-ปีที่ชำระ"
+              options={dueDateOptions}
+              selected={dueDateFilter}
+              onChange={setDueDateFilter}
+            />
             {/* เดือน-ปีที่อนุมัติ */}
             <MonthMultiSelect
               label="เดือน-ปีที่อนุมัติ"
               options={approveDateOptions}
               selected={approveDateFilter}
               onChange={setApproveDateFilter}
-            />
-            {/* เดือน-ปีที่ชำระ */}
-            <MonthMultiSelect
-              label="เดือน-ปีที่ชำระ"
-              options={dueDateOptions}
-              selected={dueDateFilter}
-              onChange={setDueDateFilter}
             />
             {/* สถานะหนี้ */}
             <StatusMultiSelect selected={statusFilter} onChange={setStatusFilter} />
@@ -945,9 +945,9 @@ export default function DebtOverview() {
             {/* Export Excel */}
             {hasData && (
               <Button
-                variant="outline"
+                variant="default"
                 size="sm"
-                className="gap-1.5 h-9 text-xs"
+                className="gap-1.5 h-9 text-xs bg-green-600 hover:bg-green-700 text-white border-0"
                 disabled={isExporting}
                 onClick={async () => {
                   if (!section) return;
@@ -1026,8 +1026,10 @@ export default function DebtOverview() {
                 { key: "principal", label: "เงินต้น", value: grandTarget.principal, icon: <Coins className="w-3.5 h-3.5" />, color: "bg-blue-50 text-blue-800 border-blue-200" },
                 { key: "interest", label: "ดอกเบี้ย", value: grandTarget.interest, icon: <Percent className="w-3.5 h-3.5" />, color: "bg-purple-50 text-purple-800 border-purple-200" },
                 { key: "fee", label: "ค่าดำเนินการ", value: grandTarget.fee, icon: <Tag className="w-3.5 h-3.5" />, color: "bg-indigo-50 text-indigo-800 border-indigo-200" },
-                { key: "penalty", label: "ค่าปรับ", value: grandTarget.penalty, icon: <Gavel className="w-3.5 h-3.5" />, color: "bg-orange-50 text-orange-800 border-orange-200" },
-                { key: "unlockFee", label: "ค่าปลดล็อก", value: grandTarget.unlockFee, icon: <LockOpen className="w-3.5 h-3.5" />, color: "bg-amber-50 text-amber-800 border-amber-200" },
+                ...(!principalOnly ? [
+                  { key: "penalty", label: "ค่าปรับ", value: grandTarget.penalty, icon: <Gavel className="w-3.5 h-3.5" />, color: "bg-orange-50 text-orange-800 border-orange-200" } as BadgeItem,
+                  { key: "unlockFee", label: "ค่าปลดล็อก", value: grandTarget.unlockFee, icon: <LockOpen className="w-3.5 h-3.5" />, color: "bg-amber-50 text-amber-800 border-amber-200" } as BadgeItem,
+                ] : []),
               ]}
               visibility={targetBadgeVisibility}
               onToggle={toggleTargetBadge}
@@ -1094,9 +1096,9 @@ export default function DebtOverview() {
 
         {/* ---- Table ---- */}
         {!isLoading && hasData && (
-          <div className="flex-1 overflow-auto px-4 py-3">
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-              <table className="w-full text-sm border-collapse min-w-[1200px]">
+          <div className="flex-1 min-h-0 overflow-x-auto overflow-y-auto px-4 py-3">
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden" style={{ minWidth: '1200px' }}>
+              <table className="w-full text-sm border-collapse">
                 <thead>
                   <tr className="bg-gradient-to-r from-slate-700 to-slate-800 text-white">
                     <th className="px-3 py-3 text-left font-semibold whitespace-nowrap sticky left-0 bg-slate-700 z-10 min-w-[120px]">

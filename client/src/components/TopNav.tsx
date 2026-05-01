@@ -158,7 +158,16 @@ export function TopNav() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [sectionMenuOpen, setSectionMenuOpen] = useState(false);
   const [settingsMenuOpen, setSettingsMenuOpen] = useState(false);
-  const [mobileExpanded, setMobileExpanded] = useState<Set<string>>(new Set());
+  const [mobileExpanded, setMobileExpanded] = useState<Set<string>>(() => {
+    // auto-expand group ที่ active ตาม path ปัจจุบัน
+    const init = new Set<string>();
+    for (const entry of MAIN_NAV) {
+      if (entry.kind === "group" && entry.children.some((c) => window.location.pathname.startsWith(c.path))) {
+        init.add(entry.label);
+      }
+    }
+    return init;
+  });
   const userMenuRef = useRef<HTMLDivElement>(null);
   const sectionMenuRef = useRef<HTMLDivElement>(null);
   const settingsMenuRef = useRef<HTMLDivElement>(null);
@@ -174,6 +183,18 @@ export function TopNav() {
   }, []);
 
   useEffect(() => { setSettingsMenuOpen(false); }, [location]);
+  // sync mobile expanded groups เมื่อ location เปลี่ยน (เช่น navigate จาก desktop)
+  useEffect(() => {
+    setMobileExpanded((prev) => {
+      const next = new Set(prev);
+      for (const entry of MAIN_NAV) {
+        if (entry.kind === "group" && entry.children.some((c) => location.startsWith(c.path))) {
+          next.add(entry.label);
+        }
+      }
+      return next;
+    });
+  }, [location]);
 
   const canSwitchSection = can("section_switch", "view");
   const visibleSettings = SETTINGS_NAV.filter((item) => can(item.menuCode, "view"));
