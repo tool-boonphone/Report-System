@@ -68,7 +68,8 @@ type SummaryRow = {
 };
 type TabKey = "count"|"installTotal"|"target"|"paid"|"due"|"notYetDue";
 type MoneyBadgeKey = "principal"|"interest"|"fee"|"penalty"|"unlockFee"|"discount"|"overpaid";
-type DueBadgeKey   = "principal"|"interest"|"fee"|"penalty"|"unlockFee";
+type DueBadgeKey       = "principal"|"interest"|"fee"|"penalty"|"unlockFee";
+type NotYetDueBadgeKey = "principal"|"interest"|"fee";
 type GrandTotal = {
   bucketTotals:Record<string,{count:number;paid:MoneyBreakdown;due:MoneyBreakdown;target:MoneyBreakdown;notYetDue:MoneyBreakdown;installTotal:MoneyBreakdown}>;
   totalCount:number;
@@ -147,6 +148,12 @@ const DUE_BADGE_ITEMS: Array<{key:DueBadgeKey;label:string;icon:React.ReactNode}
   { key:"penalty",   label:"ค่าปรับ",      icon:<Gavel    className="w-3.5 h-3.5"/> },
   { key:"unlockFee", label:"ค่าปลดล็อก",   icon:<Tag      className="w-3.5 h-3.5"/> },
 ];
+// Badge ยังไม่ถึงกำหนด: เฉพาะ เงินต้น, ดอกเบี้ย, ค่าดำเนินการ (ไม่มีค่าปรับ/ค่าปลดล็อก)
+const NOT_YET_DUE_BADGE_ITEMS: Array<{key:NotYetDueBadgeKey;label:string;icon:React.ReactNode}> = [
+  { key:"principal", label:"เงินต้น",      icon:<Banknote className="w-3.5 h-3.5"/> },
+  { key:"interest",  label:"ดอกเบี้ย",     icon:<Percent  className="w-3.5 h-3.5"/> },
+  { key:"fee",       label:"ค่าดำเนินการ", icon:<Coins    className="w-3.5 h-3.5"/> },
+];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function computeMoneyTotal(m:MoneyBreakdown, v:Record<MoneyBadgeKey,boolean>):number {
@@ -154,6 +161,9 @@ function computeMoneyTotal(m:MoneyBreakdown, v:Record<MoneyBadgeKey,boolean>):nu
 }
 function computeDueTotal(m:MoneyBreakdown, v:Record<DueBadgeKey,boolean>):number {
   return (v.principal?m.principal:0)+(v.interest?m.interest:0)+(v.fee?m.fee:0)+(v.penalty?m.penalty:0)+(v.unlockFee?m.unlockFee:0);
+}
+function computeNotYetDueTotal(m:MoneyBreakdown, v:Record<NotYetDueBadgeKey,boolean>):number {
+  return (v.principal?m.principal:0)+(v.interest?m.interest:0)+(v.fee?m.fee:0);
 }
 function addMoney(a:MoneyBreakdown, b:MoneyBreakdown):MoneyBreakdown {
   return {
@@ -538,7 +548,7 @@ export default function MonthlySummary() {
   const[paidVis,setPaidVis]=useState<Record<MoneyBadgeKey,boolean>>({principal:true,interest:true,fee:true,penalty:true,unlockFee:true,discount:false,overpaid:true});
   const[targetVis,setTargetVis]=useState<Record<MoneyBadgeKey,boolean>>({principal:true,interest:true,fee:true,penalty:true,unlockFee:true,discount:false,overpaid:false});
   const[dueVis,setDueVis]=useState<Record<DueBadgeKey,boolean>>({principal:true,interest:true,fee:true,penalty:true,unlockFee:true});
-  const[notYetDueVis,setNotYetDueVis]=useState<Record<DueBadgeKey,boolean>>({principal:true,interest:true,fee:true,penalty:true,unlockFee:true});
+  const[notYetDueVis,setNotYetDueVis]=useState<Record<NotYetDueBadgeKey,boolean>>({principal:true,interest:true,fee:true});
 
   // bad debt sub-col toggles
   const[showBadDebtInstall,setShowBadDebtInstall]=useState(true);
@@ -1041,16 +1051,16 @@ export default function MonthlySummary() {
         {/* ── Badge: notYetDue ──────────────────────────────────────── */}
         {tab==="notYetDue"&&(
           <div className="bg-blue-50/60 border-b border-blue-200 px-4 py-2 flex flex-wrap items-center gap-2">
-            {DUE_BADGE_ITEMS.map(({key,label,icon})=>{const isOn=notYetDueVis[key];const val=grandBadgeNotYetDue[key as keyof MoneyBreakdown];return(
+            {NOT_YET_DUE_BADGE_ITEMS.map(({key,label,icon})=>{const isOn=notYetDueVis[key];const val=grandBadgeNotYetDue[key as keyof MoneyBreakdown];return(
               <button key={key} type="button" onClick={()=>setNotYetDueVis((p)=>({...p,[key]:!p[key]}))}
                 title={isOn?`ซ่อน${label}`:`แสดง${label}`}
                 className={["flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border transition-colors",isOn?"bg-blue-100 border-blue-300 text-blue-800 hover:bg-blue-200":"bg-gray-100 border-gray-200 text-gray-400 hover:bg-gray-200"].join(" ")}>
                 {isOn?<Eye className="w-3 h-3"/>:<EyeOff className="w-3 h-3"/>}{icon}<span>{label}</span>
                 <span className={["font-semibold ml-0.5",isOn?"":"text-gray-400"].join(" ")}>{fmtMoney(val)}</span>
-              </button>
-            );})}
+              </button>            );})
+            }
             <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border bg-blue-700 border-blue-800 text-white font-semibold">
-              <Banknote className="w-3.5 h-3.5"/><span>รวม</span><span>{fmtMoney(computeDueTotal(grandBadgeNotYetDue,notYetDueVis))}</span>
+              <Banknote className="w-3.5 h-3.5"/><span>รวม</span><span>{fmtMoney(computeNotYetDueTotal(grandBadgeNotYetDue,notYetDueVis))}</span>
             </div>
           </div>
         )}
@@ -1085,7 +1095,7 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
   tab:TabKey;rows:SummaryRow[];grandTotal:GrandTotal;hiddenBuckets:Set<string>;
   toggleBucket:(b:string)=>void;toggleGroup:(g:ColGroup)=>void;toggleAll:()=>void;
   paidVis:Record<MoneyBadgeKey,boolean>;targetVis:Record<MoneyBadgeKey,boolean>;
-  dueVis:Record<DueBadgeKey,boolean>;notYetDueVis:Record<DueBadgeKey,boolean>;
+  dueVis:Record<DueBadgeKey,boolean>;notYetDueVis:Record<NotYetDueBadgeKey,boolean>;
   installVis:Record<"principal"|"interest"|"fee",boolean>;
   sortDir:SortDir;onToggleSort:()=>void;
   hiddenRows:Set<string>;toggleRow:(month:string)=>void;
@@ -1116,8 +1126,8 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
   const cellDueBadDebtInstallRaw=(_b:string,cell:SummaryCell|undefined)=>(cell?.due.total??0);
 
   // notYetDue
-  const cellNotYetDueVal=(b:string,cell:SummaryCell|undefined)=>hiddenBuckets.has(b)?0:(cell?computeDueTotal(cell.notYetDue,notYetDueVis):0);
-  const cellNotYetDueDisplay=(_b:string,cell:SummaryCell|undefined)=>(cell?computeDueTotal(cell.notYetDue,notYetDueVis):0);
+  const cellNotYetDueVal=(b:string,cell:SummaryCell|undefined)=>hiddenBuckets.has(b)?0:(cell?computeNotYetDueTotal(cell.notYetDue,notYetDueVis):0);
+  const cellNotYetDueDisplay=(_b:string,cell:SummaryCell|undefined)=>(cell?computeNotYetDueTotal(cell.notYetDue,notYetDueVis):0);
 
   // installTotal — ใช้ installVis ในการคำนวณ
   function computeInstallVisTotal(m:MoneyBreakdown):number {
@@ -1138,7 +1148,7 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
   const gtDueVal=(b:string)=>{const bt=grandTotal.bucketTotals[b];return hiddenBuckets.has(b)?0:(bt?computeDueTotal(bt.due,dueVis):0);};
   const gtDueBadDebtInstallRaw=(b:string)=>{const bt=grandTotal.bucketTotals[b];return hiddenBuckets.has(b)?0:(bt?.due.total??0);};
   const gtDueBadDebtInstall=(b:string)=>showBadDebtInstall?gtDueBadDebtInstallRaw(b):0;
-  const gtNotYetDueVal=(b:string)=>{const bt=grandTotal.bucketTotals[b];return hiddenBuckets.has(b)?0:(bt?computeDueTotal(bt.notYetDue,notYetDueVis):0);};
+  const gtNotYetDueVal=(b:string)=>{const bt=grandTotal.bucketTotals[b];return hiddenBuckets.has(b)?0:(bt?computeNotYetDueTotal(bt.notYetDue,notYetDueVis):0);};
 
   // ── Visible buckets per tab ─────────────────────────────────────────────
   const HIDDEN_BUCKETS_BY_TAB: Record<string,string[]> = {
@@ -1201,7 +1211,7 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
   }
   function rowNotYetDueTotal(row:SummaryRow):number{
     if(hiddenRows.has(row.approveMonth))return 0;
-    return DEBT_BUCKETS.reduce((s,b)=>{if(hiddenBuckets.has(b))return s;const cell=row.buckets[b];if(!cell)return s;return s+computeDueTotal(cell.notYetDue,notYetDueVis);},0);
+    return DEBT_BUCKETS.reduce((s,b)=>{if(hiddenBuckets.has(b))return s;const cell=row.buckets[b];if(!cell)return s;return s+computeNotYetDueTotal(cell.notYetDue,notYetDueVis);},0);
   }
   function rowInstallTotal(row:SummaryRow):number{
     if(hiddenRows.has(row.approveMonth))return 0;
@@ -1219,7 +1229,7 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
     if(b==="หนี้เสีย"){return s+(showBadDebtInstall?(bt.due.total??0):0);}
     return s+computeDueTotal(bt.due,dueVis);
   },0);
-  const gtNotYetDueTotal=DEBT_BUCKETS.reduce((s,b)=>{if(hiddenBuckets.has(b))return s;const bt=grandTotal.bucketTotals[b];if(!bt)return s;return s+computeDueTotal(bt.notYetDue,notYetDueVis);},0);
+  const gtNotYetDueTotal=DEBT_BUCKETS.reduce((s,b)=>{if(hiddenBuckets.has(b))return s;const bt=grandTotal.bucketTotals[b];if(!bt)return s;return s+computeNotYetDueTotal(bt.notYetDue,notYetDueVis);},0);
   const gtInstallTotal=DEBT_BUCKETS.reduce((s,b)=>{if(hiddenBuckets.has(b))return s;const bt=grandTotal.bucketTotals[b];if(!bt)return s;return s+computeInstallVisTotal(bt.installTotal);},0);
 
   // render helpers
@@ -1470,7 +1480,7 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
                     }
                     // notYetDue
                     const calcV=isHiddenRow?0:(gi===0?rowNormalNotYetDue(row):rowSuspectNotYetDue(row));
-                    if(isHiddenRow){const displayV=buckets.reduce((s,b)=>{const c=row.buckets[b];return s+(c?computeDueTotal(c.notYetDue,notYetDueVis):0);},0);return<td className={`px-3 py-2.5 text-right font-bold ${subBg} border-r border-gray-200`}><span className="text-gray-400">{fmtMoney(displayV)}</span></td>;}
+                    if(isHiddenRow){const displayV=buckets.reduce((s,b)=>{const c=row.buckets[b];return s+(c?computeNotYetDueTotal(c.notYetDue,notYetDueVis):0);},0);return<td className={`px-3 py-2.5 text-right font-bold ${subBg} border-r border-gray-200`}><span className="text-gray-400">{fmtMoney(displayV)}</span></td>;}
                     return<td className={`px-3 py-2.5 text-right font-bold ${subBg} border-r border-gray-200`}>{renderMoney(calcV,"text-blue-900")}</td>;
                   })()}
                 </React.Fragment>
