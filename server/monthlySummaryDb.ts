@@ -228,9 +228,9 @@ async function queryCount(section: SectionKey, opts: {
 }
 
 // ---------------------------------------------------------------------------
-// Query 2: Target tab — ยอดที่ต้องชำระ (แบบ A)
-// SUM total_amount WHERE is_future_period = 0 (งวดที่ถึงกำหนดแล้ว)
-// penalty/unlockFee: ดึงจากงวดล่าสุดของแต่ละสัญญาเท่านั้น (MAX period per contract)
+// Query 2: Target tab — เป้าเก็บหนี้
+// SUM(principal+interest+fee) WHERE due_date <= CURDATE() (งวดที่ถึงกำหนดแล้วเท่านั้น)
+// penalty/unlockFee: ดึงจากงวดล่าสุดที่ถึงกำหนดแล้ว (MAX period WHERE due_date <= CURDATE())
 // ---------------------------------------------------------------------------
 async function queryTarget(
   section: SectionKey,
@@ -304,13 +304,13 @@ async function queryTarget(
       SELECT dtc.section, dtc.contract_external_id, MAX(dtc.period) AS max_period
       FROM debt_target_cache dtc
       WHERE ${baseWhere}
-        AND dtc.is_future_period = 0
+        AND DATE(dtc.due_date) <= CURDATE()
         ${dueDateFilter}
       GROUP BY dtc.section, dtc.contract_external_id
     ) latest ON latest.section = base.section
              AND latest.contract_external_id = base.contract_external_id
     WHERE base.section = '${section}'
-      AND base.is_future_period = 0
+      AND DATE(base.due_date) <= CURDATE()
       AND COALESCE(base.contract_status, '') != 'ยกเลิกสัญญา'
       ${dueDateFilter.replace(/dtc\./g, "base.")}
     GROUP BY approve_month, bucket
