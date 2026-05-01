@@ -597,28 +597,47 @@ async function queryInstallTotal(
   });
 
   /*
-   * ยอดหนี้รวม = SUM(net_amount) ทุกงวด (is_future_period=0 และ =1)
+   * ยอดหนี้รวม = SUM(net_amount) ทุกงวด (ทั้ง is_future_period=0 และ =1)
    * net_amount = principal + interest + fee (ไม่มี penalty/unlock_fee)
-   * จัดกลุ่ม bucket ตาม contract_status ปัจจุบันของสัญญา
-   * ใช้ DISTINCT contract_external_id เพื่อนับจำนวนสัญญา
+   *
+   * ปัญหา: debt_range ใน cache เปลี่ยนตามงวดนั้น ไม่ใช่สถานะปัจจุบันของสัญญา
+   * วิธีแก้: ใช้ bucket จากงวดล่าสุด (max_period) ของแต่ละสัญญา
+   * โดย JOIN กับ subquery ที่ดึง contract_status/debt_range ของงวดล่าสุด
    */
   const q = `
     SELECT
-      DATE_FORMAT(dtc.approve_date, '%Y-%m') AS approve_month,
+      DATE_FORMAT(all_periods.approve_date, '%Y-%m') AS approve_month,
       CASE
-        WHEN dtc.contract_status = 'หนี้เสีย'      THEN 'หนี้เสีย'
-        WHEN dtc.contract_status = 'ระงับสัญญา'   THEN 'ระงับสัญญา'
-        WHEN dtc.contract_status = 'สิ้นสุดสัญญา' THEN 'สิ้นสุดสัญญา'
-        ELSE COALESCE(dtc.debt_range, 'ปกติ')
+        WHEN latest.contract_status = 'หนี้เสีย'      THEN 'หนี้เสีย'
+        WHEN latest.contract_status = 'ระงับสัญญา'   THEN 'ระงับสัญญา'
+        WHEN latest.contract_status = 'สิ้นสุดสัญญา' THEN 'สิ้นสุดสัญญา'
+        ELSE COALESCE(latest.debt_range, 'ปกติ')
       END AS bucket,
-      COUNT(DISTINCT dtc.contract_external_id) AS contract_count,
-      SUM(CAST(dtc.principal AS DECIMAL(18,2))) AS principal_install,
-      SUM(CAST(dtc.interest  AS DECIMAL(18,2))) AS interest_install,
-      SUM(CAST(dtc.fee       AS DECIMAL(18,2))) AS fee_install,
-      SUM(CAST(dtc.net_amount AS DECIMAL(18,2))) AS total_install
-    FROM debt_target_cache dtc
-    WHERE ${baseWhere}
-      AND COALESCE(dtc.is_closed, 0) = 0
+      COUNT(DISTINCT all_periods.contract_external_id) AS contract_count,
+      SUM(CAST(all_periods.principal AS DECIMAL(18,2))) AS principal_install,
+      SUM(CAST(all_periods.interest  AS DECIMAL(18,2))) AS interest_install,
+      SUM(CAST(all_periods.fee       AS DECIMAL(18,2))) AS fee_install,
+      SUM(CAST(all_periods.net_amount AS DECIMAL(18,2))) AS total_install
+    FROM debt_target_cache all_periods
+    JOIN (
+      SELECT
+        dtc.section,
+        dtc.contract_external_id,
+        dtc.contract_status,
+        dtc.debt_range
+      FROM debt_target_cache dtc
+      JOIN (
+        SELECT section, contract_external_id, MAX(period) AS max_period
+        FROM debt_target_cache
+        WHERE ${baseWhere}
+        GROUP BY section, contract_external_id
+      ) mp ON mp.section = dtc.section
+          AND mp.contract_external_id = dtc.contract_external_id
+          AND mp.max_period = dtc.period
+    ) latest ON latest.section = all_periods.section
+            AND latest.contract_external_id = all_periods.contract_external_id
+    WHERE ${baseWhere.replace(/dtc\./, 'all_periods.')}
+      AND COALESCE(all_periods.contract_status, '') != 'ยกเลิกสัญญา'
     GROUP BY approve_month, bucket
     ORDER BY approve_month DESC
   `;
