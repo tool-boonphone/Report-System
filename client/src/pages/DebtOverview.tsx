@@ -790,6 +790,59 @@ export default function DebtOverview() {
   /* ---- Today for "ยังไม่ถึงกำหนด" ---- */
   const todayStr = useMemo(() => new Date().toISOString().slice(0, 10), []);
 
+  /* ---- Cache-based summary (ยอดเก็บหนี้ + ยังไม่ถึงกำหนด จาก DB cache เหมือน MonthlySummary) ---- */
+  const approveMonthsForCache = useMemo(() => {
+    const months = new Set<string>(approveDateFilter);
+    if (approveYearFilter.size > 0) {
+      Array.from(approveYearFilter).forEach((yr) => {
+        for (let m = 1; m <= 12; m++) {
+          months.add(`${yr}-${String(m).padStart(2, "0")}`);
+        }
+      });
+    }
+    return months.size > 0 ? Array.from(months).sort() : undefined;
+  }, [approveDateFilter, approveYearFilter]);
+
+  const productTypeForCache = useMemo(() => {
+    if (productTypeFilter.size === 1) return Array.from(productTypeFilter)[0];
+    return undefined;
+  }, [productTypeFilter]);
+
+  const cacheSummaryInput = useMemo(() => {
+    if (!section) return null;
+    return {
+      section: section as "Boonphone" | "Fastfone365",
+      paidApproveMonths: approveMonthsForCache,
+      paidProductType: productTypeForCache,
+      notYetDueApproveMonths: approveMonthsForCache,
+      notYetDueProductType: productTypeForCache,
+    };
+  }, [section, approveMonthsForCache, productTypeForCache]);
+
+  const { data: cacheSummaryData } = trpc.monthlySummary.get.useQuery(
+    cacheSummaryInput ?? { section: "Boonphone" as const },
+    { enabled: !!cacheSummaryInput, staleTime: 5 * 60 * 1000 },
+  );
+
+  // Map: approveMonth → { paidTotal, notYetDueTotal }
+  const cacheByMonth = useMemo(() => {
+    const m = new Map<string, { paidTotal: number; notYetDueTotal: number }>();
+    if (!cacheSummaryData?.rowsJson) return m;
+    try {
+      const rows = JSON.parse(cacheSummaryData.rowsJson) as Array<{
+        approveMonth: string;
+        bucket: string;
+        paidTotal: number;
+        notYetDueTotal: number;
+      }>;
+      for (const r of rows) {
+        if (r.bucket !== "__total__") continue;
+        m.set(r.approveMonth, { paidTotal: r.paidTotal ?? 0, notYetDueTotal: r.notYetDueTotal ?? 0 });
+      }
+    } catch { /* ignore */ }
+    return m;
+  }, [cacheSummaryData]);
+
   /* ---- Aggregate by month ---- */
   const monthRows = useMemo(() => {
     const map = new Map<string, MonthRow>();
@@ -900,6 +953,13 @@ export default function DebtOverview() {
         (cv.unlockFee ? row.collectedUnlockFee : 0) +
         (cv.overpaid ? row.collectedOverpaid : 0);
       // หมายเหตุ: badDebt (ยอดขายเครื่อง) แยกไปอยู่ใน deviceSaleAmount แล้ว ไม่รวมใน collectedTotal
+
+      // Override ด้วยค่าจาก cache (DB) เหมือน MonthlySummary
+      const cached = cacheByMonth.get(row.monthKey);
+      if (cached) {
+        row.collectedTotal = cached.paidTotal;
+        row.notYetDue = cached.notYetDueTotal;
+      }
     });
 
     // Sort by monthKey (default asc = เก่าสุดบนสุด)
@@ -910,7 +970,7 @@ export default function DebtOverview() {
         ? a.monthKey.localeCompare(b.monthKey)
         : b.monthKey.localeCompare(a.monthKey)
     );
-  }, [filteredTargetRows, filteredCollectedRows, principalOnly, dueDateFilter, dueDateExact, badgeVisibility, targetBadgeVisibility, todayStr, monthSortDir]);
+  }, [filteredTargetRows, filteredCollectedRows, principalOnly, dueDateFilter, dueDateExact, badgeVisibility, targetBadgeVisibility, todayStr, monthSortDir, cacheByMonth]);
 
   /* ---- Grand totals (for badge display) ---- */
   const grandTarget = useMemo(() => {
