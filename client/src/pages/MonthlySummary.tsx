@@ -328,7 +328,6 @@ export default function MonthlySummary() {
   const[notYetDueProductType,setNotYetDueProductType]=useState<Set<string>>(new Set());
   const[notYetDueDeviceFamily,setNotYetDueDeviceFamily]=useState("");
 
-  const[filterOpen,setFilterOpen]=useState(true);
   const headerRef=useRef<HTMLDivElement>(null);
   const[headerH,setHeaderH]=useState(96);
   useEffect(()=>{
@@ -522,15 +521,7 @@ export default function MonthlySummary() {
 
         {/* ── Filter bar ───────────────────────────────────────────── */}
         <div className="bg-white border-b border-gray-200 shadow-sm">
-          <button type="button" className="w-full flex items-center justify-between px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors" onClick={()=>setFilterOpen((v)=>!v)}>
-            <span className="flex items-center gap-1.5">
-              <CalendarDays className="w-4 h-4 text-blue-500"/>ตัวกรอง
-              {activeFilterCount>0&&<span className="ml-1 inline-flex items-center justify-center bg-blue-500 text-white rounded-full w-4 h-4 text-[10px] font-bold">{activeFilterCount}</span>}
-            </span>
-            <span className="text-xs text-gray-400">{filterOpen?"▲ ซ่อน":"▼ แสดง"}</span>
-          </button>
-          {filterOpen&&(
-            <div className="px-4 pb-3 pt-1 flex flex-wrap items-center gap-2">
+            <div className="px-4 pb-3 pt-2 flex flex-wrap items-center gap-2">
               {/* Tab 1: จำนวนสัญญา */}
               {tab==="count"&&(
                 <>
@@ -682,7 +673,6 @@ export default function MonthlySummary() {
                 </>
               )}
             </div>
-          )}
         </div>
 
         {/* ── Badge: target ─────────────────────────────────────────── */}
