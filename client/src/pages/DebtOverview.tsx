@@ -730,13 +730,17 @@ export default function DebtOverview() {
         if (dueDateFilter.size > 0 && !(inst.dueDate && dueDateFilter.has(inst.dueDate.slice(0, 7)))) continue;
         if (dueDateExact && inst.dueDate?.slice(0, 10) !== dueDateExact) continue;
         if (!inst.isClosed) {
-          // งวดที่ยังไม่ปิด: sum ทุก component
-          row.targetPrincipal += inst.principal ?? 0;
-          row.targetInterest += inst.interest ?? 0;
-          row.targetFee += inst.fee ?? 0;
+          const dueStr = inst.dueDate ? inst.dueDate.slice(0, 10) : null;
+          const isFuture = dueStr ? dueStr > todayStr : false;
           // ยังไม่ครบกำหนด: principal only, dueDate > today
-          if (inst.dueDate && inst.dueDate.slice(0, 10) > todayStr) {
+          if (isFuture) {
             row.notYetDue += inst.principal ?? 0;
+          }
+          // เป้าเก็บหนี้: เฉพาะงวดที่ถึงกำหนดแล้ว (dueDate <= today) หรือไม่มี dueDate
+          if (!isFuture) {
+            row.targetPrincipal += inst.principal ?? 0;
+            row.targetInterest += inst.interest ?? 0;
+            row.targetFee += inst.fee ?? 0;
           }
         }
         // penalty/unlockFee: sum จากทุกงวด (รวม isClosed) เพราะอาจมีค้างอยู่
@@ -776,14 +780,15 @@ export default function DebtOverview() {
         (bv.unlockFee ? row.targetUnlockFee : 0);
 
       const cv = badgeVisibility;
+      // ยอดเก็บหนี้ = ค่างวดปกติที่ชำระแล้ว ไม่รวม badDebt (ยอดขายเครื่อง)
       row.collectedTotal =
         (cv.principal ? row.collectedPrincipal : 0) +
         (cv.interest ? row.collectedInterest : 0) +
         (cv.fee ? row.collectedFee : 0) +
         (cv.penalty ? row.collectedPenalty : 0) +
         (cv.unlockFee ? row.collectedUnlockFee : 0) +
-        (cv.overpaid ? row.collectedOverpaid : 0) +
-        (cv.badDebt ? row.collectedBadDebt : 0);
+        (cv.overpaid ? row.collectedOverpaid : 0);
+      // หมายเหตุ: badDebt (ยอดขายเครื่อง) แยกไปอยู่ใน deviceSaleAmount แล้ว ไม่รวมใน collectedTotal
     });
 
     // Sort by monthKey (default asc = เก่าสุดบนสุด)
