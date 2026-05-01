@@ -296,6 +296,7 @@ async function syncCustomers(
   });
   try {
     const byId = new Map<string, CustomerListItem>();
+    // Use limit=1000 to reduce page count (Fastfone365 has 22k customers → 23 pages vs 22k pages at limit=1)
     await client.forEachPage<CustomerListItem>(
       "customer",
       (d) => d?.customers,
@@ -305,7 +306,7 @@ async function syncCustomers(
           byId.set(String(it.customer_id), it);
         }
       },
-      200,
+      1000,
     );
     await finishSyncLog({ id: log.id, status: "success", rowCount: byId.size });
     return byId;
