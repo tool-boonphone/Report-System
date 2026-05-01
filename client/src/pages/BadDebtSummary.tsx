@@ -380,16 +380,16 @@ export default function BadDebtSummary() {
         {summary && (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
             <SummaryCard icon={<AlertTriangle className="w-5 h-5 text-red-500" />} label="จำนวนสัญญา" value={`${summary.contractCount.toLocaleString("th-TH")} รายการ`} color="border-red-100" />
-            <SummaryCard icon={<Banknote className="w-5 h-5 text-blue-500" />} label="ยอดจัดไฟแนนซ์รวม" value={fmtMoney(summary.totalFinanceAmount)} color="border-blue-100" />
-            <SummaryCard icon={<Wallet className="w-5 h-5 text-purple-500" />} label="ต้นทุนรวม" value={fmtMoney(summary.totalCost)} color="border-purple-100" />
-            <SummaryCard icon={<Wallet className="w-5 h-5 text-teal-500" />} label="รวมรายรับ" value={fmtMoney(summary.totalInstallmentPaid + summary.totalDeviceSaleAmount)} color="border-teal-100" />
+            <SummaryCard icon={<Wallet className="w-5 h-5 text-purple-500" />} label="ต้นทุน" value={fmtMoney(summary.totalCost)} color="border-purple-100" />
+            <SummaryCard icon={<Banknote className="w-5 h-5 text-blue-500" />} label="ยอดผ่อน" value={fmtMoney(summary.totalInstallmentPaid)} color="border-blue-100" />
+            <SummaryCard icon={<Banknote className="w-5 h-5 text-orange-500" />} label="ยอดขายเครื่อง" value={fmtMoney(summary.totalDeviceSaleAmount)} color="border-orange-100" />
+            <SummaryCard icon={<Wallet className="w-5 h-5 text-teal-500" />} label="รายรับรวม" value={fmtMoney(summary.totalInstallmentPaid + summary.totalDeviceSaleAmount)} color="border-teal-100" />
             <SummaryCard
               icon={summary.totalProfitLoss >= 0 ? <TrendingUp className="w-5 h-5 text-green-600" /> : <TrendingDown className="w-5 h-5 text-red-500" />}
-              label="กำไร/ขาดทุนรวม"
+              label="กำไร/ขาดทุน"
               value={fmtMoney(summary.totalProfitLoss)}
               color={summary.totalProfitLoss >= 0 ? "border-green-100" : "border-red-100"}
             />
-            <SummaryCard icon={<TrendingUp className="w-5 h-5 text-green-500" />} label="กำไร / เสมอ / ขาดทุน" value={`${summary.profitCount} / ${summary.breakEvenCount} / ${summary.lossCount}`} color="border-gray-100" />
           </div>
         )}
 
@@ -452,7 +452,7 @@ export default function BadDebtSummary() {
                   <Th label="ค่าคอมมิชชั่น" col="commissionNet" />
                   <Th label="ต้นทุน" col="cost" />
                   <th className="px-2 py-2 text-center text-xs font-semibold whitespace-nowrap">งวดที่ชำระ</th>
-                  <Th label="ยอดเก็บค่างวด" col="installmentPaid" />
+                  <Th label="ยอดผ่อน" col="installmentPaid" />
                   <Th label="ยอดขายเครื่อง" col="deviceSaleAmount" />
                   <Th label="รวมรายรับ" col="totalRevenue" />
                   <Th label="วันที่ขาย" col="saleDate" />
