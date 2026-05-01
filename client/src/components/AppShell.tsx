@@ -1,6 +1,8 @@
 import { useAppAuth } from "@/hooks/useAppAuth";
 import { useSection } from "@/contexts/SectionContext";
+import { useDebtCache } from "@/contexts/DebtCacheContext";
 import { useAiChat } from "@/contexts/AiChatContext";
+import type { SectionKey } from "@shared/const";
 import { Loader2 } from "lucide-react";
 import { type ReactNode, useEffect } from "react";
 import { useLocation } from "wouter";
@@ -12,6 +14,7 @@ import { AIChatPanel } from "./AIChatPanel";
  *  - If loading → spinner
  *  - If not authenticated → /login
  *  - If authenticated but no section picked → /select-section
+ *  - If section set but cache empty (e.g. browser refresh) → /data-loading
  *  - Otherwise render children inside TopNav layout
  */
 export function AppShell({
@@ -25,9 +28,10 @@ export function AppShell({
   fullHeight?: boolean;
 }) {
   const { isLoading, isAuthenticated } = useAppAuth();
-  const { hasSection } = useSection();
+  const { hasSection, section } = useSection();
+  const debtCache = useDebtCache();
   const { aiChatOpen } = useAiChat();
-  const [, navigate] = useLocation();
+  const [location, navigate] = useLocation();
 
   useEffect(() => {
     if (isLoading) return;
@@ -37,8 +41,17 @@ export function AppShell({
     }
     if (requireSection && !hasSection) {
       navigate("/select-section", { replace: true });
+      return;
     }
-  }, [isLoading, isAuthenticated, hasSection, requireSection, navigate]);
+    // ถ้ามี section แต่ cache ยังไม่มีข้อมูล (เช่น refresh browser)
+    // และไม่ได้อยู่ที่ /data-loading อยู่แล้ว → redirect ไป preload
+    if (requireSection && hasSection && section && location !== "/data-loading") {
+      const cache = debtCache.getCache(section as SectionKey);
+      if (!cache.target || !cache.collected) {
+        navigate("/data-loading", { replace: true });
+      }
+    }
+  }, [isLoading, isAuthenticated, hasSection, requireSection, navigate, section, location]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (isLoading || !isAuthenticated || (requireSection && !hasSection)) {
     return (

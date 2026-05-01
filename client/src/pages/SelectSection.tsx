@@ -34,7 +34,7 @@ export default function SelectSection() {
 
   function handlePick(s: SectionKey) {
     setSection(s);
-    navigate("/contracts", { replace: true });
+    navigate("/data-loading", { replace: true });
   }
 
   // If user has access to only 1 section, auto-navigate there

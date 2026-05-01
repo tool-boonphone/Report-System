@@ -17,6 +17,7 @@ import DebtSummary from "./pages/DebtSummary";
 import DebtOverview from "./pages/DebtOverview";
 import MonthlySummary from "./pages/MonthlySummary";
 import SuspectedBadDebt from "./pages/SuspectedBadDebt";
+import DataLoadingScreen from "./pages/DataLoadingScreen";
 import UsersSettings from "./pages/settings/Users";
 import GroupsSettings from "./pages/settings/Groups";
 
@@ -27,6 +28,7 @@ function Router() {
       <Route path="/login" component={Login} />
       <Route path="/select-section" component={SelectSection} />
       <Route path="/change-password" component={ChangePassword} />
+      <Route path="/data-loading" component={DataLoadingScreen} />
       <Route path="/contracts" component={Contracts} />
       <Route path="/debt-overview" component={DebtOverview} />
       <Route path="/debt-summary" component={DebtSummary} />
