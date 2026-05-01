@@ -212,6 +212,88 @@ function MonthMultiSelect({
 }
 
 /* ------------------------------------------------------------------ */
+/* YearMultiSelect                                                     */
+/* ------------------------------------------------------------------ */
+function YearMultiSelect({
+  label,
+  options,
+  selected,
+  onChange,
+}: {
+  label: string;
+  options: string[];
+  selected: Set<string>;
+  onChange: (v: Set<string>) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+  const toggle = (s: string) => {
+    const next = new Set(selected);
+    if (next.has(s)) next.delete(s);
+    else next.add(s);
+    onChange(next);
+  };
+  // แปลง YYYY → ปีพุทธศักราช (2-digit)
+  const fmtYear = (y: string) => {
+    const be = parseInt(y, 10) + 543;
+    return `ปี ${be.toString().slice(-2)}`;
+  };
+  const displayLabel =
+    selected.size === 0 ? label :
+    selected.size === 1 ? fmtYear(Array.from(selected)[0]) :
+    `${selected.size} ปี`;
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className={[
+          "flex items-center gap-2 h-9 px-3 py-2 rounded-md border text-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[130px] justify-between",
+          selected.size > 0 ? "border-blue-400 bg-blue-50 text-blue-700" : "border-gray-200 bg-white text-gray-700",
+        ].join(" ")}
+      >
+        <span className="truncate">{displayLabel}</span>
+        <ChevronDown className="w-4 h-4 flex-shrink-0 opacity-60" />
+      </button>
+      {open && (
+        <div className="absolute z-50 mt-1 w-[160px] bg-white border border-gray-200 rounded-md shadow-lg py-1 max-h-60 overflow-y-auto">
+          <button
+            type="button"
+            onClick={() => { onChange(new Set()); setOpen(false); }}
+            className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-gray-50 text-gray-700"
+          >
+            <span className={"w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 " + (selected.size === 0 ? "bg-blue-500 border-blue-500" : "border-gray-300")}>
+              {selected.size === 0 && <Check className="w-3 h-3 text-white" />}
+            </span>
+            ทั้งหมด
+          </button>
+          {options.map((opt) => (
+            <button
+              key={opt}
+              type="button"
+              onClick={() => toggle(opt)}
+              className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-gray-50 text-gray-700"
+            >
+              <span className={"w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 " + (selected.has(opt) ? "bg-blue-500 border-blue-500" : "border-gray-300")}>
+                {selected.has(opt) && <Check className="w-3 h-3 text-white" />}
+              </span>
+              {fmtYear(opt)}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* StatusMultiSelect                                                   */
 /* ------------------------------------------------------------------ */
 function StatusMultiSelect({
@@ -479,6 +561,8 @@ export default function DebtOverview() {
   const [productTypeFilter, setProductTypeFilter] = useState<Set<string>>(new Set());
   const [dueDateExact, setDueDateExact] = useState<string | null>(null);
   const [principalOnly, setPrincipalOnly] = useState(true);
+  // ฟิลเตอร์ปีที่อนุมัติ (multi-select)
+  const [approveYearFilter, setApproveYearFilter] = useState<Set<string>>(new Set());
   // Badge visibility — collected group
   const [badgeVisibility, setBadgeVisibility] = useState<Record<string, boolean>>({
     principal: true,
@@ -631,6 +715,12 @@ export default function DebtOverview() {
     return Array.from(s).sort().reverse();
   }, [allRows]);
 
+  const approveYearOptions = useMemo(() => {
+    const s = new Set<string>();
+    for (const r of allRows) if (r.approveDate) s.add(r.approveDate.slice(0, 4));
+    return Array.from(s).sort().reverse();
+  }, [allRows]);
+
   const dueDateOptions = useMemo(() => {
     const s = new Set<string>();
     for (const r of collectedRows) {
@@ -649,6 +739,7 @@ export default function DebtOverview() {
   const filteredTargetRows = useMemo(() => {
     const q = search.trim().toLowerCase();
     return targetRows.filter((r) => {
+      if (approveYearFilter.size > 0 && !(r.approveDate && approveYearFilter.has(r.approveDate.slice(0, 4)))) return false;
       if (approveDateFilter.size > 0 && !(r.approveDate && approveDateFilter.has(r.approveDate.slice(0, 7)))) return false;
       if (dueDateExact) {
         const hasMatch = r.installments.some((inst) => inst.dueDate && inst.dueDate.slice(0, 10) === dueDateExact);
@@ -667,11 +758,12 @@ export default function DebtOverview() {
         (r.phone ?? "").toLowerCase().includes(q)
       );
     });
-  }, [targetRows, search, statusFilter, approveDateFilter, dueDateFilter, productTypeFilter, dueDateExact]);
+  }, [targetRows, search, statusFilter, approveYearFilter, approveDateFilter, dueDateFilter, productTypeFilter, dueDateExact]);
 
   const filteredCollectedRows = useMemo(() => {
     const q = search.trim().toLowerCase();
     return collectedRows.filter((r) => {
+      if (approveYearFilter.size > 0 && !(r.approveDate && approveYearFilter.has(r.approveDate.slice(0, 4)))) return false;
       if (approveDateFilter.size > 0 && !(r.approveDate && approveDateFilter.has(r.approveDate.slice(0, 7)))) return false;
       if (dueDateExact) {
         const hasMatch = (r.payments ?? []).some((p) => p.paidAt && p.paidAt.slice(0, 10) === dueDateExact);
@@ -690,7 +782,7 @@ export default function DebtOverview() {
         (r.phone ?? "").toLowerCase().includes(q)
       );
     });
-  }, [collectedRows, search, statusFilter, approveDateFilter, dueDateFilter, productTypeFilter, dueDateExact]);
+  }, [collectedRows, search, statusFilter, approveYearFilter, approveDateFilter, dueDateFilter, productTypeFilter, dueDateExact]);
 
   /* ---- Today for "ยังไม่ถึงกำหนด" ---- */
   const todayStr = useMemo(() => new Date().toISOString().slice(0, 10), []);
@@ -821,6 +913,7 @@ export default function DebtOverview() {
   const grandTarget = useMemo(() => {
     let principal = 0, interest = 0, fee = 0, penalty = 0, unlockFee = 0;
     for (const row of monthRows) {
+      if (hiddenMonths.has(row.monthKey)) continue;
       principal += row.targetPrincipal;
       interest += row.targetInterest;
       fee += row.targetFee;
@@ -830,11 +923,12 @@ export default function DebtOverview() {
     const bv = targetBadgeVisibility;
     const total = (bv.principal ? principal : 0) + (bv.interest ? interest : 0) + (bv.fee ? fee : 0) + (bv.penalty ? penalty : 0) + (bv.unlockFee ? unlockFee : 0);
     return { principal, interest, fee, penalty, unlockFee, total };
-  }, [monthRows, targetBadgeVisibility]);
+  }, [monthRows, hiddenMonths, targetBadgeVisibility]);
 
   const grandCollected = useMemo(() => {
     let principal = 0, interest = 0, fee = 0, penalty = 0, unlockFee = 0, discount = 0, overpaid = 0, badDebt = 0;
     for (const row of monthRows) {
+      if (hiddenMonths.has(row.monthKey)) continue;
       principal += row.collectedPrincipal;
       interest += row.collectedInterest;
       fee += row.collectedFee;
@@ -847,7 +941,7 @@ export default function DebtOverview() {
     const bv = badgeVisibility;
     const total = (bv.principal ? principal : 0) + (bv.interest ? interest : 0) + (bv.fee ? fee : 0) + (bv.penalty ? penalty : 0) + (bv.unlockFee ? unlockFee : 0) + (bv.overpaid ? overpaid : 0) + (bv.badDebt ? badDebt : 0);
     return { principal, interest, fee, penalty, unlockFee, discount, overpaid, badDebt, total };
-  }, [monthRows, badgeVisibility]);
+  }, [monthRows, hiddenMonths, badgeVisibility]);
 
   /* ---- TopNav actions ---- */
   useEffect(() => {
@@ -873,7 +967,7 @@ export default function DebtOverview() {
   const hasData = streamData.target !== null && streamData.collected !== null;
 
   return (
-    <AppShell>
+    <AppShell fullHeight>
       {/* ---- Column Info Dialog ---- */}
       <Dialog open={showColumnInfo} onOpenChange={setShowColumnInfo}>
         <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
@@ -913,7 +1007,7 @@ export default function DebtOverview() {
               {
                 label: "ยอดขายเครื่อง",
                 color: "bg-red-50 text-red-700",
-                desc: "ยอดรวมการขายเครื่องของสัญญาในเดือน-ปีนั้น",
+                desc: "ยอดรวมการขายเครื่อง",
               },
               {
                 label: "รายรับรวม",
@@ -923,7 +1017,7 @@ export default function DebtOverview() {
               {
                 label: "ต้นทุน",
                 color: "bg-slate-50 text-slate-700",
-                desc: "ยอดจัดไฟแนนซ์ + ค่าคอมมิชชั่น ของสัญญาในเดือน-ปีนั้น",
+                desc: "ยอดจัดไฟแนนซ์ + ค่าคอมมิชชั่น",
               },
               {
                 label: "กำไรขั้นต้น",
@@ -945,9 +1039,9 @@ export default function DebtOverview() {
         </DialogContent>
       </Dialog>
 
-      <div className="flex flex-col h-full bg-gray-50">
+      <div className="flex flex-col h-full bg-gray-50 overflow-hidden">
         {/* ---- Header ---- */}
-        <div className="bg-white border-b border-gray-200 px-4 py-3">
+        <div className="flex-shrink-0 bg-white border-b border-gray-200 px-4 py-3">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <TrendingDown className="w-5 h-5 text-blue-600" />
@@ -1029,6 +1123,13 @@ export default function DebtOverview() {
               selected={approveDateFilter}
               onChange={setApproveDateFilter}
             />
+            {/* ปีที่อนุมัติ (multi-select) */}
+            <YearMultiSelect
+              label="ปีที่อนุมัติ"
+              options={approveYearOptions}
+              selected={approveYearFilter}
+              onChange={setApproveYearFilter}
+            />
             {/* สถานะหนี้ */}
             <StatusMultiSelect selected={statusFilter} onChange={setStatusFilter} />
             {/* ประเภทเครื่อง */}
@@ -1100,11 +1201,11 @@ export default function DebtOverview() {
               </Button>
             )}
             {/* Clear all */}
-            {(search || statusFilter.size > 0 || approveDateFilter.size > 0 || dueDateFilter.size > 0 || productTypeFilter.size > 0 || dueDateExact) && (
+            {(search || statusFilter.size > 0 || approveYearFilter.size > 0 || approveDateFilter.size > 0 || dueDateFilter.size > 0 || productTypeFilter.size > 0 || dueDateExact) && (
               <button
                 type="button"
                 onClick={() => {
-                  setSearch(""); setStatusFilter(new Set()); setApproveDateFilter(new Set());
+                  setSearch(""); setStatusFilter(new Set()); setApproveYearFilter(new Set()); setApproveDateFilter(new Set());
                   setDueDateFilter(new Set()); setProductTypeFilter(new Set()); setDueDateExact(null);
                 }}
                 className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 px-2 py-1 rounded border border-red-200 hover:bg-red-50"
@@ -1117,7 +1218,7 @@ export default function DebtOverview() {
 
         {/* ---- Badges ---- */}
         {hasData && (
-          <div className="bg-white border-b border-gray-200 px-4 py-3">
+          <div className="flex-shrink-0 bg-white border-b border-gray-200 px-4 py-3">
             {/* เป้าเก็บหนี้ badges */}
             <BadgeRow
               title="เป้าเก็บหนี้"
@@ -1161,7 +1262,7 @@ export default function DebtOverview() {
 
         {/* ---- Loading / Error ---- */}
         {isLoading && (
-          <div className="py-4">
+          <div className="flex-shrink-0 py-4">
             {streamLoading.target && (
               <StreamLoadingOverlay
                 loading={true}
@@ -1183,7 +1284,7 @@ export default function DebtOverview() {
           </div>
         )}
         {isError && !isLoading && (
-          <div className="flex flex-col items-center justify-center py-16 gap-3 text-red-500">
+          <div className="flex-shrink-0 flex flex-col items-center justify-center py-16 gap-3 text-red-500">
             <div className="text-sm font-medium">เกิดข้อผิดพลาด</div>
             {streamError.target && <div className="text-xs">{streamError.target}</div>}
             {streamError.collected && <div className="text-xs">{streamError.collected}</div>}
@@ -1195,10 +1296,10 @@ export default function DebtOverview() {
 
         {/* ---- Table ---- */}
         {!isLoading && hasData && (
-          <div className="flex-1 min-h-0 overflow-x-auto overflow-y-auto px-4 py-3">
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden" style={{ minWidth: '1200px' }}>
+          <div className="flex-1 min-h-0 overflow-x-auto overflow-y-auto">
+            <div style={{ minWidth: '1200px' }} className="h-full">
               <table className="w-full text-sm border-collapse">
-                <thead>
+                <thead className="sticky top-0 z-20">
                   <tr className="bg-gradient-to-r from-slate-700 to-slate-800 text-white">
                     <th className="px-3 py-3 text-left font-semibold whitespace-nowrap sticky left-0 bg-slate-700 z-10 min-w-[120px]">
                       <button
@@ -1263,11 +1364,12 @@ export default function DebtOverview() {
                       <tr
                         className={[
                           "border-b border-gray-100 hover:bg-blue-50/40 transition-colors",
+                          isHidden ? "opacity-50" : "",
                           isEven ? "bg-white" : "bg-slate-50/60",
                         ].join(" ")}
                       >
                         {/* เดือน + Eye toggle */}
-                        <td className={["px-3 py-2.5 font-semibold text-slate-700 sticky left-0 z-10 whitespace-nowrap", isEven ? "bg-white" : "bg-slate-50"].join(" ")}>
+                        <td className={["px-3 py-2.5 font-semibold text-slate-700 sticky left-0 z-10 whitespace-nowrap", isHidden ? "text-gray-400" : "", isEven ? "bg-white" : "bg-slate-50"].join(" ")}>
                           <div className="flex items-center gap-1.5">
                             <button
                               type="button"
@@ -1294,44 +1396,44 @@ export default function DebtOverview() {
                         </td>
                         {/* จำนวนสัญญา */}
                         <td className="px-3 py-2.5 text-right text-slate-600">
-                          <span className="inline-flex items-center justify-center bg-slate-100 text-slate-700 rounded-full px-2.5 py-0.5 text-xs font-semibold">
+                          <span className={["inline-flex items-center justify-center rounded-full px-2.5 py-0.5 text-xs font-semibold", isHidden ? "bg-gray-100 text-gray-400" : "bg-slate-100 text-slate-700"].join(" ")}>
                             {row.contractCount.toLocaleString()}
                           </span>
                         </td>
                         {/* เป้าเก็บหนี้ */}
-                        <td className="px-3 py-2.5 text-right text-blue-800 font-medium bg-blue-50/30">
+                        <td className={["px-3 py-2.5 text-right font-medium bg-blue-50/30", isHidden ? "text-gray-400" : "text-blue-800"].join(" ")}>
                           {fmtMoney(row.targetTotal)}
                         </td>
                         {/* ยอดเก็บหนี้ */}
-                        <td className="px-3 py-2.5 text-right text-green-800 font-medium bg-green-50/30">
+                        <td className={["px-3 py-2.5 text-right font-medium bg-green-50/30", isHidden ? "text-gray-400" : "text-green-800"].join(" ")}>
                           {fmtMoney(row.collectedTotal)}
                         </td>
                         {/* % การเก็บ */}
-                        <td className={["px-3 py-2.5 text-right", rateBg].join(" ")}>
+                        <td className={["px-3 py-2.5 text-right", isHidden ? "text-gray-400" : rateBg].join(" ")}>
                           <div className="flex items-center justify-end gap-1">
                             {fmtPct(collectionRate)}
-                            {collectionRate >= 100 && <TrendingUp className="w-3.5 h-3.5 text-green-600" />}
-                            {collectionRate < 60 && collectionRate > 0 && <TrendingDown className="w-3.5 h-3.5 text-red-500" />}
+                            {!isHidden && collectionRate >= 100 && <TrendingUp className="w-3.5 h-3.5 text-green-600" />}
+                            {!isHidden && collectionRate < 60 && collectionRate > 0 && <TrendingDown className="w-3.5 h-3.5 text-red-500" />}
                           </div>
                         </td>
                         {/* ยอดขายเครื่อง */}
-                        <td className={["px-3 py-2.5 text-right", showDeviceSale ? "text-red-700" : "text-gray-300 line-through"].join(" ")}>
+                        <td className={["px-3 py-2.5 text-right", isHidden ? "text-gray-400" : showDeviceSale ? "text-red-700" : "text-gray-300 line-through"].join(" ")}>
                           {fmtMoney(row.deviceSaleAmount)}
                         </td>
                         {/* รายรับรวม */}
-                        <td className="px-3 py-2.5 text-right text-emerald-800 font-semibold bg-emerald-50/30">
+                        <td className={["px-3 py-2.5 text-right font-semibold bg-emerald-50/30", isHidden ? "text-gray-400" : "text-emerald-800"].join(" ")}>
                           {fmtMoney(revenue)}
                         </td>
                         {/* ต้นทุน */}
-                        <td className="px-3 py-2.5 text-right text-slate-700">
+                        <td className={["px-3 py-2.5 text-right", isHidden ? "text-gray-400" : "text-slate-700"].join(" ")}>
                           {fmtMoney(row.cost)}
                         </td>
                         {/* กำไรขั้นต้น */}
-                        <td className={["px-3 py-2.5 text-right bg-amber-50/30", profitColor].join(" ")}>
+                        <td className={["px-3 py-2.5 text-right bg-amber-50/30", isHidden ? "text-gray-400" : profitColor].join(" ")}>
                           {fmtMoney(grossProfit)}
                         </td>
                         {/* ยังไม่ถึงกำหนด */}
-                        <td className="px-3 py-2.5 text-right text-sky-700 font-medium bg-sky-50/30">
+                        <td className={["px-3 py-2.5 text-right font-medium bg-sky-50/30", isHidden ? "text-gray-400" : "text-sky-700"].join(" ")}>
                           {fmtMoney(row.notYetDue)}
                         </td>
                       </tr>
@@ -1347,21 +1449,22 @@ export default function DebtOverview() {
                     );
                   })}
                 </tbody>
-                {/* Summary row */}
+                {/* Summary row — sticky bottom */}
                 {monthRows.length > 0 && (() => {
-                  const totalContracts = monthRows.reduce((s, r) => s + r.contractCount, 0);
-                  const totalTarget = monthRows.reduce((s, r) => s + r.targetTotal, 0);
-                  const totalCollected = monthRows.reduce((s, r) => s + r.collectedTotal, 0);
-                  const totalDeviceSale = showDeviceSale ? monthRows.reduce((s, r) => s + r.deviceSaleAmount, 0) : 0;
+                  const visibleRows = monthRows.filter((r) => !hiddenMonths.has(r.monthKey));
+                  const totalContracts = visibleRows.reduce((s, r) => s + r.contractCount, 0);
+                  const totalTarget = visibleRows.reduce((s, r) => s + r.targetTotal, 0);
+                  const totalCollected = visibleRows.reduce((s, r) => s + r.collectedTotal, 0);
+                  const totalDeviceSale = showDeviceSale ? visibleRows.reduce((s, r) => s + r.deviceSaleAmount, 0) : 0;
                   const totalRevenue = totalCollected + totalDeviceSale;
-                  const totalCost = monthRows.reduce((s, r) => s + r.cost, 0);
+                  const totalCost = visibleRows.reduce((s, r) => s + r.cost, 0);
                   const totalProfit = totalRevenue - totalCost;
-                  const totalNotYetDue = monthRows.reduce((s, r) => s + r.notYetDue, 0);
+                  const totalNotYetDue = visibleRows.reduce((s, r) => s + r.notYetDue, 0);
                   const overallRate = totalTarget > 0 ? (totalCollected / totalTarget) * 100 : 0;
                   return (
-                    <tfoot>
-                      <tr className="bg-gradient-to-r from-slate-800 to-slate-900 text-white font-bold border-t-2 border-slate-600">
-                        <td className="px-3 py-3 sticky left-0 bg-slate-800 z-10">รวมทั้งหมด</td>
+                    <tfoot className="sticky bottom-0 z-20 border-t-2 border-slate-400 shadow-[0_-2px_8px_rgba(0,0,0,0.12)]">
+                      <tr className="bg-slate-800 text-white font-bold">
+                        <td className="px-3 py-3 sticky left-0 z-30 bg-slate-800">รวมทั้งหมด</td>
                         <td className="px-3 py-3 text-right">
                           <span className="inline-flex items-center justify-center bg-white/20 rounded-full px-2.5 py-0.5 text-xs font-bold">
                             {totalContracts.toLocaleString()}
@@ -1381,9 +1484,11 @@ export default function DebtOverview() {
                 })()}
               </table>
             </div>
-            <div className="mt-2 text-xs text-gray-400 text-right">
-              แสดง {monthRows.length} เดือน จาก {filteredTargetRows.length.toLocaleString()} สัญญา (target)
-            </div>
+          </div>
+        )}
+        {hasData && !isLoading && (
+          <div className="flex-shrink-0 px-4 py-1.5 text-xs text-gray-400 text-right bg-white border-t border-gray-100">
+            แสดง {monthRows.length} เดือน จาก {filteredTargetRows.length.toLocaleString()} สัญญา (target) / {filteredCollectedRows.length.toLocaleString()} สัญญา (collected)
           </div>
         )}
       </div>

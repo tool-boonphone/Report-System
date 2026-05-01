@@ -563,7 +563,7 @@ export async function getTargetChunk(params: {
       ORDER BY contract_external_id, period
     `),
     db.execute(sql`
-      SELECT external_id, phone
+      SELECT external_id, phone, finance_amount, commission_net
       FROM contracts
       WHERE section = ${section}
         AND external_id IN (${sql.raw(contractIds.map((id) => `'${id.replace(/'/g, "''")}'`).join(","))})
@@ -574,10 +574,15 @@ export async function getTargetChunk(params: {
   const rows: any[] = (rawResult as any)[0] ?? rawResult;
   const phoneRows: any[] = (phoneResult as any)[0] ?? phoneResult;
 
-  // ── 3. Build phone map ────────────────────────────────────────────────────
+  // ── 3. Build phone + finance map ─────────────────────────────────────────
   const phoneMap = new Map<string, string | null>();
+  const financeMap = new Map<string, { financeAmount: number | null; commissionNet: number | null }>();
   for (const r of phoneRows) {
     phoneMap.set(String(r.external_id), r.phone ?? null);
+    financeMap.set(String(r.external_id), {
+      financeAmount: r.finance_amount != null ? Number(r.finance_amount) : null,
+      commissionNet: r.commission_net != null ? Number(r.commission_net) : null,
+    });
   }
 
   // ── 4. Group rows by contract ─────────────────────────────────────────────
@@ -654,6 +659,8 @@ export async function getTargetChunk(params: {
       debtStatus,
       daysOverdue,
       installments,
+      financeAmount: financeMap.get(extId)?.financeAmount ?? null,
+      commissionNet: financeMap.get(extId)?.commissionNet ?? null,
     });
   }
 

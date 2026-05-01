@@ -1277,3 +1277,16 @@ Task list:
 - [ ] P131-4: เปลี่ยน "ยังไม่ครบกำหนด" → "ยังไม่ถึงกำหนด" ทุกจุด
 - [ ] P131-5: ตัดคอลัมน์ "แสดง" (eye toggle per row) ออก
 - [ ] P131-6: ย้ายไอคอนเปิด/ปิดตา (hiddenMonths toggle) มาไว้ที่คอลัมน์ "เดือน-ปี" แทน
+
+## Phase 132 — DebtOverview แก้ไข 6 จุด (2026-05-01)
+- [x] P132-1: แก้ต้นทุน FF=0 — getTargetChunk JOIN contracts เพื่อดึง finance_amount + commission_net แล้ว return financeAmount/commissionNet
+- [x] P132-2: eye toggle — เปลี่ยนจากซ่อน row เป็นแสดงสีเทา ไม่นำไปคำนวณ grand total + Badge
+- [x] P132-3: Sticky header — หัวตารางต้อง sticky เมื่อเลื่อนจอลง
+- [x] P132-4: Sticky footer — row รวมทั้งหมดต้องค้างอยู่ล่างสุดเสมอ
+- [x] P132-5: Horizontal scroll — ตารางต้องเลื่อนซ้าย-ขวาได้บนจอแคบ
+- [x] P132-6: ตัดข้อความ "ของสัญญาในเดือน-ปีนั้น" ออกจากคำอธิบาย column info dialog
+- [ ] P132-7: Commit + Push GitHub + Checkpoint
+
+## Phase 132 เพิ่มเติม — DebtOverview เพิ่มฟิลเตอร์ปีที่อนุมัติ + ปรับ layout ตาราง
+- [x] P132-8: เพิ่มฟิลเตอร์ "ปีที่อนุมัติ" แบบ multi-select ต่อจาก "เดือน-ปีที่อนุมัติ"
+- [x] P132-9: ปรับ layout ตารางให้เหมือนหน้าสรุปรายเดือน (fullHeight, sticky thead, sticky tfoot)
