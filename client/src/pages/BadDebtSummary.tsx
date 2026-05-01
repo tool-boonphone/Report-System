@@ -103,7 +103,7 @@ export default function BadDebtSummary() {
   const [approveMonth, setApproveMonth] = useState("");
   const [saleMonth, setSaleMonth] = useState("");
   const [filterYear, setFilterYear] = useState("");
-  const [activeTab, setActiveTab] = useState<ActiveTab>("list");
+  const [activeTab, setActiveTab] = useState<ActiveTab>("yearly");
   const [sortKey, setSortKey] = useState<SortKey>("saleDate");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [monthlySortKey, setMonthlySortKey] = useState<MonthlySortKey>("ym");
@@ -330,9 +330,9 @@ export default function BadDebtSummary() {
 
   /* ── tabs ── */
   const tabs: { key: ActiveTab; label: string; icon: React.ReactNode }[] = [
-    { key: "list", label: "รายการขายเครื่อง", icon: <List className="w-4 h-4" /> },
-    { key: "monthly", label: "สรุปรายเดือน", icon: <CalendarDays className="w-4 h-4" /> },
     { key: "yearly", label: "สรุปรายปี", icon: <CalendarRange className="w-4 h-4" /> },
+    { key: "monthly", label: "สรุปรายเดือน", icon: <CalendarDays className="w-4 h-4" /> },
+    { key: "list", label: "รายการขายเครื่อง", icon: <List className="w-4 h-4" /> },
   ];
 
   if (!canView) {
