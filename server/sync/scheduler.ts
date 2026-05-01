@@ -1,7 +1,10 @@
 /**
- * Simple in-process scheduler — runs once a day at 06:00 every day.
- * The process checks once a minute; when hour matches 06 and we haven't
- * already synced today, it kicks off a run for each configured section.
+ * Simple in-process scheduler — runs once a day at 06:00 Asia/Bangkok time.
+ * The process checks once a minute; when hour matches 06 (Bangkok time) and we
+ * haven't already synced today, it kicks off a run for each configured section.
+ *
+ * IMPORTANT: Server may run in UTC or other timezones. All time comparisons
+ * MUST use Asia/Bangkok (UTC+7) to match business requirements.
  */
 
 import type { SectionKey } from "../../shared/const";
@@ -16,27 +19,49 @@ function isSectionConfigured(section: SectionKey): boolean {
   return Boolean(client && client.isConfigured());
 }
 
-const SYNC_HOUR = 6; // 06:00 daily
+const SYNC_HOUR = 6; // 06:00 daily (Asia/Bangkok)
+const BANGKOK_TZ = "Asia/Bangkok";
 
 let _timer: NodeJS.Timeout | null = null;
-let _lastTick: Record<string, string> = {}; // `${section}-${YYYY-MM-DD}`
+let _lastTick: Record<string, string> = {}; // `${section}-${YYYY-MM-DD}` in Bangkok time
 
-function currentDaySlot(d = new Date()): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+/**
+ * Get current date/time parts in Asia/Bangkok timezone.
+ * Uses Intl.DateTimeFormat which is available in Node.js without any packages.
+ */
+function getBangkokTimeParts(d = new Date()): { hour: number; minute: number; daySlot: string } {
+  const fmt = new Intl.DateTimeFormat("en-CA", {
+    timeZone: BANGKOK_TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+  const parts = fmt.formatToParts(d);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "0";
+  const hour = parseInt(get("hour"), 10);
+  const minute = parseInt(get("minute"), 10);
+  const daySlot = `${get("year")}-${get("month")}-${get("day")}`;
+  return { hour, minute, daySlot };
 }
 
 function isSyncTime(d = new Date()): boolean {
-  return d.getHours() === SYNC_HOUR;
+  const { hour } = getBangkokTimeParts(d);
+  return hour === SYNC_HOUR;
+}
+
+function currentDaySlot(d = new Date()): string {
+  return getBangkokTimeParts(d).daySlot;
 }
 
 /** One tick — called once a minute. */
 async function tick() {
   const now = new Date();
-  if (!isSyncTime(now)) return;
-  if (now.getMinutes() !== 0) return; // only at :00
+  const { hour, minute } = getBangkokTimeParts(now);
+  if (hour !== SYNC_HOUR) return;
+  if (minute !== 0) return; // only at :00
   const slot = currentDaySlot(now);
 
   for (const section of SECTIONS as readonly SectionKey[]) {
@@ -45,7 +70,7 @@ async function tick() {
     if (_lastTick[section] === slot) continue;
     if (isSyncRunning(section)) continue;
     _lastTick[section] = slot;
-    console.log(`[scheduler] ${tag} triggering daily cron sync`);
+    console.log(`[scheduler] ${tag} triggering daily cron sync (Bangkok time: ${hour}:${String(minute).padStart(2,"0")})`);
     runSectionSync(section, "cron").catch((err) =>
       console.error(`[scheduler] ${tag} failed:`, err),
     );
@@ -59,15 +84,16 @@ async function tick() {
  */
 export async function startScheduler() {
   if (_timer) return;
-  console.log("[scheduler] started (daily at 06:00)");
+  const now = new Date();
+  const { hour: bangkokHour, daySlot } = getBangkokTimeParts(now);
+  console.log(`[scheduler] started (daily at 06:00 Asia/Bangkok) — current Bangkok time: ${bangkokHour}:xx, slot: ${daySlot}`);
   _timer = setInterval(() => {
     tick().catch((err) => console.error("[scheduler] tick error:", err));
   }, 60_000);
 
   // Missed-sync recovery: if today's sync hasn't run yet (last sync older than
-  // 23h) and we're past 06:00, kick one immediately on startup.
-  const now = new Date();
-  const pastSyncHour = now.getHours() >= SYNC_HOUR;
+  // 23h) and we're past 06:00 Bangkok time, kick one immediately on startup.
+  const pastSyncHour = bangkokHour >= SYNC_HOUR;
   if (pastSyncHour) {
     for (const section of SECTIONS as readonly SectionKey[]) {
       if (!isSectionConfigured(section)) {
