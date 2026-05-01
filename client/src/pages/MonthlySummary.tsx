@@ -922,21 +922,44 @@ export default function MonthlySummary() {
         )}
 
         {/* ── Badge: target ───────────────────────────────────────────────────── */}
+        {/* เป้าเก็บหนี้ = SUM(principal+interest+fee) ทุกงวดถึงกำหนด + penalty + unlock_fee งวดล่าสุด */}
         {tab==="target"&&(
           <div className="bg-indigo-50/60 border-b border-indigo-200 px-4 py-2 flex flex-wrap items-center gap-2">
-            {MONEY_BADGE_ITEMS.filter(i=>i.key!=="discount"&&i.key!=="overpaid").map(({key,label,icon,canToggle})=>{
-              const isOn=targetVis[key as MoneyBadgeKey];const val=grandBadgeTarget[key as keyof MoneyBreakdown];
-              return(
-                <button key={key} type="button" onClick={()=>{if(!canToggle)return;setTargetVis((p)=>({...p,[key]:!p[key as MoneyBadgeKey]}));}}
-                  className={["flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border transition-colors",isOn?"bg-indigo-100 border-indigo-300 text-indigo-800 hover:bg-indigo-200":"bg-gray-100 border-gray-200 text-gray-400 hover:bg-gray-200"].join(" ")}>
-                  {isOn?<Eye className="w-3 h-3"/>:<EyeOff className="w-3 h-3"/>}{icon}<span>{label}</span>
-                  <span className={["font-semibold ml-0.5",isOn?"":"text-gray-400"].join(" ")}>{fmtMoney(val)}</span>
-                </button>
-              );
-            })}
+            {/* เงินต้น */}
+            <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border bg-indigo-100 border-indigo-300 text-indigo-800">
+              <Banknote className="w-3 h-3"/>
+              <span>เงินต้น</span>
+              <span className="font-semibold ml-0.5">{fmtMoney(grandBadgeTarget.principal)}</span>
+            </div>
+            {/* ดอกเบี้ย */}
+            <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border bg-indigo-100 border-indigo-300 text-indigo-800">
+              <Percent className="w-3 h-3"/>
+              <span>ดอกเบี้ย</span>
+              <span className="font-semibold ml-0.5">{fmtMoney(grandBadgeTarget.interest)}</span>
+            </div>
+            {/* ค่าดำเนินการ */}
+            <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border bg-indigo-100 border-indigo-300 text-indigo-800">
+              <Coins className="w-3 h-3"/>
+              <span>ค่าดำเนินการ</span>
+              <span className="font-semibold ml-0.5">{fmtMoney(grandBadgeTarget.fee)}</span>
+            </div>
+            {/* ค่าปรับ */}
+            <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border bg-indigo-100 border-indigo-300 text-indigo-800">
+              <Gavel className="w-3 h-3"/>
+              <span>ค่าปรับ</span>
+              <span className="font-semibold ml-0.5">{fmtMoney(grandBadgeTarget.penalty)}</span>
+            </div>
+            {/* ค่าปลดล็อก */}
+            <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border bg-indigo-100 border-indigo-300 text-indigo-800">
+              <Tag className="w-3 h-3"/>
+              <span>ค่าปลดล็อก</span>
+              <span className="font-semibold ml-0.5">{fmtMoney(grandBadgeTarget.unlockFee)}</span>
+            </div>
+            {/* รวมเป้าเก็บหนี้ = total_target จาก server (ถูกต้องแล้ว) */}
             <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border bg-indigo-700 border-indigo-800 text-white font-semibold">
-              <Banknote className="w-3.5 h-3.5"/><span>รวมเป้าเก็บหนี้</span>
-              <span>{fmtMoney(computeMoneyTotal(grandBadgeTarget,{...targetVis,discount:false,overpaid:false}))}</span>
+              <Banknote className="w-3.5 h-3.5"/>
+              <span>รวมเป้าเก็บหนี้</span>
+              <span>{fmtMoney(grandBadgeTarget.total)}</span>
             </div>
           </div>
         )}
