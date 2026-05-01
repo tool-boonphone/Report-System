@@ -338,7 +338,7 @@ export default function SuspectedBadDebt() {
     section ? { section } : (undefined as any),
     { enabled: canView && !!section, staleTime: 5 * 60 * 1000 },
   );
-  const allRows: Row[] = (data?.rows ?? []) as Row[];
+  const allRows: Row[] = useMemo(() => (data?.rows ?? []) as Row[], [data?.rows]);
 
   /* ── approve month options ── */
   const approveMonthOptions = useMemo(() => {
