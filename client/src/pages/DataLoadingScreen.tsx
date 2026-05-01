@@ -187,12 +187,13 @@ export default function DataLoadingScreen() {
     if (startedRef.current) return;
     startedRef.current = true;
 
-    // โหลดทั้ง 3 พร้อมกัน
-    await Promise.all([
-      fetchContracts(sec),
-      fetchDebt(sec, "target"),
-      fetchDebt(sec, "collected"),
-    ]);
+    // โหลดทีละแถบ (sequential) เพื่อลด load บน server และป้องกัน race condition
+    // 1) สัญญา
+    await fetchContracts(sec);
+    // 2) เป้าเก็บหนี้
+    await fetchDebt(sec, "target");
+    // 3) ยอดเก็บหนี้
+    await fetchDebt(sec, "collected");
   }, [fetchContracts, fetchDebt]);
 
   // ─── Effects ─────────────────────────────────────────────────────────────
