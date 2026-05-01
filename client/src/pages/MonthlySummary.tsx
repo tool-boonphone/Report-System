@@ -5,7 +5,7 @@
  *   1. จำนวนสัญญา   (count)          — slate
  *   2. ยอดหนี้รวม    (installTotal)   — purple (net_amount ทุกงวด = principal+interest+fee)
  *   3. เป้าเก็บหนี้   (target)         — indigo (งวดที่ถึงกำหนดแล้ว)
- *   4. ยอดที่ชำระแล้ว (paid)           — green
+ *   4. ยอดเก็บหนี้    (paid)           — green
  *   5. หนี้ค้างชำระ   (due)            — orange
  *   6. ยังไม่ถึงกำหนด (notYetDue)     — blue
  */
@@ -288,7 +288,7 @@ const TAB_INFO_CONTENT: {title:string;items:{label:string;desc:string;color?:str
     {label:"จำนวนสัญญา",    desc:"จำนวนสัญญาทั้งหมดที่อนุมัติ จัดกลุ่มตามสถานะหนี้ปัจจุบัน (ปกติ / เกินกำหนด / ระงับ / สิ้นสุด / หนี้เสีย)",color:"text-slate-700"},
     {label:"ยอดหนี้รวม",     desc:"เงินต้นที่ต้องชำระทั้งหมด = SUM(net_amount) ทุกงวดตั้งแต่งวดแรกถึงงวดสุดท้าย (เงินต้น + ดอกเบี้ย + ค่าดำเนินการ ไม่รวมค่าปรับ/ค่าปลดล็อก) เช่น ผ่องงวดละ 2,000 × 12 งวด = 24,000",color:"text-purple-700"},
     {label:"เป้าเก็บหนี้",     desc:"ยอดค่างวด (เงินต้น + ดอกเบี้ย + ค่าดำเนินการ + ค่าปรับ + ค่าปลดล็อก) ตั้งแต่งวดแรกถึงงวดปัจจุบัน (เฉพาะงวดที่ถึงกำหนดแล้ว)",color:"text-indigo-700"},
-    {label:"ยอดที่ชำระแล้ว", desc:"ยอดเงินที่ลูกค้าชำระจริง แยกตามประเภท (เงินต้น / ดอกเบี้ย / ค่าดำเนินการ / ค่าปรับ / ค่าปลดล็อก / ชำระเกิน / หนี้เสีย)",color:"text-green-700"},
+    {label:"ยอดเก็บหนี้",      desc:"ยอดเงินที่ลูกค้าชำระจริง แยกตามประเภท (เงินต้น / ดอกเบี้ย / ค่าดำเนินการ / ค่าปรับ / ค่าปลดล็อก / ชำระเกิน / หนี้เสีย)",color:"text-green-700"},
     {label:"หนี้ค้างชำระ",   desc:"ยอดค้างชำระจากงวดก่อนหน้าจนถึงงวดปัจจุบัน + (ค่าปรับ + ค่าปลดล็อกของงวดล่าสุด) ไม่รวมยอดที่ชำระเข้ามาแล้ว",color:"text-orange-700"},
     {label:"ยังไม่ถึงกำหนด", desc:"ยอดค่างวด (เฉพาะเงินต้น + ดอกเบี้ย + ค่าดำเนินการ ไม่รวมค่าปรับ/ค่าปลดล็อก) ของงวดที่ยังไม่ถึงกำหนดชำระ",color:"text-blue-700"},
   ],
@@ -353,7 +353,7 @@ const INFO_CONTENT: Record<string,{title:string;items:{label:string;desc:string}
     ]
   },
   paid: {
-    title: "ยอดที่ชำระแล้ว — ที่มาของตัวเลขในคอลัมน์",
+    title: "ยอดเก็บหนี้ — ที่มาของตัวเลขในคอลัมน์",
     items: [
       {label:"เดือน-ปีที่อนุมัติ",desc:"เดือนและปีที่อนุมัติสัญญา"},
       {label:"ยอดชำระ",desc:"ยอดเงินที่ชำระจริงในเดือนนั้นๆ (รวมทุกรายการ)"},
@@ -705,7 +705,7 @@ export default function MonthlySummary() {
     {key:"count",        label:"จำนวนสัญญา",       activeClass:"border-slate-600 text-slate-700",   filterCount:countFilterCount},
     {key:"installTotal", label:"ยอดหนี้รวม",       activeClass:"border-purple-600 text-purple-700", filterCount:[installApproveMonths.size>0,installApproveYears.size>0,installProductType.size>0,installDeviceFamily].filter(Boolean).length},
     {key:"target",       label:"เป้าเก็บหนี้",       activeClass:"border-indigo-600 text-indigo-700", filterCount:targetFilterCount},
-    {key:"paid",         label:"ยอดที่ชำระแล้ว",  activeClass:"border-green-600 text-green-700",   filterCount:paidFilterCount},
+    {key:"paid",         label:"ยอดเก็บหนี้",     activeClass:"border-green-600 text-green-700",   filterCount:paidFilterCount},
     {key:"due",          label:"หนี้ค้างชำระ",   activeClass:"border-orange-600 text-orange-700", filterCount:dueFilterCount},
     {key:"notYetDue",    label:"ยังไม่ถึงกำหนด", activeClass:"border-blue-600 text-blue-700",     filterCount:notYetDueFilterCount},
   ];
