@@ -3868,6 +3868,7 @@ export async function listSuspectedBadDebt(params: { section: SectionKey }): Pro
     multiplier: number | null;
     commissionNet: number | null;
     cost: number;
+    installmentCount: number | null;
     paidInstallments: number;
     totalPaid: number;
     debtValue: number;
@@ -3997,6 +3998,7 @@ export async function listSuspectedBadDebt(params: { section: SectionKey }): Pro
       multiplier: cInfo?.multiplier != null ? Number(cInfo.multiplier) : null,
       commissionNet,
       cost,
+      installmentCount: s.installment_count != null ? Number(s.installment_count) : null,
       paidInstallments: collected.paidInstallments,
       totalPaid,
       debtValue,

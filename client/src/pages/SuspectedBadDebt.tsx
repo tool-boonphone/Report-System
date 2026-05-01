@@ -1,14 +1,14 @@
 /**
- * SuspectedBadDebt — Phase 105
- * หน้าหนี้สงสัยจะเสีย: แสดงสัญญาที่มีสถานะหนี้ "เกิน 61-90" หรือ "เกิน >90"
+ * SuspectedBadDebt — Phase 130
+ * หน้าหนี้สงสัยจะเสีย: Virtual Scroll, filter UI ใหม่, งวดรูปแบบ 0/12
  */
 import React, {
   useCallback,
-  useEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { toast } from "sonner";
 import {
   AlertTriangle,
@@ -16,7 +16,6 @@ import {
   ChevronUp,
   ChevronsUpDown,
   Download,
-  Filter as FilterIcon,
   Search,
   X,
 } from "lucide-react";
@@ -28,13 +27,6 @@ import { trpc } from "@/lib/trpc";
 import { Spinner } from "@/components/ui/spinner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   Popover,
   PopoverContent,
@@ -87,7 +79,12 @@ const fmtMonthLabel = (ym: string) => {
 const deriveOS = (model: string | null): "iOS" | "Android" | null => {
   if (!model) return null;
   const m = model.toLowerCase();
-  if (m.startsWith("iphone") || m.startsWith("ipad") || m.startsWith("ไอโฟน") || m.startsWith("ไอแพด"))
+  if (
+    m.startsWith("iphone") ||
+    m.startsWith("ipad") ||
+    m.startsWith("ไอโฟน") ||
+    m.startsWith("ไอแพด")
+  )
     return "iOS";
   return "Android";
 };
@@ -95,10 +92,8 @@ const deriveOS = (model: string | null): "iOS" | "Android" | null => {
 /** Parse model name: extract base model + capacity */
 const parseModelParts = (model: string | null) => {
   if (!model) return { base: null, capacity: null };
-  // Try to extract capacity pattern like "128 Gb", "256GB", "64 GB"
   const capMatch = model.match(/(\d+)\s*[Gg][Bb]/);
   const capacity = capMatch ? `${capMatch[1]} GB` : null;
-  // Base = everything before capacity pattern or full model
   const base = capacity
     ? model.replace(/\s*\d+\s*[Gg][Bb].*$/, "").trim()
     : model.trim();
@@ -122,7 +117,6 @@ type SortKey =
   | "model"
   | "sellPrice"
   | "financeAmount"
-  | "multiplier"
   | "commissionNet"
   | "cost"
   | "paidInstallments"
@@ -143,6 +137,7 @@ type Row = {
   multiplier: number | null;
   commissionNet: number | null;
   cost: number;
+  installmentCount: number | null;
   paidInstallments: number;
   totalPaid: number;
   debtValue: number;
@@ -163,9 +158,7 @@ function SummaryCard({
   colorClass: string;
 }) {
   return (
-    <div
-      className={`rounded-lg border p-3 flex items-center gap-3 bg-white ${colorClass}`}
-    >
+    <div className={`rounded-lg border p-3 flex items-center gap-3 bg-white ${colorClass}`}>
       <div className="shrink-0">{icon}</div>
       <div className="min-w-0">
         <p className="text-xs text-gray-500 truncate">{label}</p>
@@ -194,99 +187,126 @@ function SortIcon({
   );
 }
 
-/* ─── Pagination ─────────────────────────────────────────────────────────── */
-function Pagination({
-  total,
-  page,
-  pageSize,
-  onPage,
-  onPageSize,
+/* ─── Th ─────────────────────────────────────────────────────────────────── */
+function Th({
+  col,
+  sortKey,
+  sortDir,
+  onSort,
+  className,
+  children,
 }: {
-  total: number;
-  page: number;
-  pageSize: number;
-  onPage: (p: number) => void;
-  onPageSize: (s: number) => void;
+  col: SortKey;
+  sortKey: SortKey;
+  sortDir: SortDir;
+  onSort: (k: SortKey) => void;
+  className?: string;
+  children: React.ReactNode;
 }) {
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
-  const pages = useMemo(() => {
-    const arr: (number | "...")[] = [];
-    if (totalPages <= 7) {
-      for (let i = 1; i <= totalPages; i++) arr.push(i);
-    } else {
-      arr.push(1);
-      if (page > 3) arr.push("...");
-      for (
-        let i = Math.max(2, page - 1);
-        i <= Math.min(totalPages - 1, page + 1);
-        i++
-      )
-        arr.push(i);
-      if (page < totalPages - 2) arr.push("...");
-      arr.push(totalPages);
-    }
-    return arr;
-  }, [page, totalPages]);
-
   return (
-    <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2 border-t bg-white text-xs text-gray-600">
-      <div className="flex items-center gap-2">
-        <span>แสดง</span>
-        <select
-          value={pageSize}
-          onChange={(e) => {
-            onPageSize(Number(e.target.value));
-            onPage(1);
-          }}
-          className="border rounded px-1.5 py-0.5 text-xs"
-        >
-          {[25, 50, 100, 250, 500].map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </select>
-        <span>
-          รายการ / {total.toLocaleString()} รายการทั้งหมด
-        </span>
-      </div>
-      <div className="flex items-center gap-1">
+    <th
+      className={cn(
+        "px-3 py-2 text-left text-xs font-semibold whitespace-nowrap cursor-pointer select-none hover:bg-amber-100 transition-colors",
+        className,
+      )}
+      onClick={() => onSort(col)}
+    >
+      <span className="inline-flex items-center gap-0.5">
+        {children}
+        <SortIcon col={col} sortKey={sortKey} sortDir={sortDir} />
+      </span>
+    </th>
+  );
+}
+
+/* ─── MultiSelectFilter ──────────────────────────────────────────────────── */
+function MultiSelectFilter({
+  label,
+  selected,
+  onChange,
+  options,
+  placeholder = "ทั้งหมด",
+  formatOption,
+}: {
+  label: string;
+  selected: Set<string>;
+  onChange: (v: Set<string>) => void;
+  options: string[];
+  placeholder?: string;
+  formatOption?: (v: string) => string;
+}) {
+  const [open, setOpen] = useState(false);
+  const toggle = (s: string) => {
+    const next = new Set(selected);
+    if (next.has(s)) next.delete(s);
+    else next.add(s);
+    onChange(next);
+  };
+  const labelText =
+    selected.size === 0
+      ? placeholder
+      : selected.size === 1
+        ? (formatOption ? formatOption(Array.from(selected)[0]) : Array.from(selected)[0])
+        : `${selected.size} รายการ`;
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
         <button
-          disabled={page === 1}
-          onClick={() => onPage(page - 1)}
-          className="px-2 py-1 rounded border disabled:opacity-40 hover:bg-gray-100"
+          type="button"
+          className={cn(
+            "flex items-center gap-1.5 h-9 px-3 py-2 rounded-md border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[140px] justify-between",
+            selected.size > 0
+              ? "border-indigo-400 bg-indigo-50 text-indigo-800 font-medium"
+              : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50",
+          )}
         >
-          ‹
+          <span className="truncate text-xs">{labelText}</span>
+          <ChevronsUpDown className="w-3.5 h-3.5 flex-shrink-0 text-gray-400" />
         </button>
-        {pages.map((p, i) =>
-          p === "..." ? (
-            <span key={`ellipsis-${i}`} className="px-1">
-              ...
-            </span>
-          ) : (
-            <button
-              key={p}
-              onClick={() => onPage(p as number)}
-              className={cn(
-                "px-2 py-1 rounded border",
-                page === p
-                  ? "bg-blue-600 text-white border-blue-600"
-                  : "hover:bg-gray-100",
-              )}
-            >
-              {p}
-            </button>
-          ),
-        )}
-        <button
-          disabled={page === totalPages}
-          onClick={() => onPage(page + 1)}
-          className="px-2 py-1 rounded border disabled:opacity-40 hover:bg-gray-100"
-        >
-          ›
-        </button>
-      </div>
-    </div>
+      </PopoverTrigger>
+      <PopoverContent className="w-64 p-0" align="start">
+        <Command>
+          <CommandInput placeholder={`ค้นหา ${label}...`} className="h-8 text-xs" />
+          <CommandList>
+            <CommandEmpty>ไม่พบตัวเลือก</CommandEmpty>
+            <CommandGroup>
+              <CommandItem
+                value="__all__"
+                onSelect={() => { onChange(new Set()); setOpen(false); }}
+              >
+                <Check
+                  className={cn(
+                    "mr-2 h-3.5 w-3.5",
+                    selected.size === 0 ? "opacity-100 text-indigo-600" : "opacity-0",
+                  )}
+                />
+                <span className={selected.size === 0 ? "text-indigo-600 font-medium text-xs" : "text-gray-500 text-xs"}>
+                  {placeholder}
+                </span>
+              </CommandItem>
+              {options.map((opt) => (
+                <CommandItem
+                  key={opt}
+                  value={opt}
+                  onSelect={(v) => {
+                    const original = options.find((o) => o.toLowerCase() === v) ?? v;
+                    toggle(original);
+                  }}
+                >
+                  <Check
+                    className={cn(
+                      "mr-2 h-3.5 w-3.5",
+                      selected.has(opt) ? "opacity-100 text-indigo-600" : "opacity-0",
+                    )}
+                  />
+                  <span className="text-xs">{formatOption ? formatOption(opt) : opt}</span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -300,21 +320,18 @@ export default function SuspectedBadDebt() {
 
   /* ── filters ── */
   const [search, setSearch] = useState("");
-  const [approveMonth, setApproveMonth] = useState("__all__");
-  const [debtStatusFilter, setDebtStatusFilter] = useState("__all__");
-  const [osFilter, setOsFilter] = useState("__all__"); // "iOS" | "Android" | "__all__"
-  const [modelFilter, setModelFilter] = useState<string[]>([]);
+  const [approveMonthFilter, setApproveMonthFilter] = useState<Set<string>>(new Set());
+  const [debtStatusFilter, setDebtStatusFilter] = useState<Set<string>>(new Set());
+  const [osFilter, setOsFilter] = useState<Set<string>>(new Set());
+  const [modelFilter, setModelFilter] = useState<Set<string>>(new Set());
   const [debtValueMin, setDebtValueMin] = useState("");
-  const [filterOpen, setFilterOpen] = useState(true);
-  const [modelPopoverOpen, setModelPopoverOpen] = useState(false);
 
   /* ── sort ── */
   const [sortKey, setSortKey] = useState<SortKey>("debtValue");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
-  /* ── pagination ── */
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
+  /* ── virtual scroll ref ── */
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   /* ── data ── */
   const { data, isLoading } = trpc.suspectedBadDebt.list.useQuery(
@@ -335,7 +352,7 @@ export default function SuspectedBadDebt() {
     return Array.from(set).sort().reverse();
   }, [allRows]);
 
-  /* ── model options (sorted: base model + capacity) ── */
+  /* ── model options ── */
   const modelOptions = useMemo(() => {
     const set = new Set<string>();
     for (const r of allRows) {
@@ -356,7 +373,6 @@ export default function SuspectedBadDebt() {
   const filteredRows = useMemo(() => {
     let rows = allRows;
 
-    // search: contractNo | customerName | phone
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       rows = rows.filter(
@@ -367,92 +383,46 @@ export default function SuspectedBadDebt() {
       );
     }
 
-    // approveMonth filter
-    if (approveMonth && approveMonth !== "__all__") {
-      rows = rows.filter((r) => r.approveDate?.startsWith(approveMonth));
+    if (approveMonthFilter.size > 0) {
+      rows = rows.filter((r) => r.approveDate && approveMonthFilter.has(r.approveDate.slice(0, 7)));
     }
 
-    // debtStatus filter
-    if (debtStatusFilter && debtStatusFilter !== "__all__") {
-      rows = rows.filter((r) => r.debtStatus === debtStatusFilter);
+    if (debtStatusFilter.size > 0) {
+      rows = rows.filter((r) => debtStatusFilter.has(r.debtStatus));
     }
 
-    // iOS/Android filter
-    if (osFilter && osFilter !== "__all__") {
-      rows = rows.filter((r) => deriveOS(r.model) === osFilter);
+    if (osFilter.size > 0) {
+      rows = rows.filter((r) => {
+        const os = deriveOS(r.model);
+        return os && osFilter.has(os);
+      });
     }
 
-    // model multi-select filter
-    if (modelFilter.length > 0) {
-      const modelSet = new Set(modelFilter);
-      rows = rows.filter((r) => r.model && modelSet.has(r.model));
+    if (modelFilter.size > 0) {
+      rows = rows.filter((r) => r.model && modelFilter.has(r.model));
     }
 
-    // debtValue min filter
     if (debtValueMin !== "" && !isNaN(Number(debtValueMin))) {
       const minVal = Number(debtValueMin);
       rows = rows.filter((r) => r.debtValue > minVal);
     }
 
-    // sort
     rows = [...rows].sort((a, b) => {
       let av: any, bv: any;
       switch (sortKey) {
-        case "approveDate":
-          av = a.approveDate ?? "";
-          bv = b.approveDate ?? "";
-          break;
-        case "contractNo":
-          av = a.contractNo ?? "";
-          bv = b.contractNo ?? "";
-          break;
-        case "customerName":
-          av = a.customerName ?? "";
-          bv = b.customerName ?? "";
-          break;
-        case "phone":
-          av = a.phone ?? "";
-          bv = b.phone ?? "";
-          break;
-        case "model":
-          av = a.model ?? "";
-          bv = b.model ?? "";
-          break;
-        case "sellPrice":
-          av = a.sellPrice ?? 0;
-          bv = b.sellPrice ?? 0;
-          break;
-        case "financeAmount":
-          av = a.financeAmount ?? 0;
-          bv = b.financeAmount ?? 0;
-          break;
-        case "multiplier":
-          av = a.multiplier ?? 0;
-          bv = b.multiplier ?? 0;
-          break;
-        case "commissionNet":
-          av = a.commissionNet ?? 0;
-          bv = b.commissionNet ?? 0;
-          break;
-        case "cost":
-          av = a.cost;
-          bv = b.cost;
-          break;
-        case "paidInstallments":
-          av = a.paidInstallments;
-          bv = b.paidInstallments;
-          break;
-        case "totalPaid":
-          av = a.totalPaid;
-          bv = b.totalPaid;
-          break;
-        case "debtValue":
-          av = a.debtValue;
-          bv = b.debtValue;
-          break;
-        default:
-          av = 0;
-          bv = 0;
+        case "approveDate":   av = a.approveDate ?? "";   bv = b.approveDate ?? "";   break;
+        case "contractNo":    av = a.contractNo ?? "";    bv = b.contractNo ?? "";    break;
+        case "customerName":  av = a.customerName ?? "";  bv = b.customerName ?? "";  break;
+        case "phone":         av = a.phone ?? "";         bv = b.phone ?? "";         break;
+        case "model":         av = a.model ?? "";         bv = b.model ?? "";         break;
+        case "sellPrice":     av = a.sellPrice ?? 0;      bv = b.sellPrice ?? 0;      break;
+        case "financeAmount": av = a.financeAmount ?? 0;  bv = b.financeAmount ?? 0;  break;
+        case "commissionNet": av = a.commissionNet ?? 0;  bv = b.commissionNet ?? 0;  break;
+        case "cost":          av = a.cost;                bv = b.cost;                break;
+        case "paidInstallments": av = a.paidInstallments; bv = b.paidInstallments;   break;
+        case "totalPaid":     av = a.totalPaid;           bv = b.totalPaid;           break;
+        case "debtValue":     av = a.debtValue;           bv = b.debtValue;           break;
+        default:              av = 0;                     bv = 0;
       }
       if (av < bv) return sortDir === "asc" ? -1 : 1;
       if (av > bv) return sortDir === "asc" ? 1 : -1;
@@ -463,7 +433,7 @@ export default function SuspectedBadDebt() {
   }, [
     allRows,
     search,
-    approveMonth,
+    approveMonthFilter,
     debtStatusFilter,
     osFilter,
     modelFilter,
@@ -481,16 +451,20 @@ export default function SuspectedBadDebt() {
     return { count, cost, totalPaid, debtValue };
   }, [filteredRows]);
 
-  /* ── paginated rows ── */
-  const pagedRows = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return filteredRows.slice(start, start + pageSize);
-  }, [filteredRows, page, pageSize]);
-
-  /* ── reset page on filter change ── */
-  useEffect(() => {
-    setPage(1);
-  }, [search, approveMonth, debtStatusFilter, osFilter, modelFilter, debtValueMin]);
+  /* ── virtual scroll ── */
+  const rowVirtualizer = useVirtualizer({
+    count: filteredRows.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => 36,
+    overscan: 20,
+  });
+  const virtualRows = rowVirtualizer.getVirtualItems();
+  const totalSize = rowVirtualizer.getTotalSize();
+  const paddingTop = virtualRows.length > 0 ? virtualRows[0].start : 0;
+  const paddingBottom =
+    virtualRows.length > 0
+      ? totalSize - virtualRows[virtualRows.length - 1].end
+      : 0;
 
   /* ── sort handler ── */
   const handleSort = useCallback(
@@ -505,104 +479,83 @@ export default function SuspectedBadDebt() {
     [sortKey],
   );
 
-  /* ── export ── */
-  const handleExport = useCallback(async () => {
+  /* ── clear filters ── */
+  const hasFilter =
+    !!search ||
+    approveMonthFilter.size > 0 ||
+    debtStatusFilter.size > 0 ||
+    osFilter.size > 0 ||
+    modelFilter.size > 0 ||
+    !!debtValueMin;
+
+  const clearFilters = () => {
+    setSearch("");
+    setApproveMonthFilter(new Set());
+    setDebtStatusFilter(new Set());
+    setOsFilter(new Set());
+    setModelFilter(new Set());
+    setDebtValueMin("");
+  };
+
+  /* ── export CSV ── */
+  const handleExport = useCallback(() => {
     if (!canExport) {
-      toast.error("ไม่มีสิทธิ์ Export");
+      toast.error("คุณไม่มีสิทธิ์ Export ข้อมูล");
       return;
     }
-    try {
-      const { utils } = await import("xlsx");
-      const XLSX = await import("xlsx");
-      const wsData = [
-        [
-          "#",
-          "วันที่อนุมัติ",
-          "เลขที่สัญญา",
-          "ชื่อ-นามสกุล",
-          "เบอร์โทร",
-          "รุ่น",
-          "ราคา",
-          "ยอดจัดไฟแนนซ์",
-          "ตัวคูณ",
-          "ค่าคอมมิชชั่น",
-          "ต้นทุน",
-          "งวดที่ชำระ",
-          "ยอดเก็บค่างวด",
-          "มูลค่าหนี้",
-          "สถานะหนี้",
-        ],
-        ...filteredRows.map((r, i) => [
-          i + 1,
-          r.approveDate ? fmtDate(r.approveDate) : "",
-          r.contractNo ?? "",
-          r.customerName ?? "",
-          r.phone ?? "",
-          r.model ?? "",
-          r.sellPrice ?? 0,
-          r.financeAmount ?? 0,
-          r.multiplier ?? 0,
-          r.commissionNet ?? 0,
-          r.cost,
-          r.paidInstallments,
-          r.totalPaid,
-          r.debtValue,
-          r.debtStatus,
-        ]),
-      ];
-      const ws = utils.aoa_to_sheet(wsData);
-      const wb = utils.book_new();
-      utils.book_append_sheet(wb, ws, "หนี้สงสัยจะเสีย");
-      XLSX.writeFile(wb, `suspected-bad-debt-${section}-${new Date().toISOString().slice(0, 10)}.xlsx`);
-      toast.success("Export สำเร็จ");
-    } catch {
-      toast.error("Export ล้มเหลว");
-    }
+    const headers = [
+      "#","วันที่อนุมัติ","เลขที่สัญญา","ชื่อ-นามสกุล","เบอร์โทร",
+      "รุ่น","ราคา","ยอดจัดไฟแนนซ์","ค่าคอมมิชชั่น","ต้นทุน",
+      "งวดที่ชำระ","ยอดผ่อน","มูลค่าหนี้","สถานะหนี้",
+    ];
+    const rows = filteredRows.map((r, i) => [
+      i + 1,
+      r.approveDate ?? "",
+      r.contractNo ?? "",
+      r.customerName ?? "",
+      r.phone ?? "",
+      r.model ?? "",
+      r.sellPrice ?? 0,
+      r.financeAmount ?? 0,
+      r.commissionNet ?? 0,
+      r.cost,
+      `${r.paidInstallments}/${r.installmentCount ?? "-"}`,
+      r.totalPaid,
+      r.debtValue,
+      r.debtStatus,
+    ]);
+    const csv = [headers, ...rows]
+      .map((row) => row.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(","))
+      .join("\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `suspected_bad_debt_${section}_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   }, [filteredRows, canExport, section]);
 
-  /* ── inject export button into nav ── */
-  useEffect(() => {
-    setActions(null); // clear topnav actions (export is inline now)
-    return () => setActions(null);
-  }, [setActions]);
-
-  /* ── column header helper ── */
-  const Th = ({
-    col,
-    children,
-    className,
-  }: {
-    col: SortKey;
-    children: React.ReactNode;
-    className?: string;
-  }) => (
-    <th
-      onClick={() => handleSort(col)}
-      className={cn(
-        "px-3 py-2 text-left text-xs font-semibold whitespace-nowrap cursor-pointer select-none hover:bg-blue-100 transition-colors",
-        className,
-      )}
-    >
-      <span className="inline-flex items-center gap-0.5">
-        {children}
-        <SortIcon col={col} sortKey={sortKey} sortDir={sortDir} />
-      </span>
-    </th>
-  );
-
-  /* ── topnav sticky offset ── */
-  const topNavRef = useRef<HTMLDivElement>(null);
-  const [topNavHeight, setTopNavHeight] = useState(56);
-  useEffect(() => {
-    const el = document.querySelector("[data-topnav]") as HTMLElement | null;
-    if (el) setTopNavHeight(el.offsetHeight);
-  }, []);
+  /* ── nav actions ── */
+  React.useEffect(() => {
+    setActions(
+      canExport
+        ? [
+            <Button key="export" size="sm" variant="outline" onClick={handleExport} className="gap-1.5">
+              <Download className="w-3.5 h-3.5" />
+              Export
+            </Button>,
+          ]
+        : [],
+    );
+    return () => setActions([]);
+  }, [canExport, handleExport, setActions]);
 
   if (!canView) {
     return (
       <AppShell>
-        <div className="flex items-center justify-center h-64 text-gray-500">
-          ไม่มีสิทธิ์เข้าถึงหน้านี้
+        <div className="flex items-center justify-center h-40 text-gray-400 text-sm">
+          คุณไม่มีสิทธิ์เข้าถึงหน้านี้
         </div>
       </AppShell>
     );
@@ -611,56 +564,29 @@ export default function SuspectedBadDebt() {
   return (
     <AppShell>
       <div className="flex flex-col h-full">
-        {/* ── page header ── */}
-        <div className="px-4 pt-4 pb-2 flex items-center justify-between gap-2 flex-wrap">
-          <div className="flex items-center gap-2">
-            <AlertTriangle className="w-5 h-5 text-amber-500" />
-            <h1 className="text-base font-bold text-gray-800">
-              หนี้สงสัยจะเสีย
-            </h1>
-            {!isLoading && (
-              <span className="text-xs text-gray-500">
-                ({filteredRows.length.toLocaleString()} รายการ)
-              </span>
-            )}
-          </div>
-          {/* Export button — inline with menu bar */}
-          {canExport && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleExport}
-              className="flex items-center gap-1.5 text-xs h-8"
-            >
-              <Download className="w-3.5 h-3.5" />
-              Export
-            </Button>
-          )}
-        </div>
-
         {/* ── summary cards ── */}
-        <div className="px-4 pb-2 grid grid-cols-2 md:grid-cols-4 gap-2">
+        <div className="px-4 pt-3 pb-2 grid grid-cols-2 sm:grid-cols-4 gap-2">
           <SummaryCard
-            icon={<span className="text-blue-500 font-bold text-lg">#</span>}
-            label="จำนวน"
-            value={summary.count.toLocaleString() + " รายการ"}
+            icon={<AlertTriangle className="w-4 h-4 text-amber-500" />}
+            label="จำนวนสัญญา"
+            value={summary.count.toLocaleString("th-TH")}
+            colorClass="border-amber-100"
+          />
+          <SummaryCard
+            icon={<AlertTriangle className="w-4 h-4 text-blue-500" />}
+            label="ต้นทุนรวม"
+            value={fmtMoney(summary.cost)}
             colorClass="border-blue-100"
           />
           <SummaryCard
-            icon={<span className="text-purple-500 font-bold text-sm">฿</span>}
-            label="ต้นทุน"
-            value={fmtMoney(summary.cost)}
-            colorClass="border-purple-100"
-          />
-          <SummaryCard
-            icon={<span className="text-green-500 font-bold text-sm">฿</span>}
-            label="ยอดเก็บค่างวด"
+            icon={<AlertTriangle className="w-4 h-4 text-green-500" />}
+            label="ยอดผ่อนรวม"
             value={fmtMoney(summary.totalPaid)}
             colorClass="border-green-100"
           />
           <SummaryCard
             icon={<AlertTriangle className="w-4 h-4 text-red-500" />}
-            label="มูลค่าหนี้"
+            label="มูลค่าหนี้รวม"
             value={fmtMoney(summary.debtValue)}
             colorClass="border-red-100"
           />
@@ -668,176 +594,100 @@ export default function SuspectedBadDebt() {
 
         {/* ── filter bar ── */}
         <div className="px-4 pb-2">
-          <button
-            onClick={() => setFilterOpen((v) => !v)}
-            className="flex items-center gap-1.5 text-xs font-medium text-gray-600 hover:text-gray-900 mb-1.5"
-          >
-            <FilterIcon className="w-3.5 h-3.5" />
-            ตัวกรอง
-            {filterOpen ? (
-              <ChevronUp className="w-3.5 h-3.5" />
-            ) : (
-              <ChevronDown className="w-3.5 h-3.5" />
-            )}
-          </button>
-
-          {filterOpen && (
-            <div className="bg-gray-50 border rounded-lg p-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-2">
+          <div className="flex flex-col gap-2">
+            {/* row 1: search + filters */}
+            <div className="flex flex-col md:flex-row md:items-center gap-2">
               {/* search */}
-              <div className="relative xl:col-span-2">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+              <div className="relative flex-1 min-w-0 max-w-sm">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <Input
+                  placeholder="ค้นหา: เลขที่สัญญา / ชื่อ / เบอร์โทร"
+                  className="pl-9 h-9 text-sm bg-white"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder="เลขที่สัญญา / ชื่อ / เบอร์โทร"
-                  className="pl-8 h-8 text-xs"
                 />
               </div>
 
-              {/* approve month */}
-              <Select value={approveMonth} onValueChange={setApproveMonth}>
-                <SelectTrigger className="h-8 text-xs">
-                  <SelectValue placeholder="เดือน-ปีที่อนุมัติ" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__all__">ทั้งหมด</SelectItem>
-                  {approveMonthOptions.map((ym) => (
-                    <SelectItem key={ym} value={ym}>
-                      {fmtMonthLabel(ym)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {/* filter dropdowns */}
+              <div className="flex flex-wrap items-center gap-2">
+                {/* เดือน-ปีที่อนุมัติ */}
+                <MultiSelectFilter
+                  label="เดือน-ปีที่อนุมัติ"
+                  selected={approveMonthFilter}
+                  onChange={setApproveMonthFilter}
+                  options={approveMonthOptions}
+                  placeholder="ทุกเดือน-ปีที่อนุมัติ"
+                  formatOption={fmtMonthLabel}
+                />
 
-              {/* debt status */}
-              <Select value={debtStatusFilter} onValueChange={setDebtStatusFilter}>
-                <SelectTrigger className="h-8 text-xs">
-                  <SelectValue placeholder="สถานะหนี้" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__all__">ทั้งหมด</SelectItem>
-                  <SelectItem value="เกิน 61-90">เกิน 61-90 วัน</SelectItem>
-                  <SelectItem value="เกิน >90">เกิน {">"} 90 วัน</SelectItem>
-                </SelectContent>
-              </Select>
+                {/* สถานะหนี้ */}
+                <MultiSelectFilter
+                  label="สถานะหนี้"
+                  selected={debtStatusFilter}
+                  onChange={setDebtStatusFilter}
+                  options={["เกิน 61-90", "เกิน >90"]}
+                  placeholder="ทุกสถานะหนี้"
+                />
 
-              {/* iOS/Android */}
-              <Select value={osFilter} onValueChange={setOsFilter}>
-                <SelectTrigger className="h-8 text-xs">
-                  <SelectValue placeholder="iOS / Android" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__all__">ทั้งหมด</SelectItem>
-                  <SelectItem value="iOS">iOS</SelectItem>
-                  <SelectItem value="Android">Android</SelectItem>
-                </SelectContent>
-              </Select>
+                {/* iOS/Android */}
+                <MultiSelectFilter
+                  label="ประเภทเครื่อง"
+                  selected={osFilter}
+                  onChange={setOsFilter}
+                  options={["iOS", "Android"]}
+                  placeholder="ทุกประเภท"
+                />
 
-              {/* model multi-select */}
-              <Popover open={modelPopoverOpen} onOpenChange={setModelPopoverOpen}>
-                <PopoverTrigger asChild>
+                {/* รุ่นเครื่อง */}
+                <MultiSelectFilter
+                  label="รุ่นเครื่อง"
+                  selected={modelFilter}
+                  onChange={setModelFilter}
+                  options={modelOptions}
+                  placeholder="ทุกรุ่น"
+                  formatOption={fmtModelDisplay}
+                />
+
+                {/* มูลค่าหนี้ > */}
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-gray-500 whitespace-nowrap">มูลค่าหนี้ &gt;</span>
+                  <Input
+                    type="number"
+                    value={debtValueMin}
+                    onChange={(e) => setDebtValueMin(e.target.value)}
+                    placeholder="0"
+                    className="h-9 text-xs w-24"
+                  />
+                </div>
+
+                {/* ล้างตัวกรอง */}
+                {hasFilter && (
                   <button
-                    className={cn(
-                      "flex items-center justify-between h-8 px-3 text-xs rounded-md border bg-white hover:bg-gray-50 transition-colors",
-                      modelFilter.length > 0
-                        ? "border-blue-400 text-blue-700"
-                        : "border-input text-gray-500",
-                    )}
+                    onClick={clearFilters}
+                    className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 h-9 px-2 rounded-md border border-red-200 hover:border-red-400 bg-red-50 transition-colors"
                   >
-                    <span className="truncate">
-                      {modelFilter.length === 0
-                        ? "รุ่น (ทั้งหมด)"
-                        : `รุ่น (${modelFilter.length})`}
-                    </span>
-                    <ChevronsUpDown className="w-3 h-3 ml-1 shrink-0 text-gray-400" />
+                    <X className="w-3.5 h-3.5" />
+                    ล้างตัวกรอง
                   </button>
-                </PopoverTrigger>
-                <PopoverContent className="w-72 p-0" align="start">
-                  <Command>
-                    <CommandInput placeholder="ค้นหารุ่น..." className="h-8 text-xs" />
-                    <CommandList className="max-h-52">
-                      <CommandEmpty>ไม่พบรุ่น</CommandEmpty>
-                      <CommandGroup>
-                        {modelOptions.map((m) => (
-                          <CommandItem
-                            key={m}
-                            value={m}
-                            onSelect={() => {
-                              setModelFilter((prev) =>
-                                prev.includes(m)
-                                  ? prev.filter((x) => x !== m)
-                                  : [...prev, m],
-                              );
-                            }}
-                          >
-                            <Check
-                              className={cn(
-                                "mr-2 h-3.5 w-3.5",
-                                modelFilter.includes(m)
-                                  ? "opacity-100 text-blue-600"
-                                  : "opacity-0",
-                              )}
-                            />
-                            <span className="text-xs truncate">
-                              {fmtModelDisplay(m)}
-                            </span>
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                    </CommandList>
-                  </Command>
-                  {modelFilter.length > 0 && (
-                    <div className="border-t p-1.5">
-                      <button
-                        onClick={() => setModelFilter([])}
-                        className="w-full text-xs text-red-500 hover:text-red-700 flex items-center justify-center gap-1 py-1"
-                      >
-                        <X className="w-3 h-3" />
-                        ล้างการเลือก
-                      </button>
-                    </div>
-                  )}
-                </PopoverContent>
-              </Popover>
-
-              {/* debt value min */}
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs text-gray-500 whitespace-nowrap">
-                  มูลค่าหนี้ &gt;
-                </span>
-                <Input
-                  type="number"
-                  value={debtValueMin}
-                  onChange={(e) => setDebtValueMin(e.target.value)}
-                  placeholder="0"
-                  className="h-8 text-xs"
-                />
+                )}
               </div>
-
-              {/* clear filters */}
-              {(search ||
-                approveMonth ||
-                debtStatusFilter ||
-                osFilter ||
-                modelFilter.length > 0 ||
-                debtValueMin) && (
-                <button
-                  onClick={() => {
-                    setSearch("");
-                    setApproveMonth("");
-                    setDebtStatusFilter("");
-                    setOsFilter("");
-                    setModelFilter([]);
-                    setDebtValueMin("");
-                  }}
-                  className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 h-8"
-                >
-                  <X className="w-3.5 h-3.5" />
-                  ล้างตัวกรอง
-                </button>
-              )}
             </div>
-          )}
+
+            {/* row 2: result count */}
+            <div className="flex items-center gap-2 text-xs text-gray-500">
+              <span>
+                แสดง{" "}
+                <span className="font-semibold text-gray-700">
+                  {filteredRows.length.toLocaleString("th-TH")}
+                </span>{" "}
+                จาก{" "}
+                <span className="font-semibold text-gray-700">
+                  {allRows.length.toLocaleString("th-TH")}
+                </span>{" "}
+                รายการ
+              </span>
+            </div>
+          </div>
         </div>
 
         {/* ── table ── */}
@@ -854,63 +704,49 @@ export default function SuspectedBadDebt() {
             </div>
           ) : (
             <div className="flex-1 flex flex-col min-h-0 border rounded-lg overflow-hidden">
-              {/* scrollable table */}
-              <div className="flex-1 overflow-auto">
+              {/* scrollable container for virtual scroll */}
+              <div ref={scrollRef} className="flex-1 overflow-auto">
                 <table className="w-full text-xs border-collapse">
                   <thead
                     className="bg-amber-50 text-gray-700 border-b border-amber-200"
                     style={{ position: "sticky", top: 0, zIndex: 10 }}
                   >
                     <tr>
-                      <Th col="seq" className="w-10 text-center">
-                        #
-                      </Th>
-                      <Th col="approveDate" className="min-w-[110px]">
+                      <th className="px-3 py-2 text-center text-xs font-semibold whitespace-nowrap w-10">#</th>
+                      <Th col="approveDate" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="min-w-[110px]">
                         วันที่อนุมัติ
                       </Th>
-                      <Th col="contractNo" className="min-w-[170px]">
+                      <Th col="contractNo" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="min-w-[170px]">
                         เลขที่สัญญา
                       </Th>
-                      <Th col="customerName" className="min-w-[160px]">
+                      <Th col="customerName" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="min-w-[160px]">
                         ชื่อ-นามสกุล
                       </Th>
-                      <Th col="phone" className="min-w-[110px]">
+                      <Th col="phone" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="min-w-[110px]">
                         เบอร์โทร
                       </Th>
-                      <Th col="model" className="min-w-[200px]">
+                      <Th col="model" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="min-w-[200px]">
                         รุ่น
                       </Th>
-                      <Th col="sellPrice" className="min-w-[90px] text-right">
+                      <Th col="sellPrice" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="min-w-[90px] text-right">
                         ราคา
                       </Th>
-                      <Th
-                        col="financeAmount"
-                        className="min-w-[110px] text-right"
-                      >
+                      <Th col="financeAmount" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="min-w-[110px] text-right">
                         ยอดจัดไฟแนนซ์
                       </Th>
-                      <Th col="multiplier" className="min-w-[80px] text-right">
-                        ตัวคูณ
-                      </Th>
-                      <Th
-                        col="commissionNet"
-                        className="min-w-[110px] text-right"
-                      >
+                      <Th col="commissionNet" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="min-w-[110px] text-right">
                         ค่าคอมมิชชั่น
                       </Th>
-                      <Th col="cost" className="min-w-[100px] text-right">
+                      <Th col="cost" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="min-w-[100px] text-right">
                         ต้นทุน
                       </Th>
-                      <Th
-                        col="paidInstallments"
-                        className="min-w-[80px] text-center"
-                      >
+                      <Th col="paidInstallments" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="min-w-[90px] text-center">
                         งวดที่ชำระ
                       </Th>
-                      <Th col="totalPaid" className="min-w-[110px] text-right">
-                        ยอดเก็บค่างวด
+                      <Th col="totalPaid" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="min-w-[110px] text-right">
+                        ยอดผ่อน
                       </Th>
-                      <Th col="debtValue" className="min-w-[100px] text-right">
+                      <Th col="debtValue" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="min-w-[100px] text-right">
                         มูลค่าหนี้
                       </Th>
                       <th className="px-3 py-2 text-left text-xs font-semibold whitespace-nowrap min-w-[110px]">
@@ -919,19 +755,27 @@ export default function SuspectedBadDebt() {
                     </tr>
                   </thead>
                   <tbody>
-                    {pagedRows.map((r, i) => {
-                      const seq = (page - 1) * pageSize + i + 1;
-                      const isOdd = i % 2 === 0;
+                    {/* top padding for virtual scroll */}
+                    {paddingTop > 0 && (
+                      <tr>
+                        <td colSpan={14} style={{ height: paddingTop }} />
+                      </tr>
+                    )}
+                    {virtualRows.map((vRow) => {
+                      const r = filteredRows[vRow.index];
+                      const isOdd = vRow.index % 2 === 0;
                       return (
                         <tr
                           key={r.contractExternalId}
+                          data-index={vRow.index}
+                          ref={rowVirtualizer.measureElement}
                           className={cn(
                             "hover:bg-amber-50 transition-colors",
                             isOdd ? "bg-white" : "bg-gray-50/50",
                           )}
                         >
                           <td className="px-3 py-1.5 text-center text-gray-400">
-                            {seq}
+                            {vRow.index + 1}
                           </td>
                           <td className="px-3 py-1.5 whitespace-nowrap">
                             {fmtDate(r.approveDate)}
@@ -955,18 +799,13 @@ export default function SuspectedBadDebt() {
                             {fmtMoney(r.financeAmount)}
                           </td>
                           <td className="px-3 py-1.5 text-right whitespace-nowrap">
-                            {r.multiplier != null
-                              ? r.multiplier.toFixed(2)
-                              : "-"}
-                          </td>
-                          <td className="px-3 py-1.5 text-right whitespace-nowrap">
                             {fmtMoney(r.commissionNet)}
                           </td>
                           <td className="px-3 py-1.5 text-right whitespace-nowrap font-semibold">
                             {fmtMoney(r.cost)}
                           </td>
-                          <td className="px-3 py-1.5 text-center whitespace-nowrap">
-                            {r.paidInstallments}
+                          <td className="px-3 py-1.5 text-center whitespace-nowrap font-mono">
+                            {r.paidInstallments}/{r.installmentCount ?? "-"}
                           </td>
                           <td className="px-3 py-1.5 text-right whitespace-nowrap text-green-700">
                             {fmtMoney(r.totalPaid)}
@@ -974,9 +813,7 @@ export default function SuspectedBadDebt() {
                           <td
                             className={cn(
                               "px-3 py-1.5 text-right whitespace-nowrap font-semibold",
-                              r.debtValue > 0
-                                ? "text-red-600"
-                                : "text-gray-500",
+                              r.debtValue > 0 ? "text-red-600" : "text-gray-500",
                             )}
                           >
                             {fmtMoney(r.debtValue)}
@@ -996,18 +833,15 @@ export default function SuspectedBadDebt() {
                         </tr>
                       );
                     })}
+                    {/* bottom padding for virtual scroll */}
+                    {paddingBottom > 0 && (
+                      <tr>
+                        <td colSpan={14} style={{ height: paddingBottom }} />
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
-
-              {/* pagination */}
-              <Pagination
-                total={filteredRows.length}
-                page={page}
-                pageSize={pageSize}
-                onPage={setPage}
-                onPageSize={setPageSize}
-              />
             </div>
           )}
         </div>
