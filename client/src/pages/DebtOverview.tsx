@@ -725,10 +725,10 @@ export default function DebtOverview() {
       if (!seenContracts.has(r.contractExternalId)) {
         seenContracts.set(r.contractExternalId, monthKey);
         row.contractCount += 1;
-        // ต้นทุน = financeAmount - commissionNet
+        // ต้นทุน = financeAmount + commissionNet
         const fa = r.financeAmount ?? 0;
         const cn = r.commissionNet ?? 0;
-        row.cost += fa - cn;
+        row.cost += fa + cn;
       }
 
       // เป้าเก็บหนี้ — sum installments ที่ผ่าน filter
