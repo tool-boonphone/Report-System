@@ -530,25 +530,24 @@ export default function DebtReport() {
     }
   }, [canView, section, fetchChunkWithRetry]);
 
-  // Auto-fetch when tab/section changes (only if not already loaded)
-  // NOTE: isAuthLoading must be in deps so this re-runs after auth resolves
+  // Auto-fetch + reset in ONE effect to avoid race condition:
+  // Previously, two separate useEffects (auto-fetch & reset) both depended on `section`.
+  // React runs them in order on mount, so reset ran AFTER fetch started → wiped streamLoading.
+  // Fix: merge both into one effect so reset always happens before fetch in the same flush.
   useEffect(() => {
-    if (isAuthLoading || !canView || !section) return;
-    if (tab === "target" && !streamData.target && !streamLoading.target) {
-      fetchStream("target");
-    } else if (tab === "collected" && !streamData.collected && !streamLoading.collected) {
-      fetchStream("collected");
-    }
-  }, [tab, section, canView, isAuthLoading]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Reset stream data when section changes
-  // ไม่ล้าง Global Cache เพราะแต่ละ section มี cache แยกกัน เพียง reset local UI state
-  useEffect(() => {
+    // Always reset local UI state when section changes (or on mount)
     setStreamError({ target: null, collected: null });
     setStreamLoading({ target: false, collected: false });
     setStreamProgress({ target: 0, collected: 0 });
     setStreamTotal({ target: 0, collected: 0 });
-  }, [section]);
+    // Then trigger fetch if auth is ready
+    if (isAuthLoading || !canView || !section) return;
+    if (tab === "target" && !streamData.target) {
+      fetchStream("target");
+    } else if (tab === "collected" && !streamData.collected) {
+      fetchStream("collected");
+    }
+  }, [tab, section, canView, isAuthLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const isLoading = tab === "target" ? streamLoading.target : streamLoading.collected;
   const isError = tab === "target" ? !!streamError.target : !!streamError.collected;
