@@ -3,13 +3,14 @@
  *
  * Flow:
  *  SelectSection → navigate("/data-loading") → DataLoadingScreen
- *  → โหลด contracts + debt target + debt collected พร้อมกัน
- *  → เมื่อครบทั้ง 3 → navigate("/contracts")
  *
- * หากผู้ใช้ refresh browser และ section ยังอยู่ใน localStorage
- * → ตรวจสอบว่า DebtCache มีข้อมูลอยู่แล้วหรือไม่
- *   - ถ้ามี → ข้ามหน้านี้ไป /contracts ทันที
- *   - ถ้าไม่มี → โหลดใหม่
+ *  1. ตรวจสอบว่า sync กำลังทำงานอยู่ไหม (trpc.sync.status)
+ *     - ถ้า sync กำลังทำงาน → แสดงหน้า "ระบบกำลังอัพเดทข้อมูล" พร้อม progress bar
+ *       รอจนกว่า sync เสร็จ แล้วค่อยเข้าหน้าโหลด 3 แถบ
+ *     - ถ้า sync ไม่ได้ทำงาน → เข้าหน้าโหลด 3 แถบทันที
+ *
+ *  2. โหลด contracts + debt target + debt collected พร้อมกัน
+ *     → เมื่อครบทั้ง 3 → navigate("/contracts")
  */
 
 import { BRAND_ACCENT, BRAND_LOGOS } from "@/config/brand";
@@ -18,7 +19,7 @@ import { useAppAuth } from "@/hooks/useAppAuth";
 import { useSection } from "@/contexts/SectionContext";
 import { trpc } from "@/lib/trpc";
 import type { SectionKey } from "@shared/const";
-import { CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
+import { CheckCircle2, AlertCircle, Loader2, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 
@@ -38,14 +39,160 @@ const LOAD_ITEMS: LoadItem[] = [
 
 const CHUNK_SIZE = 500;
 
+/** ชื่อ stage ที่แสดงผลในภาษาไทย */
+const STAGE_LABELS: Record<string, string> = {
+  partners: "ดึงข้อมูลพาร์ทเนอร์",
+  customers: "ดึงข้อมูลลูกค้า",
+  contracts: "ดึงข้อมูลสัญญา",
+  installments: "ดึงข้อมูลงวดผ่อน",
+  payments: "ดึงข้อมูลการชำระ",
+  populate_target: "ประมวลผลเป้าเก็บหนี้",
+  populate_collected: "ประมวลผลยอดเก็บหนี้",
+  finishing: "กำลังเสร็จสิ้น",
+};
+
+// ─── SyncWaitingScreen ────────────────────────────────────────────────────────
+
+function SyncWaitingScreen({
+  section,
+  accent,
+  onSyncDone,
+}: {
+  section: SectionKey;
+  accent: string;
+  onSyncDone: () => void;
+}) {
+  const syncStatus = trpc.sync.status.useQuery(undefined, {
+    refetchInterval: 3000, // poll ทุก 3 วินาที
+  });
+
+  const info = syncStatus.data?.[section];
+  const isRunning = info?.running ?? true;
+  const progress = info?.progress ?? 0;
+  const currentStage = info?.currentStage ?? "";
+  const stageIndex = info?.stageIndex ?? 0;
+  const totalStages = info?.totalStages ?? 5;
+  const startedAt = info?.startedAt ? new Date(info.startedAt) : null;
+
+  // คำนวณเวลาที่ใช้ไป
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    if (!startedAt) return;
+    const update = () => setElapsed(Math.floor((Date.now() - startedAt.getTime()) / 1000));
+    update();
+    const t = setInterval(update, 1000);
+    return () => clearInterval(t);
+  }, [startedAt]);
+
+  // เมื่อ sync เสร็จ → แจ้ง parent
+  const prevRunning = useRef(true);
+  useEffect(() => {
+    if (prevRunning.current && !isRunning && syncStatus.data) {
+      // sync เพิ่งเสร็จ
+      onSyncDone();
+    }
+    prevRunning.current = isRunning;
+  }, [isRunning, syncStatus.data, onSyncDone]);
+
+  const formatElapsed = (secs: number) => {
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    if (m === 0) return `${s} วินาที`;
+    return `${m} นาที ${s} วินาที`;
+  };
+
+  const stageLabel = STAGE_LABELS[currentStage] ?? currentStage ?? "กำลังประมวลผล";
+
+  return (
+    <div className="w-full max-w-md">
+      {/* Header */}
+      <div className="text-center mb-8">
+        <div
+          className="w-20 h-20 mx-auto rounded-2xl flex items-center justify-center mb-4 shadow-sm"
+          style={{ background: `${accent}18` }}
+        >
+          <RefreshCw
+            className="w-10 h-10 animate-spin"
+            style={{ color: accent, animationDuration: "2s" }}
+          />
+        </div>
+        <h1 className="text-xl font-bold text-gray-900">ระบบกำลังอัพเดทข้อมูล</h1>
+        <p className="text-sm text-gray-500 mt-1">
+          {section} — กรุณารอสักครู่...
+        </p>
+      </div>
+
+      {/* Progress card */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        {/* Overall progress bar */}
+        <div className="mb-5">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-medium text-gray-700">ความคืบหน้าโดยรวม</span>
+            <span className="text-sm font-bold" style={{ color: accent }}>{progress}%</span>
+          </div>
+          <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
+            <div
+              className="h-full rounded-full transition-all duration-500"
+              style={{ width: `${progress}%`, background: accent }}
+            />
+          </div>
+        </div>
+
+        {/* Stage dots */}
+        <div className="flex items-center justify-between mb-5">
+          {Array.from({ length: totalStages }).map((_, i) => (
+            <div key={i} className="flex flex-col items-center gap-1">
+              <div
+                className="w-3 h-3 rounded-full transition-all duration-300"
+                style={{
+                  background: i < stageIndex ? "#22c55e" : i === stageIndex ? accent : "#e5e7eb",
+                  transform: i === stageIndex ? "scale(1.3)" : "scale(1)",
+                }}
+              />
+            </div>
+          ))}
+        </div>
+
+        {/* Current stage */}
+        <div className="flex items-center gap-2 p-3 rounded-xl" style={{ background: `${accent}10` }}>
+          <Loader2 className="w-4 h-4 animate-spin flex-shrink-0" style={{ color: accent }} />
+          <div>
+            <p className="text-sm font-medium" style={{ color: accent }}>{stageLabel}</p>
+            <p className="text-xs text-gray-400 mt-0.5">
+              ขั้นตอนที่ {Math.max(1, stageIndex + 1)} จาก {totalStages}
+            </p>
+          </div>
+        </div>
+
+        {/* Elapsed time */}
+        {startedAt && (
+          <p className="text-xs text-gray-400 text-center mt-4">
+            ใช้เวลาไปแล้ว {formatElapsed(elapsed)}
+          </p>
+        )}
+      </div>
+
+      <p className="text-xs text-gray-400 text-center mt-4">
+        ระบบจะเข้าสู่หน้าโหลดข้อมูลอัตโนมัติเมื่ออัพเดทเสร็จสิ้น
+      </p>
+    </div>
+  );
+}
+
+// ─── DataLoadingScreen ────────────────────────────────────────────────────────
+
 export default function DataLoadingScreen() {
-  const { isLoading: authLoading, isAuthenticated, can } = useAppAuth();
+  const { isLoading: authLoading, isAuthenticated } = useAppAuth();
   const { section } = useSection();
   const debtCache = useDebtCache();
   const utils = trpc.useUtils();
   const [, navigate] = useLocation();
 
-  // State ของแต่ละ item
+  // ─── Phase: "checking" → "syncing" → "loading" ───────────────────────────
+  type Phase = "checking" | "syncing" | "loading";
+  const [phase, setPhase] = useState<Phase>("checking");
+
+  // ─── State ของแต่ละ item (ใช้ใน phase "loading") ─────────────────────────
   const [statuses, setStatuses] = useState<Record<LoadItem["key"], ItemStatus>>({
     contracts: "idle",
     target: "idle",
@@ -68,8 +215,27 @@ export default function DataLoadingScreen() {
   });
 
   const startedRef = useRef(false);
-
   const accent = section ? BRAND_ACCENT[section as SectionKey] : "#1e40af";
+
+  // ─── ตรวจสอบ sync status ครั้งแรก ────────────────────────────────────────
+  const syncStatusQuery = trpc.sync.status.useQuery(undefined, {
+    enabled: phase === "checking" && !!section && !authLoading && isAuthenticated,
+    refetchOnWindowFocus: false,
+  });
+
+  useEffect(() => {
+    if (phase !== "checking") return;
+    if (!syncStatusQuery.data || !section) return;
+
+    const info = syncStatusQuery.data[section as SectionKey];
+    if (info?.running) {
+      // sync กำลังทำงาน → แสดงหน้า syncing
+      setPhase("syncing");
+    } else {
+      // sync ไม่ได้ทำงาน → เข้าหน้าโหลดทันที
+      setPhase("loading");
+    }
+  }, [syncStatusQuery.data, section, phase]);
 
   // ─── Helpers ─────────────────────────────────────────────────────────────
 
@@ -165,7 +331,6 @@ export default function DataLoadingScreen() {
         debtCache.setLoadingState(sec, t, { progress: rows.length, total: totalContracts });
         if (!hasMore) break;
       }
-      // บันทึกลง Global Cache
       if (t === "target") {
         debtCache.setTargetRows(sec, rows);
       } else {
@@ -186,47 +351,39 @@ export default function DataLoadingScreen() {
   const startPreload = useCallback(async (sec: SectionKey) => {
     if (startedRef.current) return;
     startedRef.current = true;
-
-    // โหลดทีละแถบ (sequential) เพื่อลด load บน server และป้องกัน race condition
-    // 1) สัญญา
     await fetchContracts(sec);
-    // 2) เป้าเก็บหนี้
     await fetchDebt(sec, "target");
-    // 3) ยอดเก็บหนี้
     await fetchDebt(sec, "collected");
   }, [fetchContracts, fetchDebt]);
 
-  // ─── Effects ─────────────────────────────────────────────────────────────
+  // ─── เริ่มโหลดเมื่อ phase เปลี่ยนเป็น "loading" ──────────────────────────
 
   useEffect(() => {
+    if (phase !== "loading") return;
     if (authLoading || !isAuthenticated || !section) return;
 
     // ตรวจสอบว่า cache มีข้อมูลอยู่แล้วหรือไม่
     const cache = debtCache.getCache(section as SectionKey);
     if (cache.target && cache.collected) {
-      // มีข้อมูลแล้ว → ข้ามไป /contracts ทันที
       navigate("/contracts", { replace: true });
       return;
     }
 
     startPreload(section as SectionKey);
-  }, [authLoading, isAuthenticated, section]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [phase, authLoading, isAuthenticated, section]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Navigate เมื่อโหลดเสร็จ ──────────────────────────────────────────────
-  // รอให้ครบทั้ง 3 ส่วนเป็น "done" เท่านั้น (ไม่ข้ามเมื่อ error)
 
   useEffect(() => {
-    const allDone = LOAD_ITEMS.every(
-      (item) => statuses[item.key] === "done",
-    );
+    if (phase !== "loading") return;
+    const allDone = LOAD_ITEMS.every((item) => statuses[item.key] === "done");
     if (allDone && startedRef.current) {
-      // รอ 800ms เพื่อให้ผู้ใช้เห็น checkmark ก่อน navigate
       const timer = setTimeout(() => {
         navigate("/contracts", { replace: true });
       }, 800);
       return () => clearTimeout(timer);
     }
-  }, [statuses, navigate]);
+  }, [statuses, navigate, phase]);
 
   // ─── Auth guard ───────────────────────────────────────────────────────────
 
@@ -245,130 +402,151 @@ export default function DataLoadingScreen() {
 
   // ─── Render ───────────────────────────────────────────────────────────────
 
-  const allDone = LOAD_ITEMS.every(
-    (item) => statuses[item.key] === "done",
-  );
+  const allDone = LOAD_ITEMS.every((item) => statuses[item.key] === "done");
   const hasError = LOAD_ITEMS.some((item) => statuses[item.key] === "error");
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 flex items-center justify-center px-4">
-      <div className="w-full max-w-md">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <img
-            src={BRAND_LOGOS[section as SectionKey]}
-            alt={section}
-            className="w-20 h-20 mx-auto rounded-2xl object-contain bg-white border border-gray-100 shadow-sm mb-4"
-          />
-          <h1 className="text-xl font-bold text-gray-900">กำลังโหลดข้อมูล</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            {section} — กรุณารอสักครู่...
-          </p>
+
+      {/* Phase: checking — spinner ก่อนรู้ว่า sync ทำงานอยู่ไหม */}
+      {phase === "checking" && (
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-10 h-10 animate-spin" style={{ color: accent }} />
+          <p className="text-sm text-gray-500">กำลังตรวจสอบสถานะระบบ...</p>
         </div>
+      )}
 
-        {/* Progress items */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-5">
-          {LOAD_ITEMS.map((item) => {
-            const status = statuses[item.key];
-            const loadedN = loaded[item.key];
-            const totalN = total[item.key];
-            const pct = totalN > 0 ? Math.min(100, Math.round((loadedN / totalN) * 100)) : 0;
-            const err = errors[item.key];
+      {/* Phase: syncing — รอ background sync เสร็จ */}
+      {phase === "syncing" && (
+        <SyncWaitingScreen
+          section={section as SectionKey}
+          accent={accent}
+          onSyncDone={() => {
+            // reset state แล้วเข้าหน้าโหลด
+            startedRef.current = false;
+            setStatuses({ contracts: "idle", target: "idle", collected: "idle" });
+            setLoaded({ contracts: 0, target: 0, collected: 0 });
+            setTotal({ contracts: 0, target: 0, collected: 0 });
+            setErrors({ contracts: null, target: null, collected: null });
+            setPhase("loading");
+          }}
+        />
+      )}
 
-            return (
-              <div key={item.key}>
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-lg">{item.icon}</span>
-                    <span className="text-sm font-medium text-gray-700">{item.label}</span>
+      {/* Phase: loading — โหลด 3 แถบตามปกติ */}
+      {phase === "loading" && (
+        <div className="w-full max-w-md">
+          {/* Header */}
+          <div className="text-center mb-8">
+            <img
+              src={BRAND_LOGOS[section as SectionKey]}
+              alt={section}
+              className="w-20 h-20 mx-auto rounded-2xl object-contain bg-white border border-gray-100 shadow-sm mb-4"
+            />
+            <h1 className="text-xl font-bold text-gray-900">กำลังโหลดข้อมูล</h1>
+            <p className="text-sm text-gray-500 mt-1">
+              {section} — กรุณารอสักครู่...
+            </p>
+          </div>
+
+          {/* Progress items */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-5">
+            {LOAD_ITEMS.map((item) => {
+              const status = statuses[item.key];
+              const loadedN = loaded[item.key];
+              const totalN = total[item.key];
+              const pct = totalN > 0 ? Math.min(100, Math.round((loadedN / totalN) * 100)) : 0;
+              const err = errors[item.key];
+
+              return (
+                <div key={item.key}>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">{item.icon}</span>
+                      <span className="text-sm font-medium text-gray-700">{item.label}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {status === "idle" && (
+                        <span className="text-xs text-gray-400">รอดำเนินการ</span>
+                      )}
+                      {status === "loading" && (
+                        <>
+                          <span className="text-xs text-gray-500">
+                            {totalN > 0 ? `${loadedN.toLocaleString()} / ${totalN.toLocaleString()}` : "กำลังโหลด..."}
+                          </span>
+                          <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
+                        </>
+                      )}
+                      {status === "done" && (
+                        <>
+                          <span className="text-xs text-green-600">{totalN.toLocaleString()} รายการ</span>
+                          <CheckCircle2 className="w-4 h-4 text-green-500" />
+                        </>
+                      )}
+                      {status === "error" && (
+                        <>
+                          <span className="text-xs text-red-500 max-w-[140px] truncate" title={err ?? ""}>
+                            {err ?? "เกิดข้อผิดพลาด"}
+                          </span>
+                          <AlertCircle className="w-4 h-4 text-red-500" />
+                        </>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    {status === "idle" && (
-                      <span className="text-xs text-gray-400">รอดำเนินการ</span>
-                    )}
+
+                  {/* Progress bar */}
+                  <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                    {status === "idle" && <div className="h-full w-0 rounded-full" />}
                     {status === "loading" && (
-                      <>
-                        <span className="text-xs text-gray-500">
-                          {totalN > 0 ? `${loadedN.toLocaleString()} / ${totalN.toLocaleString()}` : "กำลังโหลด..."}
-                        </span>
-                        <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
-                      </>
+                      <div
+                        className="h-full rounded-full transition-all duration-300"
+                        style={{
+                          width: totalN > 0 ? `${pct}%` : "30%",
+                          background: accent,
+                          animation: totalN === 0 ? "pulse 1.5s ease-in-out infinite" : undefined,
+                        }}
+                      />
                     )}
                     {status === "done" && (
-                      <>
-                        <span className="text-xs text-green-600">{totalN.toLocaleString()} รายการ</span>
-                        <CheckCircle2 className="w-4 h-4 text-green-500" />
-                      </>
+                      <div className="h-full w-full rounded-full" style={{ background: "#22c55e" }} />
                     )}
                     {status === "error" && (
-                      <>
-                        <span className="text-xs text-red-500 max-w-[140px] truncate" title={err ?? ""}>
-                          {err ?? "เกิดข้อผิดพลาด"}
-                        </span>
-                        <AlertCircle className="w-4 h-4 text-red-500" />
-                      </>
+                      <div className="h-full w-full rounded-full bg-red-400" />
                     )}
                   </div>
                 </div>
+              );
+            })}
+          </div>
 
-                {/* Progress bar */}
-                <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                  {status === "idle" && (
-                    <div className="h-full w-0 rounded-full" />
-                  )}
-                  {status === "loading" && (
-                    <div
-                      className="h-full rounded-full transition-all duration-300"
-                      style={{
-                        width: totalN > 0 ? `${pct}%` : "30%",
-                        background: accent,
-                        // indeterminate animation เมื่อยังไม่รู้ total
-                        animation: totalN === 0 ? "pulse 1.5s ease-in-out infinite" : undefined,
-                      }}
-                    />
-                  )}
-                  {status === "done" && (
-                    <div
-                      className="h-full w-full rounded-full"
-                      style={{ background: "#22c55e" }}
-                    />
-                  )}
-                  {status === "error" && (
-                    <div className="h-full w-full rounded-full bg-red-400" />
-                  )}
-                </div>
+          {/* Footer */}
+          <div className="text-center mt-6">
+            {allDone ? (
+              <p className="text-sm text-green-600 font-medium">โหลดข้อมูลเสร็จสิ้น กำลังเข้าสู่ระบบ...</p>
+            ) : hasError ? (
+              <div className="space-y-3">
+                <p className="text-sm text-red-500">เกิดข้อผิดพลาดระหว่างโหลดข้อมูล</p>
+                <button
+                  onClick={() => {
+                    startedRef.current = false;
+                    setStatuses({ contracts: "idle", target: "idle", collected: "idle" });
+                    setLoaded({ contracts: 0, target: 0, collected: 0 });
+                    setTotal({ contracts: 0, target: 0, collected: 0 });
+                    setErrors({ contracts: null, target: null, collected: null });
+                    if (section) startPreload(section as SectionKey);
+                  }}
+                  className="px-4 py-2 text-sm font-medium text-white rounded-lg"
+                  style={{ background: accent }}
+                >
+                  ลองใหม่อีกครั้ง
+                </button>
               </div>
-            );
-          })}
+            ) : (
+              <p className="text-xs text-gray-400">ข้อมูลจะถูกเก็บ cache ไว้ตลอด session</p>
+            )}
+          </div>
         </div>
-
-        {/* Footer */}
-        <div className="text-center mt-6">
-          {allDone ? (
-            <p className="text-sm text-green-600 font-medium">โหลดข้อมูลเสร็จสิ้น กำลังเข้าสู่ระบบ...</p>
-          ) : hasError ? (
-            <div className="space-y-3">
-              <p className="text-sm text-red-500">เกิดข้อผิดพลาดระหว่างโหลดข้อมูล</p>
-              <button
-                onClick={() => {
-                  startedRef.current = false;
-                  setStatuses({ contracts: "idle", target: "idle", collected: "idle" });
-                  setLoaded({ contracts: 0, target: 0, collected: 0 });
-                  setTotal({ contracts: 0, target: 0, collected: 0 });
-                  setErrors({ contracts: null, target: null, collected: null });
-                  if (section) startPreload(section as SectionKey);
-                }}
-                className="px-4 py-2 text-sm font-medium text-white rounded-lg"
-                style={{ background: accent }}
-              >
-                ลองใหม่อีกครั้ง
-              </button>
-            </div>
-          ) : (
-            <p className="text-xs text-gray-400">ข้อมูลจะถูกเก็บ cache ไว้ตลอด session</p>
-          )}
-        </div>
-      </div>
+      )}
     </div>
   );
 }

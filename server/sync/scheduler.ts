@@ -1,6 +1,6 @@
 /**
- * Simple in-process scheduler — runs once a day at 06:00 Asia/Bangkok time.
- * The process checks once a minute; when hour matches 06 (Bangkok time) and we
+ * Simple in-process scheduler — runs once a day at 04:00 Asia/Bangkok time.
+ * The process checks once a minute; when hour matches 04 (Bangkok time) and we
  * haven't already synced today, it kicks off a run for each configured section.
  *
  * IMPORTANT: Server may run in UTC or other timezones. All time comparisons
@@ -19,7 +19,7 @@ function isSectionConfigured(section: SectionKey): boolean {
   return Boolean(client && client.isConfigured());
 }
 
-const SYNC_HOUR = 6; // 06:00 daily (Asia/Bangkok)
+const SYNC_HOUR = 4; // 04:00 daily (Asia/Bangkok)
 const BANGKOK_TZ = "Asia/Bangkok";
 
 let _timer: NodeJS.Timeout | null = null;
@@ -86,7 +86,7 @@ export async function startScheduler() {
   if (_timer) return;
   const now = new Date();
   const { hour: bangkokHour, daySlot } = getBangkokTimeParts(now);
-  console.log(`[scheduler] started (daily at 06:00 Asia/Bangkok) — current Bangkok time: ${bangkokHour}:xx, slot: ${daySlot}`);
+  console.log(`[scheduler] started (daily at 04:00 Asia/Bangkok) — current Bangkok time: ${bangkokHour}:xx, slot: ${daySlot}`);
   _timer = setInterval(() => {
     tick().catch((err) => console.error("[scheduler] tick error:", err));
   }, 60_000);
