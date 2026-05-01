@@ -1061,7 +1061,9 @@ export default function MonthlySummary() {
             );})
             }
             <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border bg-blue-700 border-blue-800 text-white font-semibold">
-              <Banknote className="w-3.5 h-3.5"/><span>รวม</span><span>{fmtMoney(computeNotYetDueTotal(grandBadgeNotYetDue,notYetDueVis))}</span>
+              <Banknote className="w-3.5 h-3.5" />
+              <span>รวม</span>
+              <span>{fmtMoney(computeNotYetDueTotal(grandBadgeNotYetDue, notYetDueVis))}</span>
             </div>
           </div>
         )}
