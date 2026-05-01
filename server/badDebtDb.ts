@@ -49,6 +49,9 @@ export type BadDebtRow = {
   installmentCount: number | null;
 };
 
+/** Map ym (YYYY-MM) → total distinct contracts approved that month (all statuses) */
+export type TotalContractsByApproveMonth = Record<string, number>;
+
 export type BadDebtSummary = {
   contractCount: number;
   totalSalePrice: number;
@@ -69,7 +72,7 @@ export async function getBadDebtSummary(params: {
   approveMonth?: string;
   /** Optional: filter by sale date year-month YYYY-MM (วันที่ขายเครื่อง) */
   saleMonth?: string;
-}): Promise<{ rows: BadDebtRow[]; summary: BadDebtSummary }> {
+}): Promise<{ rows: BadDebtRow[]; summary: BadDebtSummary; totalContractsByApproveMonth: TotalContractsByApproveMonth }> {
   const db = await getDb();
   const emptySummary: BadDebtSummary = {
     contractCount: 0,
@@ -84,7 +87,7 @@ export async function getBadDebtSummary(params: {
     lossCount: 0,
     breakEvenCount: 0,
   };
-  if (!db) return { rows: [], summary: emptySummary };
+  if (!db) return { rows: [], summary: emptySummary, totalContractsByApproveMonth: {} };
 
   // ─── Step 1: Get distinct bad-debt contracts from debt_target_cache ───────
   // contract_status = 'หนี้เสีย' is stored on every period row for that contract
@@ -122,7 +125,7 @@ export async function getBadDebtSummary(params: {
   );
   const contractsArr: Array<any> = (contractsRaw as any)[0] ?? contractsRaw;
 
-  if (contractsArr.length === 0) return { rows: [], summary: emptySummary };
+  if (contractsArr.length === 0) return { rows: [], summary: emptySummary, totalContractsByApproveMonth: {} };
 
   const contractIds = contractsArr.map((r: any) => r.contract_external_id as string);
   const idsLiteral = contractIds.map((id) => `'${id.replace(/'/g, "''")}'`).join(",");
@@ -230,5 +233,23 @@ export async function getBadDebtSummary(params: {
     { ...emptySummary },
   );
 
-  return { rows, summary };
+  // ─── Step 7: Count total contracts per approve_month (all statuses) ─────────
+  const totalContractsRaw = await db.execute(
+    sql.raw(`
+      SELECT
+        DATE_FORMAT(approve_date, '%Y-%m') AS ym,
+        COUNT(DISTINCT contract_external_id) AS total
+      FROM debt_target_cache
+      WHERE section = '${params.section}'
+        AND approve_date IS NOT NULL
+      GROUP BY DATE_FORMAT(approve_date, '%Y-%m')
+    `)
+  );
+  const totalContractsArr: Array<any> = (totalContractsRaw as any)[0] ?? totalContractsRaw;
+  const totalContractsByApproveMonth: TotalContractsByApproveMonth = {};
+  for (const r of totalContractsArr) {
+    if (r.ym) totalContractsByApproveMonth[r.ym] = Number(r.total ?? 0);
+  }
+
+  return { rows, summary, totalContractsByApproveMonth };
 }

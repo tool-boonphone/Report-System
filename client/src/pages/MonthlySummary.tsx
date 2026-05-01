@@ -1057,7 +1057,8 @@ export default function MonthlySummary() {
                 className={["flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border transition-colors",isOn?"bg-blue-100 border-blue-300 text-blue-800 hover:bg-blue-200":"bg-gray-100 border-gray-200 text-gray-400 hover:bg-gray-200"].join(" ")}>
                 {isOn?<Eye className="w-3 h-3"/>:<EyeOff className="w-3 h-3"/>}{icon}<span>{label}</span>
                 <span className={["font-semibold ml-0.5",isOn?"":"text-gray-400"].join(" ")}>{fmtMoney(val)}</span>
-              </button>            );})
+              </button>
+            );})
             }
             <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border bg-blue-700 border-blue-800 text-white font-semibold">
               <Banknote className="w-3.5 h-3.5"/><span>รวม</span><span>{fmtMoney(computeNotYetDueTotal(grandBadgeNotYetDue,notYetDueVis))}</span>
