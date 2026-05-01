@@ -645,11 +645,40 @@ export default function MonthlySummary() {
     return{bucketTotals:bt,totalCount,totalPaid,totalDue,totalTarget,totalNotYetDue,totalInstallTotal};
   },[rows,hiddenRows]);
 
-  const grandBadgePaid=useMemo(()=>{let r=emptyMoney();for(const b of DEBT_BUCKETS){const bt=grandTotal.bucketTotals[b];if(bt)r=addMoney(r,bt.paid);}return r;},[grandTotal]);
+  const grandBadgePaid=useMemo(()=>{
+    // คำนวณเหมือน gtPaidTotal ใน SummaryTable: skip hiddenBuckets + จัดการ หนี้เสีย แบบพิเศษ
+    let r=emptyMoney();
+    for(const b of DEBT_BUCKETS){
+      if(hiddenBuckets.has(b))continue;
+      const bt=grandTotal.bucketTotals[b];
+      if(!bt)continue;
+      if(b==="หนี้เสีย"){
+        const installAmt=showBadDebtInstall?(bt.paid.badDebtInstallment??0):0;
+        const saleAmt=showBadDebtSale?(bt.paid.badDebt??0):0;
+        r={...r,principal:r.principal+installAmt+saleAmt};
+      }else{
+        r=addMoney(r,{
+          principal:bt.paid.principal??0,interest:bt.paid.interest??0,fee:bt.paid.fee??0,
+          penalty:bt.paid.penalty??0,unlockFee:bt.paid.unlockFee??0,
+          discount:bt.paid.discount??0,overpaid:bt.paid.overpaid??0,
+          badDebt:0,badDebtInstallment:0,total:0,
+        });
+      }
+    }
+    return r;
+  },[grandTotal,hiddenBuckets,showBadDebtInstall,showBadDebtSale]);
   const grandBadgeDue=useMemo(()=>{let r=emptyMoney();for(const b of DEBT_BUCKETS){const bt=grandTotal.bucketTotals[b];if(bt)r=addMoney(r,bt.due);}return r;},[grandTotal]);
   const grandBadgeTarget=useMemo(()=>{let r=emptyMoney();for(const b of DEBT_BUCKETS){const bt=grandTotal.bucketTotals[b];if(bt)r=addMoney(r,bt.target);}return r;},[grandTotal]);
   const grandBadgeNotYetDue=useMemo(()=>{let r=emptyMoney();for(const b of DEBT_BUCKETS){const bt=grandTotal.bucketTotals[b];if(bt)r=addMoney(r,bt.notYetDue);}return r;},[grandTotal]);
   const grandBadgeInstallTotal=useMemo(()=>{let r=emptyMoney();for(const b of DEBT_BUCKETS){const bt=grandTotal.bucketTotals[b];if(bt)r=addMoney(r,bt.installTotal);}return r;},[grandTotal]);
+  // คำนวณยอดรวมชำระ Badge ให้ตรงกับ gtPaidTotal ใน SummaryTable
+  const grandBadgePaidTotal=useMemo(()=>DEBT_BUCKETS.reduce((s,b)=>{
+    if(hiddenBuckets.has(b))return s;
+    const bt=grandTotal.bucketTotals[b];
+    if(!bt)return s;
+    if(b==="หนี้เสีย"){return s+(showBadDebtInstall?(bt.paid.badDebtInstallment??0):0)+(showBadDebtSale?(bt.paid.badDebt??0):0);}
+    return s+computeMoneyTotal(bt.paid,paidVis);
+  },0),[grandTotal,hiddenBuckets,showBadDebtInstall,showBadDebtSale,paidVis]);
 
   // filter counts
   const countFilterCount=[countApproveDate,countApproveMonths.size>0,countApproveYears.size>0,countProductType.size>0,countDeviceFamily].filter(Boolean).length;
@@ -987,7 +1016,7 @@ export default function MonthlySummary() {
               </button>
             );})}
             <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border bg-green-700 border-green-800 text-white font-semibold">
-              <Banknote className="w-3.5 h-3.5"/><span>รวมยอดชำระ</span><span>{fmtMoney(computeMoneyTotal(grandBadgePaid,paidVis))}</span>
+              <Banknote className="w-3.5 h-3.5"/><span>รวมยอดชำระ</span><span>{fmtMoney(grandBadgePaidTotal)}</span>
             </div>
           </div>
         )}
