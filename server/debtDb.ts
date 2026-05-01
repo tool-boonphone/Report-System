@@ -2002,6 +2002,13 @@ export async function listDebtTarget(params: { section: SectionKey }) {
           isArrears: (r as any)._hasArrears === true,
           // isCurrentPeriod: will be set to true for the current period in the arrears pass below
           isCurrentPeriod: false,
+          // isFuturePeriod: true when dueDate > today (not yet due)
+          isFuturePeriod: (() => {
+            if (!r.due_date) return false;
+            const dueMs = Date.parse(`${r.due_date}T00:00:00`);
+            const todayStart = new Date(); todayStart.setHours(0,0,0,0);
+            return dueMs > todayStart.getTime();
+          })(),
           // isPaid: true when this period has been fully paid (principal reduced to 0).
           // Conditions:
           //   1. API sent amount=0 and paid>0 (API zeroed because fully paid)

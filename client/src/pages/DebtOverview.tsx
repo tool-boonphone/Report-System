@@ -1239,43 +1239,43 @@ export default function DebtOverview() {
             </div>
             {!badgesCollapsed && (
               <div className="px-4 pb-3">
-            {/* เป้าเก็บหนี้ badges */}
-            <BadgeRow
-              title="เป้าเก็บหนี้"
-              items={[
-                { key: "principal", label: "เงินต้น", value: grandTarget.principal, icon: <Coins className="w-3.5 h-3.5" />, color: "bg-blue-50 text-blue-800 border-blue-200" },
-                { key: "interest", label: "ดอกเบี้ย", value: grandTarget.interest, icon: <Percent className="w-3.5 h-3.5" />, color: "bg-purple-50 text-purple-800 border-purple-200" },
-                { key: "fee", label: "ค่าดำเนินการ", value: grandTarget.fee, icon: <Tag className="w-3.5 h-3.5" />, color: "bg-indigo-50 text-indigo-800 border-indigo-200" },
-                ...(!principalOnly ? [
-                  { key: "penalty", label: "ค่าปรับ", value: grandTarget.penalty, icon: <Gavel className="w-3.5 h-3.5" />, color: "bg-orange-50 text-orange-800 border-orange-200" } as BadgeItem,
-                  { key: "unlockFee", label: "ค่าปลดล็อก", value: grandTarget.unlockFee, icon: <LockOpen className="w-3.5 h-3.5" />, color: "bg-amber-50 text-amber-800 border-amber-200" } as BadgeItem,
-                ] : []),
-              ]}
-              visibility={targetBadgeVisibility}
-              onToggle={toggleTargetBadge}
-              totalLabel="เป้าเก็บหนี้รวม"
-              totalValue={grandTarget.total}
-              totalColor="bg-blue-600 text-white border-blue-700"
-            />
-            {/* ยอดเก็บหนี้ badges */}
-            <BadgeRow
-              title="ยอดเก็บหนี้"
-              items={[
-                { key: "principal", label: "เงินต้น", value: grandCollected.principal, icon: <Coins className="w-3.5 h-3.5" />, color: "bg-green-50 text-green-800 border-green-200" },
-                { key: "interest", label: "ดอกเบี้ย", value: grandCollected.interest, icon: <Percent className="w-3.5 h-3.5" />, color: "bg-teal-50 text-teal-800 border-teal-200" },
-                { key: "fee", label: "ค่าดำเนินการ", value: grandCollected.fee, icon: <Tag className="w-3.5 h-3.5" />, color: "bg-cyan-50 text-cyan-800 border-cyan-200" },
-                { key: "penalty", label: "ค่าปรับ", value: grandCollected.penalty, icon: <Gavel className="w-3.5 h-3.5" />, color: "bg-yellow-50 text-yellow-800 border-yellow-200" },
-                { key: "unlockFee", label: "ค่าปลดล็อก", value: grandCollected.unlockFee, icon: <LockOpen className="w-3.5 h-3.5" />, color: "bg-lime-50 text-lime-800 border-lime-200" },
-                { key: "overpaid", label: "ชำระเกิน", value: grandCollected.overpaid, icon: <TrendingUp className="w-3.5 h-3.5" />, color: "bg-emerald-50 text-emerald-800 border-emerald-200" },
-                { key: "badDebt", label: "ขายเครื่อง", value: grandCollected.badDebt, icon: <TrendingDown className="w-3.5 h-3.5" />, color: "bg-red-50 text-red-800 border-red-200" },
-                { key: "discount", label: "ส่วนลด", value: grandCollected.discount, icon: <Tag className="w-3.5 h-3.5" />, color: "bg-gray-50 text-gray-600 border-gray-200" },
-              ]}
-              visibility={badgeVisibility}
-              onToggle={toggleBadge}
-              totalLabel="ยอดเก็บหนี้รวม"
-              totalValue={grandCollected.total}
-              totalColor="bg-green-600 text-white border-green-700"
-            />
+                {/* เป้าเก็บหนี้ badges */}
+                <BadgeRow
+                  title="เป้าเก็บหนี้"
+                  items={[
+                    { key: "principal", label: "เงินต้น", value: grandTarget.principal, icon: <Coins className="w-3.5 h-3.5" />, color: "bg-blue-50 text-blue-800 border-blue-200" },
+                    { key: "interest", label: "ดอกเบี้ย", value: grandTarget.interest, icon: <Percent className="w-3.5 h-3.5" />, color: "bg-purple-50 text-purple-800 border-purple-200" },
+                    { key: "fee", label: "ค่าดำเนินการ", value: grandTarget.fee, icon: <Tag className="w-3.5 h-3.5" />, color: "bg-indigo-50 text-indigo-800 border-indigo-200" },
+                    ...(!principalOnly ? [
+                      { key: "penalty", label: "ค่าปรับ", value: grandTarget.penalty, icon: <Gavel className="w-3.5 h-3.5" />, color: "bg-orange-50 text-orange-800 border-orange-200" } as BadgeItem,
+                      { key: "unlockFee", label: "ค่าปลดล็อก", value: grandTarget.unlockFee, icon: <LockOpen className="w-3.5 h-3.5" />, color: "bg-amber-50 text-amber-800 border-amber-200" } as BadgeItem,
+                    ] : []),
+                  ]}
+                  visibility={targetBadgeVisibility}
+                  onToggle={toggleTargetBadge}
+                  totalLabel="เป้าเก็บหนี้รวม"
+                  totalValue={grandTarget.total}
+                  totalColor="bg-blue-600 text-white border-blue-700"
+                />
+                {/* ยอดเก็บหนี้ badges */}
+                <BadgeRow
+                  title="ยอดเก็บหนี้"
+                  items={[
+                    { key: "principal", label: "เงินต้น", value: grandCollected.principal, icon: <Coins className="w-3.5 h-3.5" />, color: "bg-green-50 text-green-800 border-green-200" },
+                    { key: "interest", label: "ดอกเบี้ย", value: grandCollected.interest, icon: <Percent className="w-3.5 h-3.5" />, color: "bg-teal-50 text-teal-800 border-teal-200" },
+                    { key: "fee", label: "ค่าดำเนินการ", value: grandCollected.fee, icon: <Tag className="w-3.5 h-3.5" />, color: "bg-cyan-50 text-cyan-800 border-cyan-200" },
+                    { key: "penalty", label: "ค่าปรับ", value: grandCollected.penalty, icon: <Gavel className="w-3.5 h-3.5" />, color: "bg-yellow-50 text-yellow-800 border-yellow-200" },
+                    { key: "unlockFee", label: "ค่าปลดล็อก", value: grandCollected.unlockFee, icon: <LockOpen className="w-3.5 h-3.5" />, color: "bg-lime-50 text-lime-800 border-lime-200" },
+                    { key: "overpaid", label: "ชำระเกิน", value: grandCollected.overpaid, icon: <TrendingUp className="w-3.5 h-3.5" />, color: "bg-emerald-50 text-emerald-800 border-emerald-200" },
+                    { key: "badDebt", label: "ขายเครื่อง", value: grandCollected.badDebt, icon: <TrendingDown className="w-3.5 h-3.5" />, color: "bg-red-50 text-red-800 border-red-200" },
+                    { key: "discount", label: "ส่วนลด", value: grandCollected.discount, icon: <Tag className="w-3.5 h-3.5" />, color: "bg-gray-50 text-gray-600 border-gray-200" },
+                  ]}
+                  visibility={badgeVisibility}
+                  onToggle={toggleBadge}
+                  totalLabel="ยอดเก็บหนี้รวม"
+                  totalValue={grandCollected.total}
+                  totalColor="bg-green-600 text-white border-green-700"
+                />
               </div>
             )}
           </div>
