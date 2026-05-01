@@ -1037,7 +1037,7 @@ export default function MonthlySummary() {
             <SummaryTable
               tab={tab} rows={rows} grandTotal={grandTotal}
               hiddenBuckets={hiddenBuckets} toggleBucket={toggleBucket} toggleGroup={toggleGroup} toggleAll={toggleAll}
-              paidVis={paidVis} targetVis={targetVis} dueVis={dueVis} notYetDueVis={notYetDueVis}
+              paidVis={paidVis} targetVis={targetVis} dueVis={dueVis} notYetDueVis={notYetDueVis} installVis={installVis}
               showBadDebtInstall={showBadDebtInstall} setShowBadDebtInstall={setShowBadDebtInstall}
               showBadDebtSale={showBadDebtSale} setShowBadDebtSale={setShowBadDebtSale}
               sortDir={sortDir} onToggleSort={()=>setSortDir((d)=>d==="asc"?"desc":"asc")}
@@ -1052,11 +1052,12 @@ export default function MonthlySummary() {
 }
 
 // ─── SummaryTable ─────────────────────────────────────────────────────────────
-function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGroup,toggleAll,paidVis,targetVis,dueVis,notYetDueVis,sortDir,onToggleSort,hiddenRows,toggleRow,showBadDebtInstall,setShowBadDebtInstall,showBadDebtSale,setShowBadDebtSale,stickyTop}:{
+function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGroup,toggleAll,paidVis,targetVis,dueVis,notYetDueVis,installVis,sortDir,onToggleSort,hiddenRows,toggleRow,showBadDebtInstall,setShowBadDebtInstall,showBadDebtSale,setShowBadDebtSale,stickyTop}:{
   tab:TabKey;rows:SummaryRow[];grandTotal:GrandTotal;hiddenBuckets:Set<string>;
   toggleBucket:(b:string)=>void;toggleGroup:(g:ColGroup)=>void;toggleAll:()=>void;
   paidVis:Record<MoneyBadgeKey,boolean>;targetVis:Record<MoneyBadgeKey,boolean>;
   dueVis:Record<DueBadgeKey,boolean>;notYetDueVis:Record<DueBadgeKey,boolean>;
+  installVis:Record<"principal"|"interest"|"fee",boolean>;
   sortDir:SortDir;onToggleSort:()=>void;
   hiddenRows:Set<string>;toggleRow:(month:string)=>void;
   showBadDebtInstall:boolean;setShowBadDebtInstall:(v:boolean)=>void;
@@ -1088,6 +1089,14 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
   // notYetDue
   const cellNotYetDueVal=(b:string,cell:SummaryCell|undefined)=>hiddenBuckets.has(b)?0:(cell?computeDueTotal(cell.notYetDue,notYetDueVis):0);
   const cellNotYetDueDisplay=(_b:string,cell:SummaryCell|undefined)=>(cell?computeDueTotal(cell.notYetDue,notYetDueVis):0);
+
+  // installTotal — ใช้ installVis ในการคำนวณ
+  function computeInstallVisTotal(m:MoneyBreakdown):number {
+    return (installVis.principal?m.principal:0)+(installVis.interest?m.interest:0)+(installVis.fee?m.fee:0);
+  }
+  const cellInstallVal=(b:string,cell:SummaryCell|undefined)=>hiddenBuckets.has(b)?0:(cell?computeInstallVisTotal(cell.installTotal):0);
+  const cellInstallDisplay=(_b:string,cell:SummaryCell|undefined)=>(cell?computeInstallVisTotal(cell.installTotal):0);
+  const gtInstallVal=(b:string)=>{const bt=grandTotal.bucketTotals[b];return hiddenBuckets.has(b)?0:(bt?computeInstallVisTotal(bt.installTotal):0);};
 
   // grand total helpers
   const gtCountVal=(b:string)=>{const bt=grandTotal.bucketTotals[b];return hiddenBuckets.has(b)?0:(bt?.count??0);};
@@ -1165,6 +1174,10 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
     if(hiddenRows.has(row.approveMonth))return 0;
     return DEBT_BUCKETS.reduce((s,b)=>{if(hiddenBuckets.has(b))return s;const cell=row.buckets[b];if(!cell)return s;return s+computeDueTotal(cell.notYetDue,notYetDueVis);},0);
   }
+  function rowInstallTotal(row:SummaryRow):number{
+    if(hiddenRows.has(row.approveMonth))return 0;
+    return DEBT_BUCKETS.reduce((s,b)=>{if(hiddenBuckets.has(b))return s;const cell=row.buckets[b];if(!cell)return s;return s+computeInstallVisTotal(cell.installTotal);},0);
+  }
 
   const gtTargetTotal=DEBT_BUCKETS.reduce((s,b)=>{if(hiddenBuckets.has(b))return s;const bt=grandTotal.bucketTotals[b];if(!bt)return s;return s+computeMoneyTotal(bt.target,{...targetVis,discount:false,overpaid:false});},0);
   const gtPaidTotal=DEBT_BUCKETS.reduce((s,b)=>{
@@ -1178,6 +1191,7 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
     return s+computeDueTotal(bt.due,dueVis);
   },0);
   const gtNotYetDueTotal=DEBT_BUCKETS.reduce((s,b)=>{if(hiddenBuckets.has(b))return s;const bt=grandTotal.bucketTotals[b];if(!bt)return s;return s+computeDueTotal(bt.notYetDue,notYetDueVis);},0);
+  const gtInstallTotal=DEBT_BUCKETS.reduce((s,b)=>{if(hiddenBuckets.has(b))return s;const bt=grandTotal.bucketTotals[b];if(!bt)return s;return s+computeInstallVisTotal(bt.installTotal);},0);
 
   // render helpers
   function renderCount(v:number){return v>0?(<span className="inline-flex items-center justify-center bg-slate-200 text-slate-700 rounded-full px-2.5 py-0.5 text-xs font-bold">{v.toLocaleString()}</span>):(<span className="text-gray-300">—</span>);}
@@ -1310,7 +1324,7 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
               {/* รวมคอลัมน์ 2 */}
               <td className="sticky left-[130px] z-10 px-3 py-2.5 text-right bg-white border-r border-gray-200 min-w-[110px]">
                 {tab==="count"?renderCount(isHiddenRow?0:rowContractTotal(row))
-                :tab==="installTotal"?renderMoney(isHiddenRow?0:(isHiddenRow?0:DEBT_BUCKETS.reduce((s,b)=>s+(row.buckets[b]?.installTotal.total??0),0)),"text-purple-800 font-semibold")
+                :tab==="installTotal"?renderMoney(isHiddenRow?0:rowInstallTotal(row),"text-purple-800 font-semibold")
                 :tab==="target"?renderMoney(isHiddenRow?0:rowTargetTotal(row),"text-indigo-800 font-semibold")
                 :tab==="paid"?renderMoney(isHiddenRow?0:rowPaidTotal(row),"text-green-800 font-semibold")
                 :tab==="due"?renderMoney(isHiddenRow?0:rowDueTotal(row),"text-orange-800 font-semibold")
@@ -1387,9 +1401,9 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
                       return<td key={b} className={`px-3 py-2.5 text-right ${cellBg}`}>{renderMoney(cellDueVal(b,cell),"text-orange-800 font-medium")}</td>;
                     }
                     if(tab==="installTotal"){
-                      const v=cell?.installTotal.total??0;
-                      if(isDimmed)return<td key={b} className={`px-3 py-2.5 text-right ${cellBg}`}><span className="text-gray-400">{fmtMoney(v)}</span></td>;
-                      return<td key={b} className={`px-3 py-2.5 text-right ${cellBg}`}>{renderMoney(v,"text-purple-800 font-medium")}</td>;
+                      const displayV=cellInstallDisplay(b,cell);
+                      if(isDimmed)return<td key={b} className={`px-3 py-2.5 text-right ${cellBg}`}><span className="text-gray-400">{fmtMoney(displayV)}</span></td>;
+                      return<td key={b} className={`px-3 py-2.5 text-right ${cellBg}`}>{renderMoney(cellInstallVal(b,cell),"text-purple-800 font-medium")}</td>;
                     }
                     // notYetDue tab
                     const displayV=cellNotYetDueDisplay(b,cell);
@@ -1421,8 +1435,8 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
                       return<td className={`px-3 py-2.5 text-right font-bold ${subBg} border-r border-gray-200`}>{renderMoney(calcV,"text-orange-900")}</td>;
                     }
                     if(tab==="installTotal"){
-                      const calcV=isHiddenRow?0:buckets.reduce((s,b)=>s+(row.buckets[b]?.installTotal.total??0),0);
-                      if(isHiddenRow){const displayV=buckets.reduce((s,b)=>s+(row.buckets[b]?.installTotal.total??0),0);return<td className={`px-3 py-2.5 text-right font-bold ${subBg} border-r border-gray-200`}><span className="text-gray-400">{fmtMoney(displayV)}</span></td>;}
+                      const calcV=isHiddenRow?0:buckets.reduce((s,b)=>s+cellInstallVal(b,row.buckets[b]),0);
+                      if(isHiddenRow){const displayV=buckets.reduce((s,b)=>s+cellInstallDisplay(b,row.buckets[b]),0);return<td className={`px-3 py-2.5 text-right font-bold ${subBg} border-r border-gray-200`}><span className="text-gray-400">{fmtMoney(displayV)}</span></td>;}
                       return<td className={`px-3 py-2.5 text-right font-bold ${subBg} border-r border-gray-200`}>{renderMoney(calcV,"text-purple-900")}</td>;
                     }
                     // notYetDue
@@ -1443,7 +1457,7 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
             <td className="sticky left-0 z-20 px-3 py-2.5 text-slate-800 whitespace-nowrap border-r border-slate-300 bg-slate-200 min-w-[130px]">รวมทั้งหมด</td>
             <td className="sticky left-[130px] z-20 px-3 py-2.5 text-right border-r border-slate-300 bg-slate-200 min-w-[110px]">
               {tab==="count"?(<span className="inline-flex items-center justify-center bg-slate-400 text-white rounded-full px-2.5 py-0.5 text-xs font-bold">{gtContractTotal.toLocaleString()}</span>)
-              :tab==="installTotal"?renderMoney(DEBT_BUCKETS.reduce((s,b)=>s+(grandTotal.bucketTotals[b]?.installTotal.total??0),0),"text-purple-900")
+              :tab==="installTotal"?renderMoney(gtInstallTotal,"text-purple-900")
               :tab==="target"?renderMoney(gtTargetTotal,"text-indigo-900")
               :tab==="paid"?renderMoney(gtPaidTotal,"text-green-900")
               :tab==="due"?renderMoney(gtDueTotal,"text-orange-900")
@@ -1463,7 +1477,7 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
                     if(isBadDebtExpanded(b)){const installRaw=gtDueBadDebtInstallRaw(b);const install=showBadDebtInstall?installRaw:0;return(<React.Fragment key={b}><td className={`px-3 py-2.5 text-right ${cellBg} bg-slate-100 min-w-[120px]`}>{!showBadDebtInstall?<span className="text-gray-300">{fmtMoney(installRaw)}</span>:renderMoney(install,"text-orange-900")}</td><td className={`px-3 py-2.5 text-right ${cellBg} bg-slate-100 min-w-[120px]`}><span className="text-gray-300">0.00</span></td><td className={`px-3 py-2.5 text-right font-bold ${cellBg} bg-slate-100 min-w-[120px]`}>{renderMoney(install,"text-gray-900")}</td></React.Fragment>);}
                     const v=gtDueVal(b);return<td key={b} className={`px-3 py-2.5 text-right ${cellBg} bg-slate-100 min-w-[120px]`}>{renderMoney(v,"text-orange-900")}</td>;
                   }
-                  if(tab==="installTotal"){const v=grandTotal.bucketTotals[b]?.installTotal.total??0;return<td key={b} className={`px-3 py-2.5 text-right ${cellBg} bg-slate-100 min-w-[120px]`}>{renderMoney(v,"text-purple-900")}</td>;}
+                  if(tab==="installTotal"){return<td key={b} className={`px-3 py-2.5 text-right ${cellBg} bg-slate-100 min-w-[120px]`}>{renderMoney(gtInstallVal(b),"text-purple-900")}</td>;}
                   // notYetDue
                   const v=gtNotYetDueVal(b);return<td key={b} className={`px-3 py-2.5 text-right ${cellBg} bg-slate-100 min-w-[120px]`}>{renderMoney(v,"text-blue-900")}</td>;
                 })}
@@ -1471,7 +1485,7 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
                   const subBg=gi===0?"bg-green-100":"bg-orange-100";
                   const buckets=gi===0?normalBuckets:suspectBuckets;
                   if(tab==="count"){const v=gi===0?gtNormalCount:gtSuspectCount;return<td className={`px-3 py-2.5 text-right font-bold ${subBg} border-r border-slate-300 min-w-[120px]`}><span className="inline-flex items-center justify-center bg-slate-300 text-slate-800 rounded-full px-2.5 py-0.5 text-xs font-bold">{v.toLocaleString()}</span></td>;}
-                  if(tab==="installTotal"){const v=buckets.reduce((s,b)=>s+(grandTotal.bucketTotals[b]?.installTotal.total??0),0);return<td className={`px-3 py-2.5 text-right font-bold ${subBg} border-r border-slate-300 min-w-[120px]`}>{renderMoney(v,"text-purple-900")}</td>;}
+                  if(tab==="installTotal"){const v=buckets.reduce((s,b)=>s+gtInstallVal(b),0);return<td className={`px-3 py-2.5 text-right font-bold ${subBg} border-r border-slate-300 min-w-[120px]`}>{renderMoney(v,"text-purple-900")}</td>;}
                   if(tab==="target"){const v=gi===0?gtNormalTarget:gtSuspectTarget;return<td className={`px-3 py-2.5 text-right font-bold ${subBg} border-r border-slate-300 min-w-[120px]`}>{renderMoney(v,"text-indigo-900")}</td>;}
                   if(tab==="paid"){const v=gi===0?gtNormalPaid:gtSuspectPaid;return<td className={`px-3 py-2.5 text-right font-bold ${subBg} border-r border-slate-300 min-w-[120px]`}>{renderMoney(v,"text-green-900")}</td>;}
                   if(tab==="due"){const v=gi===0?gtNormalDue:gtSuspectDue;return<td className={`px-3 py-2.5 text-right font-bold ${subBg} border-r border-slate-300 min-w-[120px]`}>{renderMoney(v,"text-orange-900")}</td>;}
