@@ -633,7 +633,9 @@ export default function MonthlySummary() {
       <div className="flex-shrink-0 bg-white" ref={headerRef}>
         {/* ── Tab switcher + Export ─────────────────────────────────── */}
         <div className="bg-white border-b border-gray-200 px-4 flex items-center gap-0 overflow-x-auto">
-          <span className="text-sm font-semibold text-gray-700 whitespace-nowrap mr-3 flex-shrink-0">สรุปรายเดือน</span>
+          <span className="text-sm font-semibold text-gray-700 whitespace-nowrap flex-shrink-0">สรุปรายเดือน</span>
+          <InfoPopup tab={tab}/>
+          <span className="mr-2"/>
           {TAB_CONFIG.map((t)=>(
             <button key={t.key} type="button" onClick={()=>setTab(t.key)}
               className={["relative px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap flex-shrink-0",tab===t.key?t.activeClass:"border-transparent text-gray-400 hover:text-gray-600"].join(" ")}>
@@ -966,6 +968,17 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
   const gtDueBadDebtInstall=(b:string)=>showBadDebtInstall?gtDueBadDebtInstallRaw(b):0;
   const gtNotYetDueVal=(b:string)=>{const bt=grandTotal.bucketTotals[b];return hiddenBuckets.has(b)?0:(bt?computeDueTotal(bt.notYetDue,notYetDueVis):0);};
 
+  // ── Visible buckets per tab ─────────────────────────────────────────────
+  const HIDDEN_BUCKETS_BY_TAB: Record<string,string[]> = {
+    target:   ["หนี้เสีย"],
+    due:      ["สิ้นสุดสัญญา","หนี้เสีย"],
+    notYetDue:["ระงับสัญญา","สิ้นสุดสัญญา","หนี้เสีย"],
+  };
+  const tabHiddenBuckets = new Set(HIDDEN_BUCKETS_BY_TAB[tab] ?? []);
+  const visibleGroups: ColGroup[] = COL_GROUPS.map(g=>({
+    ...g,
+    buckets: (g.buckets as string[]).filter(b=>!tabHiddenBuckets.has(b)) as DebtBucket[],
+  })).filter(g=>g.buckets.length>0);
   const normalBuckets=COL_GROUPS[0].buckets as readonly string[];
   const suspectBuckets=COL_GROUPS[1].buckets as readonly string[];
 
@@ -1067,7 +1080,7 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
           <th rowSpan={3} className={`sticky left-[130px] z-30 px-3 py-2 text-right font-semibold whitespace-nowrap ${col2Color} text-white border-r border-white/20 min-w-[110px]`}>
             {col2Label}
           </th>
-          {COL_GROUPS.map((g)=>{
+          {visibleGroups.map((g)=>{
             const bucketSpan=g.buckets.reduce((a,b)=>a+bucketColSpan(b),0);
             const span=bucketSpan+(g.hasSubtotal?1:0);
             if(!g.label){
@@ -1121,14 +1134,11 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
               </th>
             );
           })}
-          {/* info popup */}
-          <th rowSpan={3} className="px-2 py-2 text-center bg-slate-700 text-white min-w-[40px] border-l border-white/20">
-            <InfoPopup tab={tab}/>
-          </th>
+
         </tr>
         {/* ── Row 2: bucket headers (for groups with subtotal) ──────── */}
         <tr>
-          {COL_GROUPS.map((g)=>{
+          {visibleGroups.map((g)=>{
             if(!g.label)return null;
             return(
               <React.Fragment key={g.key}>
@@ -1172,7 +1182,7 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
                 :renderMoney(isHiddenRow?0:rowNotYetDueTotal(row),"text-blue-800 font-semibold")}
               </td>
               {/* Bucket cells */}
-              {COL_GROUPS.map((g,gi)=>(
+              {visibleGroups.map((g,gi)=>(
                 <React.Fragment key={g.key}>
                   {g.buckets.map((b)=>{
                     const cell=row.buckets[b];const cellBg=bucketCellBg(b);
@@ -1293,7 +1303,7 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
               :tab==="due"?renderMoney(gtDueTotal,"text-orange-900")
               :renderMoney(gtNotYetDueTotal,"text-blue-900")}
             </td>
-            {COL_GROUPS.map((g,gi)=>(
+            {visibleGroups.map((g,gi)=>(
               <React.Fragment key={g.key}>
                 {g.buckets.map((b)=>{
                   const cellBg=bucketCellBg(b);
@@ -1320,7 +1330,7 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
                 })()}
               </React.Fragment>
             ))}
-            <td className="px-2 py-2.5 bg-slate-100 min-w-[40px]"/>
+
           </tr>
       </tfoot>
     </table>
