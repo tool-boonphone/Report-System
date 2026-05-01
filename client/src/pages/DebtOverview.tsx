@@ -447,7 +447,7 @@ type MonthRow = {
   deviceSaleAmount: number;
   // ต้นทุน = financeAmount - commissionNet
   cost: number;
-  // ยังไม่ครบกำหนด (principal only, dueDate > today)
+  // ยังไม่ถึงกำหนด (principal only, dueDate > today)
   notYetDue: number;
 };
 
@@ -692,7 +692,7 @@ export default function DebtOverview() {
     });
   }, [collectedRows, search, statusFilter, approveDateFilter, dueDateFilter, productTypeFilter, dueDateExact]);
 
-  /* ---- Today for "ยังไม่ครบกำหนด" ---- */
+  /* ---- Today for "ยังไม่ถึงกำหนด" ---- */
   const todayStr = useMemo(() => new Date().toISOString().slice(0, 10), []);
 
   /* ---- Aggregate by month ---- */
@@ -721,7 +721,7 @@ export default function DebtOverview() {
       const monthKey = r.approveDate ? r.approveDate.slice(0, 7) : "ไม่ระบุ";
       const row = getOrCreate(monthKey);
 
-      // นับสัญญา (unique per contract)
+      // นับสัญญา (unique per contract) — รวมทุกสัญญาไม่ว่าจะมีงวดถึงกำหนดหรือไม่
       if (!seenContracts.has(r.contractExternalId)) {
         seenContracts.set(r.contractExternalId, monthKey);
         row.contractCount += 1;
@@ -731,8 +731,19 @@ export default function DebtOverview() {
         row.cost += fa + cn;
       }
 
-      // เป้าเก็บหนี้ — sum installments ที่ผ่าน filter
-      // หมายเหตุ: isClosed installments ยังอาจมี penalty/unlockFee ค้างอยู่
+      // ยังไม่ถึงกำหนด: principal ของงวดที่ยังไม่ถึง dueDate (ทุกงวด isFuture)
+      for (const inst of r.installments) {
+        if (inst.isSuspended) continue;
+        if (!inst.isClosed) {
+          const dueStr = inst.dueDate ? inst.dueDate.slice(0, 10) : null;
+          const isFuture = dueStr ? dueStr > todayStr : false;
+          if (isFuture) {
+            row.notYetDue += inst.principal ?? 0;
+          }
+        }
+      }
+
+      // เป้าเก็บหนี้ — sum installments ที่ผ่าน filter (เฉพาะงวดถึงกำหนดแล้ว)
       for (const inst of r.installments) {
         if (inst.isSuspended) continue;
         if (dueDateFilter.size > 0 && !(inst.dueDate && dueDateFilter.has(inst.dueDate.slice(0, 7)))) continue;
@@ -740,16 +751,11 @@ export default function DebtOverview() {
         if (!inst.isClosed) {
           const dueStr = inst.dueDate ? inst.dueDate.slice(0, 10) : null;
           const isFuture = dueStr ? dueStr > todayStr : false;
-          // ยังไม่ครบกำหนด: principal only, dueDate > today
-          if (isFuture) {
-            row.notYetDue += inst.principal ?? 0;
-          }
           // เป้าเก็บหนี้: เฉพาะงวดที่ถึงกำหนดแล้ว (dueDate <= today) หรือไม่มี dueDate
           if (!isFuture) {
             row.targetPrincipal += inst.principal ?? 0;
             row.targetInterest += inst.interest ?? 0;
             row.targetFee += inst.fee ?? 0;
-            // penalty/unlockFee: sum เฉพาะงวดที่ !isClosed AND !isFuture (ถึงกำหนดแล้ว)
             if (!principalOnly) {
               row.targetPenalty += inst.penalty ?? 0;
               row.targetUnlockFee += inst.unlockFee ?? 0;
@@ -878,7 +884,7 @@ export default function DebtOverview() {
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 text-sm">
-            {[
+              {[
               {
                 label: "เดือน-ปีที่อนุมัติ",
                 color: "bg-slate-100 text-slate-700",
@@ -886,48 +892,48 @@ export default function DebtOverview() {
               },
               {
                 label: "จำนวนสัญญา",
-                color: "bg-blue-50 text-blue-700",
-                desc: "จำนวนสัญญาทั้งหมดที่เกิดขึ้นในเดือน-ปีนั้น",
+                color: "bg-slate-100 text-slate-700",
+                desc: "จำนวนสัญญาทั้งหมดที่อนุมัติในเดือน-ปีนั้น",
               },
               {
                 label: "เป้าเก็บหนี้",
-                color: "bg-orange-50 text-orange-700",
-                desc: "ยอดรวมของงวดที่ค้างชำระหรือยังไม่ได้ชำระ ตั้งแต่งวดแรกจนถึงปัจจุบัน (ไม่นับงวดในอนาคต) = สีส้มในหน้าเป้าเก็บหนี้",
+                color: "bg-blue-50 text-blue-700",
+                desc: "ยอดรวมงวดที่ถึงกำหนดชำระแล้ว (ไม่นับงวดในอนาคต)",
               },
               {
                 label: "ยอดเก็บหนี้",
                 color: "bg-green-50 text-green-700",
-                desc: "ยอดค่างวดปกติที่ลูกค้าชำระเข้ามาแล้ว ไม่รวมยอดขายเครื่อง = สีเขียวในหน้าเป้าเก็บหนี้",
+                desc: "ยอดค่างวดที่ลูกค้าชำระแล้ว ไม่รวมยอดขายเครื่อง",
               },
               {
                 label: "อัตราเก็บ",
                 color: "bg-purple-50 text-purple-700",
-                desc: "ยอดเก็บหนี้ ÷ เป้าเก็บหนี้ × 100 (เปอร์เซ็นต์การเก็บหนี้สำเร็จ)",
+                desc: "ยอดเก็บหนี้ ÷ เป้าเก็บหนี้ × 100",
               },
               {
                 label: "ยอดขายเครื่อง",
-                color: "bg-yellow-50 text-yellow-700",
-                desc: "ยอดรวมการขายเครื่องของสัญญาทั้งหมดที่เกิดขึ้นในเดือน-ปีนั้น",
+                color: "bg-red-50 text-red-700",
+                desc: "ยอดรวมการขายเครื่องของสัญญาในเดือน-ปีนั้น",
               },
               {
                 label: "รายรับรวม",
-                color: "bg-teal-50 text-teal-700",
-                desc: "ยอดเก็บหนี้ + ยอดขายเครื่อง (ถ้าเปิดแสดงยอดขายเครื่อง)",
+                color: "bg-emerald-50 text-emerald-700",
+                desc: "ยอดเก็บหนี้ + ยอดขายเครื่อง (ถ้าเปิดแสดง)",
               },
               {
                 label: "ต้นทุน",
-                color: "bg-red-50 text-red-700",
-                desc: "ยอดจัดไฟแนนซ์ + ค่าคอมมิชชั่น ของสัญญาทั้งหมดที่เกิดขึ้นในเดือน-ปีนั้น",
+                color: "bg-slate-50 text-slate-700",
+                desc: "ยอดจัดไฟแนนซ์ + ค่าคอมมิชชั่น ของสัญญาในเดือน-ปีนั้น",
               },
               {
                 label: "กำไรขั้นต้น",
-                color: "bg-emerald-50 text-emerald-700",
+                color: "bg-amber-50 text-amber-700",
                 desc: "รายรับรวม − ต้นทุน",
               },
               {
-                label: "ยังไม่ครบกำหนด",
-                color: "bg-blue-50 text-blue-700",
-                desc: "ยอดรวมของงวดที่ยังไม่ถึงวันครบกำหนดชำระ (dueDate อยู่ในอนาคต) = สีฟ้าในหน้าเป้าเก็บหนี้",
+                label: "ยังไม่ถึงกำหนด",
+                color: "bg-sky-50 text-sky-700",
+                desc: "ยอดเงินต้นของงวดที่ยังไม่ถึงวันครบกำหนดชำระ",
               },
             ].map(({ label, color, desc }) => (
               <div key={label} className="flex gap-3 items-start">
@@ -1051,7 +1057,7 @@ export default function DebtOverview() {
                     const XLSX = await import("xlsx");
                     const wb = XLSX.utils.book_new();
                     const wsData = [
-                      ["เดือน", "จำนวนสัญญา", "เป้าเก็บหนี้", "ยอดเก็บหนี้", "% การเก็บ", "ยอดขายเครื่อง", "รายรับรวม", "ต้นทุน", "กำไรขั้นต้น", "ยังไม่ครบกำหนด"],
+                      ["เดือน", "จำนวนสัญญา", "เป้าเก็บหนี้", "ยอดเก็บหนี้", "% การเก็บ", "ยอดขายเครื่อง", "รายรับรวม", "ต้นทุน", "กำไรขั้นต้น", "ยังไม่ถึงกำหนด"],
                       ...rows.map((r) => {
                         const deviceSale = showDeviceSale ? r.deviceSaleAmount : 0;
                         const revenue = r.collectedTotal + deviceSale;
@@ -1206,8 +1212,8 @@ export default function DebtOverview() {
                       </button>
                     </th>
                     <th className="px-3 py-3 text-right font-semibold whitespace-nowrap text-white min-w-[90px]">จำนวนสัญญา</th>
-                    <th className="px-3 py-3 text-right font-semibold whitespace-nowrap text-white min-w-[140px] bg-blue-800">เป้าเก็บหนี้</th>
-                    <th className="px-3 py-3 text-right font-semibold whitespace-nowrap text-white min-w-[140px] bg-green-800">ยอดเก็บหนี้</th>
+                    <th className="px-3 py-3 text-right font-semibold whitespace-nowrap text-white min-w-[140px] bg-blue-700">เป้าเก็บหนี้</th>
+                    <th className="px-3 py-3 text-right font-semibold whitespace-nowrap text-white min-w-[140px] bg-green-700">ยอดเก็บหนี้</th>
                     <th className="px-3 py-3 text-right font-semibold whitespace-nowrap text-white min-w-[90px]">% การเก็บ</th>
                     <th className="px-3 py-3 text-right font-semibold whitespace-nowrap text-white min-w-[140px]">
                       <div className="flex items-center justify-end gap-1">
@@ -1225,8 +1231,7 @@ export default function DebtOverview() {
                     <th className="px-3 py-3 text-right font-semibold whitespace-nowrap text-white min-w-[140px] bg-emerald-800">รายรับรวม</th>
                     <th className="px-3 py-3 text-right font-semibold whitespace-nowrap text-white min-w-[140px]">ต้นทุน</th>
                     <th className="px-3 py-3 text-right font-semibold whitespace-nowrap text-white min-w-[140px] bg-amber-700">กำไรขั้นต้น</th>
-                    <th className="px-3 py-3 text-right font-semibold whitespace-nowrap text-white min-w-[140px]">ยังไม่ครบกำหนด</th>
-                    <th className="px-3 py-3 text-center font-semibold whitespace-nowrap text-white min-w-[50px]">แสดง</th>
+                    <th className="px-3 py-3 text-right font-semibold whitespace-nowrap text-white min-w-[140px] bg-sky-700">ยังไม่ถึงกำหนด</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1261,9 +1266,31 @@ export default function DebtOverview() {
                           isEven ? "bg-white" : "bg-slate-50/60",
                         ].join(" ")}
                       >
-                        {/* เดือน */}
+                        {/* เดือน + Eye toggle */}
                         <td className={["px-3 py-2.5 font-semibold text-slate-700 sticky left-0 z-10 whitespace-nowrap", isEven ? "bg-white" : "bg-slate-50"].join(" ")}>
-                          {fmtMonthYear(row.monthKey)}
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => setHiddenMonths((prev) => {
+                                const next = new Set(prev);
+                                if (next.has(row.monthKey)) next.delete(row.monthKey);
+                                else next.add(row.monthKey);
+                                return next;
+                              })}
+                              className={[
+                                "p-0.5 rounded transition-colors flex-shrink-0",
+                                hiddenMonths.has(row.monthKey)
+                                  ? "text-gray-300 hover:text-gray-500"
+                                  : "text-slate-400 hover:text-slate-600",
+                              ].join(" ")}
+                              title={hiddenMonths.has(row.monthKey) ? "แสดงเดือนนี้" : "ซ่อนเดือนนี้"}
+                            >
+                              {hiddenMonths.has(row.monthKey)
+                                ? <EyeOff className="w-3.5 h-3.5" />
+                                : <Eye className="w-3.5 h-3.5" />}
+                            </button>
+                            {fmtMonthYear(row.monthKey)}
+                          </div>
                         </td>
                         {/* จำนวนสัญญา */}
                         <td className="px-3 py-2.5 text-right text-slate-600">
@@ -1303,38 +1330,15 @@ export default function DebtOverview() {
                         <td className={["px-3 py-2.5 text-right bg-amber-50/30", profitColor].join(" ")}>
                           {fmtMoney(grossProfit)}
                         </td>
-                        {/* ยังไม่ครบกำหนด */}
-                        <td className="px-3 py-2.5 text-right text-slate-500">
+                        {/* ยังไม่ถึงกำหนด */}
+                        <td className="px-3 py-2.5 text-right text-sky-700 font-medium bg-sky-50/30">
                           {fmtMoney(row.notYetDue)}
-                        </td>
-                        {/* Eye toggle */}
-                        <td className="px-3 py-2.5 text-center">
-                          <button
-                            type="button"
-                            onClick={() => setHiddenMonths((prev) => {
-                              const next = new Set(prev);
-                              if (next.has(row.monthKey)) next.delete(row.monthKey);
-                              else next.add(row.monthKey);
-                              return next;
-                            })}
-                            className={[
-                              "p-1 rounded transition-colors",
-                              hiddenMonths.has(row.monthKey)
-                                ? "text-gray-300 hover:text-gray-500"
-                                : "text-slate-500 hover:text-slate-700",
-                            ].join(" ")}
-                            title={hiddenMonths.has(row.monthKey) ? "แสดงเดือนนี้" : "ซ่อนเดือนนี้"}
-                          >
-                            {hiddenMonths.has(row.monthKey)
-                              ? <EyeOff className="w-4 h-4" />
-                              : <Eye className="w-4 h-4" />}
-                          </button>
                         </td>
                       </tr>
                       {/* Hidden month detail row */}
                       {isHidden && (
                         <tr className={isEven ? "bg-white" : "bg-slate-50/60"}>
-                          <td colSpan={11} className="px-6 py-1.5 text-xs text-gray-400 italic border-b border-gray-100">
+                          <td colSpan={10} className="px-6 py-1.5 text-xs text-gray-400 italic border-b border-gray-100">
                             ซ่อนแล้ว — คลิกไอคอนตาเพื่อแสดงอีกครั้ง
                           </td>
                         </tr>
@@ -1370,8 +1374,7 @@ export default function DebtOverview() {
                         <td className="px-3 py-3 text-right text-emerald-200">{fmtMoney(totalRevenue)}</td>
                         <td className="px-3 py-3 text-right text-slate-200">{fmtMoney(totalCost)}</td>
                         <td className={["px-3 py-3 text-right", totalProfit >= 0 ? "text-amber-200" : "text-red-300"].join(" ")}>{fmtMoney(totalProfit)}</td>
-                        <td className="px-3 py-3 text-right text-slate-300">{fmtMoney(totalNotYetDue)}</td>
-                        <td></td>
+                        <td className="px-3 py-3 text-right text-sky-200">{fmtMoney(totalNotYetDue)}</td>
                       </tr>
                     </tfoot>
                   );
@@ -1379,7 +1382,7 @@ export default function DebtOverview() {
               </table>
             </div>
             <div className="mt-2 text-xs text-gray-400 text-right">
-              แสดง {monthRows.length} เดือน จาก {filteredTargetRows.length.toLocaleString()} สัญญา (target) / {filteredCollectedRows.length.toLocaleString()} สัญญา (collected)
+              แสดง {monthRows.length} เดือน จาก {filteredTargetRows.length.toLocaleString()} สัญญา (target)
             </div>
           </div>
         )}

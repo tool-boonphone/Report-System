@@ -1255,3 +1255,25 @@ Task list:
 - [x] P128-7: MonthlySummary.tsx — เพิ่ม TabKey "target"|"notYetDue", filter state, badge bar (indigo/ฟ้า), tab switcher 5 แถบ
 - [x] P128-8: MonthlySummary.tsx — อัปเดต SummaryTable cell helpers + Export Excel รองรับ tab ใหม่
 - [x] P128-9: ตรวจสอบ TypeScript, save checkpoint, push GitHub
+
+## Phase 129 — Fix จำนวนสัญญาใน DebtOverview และ MonthlySummary ให้ตรงกับ DebtReport
+- [ ] P129-1: ตรวจสอบ logic นับสัญญาใน DebtOverview (debtOverviewDb.ts หรือ client-side)
+- [ ] P129-2: ตรวจสอบ logic นับสัญญาใน MonthlySummary (queryCount ใน monthlySummaryDb.ts)
+- [ ] P129-3: ตรวจสอบ logic นับสัญญาใน DebtReport (debtDb.ts) เพื่อใช้เป็น reference
+- [ ] P129-4: แก้ไข DebtOverview ให้นับทุกสถานะยกเว้น "ยกเลิกสัญญา"
+- [ ] P129-5: แก้ไข MonthlySummary queryCount ให้นับทุกสถานะยกเว้น "ยกเลิกสัญญา"
+- [ ] P129-6: ตรวจสอบ TypeScript, save checkpoint, push GitHub
+
+## Phase 130 — Fix DebtOverview จำนวนสัญญา (3509 → 3902)
+- [ ] P130-1: วิเคราะห์สาเหตุที่ DebtOverview แสดง 3509 แทน 3902 (DebtReport)
+- [ ] P130-2: แก้ไข DebtOverview ให้นับสัญญาทั้งหมดยกเว้นยกเลิกสัญญา
+- [ ] P130-3: ตรวจสอบ TypeScript, save checkpoint, push GitHub
+
+## Phase 131 — DebtOverview UI Fix
+
+- [ ] P131-1: นับ contractCount จากทุก installments (รวม isFuture) ไม่ใช่แค่งวดที่ถึงกำหนดแล้ว
+- [ ] P131-2: ปรับสีคอลัมน์ header ให้ตรงกับ badge สี (เป้าเก็บหนี้=น้ำเงิน, ยอดเก็บหนี้=เขียว, กำไรขั้นต้น=ส้ม, ยังไม่ถึงกำหนด=ฟ้า)
+- [ ] P131-3: ปรับคำอธิบาย (ColumnInfoModal) ให้กระชับ ไม่อ้างอิงหน้าอื่น
+- [ ] P131-4: เปลี่ยน "ยังไม่ครบกำหนด" → "ยังไม่ถึงกำหนด" ทุกจุด
+- [ ] P131-5: ตัดคอลัมน์ "แสดง" (eye toggle per row) ออก
+- [ ] P131-6: ย้ายไอคอนเปิด/ปิดตา (hiddenMonths toggle) มาไว้ที่คอลัมน์ "เดือน-ปี" แทน
