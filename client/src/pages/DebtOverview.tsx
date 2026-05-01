@@ -749,11 +749,13 @@ export default function DebtOverview() {
             row.targetPrincipal += inst.principal ?? 0;
             row.targetInterest += inst.interest ?? 0;
             row.targetFee += inst.fee ?? 0;
+            // penalty/unlockFee: sum เฉพาะงวดที่ !isClosed AND !isFuture (ถึงกำหนดแล้ว)
+            if (!principalOnly) {
+              row.targetPenalty += inst.penalty ?? 0;
+              row.targetUnlockFee += inst.unlockFee ?? 0;
+            }
           }
         }
-        // penalty/unlockFee: sum จากทุกงวด (รวม isClosed) เพราะอาจมีค้างอยู่
-        row.targetPenalty += principalOnly ? 0 : (inst.penalty ?? 0);
-        row.targetUnlockFee += principalOnly ? 0 : (inst.unlockFee ?? 0);
       }
     }
 

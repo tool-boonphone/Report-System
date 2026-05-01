@@ -1244,3 +1244,14 @@ Task list:
 - [ ] Summary: แก้ logic คอลัมน์ต้นทุน (ยอดจัดไฟแนนซ์+ค่าคอมมิชชั่น)
 - [ ] Summary: แก้ logic คอลัมน์กำไรขั้นต้น (รายรับรวม-ต้นทุน)
 - [ ] Summary: แก้ logic คอลัมน์ยังไม่ครบกำหนด (ยอดรวมที่ยังไม่ถึงดิว)
+
+## Phase 128 — MonthlySummary: เพิ่ม 2 แถบใหม่ + Fix ยอดค้างชำระ + Fix penalty/unlockFee
+- [x] P128-1: monthlySummaryDb.ts — เพิ่ม queryTarget (ยอดที่ต้องชำระ แบบ A: SUM total_amount WHERE is_future=0)
+- [x] P128-2: monthlySummaryDb.ts — เพิ่ม queryNotYetDue (ยอดที่ยังไม่ถึงกำหนด: SUM total_amount WHERE is_future=1)
+- [x] P128-3: monthlySummaryDb.ts — fix queryDue ให้รวม unlock_fee (ดึงจากงวดล่าสุดของแต่ละสัญญา)
+- [x] P128-4: monthlySummaryDb.ts — fix penalty/unlockFee ใน queryTarget และ queryDue ให้ดึงจากงวดล่าสุดเท่านั้น (MAX period_number per contract)
+- [x] P128-5: monthlySummaryDb.ts — อัปเดต MonthlySummaryParams และ getMonthlySummary ให้รัน 5 queries + assemble
+- [x] P128-6: routers/monthlySummary.ts — เพิ่ม input params (target/notYetDue filters), FlatRow fields (targetTotal, notYetDueTotal + breakdown), flatten loop
+- [x] P128-7: MonthlySummary.tsx — เพิ่ม TabKey "target"|"notYetDue", filter state, badge bar (indigo/ฟ้า), tab switcher 5 แถบ
+- [x] P128-8: MonthlySummary.tsx — อัปเดต SummaryTable cell helpers + Export Excel รองรับ tab ใหม่
+- [x] P128-9: ตรวจสอบ TypeScript, save checkpoint, push GitHub

@@ -1,5 +1,5 @@
 /**
- * Monthly Summary router (Phase 83).
+ * Monthly Summary router (Phase 128).
  *
  * Return type (flat — เพื่อหลีกเลี่ยง superjson depth limit):
  *   rowsJson: string  (JSON.stringify of FlatRow[])
@@ -10,7 +10,9 @@
  *   bucket: string  // "ปกติ"|"เกิน 1-7"|...|"__total__"
  *   contractCount: number
  *   paidPrincipal/Interest/Fee/Penalty/UnlockFee/Discount/Overpaid/BadDebt/BadDebtInstallment/Total: number
- *   duePrincipal/Interest/Fee/Penalty/Total: number
+ *   duePrincipal/Interest/Fee/Penalty/UnlockFee/Total: number
+ *   targetPrincipal/Interest/Fee/Penalty/UnlockFee/Total: number
+ *   notYetDuePrincipal/Interest/Fee/Penalty/UnlockFee/Total: number
  * }
  */
 import { z } from "zod";
@@ -32,20 +34,32 @@ export const monthlySummaryRouter = router({
       z.object({
         section: SectionEnum,
         // Tab 1: จำนวนสัญญา
-        countApproveDate:    DateStr,
-        countApproveMonths:  z.array(MonthStr).optional(),
-        countProductType:    z.string().optional(),
-        countDeviceFamily:   DeviceFamily,
-        // Tab 2: ยอดชำระแล้ว
-        paidAtDate:          DateStr,
-        paidAtMonths:        z.array(MonthStr).optional(),
-        paidProductType:     z.string().optional(),
-        paidDeviceFamily:    DeviceFamily,
-        // Tab 3: ยอดค้างชำระ
-        dueAtDate:           DateStr,
-        dueAtMonths:         z.array(MonthStr).optional(),
-        dueProductType:      z.string().optional(),
-        dueDeviceFamily:     DeviceFamily,
+        countApproveDate:       DateStr,
+        countApproveMonths:     z.array(MonthStr).optional(),
+        countProductType:       z.string().optional(),
+        countDeviceFamily:      DeviceFamily,
+        // Tab 2: ยอดที่ต้องชำระ
+        targetDueDate:          DateStr,
+        targetDueMonths:        z.array(MonthStr).optional(),
+        targetApproveMonths:    z.array(MonthStr).optional(),
+        targetProductType:      z.string().optional(),
+        targetDeviceFamily:     DeviceFamily,
+        // Tab 3: ยอดชำระแล้ว
+        paidAtDate:             DateStr,
+        paidAtMonths:           z.array(MonthStr).optional(),
+        paidProductType:        z.string().optional(),
+        paidDeviceFamily:       DeviceFamily,
+        // Tab 4: ยอดค้างชำระ
+        dueAtDate:              DateStr,
+        dueAtMonths:            z.array(MonthStr).optional(),
+        dueProductType:         z.string().optional(),
+        dueDeviceFamily:        DeviceFamily,
+        // Tab 5: ยอดที่ยังไม่ถึงกำหนด
+        notYetDueDueDate:       DateStr,
+        notYetDueDueMonths:     z.array(MonthStr).optional(),
+        notYetDueApproveMonths: z.array(MonthStr).optional(),
+        notYetDueProductType:   z.string().optional(),
+        notYetDueDeviceFamily:  DeviceFamily,
       }),
     )
     .query(async ({ input }) => {
@@ -71,10 +85,19 @@ export const monthlySummaryRouter = router({
         approveMonth: string;
         bucket: string;
         contractCount: number;
+        // paid
         paidPrincipal: number; paidInterest: number; paidFee: number; paidPenalty: number;
         paidUnlockFee: number; paidDiscount: number; paidOverpaid: number;
         paidBadDebt: number; paidBadDebtInstallment: number; paidTotal: number;
-        duePrincipal: number; dueInterest: number; dueFee: number; duePenalty: number; dueTotal: number;
+        // due (ยอดค้างชำระ) — รวม unlockFee จากงวดล่าสุด
+        duePrincipal: number; dueInterest: number; dueFee: number;
+        duePenalty: number; dueUnlockFee: number; dueTotal: number;
+        // target (ยอดที่ต้องชำระ)
+        targetPrincipal: number; targetInterest: number; targetFee: number;
+        targetPenalty: number; targetUnlockFee: number; targetTotal: number;
+        // notYetDue (ยอดที่ยังไม่ถึงกำหนด)
+        notYetDuePrincipal: number; notYetDueInterest: number; notYetDueFee: number;
+        notYetDuePenalty: number; notYetDueUnlockFee: number; notYetDueTotal: number;
       }[] = [];
 
       for (const row of summaryRows) {
@@ -85,21 +108,38 @@ export const monthlySummaryRouter = router({
             approveMonth: row.approveMonth,
             bucket,
             contractCount: cell.contractCount,
-            paidPrincipal: cell.paid.principal,
-            paidInterest: cell.paid.interest,
-            paidFee: cell.paid.fee,
-            paidPenalty: cell.paid.penalty,
-            paidUnlockFee: cell.paid.unlockFee,
-            paidDiscount: cell.paid.discount,
-            paidOverpaid: cell.paid.overpaid,
-            paidBadDebt: cell.paid.badDebt,
+            // paid
+            paidPrincipal:          cell.paid.principal,
+            paidInterest:           cell.paid.interest,
+            paidFee:                cell.paid.fee,
+            paidPenalty:            cell.paid.penalty,
+            paidUnlockFee:          cell.paid.unlockFee,
+            paidDiscount:           cell.paid.discount,
+            paidOverpaid:           cell.paid.overpaid,
+            paidBadDebt:            cell.paid.badDebt,
             paidBadDebtInstallment: cell.paid.badDebtInstallment,
-            paidTotal: cell.paid.total,
-            duePrincipal: cell.due.principal,
-            dueInterest: cell.due.interest,
-            dueFee: cell.due.fee,
-            duePenalty: cell.due.penalty,
-            dueTotal: cell.due.total,
+            paidTotal:              cell.paid.total,
+            // due
+            duePrincipal:           cell.due.principal,
+            dueInterest:            cell.due.interest,
+            dueFee:                 cell.due.fee,
+            duePenalty:             cell.due.penalty,
+            dueUnlockFee:           cell.due.unlockFee,
+            dueTotal:               cell.due.total,
+            // target
+            targetPrincipal:        cell.target.principal,
+            targetInterest:         cell.target.interest,
+            targetFee:              cell.target.fee,
+            targetPenalty:          cell.target.penalty,
+            targetUnlockFee:        cell.target.unlockFee,
+            targetTotal:            cell.target.total,
+            // notYetDue
+            notYetDuePrincipal:     cell.notYetDue.principal,
+            notYetDueInterest:      cell.notYetDue.interest,
+            notYetDueFee:           cell.notYetDue.fee,
+            notYetDuePenalty:       cell.notYetDue.penalty,
+            notYetDueUnlockFee:     cell.notYetDue.unlockFee,
+            notYetDueTotal:         cell.notYetDue.total,
           });
         }
         // "__total__" row สำหรับแต่ละเดือน
@@ -107,21 +147,38 @@ export const monthlySummaryRouter = router({
           approveMonth: row.approveMonth,
           bucket: "__total__",
           contractCount: row.totalCount,
-          paidPrincipal: row.totalPaid.principal,
-          paidInterest: row.totalPaid.interest,
-          paidFee: row.totalPaid.fee,
-          paidPenalty: row.totalPaid.penalty,
-          paidUnlockFee: row.totalPaid.unlockFee,
-          paidDiscount: row.totalPaid.discount,
-          paidOverpaid: row.totalPaid.overpaid,
-          paidBadDebt: row.totalPaid.badDebt,
+          // paid
+          paidPrincipal:          row.totalPaid.principal,
+          paidInterest:           row.totalPaid.interest,
+          paidFee:                row.totalPaid.fee,
+          paidPenalty:            row.totalPaid.penalty,
+          paidUnlockFee:          row.totalPaid.unlockFee,
+          paidDiscount:           row.totalPaid.discount,
+          paidOverpaid:           row.totalPaid.overpaid,
+          paidBadDebt:            row.totalPaid.badDebt,
           paidBadDebtInstallment: row.totalPaid.badDebtInstallment,
-          paidTotal: row.totalPaid.total,
-          duePrincipal: row.totalDue.principal,
-          dueInterest: row.totalDue.interest,
-          dueFee: row.totalDue.fee,
-          duePenalty: row.totalDue.penalty,
-          dueTotal: row.totalDue.total,
+          paidTotal:              row.totalPaid.total,
+          // due
+          duePrincipal:           row.totalDue.principal,
+          dueInterest:            row.totalDue.interest,
+          dueFee:                 row.totalDue.fee,
+          duePenalty:             row.totalDue.penalty,
+          dueUnlockFee:           row.totalDue.unlockFee,
+          dueTotal:               row.totalDue.total,
+          // target
+          targetPrincipal:        row.totalTarget.principal,
+          targetInterest:         row.totalTarget.interest,
+          targetFee:              row.totalTarget.fee,
+          targetPenalty:          row.totalTarget.penalty,
+          targetUnlockFee:        row.totalTarget.unlockFee,
+          targetTotal:            row.totalTarget.total,
+          // notYetDue
+          notYetDuePrincipal:     row.totalNotYetDue.principal,
+          notYetDueInterest:      row.totalNotYetDue.interest,
+          notYetDueFee:           row.totalNotYetDue.fee,
+          notYetDuePenalty:       row.totalNotYetDue.penalty,
+          notYetDueUnlockFee:     row.totalNotYetDue.unlockFee,
+          notYetDueTotal:         row.totalNotYetDue.total,
         });
       }
 
