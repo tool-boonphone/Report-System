@@ -35,7 +35,14 @@ import {
   TrendingUp,
   Wallet,
   X,
+  Info,
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
@@ -499,6 +506,7 @@ export default function DebtOverview() {
   const [hiddenMonths, setHiddenMonths] = useState<Set<string>>(new Set());
   // Export loading state
   const [isExporting, setIsExporting] = useState(false);
+  const [showColumnInfo, setShowColumnInfo] = useState(false);
 
   const toggleBadge = (key: string) => {
     setBadgeVisibility((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -858,6 +866,77 @@ export default function DebtOverview() {
 
   return (
     <AppShell>
+      {/* ---- Column Info Dialog ---- */}
+      <Dialog open={showColumnInfo} onOpenChange={setShowColumnInfo}>
+        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Info className="w-4 h-4 text-blue-500" />
+              คำอธิบายคอลัมน์ในตารางภาพรวม
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 text-sm">
+            {[
+              {
+                label: "เดือน-ปีที่อนุมัติ",
+                color: "bg-slate-100 text-slate-700",
+                desc: "เดือนและปีที่อนุมัติสัญญา ใช้เป็นตัวกำหนดกลุ่มของสัญญา",
+              },
+              {
+                label: "จำนวนสัญญา",
+                color: "bg-blue-50 text-blue-700",
+                desc: "จำนวนสัญญาทั้งหมดที่เกิดขึ้นในเดือน-ปีนั้น",
+              },
+              {
+                label: "เป้าเก็บหนี้",
+                color: "bg-orange-50 text-orange-700",
+                desc: "ยอดรวมของงวดที่ค้างชำระหรือยังไม่ได้ชำระ ตั้งแต่งวดแรกจนถึงปัจจุบัน (ไม่นับงวดในอนาคต) = สีส้มในหน้าเป้าเก็บหนี้",
+              },
+              {
+                label: "ยอดเก็บหนี้",
+                color: "bg-green-50 text-green-700",
+                desc: "ยอดค่างวดปกติที่ลูกค้าชำระเข้ามาแล้ว ไม่รวมยอดขายเครื่อง = สีเขียวในหน้าเป้าเก็บหนี้",
+              },
+              {
+                label: "อัตราเก็บ",
+                color: "bg-purple-50 text-purple-700",
+                desc: "ยอดเก็บหนี้ ÷ เป้าเก็บหนี้ × 100 (เปอร์เซ็นต์การเก็บหนี้สำเร็จ)",
+              },
+              {
+                label: "ยอดขายเครื่อง",
+                color: "bg-yellow-50 text-yellow-700",
+                desc: "ยอดรวมการขายเครื่องของสัญญาทั้งหมดที่เกิดขึ้นในเดือน-ปีนั้น",
+              },
+              {
+                label: "รายรับรวม",
+                color: "bg-teal-50 text-teal-700",
+                desc: "ยอดเก็บหนี้ + ยอดขายเครื่อง (ถ้าเปิดแสดงยอดขายเครื่อง)",
+              },
+              {
+                label: "ต้นทุน",
+                color: "bg-red-50 text-red-700",
+                desc: "ยอดจัดไฟแนนซ์ + ค่าคอมมิชชั่น ของสัญญาทั้งหมดที่เกิดขึ้นในเดือน-ปีนั้น",
+              },
+              {
+                label: "กำไรขั้นต้น",
+                color: "bg-emerald-50 text-emerald-700",
+                desc: "รายรับรวม − ต้นทุน",
+              },
+              {
+                label: "ยังไม่ครบกำหนด",
+                color: "bg-blue-50 text-blue-700",
+                desc: "ยอดรวมของงวดที่ยังไม่ถึงวันครบกำหนดชำระ (dueDate อยู่ในอนาคต) = สีฟ้าในหน้าเป้าเก็บหนี้",
+              },
+            ].map(({ label, color, desc }) => (
+              <div key={label} className="flex gap-3 items-start">
+                <span className={`shrink-0 px-2 py-0.5 rounded text-xs font-medium ${color}`}>{label}</span>
+                <span className="text-gray-600 leading-relaxed">{desc}</span>
+              </div>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <div className="flex flex-col h-full bg-gray-50">
         {/* ---- Header ---- */}
         <div className="bg-white border-b border-gray-200 px-4 py-3">
@@ -868,6 +947,13 @@ export default function DebtOverview() {
               {section && (
                 <span className="text-sm text-gray-500 font-normal">— {section}</span>
               )}
+              <button
+                onClick={() => setShowColumnInfo(true)}
+                className="ml-1 text-gray-400 hover:text-blue-500 transition-colors"
+                title="คำอธิบายคอลัมน์"
+              >
+                <Info className="w-4 h-4" />
+              </button>
             </div>
             <Button
               variant="outline"
