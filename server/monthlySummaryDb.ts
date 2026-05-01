@@ -625,10 +625,12 @@ async function queryInstallTotal(
         dtc.debt_range
       FROM debt_target_cache dtc
       INNER JOIN (
-        SELECT section, contract_external_id, MAX(period) AS max_period
-        FROM debt_target_cache
-        WHERE ${baseWhere}
-        GROUP BY section, contract_external_id
+        SELECT dtc2.section, dtc2.contract_external_id, MAX(dtc2.period) AS max_period
+        FROM debt_target_cache dtc2
+        WHERE dtc2.section = '${section}'
+          AND dtc2.approve_date IS NOT NULL
+          AND COALESCE(dtc2.contract_status, '') != 'ยกเลิกสัญญา'
+        GROUP BY dtc2.section, dtc2.contract_external_id
       ) mp ON mp.section = dtc.section
           AND mp.contract_external_id = dtc.contract_external_id
           AND mp.max_period = dtc.period
