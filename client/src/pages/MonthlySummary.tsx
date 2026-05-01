@@ -490,6 +490,12 @@ export default function MonthlySummary() {
   const[countProductType,setCountProductType]=useState<Set<string>>(new Set());
   const[countDeviceFamily,setCountDeviceFamily]=useState("");
 
+  // Tab installTotal: ยอดหนี้รวม
+  const[installApproveMonths,setInstallApproveMonths]=useState<Set<string>>(new Set());
+  const[installApproveYears,setInstallApproveYears]=useState<Set<string>>(new Set());
+  const[installProductType,setInstallProductType]=useState<Set<string>>(new Set());
+  const[installDeviceFamily,setInstallDeviceFamily]=useState("");
+
   // Tab 2: ยอดที่ต้องชำระ
   const[targetDueDate,setTargetDueDate]=useState("");
   const[targetDueMonths,setTargetDueMonths]=useState<Set<string>>(new Set());
@@ -528,6 +534,7 @@ export default function MonthlySummary() {
   },[]);
 
   // badge visibility
+  const[installVis,setInstallVis]=useState<Record<"principal"|"interest"|"fee",boolean>>({principal:true,interest:true,fee:true});
   const[paidVis,setPaidVis]=useState<Record<MoneyBadgeKey,boolean>>({principal:true,interest:true,fee:true,penalty:true,unlockFee:true,discount:false,overpaid:true});
   const[targetVis,setTargetVis]=useState<Record<MoneyBadgeKey,boolean>>({principal:true,interest:true,fee:true,penalty:true,unlockFee:true,discount:false,overpaid:false});
   const[dueVis,setDueVis]=useState<Record<DueBadgeKey,boolean>>({principal:true,interest:true,fee:true,penalty:true,unlockFee:true});
@@ -557,6 +564,10 @@ export default function MonthlySummary() {
       countApproveMonths:countApproveMonths.size>0?Array.from(countApproveMonths):undefined,
       countProductType:countProductType.size===1?Array.from(countProductType)[0]:undefined,
       countDeviceFamily:(countDeviceFamily as "iOS"|"Android"|undefined)||undefined,
+      // installTotal
+      installTotalApproveMonths:installApproveMonths.size>0?Array.from(installApproveMonths):undefined,
+      installTotalProductType:installProductType.size===1?Array.from(installProductType)[0]:undefined,
+      installTotalDeviceFamily:(installDeviceFamily as "iOS"|"Android"|undefined)||undefined,
       // target
       targetDueDate:targetDueDate||undefined,
       targetDueMonths:targetDueMonths.size>0?Array.from(targetDueMonths):undefined,
@@ -582,6 +593,7 @@ export default function MonthlySummary() {
     };
   },[section,
     countApproveDate,countApproveMonths,countProductType,countDeviceFamily,
+    installApproveMonths,installProductType,installDeviceFamily,
     targetDueDate,targetDueMonths,targetApproveMonths,targetProductType,targetDeviceFamily,
     paidAtDate,paidAtMonths,paidProductType,paidDeviceFamily,
     dueAtDate,dueAtMonths,dueProductType,dueDeviceFamily,
@@ -645,7 +657,8 @@ export default function MonthlySummary() {
   const paidFilterCount=[paidAtDate,paidAtMonths.size>0,paidProductType.size>0,paidDeviceFamily].filter(Boolean).length;
   const dueFilterCount=[dueAtDate,dueAtMonths.size>0,dueProductType.size>0,dueDeviceFamily].filter(Boolean).length;
   const notYetDueFilterCount=[notYetDueDueDate,notYetDueDueMonths.size>0,notYetDueApproveMonths.size>0,notYetDueApproveYears.size>0,notYetDueProductType.size>0,notYetDueDeviceFamily].filter(Boolean).length;
-  const activeFilterCount=tab==="count"?countFilterCount:tab==="target"?targetFilterCount:tab==="paid"?paidFilterCount:tab==="due"?dueFilterCount:notYetDueFilterCount;
+  const installFilterCount=[installApproveMonths.size>0,installApproveYears.size>0,installProductType.size>0,installDeviceFamily].filter(Boolean).length;
+  const activeFilterCount=tab==="count"?countFilterCount:tab==="installTotal"?installFilterCount:tab==="target"?targetFilterCount:tab==="paid"?paidFilterCount:tab==="due"?dueFilterCount:notYetDueFilterCount;
 
   // ── Export Excel ──────────────────────────────────────────────────────────
   const handleExport=useCallback(()=>{
@@ -690,7 +703,7 @@ export default function MonthlySummary() {
   // ── Tab config ────────────────────────────────────────────────────────────────────
   const TAB_CONFIG: Array<{key:TabKey;label:string;activeClass:string;filterCount:number}> = [
     {key:"count",        label:"จำนวนสัญญา",       activeClass:"border-slate-600 text-slate-700",   filterCount:countFilterCount},
-    {key:"installTotal", label:"ยอดหนี้รวม",       activeClass:"border-purple-600 text-purple-700", filterCount:0},
+    {key:"installTotal", label:"ยอดหนี้รวม",       activeClass:"border-purple-600 text-purple-700", filterCount:[installApproveMonths.size>0,installApproveYears.size>0,installProductType.size>0,installDeviceFamily].filter(Boolean).length},
     {key:"target",       label:"เป้าเก็บหนี้",       activeClass:"border-indigo-600 text-indigo-700", filterCount:targetFilterCount},
     {key:"paid",         label:"ยอดที่ชำระแล้ว",  activeClass:"border-green-600 text-green-700",   filterCount:paidFilterCount},
     {key:"due",          label:"หนี้ค้างชำระ",   activeClass:"border-orange-600 text-orange-700", filterCount:dueFilterCount},
@@ -754,6 +767,29 @@ export default function MonthlySummary() {
                   <MultiSelectFilter label="ประเภทสินค้า" selected={countProductType} onChange={setCountProductType} options={productTypes} placeholder="ทุกประเภทสินค้า"/>
                   {countFilterCount>0&&(
                     <button type="button" onClick={()=>{setCountApproveDate("");setCountApproveMonths(new Set());setCountApproveYears(new Set());setCountProductType(new Set());setCountDeviceFamily("");}}
+                      className="flex items-center gap-1 h-9 px-2.5 rounded-md border border-red-200 bg-red-50 text-red-600 text-xs hover:bg-red-100 transition-colors">
+                      <X className="w-3.5 h-3.5"/>ล้างทั้งหมด
+                    </button>
+                  )}
+                </>
+              )}
+              {/* Tab installTotal: ยอดหนี้รวม */}
+              {tab==="installTotal"&&(
+                <>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs text-gray-500 whitespace-nowrap">เดือน-ปีที่อนุมัติ:</span>
+                    <MonthMultiSelect selected={installApproveMonths} onChange={setInstallApproveMonths} options={availableMonths}/>
+                    {installApproveMonths.size>0&&<button type="button" onClick={()=>setInstallApproveMonths(new Set())} className="flex items-center justify-center w-6 h-6 rounded-full bg-gray-100 hover:bg-red-100 text-gray-400 hover:text-red-500"><X className="w-3.5 h-3.5"/></button>}
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs text-gray-500 whitespace-nowrap">ปีที่อนุมัติ:</span>
+                    <YearMultiSelect selected={installApproveYears} onChange={setInstallApproveYears} options={availableYears}/>
+                    {installApproveYears.size>0&&<button type="button" onClick={()=>setInstallApproveYears(new Set())} className="flex items-center justify-center w-6 h-6 rounded-full bg-gray-100 hover:bg-red-100 text-gray-400 hover:text-red-500"><X className="w-3.5 h-3.5"/></button>}
+                  </div>
+                  <DeviceFamilyFilter value={installDeviceFamily} onChange={setInstallDeviceFamily}/>
+                  <MultiSelectFilter label="ประเภทสินค้า" selected={installProductType} onChange={setInstallProductType} options={productTypes} placeholder="ทุกประเภทสินค้า"/>
+                  {installFilterCount>0&&(
+                    <button type="button" onClick={()=>{setInstallApproveMonths(new Set());setInstallApproveYears(new Set());setInstallProductType(new Set());setInstallDeviceFamily("");}}
                       className="flex items-center gap-1 h-9 px-2.5 rounded-md border border-red-200 bg-red-50 text-red-600 text-xs hover:bg-red-100 transition-colors">
                       <X className="w-3.5 h-3.5"/>ล้างทั้งหมด
                     </button>
@@ -898,25 +934,20 @@ export default function MonthlySummary() {
         {/* ── Badge: installTotal ─────────────────────────────────────────────── */}
         {tab==="installTotal"&&(
           <div className="bg-purple-50/60 border-b border-purple-200 px-4 py-2 flex flex-wrap items-center gap-2">
-            {/* เงินต้น */}
-            <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border bg-purple-100 border-purple-300 text-purple-800">
-              <Banknote className="w-3 h-3"/><span>เงินต้น</span>
-              <span className="font-semibold ml-0.5">{fmtMoney(grandBadgeInstallTotal.principal)}</span>
-            </div>
-            {/* ดอกเบี้ย */}
-            <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border bg-purple-100 border-purple-300 text-purple-800">
-              <Percent className="w-3 h-3"/><span>ดอกเบี้ย</span>
-              <span className="font-semibold ml-0.5">{fmtMoney(grandBadgeInstallTotal.interest)}</span>
-            </div>
-            {/* ค่าดำเนินการ */}
-            <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border bg-purple-100 border-purple-300 text-purple-800">
-              <Coins className="w-3 h-3"/><span>ค่าดำเนินการ</span>
-              <span className="font-semibold ml-0.5">{fmtMoney(grandBadgeInstallTotal.fee)}</span>
-            </div>
+            {([{key:"principal",label:"เงินต้น",icon:<Banknote className="w-3 h-3"/>},{key:"interest",label:"ดอกเบี้ย",icon:<Percent className="w-3 h-3"/>},{key:"fee",label:"ค่าดำเนินการ",icon:<Coins className="w-3 h-3"/>}] as Array<{key:"principal"|"interest"|"fee";label:string;icon:React.ReactNode}>).map(({key,label,icon})=>{
+              const isOn=installVis[key];const val=grandBadgeInstallTotal[key];
+              return(
+                <button key={key} type="button" onClick={()=>setInstallVis(p=>({...p,[key]:!p[key]}))}
+                  className={["flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border transition-colors",isOn?"bg-purple-100 border-purple-300 text-purple-800":"bg-gray-100 border-gray-200 text-gray-400 line-through"].join(" ")}>
+                  {isOn?<Eye className="w-3 h-3"/>:<EyeOff className="w-3 h-3"/>}{icon}<span>{label}</span>
+                  <span className="font-semibold ml-0.5">{fmtMoney(val)}</span>
+                </button>
+              );
+            })}
             {/* ยอดหนี้รวม */}
             <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border bg-purple-700 border-purple-800 text-white font-semibold">
               <Banknote className="w-3.5 h-3.5"/><span>ยอดหนี้รวม</span>
-              <span>{fmtMoney(grandBadgeInstallTotal.total)}</span>
+              <span>{fmtMoney((installVis.principal?grandBadgeInstallTotal.principal:0)+(installVis.interest?grandBadgeInstallTotal.interest:0)+(installVis.fee?grandBadgeInstallTotal.fee:0))}</span>
             </div>
           </div>
         )}
@@ -925,41 +956,21 @@ export default function MonthlySummary() {
         {/* เป้าเก็บหนี้ = SUM(principal+interest+fee) ทุกงวดถึงกำหนด + penalty + unlock_fee งวดล่าสุด */}
         {tab==="target"&&(
           <div className="bg-indigo-50/60 border-b border-indigo-200 px-4 py-2 flex flex-wrap items-center gap-2">
-            {/* เงินต้น */}
-            <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border bg-indigo-100 border-indigo-300 text-indigo-800">
-              <Banknote className="w-3 h-3"/>
-              <span>เงินต้น</span>
-              <span className="font-semibold ml-0.5">{fmtMoney(grandBadgeTarget.principal)}</span>
-            </div>
-            {/* ดอกเบี้ย */}
-            <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border bg-indigo-100 border-indigo-300 text-indigo-800">
-              <Percent className="w-3 h-3"/>
-              <span>ดอกเบี้ย</span>
-              <span className="font-semibold ml-0.5">{fmtMoney(grandBadgeTarget.interest)}</span>
-            </div>
-            {/* ค่าดำเนินการ */}
-            <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border bg-indigo-100 border-indigo-300 text-indigo-800">
-              <Coins className="w-3 h-3"/>
-              <span>ค่าดำเนินการ</span>
-              <span className="font-semibold ml-0.5">{fmtMoney(grandBadgeTarget.fee)}</span>
-            </div>
-            {/* ค่าปรับ */}
-            <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border bg-indigo-100 border-indigo-300 text-indigo-800">
-              <Gavel className="w-3 h-3"/>
-              <span>ค่าปรับ</span>
-              <span className="font-semibold ml-0.5">{fmtMoney(grandBadgeTarget.penalty)}</span>
-            </div>
-            {/* ค่าปลดล็อก */}
-            <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border bg-indigo-100 border-indigo-300 text-indigo-800">
-              <Tag className="w-3 h-3"/>
-              <span>ค่าปลดล็อก</span>
-              <span className="font-semibold ml-0.5">{fmtMoney(grandBadgeTarget.unlockFee)}</span>
-            </div>
-            {/* รวมเป้าเก็บหนี้ = total_target จาก server (ถูกต้องแล้ว) */}
+            {([{key:"principal",label:"เงินต้น",icon:<Banknote className="w-3 h-3"/>},{key:"interest",label:"ดอกเบี้ย",icon:<Percent className="w-3 h-3"/>},{key:"fee",label:"ค่าดำเนินการ",icon:<Coins className="w-3 h-3"/>},{key:"penalty",label:"ค่าปรับ",icon:<Gavel className="w-3 h-3"/>},{key:"unlockFee",label:"ค่าปลดล็อก",icon:<Tag className="w-3 h-3"/>}] as Array<{key:MoneyBadgeKey;label:string;icon:React.ReactNode}>).map(({key,label,icon})=>{
+              const isOn=targetVis[key];const val=grandBadgeTarget[key as keyof MoneyBreakdown] as number;
+              return(
+                <button key={key} type="button" onClick={()=>setTargetVis(p=>({...p,[key]:!p[key]}))}
+                  className={["flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border transition-colors",isOn?"bg-indigo-100 border-indigo-300 text-indigo-800":"bg-gray-100 border-gray-200 text-gray-400 line-through"].join(" ")}>
+                  {isOn?<Eye className="w-3 h-3"/>:<EyeOff className="w-3 h-3"/>}{icon}<span>{label}</span>
+                  <span className="font-semibold ml-0.5">{fmtMoney(val)}</span>
+                </button>
+              );
+            })}
+            {/* รวมเป้าเก็บหนี้ */}
             <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border bg-indigo-700 border-indigo-800 text-white font-semibold">
               <Banknote className="w-3.5 h-3.5"/>
               <span>รวมเป้าเก็บหนี้</span>
-              <span>{fmtMoney(grandBadgeTarget.total)}</span>
+              <span>{fmtMoney(computeMoneyTotal(grandBadgeTarget,{...targetVis,discount:false,overpaid:false}))}</span>
             </div>
           </div>
         )}
