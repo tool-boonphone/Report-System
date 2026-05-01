@@ -292,7 +292,13 @@ async function queryTarget(
                THEN CAST(base.penalty    AS DECIMAL(18,2)) ELSE 0 END) AS penalty_target,
       SUM(CASE WHEN base.period = latest.max_period
                THEN CAST(base.unlock_fee AS DECIMAL(18,2)) ELSE 0 END) AS unlock_fee_target,
-      SUM(CAST(base.total_amount AS DECIMAL(18,2))) AS total_target
+      SUM(CAST(base.principal AS DECIMAL(18,2)))
+        + SUM(CAST(base.interest  AS DECIMAL(18,2)))
+        + SUM(CAST(base.fee       AS DECIMAL(18,2)))
+        + SUM(CASE WHEN base.period = latest.max_period
+               THEN CAST(base.penalty    AS DECIMAL(18,2)) ELSE 0 END)
+        + SUM(CASE WHEN base.period = latest.max_period
+               THEN CAST(base.unlock_fee AS DECIMAL(18,2)) ELSE 0 END) AS total_target
     FROM debt_target_cache base
     JOIN (
       SELECT dtc.section, dtc.contract_external_id, MAX(dtc.period) AS max_period

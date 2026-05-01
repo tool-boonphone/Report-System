@@ -935,13 +935,8 @@ export default function MonthlySummary() {
               );
             })}
             <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border bg-indigo-700 border-indigo-800 text-white font-semibold">
-              <Banknote className="w-3.5 h-3.5"/><span>รวมยอดต้องชำระ</span>
+              <Banknote className="w-3.5 h-3.5"/><span>รวมเป้าเก็บหนี้</span>
               <span>{fmtMoney(computeMoneyTotal(grandBadgeTarget,{...targetVis,discount:false,overpaid:false}))}</span>
-            </div>
-            {/* ยอดผ่อนรวม = target.total (รวมทุก component ก่อนหักส่วนลด) */}
-            <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border bg-indigo-900 border-indigo-950 text-white font-semibold">
-              <Banknote className="w-3.5 h-3.5"/><span>ยอดผ่อนรวม</span>
-              <span>{fmtMoney(grandBadgeTarget.total)}</span>
             </div>
           </div>
         )}
