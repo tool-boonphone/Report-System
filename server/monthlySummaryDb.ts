@@ -344,7 +344,7 @@ async function queryPaid(
         WHEN dcc.contract_status = 'หนี้เสีย'      THEN 'หนี้เสีย'
         WHEN dcc.contract_status = 'ระงับสัญญา'   THEN 'ระงับสัญญา'
         WHEN dcc.contract_status = 'สิ้นสุดสัญญา' THEN 'สิ้นสุดสัญญา'
-        ELSE 'ปกติ'
+        ELSE COALESCE(dtc_latest.debt_range, 'ปกติ')
       END AS bucket,
       COUNT(DISTINCT dcc.contract_external_id)                                                       AS contract_count,
       SUM(CASE WHEN dcc.is_bad_debt_row = 0 THEN CAST(dcc.principal   AS DECIMAL(18,2)) ELSE 0 END) AS principal_paid,
@@ -358,6 +358,19 @@ async function queryPaid(
       SUM(CASE WHEN dcc.is_bad_debt_row = 1 THEN CAST(dcc.bad_debt    AS DECIMAL(18,2)) ELSE 0 END) AS device_sale_amount,
       SUM(CAST(dcc.total_amount AS DECIMAL(18,2)))                                                   AS total_paid
     FROM debt_collected_cache dcc
+    LEFT JOIN (
+      SELECT dtc.section, dtc.contract_external_id, dtc.debt_range
+      FROM debt_target_cache dtc
+      INNER JOIN (
+        SELECT section, contract_external_id, MAX(period) AS max_period
+        FROM debt_target_cache
+        WHERE section = '${section}'
+        GROUP BY section, contract_external_id
+      ) mx ON mx.section = dtc.section
+           AND mx.contract_external_id = dtc.contract_external_id
+           AND mx.max_period = dtc.period
+    ) dtc_latest ON dtc_latest.section = dcc.section
+                AND dtc_latest.contract_external_id = dcc.contract_external_id
     WHERE ${dccWhere(section, opts)}
     GROUP BY approve_month, bucket
     ORDER BY approve_month DESC
