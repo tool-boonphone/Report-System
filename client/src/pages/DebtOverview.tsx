@@ -824,9 +824,13 @@ export default function DebtOverview() {
     { enabled: !!cacheSummaryInput, staleTime: 5 * 60 * 1000 },
   );
 
-  // Map: approveMonth → { paidTotal, notYetDueTotal }
+  // Map: approveMonth → { paidTotal, notYetDueTotal, breakdown }
   const cacheByMonth = useMemo(() => {
-    const m = new Map<string, { paidTotal: number; notYetDueTotal: number }>();
+    const m = new Map<string, {
+      paidTotal: number; notYetDueTotal: number;
+      principal: number; interest: number; fee: number;
+      penalty: number; unlockFee: number; overpaid: number;
+    }>();
     if (!cacheSummaryData?.rowsJson) return m;
     try {
       const rows = JSON.parse(cacheSummaryData.rowsJson) as Array<{
@@ -834,10 +838,25 @@ export default function DebtOverview() {
         bucket: string;
         paidTotal: number;
         notYetDueTotal: number;
+        paidPrincipal?: number;
+        paidInterest?: number;
+        paidFee?: number;
+        paidPenalty?: number;
+        paidUnlockFee?: number;
+        paidOverpaid?: number;
       }>;
       for (const r of rows) {
         if (r.bucket !== "__total__") continue;
-        m.set(r.approveMonth, { paidTotal: r.paidTotal ?? 0, notYetDueTotal: r.notYetDueTotal ?? 0 });
+        m.set(r.approveMonth, {
+          paidTotal: r.paidTotal ?? 0,
+          notYetDueTotal: r.notYetDueTotal ?? 0,
+          principal: r.paidPrincipal ?? 0,
+          interest: r.paidInterest ?? 0,
+          fee: r.paidFee ?? 0,
+          penalty: r.paidPenalty ?? 0,
+          unlockFee: r.paidUnlockFee ?? 0,
+          overpaid: r.paidOverpaid ?? 0,
+        });
       }
     } catch { /* ignore */ }
     return m;
@@ -978,7 +997,28 @@ export default function DebtOverview() {
       const isFullMonth = !search.trim() && statusFilter.size === 0;
       const cached = isFullMonth ? cacheByMonth.get(row.monthKey) : undefined;
       if (cached) {
-        row.collectedTotal = cached.paidTotal;
+        // ถ้า cache มี breakdown → sync breakdown ลง row และคำนวณ collectedTotal จาก breakdown × badge visibility
+        // เพื่อให้ badge toggle มีผลต่อยอดในตารางด้วย
+        const hasCacheBreakdown = cached.principal > 0 || cached.interest > 0 || cached.fee > 0 ||
+          cached.penalty > 0 || cached.unlockFee > 0 || cached.overpaid > 0;
+        if (hasCacheBreakdown) {
+          row.collectedPrincipal = cached.principal;
+          row.collectedInterest = cached.interest;
+          row.collectedFee = cached.fee;
+          row.collectedPenalty = cached.penalty;
+          row.collectedUnlockFee = cached.unlockFee;
+          row.collectedOverpaid = cached.overpaid;
+          row.collectedTotal =
+            (cv.principal ? cached.principal : 0) +
+            (cv.interest ? cached.interest : 0) +
+            (cv.fee ? cached.fee : 0) +
+            (cv.penalty ? cached.penalty : 0) +
+            (cv.unlockFee ? cached.unlockFee : 0) +
+            (cv.overpaid ? cached.overpaid : 0);
+        } else {
+          // fallback: ใช้ paidTotal จาก cache โดยตรง (กรณี breakdown ยังไม่มีใน cache เก่า)
+          row.collectedTotal = cached.paidTotal;
+        }
         row.notYetDue = cached.notYetDueTotal;
       }
     });
