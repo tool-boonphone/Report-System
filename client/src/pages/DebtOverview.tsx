@@ -1224,12 +1224,12 @@ export default function DebtOverview() {
             {/* ประเภทเครื่อง */}
             <ProductTypeMultiSelect options={productTypeOptions} selected={productTypeFilter} onChange={setProductTypeFilter} />
             {/* เป้าเก็บหนี้ toggle */}
-            <div className="flex items-center gap-1.5 h-9 px-3 rounded-md border border-purple-200 bg-purple-50 cursor-pointer select-none"
+            <div className={["flex items-center gap-1.5 h-9 px-3 rounded-md border cursor-pointer select-none", principalOnly ? "border-blue-400 bg-blue-100" : "border-blue-200 bg-blue-50"].join(" ")}
               onClick={() => setPrincipalOnly((v) => !v)}
               title="เปิด/ปิด เป้าเก็บหนี้ (แสดงยอดผ่อนเฉพาะงวดที่ถึงกำหนดแล้ว แทนยอดผ่อนรวมตามสัญญา)"
             >
               <Switch checked={principalOnly} onCheckedChange={setPrincipalOnly} id="principalOnly" onClick={(e) => e.stopPropagation()} />
-              <label htmlFor="principalOnly" className="text-xs text-purple-700 font-medium cursor-pointer">เป้าเก็บหนี้</label>
+              <label htmlFor="principalOnly" className="text-xs text-blue-700 font-medium cursor-pointer">เป้าเก็บหนี้</label>
             </div>
             {/* Export Excel */}
             {hasData && (
@@ -1325,19 +1325,19 @@ export default function DebtOverview() {
             </div>
             {!badgesCollapsed && (
               <div className="px-4 pb-3">
-                {/* ยอดผ่อนรวม badges */}
+                {/* ยอดผ่อนรวม / เป้าเก็บหนี้ badges */}
                 <BadgeRow
-                  title="ยอดผ่อนรวม"
+                  title={principalOnly ? "เป้าเก็บหนี้" : "ยอดผ่อนรวม"}
                   items={[
                     { key: "principal", label: "เงินต้น", value: grandInstall.principal, icon: <Coins className="w-3.5 h-3.5" />, color: "bg-blue-50 text-blue-800 border-blue-200" },
-                    { key: "interest", label: "ดอกเบี้ย", value: grandInstall.interest, icon: <Percent className="w-3.5 h-3.5" />, color: "bg-purple-50 text-purple-800 border-purple-200" },
-                    { key: "fee", label: "ค่าดำเนินการ", value: grandInstall.fee, icon: <Tag className="w-3.5 h-3.5" />, color: "bg-indigo-50 text-indigo-800 border-indigo-200" },
+                    { key: "interest", label: "ดอกเบี้ย", value: grandInstall.interest, icon: <Percent className="w-3.5 h-3.5" />, color: principalOnly ? "bg-blue-50 text-blue-800 border-blue-200" : "bg-purple-50 text-purple-800 border-purple-200" },
+                    { key: "fee", label: "ค่าดำเนินการ", value: grandInstall.fee, icon: <Tag className="w-3.5 h-3.5" />, color: principalOnly ? "bg-blue-50 text-blue-800 border-blue-200" : "bg-indigo-50 text-indigo-800 border-indigo-200" },
                   ]}
                   visibility={targetBadgeVisibility}
                   onToggle={toggleTargetBadge}
-                  totalLabel="ยอดผ่อนรวม"
+                  totalLabel={principalOnly ? "เป้าเก็บหนี้" : "ยอดผ่อนรวม"}
                   totalValue={grandInstall.total}
-                  totalColor="bg-purple-600 text-white border-purple-700"
+                  totalColor={principalOnly ? "bg-blue-600 text-white border-blue-700" : "bg-purple-600 text-white border-purple-700"}
                 />
                 {/* ยอดเก็บหนี้ badges */}
                 <BadgeRow
@@ -1416,9 +1416,10 @@ export default function DebtOverview() {
                       </button>
                     </th>
                     <th className="px-3 py-3 text-right font-semibold whitespace-nowrap text-white min-w-[90px]">จำนวนสัญญา</th>
-                    <th className="px-3 py-3 text-right font-semibold whitespace-nowrap text-white min-w-[140px] bg-purple-700">ยอดผ่อนรวม</th>
+                    <th className={["px-3 py-3 text-right font-semibold whitespace-nowrap text-white min-w-[160px]", principalOnly ? "bg-blue-700" : "bg-purple-700"].join(" ")}>
+                      {principalOnly ? "เป้าเก็บหนี้" : "ยอดผ่อนรวม"}
+                    </th>
                     <th className="px-3 py-3 text-right font-semibold whitespace-nowrap text-white min-w-[140px] bg-green-700">ยอดเก็บหนี้</th>
-                    <th className="px-3 py-3 text-right font-semibold whitespace-nowrap text-white min-w-[90px]">% การเก็บ</th>
                     <th className="px-3 py-3 text-right font-semibold whitespace-nowrap text-white min-w-[140px]">
                       <div className="flex items-center justify-end gap-1">
                         <button
@@ -1441,7 +1442,7 @@ export default function DebtOverview() {
                 <tbody>
                   {monthRows.length === 0 && (
                     <tr>
-                      <td colSpan={11} className="text-center py-12 text-gray-400">ไม่มีข้อมูล</td>
+                      <td colSpan={10} className="text-center py-12 text-gray-400">ไม่มีข้อมูล</td>
                     </tr>
                   )}
                   {monthRows.map((row, idx) => {
@@ -1504,42 +1505,92 @@ export default function DebtOverview() {
                             {row.contractCount.toLocaleString()}
                           </span>
                         </td>
-                        {/* ยอดผ่อนรวม */}
-                        <td className={["px-3 py-2.5 text-right font-medium bg-purple-50/30", isHidden ? "text-gray-400" : "text-purple-800"].join(" ")}>
-                          {principalOnly ? fmtMoney(row.debtTargetTotal) : fmtMoney(row.installTotal)}
+                        {/* ยอดผ่อนรวม / เป้าเก็บหนี้ + % การเก็บ tag */}
+                        <td className={["px-3 py-2.5 text-right font-medium", principalOnly ? "bg-blue-50/30" : "bg-purple-50/30", isHidden ? "text-gray-400" : principalOnly ? "text-blue-800" : "text-purple-800"].join(" ")}>
+                          <div className="flex flex-col items-end gap-0.5">
+                            <span>{principalOnly ? fmtMoney(row.debtTargetTotal) : fmtMoney(row.installTotal)}</span>
+                            {!isHidden && displayInstall > 0 && (
+                              <span className={["inline-flex text-[10px] px-1.5 py-0.5 rounded-full font-medium", collectionRate >= 100 ? "bg-green-100 text-green-700" : collectionRate >= 80 ? "bg-blue-100 text-blue-700" : collectionRate >= 60 ? "bg-amber-100 text-amber-700" : "bg-red-100 text-red-600"].join(" ")}>
+                                {fmtPct(collectionRate)}
+                                {collectionRate >= 100 && <TrendingUp className="w-2.5 h-2.5 ml-0.5" />}
+                                {collectionRate < 60 && collectionRate > 0 && <TrendingDown className="w-2.5 h-2.5 ml-0.5" />}
+                              </span>
+                            )}
+                          </div>
                         </td>
                         {/* ยอดเก็บหนี้ */}
                         <td className={["px-3 py-2.5 text-right font-medium bg-green-50/30", isHidden ? "text-gray-400" : "text-green-800"].join(" ")}>
                           {fmtMoney(row.collectedTotal)}
                         </td>
-                        {/* % การเก็บ */}
-                        <td className={["px-3 py-2.5 text-right", isHidden ? "text-gray-400" : rateBg].join(" ")}>
-                          <div className="flex items-center justify-end gap-1">
-                            {fmtPct(collectionRate)}
-                            {!isHidden && collectionRate >= 100 && <TrendingUp className="w-3.5 h-3.5 text-green-600" />}
-                            {!isHidden && collectionRate < 60 && collectionRate > 0 && <TrendingDown className="w-3.5 h-3.5 text-red-500" />}
-                          </div>
-                        </td>
-                        {/* ยอดขายเครื่อง */}
-                        <td className={["px-3 py-2.5 text-right", isHidden ? "text-gray-400" : showDeviceSale ? "text-red-700" : "text-gray-300 line-through"].join(" ")}>
-                          {fmtMoney(row.deviceSaleAmount)}
-                        </td>
-                        {/* รายรับรวม */}
-                        <td className={["px-3 py-2.5 text-right font-semibold bg-emerald-50/30", isHidden ? "text-gray-400" : "text-emerald-800"].join(" ")}>
-                          {fmtMoney(revenue)}
-                        </td>
+                        {/* ยอดขายเครื่อง + % tag */}
+                        {(() => {
+                          const denominator = row.installTotal - row.debtTargetTotal;
+                          const devicePct = denominator > 0 ? (row.deviceSaleAmount / denominator) * 100 : 0;
+                          return (
+                            <td className={["px-3 py-2.5 text-right", isHidden ? "text-gray-400" : showDeviceSale ? "text-red-700" : "text-gray-300 line-through"].join(" ")}>
+                              <div className="flex flex-col items-end gap-0.5">
+                                <span>{fmtMoney(row.deviceSaleAmount)}</span>
+                                {!isHidden && showDeviceSale && denominator > 0 && (
+                                  <span className="inline-flex text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-red-100 text-red-600">
+                                    {fmtPct(devicePct)}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                          );
+                        })()}
+                        {/* รายรับรวม + % tag */}
+                        {(() => {
+                          const revenuePct = row.installTotal > 0 ? (revenue / row.installTotal) * 100 : 0;
+                          return (
+                            <td className={["px-3 py-2.5 text-right font-semibold bg-emerald-50/30", isHidden ? "text-gray-400" : "text-emerald-800"].join(" ")}>
+                              <div className="flex flex-col items-end gap-0.5">
+                                <span>{fmtMoney(revenue)}</span>
+                                {!isHidden && row.installTotal > 0 && (
+                                  <span className="inline-flex text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-emerald-100 text-emerald-700">
+                                    {fmtPct(revenuePct)}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                          );
+                        })()}
                         {/* ต้นทุน */}
                         <td className={["px-3 py-2.5 text-right", isHidden ? "text-gray-400" : "text-slate-700"].join(" ")}>
                           {fmtMoney(row.cost)}
                         </td>
-                        {/* กำไรขั้นต้น */}
-                        <td className={["px-3 py-2.5 text-right bg-amber-50/30", isHidden ? "text-gray-400" : profitColor].join(" ")}>
-                          {fmtMoney(grossProfit)}
-                        </td>
-                        {/* ยังไม่ถึงกำหนด */}
-                        <td className={["px-3 py-2.5 text-right font-medium bg-sky-50/30", isHidden ? "text-gray-400" : "text-sky-700"].join(" ")}>
-                          {fmtMoney(row.notYetDue)}
-                        </td>
+                        {/* กำไรขั้นต้น + % tag */}
+                        {(() => {
+                          const profitPct = row.cost > 0 ? (grossProfit / row.cost) * 100 : 0;
+                          return (
+                            <td className={["px-3 py-2.5 text-right bg-amber-50/30", isHidden ? "text-gray-400" : profitColor].join(" ")}>
+                              <div className="flex flex-col items-end gap-0.5">
+                                <span>{fmtMoney(grossProfit)}</span>
+                                {!isHidden && row.cost > 0 && (
+                                  <span className={["inline-flex text-[10px] px-1.5 py-0.5 rounded-full font-medium", profitPct >= 0 ? "bg-amber-100 text-amber-700" : "bg-red-100 text-red-600"].join(" ")}>
+                                    {fmtPct(profitPct)}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                          );
+                        })()}
+                        {/* ยังไม่ถึงกำหนด + % tag */}
+                        {(() => {
+                          const notDuePct = row.installTotal > 0 ? (row.notYetDue / row.installTotal) * 100 : 0;
+                          return (
+                            <td className={["px-3 py-2.5 text-right font-medium bg-sky-50/30", isHidden ? "text-gray-400" : "text-sky-700"].join(" ")}>
+                              <div className="flex flex-col items-end gap-0.5">
+                                <span>{fmtMoney(row.notYetDue)}</span>
+                                {!isHidden && row.installTotal > 0 && (
+                                  <span className="inline-flex text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-sky-100 text-sky-700">
+                                    {fmtPct(notDuePct)}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                          );
+                        })()}
                       </tr>
 
                       </React.Fragment>
@@ -1569,14 +1620,84 @@ export default function DebtOverview() {
                             {totalContracts.toLocaleString()}
                           </span>
                         </td>
-                        <td className="px-3 py-3 text-right text-purple-200">{fmtMoney(displayTotalInstall)}</td>
+                        {/* ยอดผ่อนรวม / เป้าเก็บหนี้ + % tag */}
+                        <td className={["px-3 py-3 text-right", principalOnly ? "text-blue-200" : "text-purple-200"].join(" ")}>
+                          <div className="flex flex-col items-end gap-0.5">
+                            <span>{fmtMoney(displayTotalInstall)}</span>
+                            {displayTotalInstall > 0 && (
+                              <span className={["inline-flex text-[10px] px-1.5 py-0.5 rounded-full font-medium", overallRate >= 100 ? "bg-green-900/60 text-green-200" : overallRate >= 80 ? "bg-blue-900/60 text-blue-200" : overallRate >= 60 ? "bg-amber-900/60 text-amber-200" : "bg-red-900/60 text-red-200"].join(" ")}>
+                                {fmtPct(overallRate)}
+                              </span>
+                            )}
+                          </div>
+                        </td>
                         <td className="px-3 py-3 text-right text-green-200">{fmtMoney(totalCollected)}</td>
-                        <td className="px-3 py-3 text-right text-yellow-200">{fmtPct(overallRate)}</td>
-                        <td className={["px-3 py-3 text-right", showDeviceSale ? "text-red-200" : "text-gray-500"].join(" ")}>{fmtMoney(totalDeviceSale)}</td>
-                        <td className="px-3 py-3 text-right text-emerald-200">{fmtMoney(totalRevenue)}</td>
+                        {/* ยอดขายเครื่อง + % tag */}
+                        {(() => {
+                          const totalDenominator = totalInstall - totalDebtTarget;
+                          const totalDevicePct = totalDenominator > 0 ? (totalDeviceSale / totalDenominator) * 100 : 0;
+                          return (
+                            <td className={["px-3 py-3 text-right", showDeviceSale ? "text-red-200" : "text-gray-500"].join(" ")}>
+                              <div className="flex flex-col items-end gap-0.5">
+                                <span>{fmtMoney(totalDeviceSale)}</span>
+                                {showDeviceSale && totalDenominator > 0 && (
+                                  <span className="inline-flex text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-red-900/60 text-red-200">
+                                    {fmtPct(totalDevicePct)}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                          );
+                        })()}
+                        {/* รายรับรวม + % tag */}
+                        {(() => {
+                          const totalRevenuePct = totalInstall > 0 ? (totalRevenue / totalInstall) * 100 : 0;
+                          return (
+                            <td className="px-3 py-3 text-right text-emerald-200">
+                              <div className="flex flex-col items-end gap-0.5">
+                                <span>{fmtMoney(totalRevenue)}</span>
+                                {totalInstall > 0 && (
+                                  <span className="inline-flex text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-emerald-900/60 text-emerald-200">
+                                    {fmtPct(totalRevenuePct)}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                          );
+                        })()}
                         <td className="px-3 py-3 text-right text-slate-200">{fmtMoney(totalCost)}</td>
-                        <td className={["px-3 py-3 text-right", totalProfit >= 0 ? "text-amber-200" : "text-red-300"].join(" ")}>{fmtMoney(totalProfit)}</td>
-                        <td className="px-3 py-3 text-right text-sky-200">{fmtMoney(totalNotYetDue)}</td>
+                        {/* กำไรขั้นต้น + % tag */}
+                        {(() => {
+                          const totalProfitPct = totalCost > 0 ? (totalProfit / totalCost) * 100 : 0;
+                          return (
+                            <td className={["px-3 py-3 text-right", totalProfit >= 0 ? "text-amber-200" : "text-red-300"].join(" ")}>
+                              <div className="flex flex-col items-end gap-0.5">
+                                <span>{fmtMoney(totalProfit)}</span>
+                                {totalCost > 0 && (
+                                  <span className={["inline-flex text-[10px] px-1.5 py-0.5 rounded-full font-medium", totalProfitPct >= 0 ? "bg-amber-900/60 text-amber-200" : "bg-red-900/60 text-red-200"].join(" ")}>
+                                    {fmtPct(totalProfitPct)}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                          );
+                        })()}
+                        {/* ยังไม่ถึงกำหนด + % tag */}
+                        {(() => {
+                          const totalNotDuePct = totalInstall > 0 ? (totalNotYetDue / totalInstall) * 100 : 0;
+                          return (
+                            <td className="px-3 py-3 text-right text-sky-200">
+                              <div className="flex flex-col items-end gap-0.5">
+                                <span>{fmtMoney(totalNotYetDue)}</span>
+                                {totalInstall > 0 && (
+                                  <span className="inline-flex text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-sky-900/60 text-sky-200">
+                                    {fmtPct(totalNotDuePct)}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                          );
+                        })()}
                       </tr>
                     </tfoot>
                   );
