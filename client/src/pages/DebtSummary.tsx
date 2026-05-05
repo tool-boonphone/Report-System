@@ -417,7 +417,7 @@ export default function DebtSummary() {
     t: "target" | "collected",
     offset: number,
     limit: number,
-    maxRetries = 3,
+    maxRetries = 5,
   ) => {
     let lastErr: unknown;
     for (let attempt = 0; attempt < maxRetries; attempt++) {
@@ -430,7 +430,8 @@ export default function DebtSummary() {
       } catch (err) {
         lastErr = err;
         if (attempt < maxRetries - 1) {
-          await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, attempt)));
+          // exponential backoff: 2s, 4s, 8s, 16s (รอ cache warm)
+          await new Promise((r) => setTimeout(r, 2000 * Math.pow(2, attempt)));
         }
       }
     }
