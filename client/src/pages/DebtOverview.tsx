@@ -509,13 +509,11 @@ function BadgeRow({
 type MonthRow = {
   monthKey: string; // YYYY-MM
   contractCount: number;
-  // เป้าเก็บหนี้
-  targetPrincipal: number;
-  targetInterest: number;
-  targetFee: number;
-  targetPenalty: number;
-  targetUnlockFee: number;
-  targetTotal: number;
+  // ยอดผ่อนรวม = SUM(baselineAmount) ทุกงวด (principal+interest+fee ก่อนหักชำระเกิน)
+  installPrincipal: number;
+  installInterest: number;
+  installFee: number;
+  installTotal: number;
   // ยอดเก็บหนี้
   collectedPrincipal: number;
   collectedInterest: number;
@@ -852,7 +850,7 @@ export default function DebtOverview() {
         map.set(monthKey, {
           monthKey,
           contractCount: 0,
-          targetPrincipal: 0, targetInterest: 0, targetFee: 0, targetPenalty: 0, targetUnlockFee: 0, targetTotal: 0,
+          installPrincipal: 0, installInterest: 0, installFee: 0, installTotal: 0,
           collectedPrincipal: 0, collectedInterest: 0, collectedFee: 0, collectedPenalty: 0,
           collectedUnlockFee: 0, collectedDiscount: 0, collectedOverpaid: 0, collectedBadDebt: 0, collectedTotal: 0,
           deviceSaleAmount: 0,
@@ -891,25 +889,12 @@ export default function DebtOverview() {
         }
       }
 
-      // เป้าเก็บหนี้ — sum installments ที่ผ่าน filter (เฉพาะงวดถึงกำหนดแล้ว)
+      // ยอดผ่อนรวม = SUM(baselineAmount) ทุกงวด (ไม่ filter due date, ไม่ filter isClosed)
       for (const inst of r.installments) {
         if (inst.isSuspended) continue;
-        if (dueDateFilter.size > 0 && !(inst.dueDate && dueDateFilter.has(inst.dueDate.slice(0, 7)))) continue;
-        if (dueDateExact && inst.dueDate?.slice(0, 10) !== dueDateExact) continue;
-        if (!inst.isClosed) {
-          const dueStr = inst.dueDate ? inst.dueDate.slice(0, 10) : null;
-          const isFuture = dueStr ? dueStr > todayStr : false;
-          // เป้าเก็บหนี้: เฉพาะงวดที่ถึงกำหนดแล้ว (dueDate <= today) หรือไม่มี dueDate
-          if (!isFuture) {
-            row.targetPrincipal += inst.principal ?? 0;
-            row.targetInterest += inst.interest ?? 0;
-            row.targetFee += inst.fee ?? 0;
-            if (!principalOnly) {
-              row.targetPenalty += inst.penalty ?? 0;
-              row.targetUnlockFee += inst.unlockFee ?? 0;
-            }
-          }
-        }
+        row.installPrincipal += inst.principal ?? 0;
+        row.installInterest += inst.interest ?? 0;
+        row.installFee += inst.fee ?? 0;
       }
     }
 
@@ -935,13 +920,12 @@ export default function DebtOverview() {
 
     // Compute totals
     map.forEach((row) => {
+      // ยอดผ่อนรวม = SUM(principal+interest+fee) ทุกงวด (baseline)
       const bv = targetBadgeVisibility;
-      row.targetTotal =
-        (bv.principal ? row.targetPrincipal : 0) +
-        (bv.interest ? row.targetInterest : 0) +
-        (bv.fee ? row.targetFee : 0) +
-        (bv.penalty ? row.targetPenalty : 0) +
-        (bv.unlockFee ? row.targetUnlockFee : 0);
+      row.installTotal =
+        (bv.principal ? row.installPrincipal : 0) +
+        (bv.interest ? row.installInterest : 0) +
+        (bv.fee ? row.installFee : 0);
 
       const cv = badgeVisibility;
       // ยอดเก็บหนี้ = ค่างวดปกติที่ชำระแล้ว ไม่รวม badDebt (ยอดขายเครื่อง)
@@ -973,19 +957,17 @@ export default function DebtOverview() {
   }, [filteredTargetRows, filteredCollectedRows, principalOnly, dueDateFilter, dueDateExact, badgeVisibility, targetBadgeVisibility, todayStr, monthSortDir, cacheByMonth]);
 
   /* ---- Grand totals (for badge display) ---- */
-  const grandTarget = useMemo(() => {
-    let principal = 0, interest = 0, fee = 0, penalty = 0, unlockFee = 0;
+  const grandInstall = useMemo(() => {
+    let principal = 0, interest = 0, fee = 0;
     for (const row of monthRows) {
       if (hiddenMonths.has(row.monthKey)) continue;
-      principal += row.targetPrincipal;
-      interest += row.targetInterest;
-      fee += row.targetFee;
-      penalty += row.targetPenalty;
-      unlockFee += row.targetUnlockFee;
+      principal += row.installPrincipal;
+      interest += row.installInterest;
+      fee += row.installFee;
     }
     const bv = targetBadgeVisibility;
-    const total = (bv.principal ? principal : 0) + (bv.interest ? interest : 0) + (bv.fee ? fee : 0) + (bv.penalty ? penalty : 0) + (bv.unlockFee ? unlockFee : 0);
-    return { principal, interest, fee, penalty, unlockFee, total };
+    const total = (bv.principal ? principal : 0) + (bv.interest ? interest : 0) + (bv.fee ? fee : 0);
+    return { principal, interest, fee, total };
   }, [monthRows, hiddenMonths, targetBadgeVisibility]);
 
   const grandCollected = useMemo(() => {
@@ -1053,9 +1035,9 @@ export default function DebtOverview() {
                 desc: "จำนวนสัญญาทั้งหมดที่อนุมัติในเดือน-ปีนั้น",
               },
               {
-                label: "เป้าเก็บหนี้",
+                label: "ยอดผ่อนรวม",
                 color: "bg-blue-50 text-blue-700",
-                desc: "ยอดรวมงวดที่ถึงกำหนดชำระแล้ว (ไม่นับงวดในอนาคต)",
+                desc: "ยอดรวมที่ลูกค้าต้องผ่อนทั้งสัญญา (SUM ทุกงวด เงินต้น+ดอกเบี้ย+ค่าดำเนินการ ก่อนหักชำระเกิน)",
               },
               {
                 label: "ยอดเก็บหนี้",
@@ -1065,7 +1047,7 @@ export default function DebtOverview() {
               {
                 label: "อัตราเก็บ",
                 color: "bg-purple-50 text-purple-700",
-                desc: "ยอดเก็บหนี้ ÷ เป้าเก็บหนี้ × 100",
+                desc: "ยอดเก็บหนี้ ÷ ยอดผ่อนรวม × 100",
               },
               {
                 label: "ยอดขายเครื่อง",
@@ -1221,14 +1203,14 @@ export default function DebtOverview() {
                     const XLSX = await import("xlsx");
                     const wb = XLSX.utils.book_new();
                     const wsData = [
-                      ["เดือน", "จำนวนสัญญา", "เป้าเก็บหนี้", "ยอดเก็บหนี้", "% การเก็บ", "ยอดขายเครื่อง", "รายรับรวม", "ต้นทุน", "กำไรขั้นต้น", "ยังไม่ถึงกำหนด"],
+                      ["เดือน", "จำนวนสัญญา", "ยอดผ่อนรวม", "ยอดเก็บหนี้", "% การเก็บ", "ยอดขายเครื่อง", "รายรับรวม", "ต้นทุน", "กำไรขั้นต้น", "ยังไม่ถึงกำหนด"],
                       ...rows.map((r) => {
                         const deviceSale = showDeviceSale ? r.deviceSaleAmount : 0;
                         const revenue = r.collectedTotal + deviceSale;
                         const profit = revenue - r.cost;
-                        const rate = r.targetTotal > 0 ? ((r.collectedTotal / r.targetTotal) * 100).toFixed(1) + "%" : "0%";
+                        const rate = r.installTotal > 0 ? ((r.collectedTotal / r.installTotal) * 100).toFixed(1) + "%" : "0%";
                         return [
-                          fmtMonthYear(r.monthKey), r.contractCount, r.targetTotal, r.collectedTotal, rate,
+                          fmtMonthYear(r.monthKey), r.contractCount, r.installTotal, r.collectedTotal, rate,
                           r.deviceSaleAmount, revenue, r.cost, profit, r.notYetDue,
                         ];
                       }),
@@ -1236,10 +1218,10 @@ export default function DebtOverview() {
                       [
                         "รวมทั้งหมด",
                         rows.reduce((s, r) => s + r.contractCount, 0),
-                        rows.reduce((s, r) => s + r.targetTotal, 0),
+                        rows.reduce((s, r) => s + r.installTotal, 0),
                         rows.reduce((s, r) => s + r.collectedTotal, 0),
-                        rows.reduce((s, r) => s + r.targetTotal, 0) > 0
-                          ? (rows.reduce((s, r) => s + r.collectedTotal, 0) / rows.reduce((s, r) => s + r.targetTotal, 0) * 100).toFixed(1) + "%"
+                        rows.reduce((s, r) => s + r.installTotal, 0) > 0
+                          ? (rows.reduce((s, r) => s + r.collectedTotal, 0) / rows.reduce((s, r) => s + r.installTotal, 0) * 100).toFixed(1) + "%"
                           : "0%",
                         rows.reduce((s, r) => s + r.deviceSaleAmount, 0),
                         rows.reduce((s, r) => s + r.collectedTotal + (showDeviceSale ? r.deviceSaleAmount : 0), 0),
@@ -1299,22 +1281,18 @@ export default function DebtOverview() {
             </div>
             {!badgesCollapsed && (
               <div className="px-4 pb-3">
-                {/* เป้าเก็บหนี้ badges */}
+                {/* ยอดผ่อนรวม badges */}
                 <BadgeRow
-                  title="เป้าเก็บหนี้"
+                  title="ยอดผ่อนรวม"
                   items={[
-                    { key: "principal", label: "เงินต้น", value: grandTarget.principal, icon: <Coins className="w-3.5 h-3.5" />, color: "bg-blue-50 text-blue-800 border-blue-200" },
-                    { key: "interest", label: "ดอกเบี้ย", value: grandTarget.interest, icon: <Percent className="w-3.5 h-3.5" />, color: "bg-purple-50 text-purple-800 border-purple-200" },
-                    { key: "fee", label: "ค่าดำเนินการ", value: grandTarget.fee, icon: <Tag className="w-3.5 h-3.5" />, color: "bg-indigo-50 text-indigo-800 border-indigo-200" },
-                    ...(!principalOnly ? [
-                      { key: "penalty", label: "ค่าปรับ", value: grandTarget.penalty, icon: <Gavel className="w-3.5 h-3.5" />, color: "bg-orange-50 text-orange-800 border-orange-200" } as BadgeItem,
-                      { key: "unlockFee", label: "ค่าปลดล็อก", value: grandTarget.unlockFee, icon: <LockOpen className="w-3.5 h-3.5" />, color: "bg-amber-50 text-amber-800 border-amber-200" } as BadgeItem,
-                    ] : []),
+                    { key: "principal", label: "เงินต้น", value: grandInstall.principal, icon: <Coins className="w-3.5 h-3.5" />, color: "bg-blue-50 text-blue-800 border-blue-200" },
+                    { key: "interest", label: "ดอกเบี้ย", value: grandInstall.interest, icon: <Percent className="w-3.5 h-3.5" />, color: "bg-purple-50 text-purple-800 border-purple-200" },
+                    { key: "fee", label: "ค่าดำเนินการ", value: grandInstall.fee, icon: <Tag className="w-3.5 h-3.5" />, color: "bg-indigo-50 text-indigo-800 border-indigo-200" },
                   ]}
                   visibility={targetBadgeVisibility}
                   onToggle={toggleTargetBadge}
-                  totalLabel="เป้าเก็บหนี้รวม"
-                  totalValue={grandTarget.total}
+                  totalLabel="ยอดผ่อนรวม"
+                  totalValue={grandInstall.total}
                   totalColor="bg-blue-600 text-white border-blue-700"
                 />
                 {/* ยอดเก็บหนี้ badges */}
@@ -1394,7 +1372,7 @@ export default function DebtOverview() {
                       </button>
                     </th>
                     <th className="px-3 py-3 text-right font-semibold whitespace-nowrap text-white min-w-[90px]">จำนวนสัญญา</th>
-                    <th className="px-3 py-3 text-right font-semibold whitespace-nowrap text-white min-w-[140px] bg-blue-700">เป้าเก็บหนี้</th>
+                    <th className="px-3 py-3 text-right font-semibold whitespace-nowrap text-white min-w-[140px] bg-blue-700">ยอดผ่อนรวม</th>
                     <th className="px-3 py-3 text-right font-semibold whitespace-nowrap text-white min-w-[140px] bg-green-700">ยอดเก็บหนี้</th>
                     <th className="px-3 py-3 text-right font-semibold whitespace-nowrap text-white min-w-[90px]">% การเก็บ</th>
                     <th className="px-3 py-3 text-right font-semibold whitespace-nowrap text-white min-w-[140px]">
@@ -1424,7 +1402,7 @@ export default function DebtOverview() {
                   )}
                   {monthRows.map((row, idx) => {
                     const isHidden = hiddenMonths.has(row.monthKey);
-                    const collectionRate = row.targetTotal > 0 ? (row.collectedTotal / row.targetTotal) * 100 : 0;
+                    const collectionRate = row.installTotal > 0 ? (row.collectedTotal / row.installTotal) * 100 : 0;
                     const deviceSale = showDeviceSale ? row.deviceSaleAmount : 0;
                     const revenue = row.collectedTotal + deviceSale;
                     const grossProfit = revenue - row.cost;
@@ -1481,9 +1459,9 @@ export default function DebtOverview() {
                             {row.contractCount.toLocaleString()}
                           </span>
                         </td>
-                        {/* เป้าเก็บหนี้ */}
+                        {/* ยอดผ่อนรวม */}
                         <td className={["px-3 py-2.5 text-right font-medium bg-blue-50/30", isHidden ? "text-gray-400" : "text-blue-800"].join(" ")}>
-                          {fmtMoney(row.targetTotal)}
+                          {fmtMoney(row.installTotal)}
                         </td>
                         {/* ยอดเก็บหนี้ */}
                         <td className={["px-3 py-2.5 text-right font-medium bg-green-50/30", isHidden ? "text-gray-400" : "text-green-800"].join(" ")}>
@@ -1527,14 +1505,14 @@ export default function DebtOverview() {
                 {monthRows.length > 0 && (() => {
                   const visibleRows = monthRows.filter((r) => !hiddenMonths.has(r.monthKey));
                   const totalContracts = visibleRows.reduce((s, r) => s + r.contractCount, 0);
-                  const totalTarget = visibleRows.reduce((s, r) => s + r.targetTotal, 0);
+                  const totalInstall = visibleRows.reduce((s, r) => s + r.installTotal, 0);
                   const totalCollected = visibleRows.reduce((s, r) => s + r.collectedTotal, 0);
                   const totalDeviceSale = showDeviceSale ? visibleRows.reduce((s, r) => s + r.deviceSaleAmount, 0) : 0;
                   const totalRevenue = totalCollected + totalDeviceSale;
                   const totalCost = visibleRows.reduce((s, r) => s + r.cost, 0);
                   const totalProfit = totalRevenue - totalCost;
                   const totalNotYetDue = visibleRows.reduce((s, r) => s + r.notYetDue, 0);
-                  const overallRate = totalTarget > 0 ? (totalCollected / totalTarget) * 100 : 0;
+                  const overallRate = totalInstall > 0 ? (totalCollected / totalInstall) * 100 : 0;
                   return (
                     <tfoot className="sticky bottom-0 z-20 border-t-2 border-slate-400 shadow-[0_-2px_8px_rgba(0,0,0,0.12)]">
                       <tr className="bg-slate-800 text-white font-bold">
@@ -1544,7 +1522,7 @@ export default function DebtOverview() {
                             {totalContracts.toLocaleString()}
                           </span>
                         </td>
-                        <td className="px-3 py-3 text-right text-blue-200">{fmtMoney(totalTarget)}</td>
+                        <td className="px-3 py-3 text-right text-blue-200">{fmtMoney(totalInstall)}</td>
                         <td className="px-3 py-3 text-right text-green-200">{fmtMoney(totalCollected)}</td>
                         <td className="px-3 py-3 text-right text-yellow-200">{fmtPct(overallRate)}</td>
                         <td className={["px-3 py-3 text-right", showDeviceSale ? "text-red-200" : "text-gray-500"].join(" ")}>{fmtMoney(totalDeviceSale)}</td>
