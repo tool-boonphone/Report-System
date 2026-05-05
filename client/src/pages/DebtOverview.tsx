@@ -995,16 +995,24 @@ export default function DebtOverview() {
   /* ---- Grand totals (for badge display) ---- */
   const grandInstall = useMemo(() => {
     let principal = 0, interest = 0, fee = 0;
+    let debtTargetPrincipal = 0, debtTargetInterest = 0, debtTargetFee = 0;
     for (const row of monthRows) {
       if (hiddenMonths.has(row.monthKey)) continue;
       principal += row.installPrincipal;
       interest += row.installInterest;
       fee += row.installFee;
+      debtTargetPrincipal += row.debtTargetPrincipal;
+      debtTargetInterest += row.debtTargetInterest;
+      debtTargetFee += row.debtTargetFee;
     }
     const bv = targetBadgeVisibility;
-    const total = (bv.principal ? principal : 0) + (bv.interest ? interest : 0) + (bv.fee ? fee : 0);
-    return { principal, interest, fee, total };
-  }, [monthRows, hiddenMonths, targetBadgeVisibility]);
+    // เมื่อ principalOnly=true ให้แสดงยอดเป้าเก็บหนี้ (งวดที่ถึงกำหนดแล้ว) แทนยอดผ่อนรวมทั้งสัญญา
+    const displayPrincipal = principalOnly ? debtTargetPrincipal : principal;
+    const displayInterest = principalOnly ? debtTargetInterest : interest;
+    const displayFee = principalOnly ? debtTargetFee : fee;
+    const total = (bv.principal ? displayPrincipal : 0) + (bv.interest ? displayInterest : 0) + (bv.fee ? displayFee : 0);
+    return { principal: displayPrincipal, interest: displayInterest, fee: displayFee, total };
+  }, [monthRows, hiddenMonths, targetBadgeVisibility, principalOnly]);
 
   const grandCollected = useMemo(() => {
     let principal = 0, interest = 0, fee = 0, penalty = 0, unlockFee = 0, discount = 0, overpaid = 0, badDebt = 0;
