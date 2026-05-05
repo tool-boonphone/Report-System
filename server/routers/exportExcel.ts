@@ -20,6 +20,12 @@ import {
   type ContractSort,
 } from "../contractsDb";
 import { listDebtTarget, listDebtCollected } from "../debtDb";
+import {
+  getCachedTarget,
+  getCachedCollected,
+  waitForPrewarmTarget,
+  waitForPrewarmCollected,
+} from "../debtCache";
 import { getBadDebtSummary } from "../badDebtDb";
 
 function parseCookies(header: string | undefined): Record<string, string> {
@@ -198,14 +204,28 @@ export async function handleDebtExport(req: Request, res: Response) {
     const productTypeRaw = req.query.productType ? String(req.query.productType) : "";
     const productTypes = productTypeRaw ? new Set(productTypeRaw.split(",").filter(Boolean)) : new Set<string>();
 
-    // 1. Load all rows for the selected variant (DB has ~3.5k contracts — safe).
+    // 1. Load all rows — use in-memory cache (same as UI) to avoid timeout.
     let rows: any[];
     if (variant === "target") {
-      const r = await listDebtTarget({ section });
-      rows = r.rows;
+      // Wait for any in-progress prewarm first
+      await waitForPrewarmTarget(section);
+      const cached = getCachedTarget(section);
+      if (cached) {
+        rows = cached.rows ?? cached;
+      } else {
+        // Cache miss — fall back to direct query
+        const r = await listDebtTarget({ section });
+        rows = r.rows;
+      }
     } else {
-      const r = await listDebtCollected({ section });
-      rows = r.rows;
+      await waitForPrewarmCollected(section);
+      const cached = getCachedCollected(section);
+      if (cached) {
+        rows = cached.rows ?? cached;
+      } else {
+        const r = await listDebtCollected({ section });
+        rows = r.rows;
+      }
     }
 
     // 2. Apply same filters as the UI (Phase 29: full filter parity).
