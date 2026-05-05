@@ -3,7 +3,7 @@
  *
  * 6 แถบ:
  *   1. จำนวนสัญญา   (count)          — slate
- *   2. ยอดหนี้รวม    (installTotal)   — purple (net_amount ทุกงวด = principal+interest+fee)
+ *   2. ยอดผ่อนรวม   (installTotal)   — purple (net_amount ทุกงวด = principal+interest+fee)
  *   3. เป้าเก็บหนี้   (target)         — indigo (งวดที่ถึงกำหนดแล้ว)
  *   4. ยอดเก็บหนี้    (paid)           — green
  *   5. หนี้ค้างชำระ   (due)            — orange
@@ -54,7 +54,7 @@ type SummaryCell = {
   due:MoneyBreakdown;
   target:MoneyBreakdown;
   notYetDue:MoneyBreakdown;
-  installTotal:MoneyBreakdown; // ยอดหนี้รวม = SUM(net_amount) ทุกงวด (principal+interest+fee)
+  installTotal:MoneyBreakdown; // ยอดผ่อนรวม = SUM(net_amount) ทุกงวด (principal+interest+fee)
 };
 type SummaryRow = {
   approveMonth:string;
@@ -296,7 +296,7 @@ const TAB_INFO_CONTENT: {title:string;items:{label:string;desc:string;color?:str
   title: "สรุปรายเดือน — ความหมายของแต่ละแถบ",
   items: [
     {label:"จำนวนสัญญา",    desc:"จำนวนสัญญาทั้งหมดที่อนุมัติ จัดกลุ่มตามสถานะหนี้ปัจจุบัน (ปกติ / เกินกำหนด / ระงับ / สิ้นสุด / หนี้เสีย)",color:"text-slate-700"},
-    {label:"ยอดหนี้รวม",     desc:"เงินต้นที่ต้องชำระทั้งหมด = SUM(net_amount) ทุกงวดตั้งแต่งวดแรกถึงงวดสุดท้าย (เงินต้น + ดอกเบี้ย + ค่าดำเนินการ ไม่รวมค่าปรับ/ค่าปลดล็อก) เช่น ผ่องงวดละ 2,000 × 12 งวด = 24,000",color:"text-purple-700"},
+    {label:"ยอดผ่อนรวม",     desc:"ยอดที่ลูกค้าต้องผ่อนทั้งหมด = SUM(net_amount) ทุกงวดตั้งแต่งวดแรกถึงงวดสุดท้าย (เงินต้น + ดอกเบี้ย + ค่าดำเนินการ ไม่รวมค่าปรับ/ค่าปลดล็อก) เช่น ผ่อนงวดละ 2,000 × 12 งวด = 24,000",color:"text-purple-700"},
     {label:"เป้าเก็บหนี้",     desc:"ยอดค่างวด (เงินต้น + ดอกเบี้ย + ค่าดำเนินการ + ค่าปรับ + ค่าปลดล็อก) ตั้งแต่งวดแรกถึงงวดปัจจุบัน (เฉพาะงวดที่ถึงกำหนดแล้ว)",color:"text-indigo-700"},
     {label:"ยอดเก็บหนี้",      desc:"ยอดเงินที่ลูกค้าชำระจริง แยกตามประเภท (เงินต้น / ดอกเบี้ย / ค่าดำเนินการ / ค่าปรับ / ค่าปลดล็อก / ชำระเกิน / หนี้เสีย)",color:"text-green-700"},
     {label:"หนี้ค้างชำระ",   desc:"ยอดค้างชำระจากงวดก่อนหน้าจนถึงงวดปัจจุบัน + (ค่าปรับ + ค่าปลดล็อกของงวดล่าสุด) ไม่รวมยอดที่ชำระเข้ามาแล้ว",color:"text-orange-700"},
@@ -500,7 +500,7 @@ export default function MonthlySummary() {
   const[countProductType,setCountProductType]=useState<Set<string>>(new Set());
   const[countDeviceFamily,setCountDeviceFamily]=useState("");
 
-  // Tab installTotal: ยอดหนี้รวม
+  // Tab installTotal: ยอดผ่อนรวม
   const[installApproveMonths,setInstallApproveMonths]=useState<Set<string>>(new Set());
   const[installApproveYears,setInstallApproveYears]=useState<Set<string>>(new Set());
   const[installProductType,setInstallProductType]=useState<Set<string>>(new Set());
@@ -704,7 +704,7 @@ export default function MonthlySummary() {
     if(!canExport){toast.error("คุณไม่มีสิทธิ์ Export");return;}
     try{
       const wb=XLSX.utils.book_new();
-      const tabLabel=tab==="count"?"จำนวนสัญญา":tab==="installTotal"?"ยอดหนี้รวม":tab==="target"?"เป้าเก็บหนี้":tab==="paid"?"ยอดชำระแล้ว":tab==="due"?"หนี้ค้างชำระ":"ยังไม่ถึงกำหนด";
+      const tabLabel=tab==="count"?"จำนวนสัญญา":tab==="installTotal"?"ยอดผ่อนรวม":tab==="target"?"เป้าเก็บหนี้":tab==="paid"?"ยอดชำระแล้ว":tab==="due"?"หนี้ค้างชำระ":"ยังไม่ถึงกำหนด";
       const headers=["เดือน-ปีที่อนุมัติ","สัญญา",...DEBT_BUCKETS];
       const wsData:(string|number)[][]=[headers];
       for(const row of rows){
@@ -742,7 +742,7 @@ export default function MonthlySummary() {
   // ── Tab config ────────────────────────────────────────────────────────────────────
   const TAB_CONFIG: Array<{key:TabKey;label:string;activeClass:string;filterCount:number}> = [
     {key:"count",        label:"จำนวนสัญญา",       activeClass:"border-slate-600 text-slate-700",   filterCount:countFilterCount},
-    {key:"installTotal", label:"ยอดหนี้รวม",       activeClass:"border-purple-600 text-purple-700", filterCount:[installApproveMonths.size>0,installApproveYears.size>0,installProductType.size>0,installDeviceFamily].filter(Boolean).length},
+    {key:"installTotal", label:"ยอดผ่อนรวม",       activeClass:"border-purple-600 text-purple-700", filterCount:[installApproveMonths.size>0,installApproveYears.size>0,installProductType.size>0,installDeviceFamily].filter(Boolean).length},
     {key:"target",       label:"เป้าเก็บหนี้",       activeClass:"border-indigo-600 text-indigo-700", filterCount:targetFilterCount},
     {key:"paid",         label:"ยอดเก็บหนี้",     activeClass:"border-green-600 text-green-700",   filterCount:paidFilterCount},
     {key:"due",          label:"หนี้ค้างชำระ",   activeClass:"border-orange-600 text-orange-700", filterCount:dueFilterCount},
@@ -812,7 +812,7 @@ export default function MonthlySummary() {
                   )}
                 </>
               )}
-              {/* Tab installTotal: ยอดหนี้รวม */}
+              {/* Tab installTotal: ยอดผ่อนรวม */}
               {tab==="installTotal"&&(
                 <>
                   <div className="flex items-center gap-1.5">
@@ -985,7 +985,7 @@ export default function MonthlySummary() {
             })}
             {/* ยอดหนี้รวม */}
             <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border bg-purple-700 border-purple-800 text-white font-semibold">
-              <Banknote className="w-3.5 h-3.5"/><span>ยอดหนี้รวม</span>
+              <Banknote className="w-3.5 h-3.5"/><span>ยอดผ่อนรวม</span>
               <span>{fmtMoney((installVis.principal?grandBadgeInstallTotal.principal:0)+(installVis.interest?grandBadgeInstallTotal.interest:0)+(installVis.fee?grandBadgeInstallTotal.fee:0))}</span>
             </div>
           </div>
@@ -1242,7 +1242,7 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
   const SortIcon=sortDir==="asc"?ArrowUp:ArrowDown;
 
   // second column label by tab
-  const col2Label=tab==="count"?"สัญญา":tab==="installTotal"?"ยอดหนี้รวม":tab==="target"?"เป้าเก็บหนี้":tab==="paid"?"ยอดชำระ":tab==="due"?"หนี้ค้างชำระ":"ยังไม่ถึงกำหนด";
+  const col2Label=tab==="count"?"สัญญา":tab==="installTotal"?"ยอดผ่อนรวม":tab==="target"?"เป้าเก็บหนี้":tab==="paid"?"ยอดชำระ":tab==="due"?"หนี้ค้างชำระ":"ยังไม่ถึงกำหนด";
   const col2Color=tab==="count"?"bg-slate-700":tab==="installTotal"?"bg-purple-700":tab==="target"?"bg-indigo-700":tab==="paid"?"bg-green-700":tab==="due"?"bg-orange-700":"bg-blue-700";
 
   const minWidth=useMemo(()=>{
