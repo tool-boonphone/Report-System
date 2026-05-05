@@ -87,19 +87,25 @@ export async function* streamTargetFromCache(params: {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  // ── 1. Load phone numbers once (small table) ─────────────────────────────────────────────
+  // ── 1. Load contract metadata once (phone, installment_amount, finance_amount) ─────────────────────────────────────────────────────────────────────────────────────────
   const phoneResult = await db.execute(sql`
-    SELECT external_id, phone
+    SELECT external_id, phone, installment_amount, finance_amount
     FROM contracts
     WHERE section = ${section}
   `);
   const phoneRows: any[] = (phoneResult as any)[0] ?? phoneResult;
   const phoneMap = new Map<string, string | null>();
+  // Phase 9AK: เก็บ installment_amount จาก contracts table โดยตรง (ไม่คำนวณจาก totalAmount)
+  const contractInstAmtMap = new Map<string, { installmentAmount: number | null; financeAmount: number | null }>();
   for (const r of phoneRows) {
     phoneMap.set(String(r.external_id), r.phone ?? null);
+    contractInstAmtMap.set(String(r.external_id), {
+      installmentAmount: r.installment_amount != null ? Number(r.installment_amount) : null,
+      financeAmount: r.finance_amount != null ? Number(r.finance_amount) : null,
+    });
   }
 
-  // ── 2. Get distinct contract IDs in order (paginated) ─────────────────────────────────
+  // -- 2. Get distinct contract IDs in order (paginated) --
   let offset = 0;
   while (true) {
     // Get next page of distinct contract IDs
@@ -146,7 +152,9 @@ export async function* streamTargetFromCache(params: {
         is_future_period,
         is_arrears,
         is_bad_debt,
-        debt_range
+        debt_range,
+        finance_amount,
+        installment_amount
       FROM debt_target_cache
       WHERE section = ${section}
         AND contract_external_id IN (${sql.raw(idList)})
@@ -221,9 +229,9 @@ export async function* streamTargetFromCache(params: {
         phone: phoneMap.get(extId) ?? null,
         productType: first?.product_type ?? null,
         installmentCount: first?.installment_count != null ? Number(first.installment_count) : null,
-        installmentAmount: (first.installment_count != null && Number(first.installment_count) > 0) ? Math.round((totalAmount / Number(first.installment_count)) * 100) / 100 : null,
-        // Phase 9X: financeAmount ใช้คำนวณ breakdown สำหรับสัญญา suspended ที่ p/i/f = 0
-        financeAmount: first?.finance_amount != null ? Number(first.finance_amount) : null,
+        // Phase 9AK: ใช้ installment_amount จาก contracts table โดยตรง (ไม่คำนวณจาก totalAmount)
+        installmentAmount: contractInstAmtMap.get(extId)?.installmentAmount ?? null,
+        financeAmount: contractInstAmtMap.get(extId)?.financeAmount ?? null,
         totalAmount,
         totalPaid,
         remaining: Math.max(totalAmount - totalPaid, 0),
@@ -603,7 +611,7 @@ export async function getTargetChunk(params: {
       }
       
       const result = await db.execute(sql.raw(`
-        SELECT c.external_id, c.phone, c.finance_amount, c.commission_net
+        SELECT c.external_id, c.phone, c.finance_amount, c.commission_net, c.installment_amount
         FROM contracts c
         INNER JOIN ${tempTableName2} t ON c.external_id = t.contract_id
         WHERE c.section = '${section}'
@@ -619,18 +627,20 @@ export async function getTargetChunk(params: {
   const rows: any[] = (rawResult as any)[0] ?? rawResult;
   const phoneRows: any[] = (phoneResult as any)[0] ?? phoneResult;
 
-  // ── 3. Build phone + finance map ─────────────────────────────────────────
+  // ── 3. Build phone + finance + installmentAmount map ─────────────────────────────────────────────────────────────────────────────────────────
   const phoneMap = new Map<string, string | null>();
-  const financeMap = new Map<string, { financeAmount: number | null; commissionNet: number | null }>();
+  const financeMap = new Map<string, { financeAmount: number | null; commissionNet: number | null; installmentAmount: number | null }>();
   for (const r of phoneRows) {
     phoneMap.set(String(r.external_id), r.phone ?? null);
     financeMap.set(String(r.external_id), {
       financeAmount: r.finance_amount != null ? Number(r.finance_amount) : null,
       commissionNet: r.commission_net != null ? Number(r.commission_net) : null,
+      // Phase 9AK: ใช้ installment_amount จาก contracts table โดยตรง
+      installmentAmount: r.installment_amount != null ? Number(r.installment_amount) : null,
     });
   }
 
-  // ── 4. Group rows by contract ─────────────────────────────────────────────
+  // ── 4. Group rows by contract ─────────────────────────────────────────────────────────────────────────────────────────
   const contractMap = new Map<string, any[]>();
   for (const r of rows) {
     const key = String(r.contract_external_id);
@@ -697,7 +707,8 @@ export async function getTargetChunk(params: {
       phone: phoneMap.get(extId) ?? null,
       productType: first.product_type ?? null,
       installmentCount: first.installment_count != null ? Number(first.installment_count) : null,
-      installmentAmount: (first.installment_count != null && Number(first.installment_count) > 0) ? Math.round((totalAmount / Number(first.installment_count)) * 100) / 100 : null,
+      // Phase 9AK: ใช้ installment_amount จาก contracts table โดยตรง
+      installmentAmount: financeMap.get(extId)?.installmentAmount ?? null,
       totalAmount,
       totalPaid,
       remaining: Math.max(totalAmount - totalPaid, 0),

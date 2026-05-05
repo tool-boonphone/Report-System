@@ -597,62 +597,52 @@ async function queryInstallTotal(
   });
 
   /*
-   * ยอดผ่อนรวม = SUM(baseline_amount) ทุกงวด ตั้งแต่งวดแรกถึงงวดสุดท้าย
-   * = ผ่อนงวดละ × จำนวนงวด (baseline = principal+interest+fee ก่อนหัก overpaid carry)
-   * ใช้ baseline_amount ไม่ใช้ principal+interest+fee เพราะ interest อาจถูก scale ลงเมื่อมี overpaid carry
-   * ดึงจากทุกงวด (is_future_period=0 และ =1) ไม่มี filter
-   * bucket ใช้จากงวดล่าสุด (max_period) ของแต่ละสัญญา (สถานะหนี้ปัจจุบัน)
-   *
-   * Phase 9AK fix: สัญญา suspended มี principal=interest=fee=0 ใน cache
-   * ให้คำนวณ breakdown จากสูตร Phase 9X:
+   * Phase 9AK fix: ใช้ installment_amount × installment_count จาก contracts table โดยตรง
+   * ไม่ต้องสนใจสถานะงวด (suspended/closed/normal)
+   * Breakdown ต่องวด (Phase 9X):
    *   basePrincipal = CEIL(finance_amount / installment_count)
    *   baseFee       = 100
-   *   baseInterest  = baseline_amount - basePrincipal - baseFee
+   *   baseInterest  = installment_amount - basePrincipal - baseFee
    */
   const q = `
     SELECT
-      DATE_FORMAT(all_p.approve_date, '%Y-%m') AS approve_month,
+      DATE_FORMAT(c.approve_date, '%Y-%m') AS approve_month,
       CASE
         WHEN latest.contract_status = 'หนี้เสีย'      THEN 'หนี้เสีย'
         WHEN latest.contract_status = 'ระงับสัญญา'   THEN 'ระงับสัญญา'
         WHEN latest.contract_status = 'สิ้นสุดสัญญา' THEN 'สิ้นสุดสัญญา'
         ELSE COALESCE(latest.debt_range, 'ปกติ')
       END AS bucket,
-      COUNT(DISTINCT all_p.contract_external_id) AS contract_count,
+      COUNT(DISTINCT c.external_id) AS contract_count,
+      -- Phase 9X breakdown: principal/งวด = CEIL(finance/count), fee=100, interest=instAmt-principal-100
       SUM(
         CASE
-          WHEN all_p.is_suspended = 1
-            AND all_p.finance_amount > 0
-            AND all_p.installment_count > 0
-          THEN CEIL(CAST(all_p.finance_amount AS DECIMAL(18,2)) / all_p.installment_count)
-          ELSE CAST(all_p.principal AS DECIMAL(18,2))
+          WHEN c.finance_amount > 0 AND c.installment_count > 0
+          THEN CEIL(CAST(c.finance_amount AS DECIMAL(18,2)) / c.installment_count) * c.installment_count
+          ELSE CAST(c.installment_amount AS DECIMAL(18,2)) * c.installment_count
         END
       ) AS principal_install,
       SUM(
         CASE
-          WHEN all_p.is_suspended = 1
-            AND all_p.finance_amount > 0
-            AND all_p.installment_count > 0
-            AND CAST(all_p.baseline_amount AS DECIMAL(18,2)) > 0
+          WHEN c.finance_amount > 0 AND c.installment_count > 0
+            AND CAST(c.installment_amount AS DECIMAL(18,2)) > 0
           THEN GREATEST(0,
-            CAST(all_p.baseline_amount AS DECIMAL(18,2))
-            - CEIL(CAST(all_p.finance_amount AS DECIMAL(18,2)) / all_p.installment_count)
+            CAST(c.installment_amount AS DECIMAL(18,2))
+            - CEIL(CAST(c.finance_amount AS DECIMAL(18,2)) / c.installment_count)
             - 100
-          )
-          ELSE CAST(all_p.interest AS DECIMAL(18,2))
+          ) * c.installment_count
+          ELSE 0
         END
       ) AS interest_install,
       SUM(
         CASE
-          WHEN all_p.is_suspended = 1
-            AND all_p.finance_amount > 0
-            AND all_p.installment_count > 0
-          THEN 100
-          ELSE CAST(all_p.fee AS DECIMAL(18,2))
+          WHEN c.finance_amount > 0 AND c.installment_count > 0
+          THEN 100 * c.installment_count
+          ELSE 0
         END
       ) AS fee_install,
-      SUM(CAST(all_p.baseline_amount AS DECIMAL(18,2))) AS total_install
-    FROM debt_target_cache all_p
+      SUM(CAST(c.installment_amount AS DECIMAL(18,2)) * c.installment_count) AS total_install
+    FROM contracts c
     JOIN (
       SELECT
         dtc.section,
@@ -670,11 +660,13 @@ async function queryInstallTotal(
       ) mp ON mp.section = dtc.section
           AND mp.contract_external_id = dtc.contract_external_id
           AND mp.max_period = dtc.period
-    ) latest ON latest.section = all_p.section
-            AND latest.contract_external_id = all_p.contract_external_id
-    WHERE all_p.section = '${section}'
-      AND all_p.approve_date IS NOT NULL
-      AND COALESCE(all_p.contract_status, '') NOT IN ('ยกเลิกสัญญา')
+    ) latest ON latest.section = c.section
+            AND latest.contract_external_id = CAST(c.external_id AS CHAR)
+    WHERE c.section = '${section}'
+      AND c.approve_date IS NOT NULL
+      AND COALESCE(c.status, '') NOT IN ('ยกเลิกสัญญา')
+      AND c.installment_amount > 0
+      AND c.installment_count > 0
     GROUP BY approve_month, bucket
     ORDER BY approve_month DESC
   `;

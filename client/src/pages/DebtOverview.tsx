@@ -885,46 +885,26 @@ export default function DebtOverview() {
         }
       }
 
-      // ยอดผ่อนรวม = ผ่อนงวดละ × จำนวนงวดทั้งหมดตามสัญญา
-      // ใช้ r.installmentCount (จาก contract header) เพราะ cache อาจเก็บไม่ครบทุกงวด
-      // ใช้งวดแรก (period=1) ที่ไม่ suspended เป็น template ค่าต่องวด
-      // หา template งวด: งวดแรก (period=1) ที่ไม่ suspended
-      // fallback: งวดแรกที่ไม่ suspended ใดก็ได้
-      // fallback สุดท้าย: งวดแรกสุด (แม้ suspended) เพื่อดึง baseline_amount
-      const firstInst = r.installments.find((inst) => !inst.isSuspended && inst.period === 1)
-        ?? r.installments.find((inst) => !inst.isSuspended)
-        ?? r.installments.find((inst) => inst.period === 1)
-        ?? r.installments[0];
-      const installCount = r.installmentCount ?? r.installments.length;
-      if (firstInst && installCount > 0) {
-        const pPerPeriod = (firstInst.principal ?? 0);
-        const iPerPeriod = (firstInst.interest ?? 0);
-        const fPerPeriod = (firstInst.fee ?? 0);
-        // ถ้า p+i+f = 0 (เช่น สัญญา suspended ทั้งหมด Phase 9AK)
-        // ให้คำนวณ breakdown จากสูตร Phase 9X:
-        //   basePrincipal = CEIL(financeAmount / installmentCount)
-        //   baseFee       = 100 (ตายตัวต่องวด)
-        //   baseInterest  = baselineAmount - basePrincipal - baseFee
-        if (pPerPeriod + iPerPeriod + fPerPeriod === 0 && (firstInst.baselineAmount ?? 0) > 0) {
-          const baseline = firstInst.baselineAmount ?? 0;
-          const finAmt = r.financeAmount ?? 0;
-          const periods = installCount;
-          if (finAmt > 0 && periods > 0) {
-            // สูตร Phase 9X (เหมือนกับ debtDb.ts)
-            const basePrincipal = Math.ceil(finAmt / periods);
+      // ยอดผ่อนรวม = installmentAmount × installmentCount (Phase 9AK fix)
+      // ไม่ต้องสนใจสถานะงวด เพราะ installmentAmount × installmentCount = ยอดผ่อนรวมตามสัญญาเสมอ
+      // Breakdown: Phase 9X ต่องวด × installmentCount
+      {
+        const finAmt = r.financeAmount ?? 0;
+        const installCount = r.installmentCount ?? r.installments.length;
+        const instAmt = r.installmentAmount ?? 0;
+        if (installCount > 0 && instAmt > 0) {
+          if (finAmt > 0) {
+            // สูตร Phase 9X: principal/งวด = CEIL(finance / count), fee = 100, interest = instAmt - principal - 100
+            const basePrincipal = Math.ceil(finAmt / installCount);
             const baseFee = 100;
-            const baseInterest = Math.max(0, baseline - basePrincipal - baseFee);
+            const baseInterest = Math.max(0, instAmt - basePrincipal - baseFee);
             row.installPrincipal += basePrincipal * installCount;
             row.installInterest  += baseInterest  * installCount;
             row.installFee       += baseFee        * installCount;
           } else {
-            // fallback: ใส่ทั้งหมดใน principal ถ้าไม่มี financeAmount
-            row.installPrincipal += baseline * installCount;
+            // fallback: ไม่มี financeAmount ใส่ทั้งหมดใน principal
+            row.installPrincipal += instAmt * installCount;
           }
-        } else {
-          row.installPrincipal += pPerPeriod * installCount;
-          row.installInterest += iPerPeriod * installCount;
-          row.installFee += fPerPeriod * installCount;
         }
       }
     }
