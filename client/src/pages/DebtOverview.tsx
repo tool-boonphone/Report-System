@@ -884,13 +884,25 @@ export default function DebtOverview() {
         }
       }
 
-      // ยอดผ่อนรวม = SUM(principal + interest + fee) ทุกงวด (ไม่ filter due date, ไม่ filter isClosed)
+      // ยอดผ่อนรวม = SUM(baselineAmount) ทุกงวด (ไม่ filter due date, ไม่ filter isClosed)
       // = ผ่อนงวดละ × จำนวนงวด (SUM ทุกงวด)
+      // ใช้ baselineAmount เพราะ interest อาจถูก scale ลงเมื่อมี overpaid carry (เช่น overpaid_applied=50 ทำให้ interest ลด 50)
       for (const inst of r.installments) {
         if (inst.isSuspended) continue;
-        row.installPrincipal += inst.principal ?? 0;
-        row.installInterest += inst.interest ?? 0;
-        row.installFee += inst.fee ?? 0;
+        // baseline = principal + interest + fee ก่อนหัก overpaid carry
+        const baseline = inst.baselineAmount ?? ((inst.principal ?? 0) + (inst.interest ?? 0) + (inst.fee ?? 0));
+        // แยก breakdown ตามสัดส่วน principal:interest:fee ของงวดนั้น
+        const p0 = inst.principal ?? 0;
+        const i0 = inst.interest ?? 0;
+        const f0 = inst.fee ?? 0;
+        const raw = p0 + i0 + f0;
+        if (raw > 0) {
+          row.installPrincipal += baseline * (p0 / raw);
+          row.installInterest += baseline * (i0 / raw);
+          row.installFee += baseline * (f0 / raw);
+        } else {
+          row.installPrincipal += baseline;
+        }
       }
     }
 
@@ -935,7 +947,9 @@ export default function DebtOverview() {
       // หมายเหตุ: badDebt (ยอดขายเครื่อง) แยกไปอยู่ใน deviceSaleAmount แล้ว ไม่รวมใน collectedTotal
 
       // Override ด้วยค่าจาก cache (DB) เหมือน MonthlySummary
-      const cached = cacheByMonth.get(row.monthKey);
+      // ใช้ cache เฉพาะเมื่อไม่มีการ search/statusFilter ที่ทำให้สัญญาลดลงจากทั้งเดือน
+      const isFullMonth = !search.trim() && statusFilter.size === 0;
+      const cached = isFullMonth ? cacheByMonth.get(row.monthKey) : undefined;
       if (cached) {
         row.collectedTotal = cached.paidTotal;
         row.notYetDue = cached.notYetDueTotal;
@@ -950,7 +964,7 @@ export default function DebtOverview() {
         ? a.monthKey.localeCompare(b.monthKey)
         : b.monthKey.localeCompare(a.monthKey)
     );
-  }, [filteredTargetRows, filteredCollectedRows, principalOnly, dueDateFilter, dueDateExact, badgeVisibility, targetBadgeVisibility, todayStr, monthSortDir, cacheByMonth]);
+  }, [filteredTargetRows, filteredCollectedRows, principalOnly, dueDateFilter, dueDateExact, badgeVisibility, targetBadgeVisibility, todayStr, monthSortDir, cacheByMonth, search, statusFilter]);
 
   /* ---- Grand totals (for badge display) ---- */
   const grandInstall = useMemo(() => {

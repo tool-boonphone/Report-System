@@ -597,8 +597,9 @@ async function queryInstallTotal(
   });
 
   /*
-   * ยอดผ่อนรวม = SUM(principal + interest + fee) ทุกงวด ตั้งแต่งวดแรกถึงงวดสุดท้าย
-   * = ยอดที่ลูกค้าต้องผ่อนจริงต่องวด (ผ่อนงวดละ) รวมทุกงวด
+   * ยอดผ่อนรวม = SUM(baseline_amount) ทุกงวด ตั้งแต่งวดแรกถึงงวดสุดท้าย
+   * = ผ่อนงวดละ × จำนวนงวด (baseline = principal+interest+fee ก่อนหัก overpaid carry)
+   * ใช้ baseline_amount ไม่ใช้ principal+interest+fee เพราะ interest อาจถูก scale ลงเมื่อมี overpaid carry
    * ดึงจากทุกงวด (is_future_period=0 และ =1) ไม่มี filter
    * bucket ใช้จากงวดล่าสุด (max_period) ของแต่ละสัญญา (สถานะหนี้ปัจจุบัน)
    */
@@ -615,7 +616,7 @@ async function queryInstallTotal(
       SUM(CAST(all_p.principal  AS DECIMAL(18,2))) AS principal_install,
       SUM(CAST(all_p.interest   AS DECIMAL(18,2))) AS interest_install,
       SUM(CAST(all_p.fee        AS DECIMAL(18,2))) AS fee_install,
-      SUM(CAST(all_p.principal AS DECIMAL(18,2)) + CAST(all_p.interest AS DECIMAL(18,2)) + CAST(all_p.fee AS DECIMAL(18,2))) AS total_install
+      SUM(CAST(all_p.baseline_amount AS DECIMAL(18,2))) AS total_install
     FROM debt_target_cache all_p
     JOIN (
       SELECT
