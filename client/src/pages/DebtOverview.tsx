@@ -1267,7 +1267,7 @@ export default function DebtOverview() {
             {/* เป้าเก็บหนี้ toggle */}
             <div className={["flex items-center gap-1.5 h-9 px-3 rounded-md border cursor-pointer select-none", principalOnly ? "border-blue-400 bg-blue-100" : "border-blue-200 bg-blue-50"].join(" ")}
               onClick={() => setPrincipalOnly((v) => !v)}
-              title="เปิด/ปิด เป้าเก็บหนี้ (แสดงยอดผ่อนเฉพาะงวดที่ถึงกำหนดแล้ว แทนยอดผ่อนรวมตามสัญญา)"
+              title="เปิด: แสดงเฉพาะยอดที่ถึงกำหนดชำระแล้ว (เป้าเก็บหนี้) | ปิด: แสดงยอดผ่อนรวมทั้งหมดตามสัญญา"
             >
               <Switch checked={principalOnly} onCheckedChange={setPrincipalOnly} id="principalOnly" onClick={(e) => e.stopPropagation()} />
               <label htmlFor="principalOnly" className="text-xs text-blue-700 font-medium cursor-pointer">เป้าเก็บหนี้</label>
@@ -1563,10 +1563,11 @@ export default function DebtOverview() {
                                     {collectionRate < 60 && collectionRate > 0 && <TrendingDown className="w-3 h-3 ml-0.5" />}
                                   </span>
                                 </TooltipTrigger>
-                                <TooltipContent side="top" className="max-w-[220px] text-xs">
-                                  <p className="font-semibold mb-1">% การเก็บหนี้</p>
-                                  <p>ยอดเก็บหนี้ ÷ {principalOnly ? "เป้าเก็บหนี้" : "ยอดผ่อนรวม"}</p>
-                                  <p className="mt-1 text-gray-300">{fmtMoney(row.collectedTotal)} ÷ {fmtMoney(displayInstall)}</p>
+                                <TooltipContent side="top" className="max-w-[260px] text-xs">
+                                  <p className="font-semibold mb-1">อัตราการเก็บหนี้</p>
+                                  <p className="text-gray-200">เก็บได้จริงเทียบกับ{principalOnly ? "ยอดที่ถึงกำหนดชำระ" : "ยอดผ่อนรวมทั้งหมด"}</p>
+                                  <p className="mt-1.5 font-mono">{fmtMoney(row.collectedTotal)} ÷ {fmtMoney(displayInstall)}</p>
+                                  <p className="mt-1 text-gray-400 text-[10px]">เขียว ≥100% · น้ำเงิน ≥80% · เหลือง ≥60% · แดง &lt;60%</p>
                                 </TooltipContent>
                               </Tooltip>
                             )}
@@ -1587,10 +1588,12 @@ export default function DebtOverview() {
                                         {fmtPct(devicePct)}
                                       </span>
                                     </TooltipTrigger>
-                                    <TooltipContent side="top" className="max-w-[240px] text-xs">
-                                      <p className="font-semibold mb-1">% ยอดขายเครื่อง</p>
-                                      <p>ยอดขายเครื่อง ÷ (ยอดผ่อนรวม − เป้าเก็บหนี้)</p>
-                                      <p className="mt-1 text-gray-300">{fmtMoney(row.deviceSaleAmount)} ÷ {fmtMoney(denominator)}</p>
+                                    <TooltipContent side="top" className="max-w-[280px] text-xs">
+                                      <p className="font-semibold mb-1">สัดส่วนยอดขายเครื่อง</p>
+                                      <p className="text-gray-200">ยอดขายเครื่องเทียบกับส่วนที่ยังไม่ถึงกำหนดชำระ</p>
+                                      <p className="text-gray-400 text-[10px] mt-0.5">(ยอดผ่อนรวม − ยอดที่ถึงกำหนดแล้ว)</p>
+                                      <p className="mt-1.5 font-mono">{fmtMoney(row.deviceSaleAmount)} ÷ {fmtMoney(denominator)}</p>
+                                      <p className="mt-1 text-gray-400 text-[10px]">เขียว ≥80% · น้ำเงิน ≥60% · เหลือง ≥40% · แดง &lt;40%</p>
                                     </TooltipContent>
                                   </Tooltip>
                                 )}
@@ -1612,10 +1615,11 @@ export default function DebtOverview() {
                                         {fmtPct(revenuePct)}
                                       </span>
                                     </TooltipTrigger>
-                                    <TooltipContent side="top" className="max-w-[220px] text-xs">
-                                      <p className="font-semibold mb-1">% รายรับรวม</p>
-                                      <p>รายรับรวม ÷ ยอดผ่อนรวม</p>
-                                      <p className="mt-1 text-gray-300">{fmtMoney(revenue)} ÷ {fmtMoney(row.installTotal)}</p>
+                                    <TooltipContent side="top" className="max-w-[280px] text-xs">
+                                      <p className="font-semibold mb-1">สัดส่วนรายรับรวม</p>
+                                      <p className="text-gray-200">รายรับทั้งหมด (เก็บหนี้ + ขายเครื่อง) เทียบกับยอดผ่อนรวมตามสัญญา</p>
+                                      <p className="mt-1.5 font-mono">{fmtMoney(revenue)} ÷ {fmtMoney(row.installTotal)}</p>
+                                      <p className="mt-1 text-gray-400 text-[10px]">เขียว ≥100% · น้ำเงิน ≥80% · เหลือง ≥60% · แดง &lt;60%</p>
                                     </TooltipContent>
                                   </Tooltip>
                                 )}
@@ -1641,10 +1645,11 @@ export default function DebtOverview() {
                                         {fmtPct(profitPct)}
                                       </span>
                                     </TooltipTrigger>
-                                    <TooltipContent side="top" className="max-w-[220px] text-xs">
-                                      <p className="font-semibold mb-1">% กำไรขั้นต้น</p>
-                                      <p>กำไรขั้นต้น ÷ ต้นทุน</p>
-                                      <p className="mt-1 text-gray-300">{fmtMoney(grossProfit)} ÷ {fmtMoney(row.cost)}</p>
+                                    <TooltipContent side="top" className="max-w-[280px] text-xs">
+                                      <p className="font-semibold mb-1">อัตรากำไรขั้นต้น</p>
+                                      <p className="text-gray-200">กำไรที่ได้ (รายรับ − ต้นทุน) เทียบกับต้นทุนที่ลงทุนไป</p>
+                                      <p className="mt-1.5 font-mono">{fmtMoney(grossProfit)} ÷ {fmtMoney(row.cost)}</p>
+                                      <p className="mt-1 text-gray-400 text-[10px]">บวก = มีกำไร · ลบ = ขาดทุน</p>
                                     </TooltipContent>
                                   </Tooltip>
                                 )}
@@ -1666,10 +1671,11 @@ export default function DebtOverview() {
                                         {fmtPct(notDuePct)}
                                       </span>
                                     </TooltipTrigger>
-                                    <TooltipContent side="top" className="max-w-[220px] text-xs">
-                                      <p className="font-semibold mb-1">% ยังไม่ถึงกำหนด</p>
-                                      <p>ยอดที่ยังไม่ถึงกำหนด ÷ ยอดผ่อนรวม</p>
-                                      <p className="mt-1 text-gray-300">{fmtMoney(row.notYetDue)} ÷ {fmtMoney(row.installTotal)}</p>
+                                    <TooltipContent side="top" className="max-w-[280px] text-xs">
+                                      <p className="font-semibold mb-1">สัดส่วนยอดที่ยังไม่ถึงกำหนด</p>
+                                      <p className="text-gray-200">ยอดงวดที่ยังไม่ถึงกำหนดชำระ เทียบกับยอดผ่อนรวมทั้งสัญญา</p>
+                                      <p className="mt-1.5 font-mono">{fmtMoney(row.notYetDue)} ÷ {fmtMoney(row.installTotal)}</p>
+                                      <p className="mt-1 text-gray-400 text-[10px]">ยิ่งสูง = ลูกค้ายังผ่อนอยู่นาน · ยิ่งต่ำ = ใกล้ปิดสัญญา</p>
                                     </TooltipContent>
                                   </Tooltip>
                                 )}
@@ -1723,10 +1729,11 @@ export default function DebtOverview() {
                                     {overallRate < 60 && overallRate > 0 && <TrendingDown className="w-3 h-3 ml-0.5" />}
                                   </span>
                                 </TooltipTrigger>
-                                <TooltipContent side="top" className="max-w-[220px] text-xs">
-                                  <p className="font-semibold mb-1">% การเก็บหนี้ (รวม)</p>
-                                  <p>ยอดเก็บหนี้รวม ÷ {principalOnly ? "เป้าเก็บหนี้รวม" : "ยอดผ่อนรวมทั้งหมด"}</p>
-                                  <p className="mt-1 text-gray-300">{fmtMoney(totalCollected)} ÷ {fmtMoney(displayTotalInstall)}</p>
+                                <TooltipContent side="top" className="max-w-[280px] text-xs">
+                                  <p className="font-semibold mb-1">อัตราการเก็บหนี้ (ภาพรวม)</p>
+                                  <p className="text-gray-200">เก็บได้จริงทั้งหมดเทียบกับ{principalOnly ? "ยอดที่ถึงกำหนดชำระทั้งหมด" : "ยอดผ่อนรวมทุกสัญญา"}</p>
+                                  <p className="mt-1.5 font-mono">{fmtMoney(totalCollected)} ÷ {fmtMoney(displayTotalInstall)}</p>
+                                  <p className="mt-1 text-gray-400 text-[10px]">เขียว ≥100% · น้ำเงิน ≥80% · เหลือง ≥60% · แดง &lt;60%</p>
                                 </TooltipContent>
                               </Tooltip>
                             )}
@@ -1747,10 +1754,12 @@ export default function DebtOverview() {
                                         {fmtPct(totalDevicePct)}
                                       </span>
                                     </TooltipTrigger>
-                                    <TooltipContent side="top" className="max-w-[240px] text-xs">
-                                      <p className="font-semibold mb-1">% ยอดขายเครื่อง (รวม)</p>
-                                      <p>ยอดขายเครื่อง ÷ (ยอดผ่อนรวม − เป้าเก็บหนี้)</p>
-                                      <p className="mt-1 text-gray-300">{fmtMoney(totalDeviceSale)} ÷ {fmtMoney(totalDenominator)}</p>
+                                    <TooltipContent side="top" className="max-w-[280px] text-xs">
+                                      <p className="font-semibold mb-1">สัดส่วนยอดขายเครื่อง (ภาพรวม)</p>
+                                      <p className="text-gray-200">ยอดขายเครื่องทั้งหมดเทียบกับส่วนที่ยังไม่ถึงกำหนดชำระ</p>
+                                      <p className="text-gray-400 text-[10px] mt-0.5">(ยอดผ่อนรวม − ยอดที่ถึงกำหนดแล้ว)</p>
+                                      <p className="mt-1.5 font-mono">{fmtMoney(totalDeviceSale)} ÷ {fmtMoney(totalDenominator)}</p>
+                                      <p className="mt-1 text-gray-400 text-[10px]">เขียว ≥80% · น้ำเงิน ≥60% · เหลือง ≥40% · แดง &lt;40%</p>
                                     </TooltipContent>
                                   </Tooltip>
                                 )}
@@ -1772,10 +1781,11 @@ export default function DebtOverview() {
                                         {fmtPct(totalRevenuePct)}
                                       </span>
                                     </TooltipTrigger>
-                                    <TooltipContent side="top" className="max-w-[220px] text-xs">
-                                      <p className="font-semibold mb-1">% รายรับรวม (รวม)</p>
-                                      <p>รายรับรวม ÷ ยอดผ่อนรวม</p>
-                                      <p className="mt-1 text-gray-300">{fmtMoney(totalRevenue)} ÷ {fmtMoney(totalInstall)}</p>
+                                    <TooltipContent side="top" className="max-w-[280px] text-xs">
+                                      <p className="font-semibold mb-1">สัดส่วนรายรับรวม (ภาพรวม)</p>
+                                      <p className="text-gray-200">รายรับทั้งหมด (เก็บหนี้ + ขายเครื่อง) เทียบกับยอดผ่อนรวมทุกสัญญา</p>
+                                      <p className="mt-1.5 font-mono">{fmtMoney(totalRevenue)} ÷ {fmtMoney(totalInstall)}</p>
+                                      <p className="mt-1 text-gray-400 text-[10px]">เขียว ≥100% · น้ำเงิน ≥80% · เหลือง ≥60% · แดง &lt;60%</p>
                                     </TooltipContent>
                                   </Tooltip>
                                 )}
@@ -1798,10 +1808,11 @@ export default function DebtOverview() {
                                         {fmtPct(totalProfitPct)}
                                       </span>
                                     </TooltipTrigger>
-                                    <TooltipContent side="top" className="max-w-[220px] text-xs">
-                                      <p className="font-semibold mb-1">% กำไรขั้นต้น (รวม)</p>
-                                      <p>กำไรขั้นต้น ÷ ต้นทุน</p>
-                                      <p className="mt-1 text-gray-300">{fmtMoney(totalProfit)} ÷ {fmtMoney(totalCost)}</p>
+                                    <TooltipContent side="top" className="max-w-[280px] text-xs">
+                                      <p className="font-semibold mb-1">อัตรากำไรขั้นต้น (ภาพรวม)</p>
+                                      <p className="text-gray-200">กำไรรวมทั้งหมด (รายรับ − ต้นทุน) เทียบกับต้นทุนที่ลงทุนไปทั้งหมด</p>
+                                      <p className="mt-1.5 font-mono">{fmtMoney(totalProfit)} ÷ {fmtMoney(totalCost)}</p>
+                                      <p className="mt-1 text-gray-400 text-[10px]">บวก = มีกำไร · ลบ = ขาดทุน</p>
                                     </TooltipContent>
                                   </Tooltip>
                                 )}
