@@ -884,15 +884,29 @@ export default function DebtOverview() {
         }
       }
 
-      // ยอดผ่อนรวม = ผ่อนงวดละ × จำนวนงวด
-      // ใช้งวดแรก (period=1) เป็น template เพราะงวดแรกไม่มี overpaid carry
+      // ยอดผ่อนรวม = ผ่อนงวดละ × จำนวนงวดทั้งหมดตามสัญญา
+      // ใช้ r.installmentCount (จาก contract header) เพราะ cache อาจเก็บไม่ครบทุกงวด
+      // ใช้งวดแรก (period=1) ที่ไม่ suspended เป็น template ค่าต่องวด
+      // หา template งวด: งวดแรก (period=1) ที่ไม่ suspended
+      // fallback: งวดแรกที่ไม่ suspended ใดก็ได้
+      // fallback สุดท้าย: งวดแรกสุด (แม้ suspended) เพื่อดึง baseline_amount
       const firstInst = r.installments.find((inst) => !inst.isSuspended && inst.period === 1)
-        ?? r.installments.find((inst) => !inst.isSuspended);
-      const installCount = r.installments.filter((inst) => !inst.isSuspended).length;
+        ?? r.installments.find((inst) => !inst.isSuspended)
+        ?? r.installments.find((inst) => inst.period === 1)
+        ?? r.installments[0];
+      const installCount = r.installmentCount ?? r.installments.length;
       if (firstInst && installCount > 0) {
-        row.installPrincipal += (firstInst.principal ?? 0) * installCount;
-        row.installInterest += (firstInst.interest ?? 0) * installCount;
-        row.installFee += (firstInst.fee ?? 0) * installCount;
+        const pPerPeriod = (firstInst.principal ?? 0);
+        const iPerPeriod = (firstInst.interest ?? 0);
+        const fPerPeriod = (firstInst.fee ?? 0);
+        // ถ้า p+i+f = 0 (เช่น สัญญา suspended ทั้งหมด) ให้ใช้ baseline_amount แทน
+        if (pPerPeriod + iPerPeriod + fPerPeriod === 0 && (firstInst.baselineAmount ?? 0) > 0) {
+          row.installPrincipal += (firstInst.baselineAmount ?? 0) * installCount;
+        } else {
+          row.installPrincipal += pPerPeriod * installCount;
+          row.installInterest += iPerPeriod * installCount;
+          row.installFee += fPerPeriod * installCount;
+        }
       }
     }
 
