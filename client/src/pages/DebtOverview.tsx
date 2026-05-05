@@ -884,25 +884,15 @@ export default function DebtOverview() {
         }
       }
 
-      // ยอดผ่อนรวม = SUM(baselineAmount) ทุกงวด (ไม่ filter due date, ไม่ filter isClosed)
-      // = ผ่อนงวดละ × จำนวนงวด (SUM ทุกงวด)
-      // ใช้ baselineAmount เพราะ interest อาจถูก scale ลงเมื่อมี overpaid carry (เช่น overpaid_applied=50 ทำให้ interest ลด 50)
-      for (const inst of r.installments) {
-        if (inst.isSuspended) continue;
-        // baseline = principal + interest + fee ก่อนหัก overpaid carry
-        const baseline = inst.baselineAmount ?? ((inst.principal ?? 0) + (inst.interest ?? 0) + (inst.fee ?? 0));
-        // แยก breakdown ตามสัดส่วน principal:interest:fee ของงวดนั้น
-        const p0 = inst.principal ?? 0;
-        const i0 = inst.interest ?? 0;
-        const f0 = inst.fee ?? 0;
-        const raw = p0 + i0 + f0;
-        if (raw > 0) {
-          row.installPrincipal += baseline * (p0 / raw);
-          row.installInterest += baseline * (i0 / raw);
-          row.installFee += baseline * (f0 / raw);
-        } else {
-          row.installPrincipal += baseline;
-        }
+      // ยอดผ่อนรวม = ผ่อนงวดละ × จำนวนงวด
+      // ใช้งวดแรก (period=1) เป็น template เพราะงวดแรกไม่มี overpaid carry
+      const firstInst = r.installments.find((inst) => !inst.isSuspended && inst.period === 1)
+        ?? r.installments.find((inst) => !inst.isSuspended);
+      const installCount = r.installments.filter((inst) => !inst.isSuspended).length;
+      if (firstInst && installCount > 0) {
+        row.installPrincipal += (firstInst.principal ?? 0) * installCount;
+        row.installInterest += (firstInst.interest ?? 0) * installCount;
+        row.installFee += (firstInst.fee ?? 0) * installCount;
       }
     }
 
