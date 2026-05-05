@@ -280,7 +280,7 @@ export default function DataLoadingScreen() {
     t: "target" | "collected",
     offset: number,
     limit: number,
-    maxRetries = 5,
+    maxRetries = 8,
   ) => {
     let lastErr: unknown;
     for (let attempt = 0; attempt < maxRetries; attempt++) {
@@ -292,9 +292,15 @@ export default function DataLoadingScreen() {
         }
       } catch (err) {
         lastErr = err;
+        const errMsg = (err as Error)?.message ?? "";
+        // "Failed to fetch" = transient network/connection-pool error → retry ทันที (short delay)
+        // Other errors (timeout, server error) → exponential backoff
+        const isTransient = errMsg.includes("Failed to fetch") || errMsg.includes("NetworkError");
         if (attempt < maxRetries - 1) {
-          // exponential backoff: 2s, 4s, 8s, 16s (รอ cache warm)
-          await new Promise((r) => setTimeout(r, 2000 * Math.pow(2, attempt)));
+          const delay = isTransient
+            ? 500 + attempt * 300          // 500ms, 800ms, 1.1s, ... (เร็ว)
+            : 2000 * Math.pow(2, attempt); // 2s, 4s, 8s, ... (ช้า)
+          await new Promise((r) => setTimeout(r, delay));
         }
       }
     }

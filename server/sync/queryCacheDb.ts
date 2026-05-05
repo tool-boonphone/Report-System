@@ -543,92 +543,53 @@ export async function getTargetChunk(params: {
   const contractIds = idRows.map((r: any) => String(r.contract_external_id));
 
   // ── 2. Get total count (parallel with data query) ─────────────────────────
-  // Build temp table to avoid long IN clause (which can exceed proxy/server limits)
-  const tempTableName = `temp_ids_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+  // Use IN clause directly — avoids temp table race conditions under concurrent requests
+  // (Chunk size is 500 so IN clause stays well within MySQL's max_allowed_packet)
+  const idListSqlTarget = contractIds.map((id) => `'${id.replace(/'/g, "''")}'`).join(",");
+
   const [totalResult, rawResult, phoneResult] = await Promise.all([
     getTargetContractCount(section),
-    (async () => {
-      // Create temp table with contract IDs
-      await db.execute(sql.raw(`CREATE TEMPORARY TABLE ${tempTableName} (contract_id VARCHAR(255) PRIMARY KEY)`))
-      .catch(() => {}); // ignore if exists
-      
-      // Insert IDs in batches to avoid query string overflow
-      const batchSize = 500;
-      for (let i = 0; i < contractIds.length; i += batchSize) {
-        const batch = contractIds.slice(i, i + batchSize);
-        const values = batch.map((id) => {
-          const escaped = id.replace(/'/g, "''");
-          return `('${escaped}')`;
-        }).join(",");
-        await db.execute(sql.raw(`INSERT INTO ${tempTableName} VALUES ${values}`));
-      }
-      
-      // Query using JOIN instead of IN
-      const result = await db.execute(sql.raw(`
-        SELECT
-          dtc.contract_external_id,
-          dtc.contract_no,
-          dtc.customer_name,
-          dtc.approve_date,
-          dtc.contract_status,
-          dtc.product_type,
-          dtc.installment_count,
-          dtc.period,
-          dtc.due_date,
-          CAST(dtc.principal    AS DECIMAL(18,4)) AS principal,
-          CAST(dtc.interest     AS DECIMAL(18,4)) AS interest,
-          CAST(dtc.fee          AS DECIMAL(18,4)) AS fee,
-          CAST(dtc.penalty      AS DECIMAL(18,4)) AS penalty,
-          CAST(dtc.unlock_fee   AS DECIMAL(18,4)) AS unlock_fee,
-          CAST(dtc.net_amount   AS DECIMAL(18,4)) AS net_amount,
-          CAST(dtc.total_amount AS DECIMAL(18,4)) AS total_amount,
-          CAST(dtc.paid_amount  AS DECIMAL(18,4)) AS paid_amount,
-          CAST(dtc.overpaid_applied AS DECIMAL(18,4)) AS overpaid_applied,
-          CAST(dtc.baseline_amount  AS DECIMAL(18,4)) AS baseline_amount,
-          dtc.is_paid,
-          dtc.is_partial_paid,
-          dtc.is_closed,
-          dtc.is_suspended,
-          dtc.is_current_period,
-          dtc.is_future_period,
-          dtc.is_arrears,
-          dtc.is_bad_debt,
-          dtc.debt_range
-        FROM debt_target_cache dtc
-        INNER JOIN ${tempTableName} t ON dtc.contract_external_id = t.contract_id
-        WHERE dtc.section = '${section}'
-        ORDER BY dtc.contract_external_id, dtc.period
-      `));
-      
-      // Clean up temp table
-      await db.execute(sql.raw(`DROP TEMPORARY TABLE IF EXISTS ${tempTableName}`)).catch(() => {});
-      
-      return result;
-    })(),
-    (async () => {
-      // Same pattern for contracts table
-      const tempTableName2 = `temp_ids_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-      await db.execute(sql.raw(`CREATE TEMPORARY TABLE ${tempTableName2} (contract_id VARCHAR(255) PRIMARY KEY)`))
-        .catch(() => {});
-      
-      const batchSize = 500;
-      for (let i = 0; i < contractIds.length; i += batchSize) {
-        const batch = contractIds.slice(i, i + batchSize);
-        const values = batch.map((id) => `('${id.replace(/'/g, "\\'\\'")}')` ).join(",");
-        await db.execute(sql.raw(`INSERT INTO ${tempTableName2} VALUES ${values}`));
-      }
-      
-      const result = await db.execute(sql.raw(`
-        SELECT c.external_id, c.phone, c.finance_amount, c.commission_net, c.installment_amount
-        FROM contracts c
-        INNER JOIN ${tempTableName2} t ON c.external_id = t.contract_id
-        WHERE c.section = '${section}'
-      `));
-      
-      await db.execute(sql.raw(`DROP TEMPORARY TABLE IF EXISTS ${tempTableName2}`)).catch(() => {});
-      
-      return result;
-    })(),
+    db.execute(sql.raw(`
+      SELECT
+        dtc.contract_external_id,
+        dtc.contract_no,
+        dtc.customer_name,
+        dtc.approve_date,
+        dtc.contract_status,
+        dtc.product_type,
+        dtc.installment_count,
+        dtc.period,
+        dtc.due_date,
+        CAST(dtc.principal    AS DECIMAL(18,4)) AS principal,
+        CAST(dtc.interest     AS DECIMAL(18,4)) AS interest,
+        CAST(dtc.fee          AS DECIMAL(18,4)) AS fee,
+        CAST(dtc.penalty      AS DECIMAL(18,4)) AS penalty,
+        CAST(dtc.unlock_fee   AS DECIMAL(18,4)) AS unlock_fee,
+        CAST(dtc.net_amount   AS DECIMAL(18,4)) AS net_amount,
+        CAST(dtc.total_amount AS DECIMAL(18,4)) AS total_amount,
+        CAST(dtc.paid_amount  AS DECIMAL(18,4)) AS paid_amount,
+        CAST(dtc.overpaid_applied AS DECIMAL(18,4)) AS overpaid_applied,
+        CAST(dtc.baseline_amount  AS DECIMAL(18,4)) AS baseline_amount,
+        dtc.is_paid,
+        dtc.is_partial_paid,
+        dtc.is_closed,
+        dtc.is_suspended,
+        dtc.is_current_period,
+        dtc.is_future_period,
+        dtc.is_arrears,
+        dtc.is_bad_debt,
+        dtc.debt_range
+      FROM debt_target_cache dtc
+      WHERE dtc.section = '${section}'
+        AND dtc.contract_external_id IN (${idListSqlTarget})
+      ORDER BY dtc.contract_external_id, dtc.period
+    `)),
+    db.execute(sql.raw(`
+      SELECT c.external_id, c.phone, c.finance_amount, c.commission_net, c.installment_amount
+      FROM contracts c
+      WHERE c.section = '${section}'
+        AND c.external_id IN (${idListSqlTarget})
+    `)),
   ]);
 
   const totalContracts = totalResult;
