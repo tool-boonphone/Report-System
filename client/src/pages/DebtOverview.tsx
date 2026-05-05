@@ -50,6 +50,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { StreamLoadingOverlay } from "@/components/StreamLoadingOverlay";
 import { trpc } from "@/lib/trpc";
 import { Switch } from "@/components/ui/switch";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 
 /* ------------------------------------------------------------------ */
@@ -564,7 +565,7 @@ export default function DebtOverview() {
   const [dueDateFilter, setDueDateFilter] = useState<Set<string>>(new Set());
   const [productTypeFilter, setProductTypeFilter] = useState<Set<string>>(new Set());
   const [dueDateExact, setDueDateExact] = useState<string | null>(null);
-  const [principalOnly, setPrincipalOnly] = useState(true);
+  const [principalOnly, setPrincipalOnly] = useState(false);
   // ฟิลเตอร์ปีที่อนุมัติ (multi-select)
   const [approveYearFilter, setApproveYearFilter] = useState<Set<string>>(new Set());
   // Badge visibility — collected group
@@ -1505,22 +1506,31 @@ export default function DebtOverview() {
                             {row.contractCount.toLocaleString()}
                           </span>
                         </td>
-                        {/* ยอดผ่อนรวม / เป้าเก็บหนี้ + % การเก็บ tag */}
+                        {/* ยอดผ่อนรวม / เป้าเก็บหนี้ */}
                         <td className={["px-3 py-2.5 text-right font-medium", principalOnly ? "bg-blue-50/30" : "bg-purple-50/30", isHidden ? "text-gray-400" : principalOnly ? "text-blue-800" : "text-purple-800"].join(" ")}>
-                          <div className="flex flex-col items-end gap-0.5">
-                            <span>{principalOnly ? fmtMoney(row.debtTargetTotal) : fmtMoney(row.installTotal)}</span>
+                          {principalOnly ? fmtMoney(row.debtTargetTotal) : fmtMoney(row.installTotal)}
+                        </td>
+                        {/* ยอดเก็บหนี้ + % การเก็บ tag */}
+                        <td className={["px-3 py-2.5 text-right font-medium bg-green-50/30", isHidden ? "text-gray-400" : "text-green-800"].join(" ")}>
+                          <div className="flex items-center justify-end gap-1.5">
+                            <span>{fmtMoney(row.collectedTotal)}</span>
                             {!isHidden && displayInstall > 0 && (
-                              <span className={["inline-flex text-[10px] px-1.5 py-0.5 rounded-full font-medium", collectionRate >= 100 ? "bg-green-100 text-green-700" : collectionRate >= 80 ? "bg-blue-100 text-blue-700" : collectionRate >= 60 ? "bg-amber-100 text-amber-700" : "bg-red-100 text-red-600"].join(" ")}>
-                                {fmtPct(collectionRate)}
-                                {collectionRate >= 100 && <TrendingUp className="w-2.5 h-2.5 ml-0.5" />}
-                                {collectionRate < 60 && collectionRate > 0 && <TrendingDown className="w-2.5 h-2.5 ml-0.5" />}
-                              </span>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className={["inline-flex items-center text-sm px-1.5 py-0.5 rounded font-medium cursor-help", collectionRate >= 100 ? "bg-green-100 text-green-700" : collectionRate >= 80 ? "bg-blue-100 text-blue-700" : collectionRate >= 60 ? "bg-amber-100 text-amber-700" : "bg-red-100 text-red-600"].join(" ")}>
+                                    {fmtPct(collectionRate)}
+                                    {collectionRate >= 100 && <TrendingUp className="w-3 h-3 ml-0.5" />}
+                                    {collectionRate < 60 && collectionRate > 0 && <TrendingDown className="w-3 h-3 ml-0.5" />}
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="max-w-[220px] text-xs">
+                                  <p className="font-semibold mb-1">% การเก็บหนี้</p>
+                                  <p>ยอดเก็บหนี้ ÷ {principalOnly ? "เป้าเก็บหนี้" : "ยอดผ่อนรวม"}</p>
+                                  <p className="mt-1 text-gray-300">{fmtMoney(row.collectedTotal)} ÷ {fmtMoney(displayInstall)}</p>
+                                </TooltipContent>
+                              </Tooltip>
                             )}
                           </div>
-                        </td>
-                        {/* ยอดเก็บหนี้ */}
-                        <td className={["px-3 py-2.5 text-right font-medium bg-green-50/30", isHidden ? "text-gray-400" : "text-green-800"].join(" ")}>
-                          {fmtMoney(row.collectedTotal)}
                         </td>
                         {/* ยอดขายเครื่อง + % tag */}
                         {(() => {
@@ -1528,12 +1538,21 @@ export default function DebtOverview() {
                           const devicePct = denominator > 0 ? (row.deviceSaleAmount / denominator) * 100 : 0;
                           return (
                             <td className={["px-3 py-2.5 text-right", isHidden ? "text-gray-400" : showDeviceSale ? "text-red-700" : "text-gray-300 line-through"].join(" ")}>
-                              <div className="flex flex-col items-end gap-0.5">
+                              <div className="flex items-center justify-end gap-1.5">
                                 <span>{fmtMoney(row.deviceSaleAmount)}</span>
                                 {!isHidden && showDeviceSale && denominator > 0 && (
-                                  <span className="inline-flex text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-red-100 text-red-600">
-                                    {fmtPct(devicePct)}
-                                  </span>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <span className={["inline-flex items-center text-sm px-1.5 py-0.5 rounded font-medium cursor-help", devicePct >= 80 ? "bg-green-100 text-green-700" : devicePct >= 60 ? "bg-blue-100 text-blue-700" : devicePct >= 40 ? "bg-amber-100 text-amber-700" : "bg-red-100 text-red-600"].join(" ")}>
+                                        {fmtPct(devicePct)}
+                                      </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="top" className="max-w-[240px] text-xs">
+                                      <p className="font-semibold mb-1">% ยอดขายเครื่อง</p>
+                                      <p>ยอดขายเครื่อง ÷ (ยอดผ่อนรวม − เป้าเก็บหนี้)</p>
+                                      <p className="mt-1 text-gray-300">{fmtMoney(row.deviceSaleAmount)} ÷ {fmtMoney(denominator)}</p>
+                                    </TooltipContent>
+                                  </Tooltip>
                                 )}
                               </div>
                             </td>
@@ -1544,12 +1563,21 @@ export default function DebtOverview() {
                           const revenuePct = row.installTotal > 0 ? (revenue / row.installTotal) * 100 : 0;
                           return (
                             <td className={["px-3 py-2.5 text-right font-semibold bg-emerald-50/30", isHidden ? "text-gray-400" : "text-emerald-800"].join(" ")}>
-                              <div className="flex flex-col items-end gap-0.5">
+                              <div className="flex items-center justify-end gap-1.5">
                                 <span>{fmtMoney(revenue)}</span>
                                 {!isHidden && row.installTotal > 0 && (
-                                  <span className="inline-flex text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-emerald-100 text-emerald-700">
-                                    {fmtPct(revenuePct)}
-                                  </span>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <span className={["inline-flex items-center text-sm px-1.5 py-0.5 rounded font-medium cursor-help", revenuePct >= 100 ? "bg-green-100 text-green-700" : revenuePct >= 80 ? "bg-blue-100 text-blue-700" : revenuePct >= 60 ? "bg-amber-100 text-amber-700" : "bg-red-100 text-red-600"].join(" ")}>
+                                        {fmtPct(revenuePct)}
+                                      </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="top" className="max-w-[220px] text-xs">
+                                      <p className="font-semibold mb-1">% รายรับรวม</p>
+                                      <p>รายรับรวม ÷ ยอดผ่อนรวม</p>
+                                      <p className="mt-1 text-gray-300">{fmtMoney(revenue)} ÷ {fmtMoney(row.installTotal)}</p>
+                                    </TooltipContent>
+                                  </Tooltip>
                                 )}
                               </div>
                             </td>
@@ -1564,12 +1592,21 @@ export default function DebtOverview() {
                           const profitPct = row.cost > 0 ? (grossProfit / row.cost) * 100 : 0;
                           return (
                             <td className={["px-3 py-2.5 text-right bg-amber-50/30", isHidden ? "text-gray-400" : profitColor].join(" ")}>
-                              <div className="flex flex-col items-end gap-0.5">
+                              <div className="flex items-center justify-end gap-1.5">
                                 <span>{fmtMoney(grossProfit)}</span>
                                 {!isHidden && row.cost > 0 && (
-                                  <span className={["inline-flex text-[10px] px-1.5 py-0.5 rounded-full font-medium", profitPct >= 0 ? "bg-amber-100 text-amber-700" : "bg-red-100 text-red-600"].join(" ")}>
-                                    {fmtPct(profitPct)}
-                                  </span>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <span className={["inline-flex items-center text-sm px-1.5 py-0.5 rounded font-medium cursor-help", profitPct >= 0 ? "bg-amber-100 text-amber-700" : "bg-red-100 text-red-600"].join(" ")}>
+                                        {fmtPct(profitPct)}
+                                      </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="top" className="max-w-[220px] text-xs">
+                                      <p className="font-semibold mb-1">% กำไรขั้นต้น</p>
+                                      <p>กำไรขั้นต้น ÷ ต้นทุน</p>
+                                      <p className="mt-1 text-gray-300">{fmtMoney(grossProfit)} ÷ {fmtMoney(row.cost)}</p>
+                                    </TooltipContent>
+                                  </Tooltip>
                                 )}
                               </div>
                             </td>
@@ -1580,12 +1617,21 @@ export default function DebtOverview() {
                           const notDuePct = row.installTotal > 0 ? (row.notYetDue / row.installTotal) * 100 : 0;
                           return (
                             <td className={["px-3 py-2.5 text-right font-medium bg-sky-50/30", isHidden ? "text-gray-400" : "text-sky-700"].join(" ")}>
-                              <div className="flex flex-col items-end gap-0.5">
+                              <div className="flex items-center justify-end gap-1.5">
                                 <span>{fmtMoney(row.notYetDue)}</span>
                                 {!isHidden && row.installTotal > 0 && (
-                                  <span className="inline-flex text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-sky-100 text-sky-700">
-                                    {fmtPct(notDuePct)}
-                                  </span>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <span className="inline-flex items-center text-sm px-1.5 py-0.5 rounded font-medium cursor-help bg-sky-100 text-sky-700">
+                                        {fmtPct(notDuePct)}
+                                      </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="top" className="max-w-[220px] text-xs">
+                                      <p className="font-semibold mb-1">% ยังไม่ถึงกำหนด</p>
+                                      <p>ยอดที่ยังไม่ถึงกำหนด ÷ ยอดผ่อนรวม</p>
+                                      <p className="mt-1 text-gray-300">{fmtMoney(row.notYetDue)} ÷ {fmtMoney(row.installTotal)}</p>
+                                    </TooltipContent>
+                                  </Tooltip>
                                 )}
                               </div>
                             </td>
@@ -1620,30 +1666,53 @@ export default function DebtOverview() {
                             {totalContracts.toLocaleString()}
                           </span>
                         </td>
-                        {/* ยอดผ่อนรวม / เป้าเก็บหนี้ + % tag */}
+                        {/* ยอดผ่อนรวม / เป้าเก็บหนี้ */}
                         <td className={["px-3 py-3 text-right", principalOnly ? "text-blue-200" : "text-purple-200"].join(" ")}>
-                          <div className="flex flex-col items-end gap-0.5">
-                            <span>{fmtMoney(displayTotalInstall)}</span>
+                          {fmtMoney(displayTotalInstall)}
+                        </td>
+                        {/* ยอดเก็บหนี้รวม + % tag */}
+                        <td className="px-3 py-3 text-right text-green-200">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <span>{fmtMoney(totalCollected)}</span>
                             {displayTotalInstall > 0 && (
-                              <span className={["inline-flex text-[10px] px-1.5 py-0.5 rounded-full font-medium", overallRate >= 100 ? "bg-green-900/60 text-green-200" : overallRate >= 80 ? "bg-blue-900/60 text-blue-200" : overallRate >= 60 ? "bg-amber-900/60 text-amber-200" : "bg-red-900/60 text-red-200"].join(" ")}>
-                                {fmtPct(overallRate)}
-                              </span>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className={["inline-flex items-center text-sm px-1.5 py-0.5 rounded font-medium cursor-help", overallRate >= 100 ? "bg-green-900/60 text-green-200" : overallRate >= 80 ? "bg-blue-900/60 text-blue-200" : overallRate >= 60 ? "bg-amber-900/60 text-amber-200" : "bg-red-900/60 text-red-200"].join(" ")}>
+                                    {fmtPct(overallRate)}
+                                    {overallRate >= 100 && <TrendingUp className="w-3 h-3 ml-0.5" />}
+                                    {overallRate < 60 && overallRate > 0 && <TrendingDown className="w-3 h-3 ml-0.5" />}
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="max-w-[220px] text-xs">
+                                  <p className="font-semibold mb-1">% การเก็บหนี้ (รวม)</p>
+                                  <p>ยอดเก็บหนี้รวม ÷ {principalOnly ? "เป้าเก็บหนี้รวม" : "ยอดผ่อนรวมทั้งหมด"}</p>
+                                  <p className="mt-1 text-gray-300">{fmtMoney(totalCollected)} ÷ {fmtMoney(displayTotalInstall)}</p>
+                                </TooltipContent>
+                              </Tooltip>
                             )}
                           </div>
                         </td>
-                        <td className="px-3 py-3 text-right text-green-200">{fmtMoney(totalCollected)}</td>
                         {/* ยอดขายเครื่อง + % tag */}
                         {(() => {
                           const totalDenominator = totalInstall - totalDebtTarget;
                           const totalDevicePct = totalDenominator > 0 ? (totalDeviceSale / totalDenominator) * 100 : 0;
                           return (
                             <td className={["px-3 py-3 text-right", showDeviceSale ? "text-red-200" : "text-gray-500"].join(" ")}>
-                              <div className="flex flex-col items-end gap-0.5">
+                              <div className="flex items-center justify-end gap-1.5">
                                 <span>{fmtMoney(totalDeviceSale)}</span>
                                 {showDeviceSale && totalDenominator > 0 && (
-                                  <span className="inline-flex text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-red-900/60 text-red-200">
-                                    {fmtPct(totalDevicePct)}
-                                  </span>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <span className={["inline-flex items-center text-sm px-1.5 py-0.5 rounded font-medium cursor-help", totalDevicePct >= 80 ? "bg-green-900/60 text-green-200" : totalDevicePct >= 60 ? "bg-blue-900/60 text-blue-200" : totalDevicePct >= 40 ? "bg-amber-900/60 text-amber-200" : "bg-red-900/60 text-red-200"].join(" ")}>
+                                        {fmtPct(totalDevicePct)}
+                                      </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="top" className="max-w-[240px] text-xs">
+                                      <p className="font-semibold mb-1">% ยอดขายเครื่อง (รวม)</p>
+                                      <p>ยอดขายเครื่อง ÷ (ยอดผ่อนรวม − เป้าเก็บหนี้)</p>
+                                      <p className="mt-1 text-gray-300">{fmtMoney(totalDeviceSale)} ÷ {fmtMoney(totalDenominator)}</p>
+                                    </TooltipContent>
+                                  </Tooltip>
                                 )}
                               </div>
                             </td>
@@ -1654,12 +1723,21 @@ export default function DebtOverview() {
                           const totalRevenuePct = totalInstall > 0 ? (totalRevenue / totalInstall) * 100 : 0;
                           return (
                             <td className="px-3 py-3 text-right text-emerald-200">
-                              <div className="flex flex-col items-end gap-0.5">
+                              <div className="flex items-center justify-end gap-1.5">
                                 <span>{fmtMoney(totalRevenue)}</span>
                                 {totalInstall > 0 && (
-                                  <span className="inline-flex text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-emerald-900/60 text-emerald-200">
-                                    {fmtPct(totalRevenuePct)}
-                                  </span>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <span className={["inline-flex items-center text-sm px-1.5 py-0.5 rounded font-medium cursor-help", totalRevenuePct >= 100 ? "bg-green-900/60 text-green-200" : totalRevenuePct >= 80 ? "bg-blue-900/60 text-blue-200" : totalRevenuePct >= 60 ? "bg-amber-900/60 text-amber-200" : "bg-red-900/60 text-red-200"].join(" ")}>
+                                        {fmtPct(totalRevenuePct)}
+                                      </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="top" className="max-w-[220px] text-xs">
+                                      <p className="font-semibold mb-1">% รายรับรวม (รวม)</p>
+                                      <p>รายรับรวม ÷ ยอดผ่อนรวม</p>
+                                      <p className="mt-1 text-gray-300">{fmtMoney(totalRevenue)} ÷ {fmtMoney(totalInstall)}</p>
+                                    </TooltipContent>
+                                  </Tooltip>
                                 )}
                               </div>
                             </td>
@@ -1671,12 +1749,21 @@ export default function DebtOverview() {
                           const totalProfitPct = totalCost > 0 ? (totalProfit / totalCost) * 100 : 0;
                           return (
                             <td className={["px-3 py-3 text-right", totalProfit >= 0 ? "text-amber-200" : "text-red-300"].join(" ")}>
-                              <div className="flex flex-col items-end gap-0.5">
+                              <div className="flex items-center justify-end gap-1.5">
                                 <span>{fmtMoney(totalProfit)}</span>
                                 {totalCost > 0 && (
-                                  <span className={["inline-flex text-[10px] px-1.5 py-0.5 rounded-full font-medium", totalProfitPct >= 0 ? "bg-amber-900/60 text-amber-200" : "bg-red-900/60 text-red-200"].join(" ")}>
-                                    {fmtPct(totalProfitPct)}
-                                  </span>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <span className={["inline-flex items-center text-sm px-1.5 py-0.5 rounded font-medium cursor-help", totalProfitPct >= 0 ? "bg-amber-900/60 text-amber-200" : "bg-red-900/60 text-red-200"].join(" ")}>
+                                        {fmtPct(totalProfitPct)}
+                                      </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="top" className="max-w-[220px] text-xs">
+                                      <p className="font-semibold mb-1">% กำไรขั้นต้น (รวม)</p>
+                                      <p>กำไรขั้นต้น ÷ ต้นทุน</p>
+                                      <p className="mt-1 text-gray-300">{fmtMoney(totalProfit)} ÷ {fmtMoney(totalCost)}</p>
+                                    </TooltipContent>
+                                  </Tooltip>
                                 )}
                               </div>
                             </td>
@@ -1687,12 +1774,21 @@ export default function DebtOverview() {
                           const totalNotDuePct = totalInstall > 0 ? (totalNotYetDue / totalInstall) * 100 : 0;
                           return (
                             <td className="px-3 py-3 text-right text-sky-200">
-                              <div className="flex flex-col items-end gap-0.5">
+                              <div className="flex items-center justify-end gap-1.5">
                                 <span>{fmtMoney(totalNotYetDue)}</span>
                                 {totalInstall > 0 && (
-                                  <span className="inline-flex text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-sky-900/60 text-sky-200">
-                                    {fmtPct(totalNotDuePct)}
-                                  </span>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <span className="inline-flex items-center text-sm px-1.5 py-0.5 rounded font-medium cursor-help bg-sky-900/60 text-sky-200">
+                                        {fmtPct(totalNotDuePct)}
+                                      </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="top" className="max-w-[220px] text-xs">
+                                      <p className="font-semibold mb-1">% ยังไม่ถึงกำหนด (รวม)</p>
+                                      <p>ยอดที่ยังไม่ถึงกำหนด ÷ ยอดผ่อนรวม</p>
+                                      <p className="mt-1 text-gray-300">{fmtMoney(totalNotYetDue)} ÷ {fmtMoney(totalInstall)}</p>
+                                    </TooltipContent>
+                                  </Tooltip>
                                 )}
                               </div>
                             </td>
