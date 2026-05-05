@@ -762,10 +762,12 @@ export default function DebtOverview() {
   }, [targetRows, search, statusFilter, approveYearFilter, approveDateFilter, dueDateFilter, productTypeFilter, dueDateExact]);
 
   const filteredCollectedRows = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    // กรองตาม contractExternalId ของ filteredTargetRows เสมอ
+    // เพื่อให้ยอดเก็บหนี้ตรงกับสัญญาที่แสดงในตาราง (รวมถึงกรณี search เฉพาะสัญญา)
+    const targetIds = new Set(filteredTargetRows.map((r) => r.contractExternalId));
     return collectedRows.filter((r) => {
-      if (approveYearFilter.size > 0 && !(r.approveDate && approveYearFilter.has(r.approveDate.slice(0, 4)))) return false;
-      if (approveDateFilter.size > 0 && !(r.approveDate && approveDateFilter.has(r.approveDate.slice(0, 7)))) return false;
+      // ต้องอยู่ใน filteredTargetRows เสมอ
+      if (!targetIds.has(r.contractExternalId)) return false;
       if (dueDateExact) {
         const hasMatch = (r.payments ?? []).some((p) => p.paidAt && p.paidAt.slice(0, 10) === dueDateExact);
         if (!hasMatch) return false;
@@ -774,16 +776,9 @@ export default function DebtOverview() {
         const hasMatch = (r.payments ?? []).some((p) => p.paidAt && dueDateFilter.has(p.paidAt.slice(0, 7)));
         if (!hasMatch) return false;
       }
-      if (statusFilter.size > 0 && !statusFilter.has(r.debtStatus)) return false;
-      if (productTypeFilter.size > 0 && !productTypeFilter.has(r.productType ?? "")) return false;
-      if (!q) return true;
-      return (
-        (r.contractNo ?? "").toLowerCase().includes(q) ||
-        (r.customerName ?? "").toLowerCase().includes(q) ||
-        (r.phone ?? "").toLowerCase().includes(q)
-      );
+      return true;
     });
-  }, [collectedRows, search, statusFilter, approveYearFilter, approveDateFilter, dueDateFilter, productTypeFilter, dueDateExact]);
+  }, [collectedRows, filteredTargetRows, dueDateFilter, dueDateExact]);
 
   /* ---- Today for "ยังไม่ถึงกำหนด" ---- */
   const todayStr = useMemo(() => new Date().toISOString().slice(0, 10), []);
@@ -889,7 +884,8 @@ export default function DebtOverview() {
         }
       }
 
-      // ยอดผ่อนรวม = SUM(baselineAmount) ทุกงวด (ไม่ filter due date, ไม่ filter isClosed)
+      // ยอดผ่อนรวม = SUM(principal + interest + fee) ทุกงวด (ไม่ filter due date, ไม่ filter isClosed)
+      // = ผ่อนงวดละ × จำนวนงวด (SUM ทุกงวด)
       for (const inst of r.installments) {
         if (inst.isSuspended) continue;
         row.installPrincipal += inst.principal ?? 0;
