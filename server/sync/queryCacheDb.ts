@@ -222,6 +222,8 @@ export async function* streamTargetFromCache(params: {
         productType: first?.product_type ?? null,
         installmentCount: first?.installment_count != null ? Number(first.installment_count) : null,
         installmentAmount: (first.installment_count != null && Number(first.installment_count) > 0) ? Math.round((totalAmount / Number(first.installment_count)) * 100) / 100 : null,
+        // Phase 9X: financeAmount ใช้คำนวณ breakdown สำหรับสัญญา suspended ที่ p/i/f = 0
+        financeAmount: first?.finance_amount != null ? Number(first.finance_amount) : null,
         totalAmount,
         totalPaid,
         remaining: Math.max(totalAmount - totalPaid, 0),

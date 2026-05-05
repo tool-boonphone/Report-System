@@ -602,6 +602,12 @@ async function queryInstallTotal(
    * ใช้ baseline_amount ไม่ใช้ principal+interest+fee เพราะ interest อาจถูก scale ลงเมื่อมี overpaid carry
    * ดึงจากทุกงวด (is_future_period=0 และ =1) ไม่มี filter
    * bucket ใช้จากงวดล่าสุด (max_period) ของแต่ละสัญญา (สถานะหนี้ปัจจุบัน)
+   *
+   * Phase 9AK fix: สัญญา suspended มี principal=interest=fee=0 ใน cache
+   * ให้คำนวณ breakdown จากสูตร Phase 9X:
+   *   basePrincipal = CEIL(finance_amount / installment_count)
+   *   baseFee       = 100
+   *   baseInterest  = baseline_amount - basePrincipal - baseFee
    */
   const q = `
     SELECT
@@ -613,9 +619,38 @@ async function queryInstallTotal(
         ELSE COALESCE(latest.debt_range, 'ปกติ')
       END AS bucket,
       COUNT(DISTINCT all_p.contract_external_id) AS contract_count,
-      SUM(CAST(all_p.principal  AS DECIMAL(18,2))) AS principal_install,
-      SUM(CAST(all_p.interest   AS DECIMAL(18,2))) AS interest_install,
-      SUM(CAST(all_p.fee        AS DECIMAL(18,2))) AS fee_install,
+      SUM(
+        CASE
+          WHEN all_p.is_suspended = 1
+            AND all_p.finance_amount > 0
+            AND all_p.installment_count > 0
+          THEN CEIL(CAST(all_p.finance_amount AS DECIMAL(18,2)) / all_p.installment_count)
+          ELSE CAST(all_p.principal AS DECIMAL(18,2))
+        END
+      ) AS principal_install,
+      SUM(
+        CASE
+          WHEN all_p.is_suspended = 1
+            AND all_p.finance_amount > 0
+            AND all_p.installment_count > 0
+            AND CAST(all_p.baseline_amount AS DECIMAL(18,2)) > 0
+          THEN GREATEST(0,
+            CAST(all_p.baseline_amount AS DECIMAL(18,2))
+            - CEIL(CAST(all_p.finance_amount AS DECIMAL(18,2)) / all_p.installment_count)
+            - 100
+          )
+          ELSE CAST(all_p.interest AS DECIMAL(18,2))
+        END
+      ) AS interest_install,
+      SUM(
+        CASE
+          WHEN all_p.is_suspended = 1
+            AND all_p.finance_amount > 0
+            AND all_p.installment_count > 0
+          THEN 100
+          ELSE CAST(all_p.fee AS DECIMAL(18,2))
+        END
+      ) AS fee_install,
       SUM(CAST(all_p.baseline_amount AS DECIMAL(18,2))) AS total_install
     FROM debt_target_cache all_p
     JOIN (

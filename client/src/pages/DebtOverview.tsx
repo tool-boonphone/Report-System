@@ -133,7 +133,7 @@ type TargetRow = {
   debtStatus: string;
   daysOverdue: number;
   installments: InstallmentCell[];
-  financeAmount?: number | null;
+  financeAmount?: number | null;   // Phase 9X: ใช้คำนวณ breakdown สำหรับสัญญา suspended
   commissionNet?: number | null;
 };
 type CollectedRow = TargetRow & { payments: PaymentCell[] };
@@ -900,9 +900,27 @@ export default function DebtOverview() {
         const pPerPeriod = (firstInst.principal ?? 0);
         const iPerPeriod = (firstInst.interest ?? 0);
         const fPerPeriod = (firstInst.fee ?? 0);
-        // ถ้า p+i+f = 0 (เช่น สัญญา suspended ทั้งหมด) ให้ใช้ baseline_amount แทน
+        // ถ้า p+i+f = 0 (เช่น สัญญา suspended ทั้งหมด Phase 9AK)
+        // ให้คำนวณ breakdown จากสูตร Phase 9X:
+        //   basePrincipal = CEIL(financeAmount / installmentCount)
+        //   baseFee       = 100 (ตายตัวต่องวด)
+        //   baseInterest  = baselineAmount - basePrincipal - baseFee
         if (pPerPeriod + iPerPeriod + fPerPeriod === 0 && (firstInst.baselineAmount ?? 0) > 0) {
-          row.installPrincipal += (firstInst.baselineAmount ?? 0) * installCount;
+          const baseline = firstInst.baselineAmount ?? 0;
+          const finAmt = r.financeAmount ?? 0;
+          const periods = installCount;
+          if (finAmt > 0 && periods > 0) {
+            // สูตร Phase 9X (เหมือนกับ debtDb.ts)
+            const basePrincipal = Math.ceil(finAmt / periods);
+            const baseFee = 100;
+            const baseInterest = Math.max(0, baseline - basePrincipal - baseFee);
+            row.installPrincipal += basePrincipal * installCount;
+            row.installInterest  += baseInterest  * installCount;
+            row.installFee       += baseFee        * installCount;
+          } else {
+            // fallback: ใส่ทั้งหมดใน principal ถ้าไม่มี financeAmount
+            row.installPrincipal += baseline * installCount;
+          }
         } else {
           row.installPrincipal += pPerPeriod * installCount;
           row.installInterest += iPerPeriod * installCount;
