@@ -538,7 +538,10 @@ export async function getTargetChunk(params: {
       const batchSize = 500;
       for (let i = 0; i < contractIds.length; i += batchSize) {
         const batch = contractIds.slice(i, i + batchSize);
-        const values = batch.map((id) => `('${id.replace(/'/g, "\\'\\'")}')` ).join(",");
+        const values = batch.map((id) => {
+          const escaped = id.replace(/'/g, "''");
+          return `('${escaped}')`;
+        }).join(",");
         await db.execute(sql.raw(`INSERT INTO ${tempTableName} VALUES ${values}`));
       }
       

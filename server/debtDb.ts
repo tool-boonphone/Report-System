@@ -1877,7 +1877,10 @@ export async function listDebtTarget(params: { section: SectionKey }) {
           if (financeAmt > 0 && periods > 0) {
             basePrincipal = Math.ceil(financeAmt / periods);
             baseFee = 100;
-            baseInterest = Math.max(0, baseline - basePrincipal - baseFee);
+            // ดอกเบี้ย = (ยอดจัดไฟแนนซ์ × ตัวคูณ) - ยอดจัดไฟแนนซ์
+            // โดยที่ ตัวคูณ = baseline / financeAmt
+            const multiplier = baseline > 0 ? baseline / financeAmt : 1;
+            baseInterest = Math.max(0, (financeAmt * multiplier) - financeAmt);
           } else {
             // Fallback: ใช้ค่าจาก API *_due
             basePrincipal = rawPrincipal;
