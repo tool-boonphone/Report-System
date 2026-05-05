@@ -514,6 +514,11 @@ type MonthRow = {
   installInterest: number;
   installFee: number;
   installTotal: number;
+  // เป้าเก็บหนี้ = นับเฉพาะงวดที่ถึงกำหนดแล้ว + ไม่ suspended
+  debtTargetPrincipal: number;
+  debtTargetInterest: number;
+  debtTargetFee: number;
+  debtTargetTotal: number;
   // ยอดเก็บหนี้
   collectedPrincipal: number;
   collectedInterest: number;
@@ -847,6 +852,7 @@ export default function DebtOverview() {
           monthKey,
           contractCount: 0,
           installPrincipal: 0, installInterest: 0, installFee: 0, installTotal: 0,
+          debtTargetPrincipal: 0, debtTargetInterest: 0, debtTargetFee: 0, debtTargetTotal: 0,
           collectedPrincipal: 0, collectedInterest: 0, collectedFee: 0, collectedPenalty: 0,
           collectedUnlockFee: 0, collectedDiscount: 0, collectedOverpaid: 0, collectedBadDebt: 0, collectedTotal: 0,
           deviceSaleAmount: 0,
@@ -907,6 +913,17 @@ export default function DebtOverview() {
           }
         }
       }
+
+      // เป้าเก็บหนี้ = SUM งวดที่ถึงกำหนดแล้ว (dueDate <= today) และไม่ suspended
+      for (const inst of r.installments) {
+        if (inst.isSuspended) continue;
+        const dueStr = inst.dueDate ? inst.dueDate.slice(0, 10) : null;
+        const isDue = dueStr ? dueStr <= todayStr : false;
+        if (!isDue) continue;
+        row.debtTargetPrincipal += inst.principal ?? 0;
+        row.debtTargetInterest  += inst.interest  ?? 0;
+        row.debtTargetFee       += inst.fee       ?? 0;
+      }
     }
 
     // --- Collected rows ---
@@ -937,6 +954,12 @@ export default function DebtOverview() {
         (bv.principal ? row.installPrincipal : 0) +
         (bv.interest ? row.installInterest : 0) +
         (bv.fee ? row.installFee : 0);
+
+      // เป้าเก็บหนี้ total
+      row.debtTargetTotal =
+        (bv.principal ? row.debtTargetPrincipal : 0) +
+        (bv.interest ? row.debtTargetInterest : 0) +
+        (bv.fee ? row.debtTargetFee : 0);
 
       const cv = badgeVisibility;
       // ยอดเก็บหนี้ = ค่างวดปกติที่ชำระแล้ว ไม่รวม badDebt (ยอดขายเครื่อง)
@@ -1049,8 +1072,8 @@ export default function DebtOverview() {
               },
               {
                 label: "ยอดผ่อนรวม",
-                color: "bg-blue-50 text-blue-700",
-                desc: "ยอดรวมที่ลูกค้าต้องผ่อนทั้งสัญญา (SUM ทุกงวด เงินต้น+ดอกเบี้ย+ค่าดำเนินการ ก่อนหักชำระเกิน)",
+                color: "bg-purple-50 text-purple-700",
+                desc: "ยอดรวมที่ลูกค้าต้องผ่อนทั้งสัญญา (SUM ทุกงวด เงินต้อน+ดอกเบี้ย+ค่าดำเนินการ ก่อนหักชำระเกิน) | เปิดสวิตช์‘เป้าเก็บหนี้’ เพื่อดูเฉพาะงวดที่ถึงกำหนดแล้ว",
               },
               {
                 label: "ยอดเก็บหนี้",
@@ -1152,6 +1175,20 @@ export default function DebtOverview() {
                 </button>
               )}
             </div>
+            {/* เดือน-ปีที่อนุมัติ (ย้ายมาหลัง search box) */}
+            <MonthMultiSelect
+              label="เดือน-ปีที่อนุมัติ"
+              options={approveDateOptions}
+              selected={approveDateFilter}
+              onChange={setApproveDateFilter}
+            />
+            {/* ปีที่อนุมัติ (ย้ายมาหลัง search box) */}
+            <YearMultiSelect
+              label="ปีที่อนุมัติ"
+              options={approveYearOptions}
+              selected={approveYearFilter}
+              onChange={setApproveYearFilter}
+            />
             {/* วันที่ */}
             <div className="flex items-center gap-1">
               <CalendarDays className="w-4 h-4 text-gray-400" />
@@ -1167,38 +1204,24 @@ export default function DebtOverview() {
                 </button>
               )}
             </div>
-            {/* เดือน-ปีที่ชำระ (สลับมาก่อน) */}
+            {/* เดือน-ปีที่ชำระ */}
             <MonthMultiSelect
               label="เดือน-ปีที่ชำระ"
               options={dueDateOptions}
               selected={dueDateFilter}
               onChange={setDueDateFilter}
             />
-            {/* เดือน-ปีที่อนุมัติ */}
-            <MonthMultiSelect
-              label="เดือน-ปีที่อนุมัติ"
-              options={approveDateOptions}
-              selected={approveDateFilter}
-              onChange={setApproveDateFilter}
-            />
-            {/* ปีที่อนุมัติ (multi-select) */}
-            <YearMultiSelect
-              label="ปีที่อนุมัติ"
-              options={approveYearOptions}
-              selected={approveYearFilter}
-              onChange={setApproveYearFilter}
-            />
             {/* สถานะหนี้ */}
             <StatusMultiSelect selected={statusFilter} onChange={setStatusFilter} />
             {/* ประเภทเครื่อง */}
             <ProductTypeMultiSelect options={productTypeOptions} selected={productTypeFilter} onChange={setProductTypeFilter} />
-            {/* เฉพาะเงินต้น toggle */}
-            <div className="flex items-center gap-1.5 h-9 px-3 rounded-md border border-gray-200 bg-white cursor-pointer select-none"
+            {/* เป้าเก็บหนี้ toggle */}
+            <div className="flex items-center gap-1.5 h-9 px-3 rounded-md border border-purple-200 bg-purple-50 cursor-pointer select-none"
               onClick={() => setPrincipalOnly((v) => !v)}
-              title="เปิด/ปิด เฉพาะเงินต้น (ไม่รวมค่าปรับ+ค่าปลดล็อกในเป้า)"
+              title="เปิด/ปิด เป้าเก็บหนี้ (แสดงยอดผ่อนเฉพาะงวดที่ถึงกำหนดแล้ว แทนยอดผ่อนรวมตามสัญญา)"
             >
               <Switch checked={principalOnly} onCheckedChange={setPrincipalOnly} id="principalOnly" onClick={(e) => e.stopPropagation()} />
-              <label htmlFor="principalOnly" className="text-xs text-gray-600 cursor-pointer">เฉพาะเงินต้น</label>
+              <label htmlFor="principalOnly" className="text-xs text-purple-700 font-medium cursor-pointer">เป้าเก็บหนี้</label>
             </div>
             {/* Export Excel */}
             {hasData && (
@@ -1306,7 +1329,7 @@ export default function DebtOverview() {
                   onToggle={toggleTargetBadge}
                   totalLabel="ยอดผ่อนรวม"
                   totalValue={grandInstall.total}
-                  totalColor="bg-blue-600 text-white border-blue-700"
+                  totalColor="bg-purple-600 text-white border-purple-700"
                 />
                 {/* ยอดเก็บหนี้ badges */}
                 <BadgeRow
@@ -1385,7 +1408,7 @@ export default function DebtOverview() {
                       </button>
                     </th>
                     <th className="px-3 py-3 text-right font-semibold whitespace-nowrap text-white min-w-[90px]">จำนวนสัญญา</th>
-                    <th className="px-3 py-3 text-right font-semibold whitespace-nowrap text-white min-w-[140px] bg-blue-700">ยอดผ่อนรวม</th>
+                    <th className="px-3 py-3 text-right font-semibold whitespace-nowrap text-white min-w-[140px] bg-purple-700">ยอดผ่อนรวม</th>
                     <th className="px-3 py-3 text-right font-semibold whitespace-nowrap text-white min-w-[140px] bg-green-700">ยอดเก็บหนี้</th>
                     <th className="px-3 py-3 text-right font-semibold whitespace-nowrap text-white min-w-[90px]">% การเก็บ</th>
                     <th className="px-3 py-3 text-right font-semibold whitespace-nowrap text-white min-w-[140px]">
@@ -1415,7 +1438,8 @@ export default function DebtOverview() {
                   )}
                   {monthRows.map((row, idx) => {
                     const isHidden = hiddenMonths.has(row.monthKey);
-                    const collectionRate = row.installTotal > 0 ? (row.collectedTotal / row.installTotal) * 100 : 0;
+                    const displayInstall = principalOnly ? row.debtTargetTotal : row.installTotal;
+                    const collectionRate = displayInstall > 0 ? (row.collectedTotal / displayInstall) * 100 : 0;
                     const deviceSale = showDeviceSale ? row.deviceSaleAmount : 0;
                     const revenue = row.collectedTotal + deviceSale;
                     const grossProfit = revenue - row.cost;
@@ -1473,8 +1497,8 @@ export default function DebtOverview() {
                           </span>
                         </td>
                         {/* ยอดผ่อนรวม */}
-                        <td className={["px-3 py-2.5 text-right font-medium bg-blue-50/30", isHidden ? "text-gray-400" : "text-blue-800"].join(" ")}>
-                          {fmtMoney(row.installTotal)}
+                        <td className={["px-3 py-2.5 text-right font-medium bg-purple-50/30", isHidden ? "text-gray-400" : "text-purple-800"].join(" ")}>
+                          {principalOnly ? fmtMoney(row.debtTargetTotal) : fmtMoney(row.installTotal)}
                         </td>
                         {/* ยอดเก็บหนี้ */}
                         <td className={["px-3 py-2.5 text-right font-medium bg-green-50/30", isHidden ? "text-gray-400" : "text-green-800"].join(" ")}>
@@ -1525,7 +1549,9 @@ export default function DebtOverview() {
                   const totalCost = visibleRows.reduce((s, r) => s + r.cost, 0);
                   const totalProfit = totalRevenue - totalCost;
                   const totalNotYetDue = visibleRows.reduce((s, r) => s + r.notYetDue, 0);
-                  const overallRate = totalInstall > 0 ? (totalCollected / totalInstall) * 100 : 0;
+                  const totalDebtTarget = visibleRows.reduce((s, r) => s + r.debtTargetTotal, 0);
+                  const displayTotalInstall = principalOnly ? totalDebtTarget : totalInstall;
+                  const overallRate = displayTotalInstall > 0 ? (totalCollected / displayTotalInstall) * 100 : 0;
                   return (
                     <tfoot className="sticky bottom-0 z-20 border-t-2 border-slate-400 shadow-[0_-2px_8px_rgba(0,0,0,0.12)]">
                       <tr className="bg-slate-800 text-white font-bold">
@@ -1535,7 +1561,7 @@ export default function DebtOverview() {
                             {totalContracts.toLocaleString()}
                           </span>
                         </td>
-                        <td className="px-3 py-3 text-right text-blue-200">{fmtMoney(totalInstall)}</td>
+                        <td className="px-3 py-3 text-right text-purple-200">{fmtMoney(displayTotalInstall)}</td>
                         <td className="px-3 py-3 text-right text-green-200">{fmtMoney(totalCollected)}</td>
                         <td className="px-3 py-3 text-right text-yellow-200">{fmtPct(overallRate)}</td>
                         <td className={["px-3 py-3 text-right", showDeviceSale ? "text-red-200" : "text-gray-500"].join(" ")}>{fmtMoney(totalDeviceSale)}</td>

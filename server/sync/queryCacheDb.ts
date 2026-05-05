@@ -265,16 +265,22 @@ export async function* streamCollectedFromCache(params: {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  // ── 1. Load phone numbers once (small table) ─────────────────────────────────────────────
+  // ── 1. Load phone numbers + installment_amount + finance_amount once ─────────────────────────────────────────────
   const phoneResult = await db.execute(sql`
-    SELECT external_id, phone
+    SELECT external_id, phone, installment_amount, finance_amount
     FROM contracts
     WHERE section = ${section}
   `);
   const phoneRows: any[] = (phoneResult as any)[0] ?? phoneResult;
   const phoneMap = new Map<string, string | null>();
+  // Phase 9AK: เก็บ installment_amount จาก contracts table โดยตรง
+  const contractInstAmtMap2 = new Map<string, { installmentAmount: number | null; financeAmount: number | null }>();
   for (const r of phoneRows) {
     phoneMap.set(String(r.external_id), r.phone ?? null);
+    contractInstAmtMap2.set(String(r.external_id), {
+      installmentAmount: r.installment_amount != null ? Number(r.installment_amount) : null,
+      financeAmount: r.finance_amount != null ? Number(r.finance_amount) : null,
+    });
   }
 
   // ── 2. Paginate through distinct contract IDs ─────────────────────────────────────────
@@ -445,7 +451,9 @@ export async function* streamCollectedFromCache(params: {
         phone: phoneMap.get(extId) ?? null,
         productType: first.product_type ?? null,
         installmentCount: first.installment_count != null ? Number(first.installment_count) : null,
-        installmentAmount: (first.installment_count != null && Number(first.installment_count) > 0) ? Math.round((totalAmount / Number(first.installment_count)) * 100) / 100 : null,
+        // Phase 9AK: ใช้ installment_amount จาก contracts table โดยตรง
+        installmentAmount: contractInstAmtMap2.get(extId)?.installmentAmount ?? null,
+        financeAmount: contractInstAmtMap2.get(extId)?.financeAmount ?? null,
         totalAmount,
         totalPaid,
         remaining: Math.max(totalAmount - totalPaid, 0),
