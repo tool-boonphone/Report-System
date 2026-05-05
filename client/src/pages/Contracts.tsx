@@ -28,7 +28,6 @@ import {
   ChevronsUpDown,
   Download,
   Filter as FilterIcon,
-  RefreshCcw,
   Search,
   X,
 } from "lucide-react";
@@ -520,16 +519,6 @@ export default function Contracts() {
           </div>
 
           <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              className="bg-white"
-              onClick={() => listQuery.refetch()}
-              title="โหลดข้อมูลใหม่"
-            >
-              <RefreshCcw
-                className={`w-4 h-4 ${listQuery.isFetching ? "animate-spin" : ""}`}
-              />
-            </Button>
             {canExport && (
               <Button
                 className="bg-green-600 hover:bg-green-700 text-white"

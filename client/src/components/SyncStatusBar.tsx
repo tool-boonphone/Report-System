@@ -1,19 +1,22 @@
 import { useSection } from "@/contexts/SectionContext";
 import { trpc } from "@/lib/trpc";
 import { Progress } from "@/components/ui/progress";
-import { RefreshCw } from "lucide-react";
+import { clearIdbCache } from "@/lib/debtIdbCache";
+import { useDebtCache } from "@/contexts/DebtCacheContext";
+import { RefreshCw, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { useLocation } from "wouter";
 
 /**
- * Injected into TopNav actions. Shows "ข้อมูล ณ <date>" + a Refresh button.
+ * Injected into TopNav actions. Shows:
+ *  - "ข้อมูล ณ <date>"
+ *  - ปุ่ม "Re-Sync API" — ดึงข้อมูลจาก API ภายนอกมาบันทึกลง DB ใหม่
+ *  - ปุ่ม "Clear Cache" — ล้าง IndexedDB ใน browser แล้ว redirect ไปหน้า data-loading
  *
  * While a sync is running:
- *  - Hides the Refresh button
- *  - Shows a progress bar with % complete
- *  - Shows elapsed time and estimated remaining time
- *
- * Polls `sync.status` every 2s while running, 0 otherwise.
+ *  - Hides both buttons
+ *  - Shows a progress bar with % complete + elapsed/ETA
  */
 
 /** Format seconds into "Xm Ys" or "Xs" */
@@ -38,6 +41,9 @@ const STAGE_LABELS: Record<string, string> = {
 export function SyncStatusBar() {
   const { section } = useSection();
   const utils = trpc.useUtils();
+  const debtCache = useDebtCache();
+  const [, navigate] = useLocation();
+  const [isClearing, setIsClearing] = useState(false);
 
   // Last synced time for the active section.
   const last = trpc.sync.lastSyncedAt.useQuery(
@@ -76,13 +82,33 @@ export function SyncStatusBar() {
     wasRunning.current = isRunning;
   }, [isRunning, section, utils.sync.lastSyncedAt]);
 
+  // Re-Sync API mutation
   const trigger = trpc.sync.trigger.useMutation({
     onSuccess: () => {
-      toast.info(`เริ่ม Sync ${section} — ทำงานเบื้องหลัง`);
+      toast.info(`เริ่ม Re-Sync ${section} — ทำงานเบื้องหลัง`);
       utils.sync.status.invalidate();
     },
     onError: (err) => toast.error(err.message),
   });
+
+  // Clear Cache handler
+  const handleClearCache = async () => {
+    if (isClearing) return;
+    setIsClearing(true);
+    try {
+      // ล้าง IndexedDB ทั้งหมด
+      await clearIdbCache();
+      // ล้าง memory cache ด้วย
+      debtCache.clearAll();
+      toast.info("ล้างแคชเรียบร้อย — กำลังโหลดข้อมูลใหม่...");
+      // redirect ไปหน้า data-loading เพื่อโหลดใหม่
+      navigate("/data-loading", { replace: true });
+    } catch {
+      toast.error("ล้างแคชไม่สำเร็จ กรุณาลองใหม่");
+    } finally {
+      setIsClearing(false);
+    }
+  };
 
   if (!section) return null;
 
@@ -114,12 +140,13 @@ export function SyncStatusBar() {
 
   return (
     <div className="flex items-center gap-2">
+      {/* ข้อมูล ณ วันที่ */}
       <span className="hidden sm:inline text-xs text-gray-500 whitespace-nowrap">
         ข้อมูล ณ {lastLabel}
       </span>
 
       {isRunning ? (
-        /* ---- Progress bar (replaces Refresh button while running) ---- */
+        /* ---- Progress bar (แสดงแทนปุ่มขณะ Sync กำลังทำงาน) ---- */
         <div className="flex items-center gap-2 min-w-[180px] max-w-[260px]">
           <div className="flex-1 min-w-0">
             {/* Stage label + % */}
@@ -147,18 +174,34 @@ export function SyncStatusBar() {
           </div>
         </div>
       ) : (
-        /* ---- Normal Refresh button ---- */
-        <button
-          onClick={() => trigger.mutate({ section })}
-          disabled={trigger.isPending}
-          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 text-sm text-gray-700 disabled:opacity-50"
-          title="Sync ข้อมูลใหม่"
-        >
-          <RefreshCw
-            className={`w-4 h-4 ${trigger.isPending ? "animate-spin text-blue-600" : ""}`}
-          />
-          <span className="hidden sm:inline">Refresh</span>
-        </button>
+        /* ---- ปุ่ม Re-Sync API + Clear Cache ---- */
+        <div className="flex items-center gap-1.5">
+          {/* Re-Sync API */}
+          <button
+            onClick={() => trigger.mutate({ section })}
+            disabled={trigger.isPending || isClearing}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 text-sm text-gray-700 disabled:opacity-50 transition-colors"
+            title="ดึงข้อมูลใหม่จาก API ภายนอก (ใช้เวลาหลายนาที)"
+          >
+            <RefreshCw
+              className={`w-4 h-4 ${trigger.isPending ? "animate-spin text-blue-600" : ""}`}
+            />
+            <span className="hidden sm:inline">Re-Sync API</span>
+          </button>
+
+          {/* Clear Cache */}
+          <button
+            onClick={handleClearCache}
+            disabled={trigger.isPending || isClearing}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-orange-200 hover:bg-orange-50 text-sm text-orange-600 disabled:opacity-50 transition-colors"
+            title="ล้างข้อมูลที่บันทึกไว้ในเบราเซอร์ แล้วโหลดข้อมูลใหม่จากระบบ"
+          >
+            <Trash2
+              className={`w-4 h-4 ${isClearing ? "animate-pulse" : ""}`}
+            />
+            <span className="hidden sm:inline">Clear Cache</span>
+          </button>
+        </div>
       )}
     </div>
   );

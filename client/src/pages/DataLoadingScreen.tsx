@@ -21,6 +21,7 @@ import { trpc } from "@/lib/trpc";
 import type { SectionKey } from "@shared/const";
 import { CheckCircle2, AlertCircle, Loader2, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { readIdbCache, writeIdbCache } from "@/lib/debtIdbCache";
 import { useLocation } from "wouter";
 
 type ItemStatus = "idle" | "loading" | "done" | "error";
@@ -215,6 +216,7 @@ export default function DataLoadingScreen() {
   });
 
   const startedRef = useRef(false);
+  const idbCheckedRef = useRef(false);
   const accent = section ? BRAND_ACCENT[section as SectionKey] : "#1e40af";
 
   // ─── ตรวจสอบ sync status ครั้งแรก ────────────────────────────────────────
@@ -361,7 +363,18 @@ export default function DataLoadingScreen() {
     await fetchContracts(sec);
     await fetchDebt(sec, "target");
     await fetchDebt(sec, "collected");
-  }, [fetchContracts, fetchDebt]);
+    // บันทึกลง IndexedDB หลังโหลดครบทั้งหมด
+    const cache = debtCache.getCache(sec);
+    if (cache.target && cache.collected) {
+      writeIdbCache({
+        section: sec,
+        savedAt: Date.now(),
+        targetRows: cache.target.rows,
+        collectedRows: cache.collected.rows,
+        hasPrincipalBreakdown: cache.collected.hasPrincipalBreakdown,
+      }).catch(() => { /* silent fail */ });
+    }
+  }, [fetchContracts, fetchDebt, debtCache]);
 
   // ─── เริ่มโหลดเมื่อ phase เปลี่ยนเป็น "loading" ──────────────────────────
 
@@ -369,14 +382,31 @@ export default function DataLoadingScreen() {
     if (phase !== "loading") return;
     if (authLoading || !isAuthenticated || !section) return;
 
-    // ตรวจสอบว่า cache มีข้อมูลอยู่แล้วหรือไม่
-    const cache = debtCache.getCache(section as SectionKey);
-    if (cache.target && cache.collected) {
+    // ตรวจสอบว่า memory cache มีข้อมูลอยู่แล้วหรือไม่
+    const memCache = debtCache.getCache(section as SectionKey);
+    if (memCache.target && memCache.collected) {
       navigate("/contracts", { replace: true });
       return;
     }
 
-    startPreload(section as SectionKey);
+    // ป้องกัน IDB check ซ้ำ
+    if (idbCheckedRef.current) return;
+    idbCheckedRef.current = true;
+
+    // ตรวจสอบ IndexedDB cache ก่อนโหลดจาก API
+    readIdbCache(section as SectionKey).then((idbEntry) => {
+      if (idbEntry) {
+        // มี IDB cache ที่ยังไม่หมดอายุ → restore เข้า memory แล้วไปหน้า contracts ทันที
+        debtCache.setTargetRows(section as SectionKey, idbEntry.targetRows);
+        debtCache.setCollectedRows(section as SectionKey, idbEntry.collectedRows, idbEntry.hasPrincipalBreakdown);
+        navigate("/contracts", { replace: true });
+      } else {
+        // ไม่มี IDB cache → โหลดจาก API ตามปกติ
+        startPreload(section as SectionKey);
+      }
+    }).catch(() => {
+      startPreload(section as SectionKey);
+    });
   }, [phase, authLoading, isAuthenticated, section]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Navigate เมื่อโหลดเสร็จ ──────────────────────────────────────────────

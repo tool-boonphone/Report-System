@@ -27,7 +27,6 @@ import {
   Gavel,
   LockOpen,
   Percent,
-  RefreshCw,
   Search,
   Smartphone,
   Tag,
@@ -1191,24 +1190,7 @@ export default function DebtOverview() {
                 <Info className="w-4 h-4" />
               </button>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                // ล้าง Global Cache เพื่อ force refetch
-                if (section) debtCache.clearCache(section as any);
-                setStreamError({ target: null, collected: null });
-                setTimeout(() => {
-                  fetchStream("target");
-                  fetchStream("collected");
-                }, 50);
-              }}
-              disabled={isLoading}
-              className="gap-1.5"
-            >
-              <RefreshCw className={["w-4 h-4", isLoading ? "animate-spin" : ""].join(" ")} />
-              รีเฟรช
-            </Button>
+
           </div>
 
           {/* ---- Filters ---- */}
