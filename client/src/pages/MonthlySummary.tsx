@@ -157,9 +157,9 @@ const NOT_YET_DUE_BADGE_ITEMS: Array<{key:NotYetDueBadgeKey;label:string;icon:Re
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function computeMoneyTotal(m:MoneyBreakdown, v:Record<MoneyBadgeKey,boolean>):number {
-  // รวม badDebtInstallment เข้ากลุ่มค่างวดปกติ (ค่างวดที่ลูกค้าหนี้เสียจ่ายมาก่อนตกเป็นหนี้เสีย)
-  // toggle ผ่าน paidVis.badDebtInstallment ซึ่งผูกกับปุ่มตาที่หัวคอลัมน์ "ค่างวด" ใน SummaryTable
-  return (v.principal?m.principal:0)+(v.interest?m.interest:0)+(v.fee?m.fee:0)+(v.penalty?m.penalty:0)+(v.unlockFee?m.unlockFee:0)+(v.overpaid?m.overpaid:0)+(v.badDebtInstallment?m.badDebtInstallment:0);
+  // หมายเหตุ: badDebtInstallment ไม่ถูกรวมที่นี่ เพราะยอดนั้นอยู่ใน principal/interest/fee/penalty/unlockFee/overpaid อยู่แล้ว
+  // badDebtInstallment ใช้เฉพาะ toggle คอลัมน์ "ค่างวด" ใน SummaryTable เท่านั้น
+  return (v.principal?m.principal:0)+(v.interest?m.interest:0)+(v.fee?m.fee:0)+(v.penalty?m.penalty:0)+(v.unlockFee?m.unlockFee:0)+(v.overpaid?m.overpaid:0);
 }
 function computeDueTotal(m:MoneyBreakdown, v:Record<DueBadgeKey,boolean>):number {
   return (v.principal?m.principal:0)+(v.interest?m.interest:0)+(v.fee?m.fee:0)+(v.penalty?m.penalty:0)+(v.unlockFee?m.unlockFee:0);
