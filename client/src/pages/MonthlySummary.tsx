@@ -27,30 +27,6 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { TrendingDown } from "lucide-react";
-
-// ─── Percent helpers ─────────────────────────────────────────────────────────
-function fmtPct(n: number): string { return n.toFixed(1) + "%"; }
-function pctOf(numerator: number, denominator: number): number {
-  if (!denominator || denominator === 0) return 0;
-  return (numerator / denominator) * 100;
-}
-/** สีของ tag ตาม % */
-function pctTagColor(pct: number, inverse = false): string {
-  if (inverse) {
-    // สำหรับ หนี้ค้างชำระ — ยิ่งน้อยยิ่งดี
-    if (pct <= 5)  return "bg-green-100 text-green-700";
-    if (pct <= 15) return "bg-amber-100 text-amber-700";
-    if (pct <= 30) return "bg-orange-100 text-orange-700";
-    return "bg-red-100 text-red-600";
-  }
-  // ยิ่งมากยิ่งดี
-  if (pct >= 100) return "bg-green-100 text-green-700";
-  if (pct >= 80)  return "bg-blue-100 text-blue-700";
-  if (pct >= 60)  return "bg-amber-100 text-amber-700";
-  return "bg-red-100 text-red-600";
-}
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 const DEBT_BUCKETS = [
@@ -581,11 +557,6 @@ export default function MonthlySummary() {
 
   // combined tab: badge expand state (ซ่อนไว้ก่อน กดขยายได้ต่อแถบ)
   const[combinedBadgeExpanded,setCombinedBadgeExpanded]=useState<Set<TabKey>>(new Set());
-  // combined tab: filter state
-  const[combinedApproveMonths,setCombinedApproveMonths]=useState<Set<string>>(new Set());
-  const[combinedApproveYears,setCombinedApproveYears]=useState<Set<string>>(new Set());
-  const[combinedProductType,setCombinedProductType]=useState<Set<string>>(new Set());
-  const[combinedDeviceFamily,setCombinedDeviceFamily]=useState("");
 
   // bucket eye toggle
   const[hiddenBuckets,setHiddenBuckets]=useState<Set<string>>(new Set());
@@ -654,14 +625,6 @@ export default function MonthlySummary() {
   const rows=useMemo(()=>{
     return [...rawRows].sort((a,b)=>sortDir==="asc"?a.approveMonth.localeCompare(b.approveMonth):b.approveMonth.localeCompare(a.approveMonth));
   },[rawRows,sortDir]);
-  // combined tab: filtered rows (client-side filter by approveMonth/Year)
-  const combinedRows=useMemo(()=>{
-    return rows.filter((r)=>{
-      if(combinedApproveMonths.size>0&&!combinedApproveMonths.has(r.approveMonth))return false;
-      if(combinedApproveYears.size>0&&!combinedApproveYears.has(r.approveMonth.slice(0,4)))return false;
-      return true;
-    });
-  },[rows,combinedApproveMonths,combinedApproveYears]);
 
   const availableMonths=useMemo(()=>rawRows.map((r)=>r.approveMonth).sort((a,b)=>b.localeCompare(a)),[rawRows]);
   const availableYears=useMemo(()=>{
@@ -695,32 +658,6 @@ export default function MonthlySummary() {
     }
     return{bucketTotals:bt,totalCount,totalPaid,totalDue,totalTarget,totalNotYetDue,totalInstallTotal};
   },[rows,hiddenRows]);
-  // combined grand total (คำนวณจาก combinedRows เท่านั้น)
-  const combinedGrandTotal=useMemo(()=>{
-    const bt:Record<string,{count:number;paid:MoneyBreakdown;due:MoneyBreakdown;target:MoneyBreakdown;notYetDue:MoneyBreakdown;installTotal:MoneyBreakdown}>={}
-    for(const b of DEBT_BUCKETS)bt[b]={count:0,paid:emptyMoney(),due:emptyMoney(),target:emptyMoney(),notYetDue:emptyMoney(),installTotal:emptyMoney()};
-    let totalCount=0;
-    const totalPaid=emptyMoney();const totalDue=emptyMoney();const totalTarget=emptyMoney();const totalNotYetDue=emptyMoney();const totalInstallTotal=emptyMoney();
-    for(const row of combinedRows){
-      if(hiddenRows.has(row.approveMonth))continue;
-      totalCount+=row.totalCount;
-      for(const k of Object.keys(totalPaid)as(keyof MoneyBreakdown)[]){
-        totalPaid[k]+=row.totalPaid[k];totalDue[k]+=row.totalDue[k];
-        totalTarget[k]+=row.totalTarget[k];totalNotYetDue[k]+=row.totalNotYetDue[k];
-        totalInstallTotal[k]+=(row.totalInstallTotal?.[k]??0);
-      }
-      for(const b of DEBT_BUCKETS){
-        const cell=row.buckets[b];if(!cell)continue;
-        bt[b].count+=cell.contractCount;
-        for(const k of Object.keys(totalPaid)as(keyof MoneyBreakdown)[]){
-          bt[b].paid[k]+=cell.paid[k];bt[b].due[k]+=cell.due[k];
-          bt[b].target[k]+=cell.target[k];bt[b].notYetDue[k]+=cell.notYetDue[k];
-          bt[b].installTotal[k]+=(cell.installTotal?.[k]??0);
-        }
-      }
-    }
-    return{bucketTotals:bt,totalCount,totalPaid,totalDue,totalTarget,totalNotYetDue,totalInstallTotal};
-  },[combinedRows,hiddenRows]);
 
   const grandBadgePaid=useMemo(()=>{
     // คำนวณเหมือน gtPaidTotal ใน SummaryTable: skip hiddenBuckets + จัดการ หนี้เสีย แบบพิเศษ
@@ -772,40 +709,19 @@ export default function MonthlySummary() {
     try{
       const wb=XLSX.utils.book_new();
       const tabLabel=tab==="count"?"สัญญา":tab==="installTotal"?"ยอดผ่อนรวม":tab==="target"?"เป้าเก็บหนี้":tab==="paid"?"ยอดชำระแล้ว":tab==="due"?"หนี้ค้างชำระ":"ยังไม่ถึงกำหนด";
-      // สร้าง headers ตามแต่ละ tab โดยแยกคอลัมน์ % ออกจากตัวเลข
-      const buildHeaders=()=>{
-        const base=["เดือน-ปีที่อนุมัติ","สัญญา"];
-        if(tab==="count"||tab==="installTotal")return[...base,...DEBT_BUCKETS];
-        if(tab==="target")return[...base,...DEBT_BUCKETS,"รวมเป้าเก็บหนี้","% เป้า/ยอดผ่อนรวม"];
-        if(tab==="paid")return[...base,...DEBT_BUCKETS,"รวมยอดเก็บหนี้","% เก็บ/ยอดผ่อนรวม","% เก็บ/เป้าเก็บหนี้"];
-        if(tab==="due")return[...base,...DEBT_BUCKETS,"รวมหนี้ค้างชำระ","% ค้าง/เป้าเก็บหนี้"];
-        return[...base,...DEBT_BUCKETS,"รวมยังไม่ถึงกำหนด","% ยังไม่ถึง/ยอดผ่อนรวม"];
-      };
-      const wsData:(string|number)[][]=[buildHeaders()];
+      const headers=["เดือน-ปีที่อนุมัติ","สัญญา",...DEBT_BUCKETS];
+      const wsData:(string|number)[][]=[headers];
       for(const row of rows){
         const vals:any[]=[fmtMonthYear(row.approveMonth),row.totalCount];
-        let rowMainTotal=0;
-        let rowInstallTotalVal=0;
-        let rowTargetTotalVal=0;
         for(const b of DEBT_BUCKETS){
           const cell=row.buckets[b];
-          let v=0;
-          if(tab==="count")v=cell?.contractCount??0;
-          else if(tab==="installTotal")v=cell?.installTotal.total??0;
-          else if(tab==="target")v=cell?.target.total??0;
-          else if(tab==="paid")v=cell?.paid.total??0;
-          else if(tab==="due")v=cell?.due.total??0;
-          else v=cell?.notYetDue.total??0;
-          vals.push(v);
-          rowMainTotal+=v;
-          rowInstallTotalVal+=cell?.installTotal.total??0;
-          rowTargetTotalVal+=cell?.target.total??0;
+          if(tab==="count")vals.push(cell?.contractCount??0);
+          else if(tab==="installTotal")vals.push(cell?.installTotal.total??0);
+          else if(tab==="target")vals.push(cell?.target.total??0);
+          else if(tab==="paid")vals.push(cell?.paid.total??0);
+          else if(tab==="due")vals.push(cell?.due.total??0);
+          else vals.push(cell?.notYetDue.total??0);
         }
-        // เพิ่มคอลัมน์ % ตาม tab
-        if(tab==="target"){vals.push(rowMainTotal);vals.push(rowInstallTotalVal>0?Math.round(rowMainTotal/rowInstallTotalVal*10000)/100:0);}
-        else if(tab==="paid"){vals.push(rowMainTotal);vals.push(rowInstallTotalVal>0?Math.round(rowMainTotal/rowInstallTotalVal*10000)/100:0);vals.push(rowTargetTotalVal>0?Math.round(rowMainTotal/rowTargetTotalVal*10000)/100:0);}
-        else if(tab==="due"){vals.push(rowMainTotal);vals.push(rowTargetTotalVal>0?Math.round(rowMainTotal/rowTargetTotalVal*10000)/100:0);}
-        else if(tab==="notYetDue"){vals.push(rowMainTotal);vals.push(rowInstallTotalVal>0?Math.round(rowMainTotal/rowInstallTotalVal*10000)/100:0);}
         wsData.push(vals);
       }
       const ws=XLSX.utils.aoa_to_sheet(wsData);
@@ -835,7 +751,7 @@ export default function MonthlySummary() {
     {key:"paid",         label:"ยอดเก็บหนี้",     activeClass:"border-green-600 text-green-700",   filterCount:paidFilterCount},
     {key:"due",          label:"หนี้ค้างชำระ",   activeClass:"border-orange-600 text-orange-700", filterCount:dueFilterCount},
     {key:"notYetDue",    label:"ยังไม่ถึงกำหนด", activeClass:"border-blue-600 text-blue-700",     filterCount:notYetDueFilterCount},
-    {key:"combined",     label:"สรุปรวม",          activeClass:"border-teal-600 text-teal-700",     filterCount:[combinedApproveMonths.size>0,combinedApproveYears.size>0,combinedProductType.size>0,combinedDeviceFamily].filter(Boolean).length},
+    {key:"combined",     label:"สรุปรวม",          activeClass:"border-teal-600 text-teal-700",     filterCount:0},
   ];
 
   return(
@@ -1056,32 +972,10 @@ export default function MonthlySummary() {
                   )}
                 </>
               )}
-              {/* Tab 6: สรุปรวม */}
-              {tab==="combined"&&(
-                <>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-xs text-gray-500 whitespace-nowrap">เดือน-ปีที่อนุมัติ:</span>
-                    <MonthMultiSelect selected={combinedApproveMonths} onChange={setCombinedApproveMonths} options={availableMonths}/>
-                    {combinedApproveMonths.size>0&&<button type="button" onClick={()=>setCombinedApproveMonths(new Set())} className="flex items-center justify-center w-6 h-6 rounded-full bg-gray-100 hover:bg-red-100 text-gray-400 hover:text-red-500"><X className="w-3.5 h-3.5"/></button>}
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-xs text-gray-500 whitespace-nowrap">ปีที่อนุมัติ:</span>
-                    <YearMultiSelect selected={combinedApproveYears} onChange={setCombinedApproveYears} options={availableYears}/>
-                    {combinedApproveYears.size>0&&<button type="button" onClick={()=>setCombinedApproveYears(new Set())} className="flex items-center justify-center w-6 h-6 rounded-full bg-gray-100 hover:bg-red-100 text-gray-400 hover:text-red-500"><X className="w-3.5 h-3.5"/></button>}
-                  </div>
-                  <DeviceFamilyFilter value={combinedDeviceFamily} onChange={setCombinedDeviceFamily}/>
-                  <MultiSelectFilter label="ประเภทสินค้า" selected={combinedProductType} onChange={setCombinedProductType} options={productTypes} placeholder="ทุกประเภทสินค้า"/>
-                  {[combinedApproveMonths.size>0,combinedApproveYears.size>0,combinedProductType.size>0,combinedDeviceFamily].filter(Boolean).length>0&&(
-                    <button type="button" onClick={()=>{setCombinedApproveMonths(new Set());setCombinedApproveYears(new Set());setCombinedProductType(new Set());setCombinedDeviceFamily("");}}
-                      className="flex items-center gap-1 h-9 px-2.5 rounded-md border border-red-200 bg-red-50 text-red-600 text-xs hover:bg-red-100 transition-colors">
-                      <X className="w-3.5 h-3.5"/>ล้างทั้งหมด
-                    </button>
-                  )}
-                </>
-              )}
             </div>
         </div>
-        {/* ── Badge: installTotalal ─────────────────────────────────────────────── */}
+
+        {/* ── Badge: installTotal ─────────────────────────────────────────────── */}
         {tab==="installTotal"&&(
           <div className="bg-purple-50/60 border-b border-purple-200 px-4 py-2 flex flex-wrap items-center gap-2">
             {([{key:"principal",label:"เงินต้น",icon:<Banknote className="w-3 h-3"/>},{key:"interest",label:"ดอกเบี้ย",icon:<Percent className="w-3 h-3"/>},{key:"fee",label:"ค่าดำเนินการ",icon:<Coins className="w-3 h-3"/>}] as Array<{key:"principal"|"interest"|"fee";label:string;icon:React.ReactNode}>).map(({key,label,icon})=>{
@@ -1207,7 +1101,7 @@ export default function MonthlySummary() {
           :rows.length===0?(<div className="flex items-center justify-center h-full text-gray-400 text-sm">ไม่มีข้อมูล</div>)
           :tab==="combined"?(
             <CombinedTable
-              rows={combinedRows} grandTotal={combinedGrandTotal}
+              rows={rows} grandTotal={grandTotal}
               hiddenBuckets={hiddenBuckets} toggleBucket={toggleBucket}
               sortDir={sortDir} onToggleSort={()=>setSortDir((d)=>d==="asc"?"desc":"asc")}
               hiddenRows={hiddenRows} toggleRow={toggleRow}
@@ -1509,113 +1403,13 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
                 </div>
               </td>
               {/* รวมคอลัมน์ 2 */}
-              <td className="sticky left-[130px] z-10 px-3 py-2.5 text-right bg-white border-r border-gray-200 min-w-[130px]">
+              <td className="sticky left-[130px] z-10 px-3 py-2.5 text-right bg-white border-r border-gray-200 min-w-[110px]">
                 {tab==="count"?renderCount(isHiddenRow?0:rowContractTotal(row))
                 :tab==="installTotal"?renderMoney(isHiddenRow?0:rowInstallTotal(row),"text-purple-800 font-semibold")
-                :tab==="target"?(()=>{
-                  const val=isHiddenRow?0:rowTargetTotal(row);
-                  const installVal=isHiddenRow?0:rowInstallTotal(row);
-                  const pct=pctOf(val,installVal);
-                  return(
-                    <div className="flex flex-col items-end gap-0.5">
-                      {renderMoney(val,"text-indigo-800 font-semibold")}
-                      {!isHiddenRow&&installVal>0&&(
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className={["inline-flex items-center text-[10px] px-1.5 py-0.5 rounded font-medium cursor-help",pctTagColor(pct)].join(" ")}>{fmtPct(pct)}</span>
-                          </TooltipTrigger>
-                          <TooltipContent side="top" className="max-w-[240px] text-xs">
-                            <p className="font-semibold mb-1">เป้าเก็บหนี้ / ยอดผ่อนรวม</p>
-                            <p className="text-gray-200">เป้าเก็บหนี้คิดเป็น % จากยอดผ่อนรวม</p>
-                            <p className="mt-1 font-mono">{fmtMoney(val)} ÷ {fmtMoney(installVal)}</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      )}
-                    </div>
-                  );
-                })()
-                :tab==="paid"?(()=>{
-                  const val=isHiddenRow?0:rowPaidTotal(row);
-                  const installVal=isHiddenRow?0:rowInstallTotal(row);
-                  const targetVal=isHiddenRow?0:rowTargetTotal(row);
-                  const pctInstall=pctOf(val,installVal);
-                  const pctTarget=pctOf(val,targetVal);
-                  return(
-                    <div className="flex flex-col items-end gap-0.5">
-                      {renderMoney(val,"text-green-800 font-semibold")}
-                      {!isHiddenRow&&installVal>0&&(
-                        <div className="flex items-center gap-1">
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <span className={["inline-flex items-center text-[10px] px-1.5 py-0.5 rounded font-medium cursor-help",pctTagColor(pctInstall)].join(" ")}>{fmtPct(pctInstall)}</span>
-                            </TooltipTrigger>
-                            <TooltipContent side="top" className="max-w-[240px] text-xs">
-                              <p className="font-semibold mb-1">ยอดเก็บหนี้ / ยอดผ่อนรวม</p>
-                              <p className="text-gray-200">ยอดเก็บหนี้คิดเป็น % จากยอดผ่อนรวม</p>
-                              <p className="mt-1 font-mono">{fmtMoney(val)} ÷ {fmtMoney(installVal)}</p>
-                            </TooltipContent>
-                          </Tooltip>
-                          {targetVal>0&&(
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <span className={["inline-flex items-center text-[10px] px-1.5 py-0.5 rounded font-medium cursor-help bg-indigo-100 text-indigo-700"].join(" ")}>{fmtPct(pctTarget)}</span>
-                              </TooltipTrigger>
-                              <TooltipContent side="top" className="max-w-[240px] text-xs">
-                                <p className="font-semibold mb-1">ยอดเก็บหนี้ / เป้าเก็บหนี้</p>
-                                <p className="text-gray-200">ยอดเก็บหนี้คิดเป็น % จากเป้าเก็บหนี้</p>
-                                <p className="mt-1 font-mono">{fmtMoney(val)} ÷ {fmtMoney(targetVal)}</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })()
-                :tab==="due"?(()=>{
-                  const val=isHiddenRow?0:rowDueTotal(row);
-                  const targetVal=isHiddenRow?0:rowTargetTotal(row);
-                  const pct=pctOf(val,targetVal);
-                  return(
-                    <div className="flex flex-col items-end gap-0.5">
-                      {renderMoney(val,"text-orange-800 font-semibold")}
-                      {!isHiddenRow&&targetVal>0&&(
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className={["inline-flex items-center text-[10px] px-1.5 py-0.5 rounded font-medium cursor-help",pctTagColor(pct,true)].join(" ")}>{fmtPct(pct)}</span>
-                          </TooltipTrigger>
-                          <TooltipContent side="top" className="max-w-[240px] text-xs">
-                            <p className="font-semibold mb-1">หนี้ค้างชำระ / เป้าเก็บหนี้</p>
-                            <p className="text-gray-200">หนี้ค้างชำระคิดเป็น % จากเป้าเก็บหนี้ (ยิ่งน้อยยิ่งดี)</p>
-                            <p className="mt-1 font-mono">{fmtMoney(val)} ÷ {fmtMoney(targetVal)}</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      )}
-                    </div>
-                  );
-                })()
-                :(()=>{
-                  const val=isHiddenRow?0:rowNotYetDueTotal(row);
-                  const installVal=isHiddenRow?0:rowInstallTotal(row);
-                  const pct=pctOf(val,installVal);
-                  return(
-                    <div className="flex flex-col items-end gap-0.5">
-                      {renderMoney(val,"text-blue-800 font-semibold")}
-                      {!isHiddenRow&&installVal>0&&(
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className={["inline-flex items-center text-[10px] px-1.5 py-0.5 rounded font-medium cursor-help bg-blue-100 text-blue-700"].join(" ")}>{fmtPct(pct)}</span>
-                          </TooltipTrigger>
-                          <TooltipContent side="top" className="max-w-[240px] text-xs">
-                            <p className="font-semibold mb-1">ยังไม่ถึงกำหนด / ยอดผ่อนรวม</p>
-                            <p className="text-gray-200">ยังไม่ถึงกำหนดคิดเป็น % จากยอดผ่อนรวม</p>
-                            <p className="mt-1 font-mono">{fmtMoney(val)} ÷ {fmtMoney(installVal)}</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      )}
-                    </div>
-                  );
-                })()}
+                :tab==="target"?renderMoney(isHiddenRow?0:rowTargetTotal(row),"text-indigo-800 font-semibold")
+                :tab==="paid"?renderMoney(isHiddenRow?0:rowPaidTotal(row),"text-green-800 font-semibold")
+                :tab==="due"?renderMoney(isHiddenRow?0:rowDueTotal(row),"text-orange-800 font-semibold")
+                :renderMoney(isHiddenRow?0:rowNotYetDueTotal(row),"text-blue-800 font-semibold")}
               </td>
               {/* Bucket cells */}
               {visibleGroups.map((g,gi)=>(
@@ -1742,25 +1536,13 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
       <tfoot className="sticky bottom-0 z-20 border-t-2 border-slate-400 bg-slate-100 shadow-[0_-2px_8px_rgba(0,0,0,0.12)]">
           <tr>
             <td className="sticky left-0 z-20 px-3 py-2.5 text-slate-800 whitespace-nowrap border-r border-slate-300 bg-slate-200 min-w-[130px]">รวมทั้งหมด</td>
-            <td className="sticky left-[130px] z-20 px-3 py-2.5 text-right border-r border-slate-300 bg-slate-200 min-w-[130px]">
+            <td className="sticky left-[130px] z-20 px-3 py-2.5 text-right border-r border-slate-300 bg-slate-200 min-w-[110px]">
               {tab==="count"?(<span className="inline-flex items-center justify-center bg-slate-400 text-white rounded-full px-2.5 py-0.5 text-xs font-bold">{gtContractTotal.toLocaleString()}</span>)
               :tab==="installTotal"?renderMoney(gtInstallTotal,"text-purple-900")
-              :tab==="target"?(()=>{
-                const pct=pctOf(gtTargetTotal,gtInstallTotal);
-                return(<div className="flex flex-col items-end gap-0.5">{renderMoney(gtTargetTotal,"text-indigo-900")}{gtInstallTotal>0&&<Tooltip><TooltipTrigger asChild><span className={["inline-flex items-center text-[10px] px-1.5 py-0.5 rounded font-medium cursor-help",pctTagColor(pct)].join(" ")}>{fmtPct(pct)}</span></TooltipTrigger><TooltipContent side="top" className="max-w-[240px] text-xs"><p className="font-semibold mb-1">เป้าเก็บหนี้ / ยอดผ่อนรวม</p><p className="text-gray-200">{fmtMoney(gtTargetTotal)} ÷ {fmtMoney(gtInstallTotal)}</p></TooltipContent></Tooltip>}</div>);
-              })()
-              :tab==="paid"?(()=>{
-                const pctI=pctOf(gtPaidTotal,gtInstallTotal);const pctT=pctOf(gtPaidTotal,gtTargetTotal);
-                return(<div className="flex flex-col items-end gap-0.5">{renderMoney(gtPaidTotal,"text-green-900")}{gtInstallTotal>0&&<div className="flex items-center gap-1"><Tooltip><TooltipTrigger asChild><span className={["inline-flex items-center text-[10px] px-1.5 py-0.5 rounded font-medium cursor-help",pctTagColor(pctI)].join(" ")}>{fmtPct(pctI)}</span></TooltipTrigger><TooltipContent side="top" className="max-w-[240px] text-xs"><p className="font-semibold mb-1">ยอดเก็บหนี้ / ยอดผ่อนรวม</p><p className="text-gray-200">{fmtMoney(gtPaidTotal)} ÷ {fmtMoney(gtInstallTotal)}</p></TooltipContent></Tooltip>{gtTargetTotal>0&&<Tooltip><TooltipTrigger asChild><span className="inline-flex items-center text-[10px] px-1.5 py-0.5 rounded font-medium cursor-help bg-indigo-100 text-indigo-700">{fmtPct(pctT)}</span></TooltipTrigger><TooltipContent side="top" className="max-w-[240px] text-xs"><p className="font-semibold mb-1">ยอดเก็บหนี้ / เป้าเก็บหนี้</p><p className="text-gray-200">{fmtMoney(gtPaidTotal)} ÷ {fmtMoney(gtTargetTotal)}</p></TooltipContent></Tooltip>}</div>}</div>);
-              })()
-              :tab==="due"?(()=>{
-                const pct=pctOf(gtDueTotal,gtTargetTotal);
-                return(<div className="flex flex-col items-end gap-0.5">{renderMoney(gtDueTotal,"text-orange-900")}{gtTargetTotal>0&&<Tooltip><TooltipTrigger asChild><span className={["inline-flex items-center text-[10px] px-1.5 py-0.5 rounded font-medium cursor-help",pctTagColor(pct,true)].join(" ")}>{fmtPct(pct)}</span></TooltipTrigger><TooltipContent side="top" className="max-w-[240px] text-xs"><p className="font-semibold mb-1">หนี้ค้างชำระ / เป้าเก็บหนี้ (ยิ่งน้อยยิ่งดี)</p><p className="text-gray-200">{fmtMoney(gtDueTotal)} ÷ {fmtMoney(gtTargetTotal)}</p></TooltipContent></Tooltip>}</div>);
-              })()
-              :(()=>{
-                const pct=pctOf(gtNotYetDueTotal,gtInstallTotal);
-                return(<div className="flex flex-col items-end gap-0.5">{renderMoney(gtNotYetDueTotal,"text-blue-900")}{gtInstallTotal>0&&<Tooltip><TooltipTrigger asChild><span className="inline-flex items-center text-[10px] px-1.5 py-0.5 rounded font-medium cursor-help bg-blue-100 text-blue-700">{fmtPct(pct)}</span></TooltipTrigger><TooltipContent side="top" className="max-w-[240px] text-xs"><p className="font-semibold mb-1">ยังไม่ถึงกำหนด / ยอดผ่อนรวม</p><p className="text-gray-200">{fmtMoney(gtNotYetDueTotal)} ÷ {fmtMoney(gtInstallTotal)}</p></TooltipContent></Tooltip>}</div>);
-              })()}
+              :tab==="target"?renderMoney(gtTargetTotal,"text-indigo-900")
+              :tab==="paid"?renderMoney(gtPaidTotal,"text-green-900")
+              :tab==="due"?renderMoney(gtDueTotal,"text-orange-900")
+              :renderMoney(gtNotYetDueTotal,"text-blue-900")}
             </td>
             {visibleGroups.map((g,gi)=>(
               <React.Fragment key={g.key}>
@@ -1819,12 +1601,12 @@ const COMBINED_SUB_ROWS: Array<{
 
 // กลุ่มหัวตาราง 2 ชั้น
 const BUCKET_GROUPS = [
-  {label:"ปกติ",         bg:"bg-green-700",   buckets:["ปกติ","เกิน 1-7","เกิน 8-14","เกิน 15-30","เกิน 31-60"], hasSubtotal:true,  subtotalBg:"bg-green-100"},
-  {label:"สงสัยจะเสีย", bg:"bg-orange-600",  buckets:["เกิน 61-90","เกิน >90"],                                   hasSubtotal:true,  subtotalBg:"bg-orange-100"},
-  {label:"ระงับสัญญา",  bg:"bg-red-700",     buckets:["ระงับสัญญา"],                                              hasSubtotal:false, subtotalBg:""},
-  {label:"สิ้นสุดสัญญา",bg:"bg-gray-600",    buckets:["สิ้นสุดสัญญา"],                                            hasSubtotal:false, subtotalBg:""},
-  {label:"หนี้เสีย",    bg:"bg-gray-900",    buckets:["หนี้เสีย"],                                                hasSubtotal:false, subtotalBg:""},
-];
+  {label:"ปกติ",         bg:"bg-green-700",   buckets:["ปกติ","เกิน 1-7","เกิน 8-14","เกิน 15-30","เกิน 31-60"]},
+  {label:"สงสัยจะเสีย", bg:"bg-orange-600",  buckets:["เกิน 61-90","เกิน >90"]},
+  {label:"ระงับสัญญา",  bg:"bg-red-700",     buckets:["ระงับสัญญา"]},
+  {label:"สิ้นสุดสัญญา",bg:"bg-gray-600",    buckets:["สิ้นสุดสัญญา"]},
+  {label:"หนี้เสีย",    bg:"bg-gray-900",    buckets:["หนี้เสีย"]},
+] as const;
 
 function CombinedTable({
   rows,grandTotal,hiddenBuckets,toggleBucket,
@@ -1948,7 +1730,7 @@ function CombinedTable({
     return r;
   },[grandTotal]);
 
-  const minWidth=130+90+90+(DEBT_BUCKETS.length*110)+90+(2*110); // +90 bad-debt sub-cols, +2*110 subtotal cols for ปกติ/สงสัยจะเสีย
+  const minWidth=130+90+90+(DEBT_BUCKETS.length*110)+90; // +90 for bad-debt sub-cols (ค่างวด/ขายเครื่อง/รวม replace bucket)
 
   // ── Badge panels ──────────────────────────────────────────────────────────
   const BADGE_DEFS=[
@@ -2103,15 +1885,15 @@ function CombinedTable({
             </button>
           </th>
           <th rowSpan={2} className="sticky left-[130px] z-30 px-3 py-2 text-center font-semibold whitespace-nowrap bg-teal-700 text-white border-r border-teal-500 min-w-[90px]">
-            หัวข้อ
+            แถบ
           </th>
           <th rowSpan={2} className="sticky left-[220px] z-30 px-3 py-2 text-right font-semibold whitespace-nowrap bg-teal-700 text-white border-r border-teal-500 min-w-[90px]">
             รวม
           </th>
           {/* group headers */}
           {BUCKET_GROUPS.map((g)=>{
-            // นับ colspan = จำนวน bucket ในกลุ่ม + subtotal col + (กลุ่มหนี้เสียมี 3 sub-col แทน 1 bucket)
-            const colCount = g.label==="หนี้เสีย" ? 3 : g.buckets.length + (g.hasSubtotal ? 1 : 0);
+            // นับ colspan = จำนวน bucket ในกลุ่ม + (กลุ่มหนี้เสียมี 3 sub-col สำหรับ paid)
+            const colCount = g.label==="หนี้เสีย" ? 3 : g.buckets.length;
             // ตรวจสอบว่า bucket ในกลุ่มนี้ถูกซ่อนทั้งหมดหรือไม่
             const allHidden=g.buckets.every(b=>hiddenBuckets.has(b));
             return(
@@ -2162,22 +1944,14 @@ function CombinedTable({
                       </th>
                     </>
                   ):(
-                    <>
-                      <th
-                        onClick={()=>toggleBucket(b)}
-                        className={["px-2 py-1.5 text-center font-semibold text-white whitespace-nowrap min-w-[110px] border-r border-white/20 cursor-pointer hover:opacity-80 transition-opacity",g.bg,hiddenBuckets.has(b)?"opacity-40":""].join(" ")}>
-                        <div className="flex flex-col items-center gap-0.5">
-                          {hiddenBuckets.has(b)?<EyeOff className="w-3 h-3"/>:<Eye className="w-3 h-3"/>}
-                          <span className={["inline-block px-1.5 py-0.5 rounded-full text-[10px] border",bucketPillClasses(b)].join(" ")}>{b}</span>
-                        </div>
-                      </th>
-                      {/* subtotal col หลัง bucket สุดท้ายของกลุ่ม ปกติ/สงสัยจะเสีย */}
-                      {isLast&&g.hasSubtotal&&(
-                        <th className={["px-2 py-1.5 text-center font-bold text-white whitespace-nowrap min-w-[110px] border-r border-white/30",g.bg].join(" ")}>
-                          <span className="text-[10px]">รวม</span>
-                        </th>
-                      )}
-                    </>
+                    <th
+                      onClick={()=>toggleBucket(b)}
+                      className={["px-2 py-1.5 text-center font-semibold text-white whitespace-nowrap min-w-[110px] border-r border-white/20 cursor-pointer hover:opacity-80 transition-opacity",g.bg,hiddenBuckets.has(b)?"opacity-40":""].join(" ")}>
+                      <div className="flex flex-col items-center gap-0.5">
+                        {hiddenBuckets.has(b)?<EyeOff className="w-3 h-3"/>:<Eye className="w-3 h-3"/>}
+                        <span className={["inline-block px-1.5 py-0.5 rounded-full text-[10px] border",bucketPillClasses(b)].join(" ")}>{b}</span>
+                      </div>
+                    </th>
                   )}
                 </React.Fragment>
               );
@@ -2203,33 +1977,13 @@ function CombinedTable({
                       </div>
                     </td>
                   )}
-                  {/* ชื่อหัวข้อ */}
+                  {/* ชื่อแถบ */}
                   <td className={["sticky left-[130px] z-10 px-2 py-1.5 text-center whitespace-nowrap border-r border-gray-200 font-medium text-[11px] min-w-[90px]",sr.rowBg,sr.textColor].join(" ")}>
                     {sr.label}
                   </td>
                   {/* รวม */}
-                  <td className={["sticky left-[220px] z-10 px-3 py-1.5 text-right border-r border-gray-200 min-w-[110px]",sr.totalBg].join(" ")}>
-                    {(()=>{
-                      const val=isHiddenRow?0:rowTotal(sr.key,row);
-                      const installVal=isHiddenRow?0:rowTotal("installTotal",row);
-                      const targetVal=isHiddenRow?0:rowTotal("target",row);
-                      if(sr.key==="count"||sr.key==="installTotal")return renderCellVal(sr.key,val,sr.textColor);
-                      if(sr.key==="target"){
-                        const pct=pctOf(val,installVal);
-                        return(<div className="flex flex-col items-end gap-0.5">{renderCellVal(sr.key,val,sr.textColor)}{!isHiddenRow&&installVal>0&&<Tooltip><TooltipTrigger asChild><span className={["inline-flex items-center text-[10px] px-1.5 py-0.5 rounded font-medium cursor-help",pctTagColor(pct)].join(" ")}>{fmtPct(pct)}</span></TooltipTrigger><TooltipContent side="top" className="max-w-[240px] text-xs"><p className="font-semibold mb-1">เป้าเก็บหนี้ / ยอดผ่อนรวม</p><p className="text-gray-200">{fmtMoney(val)} ÷ {fmtMoney(installVal)}</p></TooltipContent></Tooltip>}</div>);
-                      }
-                      if(sr.key==="paid"){
-                        const pctI=pctOf(val,installVal);const pctT=pctOf(val,targetVal);
-                        return(<div className="flex flex-col items-end gap-0.5">{renderCellVal(sr.key,val,sr.textColor)}{!isHiddenRow&&installVal>0&&<div className="flex items-center gap-1"><Tooltip><TooltipTrigger asChild><span className={["inline-flex items-center text-[10px] px-1.5 py-0.5 rounded font-medium cursor-help",pctTagColor(pctI)].join(" ")}>{fmtPct(pctI)}</span></TooltipTrigger><TooltipContent side="top" className="max-w-[240px] text-xs"><p className="font-semibold mb-1">ยอดเก็บหนี้ / ยอดผ่อนรวม</p><p className="text-gray-200">{fmtMoney(val)} ÷ {fmtMoney(installVal)}</p></TooltipContent></Tooltip>{targetVal>0&&<Tooltip><TooltipTrigger asChild><span className="inline-flex items-center text-[10px] px-1.5 py-0.5 rounded font-medium cursor-help bg-indigo-100 text-indigo-700">{fmtPct(pctT)}</span></TooltipTrigger><TooltipContent side="top" className="max-w-[240px] text-xs"><p className="font-semibold mb-1">ยอดเก็บหนี้ / เป้าเก็บหนี้</p><p className="text-gray-200">{fmtMoney(val)} ÷ {fmtMoney(targetVal)}</p></TooltipContent></Tooltip>}</div>}</div>);
-                      }
-                      if(sr.key==="due"){
-                        const pct=pctOf(val,targetVal);
-                        return(<div className="flex flex-col items-end gap-0.5">{renderCellVal(sr.key,val,sr.textColor)}{!isHiddenRow&&targetVal>0&&<Tooltip><TooltipTrigger asChild><span className={["inline-flex items-center text-[10px] px-1.5 py-0.5 rounded font-medium cursor-help",pctTagColor(pct,true)].join(" ")}>{fmtPct(pct)}</span></TooltipTrigger><TooltipContent side="top" className="max-w-[240px] text-xs"><p className="font-semibold mb-1">หนี้ค้างชำระ / เป้าเก็บหนี้ (ยิ่งน้อยยิ่งดี)</p><p className="text-gray-200">{fmtMoney(val)} ÷ {fmtMoney(targetVal)}</p></TooltipContent></Tooltip>}</div>);
-                      }
-                      // notYetDue
-                      const pct=pctOf(val,installVal);
-                      return(<div className="flex flex-col items-end gap-0.5">{renderCellVal(sr.key,val,sr.textColor)}{!isHiddenRow&&installVal>0&&<Tooltip><TooltipTrigger asChild><span className="inline-flex items-center text-[10px] px-1.5 py-0.5 rounded font-medium cursor-help bg-blue-100 text-blue-700">{fmtPct(pct)}</span></TooltipTrigger><TooltipContent side="top" className="max-w-[240px] text-xs"><p className="font-semibold mb-1">ยังไม่ถึงกำหนด / ยอดผ่อนรวม</p><p className="text-gray-200">{fmtMoney(val)} ÷ {fmtMoney(installVal)}</p></TooltipContent></Tooltip>}</div>);
-                    })()}
+                  <td className={["sticky left-[220px] z-10 px-3 py-1.5 text-right border-r border-gray-200 min-w-[90px]",sr.totalBg].join(" ")}>
+                    {renderCellVal(sr.key, isHiddenRow?0:rowTotal(sr.key,row), sr.textColor)}
                   </td>
                   {/* bucket cells */}
                   {BUCKET_GROUPS.map((g)=>
@@ -2270,24 +2024,9 @@ function CombinedTable({
                               </td>
                             </>
                           ):(
-                            <>
-                              <td className={["px-3 py-1.5 text-right border-r border-gray-200",cellBg].join(" ")}>
-                                {renderCellVal(sr.key, val, sr.textColor)}
-                              </td>
-                              {/* subtotal col หลัง bucket สุดท้ายของกลุ่ม ปกติ/สงสัยจะเสีย */}
-                              {isLast&&g.hasSubtotal&&(()=>{
-                                const groupBuckets=g.buckets as readonly string[];
-                                const subtotalVal=groupBuckets.reduce((s,gb)=>{
-                                  if(isDimmed||hiddenBuckets.has(gb))return s;
-                                  return s+cellValue(sr.key,row.buckets[gb]);
-                                },0);
-                                return(
-                                  <td className={["px-3 py-1.5 text-right font-bold border-r border-gray-300",g.subtotalBg].join(" ")}>
-                                    {renderCellVal(sr.key, subtotalVal, sr.textColor)}
-                                  </td>
-                                );
-                              })()}
-                            </>
+                            <td className={["px-3 py-1.5 text-right border-r border-gray-200",cellBg].join(" ")}>
+                              {renderCellVal(sr.key, val, sr.textColor)}
+                            </td>
                           )}
                         </React.Fragment>
                       );
@@ -2317,10 +2056,7 @@ function CombinedTable({
                       <td className={["px-3 py-2",bucketCellBg(b),"bg-slate-100"].join(" ")}/>
                     </>
                   ):(
-                    <>
-                      <td className={["px-3 py-2",bucketCellBg(b),"bg-slate-100"].join(" ")}/>
-                      {isLast&&g.hasSubtotal&&<td className={["px-3 py-2",g.subtotalBg,"bg-opacity-80"].join(" ")}/>}
-                    </>
+                    <td className={["px-3 py-2",bucketCellBg(b),"bg-slate-100"].join(" ")}/>
                   )}
                 </React.Fragment>
               );
@@ -2331,27 +2067,8 @@ function CombinedTable({
           <tr key={sr.key} className={["border-b border-gray-200",sr.totalBg].join(" ")}>
             <td className={["sticky left-0 z-10 px-3 py-1.5 text-xs font-semibold whitespace-nowrap border-r border-gray-300",sr.totalBg].join(" ")}/>
             <td className={["sticky left-[130px] z-10 px-2 py-1.5 text-center text-[11px] font-semibold border-r border-gray-300",sr.totalBg,sr.textColor].join(" ")}>{sr.label}</td>
-            <td className={["sticky left-[220px] z-10 px-3 py-1.5 text-right border-r border-gray-300 min-w-[110px]",sr.totalBg].join(" ")}>
-              {(()=>{
-                const val=gtRowTotal(sr.key);
-                const installVal=gtRowTotal("installTotal");
-                const targetVal=gtRowTotal("target");
-                if(sr.key==="count"||sr.key==="installTotal")return renderCellVal(sr.key,val,sr.textColor);
-                if(sr.key==="target"){
-                  const pct=pctOf(val,installVal);
-                  return(<div className="flex flex-col items-end gap-0.5">{renderCellVal(sr.key,val,sr.textColor)}{installVal>0&&<Tooltip><TooltipTrigger asChild><span className={["inline-flex items-center text-[10px] px-1.5 py-0.5 rounded font-medium cursor-help",pctTagColor(pct)].join(" ")}>{fmtPct(pct)}</span></TooltipTrigger><TooltipContent side="top" className="max-w-[240px] text-xs"><p className="font-semibold mb-1">เป้าเก็บหนี้ / ยอดผ่อนรวม</p><p className="text-gray-200">{fmtMoney(val)} ÷ {fmtMoney(installVal)}</p></TooltipContent></Tooltip>}</div>);
-                }
-                if(sr.key==="paid"){
-                  const pctI=pctOf(val,installVal);const pctT=pctOf(val,targetVal);
-                  return(<div className="flex flex-col items-end gap-0.5">{renderCellVal(sr.key,val,sr.textColor)}{installVal>0&&<div className="flex items-center gap-1"><Tooltip><TooltipTrigger asChild><span className={["inline-flex items-center text-[10px] px-1.5 py-0.5 rounded font-medium cursor-help",pctTagColor(pctI)].join(" ")}>{fmtPct(pctI)}</span></TooltipTrigger><TooltipContent side="top" className="max-w-[240px] text-xs"><p className="font-semibold mb-1">ยอดเก็บหนี้ / ยอดผ่อนรวม</p><p className="text-gray-200">{fmtMoney(val)} ÷ {fmtMoney(installVal)}</p></TooltipContent></Tooltip>{targetVal>0&&<Tooltip><TooltipTrigger asChild><span className="inline-flex items-center text-[10px] px-1.5 py-0.5 rounded font-medium cursor-help bg-indigo-100 text-indigo-700">{fmtPct(pctT)}</span></TooltipTrigger><TooltipContent side="top" className="max-w-[240px] text-xs"><p className="font-semibold mb-1">ยอดเก็บหนี้ / เป้าเก็บหนี้</p><p className="text-gray-200">{fmtMoney(val)} ÷ {fmtMoney(targetVal)}</p></TooltipContent></Tooltip>}</div>}</div>);
-                }
-                if(sr.key==="due"){
-                  const pct=pctOf(val,targetVal);
-                  return(<div className="flex flex-col items-end gap-0.5">{renderCellVal(sr.key,val,sr.textColor)}{targetVal>0&&<Tooltip><TooltipTrigger asChild><span className={["inline-flex items-center text-[10px] px-1.5 py-0.5 rounded font-medium cursor-help",pctTagColor(pct,true)].join(" ")}>{fmtPct(pct)}</span></TooltipTrigger><TooltipContent side="top" className="max-w-[240px] text-xs"><p className="font-semibold mb-1">หนี้ค้างชำระ / เป้าเก็บหนี้ (ยิ่งน้อยยิ่งดี)</p><p className="text-gray-200">{fmtMoney(val)} ÷ {fmtMoney(targetVal)}</p></TooltipContent></Tooltip>}</div>);
-                }
-                const pct=pctOf(val,installVal);
-                return(<div className="flex flex-col items-end gap-0.5">{renderCellVal(sr.key,val,sr.textColor)}{installVal>0&&<Tooltip><TooltipTrigger asChild><span className="inline-flex items-center text-[10px] px-1.5 py-0.5 rounded font-medium cursor-help bg-blue-100 text-blue-700">{fmtPct(pct)}</span></TooltipTrigger><TooltipContent side="top" className="max-w-[240px] text-xs"><p className="font-semibold mb-1">ยังไม่ถึงกำหนด / ยอดผ่อนรวม</p><p className="text-gray-200">{fmtMoney(val)} ÷ {fmtMoney(installVal)}</p></TooltipContent></Tooltip>}</div>);
-              })()}
+            <td className={["sticky left-[220px] z-10 px-3 py-1.5 text-right border-r border-gray-300",sr.totalBg].join(" ")}>
+              {renderCellVal(sr.key,gtRowTotal(sr.key),sr.textColor)}
             </td>
             {BUCKET_GROUPS.map((g)=>
               g.buckets.map((b,bi)=>{
@@ -2389,24 +2106,9 @@ function CombinedTable({
                         </td>
                       </>
                     ):(
-                      <>
-                        <td className={["px-3 py-1.5 text-right border-r border-gray-300",cellBg,"bg-slate-100"].join(" ")}>
-                          {renderCellVal(sr.key,val,sr.textColor)}
-                        </td>
-                        {/* subtotal col หลัง bucket สุดท้ายของกลุ่ม ปกติ/สงสัยจะเสีย */}
-                        {isLast&&g.hasSubtotal&&(()=>{
-                          const groupBuckets=g.buckets as readonly string[];
-                          const subtotalVal=groupBuckets.reduce((s,gb)=>{
-                            if(hiddenBuckets.has(gb))return s;
-                            return s+gtValue(sr.key,gb);
-                          },0);
-                          return(
-                            <td className={["px-3 py-1.5 text-right font-bold border-r border-gray-300",g.subtotalBg,"bg-opacity-80"].join(" ")}>
-                              {renderCellVal(sr.key, subtotalVal, sr.textColor)}
-                            </td>
-                          );
-                        })()}
-                      </>
+                      <td className={["px-3 py-1.5 text-right border-r border-gray-300",cellBg,"bg-slate-100"].join(" ")}>
+                        {renderCellVal(sr.key,val,sr.textColor)}
+                      </td>
                     )}
                   </React.Fragment>
                 );
