@@ -1284,32 +1284,42 @@ export default function DebtOverview() {
                     const XLSX = await import("xlsx");
                     const wb = XLSX.utils.book_new();
                     const wsData = [
-                      ["เดือน-ปีที่อนุมัติ", "สัญญา", "ยอดผ่อนรวม", "ยอดเก็บหนี้", "% การเก็บ", "ยอดขายเครื่อง", "รายรับรวม", "ต้นทุน", "กำไรขั้นต้น", "ยังไม่ถึงกำหนด"],
+                      ["เดือน-ปีที่อนุมัติ", "สัญญา", "ยอดผ่อนรวม", "ยอดเก็บหนี้", "% เก็บ/ยอดผ่อนรวม", "ยอดขายเครื่อง", "รายรับรวม", "% รายรับรวม/ยอดผ่อนรวม", "ต้นทุน", "กำไรขั้นต้น", "ยังไม่ถึงกำหนด", "% ยังไม่ถึง/ยอดผ่อนรวม"],
                       ...rows.map((r) => {
                         const deviceSale = showDeviceSale ? r.deviceSaleAmount : 0;
                         const revenue = r.collectedTotal + deviceSale;
                         const profit = revenue - r.cost;
-                        const rate = r.installTotal > 0 ? ((r.collectedTotal / r.installTotal) * 100).toFixed(1) + "%" : "0%";
+                        const pctCollect = r.installTotal > 0 ? Math.round(r.collectedTotal / r.installTotal * 10000) / 100 : 0;
+                        const pctRevenue = r.installTotal > 0 ? Math.round(revenue / r.installTotal * 10000) / 100 : 0;
+                        const pctNotYetDue = r.installTotal > 0 ? Math.round(r.notYetDue / r.installTotal * 10000) / 100 : 0;
                         return [
-                          fmtMonthYear(r.monthKey), r.contractCount, r.installTotal, r.collectedTotal, rate,
-                          r.deviceSaleAmount, revenue, r.cost, profit, r.notYetDue,
+                          fmtMonthYear(r.monthKey), r.contractCount, r.installTotal,
+                          r.collectedTotal, pctCollect,
+                          r.deviceSaleAmount, revenue, pctRevenue,
+                          r.cost, profit,
+                          r.notYetDue, pctNotYetDue,
                         ];
                       }),
                       // ผลรวม
-                      [
-                        "รวมทั้งหมด",
-                        rows.reduce((s, r) => s + r.contractCount, 0),
-                        rows.reduce((s, r) => s + r.installTotal, 0),
-                        rows.reduce((s, r) => s + r.collectedTotal, 0),
-                        rows.reduce((s, r) => s + r.installTotal, 0) > 0
-                          ? (rows.reduce((s, r) => s + r.collectedTotal, 0) / rows.reduce((s, r) => s + r.installTotal, 0) * 100).toFixed(1) + "%"
-                          : "0%",
-                        rows.reduce((s, r) => s + r.deviceSaleAmount, 0),
-                        rows.reduce((s, r) => s + r.collectedTotal + (showDeviceSale ? r.deviceSaleAmount : 0), 0),
-                        rows.reduce((s, r) => s + r.cost, 0),
-                        rows.reduce((s, r) => s + r.collectedTotal + (showDeviceSale ? r.deviceSaleAmount : 0) - r.cost, 0),
-                        rows.reduce((s, r) => s + r.notYetDue, 0),
-                      ],
+                      (()=>{
+                        const totalInstall=rows.reduce((s,r)=>s+r.installTotal,0);
+                        const totalCollect=rows.reduce((s,r)=>s+r.collectedTotal,0);
+                        const totalDeviceSale=rows.reduce((s,r)=>s+r.deviceSaleAmount,0);
+                        const totalRevenue=rows.reduce((s,r)=>s+r.collectedTotal+(showDeviceSale?r.deviceSaleAmount:0),0);
+                        const totalCost=rows.reduce((s,r)=>s+r.cost,0);
+                        const totalNotYetDue=rows.reduce((s,r)=>s+r.notYetDue,0);
+                        return[
+                          "รวมทั้งหมด",
+                          rows.reduce((s,r)=>s+r.contractCount,0),
+                          totalInstall, totalCollect,
+                          totalInstall>0?Math.round(totalCollect/totalInstall*10000)/100:0,
+                          totalDeviceSale, totalRevenue,
+                          totalInstall>0?Math.round(totalRevenue/totalInstall*10000)/100:0,
+                          totalCost, totalRevenue-totalCost,
+                          totalNotYetDue,
+                          totalInstall>0?Math.round(totalNotYetDue/totalInstall*10000)/100:0,
+                        ];
+                      })(),
                     ];
                     const ws = XLSX.utils.aoa_to_sheet(wsData);
                     XLSX.utils.book_append_sheet(wb, ws, "ภาพรวมหนี้");

@@ -27,6 +27,30 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { TrendingDown } from "lucide-react";
+
+// ─── Percent helpers ─────────────────────────────────────────────────────────
+function fmtPct(n: number): string { return n.toFixed(1) + "%"; }
+function pctOf(numerator: number, denominator: number): number {
+  if (!denominator || denominator === 0) return 0;
+  return (numerator / denominator) * 100;
+}
+/** สีของ tag ตาม % */
+function pctTagColor(pct: number, inverse = false): string {
+  if (inverse) {
+    // สำหรับ หนี้ค้างชำระ — ยิ่งน้อยยิ่งดี
+    if (pct <= 5)  return "bg-green-100 text-green-700";
+    if (pct <= 15) return "bg-amber-100 text-amber-700";
+    if (pct <= 30) return "bg-orange-100 text-orange-700";
+    return "bg-red-100 text-red-600";
+  }
+  // ยิ่งมากยิ่งดี
+  if (pct >= 100) return "bg-green-100 text-green-700";
+  if (pct >= 80)  return "bg-blue-100 text-blue-700";
+  if (pct >= 60)  return "bg-amber-100 text-amber-700";
+  return "bg-red-100 text-red-600";
+}
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 const DEBT_BUCKETS = [
@@ -748,19 +772,40 @@ export default function MonthlySummary() {
     try{
       const wb=XLSX.utils.book_new();
       const tabLabel=tab==="count"?"สัญญา":tab==="installTotal"?"ยอดผ่อนรวม":tab==="target"?"เป้าเก็บหนี้":tab==="paid"?"ยอดชำระแล้ว":tab==="due"?"หนี้ค้างชำระ":"ยังไม่ถึงกำหนด";
-      const headers=["เดือน-ปีที่อนุมัติ","สัญญา",...DEBT_BUCKETS];
-      const wsData:(string|number)[][]=[headers];
+      // สร้าง headers ตามแต่ละ tab โดยแยกคอลัมน์ % ออกจากตัวเลข
+      const buildHeaders=()=>{
+        const base=["เดือน-ปีที่อนุมัติ","สัญญา"];
+        if(tab==="count"||tab==="installTotal")return[...base,...DEBT_BUCKETS];
+        if(tab==="target")return[...base,...DEBT_BUCKETS,"รวมเป้าเก็บหนี้","% เป้า/ยอดผ่อนรวม"];
+        if(tab==="paid")return[...base,...DEBT_BUCKETS,"รวมยอดเก็บหนี้","% เก็บ/ยอดผ่อนรวม","% เก็บ/เป้าเก็บหนี้"];
+        if(tab==="due")return[...base,...DEBT_BUCKETS,"รวมหนี้ค้างชำระ","% ค้าง/เป้าเก็บหนี้"];
+        return[...base,...DEBT_BUCKETS,"รวมยังไม่ถึงกำหนด","% ยังไม่ถึง/ยอดผ่อนรวม"];
+      };
+      const wsData:(string|number)[][]=[buildHeaders()];
       for(const row of rows){
         const vals:any[]=[fmtMonthYear(row.approveMonth),row.totalCount];
+        let rowMainTotal=0;
+        let rowInstallTotalVal=0;
+        let rowTargetTotalVal=0;
         for(const b of DEBT_BUCKETS){
           const cell=row.buckets[b];
-          if(tab==="count")vals.push(cell?.contractCount??0);
-          else if(tab==="installTotal")vals.push(cell?.installTotal.total??0);
-          else if(tab==="target")vals.push(cell?.target.total??0);
-          else if(tab==="paid")vals.push(cell?.paid.total??0);
-          else if(tab==="due")vals.push(cell?.due.total??0);
-          else vals.push(cell?.notYetDue.total??0);
+          let v=0;
+          if(tab==="count")v=cell?.contractCount??0;
+          else if(tab==="installTotal")v=cell?.installTotal.total??0;
+          else if(tab==="target")v=cell?.target.total??0;
+          else if(tab==="paid")v=cell?.paid.total??0;
+          else if(tab==="due")v=cell?.due.total??0;
+          else v=cell?.notYetDue.total??0;
+          vals.push(v);
+          rowMainTotal+=v;
+          rowInstallTotalVal+=cell?.installTotal.total??0;
+          rowTargetTotalVal+=cell?.target.total??0;
         }
+        // เพิ่มคอลัมน์ % ตาม tab
+        if(tab==="target"){vals.push(rowMainTotal);vals.push(rowInstallTotalVal>0?Math.round(rowMainTotal/rowInstallTotalVal*10000)/100:0);}
+        else if(tab==="paid"){vals.push(rowMainTotal);vals.push(rowInstallTotalVal>0?Math.round(rowMainTotal/rowInstallTotalVal*10000)/100:0);vals.push(rowTargetTotalVal>0?Math.round(rowMainTotal/rowTargetTotalVal*10000)/100:0);}
+        else if(tab==="due"){vals.push(rowMainTotal);vals.push(rowTargetTotalVal>0?Math.round(rowMainTotal/rowTargetTotalVal*10000)/100:0);}
+        else if(tab==="notYetDue"){vals.push(rowMainTotal);vals.push(rowInstallTotalVal>0?Math.round(rowMainTotal/rowInstallTotalVal*10000)/100:0);}
         wsData.push(vals);
       }
       const ws=XLSX.utils.aoa_to_sheet(wsData);
@@ -1464,13 +1509,113 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
                 </div>
               </td>
               {/* รวมคอลัมน์ 2 */}
-              <td className="sticky left-[130px] z-10 px-3 py-2.5 text-right bg-white border-r border-gray-200 min-w-[110px]">
+              <td className="sticky left-[130px] z-10 px-3 py-2.5 text-right bg-white border-r border-gray-200 min-w-[130px]">
                 {tab==="count"?renderCount(isHiddenRow?0:rowContractTotal(row))
                 :tab==="installTotal"?renderMoney(isHiddenRow?0:rowInstallTotal(row),"text-purple-800 font-semibold")
-                :tab==="target"?renderMoney(isHiddenRow?0:rowTargetTotal(row),"text-indigo-800 font-semibold")
-                :tab==="paid"?renderMoney(isHiddenRow?0:rowPaidTotal(row),"text-green-800 font-semibold")
-                :tab==="due"?renderMoney(isHiddenRow?0:rowDueTotal(row),"text-orange-800 font-semibold")
-                :renderMoney(isHiddenRow?0:rowNotYetDueTotal(row),"text-blue-800 font-semibold")}
+                :tab==="target"?(()=>{
+                  const val=isHiddenRow?0:rowTargetTotal(row);
+                  const installVal=isHiddenRow?0:rowInstallTotal(row);
+                  const pct=pctOf(val,installVal);
+                  return(
+                    <div className="flex flex-col items-end gap-0.5">
+                      {renderMoney(val,"text-indigo-800 font-semibold")}
+                      {!isHiddenRow&&installVal>0&&(
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className={["inline-flex items-center text-[10px] px-1.5 py-0.5 rounded font-medium cursor-help",pctTagColor(pct)].join(" ")}>{fmtPct(pct)}</span>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-[240px] text-xs">
+                            <p className="font-semibold mb-1">เป้าเก็บหนี้ / ยอดผ่อนรวม</p>
+                            <p className="text-gray-200">เป้าเก็บหนี้คิดเป็น % จากยอดผ่อนรวม</p>
+                            <p className="mt-1 font-mono">{fmtMoney(val)} ÷ {fmtMoney(installVal)}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      )}
+                    </div>
+                  );
+                })()
+                :tab==="paid"?(()=>{
+                  const val=isHiddenRow?0:rowPaidTotal(row);
+                  const installVal=isHiddenRow?0:rowInstallTotal(row);
+                  const targetVal=isHiddenRow?0:rowTargetTotal(row);
+                  const pctInstall=pctOf(val,installVal);
+                  const pctTarget=pctOf(val,targetVal);
+                  return(
+                    <div className="flex flex-col items-end gap-0.5">
+                      {renderMoney(val,"text-green-800 font-semibold")}
+                      {!isHiddenRow&&installVal>0&&(
+                        <div className="flex items-center gap-1">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className={["inline-flex items-center text-[10px] px-1.5 py-0.5 rounded font-medium cursor-help",pctTagColor(pctInstall)].join(" ")}>{fmtPct(pctInstall)}</span>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-[240px] text-xs">
+                              <p className="font-semibold mb-1">ยอดเก็บหนี้ / ยอดผ่อนรวม</p>
+                              <p className="text-gray-200">ยอดเก็บหนี้คิดเป็น % จากยอดผ่อนรวม</p>
+                              <p className="mt-1 font-mono">{fmtMoney(val)} ÷ {fmtMoney(installVal)}</p>
+                            </TooltipContent>
+                          </Tooltip>
+                          {targetVal>0&&(
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className={["inline-flex items-center text-[10px] px-1.5 py-0.5 rounded font-medium cursor-help bg-indigo-100 text-indigo-700"].join(" ")}>{fmtPct(pctTarget)}</span>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="max-w-[240px] text-xs">
+                                <p className="font-semibold mb-1">ยอดเก็บหนี้ / เป้าเก็บหนี้</p>
+                                <p className="text-gray-200">ยอดเก็บหนี้คิดเป็น % จากเป้าเก็บหนี้</p>
+                                <p className="mt-1 font-mono">{fmtMoney(val)} ÷ {fmtMoney(targetVal)}</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()
+                :tab==="due"?(()=>{
+                  const val=isHiddenRow?0:rowDueTotal(row);
+                  const targetVal=isHiddenRow?0:rowTargetTotal(row);
+                  const pct=pctOf(val,targetVal);
+                  return(
+                    <div className="flex flex-col items-end gap-0.5">
+                      {renderMoney(val,"text-orange-800 font-semibold")}
+                      {!isHiddenRow&&targetVal>0&&(
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className={["inline-flex items-center text-[10px] px-1.5 py-0.5 rounded font-medium cursor-help",pctTagColor(pct,true)].join(" ")}>{fmtPct(pct)}</span>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-[240px] text-xs">
+                            <p className="font-semibold mb-1">หนี้ค้างชำระ / เป้าเก็บหนี้</p>
+                            <p className="text-gray-200">หนี้ค้างชำระคิดเป็น % จากเป้าเก็บหนี้ (ยิ่งน้อยยิ่งดี)</p>
+                            <p className="mt-1 font-mono">{fmtMoney(val)} ÷ {fmtMoney(targetVal)}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      )}
+                    </div>
+                  );
+                })()
+                :(()=>{
+                  const val=isHiddenRow?0:rowNotYetDueTotal(row);
+                  const installVal=isHiddenRow?0:rowInstallTotal(row);
+                  const pct=pctOf(val,installVal);
+                  return(
+                    <div className="flex flex-col items-end gap-0.5">
+                      {renderMoney(val,"text-blue-800 font-semibold")}
+                      {!isHiddenRow&&installVal>0&&(
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className={["inline-flex items-center text-[10px] px-1.5 py-0.5 rounded font-medium cursor-help bg-blue-100 text-blue-700"].join(" ")}>{fmtPct(pct)}</span>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-[240px] text-xs">
+                            <p className="font-semibold mb-1">ยังไม่ถึงกำหนด / ยอดผ่อนรวม</p>
+                            <p className="text-gray-200">ยังไม่ถึงกำหนดคิดเป็น % จากยอดผ่อนรวม</p>
+                            <p className="mt-1 font-mono">{fmtMoney(val)} ÷ {fmtMoney(installVal)}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      )}
+                    </div>
+                  );
+                })()}
               </td>
               {/* Bucket cells */}
               {visibleGroups.map((g,gi)=>(
@@ -1597,13 +1742,25 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
       <tfoot className="sticky bottom-0 z-20 border-t-2 border-slate-400 bg-slate-100 shadow-[0_-2px_8px_rgba(0,0,0,0.12)]">
           <tr>
             <td className="sticky left-0 z-20 px-3 py-2.5 text-slate-800 whitespace-nowrap border-r border-slate-300 bg-slate-200 min-w-[130px]">รวมทั้งหมด</td>
-            <td className="sticky left-[130px] z-20 px-3 py-2.5 text-right border-r border-slate-300 bg-slate-200 min-w-[110px]">
+            <td className="sticky left-[130px] z-20 px-3 py-2.5 text-right border-r border-slate-300 bg-slate-200 min-w-[130px]">
               {tab==="count"?(<span className="inline-flex items-center justify-center bg-slate-400 text-white rounded-full px-2.5 py-0.5 text-xs font-bold">{gtContractTotal.toLocaleString()}</span>)
               :tab==="installTotal"?renderMoney(gtInstallTotal,"text-purple-900")
-              :tab==="target"?renderMoney(gtTargetTotal,"text-indigo-900")
-              :tab==="paid"?renderMoney(gtPaidTotal,"text-green-900")
-              :tab==="due"?renderMoney(gtDueTotal,"text-orange-900")
-              :renderMoney(gtNotYetDueTotal,"text-blue-900")}
+              :tab==="target"?(()=>{
+                const pct=pctOf(gtTargetTotal,gtInstallTotal);
+                return(<div className="flex flex-col items-end gap-0.5">{renderMoney(gtTargetTotal,"text-indigo-900")}{gtInstallTotal>0&&<Tooltip><TooltipTrigger asChild><span className={["inline-flex items-center text-[10px] px-1.5 py-0.5 rounded font-medium cursor-help",pctTagColor(pct)].join(" ")}>{fmtPct(pct)}</span></TooltipTrigger><TooltipContent side="top" className="max-w-[240px] text-xs"><p className="font-semibold mb-1">เป้าเก็บหนี้ / ยอดผ่อนรวม</p><p className="text-gray-200">{fmtMoney(gtTargetTotal)} ÷ {fmtMoney(gtInstallTotal)}</p></TooltipContent></Tooltip>}</div>);
+              })()
+              :tab==="paid"?(()=>{
+                const pctI=pctOf(gtPaidTotal,gtInstallTotal);const pctT=pctOf(gtPaidTotal,gtTargetTotal);
+                return(<div className="flex flex-col items-end gap-0.5">{renderMoney(gtPaidTotal,"text-green-900")}{gtInstallTotal>0&&<div className="flex items-center gap-1"><Tooltip><TooltipTrigger asChild><span className={["inline-flex items-center text-[10px] px-1.5 py-0.5 rounded font-medium cursor-help",pctTagColor(pctI)].join(" ")}>{fmtPct(pctI)}</span></TooltipTrigger><TooltipContent side="top" className="max-w-[240px] text-xs"><p className="font-semibold mb-1">ยอดเก็บหนี้ / ยอดผ่อนรวม</p><p className="text-gray-200">{fmtMoney(gtPaidTotal)} ÷ {fmtMoney(gtInstallTotal)}</p></TooltipContent></Tooltip>{gtTargetTotal>0&&<Tooltip><TooltipTrigger asChild><span className="inline-flex items-center text-[10px] px-1.5 py-0.5 rounded font-medium cursor-help bg-indigo-100 text-indigo-700">{fmtPct(pctT)}</span></TooltipTrigger><TooltipContent side="top" className="max-w-[240px] text-xs"><p className="font-semibold mb-1">ยอดเก็บหนี้ / เป้าเก็บหนี้</p><p className="text-gray-200">{fmtMoney(gtPaidTotal)} ÷ {fmtMoney(gtTargetTotal)}</p></TooltipContent></Tooltip>}</div>}</div>);
+              })()
+              :tab==="due"?(()=>{
+                const pct=pctOf(gtDueTotal,gtTargetTotal);
+                return(<div className="flex flex-col items-end gap-0.5">{renderMoney(gtDueTotal,"text-orange-900")}{gtTargetTotal>0&&<Tooltip><TooltipTrigger asChild><span className={["inline-flex items-center text-[10px] px-1.5 py-0.5 rounded font-medium cursor-help",pctTagColor(pct,true)].join(" ")}>{fmtPct(pct)}</span></TooltipTrigger><TooltipContent side="top" className="max-w-[240px] text-xs"><p className="font-semibold mb-1">หนี้ค้างชำระ / เป้าเก็บหนี้ (ยิ่งน้อยยิ่งดี)</p><p className="text-gray-200">{fmtMoney(gtDueTotal)} ÷ {fmtMoney(gtTargetTotal)}</p></TooltipContent></Tooltip>}</div>);
+              })()
+              :(()=>{
+                const pct=pctOf(gtNotYetDueTotal,gtInstallTotal);
+                return(<div className="flex flex-col items-end gap-0.5">{renderMoney(gtNotYetDueTotal,"text-blue-900")}{gtInstallTotal>0&&<Tooltip><TooltipTrigger asChild><span className="inline-flex items-center text-[10px] px-1.5 py-0.5 rounded font-medium cursor-help bg-blue-100 text-blue-700">{fmtPct(pct)}</span></TooltipTrigger><TooltipContent side="top" className="max-w-[240px] text-xs"><p className="font-semibold mb-1">ยังไม่ถึงกำหนด / ยอดผ่อนรวม</p><p className="text-gray-200">{fmtMoney(gtNotYetDueTotal)} ÷ {fmtMoney(gtInstallTotal)}</p></TooltipContent></Tooltip>}</div>);
+              })()}
             </td>
             {visibleGroups.map((g,gi)=>(
               <React.Fragment key={g.key}>
@@ -2051,8 +2208,28 @@ function CombinedTable({
                     {sr.label}
                   </td>
                   {/* รวม */}
-                  <td className={["sticky left-[220px] z-10 px-3 py-1.5 text-right border-r border-gray-200 min-w-[90px]",sr.totalBg].join(" ")}>
-                    {renderCellVal(sr.key, isHiddenRow?0:rowTotal(sr.key,row), sr.textColor)}
+                  <td className={["sticky left-[220px] z-10 px-3 py-1.5 text-right border-r border-gray-200 min-w-[110px]",sr.totalBg].join(" ")}>
+                    {(()=>{
+                      const val=isHiddenRow?0:rowTotal(sr.key,row);
+                      const installVal=isHiddenRow?0:rowTotal("installTotal",row);
+                      const targetVal=isHiddenRow?0:rowTotal("target",row);
+                      if(sr.key==="count"||sr.key==="installTotal")return renderCellVal(sr.key,val,sr.textColor);
+                      if(sr.key==="target"){
+                        const pct=pctOf(val,installVal);
+                        return(<div className="flex flex-col items-end gap-0.5">{renderCellVal(sr.key,val,sr.textColor)}{!isHiddenRow&&installVal>0&&<Tooltip><TooltipTrigger asChild><span className={["inline-flex items-center text-[10px] px-1.5 py-0.5 rounded font-medium cursor-help",pctTagColor(pct)].join(" ")}>{fmtPct(pct)}</span></TooltipTrigger><TooltipContent side="top" className="max-w-[240px] text-xs"><p className="font-semibold mb-1">เป้าเก็บหนี้ / ยอดผ่อนรวม</p><p className="text-gray-200">{fmtMoney(val)} ÷ {fmtMoney(installVal)}</p></TooltipContent></Tooltip>}</div>);
+                      }
+                      if(sr.key==="paid"){
+                        const pctI=pctOf(val,installVal);const pctT=pctOf(val,targetVal);
+                        return(<div className="flex flex-col items-end gap-0.5">{renderCellVal(sr.key,val,sr.textColor)}{!isHiddenRow&&installVal>0&&<div className="flex items-center gap-1"><Tooltip><TooltipTrigger asChild><span className={["inline-flex items-center text-[10px] px-1.5 py-0.5 rounded font-medium cursor-help",pctTagColor(pctI)].join(" ")}>{fmtPct(pctI)}</span></TooltipTrigger><TooltipContent side="top" className="max-w-[240px] text-xs"><p className="font-semibold mb-1">ยอดเก็บหนี้ / ยอดผ่อนรวม</p><p className="text-gray-200">{fmtMoney(val)} ÷ {fmtMoney(installVal)}</p></TooltipContent></Tooltip>{targetVal>0&&<Tooltip><TooltipTrigger asChild><span className="inline-flex items-center text-[10px] px-1.5 py-0.5 rounded font-medium cursor-help bg-indigo-100 text-indigo-700">{fmtPct(pctT)}</span></TooltipTrigger><TooltipContent side="top" className="max-w-[240px] text-xs"><p className="font-semibold mb-1">ยอดเก็บหนี้ / เป้าเก็บหนี้</p><p className="text-gray-200">{fmtMoney(val)} ÷ {fmtMoney(targetVal)}</p></TooltipContent></Tooltip>}</div>}</div>);
+                      }
+                      if(sr.key==="due"){
+                        const pct=pctOf(val,targetVal);
+                        return(<div className="flex flex-col items-end gap-0.5">{renderCellVal(sr.key,val,sr.textColor)}{!isHiddenRow&&targetVal>0&&<Tooltip><TooltipTrigger asChild><span className={["inline-flex items-center text-[10px] px-1.5 py-0.5 rounded font-medium cursor-help",pctTagColor(pct,true)].join(" ")}>{fmtPct(pct)}</span></TooltipTrigger><TooltipContent side="top" className="max-w-[240px] text-xs"><p className="font-semibold mb-1">หนี้ค้างชำระ / เป้าเก็บหนี้ (ยิ่งน้อยยิ่งดี)</p><p className="text-gray-200">{fmtMoney(val)} ÷ {fmtMoney(targetVal)}</p></TooltipContent></Tooltip>}</div>);
+                      }
+                      // notYetDue
+                      const pct=pctOf(val,installVal);
+                      return(<div className="flex flex-col items-end gap-0.5">{renderCellVal(sr.key,val,sr.textColor)}{!isHiddenRow&&installVal>0&&<Tooltip><TooltipTrigger asChild><span className="inline-flex items-center text-[10px] px-1.5 py-0.5 rounded font-medium cursor-help bg-blue-100 text-blue-700">{fmtPct(pct)}</span></TooltipTrigger><TooltipContent side="top" className="max-w-[240px] text-xs"><p className="font-semibold mb-1">ยังไม่ถึงกำหนด / ยอดผ่อนรวม</p><p className="text-gray-200">{fmtMoney(val)} ÷ {fmtMoney(installVal)}</p></TooltipContent></Tooltip>}</div>);
+                    })()}
                   </td>
                   {/* bucket cells */}
                   {BUCKET_GROUPS.map((g)=>
@@ -2154,8 +2331,27 @@ function CombinedTable({
           <tr key={sr.key} className={["border-b border-gray-200",sr.totalBg].join(" ")}>
             <td className={["sticky left-0 z-10 px-3 py-1.5 text-xs font-semibold whitespace-nowrap border-r border-gray-300",sr.totalBg].join(" ")}/>
             <td className={["sticky left-[130px] z-10 px-2 py-1.5 text-center text-[11px] font-semibold border-r border-gray-300",sr.totalBg,sr.textColor].join(" ")}>{sr.label}</td>
-            <td className={["sticky left-[220px] z-10 px-3 py-1.5 text-right border-r border-gray-300",sr.totalBg].join(" ")}>
-              {renderCellVal(sr.key,gtRowTotal(sr.key),sr.textColor)}
+            <td className={["sticky left-[220px] z-10 px-3 py-1.5 text-right border-r border-gray-300 min-w-[110px]",sr.totalBg].join(" ")}>
+              {(()=>{
+                const val=gtRowTotal(sr.key);
+                const installVal=gtRowTotal("installTotal");
+                const targetVal=gtRowTotal("target");
+                if(sr.key==="count"||sr.key==="installTotal")return renderCellVal(sr.key,val,sr.textColor);
+                if(sr.key==="target"){
+                  const pct=pctOf(val,installVal);
+                  return(<div className="flex flex-col items-end gap-0.5">{renderCellVal(sr.key,val,sr.textColor)}{installVal>0&&<Tooltip><TooltipTrigger asChild><span className={["inline-flex items-center text-[10px] px-1.5 py-0.5 rounded font-medium cursor-help",pctTagColor(pct)].join(" ")}>{fmtPct(pct)}</span></TooltipTrigger><TooltipContent side="top" className="max-w-[240px] text-xs"><p className="font-semibold mb-1">เป้าเก็บหนี้ / ยอดผ่อนรวม</p><p className="text-gray-200">{fmtMoney(val)} ÷ {fmtMoney(installVal)}</p></TooltipContent></Tooltip>}</div>);
+                }
+                if(sr.key==="paid"){
+                  const pctI=pctOf(val,installVal);const pctT=pctOf(val,targetVal);
+                  return(<div className="flex flex-col items-end gap-0.5">{renderCellVal(sr.key,val,sr.textColor)}{installVal>0&&<div className="flex items-center gap-1"><Tooltip><TooltipTrigger asChild><span className={["inline-flex items-center text-[10px] px-1.5 py-0.5 rounded font-medium cursor-help",pctTagColor(pctI)].join(" ")}>{fmtPct(pctI)}</span></TooltipTrigger><TooltipContent side="top" className="max-w-[240px] text-xs"><p className="font-semibold mb-1">ยอดเก็บหนี้ / ยอดผ่อนรวม</p><p className="text-gray-200">{fmtMoney(val)} ÷ {fmtMoney(installVal)}</p></TooltipContent></Tooltip>{targetVal>0&&<Tooltip><TooltipTrigger asChild><span className="inline-flex items-center text-[10px] px-1.5 py-0.5 rounded font-medium cursor-help bg-indigo-100 text-indigo-700">{fmtPct(pctT)}</span></TooltipTrigger><TooltipContent side="top" className="max-w-[240px] text-xs"><p className="font-semibold mb-1">ยอดเก็บหนี้ / เป้าเก็บหนี้</p><p className="text-gray-200">{fmtMoney(val)} ÷ {fmtMoney(targetVal)}</p></TooltipContent></Tooltip>}</div>}</div>);
+                }
+                if(sr.key==="due"){
+                  const pct=pctOf(val,targetVal);
+                  return(<div className="flex flex-col items-end gap-0.5">{renderCellVal(sr.key,val,sr.textColor)}{targetVal>0&&<Tooltip><TooltipTrigger asChild><span className={["inline-flex items-center text-[10px] px-1.5 py-0.5 rounded font-medium cursor-help",pctTagColor(pct,true)].join(" ")}>{fmtPct(pct)}</span></TooltipTrigger><TooltipContent side="top" className="max-w-[240px] text-xs"><p className="font-semibold mb-1">หนี้ค้างชำระ / เป้าเก็บหนี้ (ยิ่งน้อยยิ่งดี)</p><p className="text-gray-200">{fmtMoney(val)} ÷ {fmtMoney(targetVal)}</p></TooltipContent></Tooltip>}</div>);
+                }
+                const pct=pctOf(val,installVal);
+                return(<div className="flex flex-col items-end gap-0.5">{renderCellVal(sr.key,val,sr.textColor)}{installVal>0&&<Tooltip><TooltipTrigger asChild><span className="inline-flex items-center text-[10px] px-1.5 py-0.5 rounded font-medium cursor-help bg-blue-100 text-blue-700">{fmtPct(pct)}</span></TooltipTrigger><TooltipContent side="top" className="max-w-[240px] text-xs"><p className="font-semibold mb-1">ยังไม่ถึงกำหนด / ยอดผ่อนรวม</p><p className="text-gray-200">{fmtMoney(val)} ÷ {fmtMoney(installVal)}</p></TooltipContent></Tooltip>}</div>);
+              })()}
             </td>
             {BUCKET_GROUPS.map((g)=>
               g.buckets.map((b,bi)=>{
