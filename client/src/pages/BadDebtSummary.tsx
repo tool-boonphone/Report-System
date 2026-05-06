@@ -1,9 +1,9 @@
 /**
- * BadDebtSummary — Phase 99 (no overflow-x-auto, fluid table layout)
- * หน้าสรุปกำไร/ขาดทุนจากหนี้เสีย แบ่งเป็น 3 แถบ:
- *   1. รายการขายเครื่อง
- *   2. สรุปรายเดือน
- *   3. สรุปรายปี
+ * BadDebtSummary — Phase 142
+ * หน้าสรุปกำไร/ขาดทุนจากหนี้เสีย แบ่งเป็น 3 แถบหลัก:
+ *   1. สรุปรายปี  → sub-tab: ตามปีที่ขาย | ตามปีที่อนุมัติ (มี % หนี้เสีย)
+ *   2. สรุปรายเดือน → sub-tab: ตามเดือนที่ขาย | ตามเดือนที่อนุมัติ (มี % หนี้เสีย)
+ *   3. รายการขายเครื่อง
  */
 import React, { useMemo, useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
@@ -22,6 +22,7 @@ import {
   List,
 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
+import { SyncStatusBar } from "@/components/SyncStatusBar";
 import { useNavActions } from "@/contexts/NavActionsContext";
 import { useAppAuth } from "@/hooks/useAppAuth";
 import { useSection } from "@/contexts/SectionContext";
@@ -60,14 +61,18 @@ type SortKey =
   | "installmentPaid" | "deviceSaleAmount" | "totalRevenue" | "cost"
   | "profitLoss" | "saleDate";
 type MonthlySortKey = "ym" | "count" | "financeAmount" | "commissionNet" | "cost" | "installmentPaid" | "deviceSaleAmount" | "totalRevenue" | "profitLoss";
+type MonthlySortKeyWithRate = MonthlySortKey | "badDebtRate";
 type YearlySortKey = "year" | "count" | "financeAmount" | "commissionNet" | "cost" | "installmentPaid" | "deviceSaleAmount" | "totalRevenue" | "profitLoss";
+type YearlySortKeyWithRate = YearlySortKey | "badDebtRate";
 type SortDir = "asc" | "desc";
 type ActiveTab = "list" | "monthly" | "yearly";
+type MonthlySubTab = "bySale" | "byApprove";
+type YearlySubTab = "bySale" | "byApprove";
 
 /* ─── BadDebtRateBadge ──────────────────────────────────────────────────────── */
 /**
  * แสดง % หนี้เสีย พร้อม Tooltip อธิบายที่มาของตัวเลข
- * สูตร: จำนวนสัญญาหนี้เสียที่ขายในช่วงนี้ ÷ จำนวนสัญญาทั้งหมดที่อนุมัติในเดือนเดียวกัน × 100
+ * สูตร: จำนวนสัญญาหนี้เสียที่อนุมัติในเดือนนั้น ÷ จำนวนสัญญาทั้งหมดที่อนุมัติในเดือนเดียวกัน × 100
  */
 function BadDebtRateBadge({ value, totalBadDebt, totalAll }: { value: number | null; totalBadDebt?: number; totalAll?: number }) {
   if (value == null) return <span className="text-gray-300">—</span>;
@@ -83,10 +88,10 @@ function BadDebtRateBadge({ value, totalBadDebt, totalAll }: { value: number | n
             {value.toFixed(2)}%
           </span>
         </TooltipTrigger>
-        <TooltipContent side="left" className="max-w-[260px] text-xs">
+        <TooltipContent side="left" className="max-w-[280px] text-xs">
           <p className="font-semibold mb-1">ที่มา: % หนี้เสีย</p>
           <p className="text-gray-200">
-            จำนวนสัญญาหนี้เสียที่ขายในช่วงนี้ ÷ จำนวนสัญญาทั้งหมดที่อนุมัติในเดือนเดียวกัน × 100
+            จำนวนสัญญาหนี้เสียที่อนุมัติในช่วงนี้ ÷ จำนวนสัญญาทั้งหมดที่อนุมัติในช่วงเดียวกัน × 100
           </p>
           {totalBadDebt != null && totalAll != null && (
             <p className="mt-1 text-gray-300">
@@ -145,12 +150,25 @@ export default function BadDebtSummary() {
   const [saleMonth, setSaleMonth] = useState("");
   const [filterYear, setFilterYear] = useState("");
   const [activeTab, setActiveTab] = useState<ActiveTab>("yearly");
+  // sub-tabs
+  const [monthlySubTab, setMonthlySubTab] = useState<MonthlySubTab>("bySale");
+  const [yearlySubTab, setYearlySubTab] = useState<YearlySubTab>("bySale");
+
+  // sort states for list tab
   const [sortKey, setSortKey] = useState<SortKey>("saleDate");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
+  // sort states for monthly bySale
   const [monthlySortKey, setMonthlySortKey] = useState<MonthlySortKey>("ym");
   const [monthlySortDir, setMonthlySortDir] = useState<SortDir>("desc");
+  // sort states for monthly byApprove
+  const [monthlyApproveSortKey, setMonthlyApproveSortKey] = useState<MonthlySortKeyWithRate>("ym");
+  const [monthlyApproveSortDir, setMonthlyApproveSortDir] = useState<SortDir>("desc");
+  // sort states for yearly bySale
   const [yearlySortKey, setYearlySortKey] = useState<YearlySortKey>("year");
   const [yearlySortDir, setYearlySortDir] = useState<SortDir>("desc");
+  // sort states for yearly byApprove
+  const [yearlyApproveSortKey, setYearlyApproveSortKey] = useState<YearlySortKeyWithRate>("year");
+  const [yearlyApproveSortDir, setYearlyApproveSortDir] = useState<SortDir>("desc");
 
   const { data, isLoading } = trpc.badDebt.summary.useQuery(
     section ? { section, approveMonth: approveMonth || undefined, saleMonth: saleMonth || undefined } : (undefined as any),
@@ -175,10 +193,17 @@ export default function BadDebtSummary() {
     return Array.from(set).sort().reverse();
   }, [rows]);
 
-  /* ── year options ── */
+  /* ── year options (sale) ── */
   const yearOptions = useMemo(() => {
     const set = new Set<string>();
     rows.forEach((r) => { if (r.saleDate) set.add(r.saleDate.slice(0, 4)); });
+    return Array.from(set).sort().reverse();
+  }, [rows]);
+
+  /* ── year options (approve) ── */
+  const approveYearOptions = useMemo(() => {
+    const set = new Set<string>();
+    rows.forEach((r) => { if (r.approveDate) set.add(r.approveDate.slice(0, 4)); });
     return Array.from(set).sort().reverse();
   }, [rows]);
 
@@ -195,19 +220,17 @@ export default function BadDebtSummary() {
     return r;
   }, [rows, sortKey, sortDir]);
 
-  /* ── monthly summary ── */
-  const monthlyRows = useMemo(() => {
+  /* ── monthly bySale summary (ไม่มี % หนี้เสีย) ── */
+  const monthlyBySaleRows = useMemo(() => {
     const src = filterYear ? rows.filter((r) => (r.saleDate ?? "").startsWith(filterYear)) : rows;
-    // group by saleDate month, but track approveDate months for badDebtRate
     const map = new Map<string, {
       ym: string; count: number;
       financeAmount: number; commissionNet: number; cost: number;
       installmentPaid: number; deviceSaleAmount: number; totalRevenue: number; profitLoss: number;
-      approveMonths: Set<string>; badDebtCountByApproveMonth: Map<string, number>;
     }>();
     src.forEach((r) => {
       const ym = (r.saleDate ?? "").slice(0, 7) || "ไม่ระบุ";
-      const cur = map.get(ym) ?? { ym, count: 0, financeAmount: 0, commissionNet: 0, cost: 0, installmentPaid: 0, deviceSaleAmount: 0, totalRevenue: 0, profitLoss: 0, approveMonths: new Set(), badDebtCountByApproveMonth: new Map() };
+      const cur = map.get(ym) ?? { ym, count: 0, financeAmount: 0, commissionNet: 0, cost: 0, installmentPaid: 0, deviceSaleAmount: 0, totalRevenue: 0, profitLoss: 0 };
       cur.count++;
       cur.financeAmount += r.financeAmount;
       cur.commissionNet += r.commissionNet;
@@ -216,24 +239,9 @@ export default function BadDebtSummary() {
       cur.deviceSaleAmount += r.deviceSaleAmount;
       cur.totalRevenue += r.totalRevenue;
       cur.profitLoss += r.profitLoss;
-      // track approve month for badDebtRate
-      const aym = (r.approveDate ?? "").slice(0, 7);
-      if (aym) {
-        cur.approveMonths.add(aym);
-        cur.badDebtCountByApproveMonth.set(aym, (cur.badDebtCountByApproveMonth.get(aym) ?? 0) + 1);
-      }
       map.set(ym, cur);
     });
-    const raw = Array.from(map.values()).map((r) => {
-      // badDebtRate = SUM(badDebt in approveMonth) / SUM(totalContracts in approveMonth)
-      let totalBadDebt = 0; let totalAll = 0;
-      r.badDebtCountByApproveMonth.forEach((cnt, aym) => {
-        totalBadDebt += cnt;
-        totalAll += totalContractsByApproveMonth[aym] ?? 0;
-      });
-      const badDebtRate = totalAll > 0 ? (totalBadDebt / totalAll) * 100 : null;
-      return { ym: r.ym, count: r.count, financeAmount: r.financeAmount, commissionNet: r.commissionNet, cost: r.cost, installmentPaid: r.installmentPaid, deviceSaleAmount: r.deviceSaleAmount, totalRevenue: r.totalRevenue, profitLoss: r.profitLoss, badDebtRate, totalBadDebt, totalAll };
-    });
+    const raw = Array.from(map.values());
     raw.sort((a, b) => {
       const av: any = a[monthlySortKey as keyof typeof a] ?? "";
       const bv: any = b[monthlySortKey as keyof typeof b] ?? "";
@@ -241,11 +249,78 @@ export default function BadDebtSummary() {
       return monthlySortDir === "asc" ? String(av).localeCompare(String(bv), "th") : String(bv).localeCompare(String(av), "th");
     });
     return raw;
-  }, [rows, filterYear, monthlySortKey, monthlySortDir, totalContractsByApproveMonth]);
+  }, [rows, filterYear, monthlySortKey, monthlySortDir]);
 
-  /* ── yearly summary ── */
-  const yearlyRows = useMemo(() => {
+  /* ── monthly byApprove summary (มี % หนี้เสีย) ── */
+  const monthlyByApproveRows = useMemo(() => {
+    const src = filterYear ? rows.filter((r) => (r.approveDate ?? "").startsWith(filterYear)) : rows;
+    const map = new Map<string, {
+      ym: string; count: number;
+      financeAmount: number; commissionNet: number; cost: number;
+      installmentPaid: number; deviceSaleAmount: number; totalRevenue: number; profitLoss: number;
+    }>();
+    src.forEach((r) => {
+      const ym = (r.approveDate ?? "").slice(0, 7) || "ไม่ระบุ";
+      const cur = map.get(ym) ?? { ym, count: 0, financeAmount: 0, commissionNet: 0, cost: 0, installmentPaid: 0, deviceSaleAmount: 0, totalRevenue: 0, profitLoss: 0 };
+      cur.count++;
+      cur.financeAmount += r.financeAmount;
+      cur.commissionNet += r.commissionNet;
+      cur.cost += r.cost;
+      cur.installmentPaid += r.installmentPaid;
+      cur.deviceSaleAmount += r.deviceSaleAmount;
+      cur.totalRevenue += r.totalRevenue;
+      cur.profitLoss += r.profitLoss;
+      map.set(ym, cur);
+    });
+    const raw = Array.from(map.values()).map((r) => {
+      const totalBadDebt = r.count;
+      const totalAll = totalContractsByApproveMonth[r.ym] ?? 0;
+      const badDebtRate = totalAll > 0 ? (totalBadDebt / totalAll) * 100 : null;
+      return { ...r, badDebtRate, totalBadDebt, totalAll };
+    });
+    raw.sort((a, b) => {
+      const av: any = a[monthlyApproveSortKey as keyof typeof a] ?? "";
+      const bv: any = b[monthlyApproveSortKey as keyof typeof b] ?? "";
+      if (typeof av === "number" && typeof bv === "number") return monthlyApproveSortDir === "asc" ? av - bv : bv - av;
+      return monthlyApproveSortDir === "asc" ? String(av).localeCompare(String(bv), "th") : String(bv).localeCompare(String(av), "th");
+    });
+    return raw;
+  }, [rows, filterYear, monthlyApproveSortKey, monthlyApproveSortDir, totalContractsByApproveMonth]);
+
+  /* ── yearly bySale summary (ไม่มี % หนี้เสีย) ── */
+  const yearlyBySaleRows = useMemo(() => {
     const src = filterYear ? rows.filter((r) => (r.saleDate ?? "").startsWith(filterYear)) : rows;
+    const map = new Map<string, {
+      year: string; count: number;
+      financeAmount: number; commissionNet: number; cost: number;
+      installmentPaid: number; deviceSaleAmount: number; totalRevenue: number; profitLoss: number;
+    }>();
+    src.forEach((r) => {
+      const year = (r.saleDate ?? "").slice(0, 4) || "ไม่ระบุ";
+      const cur = map.get(year) ?? { year, count: 0, financeAmount: 0, commissionNet: 0, cost: 0, installmentPaid: 0, deviceSaleAmount: 0, totalRevenue: 0, profitLoss: 0 };
+      cur.count++;
+      cur.financeAmount += r.financeAmount;
+      cur.commissionNet += r.commissionNet;
+      cur.cost += r.cost;
+      cur.installmentPaid += r.installmentPaid;
+      cur.deviceSaleAmount += r.deviceSaleAmount;
+      cur.totalRevenue += r.totalRevenue;
+      cur.profitLoss += r.profitLoss;
+      map.set(year, cur);
+    });
+    const raw = Array.from(map.values());
+    raw.sort((a, b) => {
+      const av: any = a[yearlySortKey as keyof typeof a] ?? "";
+      const bv: any = b[yearlySortKey as keyof typeof b] ?? "";
+      if (typeof av === "number" && typeof bv === "number") return yearlySortDir === "asc" ? av - bv : bv - av;
+      return yearlySortDir === "asc" ? String(av).localeCompare(String(bv), "th") : String(bv).localeCompare(String(av), "th");
+    });
+    return raw;
+  }, [rows, filterYear, yearlySortKey, yearlySortDir]);
+
+  /* ── yearly byApprove summary (มี % หนี้เสีย) ── */
+  const yearlyByApproveRows = useMemo(() => {
+    const src = filterYear ? rows.filter((r) => (r.approveDate ?? "").startsWith(filterYear)) : rows;
     const map = new Map<string, {
       year: string; count: number;
       financeAmount: number; commissionNet: number; cost: number;
@@ -253,7 +328,7 @@ export default function BadDebtSummary() {
       badDebtCountByApproveMonth: Map<string, number>;
     }>();
     src.forEach((r) => {
-      const year = (r.saleDate ?? "").slice(0, 4) || "ไม่ระบุ";
+      const year = (r.approveDate ?? "").slice(0, 4) || "ไม่ระบุ";
       const cur = map.get(year) ?? { year, count: 0, financeAmount: 0, commissionNet: 0, cost: 0, installmentPaid: 0, deviceSaleAmount: 0, totalRevenue: 0, profitLoss: 0, badDebtCountByApproveMonth: new Map() };
       cur.count++;
       cur.financeAmount += r.financeAmount;
@@ -277,39 +352,29 @@ export default function BadDebtSummary() {
       return { year: r.year, count: r.count, financeAmount: r.financeAmount, commissionNet: r.commissionNet, cost: r.cost, installmentPaid: r.installmentPaid, deviceSaleAmount: r.deviceSaleAmount, totalRevenue: r.totalRevenue, profitLoss: r.profitLoss, badDebtRate, totalBadDebt, totalAll };
     });
     raw.sort((a, b) => {
-      const av: any = a[yearlySortKey as keyof typeof a] ?? "";
-      const bv: any = b[yearlySortKey as keyof typeof b] ?? "";
-      if (typeof av === "number" && typeof bv === "number") return yearlySortDir === "asc" ? av - bv : bv - av;
-      return yearlySortDir === "asc" ? String(av).localeCompare(String(bv), "th") : String(bv).localeCompare(String(av), "th");
+      const av: any = a[yearlyApproveSortKey as keyof typeof a] ?? "";
+      const bv: any = b[yearlyApproveSortKey as keyof typeof b] ?? "";
+      if (typeof av === "number" && typeof bv === "number") return yearlyApproveSortDir === "asc" ? av - bv : bv - av;
+      return yearlyApproveSortDir === "asc" ? String(av).localeCompare(String(bv), "th") : String(bv).localeCompare(String(av), "th");
     });
     return raw;
-  }, [rows, filterYear, yearlySortKey, yearlySortDir, totalContractsByApproveMonth]);
+  }, [rows, filterYear, yearlyApproveSortKey, yearlyApproveSortDir, totalContractsByApproveMonth]);
 
-  /* ── sort toggle (list tab) ── */
+  /* ── sort toggles ── */
   const toggleSort = useCallback((key: SortKey) => {
-    setSortKey((prev) => {
-      if (prev === key) { setSortDir((d) => (d === "asc" ? "desc" : "asc")); return key; }
-      setSortDir("desc");
-      return key;
-    });
+    setSortKey((prev) => { if (prev === key) { setSortDir((d) => (d === "asc" ? "desc" : "asc")); return key; } setSortDir("desc"); return key; });
   }, []);
-
-  /* ── sort toggle (monthly tab) ── */
   const toggleMonthlySort = useCallback((key: MonthlySortKey) => {
-    setMonthlySortKey((prev) => {
-      if (prev === key) { setMonthlySortDir((d) => (d === "asc" ? "desc" : "asc")); return key; }
-      setMonthlySortDir("desc");
-      return key;
-    });
+    setMonthlySortKey((prev) => { if (prev === key) { setMonthlySortDir((d) => (d === "asc" ? "desc" : "asc")); return key; } setMonthlySortDir("desc"); return key; });
   }, []);
-
-  /* ── sort toggle (yearly tab) ── */
+  const toggleMonthlyApproveSort = useCallback((key: MonthlySortKeyWithRate) => {
+    setMonthlyApproveSortKey((prev) => { if (prev === key) { setMonthlyApproveSortDir((d) => (d === "asc" ? "desc" : "asc")); return key; } setMonthlyApproveSortDir("desc"); return key; });
+  }, []);
   const toggleYearlySort = useCallback((key: YearlySortKey) => {
-    setYearlySortKey((prev) => {
-      if (prev === key) { setYearlySortDir((d) => (d === "asc" ? "desc" : "asc")); return key; }
-      setYearlySortDir("desc");
-      return key;
-    });
+    setYearlySortKey((prev) => { if (prev === key) { setYearlySortDir((d) => (d === "asc" ? "desc" : "asc")); return key; } setYearlySortDir("desc"); return key; });
+  }, []);
+  const toggleYearlyApproveSort = useCallback((key: YearlySortKeyWithRate) => {
+    setYearlyApproveSortKey((prev) => { if (prev === key) { setYearlyApproveSortDir((d) => (d === "asc" ? "desc" : "asc")); return key; } setYearlyApproveSortDir("desc"); return key; });
   }, []);
 
   /* ── export ── */
@@ -341,13 +406,13 @@ export default function BadDebtSummary() {
     }
   }, [section, approveMonth, saleMonth]);
 
-  /* ── nav actions ── */
+  /* ── nav actions: SyncStatusBar ── */
   useEffect(() => {
-    setActions([]);
-    return () => setActions([]);
+    setActions(<SyncStatusBar />);
+    return () => setActions(null);
   }, [setActions]);
 
-  /* ── SortIcon helper ── */
+  /* ── SortIcon helpers ── */
   const SortIcon = ({ col }: { col: SortKey }) => {
     if (col !== sortKey) return <ChevronsUpDown className="w-3 h-3 opacity-40" />;
     return sortDir === "asc" ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />;
@@ -356,45 +421,43 @@ export default function BadDebtSummary() {
     if (col !== monthlySortKey) return <ChevronsUpDown className="w-3 h-3 opacity-40" />;
     return monthlySortDir === "asc" ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />;
   };
+  const MonthlyApproveSortIcon = ({ col }: { col: MonthlySortKeyWithRate }) => {
+    if (col !== monthlyApproveSortKey) return <ChevronsUpDown className="w-3 h-3 opacity-40" />;
+    return monthlyApproveSortDir === "asc" ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />;
+  };
   const YearlySortIcon = ({ col }: { col: YearlySortKey }) => {
     if (col !== yearlySortKey) return <ChevronsUpDown className="w-3 h-3 opacity-40" />;
     return yearlySortDir === "asc" ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />;
   };
+  const YearlyApproveSortIcon = ({ col }: { col: YearlySortKeyWithRate }) => {
+    if (col !== yearlyApproveSortKey) return <ChevronsUpDown className="w-3 h-3 opacity-40" />;
+    return yearlyApproveSortDir === "asc" ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />;
+  };
 
   /* ── Th helpers ── */
   const Th = ({ label, col, className = "" }: { label: string; col?: SortKey; className?: string }) => (
-    <th
-      className={`px-2 py-2 text-center text-xs font-semibold whitespace-nowrap select-none ${col ? "cursor-pointer hover:bg-white/10" : ""} ${className}`}
-      onClick={col ? () => toggleSort(col) : undefined}
-    >
-      <span className="inline-flex items-center gap-1 justify-center">
-        {label}
-        {col && <SortIcon col={col} />}
-      </span>
+    <th className={`px-2 py-2 text-center text-xs font-semibold whitespace-nowrap select-none ${col ? "cursor-pointer hover:bg-white/10" : ""} ${className}`} onClick={col ? () => toggleSort(col) : undefined}>
+      <span className="inline-flex items-center gap-1 justify-center">{label}{col && <SortIcon col={col} />}</span>
     </th>
   );
   const ThM = ({ label, col, className = "", rowSpan }: { label: string; col?: MonthlySortKey; className?: string; rowSpan?: number }) => (
-    <th
-      rowSpan={rowSpan}
-      className={`px-2 py-2 text-center text-xs font-semibold whitespace-nowrap select-none ${col ? "cursor-pointer hover:bg-white/10" : ""} ${className}`}
-      onClick={col ? () => toggleMonthlySort(col) : undefined}
-    >
-      <span className="inline-flex items-center gap-1 justify-center">
-        {label}
-        {col && <MonthlySortIcon col={col} />}
-      </span>
+    <th rowSpan={rowSpan} className={`px-2 py-2 text-center text-xs font-semibold whitespace-nowrap select-none ${col ? "cursor-pointer hover:bg-white/10" : ""} ${className}`} onClick={col ? () => toggleMonthlySort(col) : undefined}>
+      <span className="inline-flex items-center gap-1 justify-center">{label}{col && <MonthlySortIcon col={col} />}</span>
+    </th>
+  );
+  const ThMA = ({ label, col, className = "", rowSpan }: { label: string; col?: MonthlySortKeyWithRate; className?: string; rowSpan?: number }) => (
+    <th rowSpan={rowSpan} className={`px-2 py-2 text-center text-xs font-semibold whitespace-nowrap select-none ${col ? "cursor-pointer hover:bg-white/10" : ""} ${className}`} onClick={col ? () => toggleMonthlyApproveSort(col) : undefined}>
+      <span className="inline-flex items-center gap-1 justify-center">{label}{col && <MonthlyApproveSortIcon col={col} />}</span>
     </th>
   );
   const ThY = ({ label, col, className = "", rowSpan }: { label: string; col?: YearlySortKey; className?: string; rowSpan?: number }) => (
-    <th
-      rowSpan={rowSpan}
-      className={`px-2 py-2 text-center text-xs font-semibold whitespace-nowrap select-none ${col ? "cursor-pointer hover:bg-white/10" : ""} ${className}`}
-      onClick={col ? () => toggleYearlySort(col) : undefined}
-    >
-      <span className="inline-flex items-center gap-1 justify-center">
-        {label}
-        {col && <YearlySortIcon col={col} />}
-      </span>
+    <th rowSpan={rowSpan} className={`px-2 py-2 text-center text-xs font-semibold whitespace-nowrap select-none ${col ? "cursor-pointer hover:bg-white/10" : ""} ${className}`} onClick={col ? () => toggleYearlySort(col) : undefined}>
+      <span className="inline-flex items-center gap-1 justify-center">{label}{col && <YearlySortIcon col={col} />}</span>
+    </th>
+  );
+  const ThYA = ({ label, col, className = "", rowSpan }: { label: string; col?: YearlySortKeyWithRate; className?: string; rowSpan?: number }) => (
+    <th rowSpan={rowSpan} className={`px-2 py-2 text-center text-xs font-semibold whitespace-nowrap select-none ${col ? "cursor-pointer hover:bg-white/10" : ""} ${className}`} onClick={col ? () => toggleYearlyApproveSort(col) : undefined}>
+      <span className="inline-flex items-center gap-1 justify-center">{label}{col && <YearlyApproveSortIcon col={col} />}</span>
     </th>
   );
 
@@ -416,14 +479,20 @@ export default function BadDebtSummary() {
     );
   }
 
+  /* ── ตัวกรองปี (ปรับตาม sub-tab) ── */
+  const activeYearOptions = (activeTab === "monthly" && monthlySubTab === "byApprove") || (activeTab === "yearly" && yearlySubTab === "byApprove")
+    ? approveYearOptions : yearOptions;
+  const activeYearLabel = (activeTab === "monthly" && monthlySubTab === "byApprove") || (activeTab === "yearly" && yearlySubTab === "byApprove")
+    ? "ปีที่อนุมัติ" : "ปีที่ขาย";
+
   return (
     <AppShell fullHeight>
       <div className="flex flex-col h-full">
       <div className="px-4 py-4 space-y-4">
 
-        {/* ── Tabs + Export Excel ── */}
-        <div className="flex items-center justify-between border-b border-gray-200">
-          <div className="flex gap-0">
+        {/* ── Main Tabs ── */}
+        <div className="flex items-center border-b border-gray-200">
+          <div className="flex gap-0 flex-1">
             {tabs.map((t) => (
               <button
                 key={t.key}
@@ -435,15 +504,6 @@ export default function BadDebtSummary() {
               </button>
             ))}
           </div>
-          {canExport && (
-            <button
-              onClick={handleExport}
-              className="flex items-center gap-1.5 px-3 py-1.5 mb-1 rounded-md text-sm font-medium bg-green-600 text-white hover:bg-green-700 transition-colors"
-            >
-              <Download className="w-4 h-4" />
-              <span className="hidden sm:inline">Export Excel</span>
-            </button>
-          )}
         </div>
 
         {/* ── Summary Cards ── */}
@@ -485,10 +545,10 @@ export default function BadDebtSummary() {
           </div>
           {(activeTab === "monthly" || activeTab === "yearly") && (
             <div className="flex flex-col gap-1">
-              <label className="text-xs text-gray-500">ปีที่ขาย</label>
+              <label className="text-xs text-gray-500">{activeYearLabel}</label>
               <select value={filterYear} onChange={(e) => setFilterYear(e.target.value)} className="border rounded px-2 py-1.5 text-sm h-9 bg-white">
                 <option value="">ทุกปี</option>
-                {yearOptions.map((y) => (
+                {activeYearOptions.map((y) => (
                   <option key={y} value={y}>{parseInt(y, 10) + 543}</option>
                 ))}
               </select>
@@ -497,6 +557,16 @@ export default function BadDebtSummary() {
           <button onClick={() => { setApproveMonth(""); setSaleMonth(""); setFilterYear(""); }} className="h-9 px-3 text-sm border rounded hover:bg-gray-50 text-gray-600">
             ล้างตัวกรอง
           </button>
+          {/* Export Excel ย้ายมาอยู่ใน body */}
+          {canExport && (
+            <button
+              onClick={handleExport}
+              className="ml-auto flex items-center gap-1.5 h-9 px-3 text-sm font-medium rounded-md bg-green-600 text-white hover:bg-green-700 transition-colors"
+            >
+              <Download className="w-4 h-4" />
+              <span className="hidden sm:inline">Export Excel</span>
+            </button>
+          )}
         </div>
 
         {/* ── Loading ── */}
@@ -505,11 +575,13 @@ export default function BadDebtSummary() {
         )}
 
       </div>
-        {/* ╔════════════════ TAB 1: รายการขายเครื่อง ════════════════ */}
+
+        {/* ╔════════════════ TAB: รายการขายเครื่อง ════════════════ */}
         {!isLoading && activeTab === "list" && (
           <div className="flex-1 min-h-0 overflow-x-auto overflow-y-auto">
           <div className="rounded-lg border border-gray-200 shadow-sm">
-            <table className="w-full text-sm">              <thead className="bg-red-700 text-white sticky top-0 z-10">
+            <table className="w-full text-sm">
+              <thead className="bg-red-700 text-white sticky top-0 z-10">
                 <tr>
                   <th className="px-2 py-2 text-center text-xs font-semibold w-10">#</th>
                   <Th label="วันที่อนุมัติ" col="approveDate" />
@@ -577,138 +649,302 @@ export default function BadDebtSummary() {
           </div>
           </div>
         )}
-        {/* ╔════════════════ TAB 2: สรุปรายเดือน ════════════════ */}
+
+        {/* ╔════════════════ TAB: สรุปรายเดือน ════════════════ */}
         {!isLoading && activeTab === "monthly" && (
-          <div className="flex-1 min-h-0 overflow-x-auto overflow-y-auto">
-          <div className="rounded-lg border border-gray-200 shadow-sm">
-            <table className="w-full text-sm">
-              <thead className="bg-blue-700 text-white sticky top-0 z-10">
-                {/* Group header row */}
-                <tr>
-                  <ThM label="เดือน-ปีที่ขาย" col="ym" rowSpan={2} className="px-3 text-left border-r border-blue-500" />
-                  <ThM label="จำนวน" col="count" rowSpan={2} className="border-r border-blue-500" />
-                  <th colSpan={3} className="px-2 py-1 text-center text-xs font-semibold border-b border-blue-500 border-r border-blue-500">ต้นทุน</th>
-                  <th colSpan={3} className="px-2 py-1 text-center text-xs font-semibold border-b border-blue-500 border-r border-blue-500">รายรับ</th>
-                  <th className="px-2 py-1 text-center text-xs font-semibold border-r border-blue-500 whitespace-nowrap" rowSpan={2}>% หนี้เสีย</th>
-                  <ThM label="กำไร/ขาดทุน" col="profitLoss" rowSpan={2} />
-                </tr>
-                <tr>
-                  <ThM label="ยอดจัดไฟแนนซ์" col="financeAmount" />
-                  <ThM label="ค่าคอมมิชชั่น" col="commissionNet" />
-                  <ThM label="ต้นทุนรวม" col="cost" className="border-r border-blue-500" />
-                  <ThM label="ยอดเก็บค่างวด" col="installmentPaid" />
-                  <ThM label="ยอดขายเครื่อง" col="deviceSaleAmount" />
-                  <ThM label="รวมรายรับ" col="totalRevenue" className="border-r border-blue-500" />
-                </tr>
-              </thead>
-              <tbody>
-                {monthlyRows.length === 0 ? (
-                  <tr><td colSpan={9} className="text-center py-12 text-gray-400">ไม่พบข้อมูล</td></tr>
-                ) : (
-                  monthlyRows.map((r, idx) => (
-                    <tr key={r.ym} className={`border-b border-gray-100 hover:bg-gray-50 ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}>
-                      <td className="px-3 py-2 font-medium text-sm whitespace-nowrap">{r.ym === "ไม่ระบุ" ? "ไม่ระบุ" : fmtMonthLabel(r.ym)}</td>
-                      <td className="px-2 py-2 text-center text-sm">{r.count.toLocaleString("th-TH")}</td>
-                      <td className="px-2 py-2 text-right text-sm">{fmtMoney(r.financeAmount)}</td>
-                      <td className="px-2 py-2 text-right text-sm">{fmtMoney(r.commissionNet)}</td>
-                      <td className="px-2 py-2 text-right text-sm text-orange-700 font-medium">{fmtMoney(r.cost)}</td>
-                      <td className="px-2 py-2 text-right text-sm">{fmtMoney(r.installmentPaid)}</td>
-                      <td className="px-2 py-2 text-right text-sm text-blue-700 font-medium">{fmtMoney(r.deviceSaleAmount)}</td>
-                      <td className="px-2 py-2 text-right text-sm font-medium">{fmtMoney(r.totalRevenue)}</td>
-                      <td className="px-2 py-2 text-right text-sm">
-                        <BadDebtRateBadge value={r.badDebtRate} totalBadDebt={r.totalBadDebt} totalAll={r.totalAll} />
-                      </td>
-                      <td className="px-2 py-2 text-right text-sm"><ProfitBadge value={r.profitLoss} /></td>
+          <div className="flex-1 min-h-0 flex flex-col">
+            {/* Sub-tabs */}
+            <div className="flex items-center gap-1 px-4 py-2 border-b border-gray-200 bg-gray-50">
+              <button
+                onClick={() => setMonthlySubTab("bySale")}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${monthlySubTab === "bySale" ? "bg-blue-600 text-white" : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-100"}`}
+              >
+                ตามเดือนที่ขาย
+              </button>
+              <button
+                onClick={() => setMonthlySubTab("byApprove")}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${monthlySubTab === "byApprove" ? "bg-blue-600 text-white" : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-100"}`}
+              >
+                ตามเดือนที่อนุมัติ
+                <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-green-100 text-green-700">% หนี้เสีย</span>
+              </button>
+            </div>
+
+            {/* ── Sub-tab: ตามเดือนที่ขาย (ไม่มี % หนี้เสีย) ── */}
+            {monthlySubTab === "bySale" && (
+              <div className="flex-1 min-h-0 overflow-x-auto overflow-y-auto">
+              <div className="rounded-lg border border-gray-200 shadow-sm">
+                <table className="w-full text-sm">
+                  <thead className="bg-blue-700 text-white sticky top-0 z-10">
+                    <tr>
+                      <ThM label="เดือน-ปีที่ขาย" col="ym" rowSpan={2} className="px-3 text-left border-r border-blue-500" />
+                      <ThM label="จำนวน" col="count" rowSpan={2} className="border-r border-blue-500" />
+                      <th colSpan={3} className="px-2 py-1 text-center text-xs font-semibold border-b border-blue-500 border-r border-blue-500">ต้นทุน</th>
+                      <th colSpan={3} className="px-2 py-1 text-center text-xs font-semibold border-b border-blue-500 border-r border-blue-500">รายรับ</th>
+                      <ThM label="กำไร/ขาดทุน" col="profitLoss" rowSpan={2} />
                     </tr>
-                  ))
-                )}
-              </tbody>
-              {monthlyRows.length > 0 && (
-                <tfoot className="bg-blue-50 border-t-2 border-blue-200 font-semibold text-xs">
-                  <tr>
-                    <td className="px-3 py-2 text-gray-600">รวม {monthlyRows.length} เดือน</td>
-                    <td className="px-2 py-2 text-center">{monthlyRows.reduce((s, r) => s + r.count, 0).toLocaleString("th-TH")}</td>
-                    <td className="px-2 py-2 text-right">{fmtMoney(monthlyRows.reduce((s, r) => s + r.financeAmount, 0))}</td>
-                    <td className="px-2 py-2 text-right">{fmtMoney(monthlyRows.reduce((s, r) => s + r.commissionNet, 0))}</td>
-                    <td className="px-2 py-2 text-right text-orange-700">{fmtMoney(monthlyRows.reduce((s, r) => s + r.cost, 0))}</td>
-                    <td className="px-2 py-2 text-right">{fmtMoney(monthlyRows.reduce((s, r) => s + r.installmentPaid, 0))}</td>
-                    <td className="px-2 py-2 text-right text-blue-700">{fmtMoney(monthlyRows.reduce((s, r) => s + r.deviceSaleAmount, 0))}</td>
-                    <td className="px-2 py-2 text-right">{fmtMoney(monthlyRows.reduce((s, r) => s + r.totalRevenue, 0))}</td>
-                    <td className="px-2 py-2"></td>
-                    <td className="px-2 py-2 text-right"><ProfitBadge value={monthlyRows.reduce((s, r) => s + r.profitLoss, 0)} /></td>
-                  </tr>
-                </tfoot>
-              )}
-            </table>
-          </div>
+                    <tr>
+                      <ThM label="ยอดจัดไฟแนนซ์" col="financeAmount" />
+                      <ThM label="ค่าคอมมิชชั่น" col="commissionNet" />
+                      <ThM label="ต้นทุนรวม" col="cost" className="border-r border-blue-500" />
+                      <ThM label="ยอดเก็บค่างวด" col="installmentPaid" />
+                      <ThM label="ยอดขายเครื่อง" col="deviceSaleAmount" />
+                      <ThM label="รวมรายรับ" col="totalRevenue" className="border-r border-blue-500" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {monthlyBySaleRows.length === 0 ? (
+                      <tr><td colSpan={9} className="text-center py-12 text-gray-400">ไม่พบข้อมูล</td></tr>
+                    ) : (
+                      monthlyBySaleRows.map((r, idx) => (
+                        <tr key={r.ym} className={`border-b border-gray-100 hover:bg-gray-50 ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}>
+                          <td className="px-3 py-2 font-medium text-sm whitespace-nowrap">{r.ym === "ไม่ระบุ" ? "ไม่ระบุ" : fmtMonthLabel(r.ym)}</td>
+                          <td className="px-2 py-2 text-center text-sm">{r.count.toLocaleString("th-TH")}</td>
+                          <td className="px-2 py-2 text-right text-sm">{fmtMoney(r.financeAmount)}</td>
+                          <td className="px-2 py-2 text-right text-sm">{fmtMoney(r.commissionNet)}</td>
+                          <td className="px-2 py-2 text-right text-sm text-orange-700 font-medium">{fmtMoney(r.cost)}</td>
+                          <td className="px-2 py-2 text-right text-sm">{fmtMoney(r.installmentPaid)}</td>
+                          <td className="px-2 py-2 text-right text-sm text-blue-700 font-medium">{fmtMoney(r.deviceSaleAmount)}</td>
+                          <td className="px-2 py-2 text-right text-sm font-medium">{fmtMoney(r.totalRevenue)}</td>
+                          <td className="px-2 py-2 text-right text-sm"><ProfitBadge value={r.profitLoss} /></td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                  {monthlyBySaleRows.length > 0 && (
+                    <tfoot className="bg-blue-50 border-t-2 border-blue-200 font-semibold text-xs">
+                      <tr>
+                        <td className="px-3 py-2 text-gray-600">รวม {monthlyBySaleRows.length} เดือน</td>
+                        <td className="px-2 py-2 text-center">{monthlyBySaleRows.reduce((s, r) => s + r.count, 0).toLocaleString("th-TH")}</td>
+                        <td className="px-2 py-2 text-right">{fmtMoney(monthlyBySaleRows.reduce((s, r) => s + r.financeAmount, 0))}</td>
+                        <td className="px-2 py-2 text-right">{fmtMoney(monthlyBySaleRows.reduce((s, r) => s + r.commissionNet, 0))}</td>
+                        <td className="px-2 py-2 text-right text-orange-700">{fmtMoney(monthlyBySaleRows.reduce((s, r) => s + r.cost, 0))}</td>
+                        <td className="px-2 py-2 text-right">{fmtMoney(monthlyBySaleRows.reduce((s, r) => s + r.installmentPaid, 0))}</td>
+                        <td className="px-2 py-2 text-right text-blue-700">{fmtMoney(monthlyBySaleRows.reduce((s, r) => s + r.deviceSaleAmount, 0))}</td>
+                        <td className="px-2 py-2 text-right">{fmtMoney(monthlyBySaleRows.reduce((s, r) => s + r.totalRevenue, 0))}</td>
+                        <td className="px-2 py-2 text-right"><ProfitBadge value={monthlyBySaleRows.reduce((s, r) => s + r.profitLoss, 0)} /></td>
+                      </tr>
+                    </tfoot>
+                  )}
+                </table>
+              </div>
+              </div>
+            )}
+
+            {/* ── Sub-tab: ตามเดือนที่อนุมัติ (มี % หนี้เสีย) ── */}
+            {monthlySubTab === "byApprove" && (
+              <div className="flex-1 min-h-0 overflow-x-auto overflow-y-auto">
+              <div className="rounded-lg border border-gray-200 shadow-sm">
+                <table className="w-full text-sm">
+                  <thead className="bg-blue-700 text-white sticky top-0 z-10">
+                    <tr>
+                      <ThMA label="เดือน-ปีที่อนุมัติ" col="ym" rowSpan={2} className="px-3 text-left border-r border-blue-500" />
+                      <ThMA label="จำนวนหนี้เสีย" col="count" rowSpan={2} className="border-r border-blue-500" />
+                      <th colSpan={3} className="px-2 py-1 text-center text-xs font-semibold border-b border-blue-500 border-r border-blue-500">ต้นทุน</th>
+                      <th colSpan={3} className="px-2 py-1 text-center text-xs font-semibold border-b border-blue-500 border-r border-blue-500">รายรับ</th>
+                      <th className="px-2 py-1 text-center text-xs font-semibold border-r border-blue-500 whitespace-nowrap" rowSpan={2}>% หนี้เสีย</th>
+                      <ThMA label="กำไร/ขาดทุน" col="profitLoss" rowSpan={2} />
+                    </tr>
+                    <tr>
+                      <ThMA label="ยอดจัดไฟแนนซ์" col="financeAmount" />
+                      <ThMA label="ค่าคอมมิชชั่น" col="commissionNet" />
+                      <ThMA label="ต้นทุนรวม" col="cost" className="border-r border-blue-500" />
+                      <ThMA label="ยอดเก็บค่างวด" col="installmentPaid" />
+                      <ThMA label="ยอดขายเครื่อง" col="deviceSaleAmount" />
+                      <ThMA label="รวมรายรับ" col="totalRevenue" className="border-r border-blue-500" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {monthlyByApproveRows.length === 0 ? (
+                      <tr><td colSpan={10} className="text-center py-12 text-gray-400">ไม่พบข้อมูล</td></tr>
+                    ) : (
+                      monthlyByApproveRows.map((r, idx) => (
+                        <tr key={r.ym} className={`border-b border-gray-100 hover:bg-gray-50 ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}>
+                          <td className="px-3 py-2 font-medium text-sm whitespace-nowrap">{r.ym === "ไม่ระบุ" ? "ไม่ระบุ" : fmtMonthLabel(r.ym)}</td>
+                          <td className="px-2 py-2 text-center text-sm">{r.count.toLocaleString("th-TH")}</td>
+                          <td className="px-2 py-2 text-right text-sm">{fmtMoney(r.financeAmount)}</td>
+                          <td className="px-2 py-2 text-right text-sm">{fmtMoney(r.commissionNet)}</td>
+                          <td className="px-2 py-2 text-right text-sm text-orange-700 font-medium">{fmtMoney(r.cost)}</td>
+                          <td className="px-2 py-2 text-right text-sm">{fmtMoney(r.installmentPaid)}</td>
+                          <td className="px-2 py-2 text-right text-sm text-blue-700 font-medium">{fmtMoney(r.deviceSaleAmount)}</td>
+                          <td className="px-2 py-2 text-right text-sm font-medium">{fmtMoney(r.totalRevenue)}</td>
+                          <td className="px-2 py-2 text-right text-sm">
+                            <BadDebtRateBadge value={r.badDebtRate} totalBadDebt={r.totalBadDebt} totalAll={r.totalAll} />
+                          </td>
+                          <td className="px-2 py-2 text-right text-sm"><ProfitBadge value={r.profitLoss} /></td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                  {monthlyByApproveRows.length > 0 && (
+                    <tfoot className="bg-blue-50 border-t-2 border-blue-200 font-semibold text-xs">
+                      <tr>
+                        <td className="px-3 py-2 text-gray-600">รวม {monthlyByApproveRows.length} เดือน</td>
+                        <td className="px-2 py-2 text-center">{monthlyByApproveRows.reduce((s, r) => s + r.count, 0).toLocaleString("th-TH")}</td>
+                        <td className="px-2 py-2 text-right">{fmtMoney(monthlyByApproveRows.reduce((s, r) => s + r.financeAmount, 0))}</td>
+                        <td className="px-2 py-2 text-right">{fmtMoney(monthlyByApproveRows.reduce((s, r) => s + r.commissionNet, 0))}</td>
+                        <td className="px-2 py-2 text-right text-orange-700">{fmtMoney(monthlyByApproveRows.reduce((s, r) => s + r.cost, 0))}</td>
+                        <td className="px-2 py-2 text-right">{fmtMoney(monthlyByApproveRows.reduce((s, r) => s + r.installmentPaid, 0))}</td>
+                        <td className="px-2 py-2 text-right text-blue-700">{fmtMoney(monthlyByApproveRows.reduce((s, r) => s + r.deviceSaleAmount, 0))}</td>
+                        <td className="px-2 py-2 text-right">{fmtMoney(monthlyByApproveRows.reduce((s, r) => s + r.totalRevenue, 0))}</td>
+                        <td className="px-2 py-2"></td>
+                        <td className="px-2 py-2 text-right"><ProfitBadge value={monthlyByApproveRows.reduce((s, r) => s + r.profitLoss, 0)} /></td>
+                      </tr>
+                    </tfoot>
+                  )}
+                </table>
+              </div>
+              </div>
+            )}
           </div>
         )}
-        {/* ╔════════════════ TAB 3: สรุปรายปี ════════════════ */}
+
+        {/* ╔════════════════ TAB: สรุปรายปี ════════════════ */}
         {!isLoading && activeTab === "yearly" && (
-          <div className="flex-1 min-h-0 overflow-x-auto overflow-y-auto">
-          <div className="rounded-lg border border-gray-200 shadow-sm">
-            <table className="w-full text-sm">
-              <thead className="bg-purple-700 text-white sticky top-0 z-10">
-                {/* Group header row */}
-                <tr>
-                  <ThY label="ปีที่ขาย" col="year" rowSpan={2} className="px-3 text-left border-r border-purple-500" />
-                  <ThY label="จำนวน" col="count" rowSpan={2} className="border-r border-purple-500" />
-                  <th colSpan={3} className="px-2 py-1 text-center text-xs font-semibold border-b border-purple-500 border-r border-purple-500">ต้นทุน</th>
-                  <th colSpan={3} className="px-2 py-1 text-center text-xs font-semibold border-b border-purple-500 border-r border-purple-500">รายรับ</th>
-                  <th className="px-2 py-1 text-center text-xs font-semibold border-r border-purple-500 whitespace-nowrap" rowSpan={2}>% หนี้เสีย</th>
-                  <ThY label="กำไร/ขาดทุน" col="profitLoss" rowSpan={2} />
-                </tr>
-                <tr>
-                  <ThY label="ยอดจัดไฟแนนซ์" col="financeAmount" />
-                  <ThY label="ค่าคอมมิชชั่น" col="commissionNet" />
-                  <ThY label="ต้นทุนรวม" col="cost" className="border-r border-purple-500" />
-                  <ThY label="ยอดเก็บค่างวด" col="installmentPaid" />
-                  <ThY label="ยอดขายเครื่อง" col="deviceSaleAmount" />
-                  <ThY label="รวมรายรับ" col="totalRevenue" className="border-r border-purple-500" />
-                </tr>
-              </thead>
-              <tbody>
-                {yearlyRows.length === 0 ? (
-                  <tr><td colSpan={9} className="text-center py-12 text-gray-400">ไม่พบข้อมูล</td></tr>
-                ) : (
-                  yearlyRows.map((r, idx) => (
-                    <tr key={r.year} className={`border-b border-gray-100 hover:bg-gray-50 ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}>
-                      <td className="px-3 py-2 font-medium text-sm whitespace-nowrap">
-                        {r.year === "ไม่ระบุ" ? "ไม่ระบุ" : `พ.ศ. ${parseInt(r.year, 10) + 543}`}
-                      </td>
-                      <td className="px-2 py-2 text-center text-sm">{r.count.toLocaleString("th-TH")}</td>
-                      <td className="px-2 py-2 text-right text-sm">{fmtMoney(r.financeAmount)}</td>
-                      <td className="px-2 py-2 text-right text-sm">{fmtMoney(r.commissionNet)}</td>
-                      <td className="px-2 py-2 text-right text-sm text-orange-700 font-medium">{fmtMoney(r.cost)}</td>
-                      <td className="px-2 py-2 text-right text-sm">{fmtMoney(r.installmentPaid)}</td>
-                      <td className="px-2 py-2 text-right text-sm text-blue-700 font-medium">{fmtMoney(r.deviceSaleAmount)}</td>
-                      <td className="px-2 py-2 text-right text-sm font-medium">{fmtMoney(r.totalRevenue)}</td>
-                      <td className="px-2 py-2 text-right text-sm">
-                        <BadDebtRateBadge value={r.badDebtRate} totalBadDebt={r.totalBadDebt} totalAll={r.totalAll} />
-                      </td>
-                      <td className="px-2 py-2 text-right text-sm"><ProfitBadge value={r.profitLoss} /></td>
+          <div className="flex-1 min-h-0 flex flex-col">
+            {/* Sub-tabs */}
+            <div className="flex items-center gap-1 px-4 py-2 border-b border-gray-200 bg-gray-50">
+              <button
+                onClick={() => setYearlySubTab("bySale")}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${yearlySubTab === "bySale" ? "bg-purple-600 text-white" : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-100"}`}
+              >
+                ตามปีที่ขาย
+              </button>
+              <button
+                onClick={() => setYearlySubTab("byApprove")}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${yearlySubTab === "byApprove" ? "bg-purple-600 text-white" : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-100"}`}
+              >
+                ตามปีที่อนุมัติ
+                <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-green-100 text-green-700">% หนี้เสีย</span>
+              </button>
+            </div>
+
+            {/* ── Sub-tab: ตามปีที่ขาย (ไม่มี % หนี้เสีย) ── */}
+            {yearlySubTab === "bySale" && (
+              <div className="flex-1 min-h-0 overflow-x-auto overflow-y-auto">
+              <div className="rounded-lg border border-gray-200 shadow-sm">
+                <table className="w-full text-sm">
+                  <thead className="bg-purple-700 text-white sticky top-0 z-10">
+                    <tr>
+                      <ThY label="ปีที่ขาย" col="year" rowSpan={2} className="px-3 text-left border-r border-purple-500" />
+                      <ThY label="จำนวน" col="count" rowSpan={2} className="border-r border-purple-500" />
+                      <th colSpan={3} className="px-2 py-1 text-center text-xs font-semibold border-b border-purple-500 border-r border-purple-500">ต้นทุน</th>
+                      <th colSpan={3} className="px-2 py-1 text-center text-xs font-semibold border-b border-purple-500 border-r border-purple-500">รายรับ</th>
+                      <ThY label="กำไร/ขาดทุน" col="profitLoss" rowSpan={2} />
                     </tr>
-                  ))
-                )}
-              </tbody>
-              {yearlyRows.length > 0 && (
-                <tfoot className="bg-purple-50 border-t-2 border-purple-200 font-semibold text-xs">
-                  <tr>
-                    <td className="px-3 py-2 text-gray-600">รวม {yearlyRows.length} ปี</td>
-                    <td className="px-2 py-2 text-center">{yearlyRows.reduce((s, r) => s + r.count, 0).toLocaleString("th-TH")}</td>
-                    <td className="px-2 py-2 text-right">{fmtMoney(yearlyRows.reduce((s, r) => s + r.financeAmount, 0))}</td>
-                    <td className="px-2 py-2 text-right">{fmtMoney(yearlyRows.reduce((s, r) => s + r.commissionNet, 0))}</td>
-                    <td className="px-2 py-2 text-right text-orange-700">{fmtMoney(yearlyRows.reduce((s, r) => s + r.cost, 0))}</td>
-                    <td className="px-2 py-2 text-right">{fmtMoney(yearlyRows.reduce((s, r) => s + r.installmentPaid, 0))}</td>
-                    <td className="px-2 py-2 text-right text-blue-700">{fmtMoney(yearlyRows.reduce((s, r) => s + r.deviceSaleAmount, 0))}</td>
-                    <td className="px-2 py-2 text-right">{fmtMoney(yearlyRows.reduce((s, r) => s + r.totalRevenue, 0))}</td>
-                    <td className="px-2 py-2"></td>
-                    <td className="px-2 py-2 text-right"><ProfitBadge value={yearlyRows.reduce((s, r) => s + r.profitLoss, 0)} /></td>
-                  </tr>
-                </tfoot>
-              )}
-            </table>
-          </div>
+                    <tr>
+                      <ThY label="ยอดจัดไฟแนนซ์" col="financeAmount" />
+                      <ThY label="ค่าคอมมิชชั่น" col="commissionNet" />
+                      <ThY label="ต้นทุนรวม" col="cost" className="border-r border-purple-500" />
+                      <ThY label="ยอดเก็บค่างวด" col="installmentPaid" />
+                      <ThY label="ยอดขายเครื่อง" col="deviceSaleAmount" />
+                      <ThY label="รวมรายรับ" col="totalRevenue" className="border-r border-purple-500" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {yearlyBySaleRows.length === 0 ? (
+                      <tr><td colSpan={9} className="text-center py-12 text-gray-400">ไม่พบข้อมูล</td></tr>
+                    ) : (
+                      yearlyBySaleRows.map((r, idx) => (
+                        <tr key={r.year} className={`border-b border-gray-100 hover:bg-gray-50 ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}>
+                          <td className="px-3 py-2 font-medium text-sm whitespace-nowrap">{r.year === "ไม่ระบุ" ? "ไม่ระบุ" : `พ.ศ. ${parseInt(r.year, 10) + 543}`}</td>
+                          <td className="px-2 py-2 text-center text-sm">{r.count.toLocaleString("th-TH")}</td>
+                          <td className="px-2 py-2 text-right text-sm">{fmtMoney(r.financeAmount)}</td>
+                          <td className="px-2 py-2 text-right text-sm">{fmtMoney(r.commissionNet)}</td>
+                          <td className="px-2 py-2 text-right text-sm text-orange-700 font-medium">{fmtMoney(r.cost)}</td>
+                          <td className="px-2 py-2 text-right text-sm">{fmtMoney(r.installmentPaid)}</td>
+                          <td className="px-2 py-2 text-right text-sm text-blue-700 font-medium">{fmtMoney(r.deviceSaleAmount)}</td>
+                          <td className="px-2 py-2 text-right text-sm font-medium">{fmtMoney(r.totalRevenue)}</td>
+                          <td className="px-2 py-2 text-right text-sm"><ProfitBadge value={r.profitLoss} /></td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                  {yearlyBySaleRows.length > 0 && (
+                    <tfoot className="bg-purple-50 border-t-2 border-purple-200 font-semibold text-xs">
+                      <tr>
+                        <td className="px-3 py-2 text-gray-600">รวม {yearlyBySaleRows.length} ปี</td>
+                        <td className="px-2 py-2 text-center">{yearlyBySaleRows.reduce((s, r) => s + r.count, 0).toLocaleString("th-TH")}</td>
+                        <td className="px-2 py-2 text-right">{fmtMoney(yearlyBySaleRows.reduce((s, r) => s + r.financeAmount, 0))}</td>
+                        <td className="px-2 py-2 text-right">{fmtMoney(yearlyBySaleRows.reduce((s, r) => s + r.commissionNet, 0))}</td>
+                        <td className="px-2 py-2 text-right text-orange-700">{fmtMoney(yearlyBySaleRows.reduce((s, r) => s + r.cost, 0))}</td>
+                        <td className="px-2 py-2 text-right">{fmtMoney(yearlyBySaleRows.reduce((s, r) => s + r.installmentPaid, 0))}</td>
+                        <td className="px-2 py-2 text-right text-blue-700">{fmtMoney(yearlyBySaleRows.reduce((s, r) => s + r.deviceSaleAmount, 0))}</td>
+                        <td className="px-2 py-2 text-right">{fmtMoney(yearlyBySaleRows.reduce((s, r) => s + r.totalRevenue, 0))}</td>
+                        <td className="px-2 py-2 text-right"><ProfitBadge value={yearlyBySaleRows.reduce((s, r) => s + r.profitLoss, 0)} /></td>
+                      </tr>
+                    </tfoot>
+                  )}
+                </table>
+              </div>
+              </div>
+            )}
+
+            {/* ── Sub-tab: ตามปีที่อนุมัติ (มี % หนี้เสีย) ── */}
+            {yearlySubTab === "byApprove" && (
+              <div className="flex-1 min-h-0 overflow-x-auto overflow-y-auto">
+              <div className="rounded-lg border border-gray-200 shadow-sm">
+                <table className="w-full text-sm">
+                  <thead className="bg-purple-700 text-white sticky top-0 z-10">
+                    <tr>
+                      <ThYA label="ปีที่อนุมัติ" col="year" rowSpan={2} className="px-3 text-left border-r border-purple-500" />
+                      <ThYA label="จำนวนหนี้เสีย" col="count" rowSpan={2} className="border-r border-purple-500" />
+                      <th colSpan={3} className="px-2 py-1 text-center text-xs font-semibold border-b border-purple-500 border-r border-purple-500">ต้นทุน</th>
+                      <th colSpan={3} className="px-2 py-1 text-center text-xs font-semibold border-b border-purple-500 border-r border-purple-500">รายรับ</th>
+                      <th className="px-2 py-1 text-center text-xs font-semibold border-r border-purple-500 whitespace-nowrap" rowSpan={2}>% หนี้เสีย</th>
+                      <ThYA label="กำไร/ขาดทุน" col="profitLoss" rowSpan={2} />
+                    </tr>
+                    <tr>
+                      <ThYA label="ยอดจัดไฟแนนซ์" col="financeAmount" />
+                      <ThYA label="ค่าคอมมิชชั่น" col="commissionNet" />
+                      <ThYA label="ต้นทุนรวม" col="cost" className="border-r border-purple-500" />
+                      <ThYA label="ยอดเก็บค่างวด" col="installmentPaid" />
+                      <ThYA label="ยอดขายเครื่อง" col="deviceSaleAmount" />
+                      <ThYA label="รวมรายรับ" col="totalRevenue" className="border-r border-purple-500" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {yearlyByApproveRows.length === 0 ? (
+                      <tr><td colSpan={10} className="text-center py-12 text-gray-400">ไม่พบข้อมูล</td></tr>
+                    ) : (
+                      yearlyByApproveRows.map((r, idx) => (
+                        <tr key={r.year} className={`border-b border-gray-100 hover:bg-gray-50 ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}>
+                          <td className="px-3 py-2 font-medium text-sm whitespace-nowrap">{r.year === "ไม่ระบุ" ? "ไม่ระบุ" : `พ.ศ. ${parseInt(r.year, 10) + 543}`}</td>
+                          <td className="px-2 py-2 text-center text-sm">{r.count.toLocaleString("th-TH")}</td>
+                          <td className="px-2 py-2 text-right text-sm">{fmtMoney(r.financeAmount)}</td>
+                          <td className="px-2 py-2 text-right text-sm">{fmtMoney(r.commissionNet)}</td>
+                          <td className="px-2 py-2 text-right text-sm text-orange-700 font-medium">{fmtMoney(r.cost)}</td>
+                          <td className="px-2 py-2 text-right text-sm">{fmtMoney(r.installmentPaid)}</td>
+                          <td className="px-2 py-2 text-right text-sm text-blue-700 font-medium">{fmtMoney(r.deviceSaleAmount)}</td>
+                          <td className="px-2 py-2 text-right text-sm font-medium">{fmtMoney(r.totalRevenue)}</td>
+                          <td className="px-2 py-2 text-right text-sm">
+                            <BadDebtRateBadge value={r.badDebtRate} totalBadDebt={r.totalBadDebt} totalAll={r.totalAll} />
+                          </td>
+                          <td className="px-2 py-2 text-right text-sm"><ProfitBadge value={r.profitLoss} /></td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                  {yearlyByApproveRows.length > 0 && (
+                    <tfoot className="bg-purple-50 border-t-2 border-purple-200 font-semibold text-xs">
+                      <tr>
+                        <td className="px-3 py-2 text-gray-600">รวม {yearlyByApproveRows.length} ปี</td>
+                        <td className="px-2 py-2 text-center">{yearlyByApproveRows.reduce((s, r) => s + r.count, 0).toLocaleString("th-TH")}</td>
+                        <td className="px-2 py-2 text-right">{fmtMoney(yearlyByApproveRows.reduce((s, r) => s + r.financeAmount, 0))}</td>
+                        <td className="px-2 py-2 text-right">{fmtMoney(yearlyByApproveRows.reduce((s, r) => s + r.commissionNet, 0))}</td>
+                        <td className="px-2 py-2 text-right text-orange-700">{fmtMoney(yearlyByApproveRows.reduce((s, r) => s + r.cost, 0))}</td>
+                        <td className="px-2 py-2 text-right">{fmtMoney(yearlyByApproveRows.reduce((s, r) => s + r.installmentPaid, 0))}</td>
+                        <td className="px-2 py-2 text-right text-blue-700">{fmtMoney(yearlyByApproveRows.reduce((s, r) => s + r.deviceSaleAmount, 0))}</td>
+                        <td className="px-2 py-2 text-right">{fmtMoney(yearlyByApproveRows.reduce((s, r) => s + r.totalRevenue, 0))}</td>
+                        <td className="px-2 py-2"></td>
+                        <td className="px-2 py-2 text-right"><ProfitBadge value={yearlyByApproveRows.reduce((s, r) => s + r.profitLoss, 0)} /></td>
+                      </tr>
+                    </tfoot>
+                  )}
+                </table>
+              </div>
+              </div>
+            )}
           </div>
         )}
 

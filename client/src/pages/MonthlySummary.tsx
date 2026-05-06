@@ -950,12 +950,7 @@ export default function MonthlySummary() {
           <span className="flex items-center px-2 flex-shrink-0">
             <TabInfoPopup/>
           </span>
-          {canExport&&(
-            <button type="button" onClick={handleExport}
-              className="ml-auto flex items-center gap-1.5 h-8 px-3 my-1 text-xs font-medium rounded-md bg-green-600 hover:bg-green-700 text-white transition-colors whitespace-nowrap flex-shrink-0">
-              <Download className="w-3.5 h-3.5"/><span className="hidden sm:inline">Export Excel</span>
-            </button>
-          )}
+
         </div>
 
         {/* ── Filter bar ───────────────────────────────────────────── */}
@@ -1172,9 +1167,16 @@ export default function MonthlySummary() {
                   )}
                 </>
               )}
+              {/* Export Excel — แสดงท้าย filter bar ทุก tab */}
+              {canExport&&(
+                <button type="button" onClick={handleExport}
+                  className="ml-auto flex items-center gap-1.5 h-9 px-3 text-sm font-medium rounded-md bg-green-600 hover:bg-green-700 text-white transition-colors whitespace-nowrap">
+                  <Download className="w-4 h-4"/><span className="hidden sm:inline">Export Excel</span>
+                </button>
+              )}
             </div>
         </div>
-        {/* ── Badge: installTotalal ─────────────────────────────────────────────── */}
+        {/* ── Badge: installTotalall ─────────────────────────────────────────────── */}
         {tab==="installTotal"&&(
           <div className="bg-purple-50/60 border-b border-purple-200 px-4 py-2 flex flex-wrap items-center gap-2">
             {([{key:"principal",label:"เงินต้น",icon:<Banknote className="w-3 h-3"/>},{key:"interest",label:"ดอกเบี้ย",icon:<Percent className="w-3 h-3"/>},{key:"fee",label:"ค่าดำเนินการ",icon:<Coins className="w-3 h-3"/>}] as Array<{key:"principal"|"interest"|"fee";label:string;icon:React.ReactNode}>).map(({key,label,icon})=>{
