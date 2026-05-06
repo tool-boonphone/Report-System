@@ -1885,7 +1885,7 @@ function CombinedTable({
             </button>
           </th>
           <th rowSpan={2} className="sticky left-[130px] z-30 px-3 py-2 text-center font-semibold whitespace-nowrap bg-teal-700 text-white border-r border-teal-500 min-w-[90px]">
-            แถบ
+            หัวข้อ
           </th>
           <th rowSpan={2} className="sticky left-[220px] z-30 px-3 py-2 text-right font-semibold whitespace-nowrap bg-teal-700 text-white border-r border-teal-500 min-w-[90px]">
             รวม
@@ -1985,7 +1985,7 @@ function CombinedTable({
                       </div>
                     </td>
                   )}
-                  {/* ชื่อแถบ */}
+                  {/* ชื่อหัวข้อ */}
                   <td className={["sticky left-[130px] z-10 px-2 py-1.5 text-center whitespace-nowrap border-r border-gray-200 font-medium text-[11px] min-w-[90px]",sr.rowBg,sr.textColor].join(" ")}>
                     {sr.label}
                   </td>
