@@ -518,6 +518,8 @@ type MonthRow = {
   debtTargetPrincipal: number;
   debtTargetInterest: number;
   debtTargetFee: number;
+  debtTargetPenalty: number;
+  debtTargetUnlockFee: number;
   debtTargetTotal: number;
   // ยอดเก็บหนี้
   collectedPrincipal: number;
@@ -583,8 +585,8 @@ export default function DebtOverview() {
     principal: true,
     interest: true,
     fee: true,
-    penalty: true,
-    unlockFee: true,
+    penalty: false,   // default ปิดตา
+    unlockFee: false, // default ปิดตา
   });
   // Toggle ยอดขายเครื่อง (มีผลต่อ รายรับรวม)
   const [showDeviceSale, setShowDeviceSale] = useState(true);
@@ -871,7 +873,7 @@ export default function DebtOverview() {
           monthKey,
           contractCount: 0,
           installPrincipal: 0, installInterest: 0, installFee: 0, installTotal: 0,
-          debtTargetPrincipal: 0, debtTargetInterest: 0, debtTargetFee: 0, debtTargetTotal: 0,
+          debtTargetPrincipal: 0, debtTargetInterest: 0, debtTargetFee: 0, debtTargetPenalty: 0, debtTargetUnlockFee: 0, debtTargetTotal: 0,
           collectedPrincipal: 0, collectedInterest: 0, collectedFee: 0, collectedPenalty: 0,
           collectedUnlockFee: 0, collectedDiscount: 0, collectedOverpaid: 0, collectedBadDebt: 0, collectedTotal: 0,
           deviceSaleAmount: 0,
@@ -942,6 +944,8 @@ export default function DebtOverview() {
         row.debtTargetPrincipal += inst.principal ?? 0;
         row.debtTargetInterest  += inst.interest  ?? 0;
         row.debtTargetFee       += inst.fee       ?? 0;
+        row.debtTargetPenalty   += inst.penalty   ?? 0;
+        row.debtTargetUnlockFee += inst.unlockFee ?? 0;
       }
     }
 
@@ -978,7 +982,9 @@ export default function DebtOverview() {
       row.debtTargetTotal =
         (bv.principal ? row.debtTargetPrincipal : 0) +
         (bv.interest ? row.debtTargetInterest : 0) +
-        (bv.fee ? row.debtTargetFee : 0);
+        (bv.fee ? row.debtTargetFee : 0) +
+        (bv.penalty ? row.debtTargetPenalty : 0) +
+        (bv.unlockFee ? row.debtTargetUnlockFee : 0);
 
       const cv = badgeVisibility;
       // ยอดเก็บหนี้ = ค่างวดปกติที่ชำระแล้ว ไม่รวม badDebt (ยอดขายเครื่อง)
@@ -1035,7 +1041,7 @@ export default function DebtOverview() {
   /* ---- Grand totals (for badge display) ---- */
   const grandInstall = useMemo(() => {
     let principal = 0, interest = 0, fee = 0;
-    let debtTargetPrincipal = 0, debtTargetInterest = 0, debtTargetFee = 0;
+    let debtTargetPrincipal = 0, debtTargetInterest = 0, debtTargetFee = 0, debtTargetPenalty = 0, debtTargetUnlockFee = 0;
     for (const row of monthRows) {
       if (hiddenMonths.has(row.monthKey)) continue;
       principal += row.installPrincipal;
@@ -1044,14 +1050,18 @@ export default function DebtOverview() {
       debtTargetPrincipal += row.debtTargetPrincipal;
       debtTargetInterest += row.debtTargetInterest;
       debtTargetFee += row.debtTargetFee;
+      debtTargetPenalty += row.debtTargetPenalty;
+      debtTargetUnlockFee += row.debtTargetUnlockFee;
     }
     const bv = targetBadgeVisibility;
     // เมื่อ principalOnly=true ให้แสดงยอดเป้าเก็บหนี้ (งวดที่ถึงกำหนดแล้ว) แทนยอดผ่อนรวมทั้งสัญญา
     const displayPrincipal = principalOnly ? debtTargetPrincipal : principal;
     const displayInterest = principalOnly ? debtTargetInterest : interest;
     const displayFee = principalOnly ? debtTargetFee : fee;
-    const total = (bv.principal ? displayPrincipal : 0) + (bv.interest ? displayInterest : 0) + (bv.fee ? displayFee : 0);
-    return { principal: displayPrincipal, interest: displayInterest, fee: displayFee, total };
+    const displayPenalty = principalOnly ? debtTargetPenalty : 0;
+    const displayUnlockFee = principalOnly ? debtTargetUnlockFee : 0;
+    const total = (bv.principal ? displayPrincipal : 0) + (bv.interest ? displayInterest : 0) + (bv.fee ? displayFee : 0) + (bv.penalty ? displayPenalty : 0) + (bv.unlockFee ? displayUnlockFee : 0);
+    return { principal: displayPrincipal, interest: displayInterest, fee: displayFee, penalty: displayPenalty, unlockFee: displayUnlockFee, total };
   }, [monthRows, hiddenMonths, targetBadgeVisibility, principalOnly]);
 
   const grandCollected = useMemo(() => {
@@ -1359,6 +1369,10 @@ export default function DebtOverview() {
                     { key: "principal", label: "เงินต้น", value: grandInstall.principal, icon: <Coins className="w-3.5 h-3.5" />, color: "bg-blue-50 text-blue-800 border-blue-200" },
                     { key: "interest", label: "ดอกเบี้ย", value: grandInstall.interest, icon: <Percent className="w-3.5 h-3.5" />, color: principalOnly ? "bg-blue-50 text-blue-800 border-blue-200" : "bg-purple-50 text-purple-800 border-purple-200" },
                     { key: "fee", label: "ค่าดำเนินการ", value: grandInstall.fee, icon: <Tag className="w-3.5 h-3.5" />, color: principalOnly ? "bg-blue-50 text-blue-800 border-blue-200" : "bg-indigo-50 text-indigo-800 border-indigo-200" },
+                    ...(principalOnly ? [
+                      { key: "penalty", label: "ค่าปรับ", value: grandInstall.penalty, icon: <Gavel className="w-3.5 h-3.5" />, color: "bg-orange-50 text-orange-800 border-orange-200" },
+                      { key: "unlockFee", label: "ค่าปลดล็อก", value: grandInstall.unlockFee, icon: <LockOpen className="w-3.5 h-3.5" />, color: "bg-amber-50 text-amber-800 border-amber-200" },
+                    ] : []),
                   ]}
                   visibility={targetBadgeVisibility}
                   onToggle={toggleTargetBadge}
