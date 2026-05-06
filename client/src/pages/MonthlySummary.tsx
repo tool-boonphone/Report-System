@@ -2108,13 +2108,13 @@ function CombinedTable({
                     {sr.label}
                   </td>
                   {/* รวม */}
-                  <td className={["sticky left-[220px] z-10 px-3 py-1.5 text-right border-r border-gray-200 min-w-[90px]",sr.totalBg].join(" ")}>
+                  <td className={["sticky left-[220px] z-10 px-3 py-1.5 text-right border-r border-gray-200 min-w-[200px]",sr.totalBg].join(" ")}>
                     {(()=>{
                       const val=isHiddenRow?0:rowTotal(sr.key,row);
                       const installVal=isHiddenRow?0:rowTotal("installTotal",row);
                       const targetVal=isHiddenRow?0:rowTotal("target",row);
                       return(
-                        <span className="inline-flex items-center justify-end flex-wrap gap-0.5">
+                        <span className="inline-flex items-center justify-end flex-nowrap gap-0.5 whitespace-nowrap">
                           {renderCellVal(sr.key,val,sr.textColor)}
                           {sr.key==="target"&&<PctTag pct={fmtPct(val,installVal)} color="bg-indigo-50 border-indigo-300 text-indigo-700" tooltip={`เป้าเก็บหนี้ ${fmtPct(val,installVal)??""} ของยอดผ่อนรวม`}/>}
                           {sr.key==="paid"&&<><PctTag pct={fmtPct(val,installVal)} color="bg-purple-50 border-purple-300 text-purple-700" tooltip={`ยอดเก็บหนี้ ${fmtPct(val,installVal)??""} ของยอดผ่อนรวม`}/><PctTag pct={fmtPct(val,targetVal)} color="bg-indigo-50 border-indigo-300 text-indigo-700" tooltip={`ยอดเก็บหนี้ ${fmtPct(val,targetVal)??""} ของเป้าเก็บหนี้`}/></> }
@@ -2228,13 +2228,13 @@ function CombinedTable({
           <tr key={sr.key} className={["border-b border-gray-200",sr.totalBg].join(" ")}>
             <td className={["sticky left-0 z-10 px-3 py-1.5 text-xs font-semibold whitespace-nowrap border-r border-gray-300",sr.totalBg].join(" ")}/>
             <td className={["sticky left-[130px] z-10 px-2 py-1.5 text-center text-[11px] font-semibold border-r border-gray-300",sr.totalBg,sr.textColor].join(" ")}>{sr.label}</td>
-            <td className={["sticky left-[220px] z-10 px-3 py-1.5 text-right border-r border-gray-300",sr.totalBg].join(" ")}>
+            <td className={["sticky left-[220px] z-10 px-3 py-1.5 text-right border-r border-gray-300 min-w-[200px]",sr.totalBg].join(" ")}>
               {(()=>{
                 const val=gtRowTotal(sr.key);
                 const installVal=gtRowTotal("installTotal");
                 const targetVal=gtRowTotal("target");
                 return(
-                  <span className="inline-flex items-center justify-end flex-wrap gap-0.5">
+                  <span className="inline-flex items-center justify-end flex-nowrap gap-0.5 whitespace-nowrap">
                     {renderCellVal(sr.key,val,sr.textColor)}
                     {sr.key==="target"&&<PctTag pct={fmtPct(val,installVal)} color="bg-indigo-50 border-indigo-300 text-indigo-700" tooltip={`เป้าเก็บหนี้ ${fmtPct(val,installVal)??""} ของยอดผ่อนรวม`}/>}
                     {sr.key==="paid"&&<><PctTag pct={fmtPct(val,installVal)} color="bg-purple-50 border-purple-300 text-purple-700" tooltip={`ยอดเก็บหนี้ ${fmtPct(val,installVal)??""} ของยอดผ่อนรวม`}/><PctTag pct={fmtPct(val,targetVal)} color="bg-indigo-50 border-indigo-300 text-indigo-700" tooltip={`ยอดเก็บหนี้ ${fmtPct(val,targetVal)??""} ของเป้าเก็บหนี้`}/></> }

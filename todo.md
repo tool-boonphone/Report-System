@@ -1336,3 +1336,5 @@ Task list:
 - [x] P137-5: เพิ่ม tooltip อธิบายที่มาของ % แต่ละจุด
 - [x] P137-6: แก้ไข Export Excel ให้แยกคอลัมน์ % ออกจากยอดเงิน (เพิ่มคอลัมน์ % แยก)
 - [x] P137-7: Commit + Push GitHub + Checkpoint
+
+## Phase 138 — MonthlySummary CombinedTable % Tag Inline (2026-05-06)- [x] P138-1: แก้ไขคอลัมน์ "รวม" ใน CombinedTable ให้ % tag อยู่แถวเดียวกันกับยอดเงิน (nowrap + เพิ่ม min-w) [ ] P138-2: Commit + Push GitHub + Checkpoint
