@@ -490,7 +490,7 @@ export default function BadDebtSummary() {
       <div className="flex flex-col h-full">
       <div className="px-4 py-4 space-y-4">
 
-        {/* ── Main Tabs ── */}
+        {/* ── Main Tabs + Export Excel ── */}
         <div className="flex items-center border-b border-gray-200">
           <div className="flex gap-0 flex-1">
             {tabs.map((t) => (
@@ -504,6 +504,16 @@ export default function BadDebtSummary() {
               </button>
             ))}
           </div>
+          {/* Export Excel ชิดขวาใน row เดียวกับ main tabs */}
+          {canExport && (
+            <button
+              onClick={handleExport}
+              className="flex items-center gap-1.5 h-8 px-3 text-sm font-medium rounded-md bg-green-600 text-white hover:bg-green-700 transition-colors mb-1 shrink-0"
+            >
+              <Download className="w-4 h-4" />
+              <span className="hidden sm:inline">Export Excel</span>
+            </button>
+          )}
         </div>
 
         {/* ── Summary Cards ── */}
@@ -557,15 +567,40 @@ export default function BadDebtSummary() {
           <button onClick={() => { setApproveMonth(""); setSaleMonth(""); setFilterYear(""); }} className="h-9 px-3 text-sm border rounded hover:bg-gray-50 text-gray-600">
             ล้างตัวกรอง
           </button>
-          {/* Export Excel ย้ายมาอยู่ใน body */}
-          {canExport && (
-            <button
-              onClick={handleExport}
-              className="ml-auto flex items-center gap-1.5 h-9 px-3 text-sm font-medium rounded-md bg-green-600 text-white hover:bg-green-700 transition-colors"
-            >
-              <Download className="w-4 h-4" />
-              <span className="hidden sm:inline">Export Excel</span>
-            </button>
+          {/* Sub-tab แสดงเมื่ออยู่ใน tab yearly หรือ monthly */}
+          {activeTab === "monthly" && (
+            <div className="flex items-center gap-1 ml-auto">
+              <button
+                onClick={() => setMonthlySubTab("bySale")}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${monthlySubTab === "bySale" ? "bg-blue-600 text-white" : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-100"}`}
+              >
+                ตามเดือนที่ขาย
+              </button>
+              <button
+                onClick={() => setMonthlySubTab("byApprove")}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${monthlySubTab === "byApprove" ? "bg-blue-600 text-white" : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-100"}`}
+              >
+                ตามเดือนที่อนุมัติ
+                <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-green-100 text-green-700">% หนี้เสีย</span>
+              </button>
+            </div>
+          )}
+          {activeTab === "yearly" && (
+            <div className="flex items-center gap-1 ml-auto">
+              <button
+                onClick={() => setYearlySubTab("bySale")}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${yearlySubTab === "bySale" ? "bg-purple-600 text-white" : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-100"}`}
+              >
+                ตามปีที่ขาย
+              </button>
+              <button
+                onClick={() => setYearlySubTab("byApprove")}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${yearlySubTab === "byApprove" ? "bg-purple-600 text-white" : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-100"}`}
+              >
+                ตามปีที่อนุมัติ
+                <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-green-100 text-green-700">% หนี้เสีย</span>
+              </button>
+            </div>
           )}
         </div>
 
@@ -653,23 +688,6 @@ export default function BadDebtSummary() {
         {/* ╔════════════════ TAB: สรุปรายเดือน ════════════════ */}
         {!isLoading && activeTab === "monthly" && (
           <div className="flex-1 min-h-0 flex flex-col">
-            {/* Sub-tabs */}
-            <div className="flex items-center gap-1 px-4 py-2 border-b border-gray-200 bg-gray-50">
-              <button
-                onClick={() => setMonthlySubTab("bySale")}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${monthlySubTab === "bySale" ? "bg-blue-600 text-white" : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-100"}`}
-              >
-                ตามเดือนที่ขาย
-              </button>
-              <button
-                onClick={() => setMonthlySubTab("byApprove")}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${monthlySubTab === "byApprove" ? "bg-blue-600 text-white" : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-100"}`}
-              >
-                ตามเดือนที่อนุมัติ
-                <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-green-100 text-green-700">% หนี้เสีย</span>
-              </button>
-            </div>
-
             {/* ── Sub-tab: ตามเดือนที่ขาย (ไม่มี % หนี้เสีย) ── */}
             {monthlySubTab === "bySale" && (
               <div className="flex-1 min-h-0 overflow-x-auto overflow-y-auto">
@@ -802,23 +820,6 @@ export default function BadDebtSummary() {
         {/* ╔════════════════ TAB: สรุปรายปี ════════════════ */}
         {!isLoading && activeTab === "yearly" && (
           <div className="flex-1 min-h-0 flex flex-col">
-            {/* Sub-tabs */}
-            <div className="flex items-center gap-1 px-4 py-2 border-b border-gray-200 bg-gray-50">
-              <button
-                onClick={() => setYearlySubTab("bySale")}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${yearlySubTab === "bySale" ? "bg-purple-600 text-white" : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-100"}`}
-              >
-                ตามปีที่ขาย
-              </button>
-              <button
-                onClick={() => setYearlySubTab("byApprove")}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${yearlySubTab === "byApprove" ? "bg-purple-600 text-white" : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-100"}`}
-              >
-                ตามปีที่อนุมัติ
-                <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-green-100 text-green-700">% หนี้เสีย</span>
-              </button>
-            </div>
-
             {/* ── Sub-tab: ตามปีที่ขาย (ไม่มี % หนี้เสีย) ── */}
             {yearlySubTab === "bySale" && (
               <div className="flex-1 min-h-0 overflow-x-auto overflow-y-auto">
