@@ -1601,12 +1601,12 @@ const COMBINED_SUB_ROWS: Array<{
 
 // กลุ่มหัวตาราง 2 ชั้น
 const BUCKET_GROUPS = [
-  {label:"ปกติ",         bg:"bg-green-700",   buckets:["ปกติ","เกิน 1-7","เกิน 8-14","เกิน 15-30","เกิน 31-60"]},
-  {label:"สงสัยจะเสีย", bg:"bg-orange-600",  buckets:["เกิน 61-90","เกิน >90"]},
-  {label:"ระงับสัญญา",  bg:"bg-red-700",     buckets:["ระงับสัญญา"]},
-  {label:"สิ้นสุดสัญญา",bg:"bg-gray-600",    buckets:["สิ้นสุดสัญญา"]},
-  {label:"หนี้เสีย",    bg:"bg-gray-900",    buckets:["หนี้เสีย"]},
-] as const;
+  {label:"ปกติ",         bg:"bg-green-700",   buckets:["ปกติ","เกิน 1-7","เกิน 8-14","เกิน 15-30","เกิน 31-60"], hasSubtotal:true,  subtotalBg:"bg-green-100"},
+  {label:"สงสัยจะเสีย", bg:"bg-orange-600",  buckets:["เกิน 61-90","เกิน >90"],                                   hasSubtotal:true,  subtotalBg:"bg-orange-100"},
+  {label:"ระงับสัญญา",  bg:"bg-red-700",     buckets:["ระงับสัญญา"],                                              hasSubtotal:false, subtotalBg:""},
+  {label:"สิ้นสุดสัญญา",bg:"bg-gray-600",    buckets:["สิ้นสุดสัญญา"],                                            hasSubtotal:false, subtotalBg:""},
+  {label:"หนี้เสีย",    bg:"bg-gray-900",    buckets:["หนี้เสีย"],                                                hasSubtotal:false, subtotalBg:""},
+];
 
 function CombinedTable({
   rows,grandTotal,hiddenBuckets,toggleBucket,
@@ -1730,7 +1730,7 @@ function CombinedTable({
     return r;
   },[grandTotal]);
 
-  const minWidth=130+90+90+(DEBT_BUCKETS.length*110)+90; // +90 for bad-debt sub-cols (ค่างวด/ขายเครื่อง/รวม replace bucket)
+  const minWidth=130+90+90+(DEBT_BUCKETS.length*110)+90+(2*110); // +90 bad-debt sub-cols, +2*110 subtotal cols for ปกติ/สงสัยจะเสีย
 
   // ── Badge panels ──────────────────────────────────────────────────────────
   const BADGE_DEFS=[
@@ -1892,8 +1892,8 @@ function CombinedTable({
           </th>
           {/* group headers */}
           {BUCKET_GROUPS.map((g)=>{
-            // นับ colspan = จำนวน bucket ในกลุ่ม + (กลุ่มหนี้เสียมี 3 sub-col สำหรับ paid)
-            const colCount = g.label==="หนี้เสีย" ? 3 : g.buckets.length;
+            // นับ colspan = จำนวน bucket ในกลุ่ม + subtotal col + (กลุ่มหนี้เสียมี 3 sub-col แทน 1 bucket)
+            const colCount = g.label==="หนี้เสีย" ? 3 : g.buckets.length + (g.hasSubtotal ? 1 : 0);
             // ตรวจสอบว่า bucket ในกลุ่มนี้ถูกซ่อนทั้งหมดหรือไม่
             const allHidden=g.buckets.every(b=>hiddenBuckets.has(b));
             return(
@@ -1944,14 +1944,22 @@ function CombinedTable({
                       </th>
                     </>
                   ):(
-                    <th
-                      onClick={()=>toggleBucket(b)}
-                      className={["px-2 py-1.5 text-center font-semibold text-white whitespace-nowrap min-w-[110px] border-r border-white/20 cursor-pointer hover:opacity-80 transition-opacity",g.bg,hiddenBuckets.has(b)?"opacity-40":""].join(" ")}>
-                      <div className="flex flex-col items-center gap-0.5">
-                        {hiddenBuckets.has(b)?<EyeOff className="w-3 h-3"/>:<Eye className="w-3 h-3"/>}
-                        <span className={["inline-block px-1.5 py-0.5 rounded-full text-[10px] border",bucketPillClasses(b)].join(" ")}>{b}</span>
-                      </div>
-                    </th>
+                    <>
+                      <th
+                        onClick={()=>toggleBucket(b)}
+                        className={["px-2 py-1.5 text-center font-semibold text-white whitespace-nowrap min-w-[110px] border-r border-white/20 cursor-pointer hover:opacity-80 transition-opacity",g.bg,hiddenBuckets.has(b)?"opacity-40":""].join(" ")}>
+                        <div className="flex flex-col items-center gap-0.5">
+                          {hiddenBuckets.has(b)?<EyeOff className="w-3 h-3"/>:<Eye className="w-3 h-3"/>}
+                          <span className={["inline-block px-1.5 py-0.5 rounded-full text-[10px] border",bucketPillClasses(b)].join(" ")}>{b}</span>
+                        </div>
+                      </th>
+                      {/* subtotal col หลัง bucket สุดท้ายของกลุ่ม ปกติ/สงสัยจะเสีย */}
+                      {isLast&&g.hasSubtotal&&(
+                        <th className={["px-2 py-1.5 text-center font-bold text-white whitespace-nowrap min-w-[110px] border-r border-white/30",g.bg].join(" ")}>
+                          <span className="text-[10px]">รวม</span>
+                        </th>
+                      )}
+                    </>
                   )}
                 </React.Fragment>
               );
@@ -2024,9 +2032,24 @@ function CombinedTable({
                               </td>
                             </>
                           ):(
-                            <td className={["px-3 py-1.5 text-right border-r border-gray-200",cellBg].join(" ")}>
-                              {renderCellVal(sr.key, val, sr.textColor)}
-                            </td>
+                            <>
+                              <td className={["px-3 py-1.5 text-right border-r border-gray-200",cellBg].join(" ")}>
+                                {renderCellVal(sr.key, val, sr.textColor)}
+                              </td>
+                              {/* subtotal col หลัง bucket สุดท้ายของกลุ่ม ปกติ/สงสัยจะเสีย */}
+                              {isLast&&g.hasSubtotal&&(()=>{
+                                const groupBuckets=g.buckets as readonly string[];
+                                const subtotalVal=groupBuckets.reduce((s,gb)=>{
+                                  if(isDimmed||hiddenBuckets.has(gb))return s;
+                                  return s+cellValue(sr.key,row.buckets[gb]);
+                                },0);
+                                return(
+                                  <td className={["px-3 py-1.5 text-right font-bold border-r border-gray-300",g.subtotalBg].join(" ")}>
+                                    {renderCellVal(sr.key, subtotalVal, sr.textColor)}
+                                  </td>
+                                );
+                              })()}
+                            </>
                           )}
                         </React.Fragment>
                       );
@@ -2056,7 +2079,10 @@ function CombinedTable({
                       <td className={["px-3 py-2",bucketCellBg(b),"bg-slate-100"].join(" ")}/>
                     </>
                   ):(
-                    <td className={["px-3 py-2",bucketCellBg(b),"bg-slate-100"].join(" ")}/>
+                    <>
+                      <td className={["px-3 py-2",bucketCellBg(b),"bg-slate-100"].join(" ")}/>
+                      {isLast&&g.hasSubtotal&&<td className={["px-3 py-2",g.subtotalBg,"bg-opacity-80"].join(" ")}/>}
+                    </>
                   )}
                 </React.Fragment>
               );
@@ -2106,9 +2132,24 @@ function CombinedTable({
                         </td>
                       </>
                     ):(
-                      <td className={["px-3 py-1.5 text-right border-r border-gray-300",cellBg,"bg-slate-100"].join(" ")}>
-                        {renderCellVal(sr.key,val,sr.textColor)}
-                      </td>
+                      <>
+                        <td className={["px-3 py-1.5 text-right border-r border-gray-300",cellBg,"bg-slate-100"].join(" ")}>
+                          {renderCellVal(sr.key,val,sr.textColor)}
+                        </td>
+                        {/* subtotal col หลัง bucket สุดท้ายของกลุ่ม ปกติ/สงสัยจะเสีย */}
+                        {isLast&&g.hasSubtotal&&(()=>{
+                          const groupBuckets=g.buckets as readonly string[];
+                          const subtotalVal=groupBuckets.reduce((s,gb)=>{
+                            if(hiddenBuckets.has(gb))return s;
+                            return s+gtValue(sr.key,gb);
+                          },0);
+                          return(
+                            <td className={["px-3 py-1.5 text-right font-bold border-r border-gray-300",g.subtotalBg,"bg-opacity-80"].join(" ")}>
+                              {renderCellVal(sr.key, subtotalVal, sr.textColor)}
+                            </td>
+                          );
+                        })()}
+                      </>
                     )}
                   </React.Fragment>
                 );
