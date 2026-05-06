@@ -295,9 +295,9 @@ function MultiSelectFilter({
                 <CommandItem
                   key={opt}
                   value={opt}
-                  onSelect={(v) => {
-                    const original = options.find((o) => o.toLowerCase() === v) ?? v;
-                    toggle(original);
+                  onSelect={() => {
+                    // ใช้ opt โดยตรง (ไม่ผ่าน v ที่ถูก lowercase โดย Command)
+                    toggle(opt);
                   }}
                 >
                   <Check
