@@ -1151,6 +1151,19 @@ export default function MonthlySummary() {
           </div>
         )}
       </div>
+        {/* ── Combined Badge Panel (outside scroll) ─────────────────── */}
+        {tab==="combined"&&canView&&!query.isLoading&&!query.error&&rows.length>0&&(
+          <CombinedBadgePanel
+            grandTotal={combinedGrandTotal}
+            hiddenBuckets={hiddenBuckets}
+            paidVis={paidVis} setPaidVis={setPaidVis}
+            targetVis={targetVis} setTargetVis={setTargetVis}
+            dueVis={dueVis} setDueVis={setDueVis}
+            notYetDueVis={notYetDueVis} setNotYetDueVis={setNotYetDueVis}
+            installVis={installVis} setInstallVis={setInstallVis}
+            showBadDebtSale={showBadDebtSale} setShowBadDebtSale={setShowBadDebtSale}
+          />
+        )}
         {/* ── Table area ────────────────────────────────────────────── */}
         <div className="flex-1 min-h-0 overflow-x-auto overflow-y-auto">
           {!canView?(<div className="flex items-center justify-center h-full text-gray-400 text-sm">คุณไม่มีสิทธิ์ดูข้อมูลนี้</div>)
@@ -1646,6 +1659,149 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
   );
 }
 
+// ─── CombinedBadgePanel ─────────────────────────────────────────────────────────
+// Badge Panel สำหรับ tab สรุปรวม — render นอก scroll container เพื่อไม่ให้เลื่อนตามตาราง
+function CombinedBadgePanel({
+  grandTotal,hiddenBuckets,
+  paidVis,setPaidVis,targetVis,setTargetVis,
+  dueVis,setDueVis,notYetDueVis,setNotYetDueVis,
+  installVis,setInstallVis,
+  showBadDebtSale,setShowBadDebtSale,
+}:{
+  grandTotal:GrandTotal;hiddenBuckets:Set<string>;
+  paidVis:Record<MoneyBadgeKey,boolean>;setPaidVis:React.Dispatch<React.SetStateAction<Record<MoneyBadgeKey,boolean>>>;
+  targetVis:Record<MoneyBadgeKey,boolean>;setTargetVis:React.Dispatch<React.SetStateAction<Record<MoneyBadgeKey,boolean>>>;
+  dueVis:Record<DueBadgeKey,boolean>;setDueVis:React.Dispatch<React.SetStateAction<Record<DueBadgeKey,boolean>>>;
+  notYetDueVis:Record<NotYetDueBadgeKey,boolean>;setNotYetDueVis:React.Dispatch<React.SetStateAction<Record<NotYetDueBadgeKey,boolean>>>;
+  installVis:Record<"principal"|"interest"|"fee",boolean>;setInstallVis:React.Dispatch<React.SetStateAction<Record<"principal"|"interest"|"fee",boolean>>>;
+  showBadDebtSale:boolean;setShowBadDebtSale:(v:boolean)=>void;
+}){
+  const [expandedBadges,setExpandedBadges]=React.useState<Set<TabKey>>(new Set());
+  function toggleBadge(k:TabKey){setExpandedBadges((p)=>{const n=new Set(p);if(n.has(k))n.delete(k);else n.add(k);return n;});}
+  function toggleInstallVis(k:"principal"|"interest"|"fee"){setInstallVis((p)=>({...p,[k]:!p[k]}));}
+  function togglePaidVis(k:MoneyBadgeKey){setPaidVis((p)=>({...p,[k]:!p[k]}));}
+  function toggleTargetVis(k:MoneyBadgeKey){setTargetVis((p)=>({...p,[k]:!p[k]}));}
+  function toggleDueVis(k:DueBadgeKey){setDueVis((p)=>({...p,[k]:!p[k]}));}
+  function toggleNotYetDueVis(k:NotYetDueBadgeKey){setNotYetDueVis((p)=>({...p,[k]:!p[k]}));}
+
+  // คำนวณ grand total badge values
+  const gtBadgeInstall=React.useMemo(()=>{let r=emptyMoney();for(const b of DEBT_BUCKETS){if(hiddenBuckets.has(b))continue;const bt=grandTotal.bucketTotals[b];if(bt)r=addMoney(r,bt.installTotal);}return r;},[grandTotal,hiddenBuckets]);
+  const gtBadgeTarget=React.useMemo(()=>{let r=emptyMoney();for(const b of DEBT_BUCKETS){if(hiddenBuckets.has(b))continue;const bt=grandTotal.bucketTotals[b];if(bt)r=addMoney(r,bt.target);}return r;},[grandTotal,hiddenBuckets]);
+  const gtBadgePaid=React.useMemo(()=>{let r=emptyMoney();for(const b of DEBT_BUCKETS){if(hiddenBuckets.has(b))continue;const bt=grandTotal.bucketTotals[b];if(bt)r=addMoney(r,bt.paid);}return r;},[grandTotal,hiddenBuckets]);
+  const gtBadgeDue=React.useMemo(()=>{let r=emptyMoney();for(const b of DEBT_BUCKETS){if(hiddenBuckets.has(b))continue;const bt=grandTotal.bucketTotals[b];if(bt)r=addMoney(r,bt.due);}return r;},[grandTotal,hiddenBuckets]);
+  const gtBadgeNotYetDue=React.useMemo(()=>{let r=emptyMoney();for(const b of DEBT_BUCKETS){if(hiddenBuckets.has(b))continue;const bt=grandTotal.bucketTotals[b];if(bt)r=addMoney(r,bt.notYetDue);}return r;},[grandTotal,hiddenBuckets]);
+
+  function BadgeItemRow({isOn,onToggle,label,val,color}:{isOn:boolean;onToggle:()=>void;label:string;val:number;color:string}){
+    return(
+      <button type="button" onClick={onToggle}
+        className={["flex items-center gap-1 px-2 py-1 rounded text-xs border transition-colors",color,isOn?"opacity-100":"opacity-40 line-through"].join(" ")}>
+        {isOn?<Eye className="w-3 h-3"/>:<EyeOff className="w-3 h-3"/>}
+        {label} {fmtMoney(val)}
+      </button>
+    );
+  }
+
+  const BADGE_DEFS=[
+    {key:"count" as TabKey,       label:"สัญญา",          color:"bg-slate-100 border-slate-300 text-slate-700"},
+    {key:"installTotal" as TabKey, label:"ยอดผ่อนรวม",    color:"bg-purple-100 border-purple-300 text-purple-700"},
+    {key:"target" as TabKey,      label:"เป้าเก็บหนี้",   color:"bg-indigo-100 border-indigo-300 text-indigo-700"},
+    {key:"paid" as TabKey,        label:"ยอดเก็บหนี้",    color:"bg-green-100 border-green-300 text-green-700"},
+    {key:"due" as TabKey,         label:"หนี้ค้างชำระ",   color:"bg-orange-100 border-orange-300 text-orange-700"},
+    {key:"notYetDue" as TabKey,   label:"ยังไม่ถึงกำหนด", color:"bg-blue-100 border-blue-300 text-blue-700"},
+  ];
+
+  return(
+    <div className="flex-shrink-0 bg-teal-50/60 border-b border-teal-200 px-4 py-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs font-semibold text-teal-700 whitespace-nowrap">Badge แต่ละแถบ:</span>
+        {BADGE_DEFS.map(({key,label,color})=>(
+          <button key={key} type="button" onClick={()=>toggleBadge(key)}
+            className={["flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border font-medium transition-colors",color,expandedBadges.has(key)?"ring-2 ring-offset-1 ring-teal-400":"opacity-70 hover:opacity-100"].join(" ")}>
+            {expandedBadges.has(key)?<Eye className="w-3 h-3"/>:<EyeOff className="w-3 h-3"/>}
+            {label}
+          </button>
+        ))}
+      </div>
+      {expandedBadges.size>0&&(
+        <div className="mt-2 flex flex-col gap-1.5">
+          {expandedBadges.has("count")&&(
+            <div className="flex flex-wrap items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-200">
+              <span className="text-[11px] font-semibold text-slate-600 whitespace-nowrap mr-1">สัญญา:</span>
+              <span className="flex items-center gap-1.5 px-2 py-1 rounded text-xs bg-slate-100 border border-slate-300 text-slate-700 font-semibold">
+                <Banknote className="w-3 h-3"/>รวม {grandTotal.totalCount.toLocaleString()} สัญญา
+              </span>
+            </div>
+          )}
+          {expandedBadges.has("installTotal")&&(
+            <div className="flex flex-wrap items-center gap-2 px-3 py-1.5 rounded-lg bg-purple-50/60 border border-purple-200">
+              <span className="text-[11px] font-semibold text-purple-700 whitespace-nowrap mr-1">ยอดผ่อนรวม:</span>
+              {(["principal","interest","fee"] as const).map((k)=>{
+                const labels={principal:"เงินต้น",interest:"ดอกเบี้ย",fee:"ค่าดำเนินการ"};
+                return(<BadgeItemRow key={k} isOn={installVis[k]} onToggle={()=>toggleInstallVis(k)} label={labels[k]} val={gtBadgeInstall[k]} color="bg-purple-100 border-purple-300 text-purple-800"/>);
+              })}
+              <span className="flex items-center gap-1.5 px-2 py-1 rounded text-xs bg-purple-700 border border-purple-800 text-white font-semibold">
+                <Banknote className="w-3 h-3"/>รวม {fmtMoney((installVis.principal?gtBadgeInstall.principal:0)+(installVis.interest?gtBadgeInstall.interest:0)+(installVis.fee?gtBadgeInstall.fee:0))}
+              </span>
+            </div>
+          )}
+          {expandedBadges.has("target")&&(
+            <div className="flex flex-wrap items-center gap-2 px-3 py-1.5 rounded-lg bg-indigo-50/60 border border-indigo-200">
+              <span className="text-[11px] font-semibold text-indigo-700 whitespace-nowrap mr-1">เป้าเก็บหนี้:</span>
+              {MONEY_BADGE_ITEMS.filter(x=>x.key!=="discount"&&x.key!=="overpaid").map(({key:k,label})=>{
+                const val=gtBadgeTarget[k as keyof MoneyBreakdown] as number;
+                return(<BadgeItemRow key={k} isOn={targetVis[k as MoneyBadgeKey]} onToggle={()=>toggleTargetVis(k as MoneyBadgeKey)} label={label} val={val} color="bg-indigo-100 border-indigo-300 text-indigo-800"/>);
+              })}
+              <span className="flex items-center gap-1.5 px-2 py-1 rounded text-xs bg-indigo-700 border border-indigo-800 text-white font-semibold">
+                <Banknote className="w-3 h-3"/>รวม {fmtMoney(computeMoneyTotal(gtBadgeTarget,{...targetVis,discount:false,overpaid:false}))}
+              </span>
+            </div>
+          )}
+          {expandedBadges.has("paid")&&(
+            <div className="flex flex-wrap items-center gap-2 px-3 py-1.5 rounded-lg bg-green-50/60 border border-green-200">
+              <span className="text-[11px] font-semibold text-green-700 whitespace-nowrap mr-1">ยอดเก็บหนี้:</span>
+              {MONEY_BADGE_ITEMS.map(({key:k,label,canToggle})=>{
+                const val=gtBadgePaid[k as keyof MoneyBreakdown] as number;
+                return(<BadgeItemRow key={k} isOn={paidVis[k as MoneyBadgeKey]} onToggle={()=>canToggle&&togglePaidVis(k as MoneyBadgeKey)} label={label} val={val} color="bg-green-100 border-green-300 text-green-800"/>);
+              })}
+              <button type="button" onClick={()=>setShowBadDebtSale(!showBadDebtSale)}
+                className={["flex items-center gap-1 px-2 py-1 rounded text-xs border transition-colors bg-green-100 border-green-300 text-green-800",showBadDebtSale?"opacity-100":"opacity-40 line-through"].join(" ")}>
+                {showBadDebtSale?<Eye className="w-3 h-3"/>:<EyeOff className="w-3 h-3"/>}หนี้เสีย(ขายเครื่อง) {fmtMoney(gtBadgePaid.badDebt??0)}
+              </button>
+              <span className="flex items-center gap-1.5 px-2 py-1 rounded text-xs bg-green-700 border border-green-800 text-white font-semibold">
+                <Banknote className="w-3 h-3"/>รวม {fmtMoney(computeMoneyTotal(gtBadgePaid,paidVis)+(showBadDebtSale?(gtBadgePaid.badDebt??0):0))}
+              </span>
+            </div>
+          )}
+          {expandedBadges.has("due")&&(
+            <div className="flex flex-wrap items-center gap-2 px-3 py-1.5 rounded-lg bg-orange-50/60 border border-orange-200">
+              <span className="text-[11px] font-semibold text-orange-700 whitespace-nowrap mr-1">หนี้ค้างชำระ:</span>
+              {DUE_BADGE_ITEMS.map(({key:k,label})=>{
+                const val=gtBadgeDue[k as keyof MoneyBreakdown] as number;
+                return(<BadgeItemRow key={k} isOn={dueVis[k as DueBadgeKey]} onToggle={()=>toggleDueVis(k as DueBadgeKey)} label={label} val={val} color="bg-orange-100 border-orange-300 text-orange-800"/>);
+              })}
+              <span className="flex items-center gap-1.5 px-2 py-1 rounded text-xs bg-orange-700 border border-orange-800 text-white font-semibold">
+                <Banknote className="w-3 h-3"/>รวม {fmtMoney(computeDueTotal(gtBadgeDue,dueVis))}
+              </span>
+            </div>
+          )}
+          {expandedBadges.has("notYetDue")&&(
+            <div className="flex flex-wrap items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-50/60 border border-blue-200">
+              <span className="text-[11px] font-semibold text-blue-700 whitespace-nowrap mr-1">ยังไม่ถึงกำหนด:</span>
+              {NOT_YET_DUE_BADGE_ITEMS.map(({key:k,label})=>{
+                const val=gtBadgeNotYetDue[k as keyof MoneyBreakdown] as number;
+                return(<BadgeItemRow key={k} isOn={notYetDueVis[k as NotYetDueBadgeKey]} onToggle={()=>toggleNotYetDueVis(k as NotYetDueBadgeKey)} label={label} val={val} color="bg-blue-100 border-blue-300 text-blue-800"/>);
+              })}
+              <span className="flex items-center gap-1.5 px-2 py-1 rounded text-xs bg-blue-700 border border-blue-800 text-white font-semibold">
+                <Banknote className="w-3 h-3"/>รวม {fmtMoney(computeNotYetDueTotal(gtBadgeNotYetDue,notYetDueVis))}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── CombinedTable ────────────────────────────────────────────────────────────
 // แสดงข้อมูลทุกแถบในตารางเดียว แต่ละเดือนมี 6 sub-row
 const COMBINED_SUB_ROWS: Array<{
@@ -1655,12 +1811,12 @@ const COMBINED_SUB_ROWS: Array<{
   textColor: string;
   totalBg: string;
 }> = [
-  {key:"count",        label:"สัญญา",          rowBg:"bg-slate-50",    textColor:"text-slate-700",   totalBg:"bg-slate-100"},
-  {key:"installTotal", label:"ยอดผ่อนรวม",     rowBg:"bg-purple-50/40",textColor:"text-purple-800",  totalBg:"bg-purple-100"},
-  {key:"target",       label:"เป้าเก็บหนี้",   rowBg:"bg-indigo-50/40",textColor:"text-indigo-800",  totalBg:"bg-indigo-100"},
-  {key:"paid",         label:"ยอดเก็บหนี้",    rowBg:"bg-green-50/40", textColor:"text-green-800",   totalBg:"bg-green-100"},
-  {key:"due",          label:"หนี้ค้างชำระ",   rowBg:"bg-orange-50/40",textColor:"text-orange-800",  totalBg:"bg-orange-100"},
-  {key:"notYetDue",    label:"ยังไม่ถึงกำหนด", rowBg:"bg-blue-50/40",  textColor:"text-blue-800",    totalBg:"bg-blue-100"},
+  {key:"count",        label:"สัญญา",          rowBg:"bg-slate-50",   textColor:"text-slate-700",   totalBg:"bg-slate-100"},
+  {key:"installTotal", label:"ยอดผ่อนรวม",     rowBg:"bg-purple-50",  textColor:"text-purple-800",  totalBg:"bg-purple-100"},
+  {key:"target",       label:"เป้าเก็บหนี้",   rowBg:"bg-indigo-50",  textColor:"text-indigo-800",  totalBg:"bg-indigo-100"},
+  {key:"paid",         label:"ยอดเก็บหนี้",    rowBg:"bg-green-50",   textColor:"text-green-800",   totalBg:"bg-green-100"},
+  {key:"due",          label:"หนี้ค้างชำระ",   rowBg:"bg-orange-50",  textColor:"text-orange-800",  totalBg:"bg-orange-100"},
+  {key:"notYetDue",    label:"ยังไม่ถึงกำหนด", rowBg:"bg-blue-50",    textColor:"text-blue-800",    totalBg:"bg-blue-100"},
 ];
 
 // กลุ่มหัวตาราง 2 ชั้น
@@ -1731,7 +1887,11 @@ function CombinedTable({
   function rowTotal(subKey:TabKey, row:SummaryRow):number {
     return DEBT_BUCKETS.reduce((s,b)=>{
       if(hiddenBuckets.has(b))return s;
-      return s+cellValue(subKey,row.buckets[b]);
+      const cell=row.buckets[b];
+      if(subKey==="paid"&&b==="หนี้เสีย"){
+        return s+computeMoneyTotal(cell?.paid??emptyMoney(),paidVis)+(showBadDebtSale?(cell?.paid.badDebt??0):0);
+      }
+      return s+cellValue(subKey,cell);
     },0);
   }
   function gtValue(subKey:TabKey, bucket:string):number {
@@ -1755,6 +1915,10 @@ function CombinedTable({
   function gtRowTotal(subKey:TabKey):number {
     return DEBT_BUCKETS.reduce((s,b)=>{
       if(hiddenBuckets.has(b))return s;
+      if(subKey==="paid"&&b==="หนี้เสีย"){
+        const bt=grandTotal.bucketTotals[b];
+        return s+computeMoneyTotal(bt?.paid??emptyMoney(),paidVis)+(showBadDebtSale?(bt?.paid.badDebt??0):0);
+      }
       return s+gtValue(subKey,b);
     },0);
   }
@@ -1772,181 +1936,11 @@ function CombinedTable({
     return<span className={["text-xs font-medium",textColor].join(" ")}>{fmtMoney(val)}</span>;
   }
 
-  // ── Badge toggle helpers ──────────────────────────────────────────────────
-  function toggleTargetVis(k:MoneyBadgeKey){setTargetVis((p)=>({...p,[k]:!p[k]}));}
-  function togglePaidVis(k:MoneyBadgeKey){setPaidVis((p)=>({...p,[k]:!p[k]}));}
-  function toggleDueVis(k:DueBadgeKey){setDueVis((p)=>({...p,[k]:!p[k]}));}
-  function toggleNotYetDueVis(k:NotYetDueBadgeKey){setNotYetDueVis((p)=>({...p,[k]:!p[k]}));}
-  function toggleInstallVis(k:"principal"|"interest"|"fee"){setInstallVis((p)=>({...p,[k]:!p[k]}));}
-
-  // ── grand total badge values ──────────────────────────────────────────────
-  const gtBadgeInstall=React.useMemo(()=>{
-    let r=emptyMoney();
-    for(const b of DEBT_BUCKETS){const bt=grandTotal.bucketTotals[b];if(bt)r=addMoney(r,bt.installTotal);}
-    return r;
-  },[grandTotal]);
-  const gtBadgeTarget=React.useMemo(()=>{
-    let r=emptyMoney();
-    for(const b of DEBT_BUCKETS){const bt=grandTotal.bucketTotals[b];if(bt)r=addMoney(r,bt.target);}
-    return r;
-  },[grandTotal]);
-  const gtBadgePaid=React.useMemo(()=>{
-    let r=emptyMoney();
-    for(const b of DEBT_BUCKETS){const bt=grandTotal.bucketTotals[b];if(bt)r=addMoney(r,bt.paid);}
-    return r;
-  },[grandTotal]);
-  const gtBadgeDue=React.useMemo(()=>{
-    let r=emptyMoney();
-    for(const b of DEBT_BUCKETS){const bt=grandTotal.bucketTotals[b];if(bt)r=addMoney(r,bt.due);}
-    return r;
-  },[grandTotal]);
-  const gtBadgeNotYetDue=React.useMemo(()=>{
-    let r=emptyMoney();
-    for(const b of DEBT_BUCKETS){const bt=grandTotal.bucketTotals[b];if(bt)r=addMoney(r,bt.notYetDue);}
-    return r;
-  },[grandTotal]);
-
   const minWidth=130+90+90+(DEBT_BUCKETS.length*110)+90+(2*110); // +90 bad-debt sub-cols, +2*110 subtotal cols for ปกติ/สงสัยจะเสีย
-
-  // ── Badge panels ──────────────────────────────────────────────────────────
-  const BADGE_DEFS=[
-    {key:"count" as TabKey,      label:"สัญญา",          color:"bg-slate-100 border-slate-300 text-slate-700",   expandColor:"bg-slate-50 border-slate-200"},
-    {key:"installTotal" as TabKey,label:"ยอดผ่อนรวม",    color:"bg-purple-100 border-purple-300 text-purple-700", expandColor:"bg-purple-50/60 border-purple-200"},
-    {key:"target" as TabKey,     label:"เป้าเก็บหนี้",   color:"bg-indigo-100 border-indigo-300 text-indigo-700", expandColor:"bg-indigo-50/60 border-indigo-200"},
-    {key:"paid" as TabKey,       label:"ยอดเก็บหนี้",    color:"bg-green-100 border-green-300 text-green-700",    expandColor:"bg-green-50/60 border-green-200"},
-    {key:"due" as TabKey,        label:"หนี้ค้างชำระ",   color:"bg-orange-100 border-orange-300 text-orange-700", expandColor:"bg-orange-50/60 border-orange-200"},
-    {key:"notYetDue" as TabKey,  label:"ยังไม่ถึงกำหนด", color:"bg-blue-100 border-blue-300 text-blue-700",       expandColor:"bg-blue-50/60 border-blue-200"},
-  ];
-  const [expandedBadges,setExpandedBadges]=React.useState<Set<TabKey>>(new Set());
-  function toggleBadge(k:TabKey){setExpandedBadges((p)=>{const n=new Set(p);if(n.has(k))n.delete(k);else n.add(k);return n;});}
-
-  function BadgeItemRow({isOn,onToggle,label,val,color}:{isOn:boolean;onToggle:()=>void;label:string;val:number;color:string}){
-    return(
-      <button type="button" onClick={onToggle}
-        className={["flex items-center gap-1 px-2 py-1 rounded text-xs border transition-colors",color,isOn?"opacity-100":"opacity-40 line-through"].join(" ")}>
-        {isOn?<Eye className="w-3 h-3"/>:<EyeOff className="w-3 h-3"/>}
-        {label} {fmtMoney(val)}
-      </button>
-    );
-  }
 
   return(
     <>
-    {/* ── Badge panels ──────────────────────────────────────────────────── */}
-    <div className="bg-teal-50/60 border-b border-teal-200 px-4 py-2">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs font-semibold text-teal-700 whitespace-nowrap">Badge แต่ละแถบ:</span>
-        {BADGE_DEFS.map(({key,label,color})=>{
-          const isExpanded=expandedBadges.has(key);
-          return(
-            <button key={key} type="button"
-              onClick={()=>toggleBadge(key)}
-              className={["flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border font-medium transition-colors",color,isExpanded?"ring-2 ring-offset-1 ring-teal-400":"opacity-70 hover:opacity-100"].join(" ")}>
-              {isExpanded?<Eye className="w-3 h-3"/>:<EyeOff className="w-3 h-3"/>}
-              {label}
-            </button>
-          );
-        })}
-      </div>
-      {expandedBadges.size>0&&(
-        <div className="mt-2 flex flex-col gap-1.5">
-          {/* สัญญา */}
-          {expandedBadges.has("count")&&(
-            <div className="flex flex-wrap items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-200">
-              <span className="text-[11px] font-semibold text-slate-600 whitespace-nowrap mr-1">สัญญา:</span>
-              <span className="flex items-center gap-1.5 px-2 py-1 rounded text-xs bg-slate-100 border border-slate-300 text-slate-700 font-semibold">
-                <Banknote className="w-3 h-3"/>รวม {grandTotal.totalCount.toLocaleString()} สัญญา
-              </span>
-            </div>
-          )}
-          {/* ยอดผ่อนรวม */}
-          {expandedBadges.has("installTotal")&&(
-            <div className="flex flex-wrap items-center gap-2 px-3 py-1.5 rounded-lg bg-purple-50/60 border border-purple-200">
-              <span className="text-[11px] font-semibold text-purple-700 whitespace-nowrap mr-1">ยอดผ่อนรวม:</span>
-              {(["principal","interest","fee"] as const).map((k)=>{
-                const labels={principal:"เงินต้น",interest:"ดอกเบี้ย",fee:"ค่าดำเนินการ"};
-                return(
-                  <BadgeItemRow key={k} isOn={installVis[k]} onToggle={()=>toggleInstallVis(k)}
-                    label={labels[k]} val={gtBadgeInstall[k]} color="bg-purple-100 border-purple-300 text-purple-800"/>
-                );
-              })}
-              <span className="flex items-center gap-1.5 px-2 py-1 rounded text-xs bg-purple-700 border border-purple-800 text-white font-semibold">
-                <Banknote className="w-3 h-3"/>รวม {fmtMoney((installVis.principal?gtBadgeInstall.principal:0)+(installVis.interest?gtBadgeInstall.interest:0)+(installVis.fee?gtBadgeInstall.fee:0))}
-              </span>
-            </div>
-          )}
-          {/* เป้าเก็บหนี้ */}
-          {expandedBadges.has("target")&&(
-            <div className="flex flex-wrap items-center gap-2 px-3 py-1.5 rounded-lg bg-indigo-50/60 border border-indigo-200">
-              <span className="text-[11px] font-semibold text-indigo-700 whitespace-nowrap mr-1">เป้าเก็บหนี้:</span>
-              {MONEY_BADGE_ITEMS.filter(x=>x.key!=="discount"&&x.key!=="overpaid").map(({key:k,label})=>{
-                const val=gtBadgeTarget[k as keyof MoneyBreakdown] as number;
-                return(
-                  <BadgeItemRow key={k} isOn={targetVis[k as MoneyBadgeKey]} onToggle={()=>toggleTargetVis(k as MoneyBadgeKey)}
-                    label={label} val={val} color="bg-indigo-100 border-indigo-300 text-indigo-800"/>
-                );
-              })}
-              <span className="flex items-center gap-1.5 px-2 py-1 rounded text-xs bg-indigo-700 border border-indigo-800 text-white font-semibold">
-                <Banknote className="w-3 h-3"/>รวม {fmtMoney(computeMoneyTotal(gtBadgeTarget,{...targetVis,discount:false,overpaid:false}))}
-              </span>
-            </div>
-          )}
-          {/* ยอดเก็บหนี้ */}
-          {expandedBadges.has("paid")&&(
-            <div className="flex flex-wrap items-center gap-2 px-3 py-1.5 rounded-lg bg-green-50/60 border border-green-200">
-              <span className="text-[11px] font-semibold text-green-700 whitespace-nowrap mr-1">ยอดเก็บหนี้:</span>
-              {MONEY_BADGE_ITEMS.map(({key:k,label,canToggle})=>{
-                const val=gtBadgePaid[k as keyof MoneyBreakdown] as number;
-                return(
-                  <BadgeItemRow key={k} isOn={paidVis[k as MoneyBadgeKey]} onToggle={()=>canToggle&&togglePaidVis(k as MoneyBadgeKey)}
-                    label={label} val={val} color="bg-green-100 border-green-300 text-green-800"/>
-                );
-              })}
-              <button type="button" onClick={()=>setShowBadDebtSale(!showBadDebtSale)}
-                className={["flex items-center gap-1 px-2 py-1 rounded text-xs border transition-colors bg-green-100 border-green-300 text-green-800",showBadDebtSale?"opacity-100":"opacity-40 line-through"].join(" ")}>
-                {showBadDebtSale?<Eye className="w-3 h-3"/>:<EyeOff className="w-3 h-3"/>}หนี้เสีย(ขายเครื่อง) {fmtMoney(gtBadgePaid.badDebt??0)}
-              </button>
-              <span className="flex items-center gap-1.5 px-2 py-1 rounded text-xs bg-green-700 border border-green-800 text-white font-semibold">
-                <Banknote className="w-3 h-3"/>รวม {fmtMoney(computeMoneyTotal(gtBadgePaid,paidVis))}
-              </span>
-            </div>
-          )}
-          {/* หนี้ค้างชำระ */}
-          {expandedBadges.has("due")&&(
-            <div className="flex flex-wrap items-center gap-2 px-3 py-1.5 rounded-lg bg-orange-50/60 border border-orange-200">
-              <span className="text-[11px] font-semibold text-orange-700 whitespace-nowrap mr-1">หนี้ค้างชำระ:</span>
-              {DUE_BADGE_ITEMS.map(({key:k,label})=>{
-                const val=gtBadgeDue[k as keyof MoneyBreakdown] as number;
-                return(
-                  <BadgeItemRow key={k} isOn={dueVis[k as DueBadgeKey]} onToggle={()=>toggleDueVis(k as DueBadgeKey)}
-                    label={label} val={val} color="bg-orange-100 border-orange-300 text-orange-800"/>
-                );
-              })}
-              <span className="flex items-center gap-1.5 px-2 py-1 rounded text-xs bg-orange-700 border border-orange-800 text-white font-semibold">
-                <Banknote className="w-3 h-3"/>รวม {fmtMoney(computeDueTotal(gtBadgeDue,dueVis))}
-              </span>
-            </div>
-          )}
-          {/* ยังไม่ถึงกำหนด */}
-          {expandedBadges.has("notYetDue")&&(
-            <div className="flex flex-wrap items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-50/60 border border-blue-200">
-              <span className="text-[11px] font-semibold text-blue-700 whitespace-nowrap mr-1">ยังไม่ถึงกำหนด:</span>
-              {NOT_YET_DUE_BADGE_ITEMS.map(({key:k,label})=>{
-                const val=gtBadgeNotYetDue[k as keyof MoneyBreakdown] as number;
-                return(
-                  <BadgeItemRow key={k} isOn={notYetDueVis[k as NotYetDueBadgeKey]} onToggle={()=>toggleNotYetDueVis(k as NotYetDueBadgeKey)}
-                    label={label} val={val} color="bg-blue-100 border-blue-300 text-blue-800"/>
-                );
-              })}
-              <span className="flex items-center gap-1.5 px-2 py-1 rounded text-xs bg-blue-700 border border-blue-800 text-white font-semibold">
-                <Banknote className="w-3 h-3"/>รวม {fmtMoney(computeNotYetDueTotal(gtBadgeNotYetDue,notYetDueVis))}
-              </span>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-    {/* ── Table ──────────────────────────────────────────────────────────── */}
+    {/* ── Table ──────────────────────────────────────────────────────────────────── */}
     <table className="w-full text-xs border-collapse" style={{minWidth:`${minWidth}px`}}>
       <thead className="sticky z-20" style={{top:`${stickyTop}px`}}>
         {/* ── Row 1: group headers ────────────────────────────────────── */}
@@ -2058,7 +2052,7 @@ function CombinedTable({
                     </td>
                   )}
                   {/* ชื่อหัวข้อ */}
-                  <td className={["sticky left-[130px] z-10 px-2 py-1.5 text-center whitespace-nowrap border-r border-gray-200 font-medium text-[11px] min-w-[90px]",sr.rowBg,sr.textColor].join(" ")}>
+                  <td className={["sticky left-[130px] z-10 px-2 py-1.5 text-center whitespace-nowrap border-r border-gray-200 font-medium text-[11px] min-w-[90px]",sr.totalBg,sr.textColor].join(" ")}>
                     {sr.label}
                   </td>
                   {/* รวม */}
