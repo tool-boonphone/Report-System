@@ -1344,6 +1344,6 @@ Task list:
 - [x] P139-2: Commit + Push GitHub + Checkpoint
 
 ## Phase 140 — MonthlySummary Export Excel ตรงกับ UI (2026-05-06)
-- [ ] P140-1: วิเคราะห์ handleExport ปัจจุบันทุกแถบ (สัญญา, ยอดผ่อนรวม, เป้าเก็บหนี้, ยอดเก็บหนี้, หนี้ค้างชำระ, ยังไม่ถึงกำหนด, สรุปรวม)
-- [ ] P140-2: เขียน Export Excel ใหม่ให้ตรงกับโครงสร้างตาราง UI (bucket groups, badge visibility, % columns)
-- [ ] P140-3: Commit + Push GitHub + Checkpoint
+- [x] P140-1: วิเคราะห์ handleExport ปัจจุบันทุกแถบ (สัญญา, ยอดผ่อนรวม, เป้าเก็บหนี้, ยอดเก็บหนี้, หนี้ค้างชำระ, ยังไม่ถึงกำหนด, สรุปรวม)
+- [x] P140-2: เขียน Export Excel ใหม่ให้ตรงกับโครงสร้างตาราง UI (bucket groups, badge visibility, % columns)
+- [x] P140-3: Commit + Push GitHub + Checkpoint
