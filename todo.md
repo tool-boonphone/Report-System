@@ -1347,3 +1347,11 @@ Task list:
 - [x] P140-1: วิเคราะห์ handleExport ปัจจุบันทุกแถบ (สัญญา, ยอดผ่อนรวม, เป้าเก็บหนี้, ยอดเก็บหนี้, หนี้ค้างชำระ, ยังไม่ถึงกำหนด, สรุปรวม)
 - [x] P140-2: เขียน Export Excel ใหม่ให้ตรงกับโครงสร้างตาราง UI (bucket groups, badge visibility, % columns)
 - [x] P140-3: Commit + Push GitHub + Checkpoint
+
+## Phase 141: Tooltip % หนี้เสีย ใน BadDebtSummary
+- [x] เพิ่ม import Tooltip components จาก @/components/ui/tooltip ใน BadDebtSummary.tsx
+- [x] สร้าง BadDebtRateBadge component พร้อม Tooltip อธิบายสูตร % หนี้เสีย
+- [x] เพิ่ม totalBadDebt และ totalAll ใน monthlyRows return object
+- [x] เพิ่ม totalBadDebt และ totalAll ใน yearlyRows return object
+- [x] แทนที่ inline badge ใน TAB 2 (สรุปรายเดือน) ด้วย BadDebtRateBadge
+- [x] แทนที่ inline badge ใน TAB 3 (สรุปรายปี) ด้วย BadDebtRateBadge

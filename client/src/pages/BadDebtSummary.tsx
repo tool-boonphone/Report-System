@@ -27,6 +27,12 @@ import { useAppAuth } from "@/hooks/useAppAuth";
 import { useSection } from "@/contexts/SectionContext";
 import { trpc } from "@/lib/trpc";
 import { Spinner } from "@/components/ui/spinner";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 /* ─── helpers ─────────────────────────────────────────────────────────────── */
 const fmtMoney = (v: number | null | undefined) =>
@@ -57,6 +63,41 @@ type MonthlySortKey = "ym" | "count" | "financeAmount" | "commissionNet" | "cost
 type YearlySortKey = "year" | "count" | "financeAmount" | "commissionNet" | "cost" | "installmentPaid" | "deviceSaleAmount" | "totalRevenue" | "profitLoss";
 type SortDir = "asc" | "desc";
 type ActiveTab = "list" | "monthly" | "yearly";
+
+/* ─── BadDebtRateBadge ──────────────────────────────────────────────────────── */
+/**
+ * แสดง % หนี้เสีย พร้อม Tooltip อธิบายที่มาของตัวเลข
+ * สูตร: จำนวนสัญญาหนี้เสียที่ขายในช่วงนี้ ÷ จำนวนสัญญาทั้งหมดที่อนุมัติในเดือนเดียวกัน × 100
+ */
+function BadDebtRateBadge({ value, totalBadDebt, totalAll }: { value: number | null; totalBadDebt?: number; totalAll?: number }) {
+  if (value == null) return <span className="text-gray-300">—</span>;
+  const colorClass =
+    value >= 10 ? "bg-red-100 text-red-700" :
+    value >= 5  ? "bg-orange-100 text-orange-700" :
+                  "bg-green-100 text-green-700";
+  return (
+    <TooltipProvider delayDuration={100}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold cursor-help ${colorClass}`}>
+            {value.toFixed(2)}%
+          </span>
+        </TooltipTrigger>
+        <TooltipContent side="left" className="max-w-[260px] text-xs">
+          <p className="font-semibold mb-1">ที่มา: % หนี้เสีย</p>
+          <p className="text-gray-200">
+            จำนวนสัญญาหนี้เสียที่ขายในช่วงนี้ ÷ จำนวนสัญญาทั้งหมดที่อนุมัติในเดือนเดียวกัน × 100
+          </p>
+          {totalBadDebt != null && totalAll != null && (
+            <p className="mt-1 text-gray-300">
+              = {totalBadDebt.toLocaleString("th-TH")} ÷ {totalAll.toLocaleString("th-TH")} × 100
+            </p>
+          )}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
 
 /* ─── ProfitBadge ─────────────────────────────────────────────────────────── */
 function ProfitBadge({ value }: { value: number }) {
@@ -191,7 +232,7 @@ export default function BadDebtSummary() {
         totalAll += totalContractsByApproveMonth[aym] ?? 0;
       });
       const badDebtRate = totalAll > 0 ? (totalBadDebt / totalAll) * 100 : null;
-      return { ym: r.ym, count: r.count, financeAmount: r.financeAmount, commissionNet: r.commissionNet, cost: r.cost, installmentPaid: r.installmentPaid, deviceSaleAmount: r.deviceSaleAmount, totalRevenue: r.totalRevenue, profitLoss: r.profitLoss, badDebtRate };
+      return { ym: r.ym, count: r.count, financeAmount: r.financeAmount, commissionNet: r.commissionNet, cost: r.cost, installmentPaid: r.installmentPaid, deviceSaleAmount: r.deviceSaleAmount, totalRevenue: r.totalRevenue, profitLoss: r.profitLoss, badDebtRate, totalBadDebt, totalAll };
     });
     raw.sort((a, b) => {
       const av: any = a[monthlySortKey as keyof typeof a] ?? "";
@@ -233,7 +274,7 @@ export default function BadDebtSummary() {
         totalAll += totalContractsByApproveMonth[aym] ?? 0;
       });
       const badDebtRate = totalAll > 0 ? (totalBadDebt / totalAll) * 100 : null;
-      return { year: r.year, count: r.count, financeAmount: r.financeAmount, commissionNet: r.commissionNet, cost: r.cost, installmentPaid: r.installmentPaid, deviceSaleAmount: r.deviceSaleAmount, totalRevenue: r.totalRevenue, profitLoss: r.profitLoss, badDebtRate };
+      return { year: r.year, count: r.count, financeAmount: r.financeAmount, commissionNet: r.commissionNet, cost: r.cost, installmentPaid: r.installmentPaid, deviceSaleAmount: r.deviceSaleAmount, totalRevenue: r.totalRevenue, profitLoss: r.profitLoss, badDebtRate, totalBadDebt, totalAll };
     });
     raw.sort((a, b) => {
       const av: any = a[yearlySortKey as keyof typeof a] ?? "";
@@ -575,13 +616,7 @@ export default function BadDebtSummary() {
                       <td className="px-2 py-2 text-right text-sm text-blue-700 font-medium">{fmtMoney(r.deviceSaleAmount)}</td>
                       <td className="px-2 py-2 text-right text-sm font-medium">{fmtMoney(r.totalRevenue)}</td>
                       <td className="px-2 py-2 text-right text-sm">
-                        {r.badDebtRate != null ? (
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${
-                            r.badDebtRate >= 10 ? "bg-red-100 text-red-700" :
-                            r.badDebtRate >= 5 ? "bg-orange-100 text-orange-700" :
-                            "bg-green-100 text-green-700"
-                          }`}>{r.badDebtRate.toFixed(2)}%</span>
-                        ) : <span className="text-gray-300">—</span>}
+                        <BadDebtRateBadge value={r.badDebtRate} totalBadDebt={r.totalBadDebt} totalAll={r.totalAll} />
                       </td>
                       <td className="px-2 py-2 text-right text-sm"><ProfitBadge value={r.profitLoss} /></td>
                     </tr>
@@ -649,13 +684,7 @@ export default function BadDebtSummary() {
                       <td className="px-2 py-2 text-right text-sm text-blue-700 font-medium">{fmtMoney(r.deviceSaleAmount)}</td>
                       <td className="px-2 py-2 text-right text-sm font-medium">{fmtMoney(r.totalRevenue)}</td>
                       <td className="px-2 py-2 text-right text-sm">
-                        {r.badDebtRate != null ? (
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${
-                            r.badDebtRate >= 10 ? "bg-red-100 text-red-700" :
-                            r.badDebtRate >= 5 ? "bg-orange-100 text-orange-700" :
-                            "bg-green-100 text-green-700"
-                          }`}>{r.badDebtRate.toFixed(2)}%</span>
-                        ) : <span className="text-gray-300">—</span>}
+                        <BadDebtRateBadge value={r.badDebtRate} totalBadDebt={r.totalBadDebt} totalAll={r.totalAll} />
                       </td>
                       <td className="px-2 py-2 text-right text-sm"><ProfitBadge value={r.profitLoss} /></td>
                     </tr>
