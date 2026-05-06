@@ -356,17 +356,32 @@ export default function SuspectedBadDebt() {
   /* ── model options ──
    * dedup ด้วย base model (ตัด capacity ออก)
    * เช่น "iPhone 14 128GB" + "iPhone 14 256GB" → แสดงเป็น "iPhone 14" ตัวเดียว
+   * ถ้าเลือก osFilter ไว้ จะแสดงเฉพาะรุ่นที่ตรงกับ OS นั้น
    */
   const modelOptions = useMemo(() => {
     const baseSet = new Set<string>();
     for (const r of allRows) {
-      if (r.model) {
-        const { base } = parseModelParts(r.model);
-        if (base) baseSet.add(base);
+      if (!r.model) continue;
+      // ถ้าเลือก osFilter ไว้ ให้แสดงเฉพาะรุ่นที่ตรงกับ OS ที่เลือก
+      if (osFilter.size > 0) {
+        const os = deriveOS(r.model);
+        if (!os || !osFilter.has(os)) continue;
       }
+      const { base } = parseModelParts(r.model);
+      if (base) baseSet.add(base);
     }
     return Array.from(baseSet).sort((a, b) => a.localeCompare(b, "th"));
-  }, [allRows]);
+  }, [allRows, osFilter]);
+
+  /* ── reset modelFilter เมื่อ osFilter เปลี่ยนแล้วรุ่นที่เลือกไว้ไม่อยู่ใน options ใหม่ ── */
+  React.useEffect(() => {
+    setModelFilter((prev) => {
+      const filtered = Array.from(prev).filter((m) => modelOptions.includes(m));
+      // ถ้าไม่มีการเปลี่ยนแปลง คืน Set เดิม
+      if (filtered.length === prev.size) return prev;
+      return new Set(filtered);
+    });
+  }, [modelOptions]);
 
   /* ── filtered + sorted rows ── */
   const filteredRows = useMemo(() => {
