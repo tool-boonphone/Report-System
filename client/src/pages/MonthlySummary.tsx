@@ -360,6 +360,7 @@ const INFO_CONTENT: Record<string,{title:string;items:{label:string;desc:string}
       {label:"เกิน >90",desc:"เป้าเก็บหนี้ของสัญญาที่ค้างชำระมากกว่า 90 วัน"},
       {label:"ระงับสัญญา",desc:"เป้าเก็บหนี้ของสัญญาที่ถูกระงับชั่วคราว"},
       {label:"สิ้นสุดสัญญา",desc:"เป้าเก็บหนี้ของสัญญาที่สิ้นสุดอายุแล้ว"},
+      {label:"หนี้เสีย",desc:"เป้าเก็บหนี้ของสัญญาที่ถูกจัดเป็นหนี้เสีย"},
     ]
   },
   paid: {
@@ -1175,7 +1176,7 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
 
   // ── Visible buckets per tab ─────────────────────────────────────────────
   const HIDDEN_BUCKETS_BY_TAB: Record<string,string[]> = {
-    target:   ["หนี้เสีย"],
+    target:   [],
     due:      ["สิ้นสุดสัญญา","หนี้เสีย"],
     notYetDue:["ระงับสัญญา","สิ้นสุดสัญญา","หนี้เสีย"],
   };
