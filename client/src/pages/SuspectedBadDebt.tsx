@@ -90,13 +90,19 @@ const deriveOS = (model: string | null): "iOS" | "Android" | null => {
   return "Android";
 };
 
-/** Parse model name: extract base model + capacity */
+/** Parse model name: extract base model + capacity
+ * รองรับทั้ง  2 format:
+ *   "iPhone 11 128GB"     → base="iPhone 11", capacity="128 GB"
+ *   "iPhone 11 / 128 GB" → base="iPhone 11", capacity="128 GB"
+ */
 const parseModelParts = (model: string | null) => {
   if (!model) return { base: null, capacity: null };
+  // match ตัวเลขตามด้วย GB (มีหรือไม่มี slash นำหน้า)
   const capMatch = model.match(/(\d+)\s*[Gg][Bb]/);
   const capacity = capMatch ? `${capMatch[1]} GB` : null;
   const base = capacity
-    ? model.replace(/\s*\d+\s*[Gg][Bb].*$/, "").trim()
+    // ตัดทั้ง slash และตัวเลข GB ออก เช่น "iPhone 11 / 128 GB" → "iPhone 11"
+    ? model.replace(/\s*\/\s*\d+\s*[Gg][Bb].*$/, "").replace(/\s*\d+\s*[Gg][Bb].*$/, "").trim()
     : model.trim();
   return { base, capacity };
 };
