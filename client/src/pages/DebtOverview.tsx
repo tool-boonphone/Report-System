@@ -1078,9 +1078,8 @@ export default function DebtOverview() {
       badDebt += row.collectedBadDebt;
     }
     const bv = badgeVisibility;
-    // หมายเหตุ: total ไม่รวม badDebt (ขายเครื่อง) เพราะ collectedTotal ในตารางก็ไม่รวม badDebt
-    // badDebt แสดงเป็น Badge แยกให้ toggle ดูได้ แต่ไม่นับในยอดรวม
-    const total = (bv.principal ? principal : 0) + (bv.interest ? interest : 0) + (bv.fee ? fee : 0) + (bv.penalty ? penalty : 0) + (bv.unlockFee ? unlockFee : 0) + (bv.overpaid ? overpaid : 0);
+    // รายรับรวม = ยอดเก็บหนี้ปกติ + ยอดขายเครื่อง (badDebt) ตาม badge visibility
+    const total = (bv.principal ? principal : 0) + (bv.interest ? interest : 0) + (bv.fee ? fee : 0) + (bv.penalty ? penalty : 0) + (bv.unlockFee ? unlockFee : 0) + (bv.overpaid ? overpaid : 0) + (bv.badDebt ? badDebt : 0);
     return { principal, interest, fee, penalty, unlockFee, discount, overpaid, badDebt, total };
   }, [monthRows, hiddenMonths, badgeVisibility]);
 
@@ -1384,7 +1383,7 @@ export default function DebtOverview() {
                 />
                 {/* ยอดเก็บหนี้ badges */}
                 <BadgeRow
-                  title="ยอดเก็บหนี้"
+                  title="รายรับรวม"
                   items={[
                     { key: "principal", label: "เงินต้น", value: grandCollected.principal, icon: <Coins className="w-3.5 h-3.5" />, color: "bg-green-50 text-green-800 border-green-200" },
                     { key: "interest", label: "ดอกเบี้ย", value: grandCollected.interest, icon: <Percent className="w-3.5 h-3.5" />, color: "bg-teal-50 text-teal-800 border-teal-200" },
@@ -1397,7 +1396,7 @@ export default function DebtOverview() {
                   ]}
                   visibility={badgeVisibility}
                   onToggle={toggleBadge}
-                  totalLabel="ยอดเก็บหนี้รวม"
+                  totalLabel="รายรับรวม"
                   totalValue={grandCollected.total}
                   totalColor="bg-green-600 text-white border-green-700"
                 />
