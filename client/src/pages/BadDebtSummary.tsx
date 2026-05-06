@@ -757,8 +757,8 @@ export default function BadDebtSummary() {
                   <thead className="bg-blue-700 text-white sticky top-0 z-10">
                     <tr>
                       <ThMA label="เดือน-ปีที่อนุมัติ" col="ym" rowSpan={2} className="px-3 text-left border-r border-blue-500" />
-                      <ThMA label="หนี้เสีย" col="count" rowSpan={2} className="border-r border-blue-500" />
                       <th className="px-2 py-1 text-center text-xs font-semibold border-r border-blue-500 whitespace-nowrap" rowSpan={2}>สัญญา</th>
+                      <ThMA label="หนี้เสีย" col="count" rowSpan={2} className="border-r border-blue-500" />
                       <th colSpan={3} className="px-2 py-1 text-center text-xs font-semibold border-b border-blue-500 border-r border-blue-500">ต้นทุน</th>
                       <th colSpan={3} className="px-2 py-1 text-center text-xs font-semibold border-b border-blue-500 border-r border-blue-500">รายรับ</th>
                       <th className="px-2 py-1 text-center text-xs font-semibold border-r border-blue-500 whitespace-nowrap" rowSpan={2}>% หนี้เสีย</th>
@@ -780,8 +780,8 @@ export default function BadDebtSummary() {
                       monthlyByApproveRows.map((r, idx) => (
                         <tr key={r.ym} className={`border-b border-gray-100 hover:bg-gray-50 ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}>
                           <td className="px-3 py-2 font-medium text-sm whitespace-nowrap">{r.ym === "ไม่ระบุ" ? "ไม่ระบุ" : fmtMonthLabel(r.ym)}</td>
-                          <td className="px-2 py-2 text-center text-sm">{r.count.toLocaleString("th-TH")}</td>
                           <td className="px-2 py-2 text-center text-sm text-gray-500">{r.totalAll > 0 ? r.totalAll.toLocaleString("th-TH") : "-"}</td>
+                          <td className="px-2 py-2 text-center text-sm">{r.count.toLocaleString("th-TH")}</td>
                           <td className="px-2 py-2 text-right text-sm">{fmtMoney(r.financeAmount)}</td>
                           <td className="px-2 py-2 text-right text-sm">{fmtMoney(r.commissionNet)}</td>
                           <td className="px-2 py-2 text-right text-sm text-orange-700 font-medium">{fmtMoney(r.cost)}</td>
@@ -800,8 +800,8 @@ export default function BadDebtSummary() {
                     <tfoot className="bg-blue-50 border-t-2 border-blue-200 font-semibold text-xs">
                       <tr>
                         <td className="px-3 py-2 text-gray-600">รวม {monthlyByApproveRows.length} เดือน</td>
-                        <td className="px-2 py-2 text-center">{monthlyByApproveRows.reduce((s, r) => s + r.count, 0).toLocaleString("th-TH")}</td>
                         <td className="px-2 py-2 text-center text-gray-500">{monthlyByApproveRows.reduce((s, r) => s + r.totalAll, 0).toLocaleString("th-TH")}</td>
+                        <td className="px-2 py-2 text-center">{monthlyByApproveRows.reduce((s, r) => s + r.count, 0).toLocaleString("th-TH")}</td>
                         <td className="px-2 py-2 text-right">{fmtMoney(monthlyByApproveRows.reduce((s, r) => s + r.financeAmount, 0))}</td>
                         <td className="px-2 py-2 text-right">{fmtMoney(monthlyByApproveRows.reduce((s, r) => s + r.commissionNet, 0))}</td>
                         <td className="px-2 py-2 text-right text-orange-700">{fmtMoney(monthlyByApproveRows.reduce((s, r) => s + r.cost, 0))}</td>
@@ -892,8 +892,8 @@ export default function BadDebtSummary() {
                   <thead className="bg-purple-700 text-white sticky top-0 z-10">
                     <tr>
                       <ThYA label="ปีที่อนุมัติ" col="year" rowSpan={2} className="px-3 text-left border-r border-purple-500" />
-                      <ThYA label="หนี้เสีย" col="count" rowSpan={2} className="border-r border-purple-500" />
                       <th className="px-2 py-1 text-center text-xs font-semibold border-r border-purple-500 whitespace-nowrap" rowSpan={2}>สัญญา</th>
+                      <ThYA label="หนี้เสีย" col="count" rowSpan={2} className="border-r border-purple-500" />
                       <th colSpan={3} className="px-2 py-1 text-center text-xs font-semibold border-b border-purple-500 border-r border-purple-500">ต้นทุน</th>
                       <th colSpan={3} className="px-2 py-1 text-center text-xs font-semibold border-b border-purple-500 border-r border-purple-500">รายรับ</th>
                       <th className="px-2 py-1 text-center text-xs font-semibold border-r border-purple-500 whitespace-nowrap" rowSpan={2}>% หนี้เสีย</th>
@@ -915,8 +915,8 @@ export default function BadDebtSummary() {
                       yearlyByApproveRows.map((r, idx) => (
                         <tr key={r.year} className={`border-b border-gray-100 hover:bg-gray-50 ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}>
                           <td className="px-3 py-2 font-medium text-sm whitespace-nowrap">{r.year === "ไม่ระบุ" ? "ไม่ระบุ" : `พ.ศ. ${parseInt(r.year, 10) + 543}`}</td>
-                          <td className="px-2 py-2 text-center text-sm">{r.count.toLocaleString("th-TH")}</td>
                           <td className="px-2 py-2 text-center text-sm text-gray-500">{r.totalAll > 0 ? r.totalAll.toLocaleString("th-TH") : "-"}</td>
+                          <td className="px-2 py-2 text-center text-sm">{r.count.toLocaleString("th-TH")}</td>
                           <td className="px-2 py-2 text-right text-sm">{fmtMoney(r.financeAmount)}</td>
                           <td className="px-2 py-2 text-right text-sm">{fmtMoney(r.commissionNet)}</td>
                           <td className="px-2 py-2 text-right text-sm text-orange-700 font-medium">{fmtMoney(r.cost)}</td>
@@ -935,8 +935,8 @@ export default function BadDebtSummary() {
                     <tfoot className="bg-purple-50 border-t-2 border-purple-200 font-semibold text-xs">
                       <tr>
                         <td className="px-3 py-2 text-gray-600">รวม {yearlyByApproveRows.length} ปี</td>
-                        <td className="px-2 py-2 text-center">{yearlyByApproveRows.reduce((s, r) => s + r.count, 0).toLocaleString("th-TH")}</td>
                         <td className="px-2 py-2 text-center text-gray-500">{yearlyByApproveRows.reduce((s, r) => s + r.totalAll, 0).toLocaleString("th-TH")}</td>
+                        <td className="px-2 py-2 text-center">{yearlyByApproveRows.reduce((s, r) => s + r.count, 0).toLocaleString("th-TH")}</td>
                         <td className="px-2 py-2 text-right">{fmtMoney(yearlyByApproveRows.reduce((s, r) => s + r.financeAmount, 0))}</td>
                         <td className="px-2 py-2 text-right">{fmtMoney(yearlyByApproveRows.reduce((s, r) => s + r.commissionNet, 0))}</td>
                         <td className="px-2 py-2 text-right text-orange-700">{fmtMoney(yearlyByApproveRows.reduce((s, r) => s + r.cost, 0))}</td>
