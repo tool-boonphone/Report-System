@@ -9,6 +9,7 @@ import React, {
   useState,
 } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
+import { SyncStatusBar } from "@/components/SyncStatusBar";
 import { toast } from "sonner";
 import {
   AlertTriangle,
@@ -539,17 +540,12 @@ export default function SuspectedBadDebt() {
   /* ── nav actions ── */
   React.useEffect(() => {
     setActions(
-      canExport
-        ? [
-            <Button key="export" size="sm" variant="outline" onClick={handleExport} className="gap-1.5">
-              <Download className="w-3.5 h-3.5" />
-              Export
-            </Button>,
-          ]
-        : [],
+      <div className="flex items-center gap-2">
+        <SyncStatusBar />
+      </div>
     );
-    return () => setActions([]);
-  }, [canExport, handleExport, setActions]);
+    return () => setActions(null);
+  }, [setActions]);
 
   if (!canView) {
     return (
@@ -668,6 +664,17 @@ export default function SuspectedBadDebt() {
                   >
                     <X className="w-3.5 h-3.5" />
                     ล้างตัวกรอง
+                  </button>
+                )}
+                {/* Export Excel */}
+                {canExport && (
+                  <button
+                    type="button"
+                    onClick={handleExport}
+                    className="ml-auto flex items-center gap-1.5 h-9 px-3 text-sm font-medium rounded-md bg-green-600 hover:bg-green-700 text-white transition-colors whitespace-nowrap"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span className="hidden sm:inline">Export Excel</span>
                   </button>
                 )}
               </div>
