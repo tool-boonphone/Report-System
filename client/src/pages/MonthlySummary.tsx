@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 const DEBT_BUCKETS = [
@@ -751,28 +752,61 @@ export default function MonthlySummary() {
     if(!canExport){toast.error("คุณไม่มีสิทธิ์ Export");return;}
     try{
       const wb=XLSX.utils.book_new();
-      const tabLabel=tab==="count"?"สัญญา":tab==="installTotal"?"ยอดผ่อนรวม":tab==="target"?"เป้าเก็บหนี้":tab==="paid"?"ยอดชำระแล้ว":tab==="due"?"หนี้ค้างชำระ":"ยังไม่ถึงกำหนด";
-      const headers=["เดือน-ปีที่อนุมัติ","สัญญา",...DEBT_BUCKETS];
-      const wsData:(string|number)[][]=[headers];
-      for(const row of rows){
-        const vals:any[]=[fmtMonthYear(row.approveMonth),row.totalCount];
-        for(const b of DEBT_BUCKETS){
-          const cell=row.buckets[b];
-          if(tab==="count")vals.push(cell?.contractCount??0);
-          else if(tab==="installTotal")vals.push(cell?.installTotal.total??0);
-          else if(tab==="target")vals.push(cell?.target.total??0);
-          else if(tab==="paid")vals.push(cell?.paid.total??0);
-          else if(tab==="due")vals.push(cell?.due.total??0);
-          else vals.push(cell?.notYetDue.total??0);
+      if(tab==="combined"){
+        // ── Combined sheet: แต่ละแถบเป็นหนึ่ง sheet พร้อมคอลัมน์ % แยก
+        const subKeys:[string,string][]=[["สัญญา","count"],["ยอดผ่อนรวม","installTotal"],["เป้าเก็บหนี้","target"],["ยอดเก็บหนี้","paid"],["หนี้ค้างชำระ","due"],["ยังไม่ถึงกำหนด","notYetDue"]];
+        // helper: คำนวณยอดรวมต่อ row
+        const rowSum=(row:SummaryRow, k:string):number=>DEBT_BUCKETS.reduce((s,b)=>{
+          const c=row.buckets[b];if(!c)return s;
+          if(k==="count")return s+c.contractCount;
+          if(k==="installTotal")return s+c.installTotal.total;
+          if(k==="target")return s+c.target.total;
+          if(k==="paid")return s+c.paid.total;
+          if(k==="due")return s+c.due.total;
+          return s+c.notYetDue.total;
+        },0);
+        const headers=["เดือน-ปีที่อนุมัติ",...subKeys.flatMap(([label,k])=>k==="paid"?[label,`${label} %/ผ่อนรวม`,`${label} %/เป้า`]:k==="target"||k==="due"||k==="notYetDue"?[label,`${label} %`]:[label])];
+        const wsData:(string|number|null)[][]=[headers];
+        for(const row of combinedRows){
+          const installVal=rowSum(row,"installTotal");
+          const targetVal=rowSum(row,"target");
+          const vals:(string|number|null)[]=[fmtMonthYear(row.approveMonth)];
+          for(const[,k] of subKeys){
+            const v=rowSum(row,k);
+            vals.push(v);
+            if(k==="target")vals.push(installVal>0?Math.round((v/installVal)*1000)/10:null);
+            else if(k==="paid"){vals.push(installVal>0?Math.round((v/installVal)*1000)/10:null);vals.push(targetVal>0?Math.round((v/targetVal)*1000)/10:null);}
+            else if(k==="due")vals.push(targetVal>0?Math.round((v/targetVal)*1000)/10:null);
+            else if(k==="notYetDue")vals.push(installVal>0?Math.round((v/installVal)*1000)/10:null);
+          }
+          wsData.push(vals);
         }
-        wsData.push(vals);
+        const ws=XLSX.utils.aoa_to_sheet(wsData);
+        XLSX.utils.book_append_sheet(wb,ws,"สรุปรวม");
+      }else{
+        const tabLabel=tab==="count"?"สัญญา":tab==="installTotal"?"ยอดผ่อนรวม":tab==="target"?"เป้าเก็บหนี้":tab==="paid"?"ยอดชำระแล้ว":tab==="due"?"หนี้ค้างชำระ":"ยังไม่ถึงกำหนด";
+        const headers=["เดือน-ปีที่อนุมัติ","สัญญา",...DEBT_BUCKETS];
+        const wsData:(string|number)[][]=[headers];
+        for(const row of rows){
+          const vals:any[]=[fmtMonthYear(row.approveMonth),row.totalCount];
+          for(const b of DEBT_BUCKETS){
+            const cell=row.buckets[b];
+            if(tab==="count")vals.push(cell?.contractCount??0);
+            else if(tab==="installTotal")vals.push(cell?.installTotal.total??0);
+            else if(tab==="target")vals.push(cell?.target.total??0);
+            else if(tab==="paid")vals.push(cell?.paid.total??0);
+            else if(tab==="due")vals.push(cell?.due.total??0);
+            else vals.push(cell?.notYetDue.total??0);
+          }
+          wsData.push(vals);
+        }
+        const ws=XLSX.utils.aoa_to_sheet(wsData);
+        XLSX.utils.book_append_sheet(wb,ws,tabLabel);
       }
-      const ws=XLSX.utils.aoa_to_sheet(wsData);
-      XLSX.utils.book_append_sheet(wb,ws,tabLabel);
       XLSX.writeFile(wb,`monthly_summary_${tab}_${new Date().toISOString().slice(0,10)}.xlsx`);
       toast.success("Export สำเร็จ");
     }catch{toast.error("Export ล้มเหลว");}
-  },[canExport,rows,tab]);
+  },[canExport,rows,combinedRows,tab]);
 
   const handleExportRef=useRef(handleExport);
   handleExportRef.current=handleExport;
@@ -1923,7 +1957,25 @@ function CombinedTable({
     },0);
   }
 
-  // ── render helpers ────────────────────────────────────────────────────────
+  // ── % tag helpers ────────────────────────────────────────────────────────────────────
+  function fmtPct(num:number, den:number):string|null {
+    if(den===0||num===0)return null;
+    const p=(num/den)*100;
+    return p.toFixed(1)+"%";
+  }
+  function PctTag({pct,color,tooltip}:{pct:string|null;color:string;tooltip:string}):React.ReactElement|null {
+    if(!pct)return null;
+    return(
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className={["inline-flex items-center ml-1 px-1.5 py-0.5 rounded text-[10px] font-semibold border cursor-help select-none",color].join(" ")}>{pct}</span>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="max-w-[200px] text-center text-xs">{tooltip}</TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  // ── render helpers ────────────────────────────────────────────────────────────────────
   function renderCellVal(subKey:TabKey, val:number, textColor:string):React.ReactNode {
     if(val===0)return <span className="text-gray-300 text-xs">—</span>;
     if(subKey==="count"){
@@ -2057,7 +2109,20 @@ function CombinedTable({
                   </td>
                   {/* รวม */}
                   <td className={["sticky left-[220px] z-10 px-3 py-1.5 text-right border-r border-gray-200 min-w-[90px]",sr.totalBg].join(" ")}>
-                    {renderCellVal(sr.key, isHiddenRow?0:rowTotal(sr.key,row), sr.textColor)}
+                    {(()=>{
+                      const val=isHiddenRow?0:rowTotal(sr.key,row);
+                      const installVal=isHiddenRow?0:rowTotal("installTotal",row);
+                      const targetVal=isHiddenRow?0:rowTotal("target",row);
+                      return(
+                        <span className="inline-flex items-center justify-end flex-wrap gap-0.5">
+                          {renderCellVal(sr.key,val,sr.textColor)}
+                          {sr.key==="target"&&<PctTag pct={fmtPct(val,installVal)} color="bg-indigo-50 border-indigo-300 text-indigo-700" tooltip={`เป้าเก็บหนี้ ${fmtPct(val,installVal)??""} ของยอดผ่อนรวม`}/>}
+                          {sr.key==="paid"&&<><PctTag pct={fmtPct(val,installVal)} color="bg-purple-50 border-purple-300 text-purple-700" tooltip={`ยอดเก็บหนี้ ${fmtPct(val,installVal)??""} ของยอดผ่อนรวม`}/><PctTag pct={fmtPct(val,targetVal)} color="bg-indigo-50 border-indigo-300 text-indigo-700" tooltip={`ยอดเก็บหนี้ ${fmtPct(val,targetVal)??""} ของเป้าเก็บหนี้`}/></> }
+                          {sr.key==="due"&&<PctTag pct={fmtPct(val,targetVal)} color="bg-orange-50 border-orange-300 text-orange-700" tooltip={`หนี้ค้างชำระ ${fmtPct(val,targetVal)??""} ของเป้าเก็บหนี้`}/>}
+                          {sr.key==="notYetDue"&&<PctTag pct={fmtPct(val,installVal)} color="bg-blue-50 border-blue-300 text-blue-700" tooltip={`ยังไม่ถึงกำหนด ${fmtPct(val,installVal)??""} ของยอดผ่อนรวม`}/>}
+                        </span>
+                      );
+                    })()}
                   </td>
                   {/* bucket cells */}
                   {BUCKET_GROUPS.map((g)=>
@@ -2164,7 +2229,20 @@ function CombinedTable({
             <td className={["sticky left-0 z-10 px-3 py-1.5 text-xs font-semibold whitespace-nowrap border-r border-gray-300",sr.totalBg].join(" ")}/>
             <td className={["sticky left-[130px] z-10 px-2 py-1.5 text-center text-[11px] font-semibold border-r border-gray-300",sr.totalBg,sr.textColor].join(" ")}>{sr.label}</td>
             <td className={["sticky left-[220px] z-10 px-3 py-1.5 text-right border-r border-gray-300",sr.totalBg].join(" ")}>
-              {renderCellVal(sr.key,gtRowTotal(sr.key),sr.textColor)}
+              {(()=>{
+                const val=gtRowTotal(sr.key);
+                const installVal=gtRowTotal("installTotal");
+                const targetVal=gtRowTotal("target");
+                return(
+                  <span className="inline-flex items-center justify-end flex-wrap gap-0.5">
+                    {renderCellVal(sr.key,val,sr.textColor)}
+                    {sr.key==="target"&&<PctTag pct={fmtPct(val,installVal)} color="bg-indigo-50 border-indigo-300 text-indigo-700" tooltip={`เป้าเก็บหนี้ ${fmtPct(val,installVal)??""} ของยอดผ่อนรวม`}/>}
+                    {sr.key==="paid"&&<><PctTag pct={fmtPct(val,installVal)} color="bg-purple-50 border-purple-300 text-purple-700" tooltip={`ยอดเก็บหนี้ ${fmtPct(val,installVal)??""} ของยอดผ่อนรวม`}/><PctTag pct={fmtPct(val,targetVal)} color="bg-indigo-50 border-indigo-300 text-indigo-700" tooltip={`ยอดเก็บหนี้ ${fmtPct(val,targetVal)??""} ของเป้าเก็บหนี้`}/></> }
+                    {sr.key==="due"&&<PctTag pct={fmtPct(val,targetVal)} color="bg-orange-50 border-orange-300 text-orange-700" tooltip={`หนี้ค้างชำระ ${fmtPct(val,targetVal)??""} ของเป้าเก็บหนี้`}/>}
+                    {sr.key==="notYetDue"&&<PctTag pct={fmtPct(val,installVal)} color="bg-blue-50 border-blue-300 text-blue-700" tooltip={`ยังไม่ถึงกำหนด ${fmtPct(val,installVal)??""} ของยอดผ่อนรวม`}/>}
+                  </span>
+                );
+              })()}
             </td>
             {BUCKET_GROUPS.map((g)=>
               g.buckets.map((b,bi)=>{
