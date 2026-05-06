@@ -358,19 +358,34 @@ export default function SuspectedBadDebt() {
    * เช่น "iPhone 14 128GB" + "iPhone 14 256GB" → แสดงเป็น "iPhone 14" ตัวเดียว
    * ถ้าเลือก osFilter ไว้ จะแสดงเฉพาะรุ่นที่ตรงกับ OS นั้น
    */
-  const modelOptions = useMemo(() => {
-    const baseSet = new Set<string>();
+  // canonicalMap: lowercase key → canonical display form เช่น "iphone 14" → "iPhone 14"
+  const modelCanonicalMap = useMemo(() => {
+    const map = new Map<string, string>();
     for (const r of allRows) {
       if (!r.model) continue;
-      // ถ้าเลือก osFilter ไว้ ให้แสดงเฉพาะรุ่นที่ตรงกับ OS ที่เลือก
+      const { base } = parseModelParts(r.model);
+      if (!base) continue;
+      const key = base.toLowerCase();
+      if (!map.has(key)) map.set(key, base);
+    }
+    return map;
+  }, [allRows]);
+
+  const modelOptions = useMemo(() => {
+    // dedup ด้วย lowercase key เพื่อรวมรุ่นที่ต่างกันแค่ case
+    const keySet = new Set<string>();
+    for (const r of allRows) {
+      if (!r.model) continue;
       if (osFilter.size > 0) {
         const os = deriveOS(r.model);
         if (!os || !osFilter.has(os)) continue;
       }
       const { base } = parseModelParts(r.model);
-      if (base) baseSet.add(base);
+      if (!base) continue;
+      keySet.add(base.toLowerCase());
     }
-    return Array.from(baseSet).sort((a, b) => a.localeCompare(b, "th"));
+    // คืน lowercase key เพื่อใช้เป็น option value (ไม่มีปัญหา CommandItem lowercase)
+    return Array.from(keySet).sort((a, b) => a.localeCompare(b, "th"));
   }, [allRows, osFilter]);
 
   /* ── reset modelFilter เมื่อ osFilter เปลี่ยนแล้วรุ่นที่เลือกไว้ไม่อยู่ใน options ใหม่ ── */
@@ -413,12 +428,11 @@ export default function SuspectedBadDebt() {
     }
 
     if (modelFilter.size > 0) {
-      // กรองด้วย base model เพื่อให้ครอบคลุมทุก capacity ของรุ่นเดียวกัน
-      // เช่น เลือก "iPhone 14" จะกรองทั้ง "iPhone 14 128GB" และ "iPhone 14 256GB"
+      // กรองด้วย base model (lowercase) เพื่อรวมรุ่นที่ต่างกันแค่ case เช่น "iPhone 14" กับ "iphone 14"
       rows = rows.filter((r) => {
         if (!r.model) return false;
         const { base } = parseModelParts(r.model);
-        return base != null && modelFilter.has(base);
+        return base != null && modelFilter.has(base.toLowerCase());
       });
     }
 
@@ -660,6 +674,7 @@ export default function SuspectedBadDebt() {
                   onChange={setModelFilter}
                   options={modelOptions}
                   placeholder="ทุกรุ่น"
+                  formatOption={(k) => modelCanonicalMap.get(k) ?? k}
                 />
 
                 {/* มูลค่าหนี้ > */}
