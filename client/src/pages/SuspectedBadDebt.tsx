@@ -91,21 +91,26 @@ const deriveOS = (model: string | null): "iOS" | "Android" | null => {
 };
 
 /** Parse model name: extract base model + capacity
- * รองรับทั้ง  2 format:
- *   "iPhone 11 128GB"     → base="iPhone 11", capacity="128 GB"
- *   "iPhone 11 / 128 GB" → base="iPhone 11", capacity="128 GB"
+ * รองรับทั้ง 2 format:
+ *   "iPhone 11 128GB"     → base="iPhone 11", capacity="128 gb"
+ *   "iPhone 11 / 128 GB" → base="iPhone 11", capacity="128 gb"
+ * capacity เก็บเป็น lowercase เพื่อให้ CommandItem (lowercase) match ได้ถูกต้อง
  */
 const parseModelParts = (model: string | null) => {
   if (!model) return { base: null, capacity: null };
   // match ตัวเลขตามด้วย GB (มีหรือไม่มี slash นำหน้า)
   const capMatch = model.match(/(\d+)\s*[Gg][Bb]/);
-  const capacity = capMatch ? `${capMatch[1]} GB` : null;
+  // เก็บเป็น lowercase เช่น "128 gb" เพื่อให้ CommandItem ที่ lowercase v ทำงานได้ถูกต้อง
+  const capacity = capMatch ? `${capMatch[1]} gb` : null;
   const base = capacity
     // ตัดทั้ง slash และตัวเลข GB ออก เช่น "iPhone 11 / 128 GB" → "iPhone 11"
     ? model.replace(/\s*\/\s*\d+\s*[Gg][Bb].*$/, "").replace(/\s*\d+\s*[Gg][Bb].*$/, "").trim()
     : model.trim();
   return { base, capacity };
 };
+
+/** แสดงความจุเป็น uppercase เช่น "128 gb" → "128 GB" */
+const fmtCapacity = (c: string) => c.replace("gb", "GB");
 
 /** Format model as "base / capacity" */
 const fmtModelDisplay = (model: string | null) => {
@@ -717,6 +722,7 @@ export default function SuspectedBadDebt() {
                   onChange={setCapacityFilter}
                   options={capacityOptions}
                   placeholder="ทุกความจุ"
+                  formatOption={fmtCapacity}
                 />
               )}
 
