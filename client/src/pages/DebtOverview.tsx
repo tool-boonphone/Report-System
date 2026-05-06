@@ -588,8 +588,8 @@ export default function DebtOverview() {
     penalty: false,   // default ปิดตา
     unlockFee: false, // default ปิดตา
   });
-  // Toggle ยอดขายเครื่อง (มีผลต่อ รายรับรวม)
-  const [showDeviceSale, setShowDeviceSale] = useState(true);
+  // showDeviceSale ผูกกับ badgeVisibility.badDebt เพื่อให้ sync กัน
+  const showDeviceSale = badgeVisibility.badDebt;
   // Sort direction for month column: "asc" = เก่าสุดบนสุด, "desc" = ใหม่สุดบนสุด
   const [monthSortDir, setMonthSortDir] = useState<"asc" | "desc">("asc");
   // Hidden months (eye toggle per row)
@@ -1466,7 +1466,7 @@ export default function DebtOverview() {
                       <div className="flex items-center justify-end gap-1">
                         <button
                           type="button"
-                          onClick={() => setShowDeviceSale((v) => !v)}
+                          onClick={() => toggleBadge("badDebt")}
                           className="opacity-70 hover:opacity-100 transition-opacity text-white"
                           title={showDeviceSale ? "ซ่อนยอดขายเครื่อง" : "แสดงยอดขายเครื่อง"}
                         >
