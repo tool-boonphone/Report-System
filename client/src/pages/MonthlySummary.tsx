@@ -1730,7 +1730,7 @@ function CombinedTable({
     return r;
   },[grandTotal]);
 
-  const minWidth=130+90+90+(DEBT_BUCKETS.length*110)+90; // +90 for 2 bad-debt sub-cols
+  const minWidth=130+90+90+(DEBT_BUCKETS.length*110)+90; // +90 for bad-debt sub-cols (ค่างวด/ขายเครื่อง/รวม replace bucket)
 
   // ── Badge panels ──────────────────────────────────────────────────────────
   const BADGE_DEFS=[
@@ -1887,13 +1887,13 @@ function CombinedTable({
           <th rowSpan={2} className="sticky left-[130px] z-30 px-3 py-2 text-center font-semibold whitespace-nowrap bg-teal-700 text-white border-r border-teal-500 min-w-[90px]">
             แถบ
           </th>
-          <th rowSpan={2} className="px-3 py-2 text-right font-semibold whitespace-nowrap bg-teal-700 text-white border-r border-teal-500 min-w-[90px]">
+          <th rowSpan={2} className="sticky left-[220px] z-30 px-3 py-2 text-right font-semibold whitespace-nowrap bg-teal-700 text-white border-r border-teal-500 min-w-[90px]">
             รวม
           </th>
           {/* group headers */}
           {BUCKET_GROUPS.map((g)=>{
             // นับ colspan = จำนวน bucket ในกลุ่ม + (กลุ่มหนี้เสียมี 3 sub-col สำหรับ paid)
-            const colCount = g.label==="หนี้เสีย" ? g.buckets.length + 2 : g.buckets.length;
+            const colCount = g.label==="หนี้เสีย" ? 3 : g.buckets.length;
             // ตรวจสอบว่า bucket ในกลุ่มนี้ถูกซ่อนทั้งหมดหรือไม่
             const allHidden=g.buckets.every(b=>hiddenBuckets.has(b));
             return(
@@ -1917,18 +1917,10 @@ function CombinedTable({
               const isBadDebtBucket=g.label==="หนี้เสีย";
               return(
                 <React.Fragment key={b}>
-                  <th
-                    onClick={()=>toggleBucket(b)}
-                    className={["px-2 py-1.5 text-center font-semibold text-white whitespace-nowrap min-w-[110px] border-r border-white/20 cursor-pointer hover:opacity-80 transition-opacity",g.bg,hiddenBuckets.has(b)?"opacity-40":""].join(" ")}>
-                    <div className="flex flex-col items-center gap-0.5">
-                      {hiddenBuckets.has(b)?<EyeOff className="w-3 h-3"/>:<Eye className="w-3 h-3"/>}
-                      <span className={["inline-block px-1.5 py-0.5 rounded-full text-[10px] border",bucketPillClasses(b)].join(" ")}>{b}</span>
-                    </div>
-                  </th>
-                  {/* sub-columns สำหรับ bucket หนี้เสีย (ค่างวด / ขายเครื่อง) */}
-                  {isBadDebtBucket&&isLast&&(
+                  {/* สำหรับ bucket หนี้เสีย: แสดงเป็น 3 sub-col (ค่างวด/ขายเครื่อง/รวม) แทน bucket หลัก */}
+                  {isBadDebtBucket?(
                     <>
-                      <th className={["px-2 py-1.5 text-center font-semibold text-white whitespace-nowrap min-w-[80px] border-r border-white/20",g.bg].join(" ")}>
+                      <th className={["px-2 py-1.5 text-center font-semibold text-white whitespace-nowrap min-w-[90px] border-r border-white/20",g.bg].join(" ")}>
                         <div className="flex flex-col items-center gap-0.5">
                           <button type="button" onClick={()=>setShowBadDebtInstall(!showBadDebtInstall)} className="hover:opacity-70">
                             {showBadDebtInstall?<Eye className="w-3 h-3"/>:<EyeOff className="w-3 h-3"/>}
@@ -1936,7 +1928,7 @@ function CombinedTable({
                           <span className="text-[10px]">ค่างวด</span>
                         </div>
                       </th>
-                      <th className={["px-2 py-1.5 text-center font-semibold text-white whitespace-nowrap min-w-[80px] border-r border-white/20",g.bg].join(" ")}>
+                      <th className={["px-2 py-1.5 text-center font-semibold text-white whitespace-nowrap min-w-[90px] border-r border-white/20",g.bg].join(" ")}>
                         <div className="flex flex-col items-center gap-0.5">
                           <button type="button" onClick={()=>setShowBadDebtSale(!showBadDebtSale)} className="hover:opacity-70">
                             {showBadDebtSale?<Eye className="w-3 h-3"/>:<EyeOff className="w-3 h-3"/>}
@@ -1944,7 +1936,22 @@ function CombinedTable({
                           <span className="text-[10px]">ขายเครื่อง</span>
                         </div>
                       </th>
+                      <th className={["px-2 py-1.5 text-center font-semibold text-white whitespace-nowrap min-w-[90px] border-r border-white/20",g.bg].join(" ")}>
+                        <div className="flex flex-col items-center gap-0.5">
+                          <Eye className="w-3 h-3 opacity-60"/>
+                          <span className="text-[10px]">รวม</span>
+                        </div>
+                      </th>
                     </>
+                  ):(
+                    <th
+                      onClick={()=>toggleBucket(b)}
+                      className={["px-2 py-1.5 text-center font-semibold text-white whitespace-nowrap min-w-[110px] border-r border-white/20 cursor-pointer hover:opacity-80 transition-opacity",g.bg,hiddenBuckets.has(b)?"opacity-40":""].join(" ")}>
+                      <div className="flex flex-col items-center gap-0.5">
+                        {hiddenBuckets.has(b)?<EyeOff className="w-3 h-3"/>:<Eye className="w-3 h-3"/>}
+                        <span className={["inline-block px-1.5 py-0.5 rounded-full text-[10px] border",bucketPillClasses(b)].join(" ")}>{b}</span>
+                      </div>
+                    </th>
                   )}
                 </React.Fragment>
               );
@@ -1975,7 +1982,7 @@ function CombinedTable({
                     {sr.label}
                   </td>
                   {/* รวม */}
-                  <td className={["px-3 py-1.5 text-right border-r border-gray-200 min-w-[90px]",sr.totalBg].join(" ")}>
+                  <td className={["sticky left-[220px] z-10 px-3 py-1.5 text-right border-r border-gray-200 min-w-[90px]",sr.totalBg].join(" ")}>
                     {renderCellVal(sr.key, isHiddenRow?0:rowTotal(sr.key,row), sr.textColor)}
                   </td>
                   {/* bucket cells */}
@@ -1990,23 +1997,36 @@ function CombinedTable({
                       const isBadDebtBucket=g.label==="หนี้เสีย";
                       return(
                         <React.Fragment key={b}>
-                          <td className={["px-3 py-1.5 text-right border-r border-gray-200",cellBg].join(" ")}>
-                            {renderCellVal(sr.key, val, sr.textColor)}
-                          </td>
-                          {/* sub-columns หนี้เสีย เฉพาะ paid row */}
-                          {isBadDebtBucket&&isLast&&(
+                          {/* bucket หนี้เสีย: แสดงเป็น 3 sub-col (ค่างวด/ขายเครื่อง/รวม) */}
+                          {isBadDebtBucket?(
                             <>
+                              {/* ค่างวด */}
                               <td className={["px-3 py-1.5 text-right border-r border-gray-200",cellBg].join(" ")}>
                                 {sr.key==="paid"&&!isDimmed
-                                  ? renderMoney(showBadDebtInstall?cellPaidInstall(cell):0, sr.textColor)
-                                  : <span className="text-gray-200 text-xs">—</span>}
+                                  ? renderMoney(showBadDebtInstall?(cell?.paid.badDebtInstallment??0):0, sr.textColor)
+                                  : <span className="text-gray-300 text-xs">—</span>}
                               </td>
+                              {/* ขายเครื่อง */}
                               <td className={["px-3 py-1.5 text-right border-r border-gray-200",cellBg].join(" ")}>
                                 {sr.key==="paid"&&!isDimmed
-                                  ? renderMoney(showBadDebtSale?cellPaidSale(cell):0, "text-red-700")
-                                  : <span className="text-gray-200 text-xs">—</span>}
+                                  ? renderMoney(showBadDebtSale?(cell?.paid.badDebt??0):0, "text-red-700")
+                                  : <span className="text-gray-300 text-xs">—</span>}
+                              </td>
+                              {/* รวม */}
+                              <td className={["px-3 py-1.5 text-right border-r border-gray-200",cellBg].join(" ")}>
+                                {sr.key==="paid"&&!isDimmed
+                                  ? renderMoney(
+                                      (showBadDebtInstall?(cell?.paid.badDebtInstallment??0):0)
+                                      +(showBadDebtSale?(cell?.paid.badDebt??0):0),
+                                      sr.textColor
+                                    )
+                                  : renderCellVal(sr.key, val, sr.textColor)}
                               </td>
                             </>
+                          ):(
+                            <td className={["px-3 py-1.5 text-right border-r border-gray-200",cellBg].join(" ")}>
+                              {renderCellVal(sr.key, val, sr.textColor)}
+                            </td>
                           )}
                         </React.Fragment>
                       );
@@ -2022,19 +2042,21 @@ function CombinedTable({
         <tr className="border-t-2 border-slate-400 bg-slate-50 font-bold">
           <td className="sticky left-0 z-10 px-3 py-2 text-sm font-bold text-slate-800 bg-slate-100 border-r border-slate-300 whitespace-nowrap">รวมทั้งหมด</td>
           <td className="sticky left-[130px] z-10 px-2 py-2 bg-slate-100 border-r border-slate-300"/>
-          <td className="px-3 py-2 bg-slate-100 border-r border-slate-300"/>
+          <td className="sticky left-[220px] z-10 px-3 py-2 bg-slate-100 border-r border-slate-300"/>
           {BUCKET_GROUPS.map((g)=>
             g.buckets.map((b,bi)=>{
               const isLast=bi===g.buckets.length-1;
               const isBadDebtBucket=g.label==="หนี้เสีย";
               return(
                 <React.Fragment key={b}>
-                  <td className={["px-3 py-2",bucketCellBg(b),"bg-slate-100"].join(" ")}/>
-                  {isBadDebtBucket&&isLast&&(
+                  {isBadDebtBucket?(
                     <>
                       <td className={["px-3 py-2",bucketCellBg(b),"bg-slate-100"].join(" ")}/>
                       <td className={["px-3 py-2",bucketCellBg(b),"bg-slate-100"].join(" ")}/>
+                      <td className={["px-3 py-2",bucketCellBg(b),"bg-slate-100"].join(" ")}/>
                     </>
+                  ):(
+                    <td className={["px-3 py-2",bucketCellBg(b),"bg-slate-100"].join(" ")}/>
                   )}
                 </React.Fragment>
               );
@@ -2045,7 +2067,7 @@ function CombinedTable({
           <tr key={sr.key} className={["border-b border-gray-200",sr.totalBg].join(" ")}>
             <td className={["sticky left-0 z-10 px-3 py-1.5 text-xs font-semibold whitespace-nowrap border-r border-gray-300",sr.totalBg].join(" ")}/>
             <td className={["sticky left-[130px] z-10 px-2 py-1.5 text-center text-[11px] font-semibold border-r border-gray-300",sr.totalBg,sr.textColor].join(" ")}>{sr.label}</td>
-            <td className={["px-3 py-1.5 text-right border-r border-gray-300",sr.totalBg].join(" ")}>
+            <td className={["sticky left-[220px] z-10 px-3 py-1.5 text-right border-r border-gray-300",sr.totalBg].join(" ")}>
               {renderCellVal(sr.key,gtRowTotal(sr.key),sr.textColor)}
             </td>
             {BUCKET_GROUPS.map((g)=>
@@ -2058,22 +2080,35 @@ function CombinedTable({
                 const bt=grandTotal.bucketTotals[b];
                 return(
                   <React.Fragment key={b}>
-                    <td className={["px-3 py-1.5 text-right border-r border-gray-300",cellBg,"bg-slate-100"].join(" ")}>
-                      {renderCellVal(sr.key,val,sr.textColor)}
-                    </td>
-                    {isBadDebtBucket&&isLast&&(
+                    {isBadDebtBucket?(
                       <>
+                        {/* ค่างวด */}
                         <td className={["px-3 py-1.5 text-right border-r border-gray-300",cellBg,"bg-slate-100"].join(" ")}>
                           {sr.key==="paid"&&!isBucketHidden
-                            ? renderMoney(showBadDebtInstall&&bt?computeMoneyTotal(bt.paid,paidVis)-(bt.paid.badDebt??0):0, sr.textColor)
+                            ? renderMoney(showBadDebtInstall&&bt?(bt.paid.badDebtInstallment??0):0, sr.textColor)
                             : <span className="text-gray-200 text-xs">—</span>}
                         </td>
+                        {/* ขายเครื่อง */}
                         <td className={["px-3 py-1.5 text-right border-r border-gray-300",cellBg,"bg-slate-100"].join(" ")}>
                           {sr.key==="paid"&&!isBucketHidden
                             ? renderMoney(showBadDebtSale&&bt?(bt.paid.badDebt??0):0, "text-red-700")
                             : <span className="text-gray-200 text-xs">—</span>}
                         </td>
+                        {/* รวม */}
+                        <td className={["px-3 py-1.5 text-right border-r border-gray-300",cellBg,"bg-slate-100"].join(" ")}>
+                          {sr.key==="paid"&&!isBucketHidden
+                            ? renderMoney(
+                                (showBadDebtInstall&&bt?(bt.paid.badDebtInstallment??0):0)
+                                +(showBadDebtSale&&bt?(bt.paid.badDebt??0):0),
+                                sr.textColor
+                              )
+                            : renderCellVal(sr.key,val,sr.textColor)}
+                        </td>
                       </>
+                    ):(
+                      <td className={["px-3 py-1.5 text-right border-r border-gray-300",cellBg,"bg-slate-100"].join(" ")}>
+                        {renderCellVal(sr.key,val,sr.textColor)}
+                      </td>
                     )}
                   </React.Fragment>
                 );
