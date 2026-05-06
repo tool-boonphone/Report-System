@@ -140,7 +140,6 @@ const MONEY_BADGE_ITEMS: Array<{key:MoneyBadgeKey;label:string;icon:React.ReactN
   { key:"unlockFee",          label:"ค่าปลดล็อก",       icon:<Tag        className="w-3.5 h-3.5"/>, canToggle:true  },
   { key:"discount",           label:"ส่วนลด",           icon:<Tag        className="w-3.5 h-3.5"/>, canToggle:false },
   { key:"overpaid",           label:"ชำระเกิน",         icon:<TrendingUp className="w-3.5 h-3.5"/>, canToggle:true  },
-  { key:"badDebtInstallment", label:"ค่างวด(หนี้เสีย)", icon:<Smartphone className="w-3.5 h-3.5"/>, canToggle:true  },
 ];
 const DUE_BADGE_ITEMS: Array<{key:DueBadgeKey;label:string;icon:React.ReactNode}> = [
   { key:"principal", label:"เงินต้น",      icon:<Banknote className="w-3.5 h-3.5"/> },
@@ -158,9 +157,9 @@ const NOT_YET_DUE_BADGE_ITEMS: Array<{key:NotYetDueBadgeKey;label:string;icon:Re
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function computeMoneyTotal(m:MoneyBreakdown, v:Record<MoneyBadgeKey,boolean>):number {
-  // หมายเหตุ: ไม่รวม badDebtInstallment ที่นี่ เพราะ bucket "หนี้เสีย" จัดการแยกต่างหาก
-  // badDebtInstallment ถูก toggle ผ่าน paidVis.badDebtInstallment ใน rowPaidTotal/gtPaidTotal
-  return (v.principal?m.principal:0)+(v.interest?m.interest:0)+(v.fee?m.fee:0)+(v.penalty?m.penalty:0)+(v.unlockFee?m.unlockFee:0)+(v.overpaid?m.overpaid:0);
+  // รวม badDebtInstallment เข้ากลุ่มค่างวดปกติ (ค่างวดที่ลูกค้าหนี้เสียจ่ายมาก่อนตกเป็นหนี้เสีย)
+  // toggle ผ่าน paidVis.badDebtInstallment ซึ่งผูกกับปุ่มตาที่หัวคอลัมน์ "ค่างวด" ใน SummaryTable
+  return (v.principal?m.principal:0)+(v.interest?m.interest:0)+(v.fee?m.fee:0)+(v.penalty?m.penalty:0)+(v.unlockFee?m.unlockFee:0)+(v.overpaid?m.overpaid:0)+(v.badDebtInstallment?m.badDebtInstallment:0);
 }
 function computeDueTotal(m:MoneyBreakdown, v:Record<DueBadgeKey,boolean>):number {
   return (v.principal?m.principal:0)+(v.interest?m.interest:0)+(v.fee?m.fee:0)+(v.penalty?m.penalty:0)+(v.unlockFee?m.unlockFee:0);
@@ -709,7 +708,9 @@ export default function MonthlySummary() {
       const bt=grandTotal.bucketTotals[b];
       if(!bt)continue;
       if(b==="หนี้เสีย"){
-        const installAmt=paidVis.badDebtInstallment?(bt.paid.badDebtInstallment??0):0;
+        // badDebtInstallment รวมอยู่ใน computeMoneyTotal แล้ว (ผ่าน paidVis.badDebtInstallment)
+        // badDebt (ขายเครื่อง) toggle แยกผ่าน showBadDebtSale
+        const installAmt=computeMoneyTotal(bt.paid,paidVis);
         const saleAmt=showBadDebtSale?(bt.paid.badDebt??0):0;
         r={...r,principal:r.principal+installAmt+saleAmt};
       }else{
@@ -732,7 +733,7 @@ export default function MonthlySummary() {
     if(hiddenBuckets.has(b))return s;
     const bt=grandTotal.bucketTotals[b];
     if(!bt)return s;
-    if(b==="หนี้เสีย"){return s+(paidVis.badDebtInstallment?(bt.paid.badDebtInstallment??0):0)+(showBadDebtSale?(bt.paid.badDebt??0):0);}
+    if(b==="หนี้เสีย"){return s+computeMoneyTotal(bt.paid,paidVis)+(showBadDebtSale?(bt.paid.badDebt??0):0);}
     return s+computeMoneyTotal(bt.paid,paidVis);
   },0),[grandTotal,hiddenBuckets,showBadDebtSale,paidVis]);
 
@@ -1099,9 +1100,9 @@ export default function MonthlySummary() {
             );})}            {/* Badge ขายเครื่อง(หนี้เสีย) ยังคงแยกออกมา */}
             {(()=>{const saleAmt=grandTotal.bucketTotals["หนี้เสีย"]?.paid.badDebt??0;return(
               <button type="button" onClick={()=>setShowBadDebtSale(v=>!v)}
-                title={showBadDebtSale?"ซ่อนขายเครื่องหนี้เสีย":"แสดงขายเครื่องหนี้เสีย"}
+                title={showBadDebtSale?"ซ่อนยอดขายเครื่อง":"แสดงยอดขายเครื่อง"}
                 className={["flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border transition-colors",showBadDebtSale?"bg-red-100 border-red-300 text-red-800 hover:bg-red-200":"bg-gray-100 border-gray-200 text-gray-400 hover:bg-gray-200"].join(" ")}>
-                <Smartphone className="w-3 h-3"/><span>ขายเครื่อง(หนี้เสีย)</span>
+                <Smartphone className="w-3 h-3"/><span>ขายเครื่อง</span>
                 <span className={["font-semibold ml-0.5",showBadDebtSale?"":"text-gray-400"].join(" ")}>{fmtMoney(saleAmt)}</span>
                 {showBadDebtSale?<Eye className="w-3 h-3 ml-0.5 opacity-60"/>:<EyeOff className="w-3 h-3 ml-0.5 opacity-50"/>}
               </button>
@@ -1296,7 +1297,7 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
     if(hiddenRows.has(row.approveMonth))return 0;
     return DEBT_BUCKETS.reduce((s,b)=>{
       if(hiddenBuckets.has(b))return s;const cell=row.buckets[b];if(!cell)return s;
-      if(b==="หนี้เสีย"){return s+(paidVis.badDebtInstallment?(cell.paid.badDebtInstallment??0):0)+(showBadDebtSale?(cell.paid.badDebt??0):0);}
+      if(b==="หนี้เสีย"){return s+computeMoneyTotal(cell.paid,paidVis)+(showBadDebtSale?(cell.paid.badDebt??0):0);}
       return s+computeMoneyTotal(cell.paid,paidVis);
     },0);
   }
@@ -1320,7 +1321,7 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
   const gtTargetTotal=DEBT_BUCKETS.reduce((s,b)=>{if(hiddenBuckets.has(b))return s;const bt=grandTotal.bucketTotals[b];if(!bt)return s;return s+computeMoneyTotal(bt.target,{...targetVis,discount:false,overpaid:false});},0);
   const gtPaidTotal=DEBT_BUCKETS.reduce((s,b)=>{
     if(hiddenBuckets.has(b))return s;const bt=grandTotal.bucketTotals[b];if(!bt)return s;
-    if(b==="หนี้เสีย"){return s+(paidVis.badDebtInstallment?(bt.paid.badDebtInstallment??0):0)+(showBadDebtSale?(bt.paid.badDebt??0):0);}
+    if(b==="หนี้เสีย"){return s+computeMoneyTotal(bt.paid,paidVis)+(showBadDebtSale?(bt.paid.badDebt??0):0);}
     return s+computeMoneyTotal(bt.paid,paidVis);
   },0);
   const gtDueTotal=DEBT_BUCKETS.reduce((s,b)=>{
