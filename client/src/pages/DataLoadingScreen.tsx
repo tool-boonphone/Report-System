@@ -38,7 +38,7 @@ const LOAD_ITEMS: LoadItem[] = [
   { key: "collected", label: "ยอดเก็บหนี้", icon: "💰" },
 ];
 
-const CHUNK_SIZE = 500;
+const CHUNK_SIZE = 1000;
 
 /** ชื่อ stage ที่แสดงผลในภาษาไทย */
 const STAGE_LABELS: Record<string, string> = {
