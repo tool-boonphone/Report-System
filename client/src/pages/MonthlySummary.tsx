@@ -752,61 +752,161 @@ export default function MonthlySummary() {
     if(!canExport){toast.error("คุณไม่มีสิทธิ์ Export");return;}
     try{
       const wb=XLSX.utils.book_new();
+
+      // ── helpers ──────────────────────────────────────────────────────────────
+      // คำนวณค่า cell ตาม tab และ badge vis state
+      const getCellVal=(b:string, cell:SummaryCell|undefined, t:TabKey):number=>{
+        if(hiddenBuckets.has(b)||!cell)return 0;
+        if(t==="count")return cell.contractCount;
+        if(t==="installTotal")return (installVis.principal?cell.installTotal.principal:0)+(installVis.interest?cell.installTotal.interest:0)+(installVis.fee?cell.installTotal.fee:0);
+        if(t==="target")return computeMoneyTotal(cell.target,{...targetVis,discount:false,overpaid:false});
+        if(t==="paid")return computeMoneyTotal(cell.paid,paidVis)+(showBadDebtSale?cell.paid.badDebt:0);
+        if(t==="due")return computeDueTotal(cell.due,dueVis);
+        if(t==="notYetDue")return computeNotYetDueTotal(cell.notYetDue,notYetDueVis);
+        return 0;
+      };
+      // กรอง bucket ที่ไม่ถูกซ่อน
+      const visBuckets=DEBT_BUCKETS.filter(b=>!hiddenBuckets.has(b));
+      // COL_GROUPS กรองเฉพาะ bucket ที่มองเห็น
+      const visGroups=COL_GROUPS.map(g=>({...g,buckets:g.buckets.filter(b=>!hiddenBuckets.has(b))})).filter(g=>g.buckets.length>0);
+
       if(tab==="combined"){
-        // ── Combined sheet: แต่ละแถบเป็นหนึ่ง sheet พร้อมคอลัมน์ % แยก
-        const subKeys:[string,string][]=[["สัญญา","count"],["ยอดผ่อนรวม","installTotal"],["เป้าเก็บหนี้","target"],["ยอดเก็บหนี้","paid"],["หนี้ค้างชำระ","due"],["ยังไม่ถึงกำหนด","notYetDue"]];
-        // helper: คำนวณยอดรวมต่อ row
-        const rowSum=(row:SummaryRow, k:string):number=>DEBT_BUCKETS.reduce((s,b)=>{
-          const c=row.buckets[b];if(!c)return s;
-          if(k==="count")return s+c.contractCount;
-          if(k==="installTotal")return s+c.installTotal.total;
-          if(k==="target")return s+c.target.total;
-          if(k==="paid")return s+c.paid.total;
-          if(k==="due")return s+c.due.total;
-          return s+c.notYetDue.total;
-        },0);
-        const headers=["เดือน-ปีที่อนุมัติ",...subKeys.flatMap(([label,k])=>k==="paid"?[label,`${label} %/ผ่อนรวม`,`${label} %/เป้า`]:k==="target"||k==="due"||k==="notYetDue"?[label,`${label} %`]:[label])];
-        const wsData:(string|number|null)[][]=[headers];
-        for(const row of combinedRows){
-          const installVal=rowSum(row,"installTotal");
-          const targetVal=rowSum(row,"target");
-          const vals:(string|number|null)[]=[fmtMonthYear(row.approveMonth)];
-          for(const[,k] of subKeys){
-            const v=rowSum(row,k);
-            vals.push(v);
-            if(k==="target")vals.push(installVal>0?Math.round((v/installVal)*1000)/10:null);
-            else if(k==="paid"){vals.push(installVal>0?Math.round((v/installVal)*1000)/10:null);vals.push(targetVal>0?Math.round((v/targetVal)*1000)/10:null);}
-            else if(k==="due")vals.push(targetVal>0?Math.round((v/targetVal)*1000)/10:null);
-            else if(k==="notYetDue")vals.push(installVal>0?Math.round((v/installVal)*1000)/10:null);
-          }
-          wsData.push(vals);
+        // ── Combined sheet ────────────────────────────────────────────────────
+        // โครงสร้าง: เดือน | หัวข้อ | bucket1 | bucket2 | ... | รวม | % columns
+        const subRows:[string,TabKey][]=[["สัญญา","count"],["ยอดผ่อนรวม","installTotal"],["เป้าเก็บหนี้","target"],["ยอดเก็บหนี้","paid"],["หนี้ค้างชำระ","due"],["ยังไม่ถึงกำหนด","notYetDue"]];
+        // header row 1: group labels
+        const hdr1:string[][]=[["เดือน-ปีที่อนุมัติ"],["หัวข้อ"]];
+        for(const g of visGroups){
+          hdr1.push([g.label]);
+          for(let i=1;i<g.buckets.length;i++)hdr1.push([""]);
+          if(g.hasSubtotal)hdr1.push([""]);
         }
+        hdr1.push(["รวม"]);
+        // header row 2: bucket names + subtotal + รวม + % columns แยก
+        const hdr2:string[][]=[["เดือน-ปีที่อนุมัติ"],["หัวข้อ"]];
+        for(const g of visGroups){
+          for(const b of g.buckets)hdr2.push([b]);
+          if(g.hasSubtotal)hdr2.push([g.label+" รวม"]);
+        }
+        hdr2.push(["รวม"],["รวม % ของยอดผ่อนรวม"],["รวม % ของเป้าเก็บหนี้"]);
+        // hdr1 ต้องมีคอลัมน์เท่ากับ hdr2
+        while(hdr1.length<hdr2.length)hdr1.push([""]);
+        const wsData:(string|number|null)[][]=[hdr1.map(x=>x[0]),hdr2.map(x=>x[0])];
+        // helper: คำนวณ subtotal ของ group
+        const groupSubtotal=(row:SummaryRow,g:typeof visGroups[0],t:TabKey)=>g.buckets.reduce((s,b)=>s+getCellVal(b,row.buckets[b],t),0);
+        const rowTotal=(row:SummaryRow,t:TabKey)=>visBuckets.reduce((s,b)=>s+getCellVal(b,row.buckets[b],t),0);
+        for(const row of combinedRows){
+          const installTotal=rowTotal(row,"installTotal");
+          const targetTotal=rowTotal(row,"target");
+          for(const[subLabel,subKey] of subRows){
+            const vals:(string|number|null)[]=[fmtMonthYear(row.approveMonth),subLabel];
+            for(const g of visGroups){
+              for(const b of g.buckets)vals.push(getCellVal(b,row.buckets[b],subKey));
+              if(g.hasSubtotal)vals.push(groupSubtotal(row,g,subKey));
+            }
+            const total=rowTotal(row,subKey);
+            vals.push(total);
+            // % columns
+            if(subKey==="target"){
+              vals.push(installTotal>0?Math.round((total/installTotal)*1000)/10:null);
+              vals.push(null);
+            } else if(subKey==="paid"){
+              const paidNoSale=total-(showBadDebtSale?visBuckets.reduce((s,b)=>{const c=row.buckets[b];return s+(hiddenBuckets.has(b)?0:(c?.paid.badDebt??0));},0):0);
+              vals.push(installTotal>0?Math.round((paidNoSale/installTotal)*1000)/10:null);
+              vals.push(targetTotal>0?Math.round((paidNoSale/targetTotal)*1000)/10:null);
+            } else if(subKey==="due"){
+              vals.push(null);
+              vals.push(targetTotal>0?Math.round((total/targetTotal)*1000)/10:null);
+            } else if(subKey==="notYetDue"){
+              vals.push(installTotal>0?Math.round((total/installTotal)*1000)/10:null);
+              vals.push(null);
+            } else {
+              vals.push(null);vals.push(null);
+            }
+            wsData.push(vals);
+          }
+        }
+        // grand total row
+        const gtRow=(subLabel:string,subKey:TabKey)=>{
+          const vals:(string|number|null)[]=["รวมทั้งหมด",subLabel];
+          for(const g of visGroups){
+            for(const b of g.buckets){const bt=grandTotal.bucketTotals[b];vals.push(bt?getCellVal(b,{contractCount:bt.count,paid:bt.paid,due:bt.due,target:bt.target,notYetDue:bt.notYetDue,installTotal:bt.installTotal},subKey):0);}
+            if(g.hasSubtotal)vals.push(g.buckets.reduce((s,b)=>{const bt=grandTotal.bucketTotals[b];return s+(bt?getCellVal(b,{contractCount:bt.count,paid:bt.paid,due:bt.due,target:bt.target,notYetDue:bt.notYetDue,installTotal:bt.installTotal},subKey):0);},0));
+          }
+          const total=visBuckets.reduce((s,b)=>{const bt=grandTotal.bucketTotals[b];return s+(bt?getCellVal(b,{contractCount:bt.count,paid:bt.paid,due:bt.due,target:bt.target,notYetDue:bt.notYetDue,installTotal:bt.installTotal},subKey):0);},0);
+          vals.push(total);
+          vals.push(null);vals.push(null);
+          return vals;
+        };
+        for(const[subLabel,subKey] of subRows)wsData.push(gtRow(subLabel,subKey));
         const ws=XLSX.utils.aoa_to_sheet(wsData);
         XLSX.utils.book_append_sheet(wb,ws,"สรุปรวม");
-      }else{
-        const tabLabel=tab==="count"?"สัญญา":tab==="installTotal"?"ยอดผ่อนรวม":tab==="target"?"เป้าเก็บหนี้":tab==="paid"?"ยอดชำระแล้ว":tab==="due"?"หนี้ค้างชำระ":"ยังไม่ถึงกำหนด";
-        const headers=["เดือน-ปีที่อนุมัติ","สัญญา",...DEBT_BUCKETS];
-        const wsData:(string|number)[][]=[headers];
+      } else {
+        // ── แถบอื่น (count/installTotal/target/paid/due/notYetDue) ─────────────
+        const tabLabel=tab==="count"?"สัญญา":tab==="installTotal"?"ยอดผ่อนรวม":tab==="target"?"เป้าเก็บหนี้":tab==="paid"?"ยอดเก็บหนี้":tab==="due"?"หนี้ค้างชำระ":"ยังไม่ถึงกำหนด";
+        // header row 1: group labels
+        const hdr1:string[]=["เดือน-ปีที่อนุมัติ"];
+        for(const g of visGroups){
+          hdr1.push(g.label);
+          for(let i=1;i<g.buckets.length;i++)hdr1.push("");
+          if(g.hasSubtotal)hdr1.push("");
+        }
+        hdr1.push("รวม");
+        if(tab==="target")hdr1.push("% ของยอดผ่อนรวม");
+        if(tab==="paid"){hdr1.push("% ของยอดผ่อนรวม");hdr1.push("% ของเป้าเก็บหนี้");}
+        if(tab==="due")hdr1.push("% ของเป้าเก็บหนี้");
+        if(tab==="notYetDue")hdr1.push("% ของยอดผ่อนรวม");
+        // header row 2: bucket names + subtotal
+        const hdr2:string[]=["เดือน-ปีที่อนุมัติ"];
+        for(const g of visGroups){
+          for(const b of g.buckets)hdr2.push(b);
+          if(g.hasSubtotal)hdr2.push(`${g.label} รวม`);
+        }
+        hdr2.push("รวม");
+        if(tab==="target")hdr2.push("% ของยอดผ่อนรวม");
+        if(tab==="paid"){hdr2.push("% ของยอดผ่อนรวม");hdr2.push("% ของเป้าเก็บหนี้");}
+        if(tab==="due")hdr2.push("% ของเป้าเก็บหนี้");
+        if(tab==="notYetDue")hdr2.push("% ของยอดผ่อนรวม");
+        const wsData:(string|number|null)[][]=[hdr1,hdr2];
+        // helper: installTotal per row (สำหรับคำนวณ %)
+        const rowInstall=(row:SummaryRow)=>visBuckets.reduce((s,b)=>s+getCellVal(b,row.buckets[b],"installTotal"),0);
+        const rowTarget=(row:SummaryRow)=>visBuckets.reduce((s,b)=>s+getCellVal(b,row.buckets[b],"target"),0);
         for(const row of rows){
-          const vals:any[]=[fmtMonthYear(row.approveMonth),row.totalCount];
-          for(const b of DEBT_BUCKETS){
-            const cell=row.buckets[b];
-            if(tab==="count")vals.push(cell?.contractCount??0);
-            else if(tab==="installTotal")vals.push(cell?.installTotal.total??0);
-            else if(tab==="target")vals.push(cell?.target.total??0);
-            else if(tab==="paid")vals.push(cell?.paid.total??0);
-            else if(tab==="due")vals.push(cell?.due.total??0);
-            else vals.push(cell?.notYetDue.total??0);
+          const vals:(string|number|null)[]=[fmtMonthYear(row.approveMonth)];
+          for(const g of visGroups){
+            for(const b of g.buckets)vals.push(getCellVal(b,row.buckets[b],tab));
+            if(g.hasSubtotal)vals.push(g.buckets.reduce((s,b)=>s+getCellVal(b,row.buckets[b],tab),0));
           }
+          const total=visBuckets.reduce((s,b)=>s+getCellVal(b,row.buckets[b],tab),0);
+          vals.push(total);
+          if(tab==="target"){const inst=rowInstall(row);vals.push(inst>0?Math.round((total/inst)*1000)/10:null);}
+          else if(tab==="paid"){
+            const inst=rowInstall(row);const tgt=rowTarget(row);
+            const paidNoSale=total-(showBadDebtSale?visBuckets.reduce((s,b)=>{const c=row.buckets[b];return s+(hiddenBuckets.has(b)?0:(c?.paid.badDebt??0));},0):0);
+            vals.push(inst>0?Math.round((paidNoSale/inst)*1000)/10:null);
+            vals.push(tgt>0?Math.round((paidNoSale/tgt)*1000)/10:null);
+          }
+          else if(tab==="due"){const tgt=rowTarget(row);vals.push(tgt>0?Math.round((total/tgt)*1000)/10:null);}
+          else if(tab==="notYetDue"){const inst=rowInstall(row);vals.push(inst>0?Math.round((total/inst)*1000)/10:null);}
           wsData.push(vals);
         }
+        // grand total row
+        const gtVals:(string|number|null)[]=["รวมทั้งหมด"];
+        for(const g of visGroups){
+          for(const b of g.buckets){const bt=grandTotal.bucketTotals[b];gtVals.push(bt?getCellVal(b,{contractCount:bt.count,paid:bt.paid,due:bt.due,target:bt.target,notYetDue:bt.notYetDue,installTotal:bt.installTotal},tab):0);}
+          if(g.hasSubtotal)gtVals.push(g.buckets.reduce((s,b)=>{const bt=grandTotal.bucketTotals[b];return s+(bt?getCellVal(b,{contractCount:bt.count,paid:bt.paid,due:bt.due,target:bt.target,notYetDue:bt.notYetDue,installTotal:bt.installTotal},tab):0);},0));
+        }
+        const gtTotal=visBuckets.reduce((s,b)=>{const bt=grandTotal.bucketTotals[b];return s+(bt?getCellVal(b,{contractCount:bt.count,paid:bt.paid,due:bt.due,target:bt.target,notYetDue:bt.notYetDue,installTotal:bt.installTotal},tab):0);},0);
+        gtVals.push(gtTotal);
+        if(tab==="target"||tab==="paid"||tab==="due"||tab==="notYetDue"){gtVals.push(null);if(tab==="paid")gtVals.push(null);}
+        wsData.push(gtVals);
         const ws=XLSX.utils.aoa_to_sheet(wsData);
         XLSX.utils.book_append_sheet(wb,ws,tabLabel);
       }
       XLSX.writeFile(wb,`monthly_summary_${tab}_${new Date().toISOString().slice(0,10)}.xlsx`);
       toast.success("Export สำเร็จ");
     }catch{toast.error("Export ล้มเหลว");}
-  },[canExport,rows,combinedRows,tab]);
+  },[canExport,rows,combinedRows,tab,hiddenBuckets,paidVis,targetVis,dueVis,notYetDueVis,installVis,showBadDebtSale,grandTotal]);
 
   const handleExportRef=useRef(handleExport);
   handleExportRef.current=handleExport;

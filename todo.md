@@ -1341,4 +1341,9 @@ Task list:
 
 ## Phase 139 — MonthlySummary CombinedTable % ยอดเก็บหนี้ หักขายเครื่อง (2026-05-06)
 - [x] P139-1: แก้ไข % ยอดเก็บหนี้ ให้หักยอดขายเครื่อง (badDebt) ออกก่อนคำนวณ % ทั้ง tbody และ grand total footer
-- [ ] P139-2: Commit + Push GitHub + Checkpoint
+- [x] P139-2: Commit + Push GitHub + Checkpoint
+
+## Phase 140 — MonthlySummary Export Excel ตรงกับ UI (2026-05-06)
+- [ ] P140-1: วิเคราะห์ handleExport ปัจจุบันทุกแถบ (สัญญา, ยอดผ่อนรวม, เป้าเก็บหนี้, ยอดเก็บหนี้, หนี้ค้างชำระ, ยังไม่ถึงกำหนด, สรุปรวม)
+- [ ] P140-2: เขียน Export Excel ใหม่ให้ตรงกับโครงสร้างตาราง UI (bucket groups, badge visibility, % columns)
+- [ ] P140-3: Commit + Push GitHub + Checkpoint
