@@ -1313,3 +1313,10 @@ Task list:
 - [ ] MonthlySummary: เพิ่มแถบ "สรุปรวม" ที่รวมข้อมูลทุกแถบมาแสดงในตารางเดียว
 - [ ] MonthlySummary สรุปรวม: แต่ละเดือนแสดงเป็น sub-row แยกตามแถบ (6 sub-rows ต่อเดือน)
 - [ ] MonthlySummary สรุปรวม: Badge แยกของแต่ละแถบ Default ซ่อนไว้ กดขยายได้
+
+## Phase 135 — MonthlySummary Badge Eye-Toggle หักยอดค่างวด (2026-05-06)
+- [x] P135-1: SummaryTable (แถบ paid) — คอลัมน์ "ค่างวด" ของ bucket หนี้เสีย ใช้ computeMoneyTotal แทน badDebtInstallment เพื่อให้ badge toggle หักยอดออก
+- [x] P135-2: SummaryTable grand total footer — แก้เช่นเดียวกัน
+- [x] P135-3: CombinedTable (แถบสรุปรวม) cell rows — คอลัมน์ "ค่างวด" ของ bucket หนี้เสีย ใช้ cellPaidInstall (computeMoneyTotal) แทน badDebtInstallment
+- [x] P135-4: CombinedTable grand total footer — แก้เช่นเดียวกัน ใช้ gtPaidInstall
+- [ ] P135-5: Commit + Push GitHub + Checkpoint
