@@ -234,12 +234,14 @@ export async function getBadDebtSummary(params: {
   );
 
   // ─── Step 7: Count total contracts per approve_month (all statuses) ─────────
+  // ใช้ตาราง contracts เพื่อนับจำนวนสัญญาที่อนุมัติในแต่ละเดือน (ทุกสถานะ)
+  // ไม่ใช้ debt_target_cache เพราะมีหลาย row ต่อสัญญา (ทุกงวด)
   const totalContractsRaw = await db.execute(
     sql.raw(`
       SELECT
         DATE_FORMAT(approve_date, '%Y-%m') AS ym,
-        COUNT(DISTINCT contract_external_id) AS total
-      FROM debt_target_cache
+        COUNT(*) AS total
+      FROM contracts
       WHERE section = '${params.section}'
         AND approve_date IS NOT NULL
       GROUP BY DATE_FORMAT(approve_date, '%Y-%m')
