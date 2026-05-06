@@ -977,9 +977,10 @@ export default function MonthlySummary() {
               const isOn=installVis[key];const val=grandBadgeInstallTotal[key];
               return(
                 <button key={key} type="button" onClick={()=>setInstallVis(p=>({...p,[key]:!p[key]}))}
-                  className={["flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border transition-colors",isOn?"bg-purple-100 border-purple-300 text-purple-800":"bg-gray-100 border-gray-200 text-gray-400 line-through"].join(" ")}>
-                  {isOn?<Eye className="w-3 h-3"/>:<EyeOff className="w-3 h-3"/>}{icon}<span>{label}</span>
-                  <span className="font-semibold ml-0.5">{fmtMoney(val)}</span>
+                  className={["flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border transition-colors",isOn?"bg-purple-100 border-purple-300 text-purple-800":"bg-gray-100 border-gray-200 text-gray-400"].join(" ")}>
+                  {icon}<span>{label}</span>
+                  <span className={["font-semibold ml-0.5",isOn?"":"text-gray-400"].join(" ")}>{fmtMoney(val)}</span>
+                  {isOn?<Eye className="w-3 h-3 ml-0.5 opacity-60"/>:<EyeOff className="w-3 h-3 ml-0.5 opacity-50"/>}
                 </button>
               );
             })}
@@ -1002,6 +1003,7 @@ export default function MonthlySummary() {
                   className={["flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border transition-colors",isOn?"bg-indigo-100 border-indigo-300 text-indigo-800":"bg-gray-100 border-gray-200 text-gray-400"].join(" ")}>
                   {icon}<span>{label}</span>
                   <span className={["font-semibold ml-0.5",isOn?"":"text-gray-400"].join(" ")}>{fmtMoney(val)}</span>
+                  {isOn?<Eye className="w-3 h-3 ml-0.5 opacity-60"/>:<EyeOff className="w-3 h-3 ml-0.5 opacity-50"/>}
                 </button>
               );
              })}
@@ -1023,6 +1025,7 @@ export default function MonthlySummary() {
                 className={["flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border transition-colors",!canToggle?"cursor-not-allowed bg-gray-100 border-gray-200 text-gray-400":isOn?"bg-green-100 border-green-300 text-green-800 hover:bg-green-200":"bg-gray-100 border-gray-200 text-gray-400 hover:bg-gray-200"].join(" ")}>
                 {icon}<span>{label}</span>
                 <span className={["font-semibold ml-0.5",!canToggle?"text-gray-400":isOn?"":"text-gray-400"].join(" ")}>{fmtMoney(val)}</span>
+                {canToggle&&(isOn?<Eye className="w-3 h-3 ml-0.5 opacity-60"/>:<EyeOff className="w-3 h-3 ml-0.5 opacity-50"/>)}
               </button>
             );})}            {/* Badge หนี้เสีย */}
             {(()=>{const installAmt=grandTotal.bucketTotals["หนี้เสีย"]?.paid.badDebtInstallment??0;const saleAmt=grandTotal.bucketTotals["หนี้เสีย"]?.paid.badDebt??0;return(<>
@@ -1031,12 +1034,14 @@ export default function MonthlySummary() {
                 className={["flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border transition-colors",showBadDebtInstall?"bg-green-100 border-green-300 text-green-800 hover:bg-green-200":"bg-gray-100 border-gray-200 text-gray-400 hover:bg-gray-200"].join(" ")}>
                 <Smartphone className="w-3 h-3"/><span>ค่างวด(หนี้เสีย)</span>
                 <span className={["font-semibold ml-0.5",showBadDebtInstall?"":"text-gray-400"].join(" ")}>{fmtMoney(installAmt)}</span>
+                {showBadDebtInstall?<Eye className="w-3 h-3 ml-0.5 opacity-60"/>:<EyeOff className="w-3 h-3 ml-0.5 opacity-50"/>}
               </button>
               <button type="button" onClick={()=>setShowBadDebtSale(v=>!v)}
                 title={showBadDebtSale?"ซ่อนขายเครื่องหนี้เสีย":"แสดงขายเครื่องหนี้เสีย"}
                 className={["flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border transition-colors",showBadDebtSale?"bg-red-100 border-red-300 text-red-800 hover:bg-red-200":"bg-gray-100 border-gray-200 text-gray-400 hover:bg-gray-200"].join(" ")}>
                 <Smartphone className="w-3 h-3"/><span>ขายเครื่อง(หนี้เสีย)</span>
                 <span className={["font-semibold ml-0.5",showBadDebtSale?"":"text-gray-400"].join(" ")}>{fmtMoney(saleAmt)}</span>
+                {showBadDebtSale?<Eye className="w-3 h-3 ml-0.5 opacity-60"/>:<EyeOff className="w-3 h-3 ml-0.5 opacity-50"/>}
               </button>
             </>);})()}
             <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border bg-green-700 border-green-800 text-white font-semibold">
@@ -1052,8 +1057,9 @@ export default function MonthlySummary() {
               <button key={key} type="button" onClick={()=>setDueVis((p)=>({...p,[key]:!p[key]}))}
                 title={isOn?`ซ่อน${label}`:`แสดง${label}`}
                 className={["flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border transition-colors",isOn?"bg-orange-100 border-orange-300 text-orange-800 hover:bg-orange-200":"bg-gray-100 border-gray-200 text-gray-400 hover:bg-gray-200"].join(" ")}>
-                {isOn?<Eye className="w-3 h-3"/>:<EyeOff className="w-3 h-3"/>}{icon}<span>{label}</span>
+                {icon}<span>{label}</span>
                 <span className={["font-semibold ml-0.5",isOn?"":"text-gray-400"].join(" ")}>{fmtMoney(val)}</span>
+                {isOn?<Eye className="w-3 h-3 ml-0.5 opacity-60"/>:<EyeOff className="w-3 h-3 ml-0.5 opacity-50"/>}
               </button>
             );})}
             <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border bg-orange-700 border-orange-800 text-white font-semibold">
@@ -1069,11 +1075,11 @@ export default function MonthlySummary() {
               <button key={key} type="button" onClick={()=>setNotYetDueVis((p)=>({...p,[key]:!p[key]}))}
                 title={isOn?`ซ่อน${label}`:`แสดง${label}`}
                 className={["flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border transition-colors",isOn?"bg-blue-100 border-blue-300 text-blue-800 hover:bg-blue-200":"bg-gray-100 border-gray-200 text-gray-400 hover:bg-gray-200"].join(" ")}>
-                {isOn?<Eye className="w-3 h-3"/>:<EyeOff className="w-3 h-3"/>}{icon}<span>{label}</span>
+                            {icon}<span>{label}</span>
                 <span className={["font-semibold ml-0.5",isOn?"":"text-gray-400"].join(" ")}>{fmtMoney(val)}</span>
+                {isOn?<Eye className="w-3 h-3 ml-0.5 opacity-60"/>:<EyeOff className="w-3 h-3 ml-0.5 opacity-50"/>}
               </button>
-            );})
-            }
+            );})}
             <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border bg-blue-700 border-blue-800 text-white font-semibold">
               <Banknote className="w-3.5 h-3.5" />
               <span>รวม</span>
