@@ -1078,7 +1078,9 @@ export default function DebtOverview() {
       badDebt += row.collectedBadDebt;
     }
     const bv = badgeVisibility;
-    const total = (bv.principal ? principal : 0) + (bv.interest ? interest : 0) + (bv.fee ? fee : 0) + (bv.penalty ? penalty : 0) + (bv.unlockFee ? unlockFee : 0) + (bv.overpaid ? overpaid : 0) + (bv.badDebt ? badDebt : 0);
+    // หมายเหตุ: total ไม่รวม badDebt (ขายเครื่อง) เพราะ collectedTotal ในตารางก็ไม่รวม badDebt
+    // badDebt แสดงเป็น Badge แยกให้ toggle ดูได้ แต่ไม่นับในยอดรวม
+    const total = (bv.principal ? principal : 0) + (bv.interest ? interest : 0) + (bv.fee ? fee : 0) + (bv.penalty ? penalty : 0) + (bv.unlockFee ? unlockFee : 0) + (bv.overpaid ? overpaid : 0);
     return { principal, interest, fee, penalty, unlockFee, discount, overpaid, badDebt, total };
   }, [monthRows, hiddenMonths, badgeVisibility]);
 

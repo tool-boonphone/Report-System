@@ -158,7 +158,9 @@ const NOT_YET_DUE_BADGE_ITEMS: Array<{key:NotYetDueBadgeKey;label:string;icon:Re
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function computeMoneyTotal(m:MoneyBreakdown, v:Record<MoneyBadgeKey,boolean>):number {
-  return (v.principal?m.principal:0)+(v.interest?m.interest:0)+(v.fee?m.fee:0)+(v.penalty?m.penalty:0)+(v.unlockFee?m.unlockFee:0)+(v.overpaid?m.overpaid:0)+(v.badDebtInstallment?(m.badDebtInstallment??0):0);
+  // หมายเหตุ: ไม่รวม badDebtInstallment ที่นี่ เพราะ bucket "หนี้เสีย" จัดการแยกต่างหาก
+  // badDebtInstallment ถูก toggle ผ่าน paidVis.badDebtInstallment ใน rowPaidTotal/gtPaidTotal
+  return (v.principal?m.principal:0)+(v.interest?m.interest:0)+(v.fee?m.fee:0)+(v.penalty?m.penalty:0)+(v.unlockFee?m.unlockFee:0)+(v.overpaid?m.overpaid:0);
 }
 function computeDueTotal(m:MoneyBreakdown, v:Record<DueBadgeKey,boolean>):number {
   return (v.principal?m.principal:0)+(v.interest?m.interest:0)+(v.fee?m.fee:0)+(v.penalty?m.penalty:0)+(v.unlockFee?m.unlockFee:0);
@@ -707,7 +709,7 @@ export default function MonthlySummary() {
       const bt=grandTotal.bucketTotals[b];
       if(!bt)continue;
       if(b==="หนี้เสีย"){
-        const installAmt=showBadDebtInstall?(bt.paid.badDebtInstallment??0):0;
+        const installAmt=paidVis.badDebtInstallment?(bt.paid.badDebtInstallment??0):0;
         const saleAmt=showBadDebtSale?(bt.paid.badDebt??0):0;
         r={...r,principal:r.principal+installAmt+saleAmt};
       }else{
@@ -720,7 +722,7 @@ export default function MonthlySummary() {
       }
     }
     return r;
-  },[grandTotal,hiddenBuckets,showBadDebtInstall,showBadDebtSale]);
+  },[grandTotal,hiddenBuckets,paidVis,showBadDebtSale]);
   const grandBadgeDue=useMemo(()=>{let r=emptyMoney();for(const b of DEBT_BUCKETS){const bt=grandTotal.bucketTotals[b];if(bt)r=addMoney(r,bt.due);}return r;},[grandTotal]);
   const grandBadgeTarget=useMemo(()=>{let r=emptyMoney();for(const b of DEBT_BUCKETS){const bt=grandTotal.bucketTotals[b];if(bt)r=addMoney(r,bt.target);}return r;},[grandTotal]);
   const grandBadgeNotYetDue=useMemo(()=>{let r=emptyMoney();for(const b of DEBT_BUCKETS){const bt=grandTotal.bucketTotals[b];if(bt)r=addMoney(r,bt.notYetDue);}return r;},[grandTotal]);
@@ -730,9 +732,9 @@ export default function MonthlySummary() {
     if(hiddenBuckets.has(b))return s;
     const bt=grandTotal.bucketTotals[b];
     if(!bt)return s;
-    if(b==="หนี้เสีย"){return s+(showBadDebtInstall?(bt.paid.badDebtInstallment??0):0)+(showBadDebtSale?(bt.paid.badDebt??0):0);}
+    if(b==="หนี้เสีย"){return s+(paidVis.badDebtInstallment?(bt.paid.badDebtInstallment??0):0)+(showBadDebtSale?(bt.paid.badDebt??0):0);}
     return s+computeMoneyTotal(bt.paid,paidVis);
-  },0),[grandTotal,hiddenBuckets,showBadDebtInstall,showBadDebtSale,paidVis]);
+  },0),[grandTotal,hiddenBuckets,showBadDebtSale,paidVis]);
 
   // filter counts
   const countFilterCount=[countApproveDate,countApproveMonths.size>0,countApproveYears.size>0,countProductType.size>0,countDeviceFamily].filter(Boolean).length;
@@ -1490,7 +1492,7 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
                         const saleDisplay=cellPaidBadDebtRaw(b,cell);
                         const installRaw=isDimmed?0:installDisplay;
                         const saleRaw=isDimmed?0:saleDisplay;
-                        const install=showBadDebtInstall?installRaw:0;
+                        const install=paidVis.badDebtInstallment?installRaw:0;
                         const sale=showBadDebtSale?saleRaw:0;
                         const total=install+sale;
                         if(isDimmed)return(
@@ -1502,7 +1504,7 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
                         );
                         return(
                           <React.Fragment key={b}>
-                            <td className={`px-3 py-2.5 text-right ${cellBg}`}>{!showBadDebtInstall?<span className="text-gray-300">{fmtMoney(installDisplay)}</span>:renderMoney(install,"text-green-800 font-medium")}</td>
+                            <td className={`px-3 py-2.5 text-right ${cellBg}`}>{!paidVis.badDebtInstallment?<span className="text-gray-300">{fmtMoney(installDisplay)}</span>:renderMoney(install,"text-green-800 font-medium")}</td>
                             <td className={`px-3 py-2.5 text-right ${cellBg}`}>{!showBadDebtSale?<span className="text-gray-300">{fmtMoney(saleDisplay)}</span>:renderMoney(sale,"text-red-700 font-medium")}</td>
                             <td className={`px-3 py-2.5 text-right font-semibold ${cellBg}`}>{renderMoney(total,"text-gray-800")}</td>
                           </React.Fragment>
@@ -1516,7 +1518,7 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
                       if(isBadDebtExpanded(b)){
                         const installDisplay=cellDueBadDebtInstallRaw(b,cell);
                         const installRaw=isDimmed?0:installDisplay;
-                        const install=showBadDebtInstall?installRaw:0;
+                        const install=paidVis.badDebtInstallment?installRaw:0;
                         if(isDimmed)return(
                           <React.Fragment key={b}>
                             <td className={`px-3 py-2.5 text-right ${cellBg}`}><span className="text-gray-400">{fmtMoney(installDisplay)}</span></td>
@@ -1526,7 +1528,7 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
                         );
                         return(
                           <React.Fragment key={b}>
-                            <td className={`px-3 py-2.5 text-right ${cellBg}`}>{!showBadDebtInstall?<span className="text-gray-300">{fmtMoney(installDisplay)}</span>:renderMoney(install,"text-orange-800 font-medium")}</td>
+                            <td className={`px-3 py-2.5 text-right ${cellBg}`}>{!paidVis.badDebtInstallment?<span className="text-gray-300">{fmtMoney(installDisplay)}</span>:renderMoney(install,"text-orange-800 font-medium")}</td>
                             <td className={`px-3 py-2.5 text-right ${cellBg}`}><span className="text-gray-300">0.00</span></td>
                             <td className={`px-3 py-2.5 text-right font-semibold ${cellBg}`}>{renderMoney(install,"text-gray-800")}</td>
                           </React.Fragment>
@@ -1606,11 +1608,11 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
                   if(tab==="count"){const v=gtCountVal(b);return<td key={b} className={`px-3 py-2.5 text-right ${cellBg} bg-slate-100 min-w-[120px]`}><span className="inline-flex items-center justify-center bg-slate-200 text-slate-800 rounded-full px-2.5 py-0.5 text-xs font-bold">{v.toLocaleString()}</span></td>;}
                   if(tab==="target"){const v=gtTargetVal(b);return<td key={b} className={`px-3 py-2.5 text-right ${cellBg} bg-slate-100 min-w-[120px]`}>{renderMoney(v,"text-indigo-900")}</td>;}
                   if(tab==="paid"){
-                    if(isBadDebtExpanded(b)){const installRaw=gtPaidBadDebtInstallRaw(b);const saleRaw=gtPaidBadDebtRaw(b);const install=showBadDebtInstall?installRaw:0;const sale=showBadDebtSale?saleRaw:0;const total=install+sale;return(<React.Fragment key={b}><td className={`px-3 py-2.5 text-right ${cellBg} bg-slate-100 min-w-[120px]`}>{!showBadDebtInstall?<span className="text-gray-300">{fmtMoney(installRaw)}</span>:renderMoney(install,"text-green-900")}</td><td className={`px-3 py-2.5 text-right ${cellBg} bg-slate-100 min-w-[120px]`}>{!showBadDebtSale?<span className="text-gray-300">{fmtMoney(saleRaw)}</span>:renderMoney(sale,"text-red-700")}</td><td className={`px-3 py-2.5 text-right font-bold ${cellBg} bg-slate-100 min-w-[120px]`}>{renderMoney(total,"text-gray-900")}</td></React.Fragment>);}
+                    if(isBadDebtExpanded(b)){const installRaw=gtPaidBadDebtInstallRaw(b);const saleRaw=gtPaidBadDebtRaw(b);const install=paidVis.badDebtInstallment?installRaw:0;const sale=showBadDebtSale?saleRaw:0;const total=install+sale;return(<React.Fragment key={b}><td className={`px-3 py-2.5 text-right ${cellBg} bg-slate-100 min-w-[120px]`}>{!paidVis.badDebtInstallment?<span className="text-gray-300">{fmtMoney(installRaw)}</span>:renderMoney(install,"text-green-900")}</td><td className={`px-3 py-2.5 text-right ${cellBg} bg-slate-100 min-w-[120px]`}>{!showBadDebtSale?<span className="text-gray-300">{fmtMoney(saleRaw)}</span>:renderMoney(sale,"text-red-700")}</td><td className={`px-3 py-2.5 text-right font-bold ${cellBg} bg-slate-100 min-w-[120px]`}>{renderMoney(total,"text-gray-900")}</td></React.Fragment>);}
                     const v=gtPaidVal(b);return<td key={b} className={`px-3 py-2.5 text-right ${cellBg} bg-slate-100 min-w-[120px]`}>{renderMoney(v,"text-green-900")}</td>;
                   }
                   if(tab==="due"){
-                    if(isBadDebtExpanded(b)){const installRaw=gtDueBadDebtInstallRaw(b);const install=showBadDebtInstall?installRaw:0;return(<React.Fragment key={b}><td className={`px-3 py-2.5 text-right ${cellBg} bg-slate-100 min-w-[120px]`}>{!showBadDebtInstall?<span className="text-gray-300">{fmtMoney(installRaw)}</span>:renderMoney(install,"text-orange-900")}</td><td className={`px-3 py-2.5 text-right ${cellBg} bg-slate-100 min-w-[120px]`}><span className="text-gray-300">0.00</span></td><td className={`px-3 py-2.5 text-right font-bold ${cellBg} bg-slate-100 min-w-[120px]`}>{renderMoney(install,"text-gray-900")}</td></React.Fragment>);}
+                    if(isBadDebtExpanded(b)){const installRaw=gtDueBadDebtInstallRaw(b);const install=paidVis.badDebtInstallment?installRaw:0;return(<React.Fragment key={b}><td className={`px-3 py-2.5 text-right ${cellBg} bg-slate-100 min-w-[120px]`}>{!paidVis.badDebtInstallment?<span className="text-gray-300">{fmtMoney(installRaw)}</span>:renderMoney(install,"text-orange-900")}</td><td className={`px-3 py-2.5 text-right ${cellBg} bg-slate-100 min-w-[120px]`}><span className="text-gray-300">0.00</span></td><td className={`px-3 py-2.5 text-right font-bold ${cellBg} bg-slate-100 min-w-[120px]`}>{renderMoney(install,"text-gray-900")}</td></React.Fragment>);}
                     const v=gtDueVal(b);return<td key={b} className={`px-3 py-2.5 text-right ${cellBg} bg-slate-100 min-w-[120px]`}>{renderMoney(v,"text-orange-900")}</td>;
                   }
                   if(tab==="installTotal"){return<td key={b} className={`px-3 py-2.5 text-right ${cellBg} bg-slate-100 min-w-[120px]`}>{renderMoney(gtInstallVal(b),"text-purple-900")}</td>;}
@@ -1971,8 +1973,8 @@ function CombinedTable({
                     <>
                       <th className={["px-2 py-1.5 text-center font-semibold text-white whitespace-nowrap min-w-[90px] border-r border-white/20",g.bg].join(" ")}>
                         <div className="flex flex-col items-center gap-0.5">
-                          <button type="button" onClick={()=>setShowBadDebtInstall(!showBadDebtInstall)} className="hover:opacity-70">
-                            {showBadDebtInstall?<Eye className="w-3 h-3"/>:<EyeOff className="w-3 h-3"/>}
+                          <button type="button" onClick={()=>{const next=!paidVis.badDebtInstallment;setShowBadDebtInstall(next);setPaidVis(prev=>({...prev,badDebtInstallment:next}));}} className="hover:opacity-70">
+                            {paidVis.badDebtInstallment?<Eye className="w-3 h-3"/>:<EyeOff className="w-3 h-3"/>}
                           </button>
                           <span className="text-[10px]">ค่างวด</span>
                         </div>
