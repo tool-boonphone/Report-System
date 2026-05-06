@@ -714,16 +714,26 @@ export default function SuspectedBadDebt() {
                 placeholder="ทุกรุ่น"
               />
 
-              {/* ความจุ — dynamic ตามรุ่นที่เลือก แสดงเฉพาะเมื่อมี options */}
+              {/* ความจุ — native select เพื่อหลีกปัญหา CommandItem lowercase */}
               {capacityOptions.length > 0 && (
-                <MultiSelectFilter
-                  label="ความจุ"
-                  selected={capacityFilter}
-                  onChange={setCapacityFilter}
-                  options={capacityOptions}
-                  placeholder="ทุกความจุ"
-                  formatOption={fmtCapacity}
-                />
+                <select
+                  value={capacityFilter.size === 1 ? Array.from(capacityFilter)[0] : ""}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setCapacityFilter(v ? new Set([v]) : new Set());
+                  }}
+                  className={[
+                    "h-9 px-2.5 rounded-md border text-xs transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[110px] bg-white cursor-pointer",
+                    capacityFilter.size > 0
+                      ? "border-indigo-400 bg-indigo-50 text-indigo-800 font-medium"
+                      : "border-gray-200 text-gray-700 hover:bg-gray-50",
+                  ].join(" ")}
+                >
+                  <option value="">ทุกความจุ</option>
+                  {capacityOptions.map((c) => (
+                    <option key={c} value={c}>{fmtCapacity(c)}</option>
+                  ))}
+                </select>
               )}
 
               {/* มูลค่าหนี้ > */}
