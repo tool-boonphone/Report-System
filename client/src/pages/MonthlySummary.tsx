@@ -66,7 +66,7 @@ type SummaryRow = {
   totalNotYetDue:MoneyBreakdown;
   totalInstallTotal:MoneyBreakdown;
 };
-type TabKey = "count"|"installTotal"|"target"|"paid"|"due"|"notYetDue";
+type TabKey = "count"|"installTotal"|"target"|"paid"|"due"|"notYetDue"|"combined";
 type MoneyBadgeKey = "principal"|"interest"|"fee"|"penalty"|"unlockFee"|"discount"|"overpaid";
 type DueBadgeKey       = "principal"|"interest"|"fee"|"penalty"|"unlockFee";
 type NotYetDueBadgeKey = "principal"|"interest"|"fee";
@@ -295,7 +295,7 @@ function MultiSelectFilter({label,selected,onChange,options,placeholder="ทั�
 const TAB_INFO_CONTENT: {title:string;items:{label:string;desc:string;color?:string}[]} = {
   title: "สรุปรายเดือน — ความหมายของแต่ละแถบ",
   items: [
-    {label:"จำนวนสัญญา",    desc:"จำนวนสัญญาทั้งหมดที่อนุมัติ จัดกลุ่มตามสถานะหนี้ปัจจุบัน (ปกติ / เกินกำหนด / ระงับ / สิ้นสุด / หนี้เสีย)",color:"text-slate-700"},
+    {label:"สัญญา",    desc:"จำนวนสัญญาทั้งหมดที่อนุมัติ จัดกลุ่มตามสถานะหนี้ปัจจุบัน (ปกติ / เกินกำหนด / ระงับ / สิ้นสุด / หนี้เสีย)",color:"text-slate-700"},
     {label:"ยอดผ่อนรวม",     desc:"ยอดที่ลูกค้าต้องผ่อนทั้งหมด = SUM(net_amount) ทุกงวดตั้งแต่งวดแรกถึงงวดสุดท้าย (เงินต้น + ดอกเบี้ย + ค่าดำเนินการ ไม่รวมค่าปรับ/ค่าปลดล็อก) เช่น ผ่อนงวดละ 2,000 × 12 งวด = 24,000",color:"text-purple-700"},
     {label:"เป้าเก็บหนี้",     desc:"ยอดค่างวด (เงินต้น + ดอกเบี้ย + ค่าดำเนินการ + ค่าปรับ + ค่าปลดล็อก) ตั้งแต่งวดแรกถึงงวดปัจจุบัน (เฉพาะงวดที่ถึงกำหนดแล้ว)",color:"text-indigo-700"},
     {label:"ยอดเก็บหนี้",      desc:"ยอดเงินที่ลูกค้าชำระจริง แยกตามประเภท (เงินต้น / ดอกเบี้ย / ค่าดำเนินการ / ค่าปรับ / ค่าปลดล็อก / ชำระเกิน / หนี้เสีย)",color:"text-green-700"},
@@ -333,7 +333,7 @@ const INFO_CONTENT: Record<string,{title:string;items:{label:string;desc:string}
     title: "จำนวนสัญญา — ที่มาของตัวเลขในคอลัมน์",
     items: [
       {label:"เดือน-ปีที่อนุมัติ",desc:"เดือนและปีที่อนุมัติสัญญา (จัดกลุ่มตามวันอนุมัติ)"},
-      {label:"จำนวนสัญญา",desc:"จำนวนสัญญาทั้งหมดที่อนุมัติในเดือนนั้น"},
+      {label:"สัญญา",desc:"จำนวนสัญญาทั้งหมดที่อนุมัติในเดือนนั้น"},
       {label:"ปกติ",desc:"สัญญาที่ไม่มีวันค้างชำระ (ค้างชำระ 0 วัน)"},
       {label:"เกิน 1-7",desc:"สัญญาที่ค้างชำระ 1–7 วัน"},
       {label:"เกิน 8-14",desc:"สัญญาที่ค้างชำระ 8–14 วัน"},
@@ -555,6 +555,9 @@ export default function MonthlySummary() {
   const[showBadDebtInstall,setShowBadDebtInstall]=useState(true);
   const[showBadDebtSale,setShowBadDebtSale]=useState(true);
 
+  // combined tab: badge expand state (ซ่อนไว้ก่อน กดขยายได้ต่อแถบ)
+  const[combinedBadgeExpanded,setCombinedBadgeExpanded]=useState<Set<TabKey>>(new Set());
+
   // bucket eye toggle
   const[hiddenBuckets,setHiddenBuckets]=useState<Set<string>>(new Set());
   const toggleBucket=useCallback((b:string)=>{setHiddenBuckets((p)=>{const n=new Set(p);if(n.has(b))n.delete(b);else n.add(b);return n;});},[]);
@@ -705,7 +708,7 @@ export default function MonthlySummary() {
     if(!canExport){toast.error("คุณไม่มีสิทธิ์ Export");return;}
     try{
       const wb=XLSX.utils.book_new();
-      const tabLabel=tab==="count"?"จำนวนสัญญา":tab==="installTotal"?"ยอดผ่อนรวม":tab==="target"?"เป้าเก็บหนี้":tab==="paid"?"ยอดชำระแล้ว":tab==="due"?"หนี้ค้างชำระ":"ยังไม่ถึงกำหนด";
+      const tabLabel=tab==="count"?"สัญญา":tab==="installTotal"?"ยอดผ่อนรวม":tab==="target"?"เป้าเก็บหนี้":tab==="paid"?"ยอดชำระแล้ว":tab==="due"?"หนี้ค้างชำระ":"ยังไม่ถึงกำหนด";
       const headers=["เดือน-ปีที่อนุมัติ","สัญญา",...DEBT_BUCKETS];
       const wsData:(string|number)[][]=[headers];
       for(const row of rows){
@@ -742,12 +745,13 @@ export default function MonthlySummary() {
 
   // ── Tab config ────────────────────────────────────────────────────────────────────
   const TAB_CONFIG: Array<{key:TabKey;label:string;activeClass:string;filterCount:number}> = [
-    {key:"count",        label:"จำนวนสัญญา",       activeClass:"border-slate-600 text-slate-700",   filterCount:countFilterCount},
+    {key:"count",        label:"สัญญา",       activeClass:"border-slate-600 text-slate-700",   filterCount:countFilterCount},
     {key:"installTotal", label:"ยอดผ่อนรวม",       activeClass:"border-purple-600 text-purple-700", filterCount:[installApproveMonths.size>0,installApproveYears.size>0,installProductType.size>0,installDeviceFamily].filter(Boolean).length},
     {key:"target",       label:"เป้าเก็บหนี้",       activeClass:"border-indigo-600 text-indigo-700", filterCount:targetFilterCount},
     {key:"paid",         label:"ยอดเก็บหนี้",     activeClass:"border-green-600 text-green-700",   filterCount:paidFilterCount},
     {key:"due",          label:"หนี้ค้างชำระ",   activeClass:"border-orange-600 text-orange-700", filterCount:dueFilterCount},
     {key:"notYetDue",    label:"ยังไม่ถึงกำหนด", activeClass:"border-blue-600 text-blue-700",     filterCount:notYetDueFilterCount},
+    {key:"combined",     label:"สรุปรวม",          activeClass:"border-teal-600 text-teal-700",     filterCount:0},
   ];
 
   return(
@@ -1089,6 +1093,95 @@ export default function MonthlySummary() {
           </div>
         )}
 
+        {/* ── Badge: combined ─────────────────────────────────────── */}
+        {tab==="combined"&&(
+          <div className="bg-teal-50/60 border-b border-teal-200 px-4 py-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-semibold text-teal-700 whitespace-nowrap">Badge แต่ละแถบ:</span>
+              {([
+                {key:"count" as TabKey,      label:"สัญญา",          color:"bg-slate-100 border-slate-300 text-slate-700",   expandColor:"bg-slate-50 border-slate-200"},
+                {key:"installTotal" as TabKey,label:"ยอดผ่อนรวม",    color:"bg-purple-100 border-purple-300 text-purple-700", expandColor:"bg-purple-50/60 border-purple-200"},
+                {key:"target" as TabKey,     label:"เป้าเก็บหนี้",   color:"bg-indigo-100 border-indigo-300 text-indigo-700", expandColor:"bg-indigo-50/60 border-indigo-200"},
+                {key:"paid" as TabKey,       label:"ยอดเก็บหนี้",    color:"bg-green-100 border-green-300 text-green-700",    expandColor:"bg-green-50/60 border-green-200"},
+                {key:"due" as TabKey,        label:"หนี้ค้างชำระ",   color:"bg-orange-100 border-orange-300 text-orange-700", expandColor:"bg-orange-50/60 border-orange-200"},
+                {key:"notYetDue" as TabKey,  label:"ยังไม่ถึงกำหนด", color:"bg-blue-100 border-blue-300 text-blue-700",       expandColor:"bg-blue-50/60 border-blue-200"},
+              ] as {key:TabKey;label:string;color:string;expandColor:string}[]).map(({key,label,color,expandColor})=>{
+                const isExpanded=combinedBadgeExpanded.has(key);
+                return(
+                  <button key={key} type="button"
+                    onClick={()=>setCombinedBadgeExpanded((p)=>{const n=new Set(p);if(n.has(key))n.delete(key);else n.add(key);return n;})}
+                    className={["flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border font-medium transition-colors",color,isExpanded?"ring-2 ring-offset-1 ring-teal-400":"opacity-70 hover:opacity-100"].join(" ")}>
+                    {isExpanded?<Eye className="w-3 h-3"/>:<EyeOff className="w-3 h-3"/>}
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+            {/* expanded badge panels */}
+            {combinedBadgeExpanded.size>0&&(
+              <div className="mt-2 flex flex-col gap-1.5">
+                {combinedBadgeExpanded.has("count")&&(
+                  <div className="flex flex-wrap items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-200">
+                    <span className="text-[11px] font-semibold text-slate-600 whitespace-nowrap mr-1">สัญญา:</span>
+                    <span className="flex items-center gap-1.5 px-2 py-1 rounded text-xs bg-slate-100 border border-slate-300 text-slate-700 font-semibold">
+                      <Banknote className="w-3 h-3"/>รวม {grandTotal.totalCount.toLocaleString()} สัญญา
+                    </span>
+                  </div>
+                )}
+                {combinedBadgeExpanded.has("installTotal")&&(
+                  <div className="flex flex-wrap items-center gap-2 px-3 py-1.5 rounded-lg bg-purple-50/60 border border-purple-200">
+                    <span className="text-[11px] font-semibold text-purple-700 whitespace-nowrap mr-1">ยอดผ่อนรวม:</span>
+                    {(["principal","interest","fee"] as const).map((k)=>{
+                      const labels={principal:"เงินต้น",interest:"ดอกเบี้ย",fee:"ค่าดำเนินการ"};
+                      return(<span key={k} className="flex items-center gap-1 px-2 py-1 rounded text-xs bg-purple-100 border border-purple-300 text-purple-800">{labels[k]} {fmtMoney(grandTotal.totalInstallTotal[k])}</span>);
+                    })}
+                    <span className="flex items-center gap-1.5 px-2 py-1 rounded text-xs bg-purple-700 border border-purple-800 text-white font-semibold"><Banknote className="w-3 h-3"/>รวม {fmtMoney(grandTotal.totalInstallTotal.total)}</span>
+                  </div>
+                )}
+                {combinedBadgeExpanded.has("target")&&(
+                  <div className="flex flex-wrap items-center gap-2 px-3 py-1.5 rounded-lg bg-indigo-50/60 border border-indigo-200">
+                    <span className="text-[11px] font-semibold text-indigo-700 whitespace-nowrap mr-1">เป้าเก็บหนี้:</span>
+                    {(["principal","interest","fee","penalty","unlockFee"] as const).map((k)=>{
+                      const labels={principal:"เงินต้น",interest:"ดอกเบี้ย",fee:"ค่าดำเนินการ",penalty:"ค่าปรับ",unlockFee:"ค่าปลดล็อก"};
+                      return(<span key={k} className="flex items-center gap-1 px-2 py-1 rounded text-xs bg-indigo-100 border border-indigo-300 text-indigo-800">{labels[k]} {fmtMoney(grandTotal.totalTarget[k])}</span>);
+                    })}
+                    <span className="flex items-center gap-1.5 px-2 py-1 rounded text-xs bg-indigo-700 border border-indigo-800 text-white font-semibold"><Banknote className="w-3 h-3"/>รวม {fmtMoney(grandTotal.totalTarget.total)}</span>
+                  </div>
+                )}
+                {combinedBadgeExpanded.has("paid")&&(
+                  <div className="flex flex-wrap items-center gap-2 px-3 py-1.5 rounded-lg bg-green-50/60 border border-green-200">
+                    <span className="text-[11px] font-semibold text-green-700 whitespace-nowrap mr-1">ยอดเก็บหนี้:</span>
+                    {MONEY_BADGE_ITEMS.map(({key:k,label})=>{
+                      const val=grandBadgePaid[k as keyof MoneyBreakdown];
+                      return(<span key={k} className="flex items-center gap-1 px-2 py-1 rounded text-xs bg-green-100 border border-green-300 text-green-800">{label} {fmtMoney(val)}</span>);
+                    })}
+                    <span className="flex items-center gap-1.5 px-2 py-1 rounded text-xs bg-green-700 border border-green-800 text-white font-semibold"><Banknote className="w-3 h-3"/>รวม {fmtMoney(grandBadgePaidTotal)}</span>
+                  </div>
+                )}
+                {combinedBadgeExpanded.has("due")&&(
+                  <div className="flex flex-wrap items-center gap-2 px-3 py-1.5 rounded-lg bg-orange-50/60 border border-orange-200">
+                    <span className="text-[11px] font-semibold text-orange-700 whitespace-nowrap mr-1">หนี้ค้างชำระ:</span>
+                    {DUE_BADGE_ITEMS.map(({key:k,label})=>{
+                      const val=grandBadgeDue[k as keyof MoneyBreakdown];
+                      return(<span key={k} className="flex items-center gap-1 px-2 py-1 rounded text-xs bg-orange-100 border border-orange-300 text-orange-800">{label} {fmtMoney(val)}</span>);
+                    })}
+                    <span className="flex items-center gap-1.5 px-2 py-1 rounded text-xs bg-orange-700 border border-orange-800 text-white font-semibold"><Banknote className="w-3 h-3"/>รวม {fmtMoney(computeDueTotal(grandBadgeDue,dueVis))}</span>
+                  </div>
+                )}
+                {combinedBadgeExpanded.has("notYetDue")&&(
+                  <div className="flex flex-wrap items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-50/60 border border-blue-200">
+                    <span className="text-[11px] font-semibold text-blue-700 whitespace-nowrap mr-1">ยังไม่ถึงกำหนด:</span>
+                    {NOT_YET_DUE_BADGE_ITEMS.map(({key:k,label})=>{
+                      const val=grandBadgeNotYetDue[k as keyof MoneyBreakdown];
+                      return(<span key={k} className="flex items-center gap-1 px-2 py-1 rounded text-xs bg-blue-100 border border-blue-300 text-blue-800">{label} {fmtMoney(val)}</span>);
+                    })}
+                    <span className="flex items-center gap-1.5 px-2 py-1 rounded text-xs bg-blue-700 border border-blue-800 text-white font-semibold"><Banknote className="w-3 h-3"/>รวม {fmtMoney(computeNotYetDueTotal(grandBadgeNotYetDue,notYetDueVis))}</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </div>
         {/* ── Table area ────────────────────────────────────────────── */}
         <div className="flex-1 min-h-0 overflow-x-auto overflow-y-auto">
@@ -1096,7 +1189,15 @@ export default function MonthlySummary() {
           :query.isLoading?(<div className="flex items-center justify-center h-full gap-2 text-gray-400"><Spinner className="w-5 h-5"/><span className="text-sm">กำลังโหลด...</span></div>)
           :query.error?(<div className="flex flex-col items-center justify-center h-full gap-3 text-red-500"><span className="text-sm">โหลดข้อมูลล้มเหลว: {query.error.message}</span><Button variant="outline" size="sm" onClick={()=>query.refetch()}>ลองใหม่</Button></div>)
           :rows.length===0?(<div className="flex items-center justify-center h-full text-gray-400 text-sm">ไม่มีข้อมูล</div>)
-          :(
+          :tab==="combined"?(
+            <CombinedTable
+              rows={rows} grandTotal={grandTotal}
+              hiddenBuckets={hiddenBuckets} toggleBucket={toggleBucket}
+              sortDir={sortDir} onToggleSort={()=>setSortDir((d)=>d==="asc"?"desc":"asc")}
+              hiddenRows={hiddenRows} toggleRow={toggleRow}
+              stickyTop={0}
+            />
+          ):(
             <SummaryTable
               tab={tab} rows={rows} grandTotal={grandTotal}
               hiddenBuckets={hiddenBuckets} toggleBucket={toggleBucket} toggleGroup={toggleGroup} toggleAll={toggleAll}
@@ -1558,6 +1659,183 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
             ))}
 
           </tr>
+      </tfoot>
+    </table>
+    </>
+  );
+}
+
+// ─── CombinedTable ────────────────────────────────────────────────────────────
+// แสดงข้อมูลทุกแถบในตารางเดียว แต่ละเดือนมี 6 sub-row
+const COMBINED_SUB_ROWS: Array<{
+  key: TabKey;
+  label: string;
+  rowBg: string;
+  textColor: string;
+  totalBg: string;
+}> = [
+  {key:"count",        label:"สัญญา",          rowBg:"bg-slate-50",    textColor:"text-slate-700",   totalBg:"bg-slate-100"},
+  {key:"installTotal", label:"ยอดผ่อนรวม",     rowBg:"bg-purple-50/40",textColor:"text-purple-800",  totalBg:"bg-purple-100"},
+  {key:"target",       label:"เป้าเก็บหนี้",   rowBg:"bg-indigo-50/40",textColor:"text-indigo-800",  totalBg:"bg-indigo-100"},
+  {key:"paid",         label:"ยอดเก็บหนี้",    rowBg:"bg-green-50/40", textColor:"text-green-800",   totalBg:"bg-green-100"},
+  {key:"due",          label:"หนี้ค้างชำระ",   rowBg:"bg-orange-50/40",textColor:"text-orange-800",  totalBg:"bg-orange-100"},
+  {key:"notYetDue",    label:"ยังไม่ถึงกำหนด", rowBg:"bg-blue-50/40",  textColor:"text-blue-800",    totalBg:"bg-blue-100"},
+];
+
+function CombinedTable({rows,grandTotal,hiddenBuckets,toggleBucket,sortDir,onToggleSort,hiddenRows,toggleRow,stickyTop}:{
+  rows:SummaryRow[];grandTotal:GrandTotal;hiddenBuckets:Set<string>;
+  toggleBucket:(b:string)=>void;
+  sortDir:SortDir;onToggleSort:()=>void;
+  hiddenRows:Set<string>;toggleRow:(month:string)=>void;
+  stickyTop:number;
+}) {
+  // คำนวณ value ของแต่ละ sub-row สำหรับ bucket หนึ่ง
+  function cellValue(subKey:TabKey, cell:SummaryCell|undefined):number {
+    if(!cell)return 0;
+    if(subKey==="count")return cell.contractCount;
+    if(subKey==="installTotal")return cell.installTotal.total;
+    if(subKey==="target")return cell.target.total;
+    if(subKey==="paid")return cell.paid.total;
+    if(subKey==="due")return cell.due.total;
+    return cell.notYetDue.total;
+  }
+  // row total (sum across visible buckets)
+  function rowTotal(subKey:TabKey, row:SummaryRow):number {
+    return DEBT_BUCKETS.reduce((s,b)=>{
+      if(hiddenBuckets.has(b))return s;
+      return s+cellValue(subKey,row.buckets[b]);
+    },0);
+  }
+  // grand total value
+  function gtValue(subKey:TabKey, bucket:string):number {
+    const bt=grandTotal.bucketTotals[bucket];if(!bt)return 0;
+    if(subKey==="count")return bt.count;
+    if(subKey==="installTotal")return bt.installTotal.total;
+    if(subKey==="target")return bt.target.total;
+    if(subKey==="paid")return bt.paid.total;
+    if(subKey==="due")return bt.due.total;
+    return bt.notYetDue.total;
+  }
+  function gtRowTotal(subKey:TabKey):number {
+    return DEBT_BUCKETS.reduce((s,b)=>{
+      if(hiddenBuckets.has(b))return s;
+      return s+gtValue(subKey,b);
+    },0);
+  }
+
+  function renderCellVal(subKey:TabKey, val:number, textColor:string):React.ReactNode {
+    if(subKey==="count"){
+      return<span className="inline-flex items-center justify-center bg-slate-100 text-slate-700 rounded-full px-2.5 py-0.5 text-xs font-bold">{val.toLocaleString()}</span>;
+    }
+    return<span className={["text-xs font-medium",textColor].join(" ")}>{fmtMoney(val)}</span>;
+  }
+
+  const SortIconCombined=sortDir==="asc"?ArrowUp:ArrowDown;
+  const minWidth=130+90+90+(DEBT_BUCKETS.length*110);
+
+  return(
+    <>
+    <table className="w-full text-xs border-collapse" style={{minWidth:`${minWidth}px`}}>
+      <thead className="sticky z-20" style={{top:`${stickyTop}px`}}>
+        <tr>
+          <th rowSpan={2} className="sticky left-0 z-30 px-3 py-2 text-left font-semibold whitespace-nowrap bg-teal-800 text-white border-r border-teal-600 min-w-[130px]">
+            <button type="button" onClick={onToggleSort} className="flex items-center gap-1 hover:opacity-80 transition-opacity" title={sortDir==="asc"?"เรียงใหม่→เก่า":"เรียงเก่า→ใหม่"}>
+              เดือน-ปีที่อนุมัติ<SortIconCombined className="w-3.5 h-3.5 text-teal-300"/>
+            </button>
+          </th>
+          <th rowSpan={2} className="sticky left-[130px] z-30 px-3 py-2 text-center font-semibold whitespace-nowrap bg-teal-700 text-white border-r border-teal-500 min-w-[90px]">
+            แถบ
+          </th>
+          <th rowSpan={2} className="px-3 py-2 text-right font-semibold whitespace-nowrap bg-teal-700 text-white border-r border-teal-500 min-w-[90px]">
+            รวม
+          </th>
+          {/* bucket headers */}
+          {DEBT_BUCKETS.map((b)=>(
+            <th key={b}
+              onClick={()=>toggleBucket(b)}
+              className={["px-2 py-2 text-center font-semibold text-white whitespace-nowrap min-w-[110px] border-r border-white/20 cursor-pointer hover:opacity-80 transition-opacity",bucketHeaderBg(b)].join(" ")}>
+              <div className="flex flex-col items-center gap-0.5">
+                {hiddenBuckets.has(b)?<EyeOff className="w-3 h-3"/>:<Eye className="w-3 h-3"/>}
+                <span className={["inline-block px-1.5 py-0.5 rounded-full text-[10px] border",bucketPillClasses(b)].join(" ")}>{b}</span>
+              </div>
+            </th>
+          ))}
+        </tr>
+        <tr className="h-0"/>
+      </thead>
+      <tbody>
+        {rows.map((row)=>{
+          const isHiddenRow=hiddenRows.has(row.approveMonth);
+          return(
+            <React.Fragment key={row.approveMonth}>
+              {COMBINED_SUB_ROWS.map((sr,srIdx)=>(
+                <tr key={sr.key} className={["border-b border-gray-100 transition-colors",srIdx===0?"border-t-2 border-t-gray-300":"",isHiddenRow?"opacity-40":"",sr.rowBg].join(" ")}>
+                  {/* เดือน — แสดงเฉพาะ sub-row แรก (rowSpan=6) */}
+                  {srIdx===0&&(
+                    <td rowSpan={COMBINED_SUB_ROWS.length} className="sticky left-0 z-10 px-3 py-2 text-sm font-semibold whitespace-nowrap bg-white border-r border-gray-200 min-w-[130px] align-middle">
+                      <div className="flex items-center gap-1.5">
+                        <button type="button" onClick={()=>toggleRow(row.approveMonth)} title={isHiddenRow?"แสดงแถวนี้":"ซ่อนแถวนี้"} className="hover:opacity-70 transition-opacity">
+                          {isHiddenRow?<EyeOff className="w-3.5 h-3.5 text-gray-400"/>:<Eye className="w-3.5 h-3.5 text-gray-400"/>}
+                        </button>
+                        <span className="text-gray-800">{fmtMonthYear(row.approveMonth)}</span>
+                      </div>
+                    </td>
+                  )}
+                  {/* ชื่อแถบ */}
+                  <td className={["sticky left-[130px] z-10 px-2 py-1.5 text-center whitespace-nowrap border-r border-gray-200 font-medium text-[11px] min-w-[90px]",sr.rowBg,sr.textColor].join(" ")}>
+                    {sr.label}
+                  </td>
+                  {/* รวม */}
+                  <td className={["px-3 py-1.5 text-right border-r border-gray-200 min-w-[90px]",sr.totalBg].join(" ")}>
+                    {renderCellVal(sr.key, isHiddenRow?0:rowTotal(sr.key,row), sr.textColor)}
+                  </td>
+                  {/* bucket cells */}
+                  {DEBT_BUCKETS.map((b)=>{
+                    const cell=row.buckets[b];
+                    const isBucketHidden=hiddenBuckets.has(b);
+                    const isDimmed=isHiddenRow||isBucketHidden;
+                    const val=isDimmed?0:cellValue(sr.key,cell);
+                    const cellBg=bucketCellBg(b);
+                    if(isDimmed){
+                      if(sr.key==="count"){
+                        return<td key={b} className={["px-3 py-1.5 text-right",cellBg].join(" ")}><span className="inline-flex items-center justify-center bg-slate-200 text-slate-400 rounded-full px-2.5 py-0.5 text-xs font-bold">{(cell?.contractCount??0).toLocaleString()}</span></td>;
+                      }
+                      return<td key={b} className={["px-3 py-1.5 text-right",cellBg].join(" ")}><span className="text-gray-400 text-xs">{fmtMoney(cellValue(sr.key,cell))}</span></td>;
+                    }
+                    return<td key={b} className={["px-3 py-1.5 text-right",cellBg].join(" ")}>{renderCellVal(sr.key,val,sr.textColor)}</td>;
+                  })}
+                </tr>
+              ))}
+            </React.Fragment>
+          );
+        })}
+      </tbody>
+      <tfoot>
+        <tr className="border-t-2 border-slate-400 bg-slate-50 font-bold">
+          <td className="sticky left-0 z-10 px-3 py-2 text-sm font-bold text-slate-800 bg-slate-100 border-r border-slate-300 whitespace-nowrap">รวมทั้งหมด</td>
+          <td className="sticky left-[130px] z-10 px-2 py-2 bg-slate-100 border-r border-slate-300"/>
+          <td className="px-3 py-2 bg-slate-100 border-r border-slate-300"/>
+          {DEBT_BUCKETS.map((b)=><td key={b} className={["px-3 py-2",bucketCellBg(b),"bg-slate-100"].join(" ")}/>)}
+        </tr>
+        {COMBINED_SUB_ROWS.map((sr)=>(
+          <tr key={sr.key} className={["border-b border-gray-200",sr.totalBg].join(" ")}>
+            <td className={["sticky left-0 z-10 px-3 py-1.5 text-xs font-semibold whitespace-nowrap border-r border-gray-300",sr.totalBg].join(" ")}/>
+            <td className={["sticky left-[130px] z-10 px-2 py-1.5 text-center text-[11px] font-semibold border-r border-gray-300",sr.totalBg,sr.textColor].join(" ")}>{sr.label}</td>
+            <td className={["px-3 py-1.5 text-right border-r border-gray-300",sr.totalBg].join(" ")}>
+              {renderCellVal(sr.key,gtRowTotal(sr.key),sr.textColor)}
+            </td>
+            {DEBT_BUCKETS.map((b)=>{
+              const isBucketHidden=hiddenBuckets.has(b);
+              const val=isBucketHidden?0:gtValue(sr.key,b);
+              const cellBg=bucketCellBg(b);
+              if(isBucketHidden){
+                if(sr.key==="count"){return<td key={b} className={["px-3 py-1.5 text-right",cellBg,"bg-slate-100"].join(" ")}><span className="inline-flex items-center justify-center bg-slate-200 text-slate-400 rounded-full px-2.5 py-0.5 text-xs font-bold">{gtValue(sr.key,b).toLocaleString()}</span></td>;}
+                return<td key={b} className={["px-3 py-1.5 text-right",cellBg,"bg-slate-100"].join(" ")}><span className="text-gray-400 text-xs">{fmtMoney(gtValue(sr.key,b))}</span></td>;
+              }
+              return<td key={b} className={["px-3 py-1.5 text-right",cellBg,"bg-slate-100"].join(" ")}>{renderCellVal(sr.key,val,sr.textColor)}</td>;
+            })}
+          </tr>
+        ))}
       </tfoot>
     </table>
     </>

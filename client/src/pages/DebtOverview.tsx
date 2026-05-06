@@ -1119,12 +1119,12 @@ export default function DebtOverview() {
           <div className="space-y-4 text-sm">
               {[
               {
-                label: "เดือน",
+                label: "เดือน-ปีที่อนุมัติ",
                 color: "bg-slate-100 text-slate-700",
                 desc: "เดือนและปีที่อนุมัติสัญญา กดลูกศรที่หัวคอลัมน์เพื่อเรียงลำดับเก่า-ใหม่ได้",
               },
               {
-                label: "จำนวนสัญญา",
+                label: "สัญญา",
                 color: "bg-slate-100 text-slate-700",
                 desc: "จำนวนสัญญาทั้งหมดที่อนุมัติในเดือนนั้น",
               },
@@ -1284,7 +1284,7 @@ export default function DebtOverview() {
                     const XLSX = await import("xlsx");
                     const wb = XLSX.utils.book_new();
                     const wsData = [
-                      ["เดือน", "จำนวนสัญญา", "ยอดผ่อนรวม", "ยอดเก็บหนี้", "% การเก็บ", "ยอดขายเครื่อง", "รายรับรวม", "ต้นทุน", "กำไรขั้นต้น", "ยังไม่ถึงกำหนด"],
+                      ["เดือน-ปีที่อนุมัติ", "สัญญา", "ยอดผ่อนรวม", "ยอดเก็บหนี้", "% การเก็บ", "ยอดขายเครื่อง", "รายรับรวม", "ต้นทุน", "กำไรขั้นต้น", "ยังไม่ถึงกำหนด"],
                       ...rows.map((r) => {
                         const deviceSale = showDeviceSale ? r.deviceSaleAmount : 0;
                         const revenue = r.collectedTotal + deviceSale;
@@ -1450,13 +1450,13 @@ export default function DebtOverview() {
                         type="button"
                         onClick={() => setMonthSortDir((d) => d === "asc" ? "desc" : "asc")}
                         className="flex items-center gap-1 text-white hover:text-blue-200 transition-colors"
-                        title={`เรียงลำดับ: ${`เดือน ${`เก่าสุดบนสุด`}`}`}
+                        title={`เรียงลำดับ: ${`เดือน-ปีที่อนุมัติ ${`เก่าสุดบนสุด`}`}`}
                       >
-                        เดือน
+                        เดือน-ปีที่อนุมัติ
                         {monthSortDir === "asc" ? <ArrowUp className="w-3.5 h-3.5" /> : <ArrowDown className="w-3.5 h-3.5" />}
                       </button>
                     </th>
-                    <th className="px-3 py-3 text-right font-semibold whitespace-nowrap text-white min-w-[90px]">จำนวนสัญญา</th>
+                    <th className="px-3 py-3 text-right font-semibold whitespace-nowrap text-white min-w-[90px]">สัญญา</th>
                     <th className={["px-3 py-3 text-right font-semibold whitespace-nowrap text-white min-w-[160px]", principalOnly ? "bg-blue-700" : "bg-purple-700"].join(" ")}>
                       {principalOnly ? "เป้าเก็บหนี้" : "ยอดผ่อนรวม"}
                     </th>
