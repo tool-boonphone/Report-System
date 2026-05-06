@@ -546,7 +546,7 @@ export default function MonthlySummary() {
   // badge visibility
   const[installVis,setInstallVis]=useState<Record<"principal"|"interest"|"fee",boolean>>({principal:true,interest:true,fee:true});
   const[paidVis,setPaidVis]=useState<Record<MoneyBadgeKey,boolean>>({principal:true,interest:true,fee:true,penalty:true,unlockFee:true,discount:false,overpaid:true});
-  const[targetVis,setTargetVis]=useState<Record<MoneyBadgeKey,boolean>>({principal:true,interest:true,fee:true,penalty:true,unlockFee:true,discount:false,overpaid:false});
+  const[targetVis,setTargetVis]=useState<Record<MoneyBadgeKey,boolean>>({principal:true,interest:true,fee:true,penalty:false,unlockFee:false,discount:false,overpaid:false});
   const[dueVis,setDueVis]=useState<Record<DueBadgeKey,boolean>>({principal:true,interest:true,fee:true,penalty:true,unlockFee:true});
   const[notYetDueVis,setNotYetDueVis]=useState<Record<NotYetDueBadgeKey,boolean>>({principal:true,interest:true,fee:true});
 
@@ -993,18 +993,18 @@ export default function MonthlySummary() {
 
         {/* ── Badge: target ───────────────────────────────────────────────────── */}
         {/* เป้าเก็บหนี้ = SUM(principal+interest+fee) ทุกงวดถึงกำหนด + penalty + unlock_fee งวดล่าสุด */}
-        {tab==="target"&&(
+        {tab=="target"&&(
           <div className="bg-indigo-50/60 border-b border-indigo-200 px-4 py-2 flex flex-wrap items-center gap-2">
             {([{key:"principal",label:"เงินต้น",icon:<Banknote className="w-3 h-3"/>},{key:"interest",label:"ดอกเบี้ย",icon:<Percent className="w-3 h-3"/>},{key:"fee",label:"ค่าดำเนินการ",icon:<Coins className="w-3 h-3"/>},{key:"penalty",label:"ค่าปรับ",icon:<Gavel className="w-3 h-3"/>},{key:"unlockFee",label:"ค่าปลดล็อก",icon:<Tag className="w-3 h-3"/>}] as Array<{key:MoneyBadgeKey;label:string;icon:React.ReactNode}>).map(({key,label,icon})=>{
               const isOn=targetVis[key];const val=grandBadgeTarget[key as keyof MoneyBreakdown] as number;
               return(
                 <button key={key} type="button" onClick={()=>setTargetVis(p=>({...p,[key]:!p[key]}))}
-                  className={["flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border transition-colors",isOn?"bg-indigo-100 border-indigo-300 text-indigo-800":"bg-gray-100 border-gray-200 text-gray-400 line-through"].join(" ")}>
-                  {isOn?<Eye className="w-3 h-3"/>:<EyeOff className="w-3 h-3"/>}{icon}<span>{label}</span>
-                  <span className="font-semibold ml-0.5">{fmtMoney(val)}</span>
+                  className={["flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border transition-colors",isOn?"bg-indigo-100 border-indigo-300 text-indigo-800":"bg-gray-100 border-gray-200 text-gray-400"].join(" ")}>
+                  {icon}<span>{label}</span>
+                  <span className={["font-semibold ml-0.5",isOn?"":"text-gray-400"].join(" ")}>{fmtMoney(val)}</span>
                 </button>
               );
-            })}
+             })}
             {/* รวมเป้าเก็บหนี้ */}
             <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border bg-indigo-700 border-indigo-800 text-white font-semibold">
               <Banknote className="w-3.5 h-3.5"/>
@@ -1015,16 +1015,30 @@ export default function MonthlySummary() {
         )}
 
         {/* ── Badge: paid ───────────────────────────────────────────── */}
-        {tab==="paid"&&(
+         {tab=="paid"&&(
           <div className="bg-green-50/60 border-b border-green-200 px-4 py-2 flex flex-wrap items-center gap-2">
             {MONEY_BADGE_ITEMS.map(({key,label,icon,canToggle})=>{const isOn=paidVis[key];const val=grandBadgePaid[key as keyof MoneyBreakdown];return(
               <button key={key} type="button" onClick={()=>{if(!canToggle)return;setPaidVis((p)=>({...p,[key]:!p[key]}));}}
                 title={canToggle?(isOn?`ซ่อน${label}`:`แสดง${label}`):`${label} (ปิดเสมอ)`}
-                className={["flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border transition-colors",!canToggle?"opacity-70 cursor-not-allowed bg-gray-100 border-gray-200 text-gray-600":isOn?"bg-green-100 border-green-300 text-green-800 hover:bg-green-200":"bg-gray-100 border-gray-200 text-gray-400 hover:bg-gray-200"].join(" ")}>
-                {isOn?<Eye className="w-3 h-3"/>:<EyeOff className="w-3 h-3"/>}{icon}<span>{label}</span>
-                <span className={["font-semibold ml-0.5",!canToggle?"text-gray-500":isOn?"":"text-gray-400"].join(" ")}>{fmtMoney(val)}</span>
+                className={["flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border transition-colors",!canToggle?"cursor-not-allowed bg-gray-100 border-gray-200 text-gray-400":isOn?"bg-green-100 border-green-300 text-green-800 hover:bg-green-200":"bg-gray-100 border-gray-200 text-gray-400 hover:bg-gray-200"].join(" ")}>
+                {icon}<span>{label}</span>
+                <span className={["font-semibold ml-0.5",!canToggle?"text-gray-400":isOn?"":"text-gray-400"].join(" ")}>{fmtMoney(val)}</span>
               </button>
-            );})}
+            );})}            {/* Badge หนี้เสีย */}
+            {(()=>{const installAmt=grandTotal.bucketTotals["หนี้เสีย"]?.paid.badDebtInstallment??0;const saleAmt=grandTotal.bucketTotals["หนี้เสีย"]?.paid.badDebt??0;return(<>
+              <button type="button" onClick={()=>setShowBadDebtInstall(v=>!v)}
+                title={showBadDebtInstall?"ซ่อนค่างวดหนี้เสีย":"แสดงค่างวดหนี้เสีย"}
+                className={["flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border transition-colors",showBadDebtInstall?"bg-green-100 border-green-300 text-green-800 hover:bg-green-200":"bg-gray-100 border-gray-200 text-gray-400 hover:bg-gray-200"].join(" ")}>
+                <Smartphone className="w-3 h-3"/><span>ค่างวด(หนี้เสีย)</span>
+                <span className={["font-semibold ml-0.5",showBadDebtInstall?"":"text-gray-400"].join(" ")}>{fmtMoney(installAmt)}</span>
+              </button>
+              <button type="button" onClick={()=>setShowBadDebtSale(v=>!v)}
+                title={showBadDebtSale?"ซ่อนขายเครื่องหนี้เสีย":"แสดงขายเครื่องหนี้เสีย"}
+                className={["flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border transition-colors",showBadDebtSale?"bg-red-100 border-red-300 text-red-800 hover:bg-red-200":"bg-gray-100 border-gray-200 text-gray-400 hover:bg-gray-200"].join(" ")}>
+                <Smartphone className="w-3 h-3"/><span>ขายเครื่อง(หนี้เสีย)</span>
+                <span className={["font-semibold ml-0.5",showBadDebtSale?"":"text-gray-400"].join(" ")}>{fmtMoney(saleAmt)}</span>
+              </button>
+            </>);})()}
             <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border bg-green-700 border-green-800 text-white font-semibold">
               <Banknote className="w-3.5 h-3.5"/><span>รวมยอดชำระ</span><span>{fmtMoney(grandBadgePaidTotal)}</span>
             </div>
