@@ -255,7 +255,7 @@ function MultiSelectFilter({
         <button
           type="button"
           className={cn(
-            "flex items-center gap-1.5 h-9 px-3 py-2 rounded-md border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[140px] justify-between",
+            "flex items-center gap-1.5 h-9 px-2.5 py-2 rounded-md border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[110px] justify-between",
             selected.size > 0
               ? "border-indigo-400 bg-indigo-50 text-indigo-800 font-medium"
               : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50",
@@ -325,6 +325,7 @@ export default function SuspectedBadDebt() {
   const [debtStatusFilter, setDebtStatusFilter] = useState<Set<string>>(new Set());
   const [osFilter, setOsFilter] = useState<Set<string>>(new Set());
   const [modelFilter, setModelFilter] = useState<Set<string>>(new Set());
+  const [capacityFilter, setCapacityFilter] = useState<Set<string>>(new Set());
   const [debtValueMin, setDebtValueMin] = useState("");
 
   /* ── sort ── */
@@ -383,6 +384,38 @@ export default function SuspectedBadDebt() {
     });
   }, [modelOptions]);
 
+  /* ── capacity options ──
+   * dynamic ตาม modelFilter ที่เลือก + osFilter
+   * ถ้าเลือกรุ่นไว้ จะแสดงเฉพาะความจุของรุ่นนั้น
+   */
+  const capacityOptions = useMemo(() => {
+    const capSet = new Set<string>();
+    for (const r of allRows) {
+      if (!r.model) continue;
+      const { base, capacity } = parseModelParts(r.model);
+      if (!capacity) continue;
+      // กรองตาม osFilter
+      if (osFilter.size > 0) {
+        const os = deriveOS(r.model);
+        if (!os || !osFilter.has(os)) continue;
+      }
+      // กรองตาม modelFilter (ถ้าเลือกไว้)
+      if (modelFilter.size > 0 && base != null && !modelFilter.has(base)) continue;
+      capSet.add(capacity);
+    }
+    // เรียงตามตัวเลข GB
+    return Array.from(capSet).sort((a, b) => parseInt(a) - parseInt(b));
+  }, [allRows, osFilter, modelFilter]);
+
+  /* ── reset capacityFilter เมื่อ capacityOptions เปลี่ยน ── */
+  React.useEffect(() => {
+    setCapacityFilter((prev) => {
+      const filtered = Array.from(prev).filter((c) => capacityOptions.includes(c));
+      if (filtered.length === prev.size) return prev;
+      return new Set(filtered);
+    });
+  }, [capacityOptions]);
+
   /* ── filtered + sorted rows ── */
   const filteredRows = useMemo(() => {
     let rows = allRows;
@@ -414,11 +447,19 @@ export default function SuspectedBadDebt() {
 
     if (modelFilter.size > 0) {
       // กรองด้วย base model เพื่อให้ครอบคลุมทุก capacity ของรุ่นเดียวกัน
-      // เช่น เลือก "iPhone 14" จะกรองทั้ง "iPhone 14 128GB" และ "iPhone 14 256GB"
       rows = rows.filter((r) => {
         if (!r.model) return false;
         const { base } = parseModelParts(r.model);
         return base != null && modelFilter.has(base);
+      });
+    }
+
+    if (capacityFilter.size > 0) {
+      // กรองด้วยความจุ (GB) เช่น "128 GB", "256 GB"
+      rows = rows.filter((r) => {
+        if (!r.model) return false;
+        const { capacity } = parseModelParts(r.model);
+        return capacity != null && capacityFilter.has(capacity);
       });
     }
 
@@ -506,6 +547,7 @@ export default function SuspectedBadDebt() {
     debtStatusFilter.size > 0 ||
     osFilter.size > 0 ||
     modelFilter.size > 0 ||
+    capacityFilter.size > 0 ||
     !!debtValueMin;
 
   const clearFilters = () => {
@@ -514,6 +556,7 @@ export default function SuspectedBadDebt() {
     setDebtStatusFilter(new Set());
     setOsFilter(new Set());
     setModelFilter(new Set());
+    setCapacityFilter(new Set());
     setDebtValueMin("");
   };
 
@@ -611,91 +654,100 @@ export default function SuspectedBadDebt() {
         <div className="px-4 pb-2">
           <div className="flex flex-col gap-2">
             {/* row 1: search + filters */}
-            <div className="flex flex-col md:flex-row md:items-center gap-2">
-              {/* search */}
-              <div className="relative flex-1 min-w-0 max-w-sm">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <div className="flex flex-wrap items-center gap-2">
+              {/* search — แคบลง ใช้ w-44 แทน max-w-sm */}
+              <div className="relative w-44 shrink-0">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
                 <Input
-                  placeholder="ค้นหา: เลขที่สัญญา / ชื่อ / เบอร์โทร"
-                  className="pl-9 h-9 text-sm bg-white"
+                  placeholder="ค้นหา..."
+                  className="pl-8 h-9 text-xs bg-white"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                 />
               </div>
 
-              {/* filter dropdowns */}
-              <div className="flex flex-wrap items-center gap-2">
-                {/* เดือน-ปีที่อนุมัติ */}
+              {/* เดือน-ปีที่อนุมัติ */}
+              <MultiSelectFilter
+                label="เดือน-ปีที่อนุมัติ"
+                selected={approveMonthFilter}
+                onChange={setApproveMonthFilter}
+                options={approveMonthOptions}
+                placeholder="ทุกเดือน"
+                formatOption={fmtMonthLabel}
+              />
+
+              {/* สถานะหนี้ */}
+              <MultiSelectFilter
+                label="สถานะหนี้"
+                selected={debtStatusFilter}
+                onChange={setDebtStatusFilter}
+                options={["เกิน 61-90", "เกิน >90"]}
+                placeholder="ทุกสถานะ"
+              />
+
+              {/* iOS/Android */}
+              <MultiSelectFilter
+                label="ประเภทเครื่อง"
+                selected={osFilter}
+                onChange={setOsFilter}
+                options={["iOS", "Android"]}
+                placeholder="ทุกประเภท"
+              />
+
+              {/* รุ่นเครื่อง — base model ยุบรวมแล้ว */}
+              <MultiSelectFilter
+                label="รุ่นเครื่อง"
+                selected={modelFilter}
+                onChange={setModelFilter}
+                options={modelOptions}
+                placeholder="ทุกรุ่น"
+              />
+
+              {/* ความจุ — dynamic ตามรุ่นที่เลือก แสดงเฉพาะเมื่อมี options */}
+              {capacityOptions.length > 0 && (
                 <MultiSelectFilter
-                  label="เดือน-ปีที่อนุมัติ"
-                  selected={approveMonthFilter}
-                  onChange={setApproveMonthFilter}
-                  options={approveMonthOptions}
-                  placeholder="ทุกเดือน-ปีที่อนุมัติ"
-                  formatOption={fmtMonthLabel}
+                  label="ความจุ"
+                  selected={capacityFilter}
+                  onChange={setCapacityFilter}
+                  options={capacityOptions}
+                  placeholder="ทุกความจุ"
                 />
+              )}
 
-                {/* สถานะหนี้ */}
-                <MultiSelectFilter
-                  label="สถานะหนี้"
-                  selected={debtStatusFilter}
-                  onChange={setDebtStatusFilter}
-                  options={["เกิน 61-90", "เกิน >90"]}
-                  placeholder="ทุกสถานะหนี้"
+              {/* มูลค่าหนี้ > */}
+              <div className="flex items-center gap-1">
+                <span className="text-xs text-gray-500 whitespace-nowrap">หนี้ &gt;</span>
+                <Input
+                  type="number"
+                  value={debtValueMin}
+                  onChange={(e) => setDebtValueMin(e.target.value)}
+                  placeholder="0"
+                  className="h-9 text-xs w-20"
                 />
-
-                {/* iOS/Android */}
-                <MultiSelectFilter
-                  label="ประเภทเครื่อง"
-                  selected={osFilter}
-                  onChange={setOsFilter}
-                  options={["iOS", "Android"]}
-                  placeholder="ทุกประเภท"
-                />
-
-                {/* รุ่นเครื่อง — options คือ base model (ยุบรวมแล้ว) ไม่ต้อง format เพิ่มเติม */}
-                <MultiSelectFilter
-                  label="รุ่นเครื่อง"
-                  selected={modelFilter}
-                  onChange={setModelFilter}
-                  options={modelOptions}
-                  placeholder="ทุกรุ่น"
-                />
-
-                {/* มูลค่าหนี้ > */}
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs text-gray-500 whitespace-nowrap">มูลค่าหนี้ &gt;</span>
-                  <Input
-                    type="number"
-                    value={debtValueMin}
-                    onChange={(e) => setDebtValueMin(e.target.value)}
-                    placeholder="0"
-                    className="h-9 text-xs w-24"
-                  />
-                </div>
-
-                {/* ล้างตัวกรอง */}
-                {hasFilter && (
-                  <button
-                    onClick={clearFilters}
-                    className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 h-9 px-2 rounded-md border border-red-200 hover:border-red-400 bg-red-50 transition-colors"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                    ล้างตัวกรอง
-                  </button>
-                )}
-                {/* Export Excel */}
-                {canExport && (
-                  <button
-                    type="button"
-                    onClick={handleExport}
-                    className="ml-auto flex items-center gap-1.5 h-9 px-3 text-sm font-medium rounded-md bg-green-600 hover:bg-green-700 text-white transition-colors whitespace-nowrap"
-                  >
-                    <Download className="w-4 h-4" />
-                    <span className="hidden sm:inline">Export Excel</span>
-                  </button>
-                )}
               </div>
+
+              {/* ล้างตัวกรอง — เป็นแค่ไอคอน X เพื่อประหยัดพื้นที่ */}
+              {hasFilter && (
+                <button
+                  onClick={clearFilters}
+                  title="ล้างตัวกรองทั้งหมด"
+                  className="flex items-center justify-center w-9 h-9 rounded-md border border-red-200 hover:border-red-400 bg-red-50 hover:bg-red-100 text-red-500 hover:text-red-700 transition-colors shrink-0"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+
+              {/* Export Excel */}
+              {canExport && (
+                <button
+                  type="button"
+                  onClick={handleExport}
+                  className="ml-auto flex items-center gap-1.5 h-9 px-3 text-sm font-medium rounded-md bg-green-600 hover:bg-green-700 text-white transition-colors whitespace-nowrap shrink-0"
+                >
+                  <Download className="w-4 h-4" />
+                  <span className="hidden sm:inline">Export Excel</span>
+                </button>
+              )}
             </div>
 
             {/* row 2: result count */}
