@@ -1384,9 +1384,9 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
                         <span className={`inline-block px-1.5 py-0.5 rounded-full text-[10px] border ${bucketPillClasses(b)}`}>{b}</span>
                       </div>
                       <div className="flex border-t border-white/20">
-                        <button type="button" onClick={()=>setPaidVis(p=>({...p,badDebtInstallment:!p.badDebtInstallment}))}
-                          className={`flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-[10px] font-semibold border-r border-white/10 transition-colors hover:bg-white/10 ${paidVis.badDebtInstallment?"text-white/90":"text-white/40"}`}>
-                          {paidVis.badDebtInstallment?<Eye className="w-2.5 h-2.5"/>:<EyeOff className="w-2.5 h-2.5"/>}ค่างวด
+                        <button type="button" onClick={()=>{const PAID_KEYS=["principal","interest","fee","penalty","unlockFee","discount","overpaid"] as const;const anyOn=PAID_KEYS.some(k=>paidVis[k]);setPaidVis(p=>({...p,...Object.fromEntries(PAID_KEYS.map(k=>[k,!anyOn]))}));}}
+                          className={`flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-[10px] font-semibold border-r border-white/10 transition-colors hover:bg-white/10 ${(["principal","interest","fee","penalty","unlockFee","discount","overpaid"] as const).some(k=>paidVis[k])?"text-white/90":"text-white/40"}`}>
+                          {(["principal","interest","fee","penalty","unlockFee","discount","overpaid"] as const).some(k=>paidVis[k])?<Eye className="w-2.5 h-2.5"/>:<EyeOff className="w-2.5 h-2.5"/>}ค่างวด
                         </button>
                         <button type="button" onClick={()=>setShowBadDebtSale(!showBadDebtSale)}
                           className={`flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-[10px] font-semibold border-r border-white/10 transition-colors hover:bg-white/10 ${showBadDebtSale?"text-red-200":"text-red-200/40"}`}>
@@ -1974,8 +1974,8 @@ function CombinedTable({
                     <>
                       <th className={["px-2 py-1.5 text-center font-semibold text-white whitespace-nowrap min-w-[90px] border-r border-white/20",g.bg].join(" ")}>
                         <div className="flex flex-col items-center gap-0.5">
-                          <button type="button" onClick={()=>{const next=!paidVis.badDebtInstallment;setShowBadDebtInstall(next);setPaidVis(prev=>({...prev,badDebtInstallment:next}));}} className="hover:opacity-70">
-                            {paidVis.badDebtInstallment?<Eye className="w-3 h-3"/>:<EyeOff className="w-3 h-3"/>}
+                          <button type="button" onClick={()=>{const PAID_KEYS=["principal","interest","fee","penalty","unlockFee","discount","overpaid"] as const;const anyOn=PAID_KEYS.some(k=>paidVis[k]);setPaidVis(prev=>({...prev,...Object.fromEntries(PAID_KEYS.map(k=>[k,!anyOn]))}));}} className="hover:opacity-70">
+                            {(["principal","interest","fee","penalty","unlockFee","discount","overpaid"] as const).some(k=>paidVis[k])?<Eye className="w-3 h-3"/>:<EyeOff className="w-3 h-3"/>}
                           </button>
                           <span className="text-[10px]">ค่างวด</span>
                         </div>
