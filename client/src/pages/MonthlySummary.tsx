@@ -1092,96 +1092,6 @@ export default function MonthlySummary() {
             </div>
           </div>
         )}
-
-        {/* ── Badge: combined ─────────────────────────────────────── */}
-        {tab==="combined"&&(
-          <div className="bg-teal-50/60 border-b border-teal-200 px-4 py-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs font-semibold text-teal-700 whitespace-nowrap">Badge แต่ละแถบ:</span>
-              {([
-                {key:"count" as TabKey,      label:"สัญญา",          color:"bg-slate-100 border-slate-300 text-slate-700",   expandColor:"bg-slate-50 border-slate-200"},
-                {key:"installTotal" as TabKey,label:"ยอดผ่อนรวม",    color:"bg-purple-100 border-purple-300 text-purple-700", expandColor:"bg-purple-50/60 border-purple-200"},
-                {key:"target" as TabKey,     label:"เป้าเก็บหนี้",   color:"bg-indigo-100 border-indigo-300 text-indigo-700", expandColor:"bg-indigo-50/60 border-indigo-200"},
-                {key:"paid" as TabKey,       label:"ยอดเก็บหนี้",    color:"bg-green-100 border-green-300 text-green-700",    expandColor:"bg-green-50/60 border-green-200"},
-                {key:"due" as TabKey,        label:"หนี้ค้างชำระ",   color:"bg-orange-100 border-orange-300 text-orange-700", expandColor:"bg-orange-50/60 border-orange-200"},
-                {key:"notYetDue" as TabKey,  label:"ยังไม่ถึงกำหนด", color:"bg-blue-100 border-blue-300 text-blue-700",       expandColor:"bg-blue-50/60 border-blue-200"},
-              ] as {key:TabKey;label:string;color:string;expandColor:string}[]).map(({key,label,color,expandColor})=>{
-                const isExpanded=combinedBadgeExpanded.has(key);
-                return(
-                  <button key={key} type="button"
-                    onClick={()=>setCombinedBadgeExpanded((p)=>{const n=new Set(p);if(n.has(key))n.delete(key);else n.add(key);return n;})}
-                    className={["flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border font-medium transition-colors",color,isExpanded?"ring-2 ring-offset-1 ring-teal-400":"opacity-70 hover:opacity-100"].join(" ")}>
-                    {isExpanded?<Eye className="w-3 h-3"/>:<EyeOff className="w-3 h-3"/>}
-                    {label}
-                  </button>
-                );
-              })}
-            </div>
-            {/* expanded badge panels */}
-            {combinedBadgeExpanded.size>0&&(
-              <div className="mt-2 flex flex-col gap-1.5">
-                {combinedBadgeExpanded.has("count")&&(
-                  <div className="flex flex-wrap items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-200">
-                    <span className="text-[11px] font-semibold text-slate-600 whitespace-nowrap mr-1">สัญญา:</span>
-                    <span className="flex items-center gap-1.5 px-2 py-1 rounded text-xs bg-slate-100 border border-slate-300 text-slate-700 font-semibold">
-                      <Banknote className="w-3 h-3"/>รวม {grandTotal.totalCount.toLocaleString()} สัญญา
-                    </span>
-                  </div>
-                )}
-                {combinedBadgeExpanded.has("installTotal")&&(
-                  <div className="flex flex-wrap items-center gap-2 px-3 py-1.5 rounded-lg bg-purple-50/60 border border-purple-200">
-                    <span className="text-[11px] font-semibold text-purple-700 whitespace-nowrap mr-1">ยอดผ่อนรวม:</span>
-                    {(["principal","interest","fee"] as const).map((k)=>{
-                      const labels={principal:"เงินต้น",interest:"ดอกเบี้ย",fee:"ค่าดำเนินการ"};
-                      return(<span key={k} className="flex items-center gap-1 px-2 py-1 rounded text-xs bg-purple-100 border border-purple-300 text-purple-800">{labels[k]} {fmtMoney(grandTotal.totalInstallTotal[k])}</span>);
-                    })}
-                    <span className="flex items-center gap-1.5 px-2 py-1 rounded text-xs bg-purple-700 border border-purple-800 text-white font-semibold"><Banknote className="w-3 h-3"/>รวม {fmtMoney(grandTotal.totalInstallTotal.total)}</span>
-                  </div>
-                )}
-                {combinedBadgeExpanded.has("target")&&(
-                  <div className="flex flex-wrap items-center gap-2 px-3 py-1.5 rounded-lg bg-indigo-50/60 border border-indigo-200">
-                    <span className="text-[11px] font-semibold text-indigo-700 whitespace-nowrap mr-1">เป้าเก็บหนี้:</span>
-                    {(["principal","interest","fee","penalty","unlockFee"] as const).map((k)=>{
-                      const labels={principal:"เงินต้น",interest:"ดอกเบี้ย",fee:"ค่าดำเนินการ",penalty:"ค่าปรับ",unlockFee:"ค่าปลดล็อก"};
-                      return(<span key={k} className="flex items-center gap-1 px-2 py-1 rounded text-xs bg-indigo-100 border border-indigo-300 text-indigo-800">{labels[k]} {fmtMoney(grandTotal.totalTarget[k])}</span>);
-                    })}
-                    <span className="flex items-center gap-1.5 px-2 py-1 rounded text-xs bg-indigo-700 border border-indigo-800 text-white font-semibold"><Banknote className="w-3 h-3"/>รวม {fmtMoney(grandTotal.totalTarget.total)}</span>
-                  </div>
-                )}
-                {combinedBadgeExpanded.has("paid")&&(
-                  <div className="flex flex-wrap items-center gap-2 px-3 py-1.5 rounded-lg bg-green-50/60 border border-green-200">
-                    <span className="text-[11px] font-semibold text-green-700 whitespace-nowrap mr-1">ยอดเก็บหนี้:</span>
-                    {MONEY_BADGE_ITEMS.map(({key:k,label})=>{
-                      const val=grandBadgePaid[k as keyof MoneyBreakdown];
-                      return(<span key={k} className="flex items-center gap-1 px-2 py-1 rounded text-xs bg-green-100 border border-green-300 text-green-800">{label} {fmtMoney(val)}</span>);
-                    })}
-                    <span className="flex items-center gap-1.5 px-2 py-1 rounded text-xs bg-green-700 border border-green-800 text-white font-semibold"><Banknote className="w-3 h-3"/>รวม {fmtMoney(grandBadgePaidTotal)}</span>
-                  </div>
-                )}
-                {combinedBadgeExpanded.has("due")&&(
-                  <div className="flex flex-wrap items-center gap-2 px-3 py-1.5 rounded-lg bg-orange-50/60 border border-orange-200">
-                    <span className="text-[11px] font-semibold text-orange-700 whitespace-nowrap mr-1">หนี้ค้างชำระ:</span>
-                    {DUE_BADGE_ITEMS.map(({key:k,label})=>{
-                      const val=grandBadgeDue[k as keyof MoneyBreakdown];
-                      return(<span key={k} className="flex items-center gap-1 px-2 py-1 rounded text-xs bg-orange-100 border border-orange-300 text-orange-800">{label} {fmtMoney(val)}</span>);
-                    })}
-                    <span className="flex items-center gap-1.5 px-2 py-1 rounded text-xs bg-orange-700 border border-orange-800 text-white font-semibold"><Banknote className="w-3 h-3"/>รวม {fmtMoney(computeDueTotal(grandBadgeDue,dueVis))}</span>
-                  </div>
-                )}
-                {combinedBadgeExpanded.has("notYetDue")&&(
-                  <div className="flex flex-wrap items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-50/60 border border-blue-200">
-                    <span className="text-[11px] font-semibold text-blue-700 whitespace-nowrap mr-1">ยังไม่ถึงกำหนด:</span>
-                    {NOT_YET_DUE_BADGE_ITEMS.map(({key:k,label})=>{
-                      const val=grandBadgeNotYetDue[k as keyof MoneyBreakdown];
-                      return(<span key={k} className="flex items-center gap-1 px-2 py-1 rounded text-xs bg-blue-100 border border-blue-300 text-blue-800">{label} {fmtMoney(val)}</span>);
-                    })}
-                    <span className="flex items-center gap-1.5 px-2 py-1 rounded text-xs bg-blue-700 border border-blue-800 text-white font-semibold"><Banknote className="w-3 h-3"/>รวม {fmtMoney(computeNotYetDueTotal(grandBadgeNotYetDue,notYetDueVis))}</span>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
       </div>
         {/* ── Table area ────────────────────────────────────────────── */}
         <div className="flex-1 min-h-0 overflow-x-auto overflow-y-auto">
@@ -1195,6 +1105,13 @@ export default function MonthlySummary() {
               hiddenBuckets={hiddenBuckets} toggleBucket={toggleBucket}
               sortDir={sortDir} onToggleSort={()=>setSortDir((d)=>d==="asc"?"desc":"asc")}
               hiddenRows={hiddenRows} toggleRow={toggleRow}
+              paidVis={paidVis} setPaidVis={setPaidVis}
+              targetVis={targetVis} setTargetVis={setTargetVis}
+              dueVis={dueVis} setDueVis={setDueVis}
+              notYetDueVis={notYetDueVis} setNotYetDueVis={setNotYetDueVis}
+              installVis={installVis} setInstallVis={setInstallVis}
+              showBadDebtInstall={showBadDebtInstall} setShowBadDebtInstall={setShowBadDebtInstall}
+              showBadDebtSale={showBadDebtSale} setShowBadDebtSale={setShowBadDebtSale}
               stickyTop={0}
             />
           ):(
@@ -1682,39 +1599,82 @@ const COMBINED_SUB_ROWS: Array<{
   {key:"notYetDue",    label:"ยังไม่ถึงกำหนด", rowBg:"bg-blue-50/40",  textColor:"text-blue-800",    totalBg:"bg-blue-100"},
 ];
 
-function CombinedTable({rows,grandTotal,hiddenBuckets,toggleBucket,sortDir,onToggleSort,hiddenRows,toggleRow,stickyTop}:{
+// กลุ่มหัวตาราง 2 ชั้น
+const BUCKET_GROUPS = [
+  {label:"ปกติ",         bg:"bg-green-700",   buckets:["ปกติ","เกิน 1-7","เกิน 8-14","เกิน 15-30","เกิน 31-60"]},
+  {label:"สงสัยจะเสีย", bg:"bg-orange-600",  buckets:["เกิน 61-90","เกิน >90"]},
+  {label:"ระงับสัญญา",  bg:"bg-red-700",     buckets:["ระงับสัญญา"]},
+  {label:"สิ้นสุดสัญญา",bg:"bg-gray-600",    buckets:["สิ้นสุดสัญญา"]},
+  {label:"หนี้เสีย",    bg:"bg-gray-900",    buckets:["หนี้เสีย"]},
+] as const;
+
+function CombinedTable({
+  rows,grandTotal,hiddenBuckets,toggleBucket,
+  sortDir,onToggleSort,hiddenRows,toggleRow,
+  paidVis,setPaidVis,targetVis,setTargetVis,
+  dueVis,setDueVis,notYetDueVis,setNotYetDueVis,
+  installVis,setInstallVis,
+  showBadDebtInstall,setShowBadDebtInstall,
+  showBadDebtSale,setShowBadDebtSale,
+  stickyTop,
+}:{
   rows:SummaryRow[];grandTotal:GrandTotal;hiddenBuckets:Set<string>;
   toggleBucket:(b:string)=>void;
   sortDir:SortDir;onToggleSort:()=>void;
   hiddenRows:Set<string>;toggleRow:(month:string)=>void;
+  paidVis:Record<MoneyBadgeKey,boolean>;setPaidVis:React.Dispatch<React.SetStateAction<Record<MoneyBadgeKey,boolean>>>;
+  targetVis:Record<MoneyBadgeKey,boolean>;setTargetVis:React.Dispatch<React.SetStateAction<Record<MoneyBadgeKey,boolean>>>;
+  dueVis:Record<DueBadgeKey,boolean>;setDueVis:React.Dispatch<React.SetStateAction<Record<DueBadgeKey,boolean>>>;
+  notYetDueVis:Record<NotYetDueBadgeKey,boolean>;setNotYetDueVis:React.Dispatch<React.SetStateAction<Record<NotYetDueBadgeKey,boolean>>>;
+  installVis:Record<"principal"|"interest"|"fee",boolean>;setInstallVis:React.Dispatch<React.SetStateAction<Record<"principal"|"interest"|"fee",boolean>>>;
+  showBadDebtInstall:boolean;setShowBadDebtInstall:(v:boolean)=>void;
+  showBadDebtSale:boolean;setShowBadDebtSale:(v:boolean)=>void;
   stickyTop:number;
 }) {
-  // คำนวณ value ของแต่ละ sub-row สำหรับ bucket หนึ่ง
+  const ArrowUp2=ArrowUp;const ArrowDown2=ArrowDown;
+  const SortIconCombined=sortDir==="asc"?ArrowUp2:ArrowDown2;
+
+  // ── คำนวณ cell value ตาม vis state ──────────────────────────────────────
   function cellValue(subKey:TabKey, cell:SummaryCell|undefined):number {
     if(!cell)return 0;
     if(subKey==="count")return cell.contractCount;
-    if(subKey==="installTotal")return cell.installTotal.total;
-    if(subKey==="target")return cell.target.total;
-    if(subKey==="paid")return cell.paid.total;
-    if(subKey==="due")return cell.due.total;
-    return cell.notYetDue.total;
+    if(subKey==="installTotal"){
+      return (installVis.principal?cell.installTotal.principal:0)
+           + (installVis.interest?cell.installTotal.interest:0)
+           + (installVis.fee?cell.installTotal.fee:0);
+    }
+    if(subKey==="target")return computeMoneyTotal(cell.target,{...targetVis,discount:false,overpaid:false});
+    if(subKey==="paid")return computeMoneyTotal(cell.paid,paidVis);
+    if(subKey==="due")return computeDueTotal(cell.due,dueVis);
+    return computeNotYetDueTotal(cell.notYetDue,notYetDueVis);
   }
-  // row total (sum across visible buckets)
+  // paid sub-columns สำหรับ bucket หนี้เสีย
+  function cellPaidInstall(cell:SummaryCell|undefined):number {
+    if(!cell)return 0;
+    const v=paidVis;
+    return (v.principal?cell.paid.principal:0)+(v.interest?cell.paid.interest:0)+(v.fee?cell.paid.fee:0)
+         + (v.penalty?cell.paid.penalty:0)+(v.unlockFee?cell.paid.unlockFee:0)
+         + (v.overpaid?cell.paid.overpaid:0) - (cell.paid.badDebt??0);
+  }
+  function cellPaidSale(cell:SummaryCell|undefined):number {
+    if(!cell)return 0;
+    return showBadDebtSale?(cell.paid.badDebt??0):0;
+  }
+
   function rowTotal(subKey:TabKey, row:SummaryRow):number {
     return DEBT_BUCKETS.reduce((s,b)=>{
       if(hiddenBuckets.has(b))return s;
       return s+cellValue(subKey,row.buckets[b]);
     },0);
   }
-  // grand total value
   function gtValue(subKey:TabKey, bucket:string):number {
     const bt=grandTotal.bucketTotals[bucket];if(!bt)return 0;
     if(subKey==="count")return bt.count;
-    if(subKey==="installTotal")return bt.installTotal.total;
-    if(subKey==="target")return bt.target.total;
-    if(subKey==="paid")return bt.paid.total;
-    if(subKey==="due")return bt.due.total;
-    return bt.notYetDue.total;
+    if(subKey==="installTotal")return (installVis.principal?bt.installTotal.principal:0)+(installVis.interest?bt.installTotal.interest:0)+(installVis.fee?bt.installTotal.fee:0);
+    if(subKey==="target")return computeMoneyTotal(bt.target,{...targetVis,discount:false,overpaid:false});
+    if(subKey==="paid")return computeMoneyTotal(bt.paid,paidVis);
+    if(subKey==="due")return computeDueTotal(bt.due,dueVis);
+    return computeNotYetDueTotal(bt.notYetDue,notYetDueVis);
   }
   function gtRowTotal(subKey:TabKey):number {
     return DEBT_BUCKETS.reduce((s,b)=>{
@@ -1723,20 +1683,201 @@ function CombinedTable({rows,grandTotal,hiddenBuckets,toggleBucket,sortDir,onTog
     },0);
   }
 
+  // ── render helpers ────────────────────────────────────────────────────────
   function renderCellVal(subKey:TabKey, val:number, textColor:string):React.ReactNode {
+    if(val===0)return <span className="text-gray-300 text-xs">—</span>;
     if(subKey==="count"){
       return<span className="inline-flex items-center justify-center bg-slate-100 text-slate-700 rounded-full px-2.5 py-0.5 text-xs font-bold">{val.toLocaleString()}</span>;
     }
     return<span className={["text-xs font-medium",textColor].join(" ")}>{fmtMoney(val)}</span>;
   }
+  function renderMoney(val:number, textColor:string):React.ReactNode {
+    if(val===0)return <span className="text-gray-300 text-xs">—</span>;
+    return<span className={["text-xs font-medium",textColor].join(" ")}>{fmtMoney(val)}</span>;
+  }
 
-  const SortIconCombined=sortDir==="asc"?ArrowUp:ArrowDown;
-  const minWidth=130+90+90+(DEBT_BUCKETS.length*110);
+  // ── Badge toggle helpers ──────────────────────────────────────────────────
+  function toggleTargetVis(k:MoneyBadgeKey){setTargetVis((p)=>({...p,[k]:!p[k]}));}
+  function togglePaidVis(k:MoneyBadgeKey){setPaidVis((p)=>({...p,[k]:!p[k]}));}
+  function toggleDueVis(k:DueBadgeKey){setDueVis((p)=>({...p,[k]:!p[k]}));}
+  function toggleNotYetDueVis(k:NotYetDueBadgeKey){setNotYetDueVis((p)=>({...p,[k]:!p[k]}));}
+  function toggleInstallVis(k:"principal"|"interest"|"fee"){setInstallVis((p)=>({...p,[k]:!p[k]}));}
+
+  // ── grand total badge values ──────────────────────────────────────────────
+  const gtBadgeInstall=React.useMemo(()=>{
+    let r=emptyMoney();
+    for(const b of DEBT_BUCKETS){const bt=grandTotal.bucketTotals[b];if(bt)r=addMoney(r,bt.installTotal);}
+    return r;
+  },[grandTotal]);
+  const gtBadgeTarget=React.useMemo(()=>{
+    let r=emptyMoney();
+    for(const b of DEBT_BUCKETS){const bt=grandTotal.bucketTotals[b];if(bt)r=addMoney(r,bt.target);}
+    return r;
+  },[grandTotal]);
+  const gtBadgePaid=React.useMemo(()=>{
+    let r=emptyMoney();
+    for(const b of DEBT_BUCKETS){const bt=grandTotal.bucketTotals[b];if(bt)r=addMoney(r,bt.paid);}
+    return r;
+  },[grandTotal]);
+  const gtBadgeDue=React.useMemo(()=>{
+    let r=emptyMoney();
+    for(const b of DEBT_BUCKETS){const bt=grandTotal.bucketTotals[b];if(bt)r=addMoney(r,bt.due);}
+    return r;
+  },[grandTotal]);
+  const gtBadgeNotYetDue=React.useMemo(()=>{
+    let r=emptyMoney();
+    for(const b of DEBT_BUCKETS){const bt=grandTotal.bucketTotals[b];if(bt)r=addMoney(r,bt.notYetDue);}
+    return r;
+  },[grandTotal]);
+
+  const minWidth=130+90+90+(DEBT_BUCKETS.length*110)+90; // +90 for 2 bad-debt sub-cols
+
+  // ── Badge panels ──────────────────────────────────────────────────────────
+  const BADGE_DEFS=[
+    {key:"count" as TabKey,      label:"สัญญา",          color:"bg-slate-100 border-slate-300 text-slate-700",   expandColor:"bg-slate-50 border-slate-200"},
+    {key:"installTotal" as TabKey,label:"ยอดผ่อนรวม",    color:"bg-purple-100 border-purple-300 text-purple-700", expandColor:"bg-purple-50/60 border-purple-200"},
+    {key:"target" as TabKey,     label:"เป้าเก็บหนี้",   color:"bg-indigo-100 border-indigo-300 text-indigo-700", expandColor:"bg-indigo-50/60 border-indigo-200"},
+    {key:"paid" as TabKey,       label:"ยอดเก็บหนี้",    color:"bg-green-100 border-green-300 text-green-700",    expandColor:"bg-green-50/60 border-green-200"},
+    {key:"due" as TabKey,        label:"หนี้ค้างชำระ",   color:"bg-orange-100 border-orange-300 text-orange-700", expandColor:"bg-orange-50/60 border-orange-200"},
+    {key:"notYetDue" as TabKey,  label:"ยังไม่ถึงกำหนด", color:"bg-blue-100 border-blue-300 text-blue-700",       expandColor:"bg-blue-50/60 border-blue-200"},
+  ];
+  const [expandedBadges,setExpandedBadges]=React.useState<Set<TabKey>>(new Set());
+  function toggleBadge(k:TabKey){setExpandedBadges((p)=>{const n=new Set(p);if(n.has(k))n.delete(k);else n.add(k);return n;});}
+
+  function BadgeItemRow({isOn,onToggle,label,val,color}:{isOn:boolean;onToggle:()=>void;label:string;val:number;color:string}){
+    return(
+      <button type="button" onClick={onToggle}
+        className={["flex items-center gap-1 px-2 py-1 rounded text-xs border transition-colors",color,isOn?"opacity-100":"opacity-40 line-through"].join(" ")}>
+        {isOn?<Eye className="w-3 h-3"/>:<EyeOff className="w-3 h-3"/>}
+        {label} {fmtMoney(val)}
+      </button>
+    );
+  }
 
   return(
     <>
+    {/* ── Badge panels ──────────────────────────────────────────────────── */}
+    <div className="bg-teal-50/60 border-b border-teal-200 px-4 py-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs font-semibold text-teal-700 whitespace-nowrap">Badge แต่ละแถบ:</span>
+        {BADGE_DEFS.map(({key,label,color})=>{
+          const isExpanded=expandedBadges.has(key);
+          return(
+            <button key={key} type="button"
+              onClick={()=>toggleBadge(key)}
+              className={["flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border font-medium transition-colors",color,isExpanded?"ring-2 ring-offset-1 ring-teal-400":"opacity-70 hover:opacity-100"].join(" ")}>
+              {isExpanded?<Eye className="w-3 h-3"/>:<EyeOff className="w-3 h-3"/>}
+              {label}
+            </button>
+          );
+        })}
+      </div>
+      {expandedBadges.size>0&&(
+        <div className="mt-2 flex flex-col gap-1.5">
+          {/* สัญญา */}
+          {expandedBadges.has("count")&&(
+            <div className="flex flex-wrap items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-200">
+              <span className="text-[11px] font-semibold text-slate-600 whitespace-nowrap mr-1">สัญญา:</span>
+              <span className="flex items-center gap-1.5 px-2 py-1 rounded text-xs bg-slate-100 border border-slate-300 text-slate-700 font-semibold">
+                <Banknote className="w-3 h-3"/>รวม {grandTotal.totalCount.toLocaleString()} สัญญา
+              </span>
+            </div>
+          )}
+          {/* ยอดผ่อนรวม */}
+          {expandedBadges.has("installTotal")&&(
+            <div className="flex flex-wrap items-center gap-2 px-3 py-1.5 rounded-lg bg-purple-50/60 border border-purple-200">
+              <span className="text-[11px] font-semibold text-purple-700 whitespace-nowrap mr-1">ยอดผ่อนรวม:</span>
+              {(["principal","interest","fee"] as const).map((k)=>{
+                const labels={principal:"เงินต้น",interest:"ดอกเบี้ย",fee:"ค่าดำเนินการ"};
+                return(
+                  <BadgeItemRow key={k} isOn={installVis[k]} onToggle={()=>toggleInstallVis(k)}
+                    label={labels[k]} val={gtBadgeInstall[k]} color="bg-purple-100 border-purple-300 text-purple-800"/>
+                );
+              })}
+              <span className="flex items-center gap-1.5 px-2 py-1 rounded text-xs bg-purple-700 border border-purple-800 text-white font-semibold">
+                <Banknote className="w-3 h-3"/>รวม {fmtMoney((installVis.principal?gtBadgeInstall.principal:0)+(installVis.interest?gtBadgeInstall.interest:0)+(installVis.fee?gtBadgeInstall.fee:0))}
+              </span>
+            </div>
+          )}
+          {/* เป้าเก็บหนี้ */}
+          {expandedBadges.has("target")&&(
+            <div className="flex flex-wrap items-center gap-2 px-3 py-1.5 rounded-lg bg-indigo-50/60 border border-indigo-200">
+              <span className="text-[11px] font-semibold text-indigo-700 whitespace-nowrap mr-1">เป้าเก็บหนี้:</span>
+              {MONEY_BADGE_ITEMS.filter(x=>x.key!=="discount"&&x.key!=="overpaid").map(({key:k,label})=>{
+                const val=gtBadgeTarget[k as keyof MoneyBreakdown] as number;
+                return(
+                  <BadgeItemRow key={k} isOn={targetVis[k as MoneyBadgeKey]} onToggle={()=>toggleTargetVis(k as MoneyBadgeKey)}
+                    label={label} val={val} color="bg-indigo-100 border-indigo-300 text-indigo-800"/>
+                );
+              })}
+              <span className="flex items-center gap-1.5 px-2 py-1 rounded text-xs bg-indigo-700 border border-indigo-800 text-white font-semibold">
+                <Banknote className="w-3 h-3"/>รวม {fmtMoney(computeMoneyTotal(gtBadgeTarget,{...targetVis,discount:false,overpaid:false}))}
+              </span>
+            </div>
+          )}
+          {/* ยอดเก็บหนี้ */}
+          {expandedBadges.has("paid")&&(
+            <div className="flex flex-wrap items-center gap-2 px-3 py-1.5 rounded-lg bg-green-50/60 border border-green-200">
+              <span className="text-[11px] font-semibold text-green-700 whitespace-nowrap mr-1">ยอดเก็บหนี้:</span>
+              {MONEY_BADGE_ITEMS.map(({key:k,label,canToggle})=>{
+                const val=gtBadgePaid[k as keyof MoneyBreakdown] as number;
+                return(
+                  <BadgeItemRow key={k} isOn={paidVis[k as MoneyBadgeKey]} onToggle={()=>canToggle&&togglePaidVis(k as MoneyBadgeKey)}
+                    label={label} val={val} color="bg-green-100 border-green-300 text-green-800"/>
+                );
+              })}
+              <button type="button" onClick={()=>setShowBadDebtInstall(!showBadDebtInstall)}
+                className={["flex items-center gap-1 px-2 py-1 rounded text-xs border transition-colors bg-green-100 border-green-300 text-green-800",showBadDebtInstall?"opacity-100":"opacity-40 line-through"].join(" ")}>
+                {showBadDebtInstall?<Eye className="w-3 h-3"/>:<EyeOff className="w-3 h-3"/>}หนี้เสีย(ค่างวด) {fmtMoney(gtBadgePaid.badDebtInstallment??0)}
+              </button>
+              <button type="button" onClick={()=>setShowBadDebtSale(!showBadDebtSale)}
+                className={["flex items-center gap-1 px-2 py-1 rounded text-xs border transition-colors bg-green-100 border-green-300 text-green-800",showBadDebtSale?"opacity-100":"opacity-40 line-through"].join(" ")}>
+                {showBadDebtSale?<Eye className="w-3 h-3"/>:<EyeOff className="w-3 h-3"/>}หนี้เสีย(ขายเครื่อง) {fmtMoney(gtBadgePaid.badDebt??0)}
+              </button>
+              <span className="flex items-center gap-1.5 px-2 py-1 rounded text-xs bg-green-700 border border-green-800 text-white font-semibold">
+                <Banknote className="w-3 h-3"/>รวม {fmtMoney(computeMoneyTotal(gtBadgePaid,paidVis))}
+              </span>
+            </div>
+          )}
+          {/* หนี้ค้างชำระ */}
+          {expandedBadges.has("due")&&(
+            <div className="flex flex-wrap items-center gap-2 px-3 py-1.5 rounded-lg bg-orange-50/60 border border-orange-200">
+              <span className="text-[11px] font-semibold text-orange-700 whitespace-nowrap mr-1">หนี้ค้างชำระ:</span>
+              {DUE_BADGE_ITEMS.map(({key:k,label})=>{
+                const val=gtBadgeDue[k as keyof MoneyBreakdown] as number;
+                return(
+                  <BadgeItemRow key={k} isOn={dueVis[k as DueBadgeKey]} onToggle={()=>toggleDueVis(k as DueBadgeKey)}
+                    label={label} val={val} color="bg-orange-100 border-orange-300 text-orange-800"/>
+                );
+              })}
+              <span className="flex items-center gap-1.5 px-2 py-1 rounded text-xs bg-orange-700 border border-orange-800 text-white font-semibold">
+                <Banknote className="w-3 h-3"/>รวม {fmtMoney(computeDueTotal(gtBadgeDue,dueVis))}
+              </span>
+            </div>
+          )}
+          {/* ยังไม่ถึงกำหนด */}
+          {expandedBadges.has("notYetDue")&&(
+            <div className="flex flex-wrap items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-50/60 border border-blue-200">
+              <span className="text-[11px] font-semibold text-blue-700 whitespace-nowrap mr-1">ยังไม่ถึงกำหนด:</span>
+              {NOT_YET_DUE_BADGE_ITEMS.map(({key:k,label})=>{
+                const val=gtBadgeNotYetDue[k as keyof MoneyBreakdown] as number;
+                return(
+                  <BadgeItemRow key={k} isOn={notYetDueVis[k as NotYetDueBadgeKey]} onToggle={()=>toggleNotYetDueVis(k as NotYetDueBadgeKey)}
+                    label={label} val={val} color="bg-blue-100 border-blue-300 text-blue-800"/>
+                );
+              })}
+              <span className="flex items-center gap-1.5 px-2 py-1 rounded text-xs bg-blue-700 border border-blue-800 text-white font-semibold">
+                <Banknote className="w-3 h-3"/>รวม {fmtMoney(computeNotYetDueTotal(gtBadgeNotYetDue,notYetDueVis))}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+    {/* ── Table ──────────────────────────────────────────────────────────── */}
     <table className="w-full text-xs border-collapse" style={{minWidth:`${minWidth}px`}}>
       <thead className="sticky z-20" style={{top:`${stickyTop}px`}}>
+        {/* ── Row 1: group headers ────────────────────────────────────── */}
         <tr>
           <th rowSpan={2} className="sticky left-0 z-30 px-3 py-2 text-left font-semibold whitespace-nowrap bg-teal-800 text-white border-r border-teal-600 min-w-[130px]">
             <button type="button" onClick={onToggleSort} className="flex items-center gap-1 hover:opacity-80 transition-opacity" title={sortDir==="asc"?"เรียงใหม่→เก่า":"เรียงเก่า→ใหม่"}>
@@ -1749,19 +1890,67 @@ function CombinedTable({rows,grandTotal,hiddenBuckets,toggleBucket,sortDir,onTog
           <th rowSpan={2} className="px-3 py-2 text-right font-semibold whitespace-nowrap bg-teal-700 text-white border-r border-teal-500 min-w-[90px]">
             รวม
           </th>
-          {/* bucket headers */}
-          {DEBT_BUCKETS.map((b)=>(
-            <th key={b}
-              onClick={()=>toggleBucket(b)}
-              className={["px-2 py-2 text-center font-semibold text-white whitespace-nowrap min-w-[110px] border-r border-white/20 cursor-pointer hover:opacity-80 transition-opacity",bucketHeaderBg(b)].join(" ")}>
-              <div className="flex flex-col items-center gap-0.5">
-                {hiddenBuckets.has(b)?<EyeOff className="w-3 h-3"/>:<Eye className="w-3 h-3"/>}
-                <span className={["inline-block px-1.5 py-0.5 rounded-full text-[10px] border",bucketPillClasses(b)].join(" ")}>{b}</span>
-              </div>
-            </th>
-          ))}
+          {/* group headers */}
+          {BUCKET_GROUPS.map((g)=>{
+            // นับ colspan = จำนวน bucket ในกลุ่ม + (กลุ่มหนี้เสียมี 3 sub-col สำหรับ paid)
+            const colCount = g.label==="หนี้เสีย" ? g.buckets.length + 2 : g.buckets.length;
+            // ตรวจสอบว่า bucket ในกลุ่มนี้ถูกซ่อนทั้งหมดหรือไม่
+            const allHidden=g.buckets.every(b=>hiddenBuckets.has(b));
+            return(
+              <th key={g.label} colSpan={colCount}
+                className={["px-2 py-1.5 text-center font-semibold text-white whitespace-nowrap border-r border-white/30",g.bg,allHidden?"opacity-50":""].join(" ")}>
+                <div className="flex items-center justify-center gap-1">
+                  <button type="button" onClick={()=>g.buckets.forEach(b=>toggleBucket(b))} title="เปิด/ปิดทั้งกลุ่ม" className="hover:opacity-70 transition-opacity">
+                    {allHidden?<EyeOff className="w-3 h-3"/>:<Eye className="w-3 h-3"/>}
+                  </button>
+                  <span className="text-[11px]">{g.label}</span>
+                </div>
+              </th>
+            );
+          })}
         </tr>
-        <tr className="h-0"/>
+        {/* ── Row 2: bucket sub-headers ───────────────────────────────── */}
+        <tr>
+          {BUCKET_GROUPS.map((g)=>
+            g.buckets.map((b,bi)=>{
+              const isLast=bi===g.buckets.length-1;
+              const isBadDebtBucket=g.label==="หนี้เสีย";
+              return(
+                <React.Fragment key={b}>
+                  <th
+                    onClick={()=>toggleBucket(b)}
+                    className={["px-2 py-1.5 text-center font-semibold text-white whitespace-nowrap min-w-[110px] border-r border-white/20 cursor-pointer hover:opacity-80 transition-opacity",g.bg,hiddenBuckets.has(b)?"opacity-40":""].join(" ")}>
+                    <div className="flex flex-col items-center gap-0.5">
+                      {hiddenBuckets.has(b)?<EyeOff className="w-3 h-3"/>:<Eye className="w-3 h-3"/>}
+                      <span className={["inline-block px-1.5 py-0.5 rounded-full text-[10px] border",bucketPillClasses(b)].join(" ")}>{b}</span>
+                    </div>
+                  </th>
+                  {/* sub-columns สำหรับ bucket หนี้เสีย (ค่างวด / ขายเครื่อง) */}
+                  {isBadDebtBucket&&isLast&&(
+                    <>
+                      <th className={["px-2 py-1.5 text-center font-semibold text-white whitespace-nowrap min-w-[80px] border-r border-white/20",g.bg].join(" ")}>
+                        <div className="flex flex-col items-center gap-0.5">
+                          <button type="button" onClick={()=>setShowBadDebtInstall(!showBadDebtInstall)} className="hover:opacity-70">
+                            {showBadDebtInstall?<Eye className="w-3 h-3"/>:<EyeOff className="w-3 h-3"/>}
+                          </button>
+                          <span className="text-[10px]">ค่างวด</span>
+                        </div>
+                      </th>
+                      <th className={["px-2 py-1.5 text-center font-semibold text-white whitespace-nowrap min-w-[80px] border-r border-white/20",g.bg].join(" ")}>
+                        <div className="flex flex-col items-center gap-0.5">
+                          <button type="button" onClick={()=>setShowBadDebtSale(!showBadDebtSale)} className="hover:opacity-70">
+                            {showBadDebtSale?<Eye className="w-3 h-3"/>:<EyeOff className="w-3 h-3"/>}
+                          </button>
+                          <span className="text-[10px]">ขายเครื่อง</span>
+                        </div>
+                      </th>
+                    </>
+                  )}
+                </React.Fragment>
+              );
+            })
+          )}
+        </tr>
       </thead>
       <tbody>
         {rows.map((row)=>{
@@ -1770,7 +1959,7 @@ function CombinedTable({rows,grandTotal,hiddenBuckets,toggleBucket,sortDir,onTog
             <React.Fragment key={row.approveMonth}>
               {COMBINED_SUB_ROWS.map((sr,srIdx)=>(
                 <tr key={sr.key} className={["border-b border-gray-100 transition-colors",srIdx===0?"border-t-2 border-t-gray-300":"",isHiddenRow?"opacity-40":"",sr.rowBg].join(" ")}>
-                  {/* เดือน — แสดงเฉพาะ sub-row แรก (rowSpan=6) */}
+                  {/* เดือน — rowSpan=6 */}
                   {srIdx===0&&(
                     <td rowSpan={COMBINED_SUB_ROWS.length} className="sticky left-0 z-10 px-3 py-2 text-sm font-semibold whitespace-nowrap bg-white border-r border-gray-200 min-w-[130px] align-middle">
                       <div className="flex items-center gap-1.5">
@@ -1790,20 +1979,39 @@ function CombinedTable({rows,grandTotal,hiddenBuckets,toggleBucket,sortDir,onTog
                     {renderCellVal(sr.key, isHiddenRow?0:rowTotal(sr.key,row), sr.textColor)}
                   </td>
                   {/* bucket cells */}
-                  {DEBT_BUCKETS.map((b)=>{
-                    const cell=row.buckets[b];
-                    const isBucketHidden=hiddenBuckets.has(b);
-                    const isDimmed=isHiddenRow||isBucketHidden;
-                    const val=isDimmed?0:cellValue(sr.key,cell);
-                    const cellBg=bucketCellBg(b);
-                    if(isDimmed){
-                      if(sr.key==="count"){
-                        return<td key={b} className={["px-3 py-1.5 text-right",cellBg].join(" ")}><span className="inline-flex items-center justify-center bg-slate-200 text-slate-400 rounded-full px-2.5 py-0.5 text-xs font-bold">{(cell?.contractCount??0).toLocaleString()}</span></td>;
-                      }
-                      return<td key={b} className={["px-3 py-1.5 text-right",cellBg].join(" ")}><span className="text-gray-400 text-xs">{fmtMoney(cellValue(sr.key,cell))}</span></td>;
-                    }
-                    return<td key={b} className={["px-3 py-1.5 text-right",cellBg].join(" ")}>{renderCellVal(sr.key,val,sr.textColor)}</td>;
-                  })}
+                  {BUCKET_GROUPS.map((g)=>
+                    g.buckets.map((b,bi)=>{
+                      const cell=row.buckets[b];
+                      const isBucketHidden=hiddenBuckets.has(b);
+                      const isDimmed=isHiddenRow||isBucketHidden;
+                      const val=isDimmed?0:cellValue(sr.key,cell);
+                      const cellBg=bucketCellBg(b);
+                      const isLast=bi===g.buckets.length-1;
+                      const isBadDebtBucket=g.label==="หนี้เสีย";
+                      return(
+                        <React.Fragment key={b}>
+                          <td className={["px-3 py-1.5 text-right border-r border-gray-200",cellBg].join(" ")}>
+                            {renderCellVal(sr.key, val, sr.textColor)}
+                          </td>
+                          {/* sub-columns หนี้เสีย เฉพาะ paid row */}
+                          {isBadDebtBucket&&isLast&&(
+                            <>
+                              <td className={["px-3 py-1.5 text-right border-r border-gray-200",cellBg].join(" ")}>
+                                {sr.key==="paid"&&!isDimmed
+                                  ? renderMoney(showBadDebtInstall?cellPaidInstall(cell):0, sr.textColor)
+                                  : <span className="text-gray-200 text-xs">—</span>}
+                              </td>
+                              <td className={["px-3 py-1.5 text-right border-r border-gray-200",cellBg].join(" ")}>
+                                {sr.key==="paid"&&!isDimmed
+                                  ? renderMoney(showBadDebtSale?cellPaidSale(cell):0, "text-red-700")
+                                  : <span className="text-gray-200 text-xs">—</span>}
+                              </td>
+                            </>
+                          )}
+                        </React.Fragment>
+                      );
+                    })
+                  )}
                 </tr>
               ))}
             </React.Fragment>
@@ -1815,7 +2023,23 @@ function CombinedTable({rows,grandTotal,hiddenBuckets,toggleBucket,sortDir,onTog
           <td className="sticky left-0 z-10 px-3 py-2 text-sm font-bold text-slate-800 bg-slate-100 border-r border-slate-300 whitespace-nowrap">รวมทั้งหมด</td>
           <td className="sticky left-[130px] z-10 px-2 py-2 bg-slate-100 border-r border-slate-300"/>
           <td className="px-3 py-2 bg-slate-100 border-r border-slate-300"/>
-          {DEBT_BUCKETS.map((b)=><td key={b} className={["px-3 py-2",bucketCellBg(b),"bg-slate-100"].join(" ")}/>)}
+          {BUCKET_GROUPS.map((g)=>
+            g.buckets.map((b,bi)=>{
+              const isLast=bi===g.buckets.length-1;
+              const isBadDebtBucket=g.label==="หนี้เสีย";
+              return(
+                <React.Fragment key={b}>
+                  <td className={["px-3 py-2",bucketCellBg(b),"bg-slate-100"].join(" ")}/>
+                  {isBadDebtBucket&&isLast&&(
+                    <>
+                      <td className={["px-3 py-2",bucketCellBg(b),"bg-slate-100"].join(" ")}/>
+                      <td className={["px-3 py-2",bucketCellBg(b),"bg-slate-100"].join(" ")}/>
+                    </>
+                  )}
+                </React.Fragment>
+              );
+            })
+          )}
         </tr>
         {COMBINED_SUB_ROWS.map((sr)=>(
           <tr key={sr.key} className={["border-b border-gray-200",sr.totalBg].join(" ")}>
@@ -1824,16 +2048,37 @@ function CombinedTable({rows,grandTotal,hiddenBuckets,toggleBucket,sortDir,onTog
             <td className={["px-3 py-1.5 text-right border-r border-gray-300",sr.totalBg].join(" ")}>
               {renderCellVal(sr.key,gtRowTotal(sr.key),sr.textColor)}
             </td>
-            {DEBT_BUCKETS.map((b)=>{
-              const isBucketHidden=hiddenBuckets.has(b);
-              const val=isBucketHidden?0:gtValue(sr.key,b);
-              const cellBg=bucketCellBg(b);
-              if(isBucketHidden){
-                if(sr.key==="count"){return<td key={b} className={["px-3 py-1.5 text-right",cellBg,"bg-slate-100"].join(" ")}><span className="inline-flex items-center justify-center bg-slate-200 text-slate-400 rounded-full px-2.5 py-0.5 text-xs font-bold">{gtValue(sr.key,b).toLocaleString()}</span></td>;}
-                return<td key={b} className={["px-3 py-1.5 text-right",cellBg,"bg-slate-100"].join(" ")}><span className="text-gray-400 text-xs">{fmtMoney(gtValue(sr.key,b))}</span></td>;
-              }
-              return<td key={b} className={["px-3 py-1.5 text-right",cellBg,"bg-slate-100"].join(" ")}>{renderCellVal(sr.key,val,sr.textColor)}</td>;
-            })}
+            {BUCKET_GROUPS.map((g)=>
+              g.buckets.map((b,bi)=>{
+                const isBucketHidden=hiddenBuckets.has(b);
+                const val=isBucketHidden?0:gtValue(sr.key,b);
+                const cellBg=bucketCellBg(b);
+                const isLast=bi===g.buckets.length-1;
+                const isBadDebtBucket=g.label==="หนี้เสีย";
+                const bt=grandTotal.bucketTotals[b];
+                return(
+                  <React.Fragment key={b}>
+                    <td className={["px-3 py-1.5 text-right border-r border-gray-300",cellBg,"bg-slate-100"].join(" ")}>
+                      {renderCellVal(sr.key,val,sr.textColor)}
+                    </td>
+                    {isBadDebtBucket&&isLast&&(
+                      <>
+                        <td className={["px-3 py-1.5 text-right border-r border-gray-300",cellBg,"bg-slate-100"].join(" ")}>
+                          {sr.key==="paid"&&!isBucketHidden
+                            ? renderMoney(showBadDebtInstall&&bt?computeMoneyTotal(bt.paid,paidVis)-(bt.paid.badDebt??0):0, sr.textColor)
+                            : <span className="text-gray-200 text-xs">—</span>}
+                        </td>
+                        <td className={["px-3 py-1.5 text-right border-r border-gray-300",cellBg,"bg-slate-100"].join(" ")}>
+                          {sr.key==="paid"&&!isBucketHidden
+                            ? renderMoney(showBadDebtSale&&bt?(bt.paid.badDebt??0):0, "text-red-700")
+                            : <span className="text-gray-200 text-xs">—</span>}
+                        </td>
+                      </>
+                    )}
+                  </React.Fragment>
+                );
+              })
+            )}
           </tr>
         ))}
       </tfoot>
