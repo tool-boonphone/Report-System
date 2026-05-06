@@ -557,6 +557,11 @@ export default function MonthlySummary() {
 
   // combined tab: badge expand state (ซ่อนไว้ก่อน กดขยายได้ต่อแถบ)
   const[combinedBadgeExpanded,setCombinedBadgeExpanded]=useState<Set<TabKey>>(new Set());
+  // combined tab: filter state
+  const[combinedApproveMonths,setCombinedApproveMonths]=useState<Set<string>>(new Set());
+  const[combinedApproveYears,setCombinedApproveYears]=useState<Set<string>>(new Set());
+  const[combinedProductType,setCombinedProductType]=useState<Set<string>>(new Set());
+  const[combinedDeviceFamily,setCombinedDeviceFamily]=useState("");
 
   // bucket eye toggle
   const[hiddenBuckets,setHiddenBuckets]=useState<Set<string>>(new Set());
@@ -625,6 +630,14 @@ export default function MonthlySummary() {
   const rows=useMemo(()=>{
     return [...rawRows].sort((a,b)=>sortDir==="asc"?a.approveMonth.localeCompare(b.approveMonth):b.approveMonth.localeCompare(a.approveMonth));
   },[rawRows,sortDir]);
+  // combined tab: filtered rows (client-side filter by approveMonth/Year)
+  const combinedRows=useMemo(()=>{
+    return rows.filter((r)=>{
+      if(combinedApproveMonths.size>0&&!combinedApproveMonths.has(r.approveMonth))return false;
+      if(combinedApproveYears.size>0&&!combinedApproveYears.has(r.approveMonth.slice(0,4)))return false;
+      return true;
+    });
+  },[rows,combinedApproveMonths,combinedApproveYears]);
 
   const availableMonths=useMemo(()=>rawRows.map((r)=>r.approveMonth).sort((a,b)=>b.localeCompare(a)),[rawRows]);
   const availableYears=useMemo(()=>{
@@ -658,6 +671,32 @@ export default function MonthlySummary() {
     }
     return{bucketTotals:bt,totalCount,totalPaid,totalDue,totalTarget,totalNotYetDue,totalInstallTotal};
   },[rows,hiddenRows]);
+  // combined grand total (คำนวณจาก combinedRows เท่านั้น)
+  const combinedGrandTotal=useMemo(()=>{
+    const bt:Record<string,{count:number;paid:MoneyBreakdown;due:MoneyBreakdown;target:MoneyBreakdown;notYetDue:MoneyBreakdown;installTotal:MoneyBreakdown}>={}
+    for(const b of DEBT_BUCKETS)bt[b]={count:0,paid:emptyMoney(),due:emptyMoney(),target:emptyMoney(),notYetDue:emptyMoney(),installTotal:emptyMoney()};
+    let totalCount=0;
+    const totalPaid=emptyMoney();const totalDue=emptyMoney();const totalTarget=emptyMoney();const totalNotYetDue=emptyMoney();const totalInstallTotal=emptyMoney();
+    for(const row of combinedRows){
+      if(hiddenRows.has(row.approveMonth))continue;
+      totalCount+=row.totalCount;
+      for(const k of Object.keys(totalPaid)as(keyof MoneyBreakdown)[]){
+        totalPaid[k]+=row.totalPaid[k];totalDue[k]+=row.totalDue[k];
+        totalTarget[k]+=row.totalTarget[k];totalNotYetDue[k]+=row.totalNotYetDue[k];
+        totalInstallTotal[k]+=(row.totalInstallTotal?.[k]??0);
+      }
+      for(const b of DEBT_BUCKETS){
+        const cell=row.buckets[b];if(!cell)continue;
+        bt[b].count+=cell.contractCount;
+        for(const k of Object.keys(totalPaid)as(keyof MoneyBreakdown)[]){
+          bt[b].paid[k]+=cell.paid[k];bt[b].due[k]+=cell.due[k];
+          bt[b].target[k]+=cell.target[k];bt[b].notYetDue[k]+=cell.notYetDue[k];
+          bt[b].installTotal[k]+=(cell.installTotal?.[k]??0);
+        }
+      }
+    }
+    return{bucketTotals:bt,totalCount,totalPaid,totalDue,totalTarget,totalNotYetDue,totalInstallTotal};
+  },[combinedRows,hiddenRows]);
 
   const grandBadgePaid=useMemo(()=>{
     // คำนวณเหมือน gtPaidTotal ใน SummaryTable: skip hiddenBuckets + จัดการ หนี้เสีย แบบพิเศษ
@@ -751,7 +790,7 @@ export default function MonthlySummary() {
     {key:"paid",         label:"ยอดเก็บหนี้",     activeClass:"border-green-600 text-green-700",   filterCount:paidFilterCount},
     {key:"due",          label:"หนี้ค้างชำระ",   activeClass:"border-orange-600 text-orange-700", filterCount:dueFilterCount},
     {key:"notYetDue",    label:"ยังไม่ถึงกำหนด", activeClass:"border-blue-600 text-blue-700",     filterCount:notYetDueFilterCount},
-    {key:"combined",     label:"สรุปรวม",          activeClass:"border-teal-600 text-teal-700",     filterCount:0},
+    {key:"combined",     label:"สรุปรวม",          activeClass:"border-teal-600 text-teal-700",     filterCount:[combinedApproveMonths.size>0,combinedApproveYears.size>0,combinedProductType.size>0,combinedDeviceFamily].filter(Boolean).length},
   ];
 
   return(
@@ -972,10 +1011,32 @@ export default function MonthlySummary() {
                   )}
                 </>
               )}
+              {/* Tab 6: สรุปรวม */}
+              {tab==="combined"&&(
+                <>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs text-gray-500 whitespace-nowrap">เดือน-ปีที่อนุมัติ:</span>
+                    <MonthMultiSelect selected={combinedApproveMonths} onChange={setCombinedApproveMonths} options={availableMonths}/>
+                    {combinedApproveMonths.size>0&&<button type="button" onClick={()=>setCombinedApproveMonths(new Set())} className="flex items-center justify-center w-6 h-6 rounded-full bg-gray-100 hover:bg-red-100 text-gray-400 hover:text-red-500"><X className="w-3.5 h-3.5"/></button>}
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs text-gray-500 whitespace-nowrap">ปีที่อนุมัติ:</span>
+                    <YearMultiSelect selected={combinedApproveYears} onChange={setCombinedApproveYears} options={availableYears}/>
+                    {combinedApproveYears.size>0&&<button type="button" onClick={()=>setCombinedApproveYears(new Set())} className="flex items-center justify-center w-6 h-6 rounded-full bg-gray-100 hover:bg-red-100 text-gray-400 hover:text-red-500"><X className="w-3.5 h-3.5"/></button>}
+                  </div>
+                  <DeviceFamilyFilter value={combinedDeviceFamily} onChange={setCombinedDeviceFamily}/>
+                  <MultiSelectFilter label="ประเภทสินค้า" selected={combinedProductType} onChange={setCombinedProductType} options={productTypes} placeholder="ทุกประเภทสินค้า"/>
+                  {[combinedApproveMonths.size>0,combinedApproveYears.size>0,combinedProductType.size>0,combinedDeviceFamily].filter(Boolean).length>0&&(
+                    <button type="button" onClick={()=>{setCombinedApproveMonths(new Set());setCombinedApproveYears(new Set());setCombinedProductType(new Set());setCombinedDeviceFamily("");}}
+                      className="flex items-center gap-1 h-9 px-2.5 rounded-md border border-red-200 bg-red-50 text-red-600 text-xs hover:bg-red-100 transition-colors">
+                      <X className="w-3.5 h-3.5"/>ล้างทั้งหมด
+                    </button>
+                  )}
+                </>
+              )}
             </div>
         </div>
-
-        {/* ── Badge: installTotal ─────────────────────────────────────────────── */}
+        {/* ── Badge: installTotalal ─────────────────────────────────────────────── */}
         {tab==="installTotal"&&(
           <div className="bg-purple-50/60 border-b border-purple-200 px-4 py-2 flex flex-wrap items-center gap-2">
             {([{key:"principal",label:"เงินต้น",icon:<Banknote className="w-3 h-3"/>},{key:"interest",label:"ดอกเบี้ย",icon:<Percent className="w-3 h-3"/>},{key:"fee",label:"ค่าดำเนินการ",icon:<Coins className="w-3 h-3"/>}] as Array<{key:"principal"|"interest"|"fee";label:string;icon:React.ReactNode}>).map(({key,label,icon})=>{
@@ -1101,7 +1162,7 @@ export default function MonthlySummary() {
           :rows.length===0?(<div className="flex items-center justify-center h-full text-gray-400 text-sm">ไม่มีข้อมูล</div>)
           :tab==="combined"?(
             <CombinedTable
-              rows={rows} grandTotal={grandTotal}
+              rows={combinedRows} grandTotal={combinedGrandTotal}
               hiddenBuckets={hiddenBuckets} toggleBucket={toggleBucket}
               sortDir={sortDir} onToggleSort={()=>setSortDir((d)=>d==="asc"?"desc":"asc")}
               hiddenRows={hiddenRows} toggleRow={toggleRow}
