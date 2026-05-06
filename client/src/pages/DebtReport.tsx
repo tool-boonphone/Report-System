@@ -895,19 +895,7 @@ export default function DebtReport() {
 
   useEffect(() => {
     setActions(
-      <div className="flex items-center gap-2">
-        {isSuperAdmin && (
-          <button
-            onClick={handleInvalidateCache}
-            disabled={isInvalidating}
-            className="px-3 py-1.5 text-xs bg-amber-100 text-amber-800 border border-amber-300 rounded-lg hover:bg-amber-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            title="ล้าง server cache และโหลดข้อมูลใหม่จาก DB (Super Admin only)"
-          >
-            {isInvalidating ? "กำลังล้าง..." : "ล้าง Cache"}
-          </button>
-        )}
-        <SyncStatusBar />
-      </div>,
+      <SyncStatusBar />,
     );
     return () => setActions(null);
   }, [setActions, isSuperAdmin, handleInvalidateCache, isInvalidating]);
