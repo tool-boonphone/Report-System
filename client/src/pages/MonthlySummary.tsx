@@ -2113,11 +2113,18 @@ function CombinedTable({
                       const val=isHiddenRow?0:rowTotal(sr.key,row);
                       const installVal=isHiddenRow?0:rowTotal("installTotal",row);
                       const targetVal=isHiddenRow?0:rowTotal("target",row);
+                      // หักยอดขายเครื่อง (badDebt) ออกก่อนคำนวณ % ยอดเก็บหนี้
+                      const paidSaleAmt=isHiddenRow?0:DEBT_BUCKETS.reduce((s,b)=>{
+                        if(hiddenBuckets.has(b))return s;
+                        const cell=row.buckets[b];
+                        return s+(showBadDebtSale?(cell?.paid.badDebt??0):0);
+                      },0);
+                      const paidNetVal=val-paidSaleAmt;
                       return(
                         <span className="inline-flex items-center justify-end flex-nowrap gap-0.5 whitespace-nowrap">
                           {renderCellVal(sr.key,val,sr.textColor)}
                           {sr.key==="target"&&<PctTag pct={fmtPct(val,installVal)} color="bg-indigo-50 border-indigo-300 text-indigo-700" tooltip={`เป้าเก็บหนี้ ${fmtPct(val,installVal)??""} ของยอดผ่อนรวม`}/>}
-                          {sr.key==="paid"&&<><PctTag pct={fmtPct(val,installVal)} color="bg-purple-50 border-purple-300 text-purple-700" tooltip={`ยอดเก็บหนี้ ${fmtPct(val,installVal)??""} ของยอดผ่อนรวม`}/><PctTag pct={fmtPct(val,targetVal)} color="bg-indigo-50 border-indigo-300 text-indigo-700" tooltip={`ยอดเก็บหนี้ ${fmtPct(val,targetVal)??""} ของเป้าเก็บหนี้`}/></> }
+                          {sr.key==="paid"&&<><PctTag pct={fmtPct(paidNetVal,installVal)} color="bg-purple-50 border-purple-300 text-purple-700" tooltip={`ยอดเก็บหนี้ (หักขายเครื่อง) ${fmtPct(paidNetVal,installVal)??""} ของยอดผ่อนรวม`}/><PctTag pct={fmtPct(paidNetVal,targetVal)} color="bg-indigo-50 border-indigo-300 text-indigo-700" tooltip={`ยอดเก็บหนี้ (หักขายเครื่อง) ${fmtPct(paidNetVal,targetVal)??""} ของเป้าเก็บหนี้`}/></> }
                           {sr.key==="due"&&<PctTag pct={fmtPct(val,targetVal)} color="bg-orange-50 border-orange-300 text-orange-700" tooltip={`หนี้ค้างชำระ ${fmtPct(val,targetVal)??""} ของเป้าเก็บหนี้`}/>}
                           {sr.key==="notYetDue"&&<PctTag pct={fmtPct(val,installVal)} color="bg-blue-50 border-blue-300 text-blue-700" tooltip={`ยังไม่ถึงกำหนด ${fmtPct(val,installVal)??""} ของยอดผ่อนรวม`}/>}
                         </span>
@@ -2233,11 +2240,18 @@ function CombinedTable({
                 const val=gtRowTotal(sr.key);
                 const installVal=gtRowTotal("installTotal");
                 const targetVal=gtRowTotal("target");
+                // หักยอดขายเครื่อง (badDebt) ออกก่อนคำนวณ % ยอดเก็บหนี้
+                const gtPaidSaleAmt=DEBT_BUCKETS.reduce((s,b)=>{
+                  if(hiddenBuckets.has(b))return s;
+                  const bt=grandTotal.bucketTotals[b];
+                  return s+(showBadDebtSale?(bt?.paid.badDebt??0):0);
+                },0);
+                const gtPaidNetVal=val-gtPaidSaleAmt;
                 return(
                   <span className="inline-flex items-center justify-end flex-nowrap gap-0.5 whitespace-nowrap">
                     {renderCellVal(sr.key,val,sr.textColor)}
                     {sr.key==="target"&&<PctTag pct={fmtPct(val,installVal)} color="bg-indigo-50 border-indigo-300 text-indigo-700" tooltip={`เป้าเก็บหนี้ ${fmtPct(val,installVal)??""} ของยอดผ่อนรวม`}/>}
-                    {sr.key==="paid"&&<><PctTag pct={fmtPct(val,installVal)} color="bg-purple-50 border-purple-300 text-purple-700" tooltip={`ยอดเก็บหนี้ ${fmtPct(val,installVal)??""} ของยอดผ่อนรวม`}/><PctTag pct={fmtPct(val,targetVal)} color="bg-indigo-50 border-indigo-300 text-indigo-700" tooltip={`ยอดเก็บหนี้ ${fmtPct(val,targetVal)??""} ของเป้าเก็บหนี้`}/></> }
+                    {sr.key==="paid"&&<><PctTag pct={fmtPct(gtPaidNetVal,installVal)} color="bg-purple-50 border-purple-300 text-purple-700" tooltip={`ยอดเก็บหนี้ (หักขายเครื่อง) ${fmtPct(gtPaidNetVal,installVal)??""} ของยอดผ่อนรวม`}/><PctTag pct={fmtPct(gtPaidNetVal,targetVal)} color="bg-indigo-50 border-indigo-300 text-indigo-700" tooltip={`ยอดเก็บหนี้ (หักขายเครื่อง) ${fmtPct(gtPaidNetVal,targetVal)??""} ของเป้าเก็บหนี้`}/></> }
                     {sr.key==="due"&&<PctTag pct={fmtPct(val,targetVal)} color="bg-orange-50 border-orange-300 text-orange-700" tooltip={`หนี้ค้างชำระ ${fmtPct(val,targetVal)??""} ของเป้าเก็บหนี้`}/>}
                     {sr.key==="notYetDue"&&<PctTag pct={fmtPct(val,installVal)} color="bg-blue-50 border-blue-300 text-blue-700" tooltip={`ยังไม่ถึงกำหนด ${fmtPct(val,installVal)??""} ของยอดผ่อนรวม`}/>}
                   </span>

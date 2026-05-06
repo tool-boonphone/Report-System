@@ -1338,3 +1338,7 @@ Task list:
 - [x] P137-7: Commit + Push GitHub + Checkpoint
 
 ## Phase 138 — MonthlySummary CombinedTable % Tag Inline (2026-05-06)- [x] P138-1: แก้ไขคอลัมน์ "รวม" ใน CombinedTable ให้ % tag อยู่แถวเดียวกันกับยอดเงิน (nowrap + เพิ่ม min-w) [ ] P138-2: Commit + Push GitHub + Checkpoint
+
+## Phase 139 — MonthlySummary CombinedTable % ยอดเก็บหนี้ หักขายเครื่อง (2026-05-06)
+- [x] P139-1: แก้ไข % ยอดเก็บหนี้ ให้หักยอดขายเครื่อง (badDebt) ออกก่อนคำนวณ % ทั้ง tbody และ grand total footer
+- [ ] P139-2: Commit + Push GitHub + Checkpoint
