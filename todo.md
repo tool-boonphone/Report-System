@@ -1322,8 +1322,8 @@ Task list:
 - [x] P135-5: Commit + Push GitHub + Checkpoint
 
 ## Phase 136 — MonthlySummary CombinedTable Fixes
-- [ ] P136-1: Badge ในแถบสรุปรวม ต้องไม่เลื่อนตามตาราง (ต้องอยู่นอก scroll container)
-- [ ] P136-2: BG ของคอลัมน์ "หัวข้อ" (sticky left-[130px]) ต้องไม่โปร่งใส เพื่อป้องกันข้อความซ้อน
-- [ ] P136-3: Badge "รวม" ในแถบสรุปรวม ให้รวมยอดขายเครื่อง (badDebt) ด้วย
-- [ ] P136-4: คอลัมน์ "รวม" ของแถว "ยอดเก็บหนี้" ในตาราง CombinedTable ให้รวมยอดขายเครื่องด้วย
-- [ ] P136-5: Commit + Push GitHub + Checkpoint
+- [x] P136-1: Badge ในแถบสรุปรวม ต้องไม่เลื่อนตามตาราง (ต้องอยู่นอก scroll container)
+- [x] P136-2: BG ของคอลัมน์ "หัวข้อ" (sticky left-[130px]) ต้องไม่โปร่งใส เพื่อป้องกันข้อความซ้อน
+- [x] P136-3: Badge "รวม" ในแถบสรุปรวม ให้รวมยอดขายเครื่อง (badDebt) ด้วย
+- [x] P136-4: คอลัมน์ "รวม" ของแถว "ยอดเก็บหนี้" ในตาราง CombinedTable ให้รวมยอดขายเครื่องด้วย
+- [x] P136-5: Commit + Push GitHub + Checkpoint
