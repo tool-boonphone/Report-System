@@ -353,21 +353,19 @@ export default function SuspectedBadDebt() {
     return Array.from(set).sort().reverse();
   }, [allRows]);
 
-  /* ── model options ── */
+  /* ── model options ──
+   * dedup ด้วย base model (ตัด capacity ออก)
+   * เช่น "iPhone 14 128GB" + "iPhone 14 256GB" → แสดงเป็น "iPhone 14" ตัวเดียว
+   */
   const modelOptions = useMemo(() => {
-    const set = new Set<string>();
+    const baseSet = new Set<string>();
     for (const r of allRows) {
-      if (r.model) set.add(r.model);
+      if (r.model) {
+        const { base } = parseModelParts(r.model);
+        if (base) baseSet.add(base);
+      }
     }
-    return Array.from(set).sort((a, b) => {
-      const pa = parseModelParts(a);
-      const pb = parseModelParts(b);
-      const baseCompare = (pa.base ?? "").localeCompare(pb.base ?? "", "th");
-      if (baseCompare !== 0) return baseCompare;
-      const capA = parseInt(pa.capacity ?? "0");
-      const capB = parseInt(pb.capacity ?? "0");
-      return capA - capB;
-    });
+    return Array.from(baseSet).sort((a, b) => a.localeCompare(b, "th"));
   }, [allRows]);
 
   /* ── filtered + sorted rows ── */
@@ -400,7 +398,13 @@ export default function SuspectedBadDebt() {
     }
 
     if (modelFilter.size > 0) {
-      rows = rows.filter((r) => r.model && modelFilter.has(r.model));
+      // กรองด้วย base model เพื่อให้ครอบคลุมทุก capacity ของรุ่นเดียวกัน
+      // เช่น เลือก "iPhone 14" จะกรองทั้ง "iPhone 14 128GB" และ "iPhone 14 256GB"
+      rows = rows.filter((r) => {
+        if (!r.model) return false;
+        const { base } = parseModelParts(r.model);
+        return base != null && modelFilter.has(base);
+      });
     }
 
     if (debtValueMin !== "" && !isNaN(Number(debtValueMin))) {
@@ -634,14 +638,13 @@ export default function SuspectedBadDebt() {
                   placeholder="ทุกประเภท"
                 />
 
-                {/* รุ่นเครื่อง */}
+                {/* รุ่นเครื่อง — options คือ base model (ยุบรวมแล้ว) ไม่ต้อง format เพิ่มเติม */}
                 <MultiSelectFilter
                   label="รุ่นเครื่อง"
                   selected={modelFilter}
                   onChange={setModelFilter}
                   options={modelOptions}
                   placeholder="ทุกรุ่น"
-                  formatOption={fmtModelDisplay}
                 />
 
                 {/* มูลค่าหนี้ > */}
