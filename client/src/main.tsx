@@ -26,6 +26,10 @@ queryClient.getQueryCache().subscribe(event => {
   if (event.type === "updated" && event.action.type === "error") {
     const error = event.query.state.error;
     redirectToLoginIfUnauthorized(error);
+    // กรอง transient errors ที่ retry ได้เอง ออกจาก console
+    // เพื่อไม่ให้ user เห็น error notification ที่ไม่จำเป็น
+    const msg = error instanceof TRPCClientError ? error.message : String(error);
+    if (msg.includes("Failed to fetch") || msg.includes("NetworkError") || msg.includes("AbortError")) return;
     console.error("[API Query Error]", error);
   }
 });
