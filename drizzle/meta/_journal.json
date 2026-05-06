@@ -78,6 +78,13 @@
       "when": 1777578304240,
       "tag": "0010_ambiguous_eternity",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "5",
+      "when": 1778045944861,
+      "tag": "0011_wonderful_ghost_rider",
+      "breakpoints": true
     }
   ]
 }

@@ -295,6 +295,8 @@ export const paymentTransactions = mysqlTable(
     status: varchar("status", { length: 32 }),
     rawJson: json("raw_json"),
     syncedAt: timestamp("synced_at").defaultNow().notNull(),
+    /** เลขที่ใบเสร็จ — TXRT prefix สำหรับ FF365 ใช้ระบุ period ใน assignPayPeriods */
+    receiptNo: varchar("receipt_no", { length: 128 }),
     /** ผู้บันทึก — join จาก installments ที่ใกล้ payment_date ที่สุด (FF365) หรือ null ถ้า API ไม่ส่ง */
     updatedBy: varchar("updated_by", { length: 128 }),
     /** วันเวลาที่บันทึก — จาก raw_json.$.updated_at */

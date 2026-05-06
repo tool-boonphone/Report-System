@@ -1,0 +1,1 @@
+ALTER TABLE `payment_transactions` ADD `receipt_no` varchar(128);

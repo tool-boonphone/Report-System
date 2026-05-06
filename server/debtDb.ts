@@ -1087,7 +1087,7 @@ export async function listDebtTarget(params: { section: SectionKey }) {
              CAST(amount AS DECIMAL(18,2)) AS total_paid_amount,
              CAST(JSON_EXTRACT(raw_json, '$.close_installment_amount') AS DECIMAL(18,2)) AS close_installment_amount,
              DATE(paid_at) AS paid_date,
-             JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.receipt_no')) AS receipt_no
+             receipt_no
         FROM ${paymentTransactions}
        WHERE ${paymentTransactions.section} = ${params.section}
          AND JSON_EXTRACT(raw_json, '$.close_installment_amount') IS NOT NULL
@@ -1164,7 +1164,7 @@ export async function listDebtTarget(params: { section: SectionKey }) {
     const rawCloseData = await db.execute(sql`
       SELECT contract_external_id,
              external_id AS payment_external_id,
-             JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.receipt_no')) AS receipt_no,
+             receipt_no,
              CAST(JSON_EXTRACT(raw_json, '$.overpaid_amount') AS DECIMAL(18,2)) AS overpaid_amount,
              CAST(JSON_EXTRACT(raw_json, '$.principal_paid') AS DECIMAL(18,2)) AS principal_paid,
              CAST(JSON_EXTRACT(raw_json, '$.interest_paid') AS DECIMAL(18,2)) AS interest_paid,
@@ -1176,7 +1176,7 @@ export async function listDebtTarget(params: { section: SectionKey }) {
              paid_at
         FROM ${paymentTransactions}
        WHERE ${paymentTransactions.section} = ${params.section}
-         AND JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.receipt_no')) IS NOT NULL
+         AND receipt_no IS NOT NULL
     `);
     const allPayRows: any[] = (rawCloseData as any)[0] ?? rawCloseData;
 
@@ -2169,7 +2169,7 @@ export async function listDebtCollected(params: { section: SectionKey }) {
            CAST(JSON_EXTRACT(pt.raw_json, '$.bad_debt_amount')          AS DECIMAL(18,2)) AS bad_debt_amount,
            CAST(JSON_EXTRACT(pt.raw_json, '$.payment_id')               AS UNSIGNED) AS payment_id,
            NULL AS installment_external_id,
-           JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.receipt_no')) AS receipt_no,
+           pt.receipt_no AS receipt_no,
            JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.remark'))     AS remark,
            pt.status AS ff_status,
            -- updated_at/updated_by: ดึงจาก column โดยตรง (บันทึกตอน sync จาก API)
@@ -2641,7 +2641,7 @@ export async function* listDebtTargetStream(params: {
              CAST(amount AS DECIMAL(18,2)) AS total_paid_amount,
              CAST(JSON_EXTRACT(raw_json, '$.close_installment_amount') AS DECIMAL(18,2)) AS close_installment_amount,
              DATE(paid_at) AS paid_date,
-             JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.receipt_no')) AS receipt_no
+             receipt_no
         FROM ${paymentTransactions}
        WHERE ${paymentTransactions.section} = ${params.section}
          AND JSON_EXTRACT(raw_json, '$.close_installment_amount') IS NOT NULL
@@ -2703,7 +2703,7 @@ export async function* listDebtTargetStream(params: {
     const rawCloseData = await db.execute(sql`
       SELECT contract_external_id,
              external_id AS payment_external_id,
-             JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.receipt_no')) AS receipt_no,
+             receipt_no,
              CAST(JSON_EXTRACT(raw_json, '$.overpaid_amount') AS DECIMAL(18,2)) AS overpaid_amount,
              CAST(JSON_EXTRACT(raw_json, '$.principal_paid') AS DECIMAL(18,2)) AS principal_paid,
              CAST(JSON_EXTRACT(raw_json, '$.interest_paid') AS DECIMAL(18,2)) AS interest_paid,
@@ -2715,7 +2715,7 @@ export async function* listDebtTargetStream(params: {
              paid_at
         FROM ${paymentTransactions}
        WHERE ${paymentTransactions.section} = ${params.section}
-         AND JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.receipt_no')) IS NOT NULL
+         AND receipt_no IS NOT NULL
     `);
     const allPayRows: any[] = (rawCloseData as any)[0] ?? rawCloseData;
     const closeDatesByContract = new Map<string, Date[]>();
@@ -3506,7 +3506,7 @@ export async function* listDebtCollectedStream(params: {
              CAST(JSON_EXTRACT(pt.raw_json, '$.close_installment_amount') AS DECIMAL(18,2)) AS close_installment_amount,
              CAST(JSON_EXTRACT(pt.raw_json, '$.bad_debt_amount')          AS DECIMAL(18,2)) AS bad_debt_amount,
              CAST(JSON_EXTRACT(pt.raw_json, '$.payment_id')               AS UNSIGNED) AS payment_id,
-             JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.receipt_no')) AS receipt_no,
+             pt.receipt_no AS receipt_no,
              JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.remark'))     AS remark,
              pt.status AS ff_status,
              JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.updated_at')) AS updated_at,
@@ -3545,7 +3545,7 @@ export async function* listDebtCollectedStream(params: {
              JSON_EXTRACT(pt.raw_json, '$.close_installment_amount'),
              JSON_EXTRACT(pt.raw_json, '$.bad_debt_amount'),
              JSON_EXTRACT(pt.raw_json, '$.payment_id'),
-             JSON_EXTRACT(pt.raw_json, '$.receipt_no'),
+             pt.receipt_no,
              JSON_EXTRACT(pt.raw_json, '$.remark'),
              pt.status,
              JSON_EXTRACT(pt.raw_json, '$.updated_at'),

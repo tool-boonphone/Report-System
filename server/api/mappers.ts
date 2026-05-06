@@ -282,6 +282,7 @@ type PaymentItem = {
   created_at?: string;
   updated_at?: string;  // วันเวลาที่บันทึก — ส่งมาจาก API (FF365 เท่านั้น)
   updated_by?: string;  // ผู้บันทึก — ส่งมาจาก API ถ้ามี
+  receipt_no?: string;  // เลขที่ใบเสร็จ — TXRT prefix สำหรับ FF365 ใช้ระบุ period
 };
 
 export function mapPayment(section: SectionKey, it: PaymentItem) {
@@ -296,6 +297,8 @@ export function mapPayment(section: SectionKey, it: PaymentItem) {
     method: it.payment_method ?? null,
     status: it.payment_status ?? null,
     rawJson: it as any,
+    // เลขที่ใบเสร็จ — TXRT prefix สำหรับ FF365 ใช้ระบุ period ใน assignPayPeriods
+    receiptNo: it.receipt_no ?? null,
     // เก็บ datetime เต็ม (YYYY-MM-DD HH:mm:ss) ไม่ใช่แค่ date เพื่อให้แสดงเวลาบันทึกได้
     updatedAt: it.updated_at ? String(it.updated_at) : null,
     updatedBy: it.updated_by ?? null,
