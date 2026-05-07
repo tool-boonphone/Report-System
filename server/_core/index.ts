@@ -10,6 +10,7 @@ import { appRouter } from "../routers";
 import { seedSuperAdmin } from "../authDb";
 import { handleContractsExport, handleDebtExport, handleBadDebtExport } from "../routers/exportExcel";
 import { handleDebtStreamTarget, handleDebtStreamCollected, handleDebtCacheInvalidate } from "../routers/debtStream";
+import { handleSyncStream } from "../routers/syncStream";
 import { startScheduler } from "../sync/scheduler";
 import { prewarmDebtCache } from "../debtPrewarm";
 import { createContext } from "./context";
@@ -53,6 +54,8 @@ async function startServer() {
   app.get("/api/debt/stream/collected", handleDebtStreamCollected);
   // Phase 88: Cache invalidation endpoint — admin can force-clear server cache
   app.post("/api/debt/cache/invalidate", handleDebtCacheInvalidate);
+  // SSE sync stream — keeps Cloud Run connection alive during long sync
+  app.get("/api/sync-stream/:section", handleSyncStream);
   // Internal backfill endpoint — no auth, only for local/admin use
   app.post("/api/internal/backfill-cache", async (req, res) => {
     const { section } = req.body as { section?: string };
