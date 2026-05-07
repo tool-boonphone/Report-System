@@ -1,0 +1,46 @@
+{
+  "query": "\nSELECT id, section, entity, status, triggered_by, current_stage, progress, started_at, finished_at, error_message\nFROM sync_logs\nWHERE started_at > NOW() - INTERVAL 2 HOUR\nORDER BY started_at DESC\nLIMIT 20;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT id, section, entity, status, triggered_by, current_stage, progress, started_at, finished_at, error_message\nFROM sync_logs\nWHERE started_at > NOW() - INTERVAL 2 HOUR\nORDER BY started_at DESC\nLIMIT 20;\n",
+  "rows": [
+    {
+      "id": "1110003",
+      "section": "Boonphone",
+      "entity": "customers",
+      "status": "in_progress",
+      "triggered_by": "on-demand",
+      "current_stage": "NULL",
+      "progress": "0",
+      "started_at": "2026-05-07 16:26:02",
+      "finished_at": "NULL",
+      "error_message": "NULL"
+    },
+    {
+      "id": "1110002",
+      "section": "Boonphone",
+      "entity": "partners",
+      "status": "success",
+      "triggered_by": "on-demand",
+      "current_stage": "NULL",
+      "progress": "0",
+      "started_at": "2026-05-07 16:25:54",
+      "finished_at": "2026-05-07 16:26:02",
+      "error_message": "NULL"
+    },
+    {
+      "id": "1110001",
+      "section": "Boonphone",
+      "entity": "all",
+      "status": "in_progress",
+      "triggered_by": "manual",
+      "current_stage": "NULL",
+      "progress": "0",
+      "started_at": "2026-05-07 16:25:54",
+      "finished_at": "NULL",
+      "error_message": "NULL"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tsection\tentity\tstatus\ttriggered_by\tcurrent_stage\tprogress\tstarted_at\tfinished_at\terror_message\n1110003\tBoonphone\tcustomers\tin_progress\ton-demand\tNULL\t0\t2026-05-07 16:26:02\tNULL\tNULL\n1110002\tBoonphone\tpartners\tsuccess\ton-demand\tNULL\t0\t2026-05-07 16:25:54\t2026-05-07 16:26:02\tNULL\n1110001\tBoonphone\tall\tin_progress\tmanual\tNULL\t0\t2026-05-07 16:25:54\tNULL\tNULL\n",
+  "stderr": "",
+  "execution_time_ms": 1644
+}

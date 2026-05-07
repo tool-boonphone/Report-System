@@ -1,0 +1,76 @@
+{
+  "query": "\nSELECT id, section, entity, status, current_stage, progress, started_at, finished_at, error_message\nFROM sync_logs\nWHERE started_at > NOW() - INTERVAL 3 HOUR\nORDER BY started_at DESC\nLIMIT 20;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT id, section, entity, status, current_stage, progress, started_at, finished_at, error_message\nFROM sync_logs\nWHERE started_at > NOW() - INTERVAL 3 HOUR\nORDER BY started_at DESC\nLIMIT 20;\n",
+  "rows": [
+    {
+      "id": "1110006",
+      "section": "Boonphone",
+      "entity": "customers",
+      "status": "in_progress",
+      "current_stage": "NULL",
+      "progress": "0",
+      "started_at": "2026-05-07 17:02:16",
+      "finished_at": "NULL",
+      "error_message": "NULL"
+    },
+    {
+      "id": "1110005",
+      "section": "Boonphone",
+      "entity": "partners",
+      "status": "success",
+      "current_stage": "NULL",
+      "progress": "0",
+      "started_at": "2026-05-07 17:02:09",
+      "finished_at": "2026-05-07 17:02:16",
+      "error_message": "NULL"
+    },
+    {
+      "id": "1110004",
+      "section": "Boonphone",
+      "entity": "all",
+      "status": "in_progress",
+      "current_stage": "customers",
+      "progress": "20",
+      "started_at": "2026-05-07 17:02:09",
+      "finished_at": "NULL",
+      "error_message": "NULL"
+    },
+    {
+      "id": "1110003",
+      "section": "Boonphone",
+      "entity": "customers",
+      "status": "error",
+      "current_stage": "NULL",
+      "progress": "0",
+      "started_at": "2026-05-07 16:26:02",
+      "finished_at": "2026-05-07 17:00:14",
+      "error_message": "Force-cleared: stuck in_progress (abandoned)"
+    },
+    {
+      "id": "1110002",
+      "section": "Boonphone",
+      "entity": "partners",
+      "status": "success",
+      "current_stage": "NULL",
+      "progress": "0",
+      "started_at": "2026-05-07 16:25:54",
+      "finished_at": "2026-05-07 16:26:02",
+      "error_message": "NULL"
+    },
+    {
+      "id": "1110001",
+      "section": "Boonphone",
+      "entity": "all",
+      "status": "error",
+      "current_stage": "NULL",
+      "progress": "0",
+      "started_at": "2026-05-07 16:25:54",
+      "finished_at": "2026-05-07 17:00:14",
+      "error_message": "Force-cleared: stuck in_progress (abandoned)"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tsection\tentity\tstatus\tcurrent_stage\tprogress\tstarted_at\tfinished_at\terror_message\n1110006\tBoonphone\tcustomers\tin_progress\tNULL\t0\t2026-05-07 17:02:16\tNULL\tNULL\n1110005\tBoonphone\tpartners\tsuccess\tNULL\t0\t2026-05-07 17:02:09\t2026-05-07 17:02:16\tNULL\n1110004\tBoonphone\tall\tin_progress\tcustomers\t20\t2026-05-07 17:02:09\tNULL\tNULL\n1110003\tBoonphone\tcustomers\terror\tNULL\t0\t2026-05-07 16:26:02\t2026-05-07 17:00:14\tForce-cleared: stuck in_progress (abandoned)\n1110002\tBoonphone\tpartners\tsuccess\tNULL\t0\t2026-05-07 16:25:54\t2026-05-07 16:26:02\tNULL\n1110001\tBoonphone\tall\terror\tNULL\t0\t2026-05-07 16:25:54\t2026-05-07 17:00:14\tForce-cleared: stuck in_progress (abandoned)\n",
+  "stderr": "",
+  "execution_time_ms": 1523
+}
