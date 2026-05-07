@@ -305,7 +305,9 @@ async function syncCustomers(
   });
   try {
     const byId = new Map<string, CustomerListItem>();
-    // Use limit=1000 to reduce page count (Fastfone365 has 22k customers → 23 pages vs 22k pages at limit=1)
+    // Use limit=200 with 60s timeout per request.
+    // limit=1000 caused >20s responses that hit the default 20s timeout and aborted.
+    // At limit=200 each page responds in ~3s, well within the 60s window.
     await client.forEachPage<CustomerListItem>(
       "customer",
       (d) => d?.customers,
@@ -315,7 +317,8 @@ async function syncCustomers(
           byId.set(String(it.customer_id), it);
         }
       },
-      1000,
+      200,
+      60_000, // 60s per-request timeout (customers endpoint is slower than others)
     );
     await finishSyncLog({ id: log.id, status: "success", rowCount: byId.size });
     return byId;

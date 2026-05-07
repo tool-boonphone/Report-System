@@ -107,6 +107,8 @@ export class PartnerClient {
   async get<T = unknown>(
     path: string,
     params: Record<string, string | number | undefined> = {},
+    /** Override per-request timeout (ms). Defaults to this.cfg.timeoutMs. */
+    timeoutMs?: number,
   ): Promise<T> {
     const url = new URL(`${this.cfg.baseUrl}api/v1/${path.replace(/^\/+/, "")}`);
     for (const [k, v] of Object.entries(params)) {
@@ -123,7 +125,7 @@ export class PartnerClient {
         const res = await this.rawFetch(url.toString(), {
           method: "GET",
           headers: { Authorization: `Bearer ${token}` },
-        });
+        }, timeoutMs);
         const body = (await res.json().catch(() => ({}))) as ApiEnvelope<T>;
         if (res.status === 401 && attemptIdx === 0) {
           // Token might have rotated server-side — invalidate and try once more.
@@ -166,6 +168,8 @@ export class PartnerClient {
     params: Record<string, string | number | undefined> = {},
     onPage: (items: TItem[], page: number, totalPages: number) => Promise<void> | void,
     limit = 100,
+    /** Override per-request timeout (ms). Defaults to this.cfg.timeoutMs. */
+    timeoutMs?: number,
   ): Promise<number> {
     let page = 1;
     let totalPages = 1;
@@ -173,7 +177,7 @@ export class PartnerClient {
     // Protect against accidental infinite loops.
     const MAX_PAGES = 10_000;
     while (page <= totalPages && page <= MAX_PAGES) {
-      const data: any = await this.get<any>(path, { ...params, page, limit });
+      const data: any = await this.get<any>(path, { ...params, page, limit }, timeoutMs);
       const items = pickItems(data) ?? [];
       totalPages = Number(data?.pagination?.total_pages ?? 1);
       totalRows += items.length;
@@ -185,9 +189,9 @@ export class PartnerClient {
   }
 
   /** Raw fetch with timeout via AbortController. */
-  private async rawFetch(url: string, init: RequestInit): Promise<Response> {
+  private async rawFetch(url: string, init: RequestInit, timeoutMs?: number): Promise<Response> {
     const ctl = new AbortController();
-    const timer = setTimeout(() => ctl.abort(), this.cfg.timeoutMs);
+    const timer = setTimeout(() => ctl.abort(), timeoutMs ?? this.cfg.timeoutMs);
     try {
       return await fetch(url, { ...init, signal: ctl.signal });
     } finally {
