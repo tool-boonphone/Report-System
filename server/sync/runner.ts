@@ -29,6 +29,7 @@ import {
 } from "./syncLog";
 import type { SectionKey, SyncTrigger } from "../../shared/const";
 import { invalidateDebtCache } from "../debtCache";
+import { buildAllDebtExports } from "../debtExportBuilder";
 import { populateDebtCache } from "./populateCache";
 
 const OVERALL_TIMEOUT_MS = 90 * 60 * 1000; // 90 minutes ceiling per section (Fastfone365 has 17k contracts)
@@ -233,6 +234,14 @@ async function doSync(
     } catch (cacheErr: any) {
       // Cache population failure is non-fatal — log and continue
       console.error(`[runner] ${section}: cache population failed:`, cacheErr?.message ?? cacheErr);
+    }
+
+    // Pre-build Excel exports (target + collected) and upload to S3.
+    // Non-fatal: errors are logged but don't block the sync result.
+    try {
+      await buildAllDebtExports(section);
+    } catch (exportErr: any) {
+      console.error(`[runner] ${section}: pre-build export failed:`, exportErr?.message ?? exportErr);
     }
 
     return { ok: true, rowCount: overallRows };

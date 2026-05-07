@@ -1,0 +1,9 @@
+{
+  "query": "CREATE TABLE `debt_export_cache` (\n\t`id` int AUTO_INCREMENT NOT NULL,\n\t`section` varchar(64) NOT NULL,\n\t`variant` enum('target','collected') NOT NULL,\n\t`storage_key` varchar(512) NOT NULL,\n\t`storage_url` varchar(512) NOT NULL,\n\t`row_count` int NOT NULL DEFAULT 0,\n\t`built_at` timestamp NOT NULL DEFAULT (now()),\n\tCONSTRAINT `debt_export_cache_id` PRIMARY KEY(`id`),\n\tCONSTRAINT `dec_section_variant_idx` UNIQUE(`section`,`variant`)\n);",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute CREATE TABLE `debt_export_cache` (\n\t`id` int AUTO_INCREMENT NOT NULL,\n\t`section` varchar(64) NOT NULL,\n\t`variant` enum('target','collected') NOT NULL,\n\t`storage_key` varchar(512) NOT NULL,\n\t`storage_url` varchar(512) NOT NULL,\n\t`row_count` int NOT NULL DEFAULT 0,\n\t`built_at` timestamp NOT NULL DEFAULT (now()),\n\tCONSTRAINT `debt_export_cache_id` PRIMARY KEY(`id`),\n\tCONSTRAINT `dec_section_variant_idx` UNIQUE(`section`,`variant`)\n);",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 1823
+}

@@ -444,3 +444,25 @@ export const debtCollectedCache = mysqlTable(
   }),
 );
 export type DebtCollectedCache = typeof debtCollectedCache.$inferSelect;
+
+/* =============================================================================
+ * Pre-built Export Cache
+ * สร้างไฟล์ Excel ล่วงหน้าหลัง sync เสร็จ แล้วเก็บ S3 URL ไว้
+ * ============================================================================= */
+
+export const debtExportCache = mysqlTable(
+  "debt_export_cache",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    section: varchar("section", { length: 64 }).notNull(),
+    variant: mysqlEnum("variant", ["target", "collected"]).notNull(),
+    storageKey: varchar("storage_key", { length: 512 }).notNull(),
+    storageUrl: varchar("storage_url", { length: 512 }).notNull(),
+    rowCount: int("row_count").notNull().default(0),
+    builtAt: timestamp("built_at").defaultNow().notNull(),
+  },
+  (t) => ({
+    sectionVariantIdx: uniqueIndex("dec_section_variant_idx").on(t.section, t.variant),
+  }),
+);
+export type DebtExportCache = typeof debtExportCache.$inferSelect;

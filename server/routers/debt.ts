@@ -168,4 +168,20 @@ export const debtRouter = router({
     invalidateAllDebtCache();
     return { ok: true };
   }),
+
+  /** Get pre-built export info (builtAt, rowCount) for a section+variant */
+  getExportInfo: debtViewProcedure
+    .input(z.object({
+      section: z.string(),
+      variant: z.enum(["target", "collected"]),
+    }))
+    .query(async ({ input }) => {
+      const { getDebtExportEntry } = await import("../debtExportBuilder");
+      const entry = await getDebtExportEntry(input.section, input.variant);
+      if (!entry) return null;
+      return {
+        builtAt: entry.builtAt,
+        rowCount: entry.rowCount,
+      };
+    }),
 });

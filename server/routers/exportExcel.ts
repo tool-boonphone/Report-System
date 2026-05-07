@@ -27,6 +27,8 @@ import {
   waitForPrewarmCollected,
 } from "../debtCache";
 import { getBadDebtSummary } from "../badDebtDb";
+import { getDebtExportEntry } from "../debtExportBuilder";
+import { storageGetSignedUrl } from "../storage";
 
 function parseCookies(header: string | undefined): Record<string, string> {
   if (!header) return {};
@@ -192,6 +194,18 @@ export async function handleDebtExport(req: Request, res: Response) {
       return;
     }
     const variant = variantRaw as "target" | "collected";
+
+    // ── Pre-built export: redirect to S3 URL if available ──────────────────
+    const prebuilt = await getDebtExportEntry(section, variant);
+    if (prebuilt) {
+      try {
+        const signedUrl = await storageGetSignedUrl(prebuilt.storageKey);
+        res.redirect(302, signedUrl);
+        return;
+      } catch (redirectErr: any) {
+        console.warn(`[export] Pre-built redirect failed, falling back to on-the-fly:`, redirectErr?.message);
+      }
+    }
 
     const search = req.query.search ? String(req.query.search).trim() : "";
     // Phase 29: parse all filter parameters (mirrors UI filter state)

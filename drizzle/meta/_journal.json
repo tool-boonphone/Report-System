@@ -85,6 +85,13 @@
       "when": 1778045944861,
       "tag": "0011_wonderful_ghost_rider",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "5",
+      "when": 1778139155189,
+      "tag": "0012_romantic_hellfire_club",
+      "breakpoints": true
     }
   ]
 }

@@ -386,6 +386,17 @@ export default function DebtReport() {
   const canExport = can("debt_report", "export");
 
   const [tab, setTab] = useState<"target" | "collected">("target");
+
+  // Pre-built export info
+  const { data: exportInfoTarget } = trpc.debt.getExportInfo.useQuery(
+    { section: section as string, variant: "target" },
+    { enabled: canExport, staleTime: 60_000 },
+  );
+  const { data: exportInfoCollected } = trpc.debt.getExportInfo.useQuery(
+    { section: section as string, variant: "collected" },
+    { enabled: canExport, staleTime: 60_000 },
+  );
+  const exportInfo = tab === "target" ? exportInfoTarget : exportInfoCollected;
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
   // New filters: month-year approve date, month-year due date, product type
@@ -1054,13 +1065,28 @@ export default function DebtReport() {
               <Info className="w-4 h-4" />
             </Button>
             {canExport && (
-              <Button
-                className="bg-green-600 hover:bg-green-700 text-white"
-                onClick={handleExport}
-              >
-                <Download className="w-4 h-4 mr-1.5" />
-                Export Excel
-              </Button>
+              <div className="flex flex-col items-end gap-0.5">
+                <Button
+                  className="bg-green-600 hover:bg-green-700 text-white"
+                  onClick={handleExport}
+                >
+                  <Download className="w-4 h-4 mr-1.5" />
+                  Export Excel
+                </Button>
+                {exportInfo ? (
+                  <span className="text-xs text-muted-foreground">
+                    ไฟล์พร้อม · {exportInfo.rowCount.toLocaleString()} รายการ ·{" "}
+                    {new Date(exportInfo.builtAt).toLocaleString("th-TH", {
+                      day: "numeric", month: "short", year: "numeric",
+                      hour: "2-digit", minute: "2-digit",
+                    })}
+                  </span>
+                ) : (
+                  <span className="text-xs text-muted-foreground">
+                    ยังไม่มีไฟล์ (สร้างหลัง sync)
+                  </span>
+                )}
+              </div>
             )}
           </div>
         </div>
