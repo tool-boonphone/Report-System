@@ -67,6 +67,7 @@ export const appGroupPermissions = mysqlTable(
     canDelete: boolean("can_delete").notNull().default(false),
     canApprove: boolean("can_approve").notNull().default(false),
     canExport: boolean("can_export").notNull().default(false),
+    canSync: boolean("can_sync").notNull().default(false),
   },
   (t) => ({
     groupMenuIdx: uniqueIndex("app_group_perm_group_menu_idx").on(

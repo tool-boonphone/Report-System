@@ -42,6 +42,7 @@ type GroupRow = {
     canDelete: boolean;
     canApprove: boolean;
     canExport: boolean;
+    canSync: boolean;
   }>;
 };
 
@@ -51,7 +52,8 @@ function actionField(a: PermissionAction):
   | "canEdit"
   | "canDelete"
   | "canApprove"
-  | "canExport" {
+  | "canExport"
+  | "canSync" {
   switch (a) {
     case "view":
       return "canView";
@@ -65,6 +67,8 @@ function actionField(a: PermissionAction):
       return "canApprove";
     case "export":
       return "canExport";
+    case "sync":
+      return "canSync";
   }
 }
 

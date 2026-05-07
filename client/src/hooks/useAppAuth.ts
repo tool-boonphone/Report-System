@@ -42,6 +42,8 @@ export function useAppAuth() {
           return p.canApprove;
         case "export":
           return p.canExport;
+        case "sync":
+          return (p as any).canSync ?? false;
       }
     },
     [me],

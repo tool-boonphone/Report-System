@@ -28,6 +28,7 @@ export const MENU_CODES = [
   "monthly_summary", // สรุปรายเดือน (bucket × approve_month)
   "settings_users", // ตั้งค่า > จัดการผู้ใช้งาน
   "settings_groups", // ตั้งค่า > จัดการสิทธิ์
+  "sync_api", // Re-Sync API (ดึงข้อมูลใหม่จาก Partner API)
 ] as const;
 export type MenuCode = (typeof MENU_CODES)[number];
 
@@ -42,6 +43,7 @@ export const MENU_LABELS: Record<MenuCode, string> = {
   monthly_summary: "สรุปรายเดือน",
   settings_users: "จัดการผู้ใช้งาน",
   settings_groups: "จัดการสิทธิ์",
+  sync_api: "Re-Sync API",
 };
 
 /** Permission actions attached to every menu. */
@@ -52,6 +54,7 @@ export const PERMISSION_ACTIONS = [
   "delete",
   "approve",
   "export",
+  "sync",
 ] as const;
 export type PermissionAction = (typeof PERMISSION_ACTIONS)[number];
 
@@ -62,6 +65,7 @@ export const PERMISSION_ACTION_LABELS: Record<PermissionAction, string> = {
   delete: "ลบ",
   approve: "อนุมัติ",
   export: "Export",
+  sync: "Sync",
 };
 
 /** Super Admin defaults (seeded on first boot). */

@@ -1,0 +1,1 @@
+ALTER TABLE `app_group_permissions` ADD `can_sync` boolean DEFAULT false NOT NULL;

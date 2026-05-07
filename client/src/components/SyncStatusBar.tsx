@@ -3,6 +3,7 @@ import { trpc } from "@/lib/trpc";
 import { Progress } from "@/components/ui/progress";
 import { clearIdbCache } from "@/lib/debtIdbCache";
 import { useDebtCache } from "@/contexts/DebtCacheContext";
+import { useAppAuth } from "@/hooks/useAppAuth";
 import { RefreshCw, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -44,6 +45,8 @@ export function SyncStatusBar() {
   const debtCache = useDebtCache();
   const [, navigate] = useLocation();
   const [isClearing, setIsClearing] = useState(false);
+  const { can } = useAppAuth();
+  const canResync = can("sync_api", "sync");
 
   // Last synced time for the active section.
   const last = trpc.sync.lastSyncedAt.useQuery(
@@ -145,7 +148,7 @@ export function SyncStatusBar() {
         ข้อมูล ณ {lastLabel}
       </span>
 
-      {isRunning ? (
+      {isRunning && canResync ? (
         /* ---- Progress bar (แสดงแทนปุ่มขณะ Sync กำลังทำงาน) ---- */
         <div className="flex items-center gap-2 min-w-[180px] max-w-[260px]">
           <div className="flex-1 min-w-0">
@@ -173,8 +176,8 @@ export function SyncStatusBar() {
             </div>
           </div>
         </div>
-      ) : (
-        /* ---- ปุ่ม Re-Sync API + Clear Cache ---- */
+      ) : canResync ? (
+        /* ---- ปุ่ม Re-Sync API + Clear Cache (เฉพาะผู้มีสิทธิ์) ---- */
         <div className="flex items-center gap-1.5">
           {/* Re-Sync API */}
           <button
@@ -202,7 +205,7 @@ export function SyncStatusBar() {
             <span className="hidden sm:inline">Clear Cache</span>
           </button>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

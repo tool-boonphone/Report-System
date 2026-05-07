@@ -84,6 +84,7 @@ export async function seedSuperAdmin(): Promise<void> {
         canDelete: true,
         canApprove: true,
         canExport: true,
+        canSync: true,
       });
     }
   }
@@ -223,6 +224,8 @@ export function checkPermission(
       return perm.canApprove;
     case "export":
       return perm.canExport;
+    case "sync":
+      return perm.canSync;
   }
 }
 
@@ -369,6 +372,7 @@ export async function updateGroupPermission(
     canDelete: boolean;
     canApprove: boolean;
     canExport: boolean;
+    canSync: boolean;
   }>,
 ) {
   const db = await getDb();
@@ -396,6 +400,7 @@ export async function updateGroupPermission(
       canDelete: patch.canDelete ?? false,
       canApprove: patch.canApprove ?? false,
       canExport: patch.canExport ?? false,
+      canSync: patch.canSync ?? false,
     });
   } else {
     await db
