@@ -1,0 +1,110 @@
+{
+  "query": "SELECT \n  id,\n  entity,\n  status,\n  triggered_by,\n  started_at,\n  finished_at,\n  TIMESTAMPDIFF(SECOND, started_at, finished_at) as duration_secs,\n  row_count\nFROM sync_logs\nWHERE section = 'Boonphone' AND status = 'success' AND entity = 'all'\nORDER BY started_at DESC\nLIMIT 10;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT \n  id,\n  entity,\n  status,\n  triggered_by,\n  started_at,\n  finished_at,\n  TIMESTAMPDIFF(SECOND, started_at, finished_at) as duration_secs,\n  row_count\nFROM sync_logs\nWHERE section = 'Boonphone' AND status = 'success' AND entity = 'all'\nORDER BY started_at DESC\nLIMIT 10;",
+  "rows": [
+    {
+      "id": "960002",
+      "entity": "all",
+      "status": "success",
+      "triggered_by": "cron",
+      "started_at": "2026-05-05 21:01:00",
+      "finished_at": "2026-05-05 21:26:37",
+      "duration_secs": "1537",
+      "row_count": "61580"
+    },
+    {
+      "id": "660009",
+      "entity": "all",
+      "status": "success",
+      "triggered_by": "manual",
+      "started_at": "2026-05-01 00:54:32",
+      "finished_at": "2026-05-01 01:17:15",
+      "duration_secs": "1363",
+      "row_count": "57794"
+    },
+    {
+      "id": "540006",
+      "entity": "all",
+      "status": "success",
+      "triggered_by": "cron",
+      "started_at": "2026-04-29 10:00:10",
+      "finished_at": "2026-04-29 10:04:03",
+      "duration_secs": "233",
+      "row_count": "52874"
+    },
+    {
+      "id": "510001",
+      "entity": "all",
+      "status": "success",
+      "triggered_by": "cron",
+      "started_at": "2026-04-28 10:00:03",
+      "finished_at": "2026-04-28 10:03:41",
+      "duration_secs": "218",
+      "row_count": "52170"
+    },
+    {
+      "id": "450001",
+      "entity": "all",
+      "status": "success",
+      "triggered_by": "manual",
+      "started_at": "2026-04-27 22:54:26",
+      "finished_at": "2026-04-27 23:01:17",
+      "duration_secs": "411",
+      "row_count": "51881"
+    },
+    {
+      "id": "360001",
+      "entity": "all",
+      "status": "success",
+      "triggered_by": "cron",
+      "started_at": "2026-04-26 10:00:10",
+      "finished_at": "2026-04-26 10:08:26",
+      "duration_secs": "496",
+      "row_count": "51177"
+    },
+    {
+      "id": "210002",
+      "entity": "all",
+      "status": "success",
+      "triggered_by": "cron",
+      "started_at": "2026-04-24 10:00:12",
+      "finished_at": "2026-04-24 10:08:19",
+      "duration_secs": "487",
+      "row_count": "49968"
+    },
+    {
+      "id": "150044",
+      "entity": "all",
+      "status": "success",
+      "triggered_by": "manual",
+      "started_at": "2026-04-23 20:32:27",
+      "finished_at": "2026-04-23 20:35:55",
+      "duration_secs": "208",
+      "row_count": "49607"
+    },
+    {
+      "id": "150022",
+      "entity": "all",
+      "status": "success",
+      "triggered_by": "manual",
+      "started_at": "2026-04-23 17:00:06",
+      "finished_at": "2026-04-23 17:06:28",
+      "duration_secs": "382",
+      "row_count": "49607"
+    },
+    {
+      "id": "150014",
+      "entity": "all",
+      "status": "success",
+      "triggered_by": "manual",
+      "started_at": "2026-04-23 16:38:43",
+      "finished_at": "2026-04-23 16:53:16",
+      "duration_secs": "873",
+      "row_count": "49607"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tentity\tstatus\ttriggered_by\tstarted_at\tfinished_at\tduration_secs\trow_count\n960002\tall\tsuccess\tcron\t2026-05-05 21:01:00\t2026-05-05 21:26:37\t1537\t61580\n660009\tall\tsuccess\tmanual\t2026-05-01 00:54:32\t2026-05-01 01:17:15\t1363\t57794\n540006\tall\tsuccess\tcron\t2026-04-29 10:00:10\t2026-04-29 10:04:03\t233\t52874\n510001\tall\tsuccess\tcron\t2026-04-28 10:00:03\t2026-04-28 10:03:41\t218\t52170\n450001\tall\tsuccess\tmanual\t2026-04-27 22:54:26\t2026-04-27 23:01:17\t411\t51881\n360001\tall\tsuccess\tcron\t2026-04-26 10:00:10\t2026-04-26 10:08:26\t496\t51177\n210002\tall\tsuccess\tcron\t2026-04-24 10:00:12\t2026-04-24 10:08:19\t487\t49968\n150044\tall\tsuccess\tmanual\t2026-04-23 20:32:27\t2026-04-23 20:35:55\t208\t49607\n150022\tall\tsuccess\tmanual\t2026-04-23 17:00:06\t2026-04-23 17:06:28\t382\t49607\n150014\tall\tsuccess\tmanual\t2026-04-23 16:38:43\t2026-04-23 16:53:16\t873\t49607\n",
+  "stderr": "",
+  "execution_time_ms": 1599
+}

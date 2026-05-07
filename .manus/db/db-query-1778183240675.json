@@ -1,0 +1,171 @@
+{
+  "query": "SELECT \n  started_at,\n  TIME(started_at) as start_time,\n  TIMESTAMPDIFF(SECOND, started_at, finished_at) as duration_secs,\n  row_count,\n  triggered_by\nFROM sync_logs\nWHERE section = 'Boonphone' AND entity = 'all' AND status = 'success'\nORDER BY started_at ASC;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT \n  started_at,\n  TIME(started_at) as start_time,\n  TIMESTAMPDIFF(SECOND, started_at, finished_at) as duration_secs,\n  row_count,\n  triggered_by\nFROM sync_logs\nWHERE section = 'Boonphone' AND entity = 'all' AND status = 'success'\nORDER BY started_at ASC;",
+  "rows": [
+    {
+      "started_at": "2026-04-22 14:00:34",
+      "start_time": "14:00:34",
+      "duration_secs": "257",
+      "row_count": "48495",
+      "triggered_by": "cron"
+    },
+    {
+      "started_at": "2026-04-22 14:50:08",
+      "start_time": "14:50:08",
+      "duration_secs": "262",
+      "row_count": "48495",
+      "triggered_by": "manual"
+    },
+    {
+      "started_at": "2026-04-22 14:58:40",
+      "start_time": "14:58:40",
+      "duration_secs": "279",
+      "row_count": "48495",
+      "triggered_by": "manual"
+    },
+    {
+      "started_at": "2026-04-22 15:13:05",
+      "start_time": "15:13:05",
+      "duration_secs": "279",
+      "row_count": "48495",
+      "triggered_by": "manual"
+    },
+    {
+      "started_at": "2026-04-22 15:27:10",
+      "start_time": "15:27:10",
+      "duration_secs": "1361",
+      "row_count": "52066",
+      "triggered_by": "manual"
+    },
+    {
+      "started_at": "2026-04-22 17:00:01",
+      "start_time": "17:00:01",
+      "duration_secs": "428",
+      "row_count": "48908",
+      "triggered_by": "cron"
+    },
+    {
+      "started_at": "2026-04-22 18:00:48",
+      "start_time": "18:00:48",
+      "duration_secs": "437",
+      "row_count": "48908",
+      "triggered_by": "cron"
+    },
+    {
+      "started_at": "2026-04-22 19:00:54",
+      "start_time": "19:00:54",
+      "duration_secs": "1203",
+      "row_count": "48908",
+      "triggered_by": "cron"
+    },
+    {
+      "started_at": "2026-04-22 20:00:59",
+      "start_time": "20:00:59",
+      "duration_secs": "411",
+      "row_count": "48908",
+      "triggered_by": "cron"
+    },
+    {
+      "started_at": "2026-04-22 21:00:02",
+      "start_time": "21:00:02",
+      "duration_secs": "324",
+      "row_count": "48908",
+      "triggered_by": "cron"
+    },
+    {
+      "started_at": "2026-04-22 23:00:33",
+      "start_time": "23:00:33",
+      "duration_secs": "459",
+      "row_count": "48908",
+      "triggered_by": "cron"
+    },
+    {
+      "started_at": "2026-04-23 14:00:01",
+      "start_time": "14:00:01",
+      "duration_secs": "394",
+      "row_count": "49637",
+      "triggered_by": "cron"
+    },
+    {
+      "started_at": "2026-04-23 15:00:01",
+      "start_time": "15:00:01",
+      "duration_secs": "376",
+      "row_count": "49608",
+      "triggered_by": "cron"
+    },
+    {
+      "started_at": "2026-04-23 16:38:43",
+      "start_time": "16:38:43",
+      "duration_secs": "873",
+      "row_count": "49607",
+      "triggered_by": "manual"
+    },
+    {
+      "started_at": "2026-04-23 17:00:06",
+      "start_time": "17:00:06",
+      "duration_secs": "382",
+      "row_count": "49607",
+      "triggered_by": "manual"
+    },
+    {
+      "started_at": "2026-04-23 20:32:27",
+      "start_time": "20:32:27",
+      "duration_secs": "208",
+      "row_count": "49607",
+      "triggered_by": "manual"
+    },
+    {
+      "started_at": "2026-04-24 10:00:12",
+      "start_time": "10:00:12",
+      "duration_secs": "487",
+      "row_count": "49968",
+      "triggered_by": "cron"
+    },
+    {
+      "started_at": "2026-04-26 10:00:10",
+      "start_time": "10:00:10",
+      "duration_secs": "496",
+      "row_count": "51177",
+      "triggered_by": "cron"
+    },
+    {
+      "started_at": "2026-04-27 22:54:26",
+      "start_time": "22:54:26",
+      "duration_secs": "411",
+      "row_count": "51881",
+      "triggered_by": "manual"
+    },
+    {
+      "started_at": "2026-04-28 10:00:03",
+      "start_time": "10:00:03",
+      "duration_secs": "218",
+      "row_count": "52170",
+      "triggered_by": "cron"
+    },
+    {
+      "started_at": "2026-04-29 10:00:10",
+      "start_time": "10:00:10",
+      "duration_secs": "233",
+      "row_count": "52874",
+      "triggered_by": "cron"
+    },
+    {
+      "started_at": "2026-05-01 00:54:32",
+      "start_time": "00:54:32",
+      "duration_secs": "1363",
+      "row_count": "57794",
+      "triggered_by": "manual"
+    },
+    {
+      "started_at": "2026-05-05 21:01:00",
+      "start_time": "21:01:00",
+      "duration_secs": "1537",
+      "row_count": "61580",
+      "triggered_by": "cron"
+    }
+  ],
+  "messages": [],
+  "stdout": "started_at\tstart_time\tduration_secs\trow_count\ttriggered_by\n2026-04-22 14:00:34\t14:00:34\t257\t48495\tcron\n2026-04-22 14:50:08\t14:50:08\t262\t48495\tmanual\n2026-04-22 14:58:40\t14:58:40\t279\t48495\tmanual\n2026-04-22 15:13:05\t15:13:05\t279\t48495\tmanual\n2026-04-22 15:27:10\t15:27:10\t1361\t52066\tmanual\n2026-04-22 17:00:01\t17:00:01\t428\t48908\tcron\n2026-04-22 18:00:48\t18:00:48\t437\t48908\tcron\n2026-04-22 19:00:54\t19:00:54\t1203\t48908\tcron\n2026-04-22 20:00:59\t20:00:59\t411\t48908\tcron\n2026-04-22 21:00:02\t21:00:02\t324\t48908\tcron\n2026-04-22 23:00:33\t23:00:33\t459\t48908\tcron\n2026-04-23 14:00:01\t14:00:01\t394\t49637\tcron\n2026-04-23 15:00:01\t15:00:01\t376\t49608\tcron\n2026-04-23 16:38:43\t16:38:43\t873\t49607\tmanual\n2026-04-23 17:00:06\t17:00:06\t382\t49607\tmanual\n2026-04-23 20:32:27\t20:32:27\t208\t49607\tmanual\n2026-04-24 10:00:12\t10:00:12\t487\t49968\tcron\n2026-04-26 10:00:10\t10:00:10\t496\t51177\tcron\n2026-04-27 22:54:26\t22:54:26\t411\t51881\tmanual\n2026-04-28 10:00:03\t10:00:03\t218\t52170\tcron\n2026-04-29 10:00:10\t10:00:10\t233\t52874\tcron\n2026-05-01 00:54:32\t00:54:32\t1363\t57794\tmanual\n2026-05-05 21:01:00\t21:01:00\t1537\t61580\tcron\n",
+  "stderr": "",
+  "execution_time_ms": 1536
+}

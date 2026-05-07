@@ -1,0 +1,640 @@
+{
+  "query": "SELECT \n  id,\n  status,\n  triggered_by,\n  started_at,\n  finished_at,\n  TIMESTAMPDIFF(SECOND, started_at, finished_at) as duration_secs,\n  row_count,\n  TIME(started_at) as start_time\nFROM sync_logs\nWHERE section = 'Boonphone' AND entity = 'all'\nORDER BY started_at ASC;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT \n  id,\n  status,\n  triggered_by,\n  started_at,\n  finished_at,\n  TIMESTAMPDIFF(SECOND, started_at, finished_at) as duration_secs,\n  row_count,\n  TIME(started_at) as start_time\nFROM sync_logs\nWHERE section = 'Boonphone' AND entity = 'all'\nORDER BY started_at ASC;",
+  "rows": [
+    {
+      "id": "1",
+      "status": "error",
+      "triggered_by": "startup",
+      "started_at": "2026-04-22 13:26:34",
+      "finished_at": "2026-04-22 13:52:59",
+      "duration_secs": "1585",
+      "row_count": "0",
+      "start_time": "13:26:34"
+    },
+    {
+      "id": "22",
+      "status": "error",
+      "triggered_by": "manual",
+      "started_at": "2026-04-22 13:42:57",
+      "finished_at": "2026-04-22 13:46:43",
+      "duration_secs": "226",
+      "row_count": "3555",
+      "start_time": "13:42:57"
+    },
+    {
+      "id": "29",
+      "status": "error",
+      "triggered_by": "manual",
+      "started_at": "2026-04-22 13:48:46",
+      "finished_at": "2026-04-22 13:52:59",
+      "duration_secs": "253",
+      "row_count": "0",
+      "start_time": "13:48:46"
+    },
+    {
+      "id": "32",
+      "status": "error",
+      "triggered_by": "manual",
+      "started_at": "2026-04-22 13:49:09",
+      "finished_at": "2026-04-22 13:52:59",
+      "duration_secs": "230",
+      "row_count": "0",
+      "start_time": "13:49:09"
+    },
+    {
+      "id": "45",
+      "status": "success",
+      "triggered_by": "cron",
+      "started_at": "2026-04-22 14:00:34",
+      "finished_at": "2026-04-22 14:04:51",
+      "duration_secs": "257",
+      "row_count": "48495",
+      "start_time": "14:00:34"
+    },
+    {
+      "id": "64",
+      "status": "success",
+      "triggered_by": "manual",
+      "started_at": "2026-04-22 14:50:08",
+      "finished_at": "2026-04-22 14:54:30",
+      "duration_secs": "262",
+      "row_count": "48495",
+      "start_time": "14:50:08"
+    },
+    {
+      "id": "70",
+      "status": "success",
+      "triggered_by": "manual",
+      "started_at": "2026-04-22 14:58:40",
+      "finished_at": "2026-04-22 15:03:19",
+      "duration_secs": "279",
+      "row_count": "48495",
+      "start_time": "14:58:40"
+    },
+    {
+      "id": "78",
+      "status": "success",
+      "triggered_by": "manual",
+      "started_at": "2026-04-22 15:13:05",
+      "finished_at": "2026-04-22 15:17:44",
+      "duration_secs": "279",
+      "row_count": "48495",
+      "start_time": "15:13:05"
+    },
+    {
+      "id": "84",
+      "status": "success",
+      "triggered_by": "manual",
+      "started_at": "2026-04-22 15:27:10",
+      "finished_at": "2026-04-22 15:49:51",
+      "duration_secs": "1361",
+      "row_count": "52066",
+      "start_time": "15:27:10"
+    },
+    {
+      "id": "90",
+      "status": "error",
+      "triggered_by": "cron",
+      "started_at": "2026-04-22 16:00:10",
+      "finished_at": "2026-04-23 21:00:09",
+      "duration_secs": "104399",
+      "row_count": "0",
+      "start_time": "16:00:10"
+    },
+    {
+      "id": "96",
+      "status": "success",
+      "triggered_by": "cron",
+      "started_at": "2026-04-22 17:00:01",
+      "finished_at": "2026-04-22 17:07:09",
+      "duration_secs": "428",
+      "row_count": "48908",
+      "start_time": "17:00:01"
+    },
+    {
+      "id": "30001",
+      "status": "success",
+      "triggered_by": "cron",
+      "started_at": "2026-04-22 18:00:48",
+      "finished_at": "2026-04-22 18:08:05",
+      "duration_secs": "437",
+      "row_count": "48908",
+      "start_time": "18:00:48"
+    },
+    {
+      "id": "60001",
+      "status": "success",
+      "triggered_by": "cron",
+      "started_at": "2026-04-22 19:00:54",
+      "finished_at": "2026-04-22 19:20:57",
+      "duration_secs": "1203",
+      "row_count": "48908",
+      "start_time": "19:00:54"
+    },
+    {
+      "id": "60009",
+      "status": "success",
+      "triggered_by": "cron",
+      "started_at": "2026-04-22 20:00:59",
+      "finished_at": "2026-04-22 20:07:50",
+      "duration_secs": "411",
+      "row_count": "48908",
+      "start_time": "20:00:59"
+    },
+    {
+      "id": "60018",
+      "status": "success",
+      "triggered_by": "cron",
+      "started_at": "2026-04-22 21:00:02",
+      "finished_at": "2026-04-22 21:05:26",
+      "duration_secs": "324",
+      "row_count": "48908",
+      "start_time": "21:00:02"
+    },
+    {
+      "id": "60025",
+      "status": "error",
+      "triggered_by": "cron",
+      "started_at": "2026-04-22 22:00:30",
+      "finished_at": "2026-04-23 21:00:09",
+      "duration_secs": "82779",
+      "row_count": "0",
+      "start_time": "22:00:30"
+    },
+    {
+      "id": "60030",
+      "status": "success",
+      "triggered_by": "cron",
+      "started_at": "2026-04-22 23:00:33",
+      "finished_at": "2026-04-22 23:08:12",
+      "duration_secs": "459",
+      "row_count": "48908",
+      "start_time": "23:00:33"
+    },
+    {
+      "id": "90001",
+      "status": "error",
+      "triggered_by": "cron",
+      "started_at": "2026-04-23 08:00:59",
+      "finished_at": "2026-04-23 21:00:09",
+      "duration_secs": "46750",
+      "row_count": "0",
+      "start_time": "08:00:59"
+    },
+    {
+      "id": "90007",
+      "status": "error",
+      "triggered_by": "cron",
+      "started_at": "2026-04-23 09:00:11",
+      "finished_at": "2026-04-23 21:00:09",
+      "duration_secs": "43198",
+      "row_count": "0",
+      "start_time": "09:00:11"
+    },
+    {
+      "id": "90013",
+      "status": "error",
+      "triggered_by": "cron",
+      "started_at": "2026-04-23 10:00:20",
+      "finished_at": "2026-04-23 21:00:09",
+      "duration_secs": "39589",
+      "row_count": "0",
+      "start_time": "10:00:20"
+    },
+    {
+      "id": "120003",
+      "status": "error",
+      "triggered_by": "startup",
+      "started_at": "2026-04-23 10:44:41",
+      "finished_at": "2026-04-23 21:00:09",
+      "duration_secs": "36928",
+      "row_count": "0",
+      "start_time": "10:44:41"
+    },
+    {
+      "id": "120008",
+      "status": "error",
+      "triggered_by": "startup",
+      "started_at": "2026-04-23 11:49:12",
+      "finished_at": "2026-04-23 21:00:09",
+      "duration_secs": "33057",
+      "row_count": "0",
+      "start_time": "11:49:12"
+    },
+    {
+      "id": "120013",
+      "status": "error",
+      "triggered_by": "startup",
+      "started_at": "2026-04-23 12:51:40",
+      "finished_at": "2026-04-23 21:00:09",
+      "duration_secs": "29309",
+      "row_count": "0",
+      "start_time": "12:51:40"
+    },
+    {
+      "id": "120023",
+      "status": "success",
+      "triggered_by": "cron",
+      "started_at": "2026-04-23 14:00:01",
+      "finished_at": "2026-04-23 14:06:35",
+      "duration_secs": "394",
+      "row_count": "49637",
+      "start_time": "14:00:01"
+    },
+    {
+      "id": "150001",
+      "status": "success",
+      "triggered_by": "cron",
+      "started_at": "2026-04-23 15:00:01",
+      "finished_at": "2026-04-23 15:06:17",
+      "duration_secs": "376",
+      "row_count": "49608",
+      "start_time": "15:00:01"
+    },
+    {
+      "id": "150010",
+      "status": "error",
+      "triggered_by": "cron",
+      "started_at": "2026-04-23 16:00:10",
+      "finished_at": "2026-04-23 21:00:09",
+      "duration_secs": "17999",
+      "row_count": "0",
+      "start_time": "16:00:10"
+    },
+    {
+      "id": "150014",
+      "status": "success",
+      "triggered_by": "manual",
+      "started_at": "2026-04-23 16:38:43",
+      "finished_at": "2026-04-23 16:53:16",
+      "duration_secs": "873",
+      "row_count": "49607",
+      "start_time": "16:38:43"
+    },
+    {
+      "id": "150022",
+      "status": "success",
+      "triggered_by": "manual",
+      "started_at": "2026-04-23 17:00:06",
+      "finished_at": "2026-04-23 17:06:28",
+      "duration_secs": "382",
+      "row_count": "49607",
+      "start_time": "17:00:06"
+    },
+    {
+      "id": "150031",
+      "status": "error",
+      "triggered_by": "cron",
+      "started_at": "2026-04-23 18:00:09",
+      "finished_at": "2026-04-23 21:00:09",
+      "duration_secs": "10800",
+      "row_count": "0",
+      "start_time": "18:00:09"
+    },
+    {
+      "id": "150039",
+      "status": "error",
+      "triggered_by": "cron",
+      "started_at": "2026-04-23 19:00:09",
+      "finished_at": "2026-04-23 21:00:09",
+      "duration_secs": "7200",
+      "row_count": "0",
+      "start_time": "19:00:09"
+    },
+    {
+      "id": "150044",
+      "status": "success",
+      "triggered_by": "manual",
+      "started_at": "2026-04-23 20:32:27",
+      "finished_at": "2026-04-23 20:35:55",
+      "duration_secs": "208",
+      "row_count": "49607",
+      "start_time": "20:32:27"
+    },
+    {
+      "id": "210002",
+      "status": "success",
+      "triggered_by": "cron",
+      "started_at": "2026-04-24 10:00:12",
+      "finished_at": "2026-04-24 10:08:19",
+      "duration_secs": "487",
+      "row_count": "49968",
+      "start_time": "10:00:12"
+    },
+    {
+      "id": "300001",
+      "status": "error",
+      "triggered_by": "startup",
+      "started_at": "2026-04-25 10:42:06",
+      "finished_at": "NULL",
+      "duration_secs": "NULL",
+      "row_count": "0",
+      "start_time": "10:42:06"
+    },
+    {
+      "id": "330001",
+      "status": "error",
+      "triggered_by": "manual",
+      "started_at": "2026-04-25 22:07:30",
+      "finished_at": "NULL",
+      "duration_secs": "NULL",
+      "row_count": "0",
+      "start_time": "22:07:30"
+    },
+    {
+      "id": "330014",
+      "status": "error",
+      "triggered_by": "cron",
+      "started_at": "2026-04-26 06:02:11",
+      "finished_at": "NULL",
+      "duration_secs": "NULL",
+      "row_count": "0",
+      "start_time": "06:02:11"
+    },
+    {
+      "id": "360001",
+      "status": "success",
+      "triggered_by": "cron",
+      "started_at": "2026-04-26 10:00:10",
+      "finished_at": "2026-04-26 10:08:26",
+      "duration_secs": "496",
+      "row_count": "51177",
+      "start_time": "10:00:10"
+    },
+    {
+      "id": "390001",
+      "status": "error",
+      "triggered_by": "startup",
+      "started_at": "2026-04-27 09:12:03",
+      "finished_at": "NULL",
+      "duration_secs": "NULL",
+      "row_count": "0",
+      "start_time": "09:12:03"
+    },
+    {
+      "id": "450001",
+      "status": "success",
+      "triggered_by": "manual",
+      "started_at": "2026-04-27 22:54:26",
+      "finished_at": "2026-04-27 23:01:17",
+      "duration_secs": "411",
+      "row_count": "51881",
+      "start_time": "22:54:26"
+    },
+    {
+      "id": "480001",
+      "status": "error",
+      "triggered_by": "manual",
+      "started_at": "2026-04-28 06:19:51",
+      "finished_at": "2026-04-28 06:29:16",
+      "duration_secs": "565",
+      "row_count": "4189",
+      "start_time": "06:19:51"
+    },
+    {
+      "id": "510001",
+      "status": "success",
+      "triggered_by": "cron",
+      "started_at": "2026-04-28 10:00:03",
+      "finished_at": "2026-04-28 10:03:41",
+      "duration_secs": "218",
+      "row_count": "52170",
+      "start_time": "10:00:03"
+    },
+    {
+      "id": "540001",
+      "status": "error",
+      "triggered_by": "startup",
+      "started_at": "2026-04-29 09:18:16",
+      "finished_at": "2026-04-29 09:24:35",
+      "duration_secs": "379",
+      "row_count": "0",
+      "start_time": "09:18:16"
+    },
+    {
+      "id": "540006",
+      "status": "success",
+      "triggered_by": "cron",
+      "started_at": "2026-04-29 10:00:10",
+      "finished_at": "2026-04-29 10:04:03",
+      "duration_secs": "233",
+      "row_count": "52874",
+      "start_time": "10:00:10"
+    },
+    {
+      "id": "630001",
+      "status": "error",
+      "triggered_by": "startup",
+      "started_at": "2026-04-30 09:07:25",
+      "finished_at": "2026-04-30 09:12:58",
+      "duration_secs": "333",
+      "row_count": "0",
+      "start_time": "09:07:25"
+    },
+    {
+      "id": "630003",
+      "status": "error",
+      "triggered_by": "startup",
+      "started_at": "2026-04-30 09:45:00",
+      "finished_at": "NULL",
+      "duration_secs": "NULL",
+      "row_count": "0",
+      "start_time": "09:45:00"
+    },
+    {
+      "id": "630009",
+      "status": "error",
+      "triggered_by": "startup",
+      "started_at": "2026-04-30 10:12:31",
+      "finished_at": "NULL",
+      "duration_secs": "NULL",
+      "row_count": "0",
+      "start_time": "10:12:31"
+    },
+    {
+      "id": "630011",
+      "status": "error",
+      "triggered_by": "startup",
+      "started_at": "2026-04-30 10:12:47",
+      "finished_at": "NULL",
+      "duration_secs": "NULL",
+      "row_count": "0",
+      "start_time": "10:12:47"
+    },
+    {
+      "id": "660009",
+      "status": "success",
+      "triggered_by": "manual",
+      "started_at": "2026-05-01 00:54:32",
+      "finished_at": "2026-05-01 01:17:15",
+      "duration_secs": "1363",
+      "row_count": "57794",
+      "start_time": "00:54:32"
+    },
+    {
+      "id": "690002",
+      "status": "error",
+      "triggered_by": "cron",
+      "started_at": "2026-05-01 21:00:07",
+      "finished_at": "2026-05-07 16:14:25",
+      "duration_secs": "501258",
+      "row_count": "0",
+      "start_time": "21:00:07"
+    },
+    {
+      "id": "720001",
+      "status": "error",
+      "triggered_by": "startup",
+      "started_at": "2026-05-02 21:35:59",
+      "finished_at": "2026-05-02 21:44:19",
+      "duration_secs": "500",
+      "row_count": "0",
+      "start_time": "21:35:59"
+    },
+    {
+      "id": "750001",
+      "status": "error",
+      "triggered_by": "startup",
+      "started_at": "2026-05-02 23:38:28",
+      "finished_at": "2026-05-02 23:49:12",
+      "duration_secs": "644",
+      "row_count": "0",
+      "start_time": "23:38:28"
+    },
+    {
+      "id": "780001",
+      "status": "error",
+      "triggered_by": "cron",
+      "started_at": "2026-05-03 21:01:33",
+      "finished_at": "2026-05-03 21:06:41",
+      "duration_secs": "308",
+      "row_count": "0",
+      "start_time": "21:01:33"
+    },
+    {
+      "id": "810001",
+      "status": "error",
+      "triggered_by": "startup",
+      "started_at": "2026-05-03 22:59:25",
+      "finished_at": "2026-05-03 23:12:52",
+      "duration_secs": "807",
+      "row_count": "0",
+      "start_time": "22:59:25"
+    },
+    {
+      "id": "900001",
+      "status": "error",
+      "triggered_by": "startup",
+      "started_at": "2026-05-05 04:05:19",
+      "finished_at": "2026-05-05 04:17:34",
+      "duration_secs": "735",
+      "row_count": "0",
+      "start_time": "04:05:19"
+    },
+    {
+      "id": "960002",
+      "status": "success",
+      "triggered_by": "cron",
+      "started_at": "2026-05-05 21:01:00",
+      "finished_at": "2026-05-05 21:26:37",
+      "duration_secs": "1537",
+      "row_count": "61580",
+      "start_time": "21:01:00"
+    },
+    {
+      "id": "1020001",
+      "status": "error",
+      "triggered_by": "startup",
+      "started_at": "2026-05-07 04:33:53",
+      "finished_at": "2026-05-07 04:40:15",
+      "duration_secs": "382",
+      "row_count": "0",
+      "start_time": "04:33:53"
+    },
+    {
+      "id": "1050001",
+      "status": "error",
+      "triggered_by": "startup",
+      "started_at": "2026-05-07 05:51:20",
+      "finished_at": "2026-05-07 16:14:25",
+      "duration_secs": "37385",
+      "row_count": "0",
+      "start_time": "05:51:20"
+    },
+    {
+      "id": "1080001",
+      "status": "error",
+      "triggered_by": "manual",
+      "started_at": "2026-05-07 10:26:02",
+      "finished_at": "2026-05-07 16:14:20",
+      "duration_secs": "20898",
+      "row_count": "0",
+      "start_time": "10:26:02"
+    },
+    {
+      "id": "1110001",
+      "status": "error",
+      "triggered_by": "manual",
+      "started_at": "2026-05-07 16:25:54",
+      "finished_at": "2026-05-07 17:00:14",
+      "duration_secs": "2060",
+      "row_count": "0",
+      "start_time": "16:25:54"
+    },
+    {
+      "id": "1110004",
+      "status": "error",
+      "triggered_by": "manual",
+      "started_at": "2026-05-07 17:02:09",
+      "finished_at": "2026-05-07 17:38:56",
+      "duration_secs": "2207",
+      "row_count": "0",
+      "start_time": "17:02:09"
+    },
+    {
+      "id": "1110007",
+      "status": "error",
+      "triggered_by": "manual",
+      "started_at": "2026-05-07 18:12:31",
+      "finished_at": "2026-05-07 18:49:05",
+      "duration_secs": "2194",
+      "row_count": "0",
+      "start_time": "18:12:31"
+    },
+    {
+      "id": "1110010",
+      "status": "error",
+      "triggered_by": "manual",
+      "started_at": "2026-05-07 18:55:22",
+      "finished_at": "2026-05-07 19:03:18",
+      "duration_secs": "476",
+      "row_count": "0",
+      "start_time": "18:55:22"
+    },
+    {
+      "id": "1110012",
+      "status": "error",
+      "triggered_by": "manual",
+      "started_at": "2026-05-07 19:11:12",
+      "finished_at": "2026-05-07 19:40:22",
+      "duration_secs": "1750",
+      "row_count": "0",
+      "start_time": "19:11:12"
+    },
+    {
+      "id": "1110015",
+      "status": "in_progress",
+      "triggered_by": "manual",
+      "started_at": "2026-05-07 19:41:54",
+      "finished_at": "NULL",
+      "duration_secs": "NULL",
+      "row_count": "0",
+      "start_time": "19:41:54"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tstatus\ttriggered_by\tstarted_at\tfinished_at\tduration_secs\trow_count\tstart_time\n1\terror\tstartup\t2026-04-22 13:26:34\t2026-04-22 13:52:59\t1585\t0\t13:26:34\n22\terror\tmanual\t2026-04-22 13:42:57\t2026-04-22 13:46:43\t226\t3555\t13:42:57\n29\terror\tmanual\t2026-04-22 13:48:46\t2026-04-22 13:52:59\t253\t0\t13:48:46\n32\terror\tmanual\t2026-04-22 13:49:09\t2026-04-22 13:52:59\t230\t0\t13:49:09\n45\tsuccess\tcron\t2026-04-22 14:00:34\t2026-04-22 14:04:51\t257\t48495\t14:00:34\n64\tsuccess\tmanual\t2026-04-22 14:50:08\t2026-04-22 14:54:30\t262\t48495\t14:50:08\n70\tsuccess\tmanual\t2026-04-22 14:58:40\t2026-04-22 15:03:19\t279\t48495\t14:58:40\n78\tsuccess\tmanual\t2026-04-22 15:13:05\t2026-04-22 15:17:44\t279\t48495\t15:13:05\n84\tsuccess\tmanual\t2026-04-22 15:27:10\t2026-04-22 15:49:51\t1361\t52066\t15:27:10\n90\terror\tcron\t2026-04-22 16:00:10\t2026-04-23 21:00:09\t104399\t0\t16:00:10\n96\tsuccess\tcron\t2026-04-22 17:00:01\t2026-04-22 17:07:09\t428\t48908\t17:00:01\n30001\tsuccess\tcron\t2026-04-22 18:00:48\t2026-04-22 18:08:05\t437\t48908\t18:00:48\n60001\tsuccess\tcron\t2026-04-22 19:00:54\t2026-04-22 19:20:57\t1203\t48908\t19:00:54\n60009\tsuccess\tcron\t2026-04-22 20:00:59\t2026-04-22 20:07:50\t411\t48908\t20:00:59\n60018\tsuccess\tcron\t2026-04-22 21:00:02\t2026-04-22 21:05:26\t324\t48908\t21:00:02\n60025\terror\tcron\t2026-04-22 22:00:30\t2026-04-23 21:00:09\t82779\t0\t22:00:30\n60030\tsuccess\tcron\t2026-04-22 23:00:33\t2026-04-22 23:08:12\t459\t48908\t23:00:33\n90001\terror\tcron\t2026-04-23 08:00:59\t2026-04-23 21:00:09\t46750\t0\t08:00:59\n90007\terror\tcron\t2026-04-23 09:00:11\t2026-04-23 21:00:09\t43198\t0\t09:00:11\n90013\terror\tcron\t2026-04-23 10:00:20\t2026-04-23 21:00:09\t39589\t0\t10:00:20\n120003\terror\tstartup\t2026-04-23 10:44:41\t2026-04-23 21:00:09\t36928\t0\t10:44:41\n120008\terror\tstartup\t2026-04-23 11:49:12\t2026-04-23 21:00:09\t33057\t0\t11:49:12\n120013\terror\tstartup\t2026-04-23 12:51:40\t2026-04-23 21:00:09\t29309\t0\t12:51:40\n120023\tsuccess\tcron\t2026-04-23 14:00:01\t2026-04-23 14:06:35\t394\t49637\t14:00:01\n150001\tsuccess\tcron\t2026-04-23 15:00:01\t2026-04-23 15:06:17\t376\t49608\t15:00:01\n150010\terror\tcron\t2026-04-23 16:00:10\t2026-04-23 21:00:09\t17999\t0\t16:00:10\n150014\tsuccess\tmanual\t2026-04-23 16:38:43\t2026-04-23 16:53:16\t873\t49607\t16:38:43\n150022\tsuccess\tmanual\t2026-04-23 17:00:06\t2026-04-23 17:06:28\t382\t49607\t17:00:06\n150031\terror\tcron\t2026-04-23 18:00:09\t2026-04-23 21:00:09\t10800\t0\t18:00:09\n150039\terror\tcron\t2026-04-23 19:00:09\t2026-04-23 21:00:09\t7200\t0\t19:00:09\n150044\tsuccess\tmanual\t2026-04-23 20:32:27\t2026-04-23 20:35:55\t208\t49607\t20:32:27\n210002\tsuccess\tcron\t2026-04-24 10:00:12\t2026-04-24 10:08:19\t487\t49968\t10:00:12\n300001\terror\tstartup\t2026-04-25 10:42:06\tNULL\tNULL\t0\t10:42:06\n330001\terror\tmanual\t2026-04-25 22:07:30\tNULL\tNULL\t0\t22:07:30\n330014\terror\tcron\t2026-04-26 06:02:11\tNULL\tNULL\t0\t06:02:11\n360001\tsuccess\tcron\t2026-04-26 10:00:10\t2026-04-26 10:08:26\t496\t51177\t10:00:10\n390001\terror\tstartup\t2026-04-27 09:12:03\tNULL\tNULL\t0\t09:12:03\n450001\tsuccess\tmanual\t2026-04-27 22:54:26\t2026-04-27 23:01:17\t411\t51881\t22:54:26\n480001\terror\tmanual\t2026-04-28 06:19:51\t2026-04-28 06:29:16\t565\t4189\t06:19:51\n510001\tsuccess\tcron\t2026-04-28 10:00:03\t2026-04-28 10:03:41\t218\t52170\t10:00:03\n540001\terror\tstartup\t2026-04-29 09:18:16\t2026-04-29 09:24:35\t379\t0\t09:18:16\n540006\tsuccess\tcron\t2026-04-29 10:00:10\t2026-04-29 10:04:03\t233\t52874\t10:00:10\n630001\terror\tstartup\t2026-04-30 09:07:25\t2026-04-30 09:12:58\t333\t0\t09:07:25\n630003\terror\tstartup\t2026-04-30 09:45:00\tNULL\tNULL\t0\t09:45:00\n630009\terror\tstartup\t2026-04-30 10:12:31\tNULL\tNULL\t0\t10:12:31\n630011\terror\tstartup\t2026-04-30 10:12:47\tNULL\tNULL\t0\t10:12:47\n660009\tsuccess\tmanual\t2026-05-01 00:54:32\t2026-05-01 01:17:15\t1363\t57794\t00:54:32\n690002\terror\tcron\t2026-05-01 21:00:07\t2026-05-07 16:14:25\t501258\t0\t21:00:07\n720001\terror\tstartup\t2026-05-02 21:35:59\t2026-05-02 21:44:19\t500\t0\t21:35:59\n750001\terror\tstartup\t2026-05-02 23:38:28\t2026-05-02 23:49:12\t644\t0\t23:38:28\n780001\terror\tcron\t2026-05-03 21:01:33\t2026-05-03 21:06:41\t308\t0\t21:01:33\n810001\terror\tstartup\t2026-05-03 22:59:25\t2026-05-03 23:12:52\t807\t0\t22:59:25\n900001\terror\tstartup\t2026-05-05 04:05:19\t2026-05-05 04:17:34\t735\t0\t04:05:19\n960002\tsuccess\tcron\t2026-05-05 21:01:00\t2026-05-05 21:26:37\t1537\t61580\t21:01:00\n1020001\terror\tstartup\t2026-05-07 04:33:53\t2026-05-07 04:40:15\t382\t0\t04:33:53\n1050001\terror\tstartup\t2026-05-07 05:51:20\t2026-05-07 16:14:25\t37385\t0\t05:51:20\n1080001\terror\tmanual\t2026-05-07 10:26:02\t2026-05-07 16:14:20\t20898\t0\t10:26:02\n1110001\terror\tmanual\t2026-05-07 16:25:54\t2026-05-07 17:00:14\t2060\t0\t16:25:54\n1110004\terror\tmanual\t2026-05-07 17:02:09\t2026-05-07 17:38:56\t2207\t0\t17:02:09\n1110007\terror\tmanual\t2026-05-07 18:12:31\t2026-05-07 18:49:05\t2194\t0\t18:12:31\n1110010\terror\tmanual\t2026-05-07 18:55:22\t2026-05-07 19:03:18\t476\t0\t18:55:22\n1110012\terror\tmanual\t2026-05-07 19:11:12\t2026-05-07 19:40:22\t1750\t0\t19:11:12\n1110015\tin_progress\tmanual\t2026-05-07 19:41:54\tNULL\tNULL\t0\t19:41:54\n",
+  "stderr": "",
+  "execution_time_ms": 1541
+}
