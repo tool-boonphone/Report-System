@@ -4,7 +4,7 @@ import { Progress } from "@/components/ui/progress";
 import { clearIdbCache } from "@/lib/debtIdbCache";
 import { useDebtCache } from "@/contexts/DebtCacheContext";
 import { useAppAuth } from "@/hooks/useAppAuth";
-import { RefreshCw, Trash2 } from "lucide-react";
+import { RefreshCw, Trash2, XCircle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
@@ -85,6 +85,15 @@ export function SyncStatusBar() {
     wasRunning.current = isRunning;
   }, [isRunning, section, utils.sync.lastSyncedAt]);
 
+  // Force-clear stuck sync mutation
+  const clearStuck = trpc.sync.clearStuck.useMutation({
+    onSuccess: (data) => {
+      toast.success(`ล้าง sync ที่ค้างแล้ว (${data.cleared} รายการ) — สามารถ Re-Sync ใหม่ได้`);
+      utils.sync.status.invalidate();
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
   // Re-Sync API mutation
   const trigger = trpc.sync.trigger.useMutation({
     onSuccess: () => {
@@ -150,8 +159,8 @@ export function SyncStatusBar() {
 
       {isRunning && canResync ? (
         /* ---- Progress bar (แสดงแทนปุ่มขณะ Sync กำลังทำงาน) ---- */
-        <div className="flex items-center gap-2 min-w-[180px] max-w-[260px]">
-          <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <div className="min-w-[180px] max-w-[260px]">
             {/* Stage label + % */}
             <div className="flex items-center justify-between mb-0.5">
               <span className="text-xs text-blue-600 font-medium truncate">
@@ -175,6 +184,18 @@ export function SyncStatusBar() {
               )}
             </div>
           </div>
+          {/* Force Clear — แสดงเมื่อ sync ค้างนานกว่า 10 นาที */}
+          {elapsedSecs > 600 && (
+            <button
+              onClick={() => clearStuck.mutate({ section })}
+              disabled={clearStuck.isPending}
+              className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-red-200 hover:bg-red-50 text-xs text-red-600 disabled:opacity-50 transition-colors shrink-0"
+              title="ยกเลิก sync ที่ค้างอยู่ เพื่อให้สามารถ Re-Sync ใหม่ได้"
+            >
+              <XCircle className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">ยกเลิก</span>
+            </button>
+          )}
         </div>
       ) : canResync ? (
         /* ---- ปุ่ม Re-Sync API + Clear Cache (เฉพาะผู้มีสิทธิ์) ---- */

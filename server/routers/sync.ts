@@ -7,6 +7,7 @@ import {
   listSyncLogs,
   getRunningSyncs,
   getDbSyncStatus,
+  clearStuckSyncLogs,
 } from "../sync/syncLog";
 import { SECTIONS, type SectionKey } from "../../shared/const";
 
@@ -83,6 +84,27 @@ export const syncRouter = router({
         section: input.section as SectionKey,
       });
       return { section: input.section, lastSyncedAt: ts };
+    }),
+
+  /**
+   * Force-clear all in_progress sync logs for a section.
+   * Use when a sync got stuck (e.g. Cloud Run killed the process mid-sync).
+   * Requires canSync permission on sync_api.
+   */
+  clearStuck: appProcedure
+    .input(z.object({ section: sectionSchema }))
+    .mutation(async ({ input, ctx }) => {
+      // Permission check — only users with sync permission can clear stuck syncs
+      const { checkPermission } = await import("../authDb");
+      if (ctx.appUser) {
+        const allowed = checkPermission(ctx.appUser, "sync_api", "sync");
+        if (!allowed) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "ไม่มีสิทธิ์ใช้งาน Re-Sync" });
+        }
+      }
+      const section = input.section as SectionKey;
+      const cleared = await clearStuckSyncLogs(section);
+      return { section, cleared };
     }),
 
   /** Recent sync log entries. Default last 50. */
