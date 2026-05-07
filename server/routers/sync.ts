@@ -14,8 +14,9 @@ const sectionSchema = z.enum(SECTIONS as unknown as [string, ...string[]]);
 
 export const syncRouter = router({
   /**
-   * Kick off a manual sync. Returns immediately — the caller should poll
-   * `sync.status` / `sync.recent` to observe progress.
+   * Kick off a manual sync. Awaits completion so Cloud Run keeps the HTTP
+   * connection alive and does not terminate the process mid-sync.
+   * The caller can also poll `sync.status` to observe live progress.
    */
   trigger: appProcedure
     .input(z.object({ section: sectionSchema }))
@@ -27,11 +28,10 @@ export const syncRouter = router({
           message: `Sync for ${section} is already running`,
         });
       }
-      // Fire-and-forget — do not await; let the background task continue.
-      runSectionSync(section, "manual").catch((err) => {
-        console.error(`[sync.trigger] ${section}`, err);
-      });
-      return { queued: true, section };
+      // Await sync — keeps HTTP connection alive so Cloud Run won't terminate
+      // the process. Frontend polls sync.status for live progress updates.
+      const result = await runSectionSync(section, "manual");
+      return { queued: false, section, ...result };
     }),
 
   /**

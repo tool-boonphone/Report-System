@@ -55,9 +55,11 @@ queryClient.getMutationCache().subscribe(event => {
   }
 });
 
-// Phase 32: เพิ่ม timeout 120 วินาที สำหรับ Fastfone365 ที่มี payload ใหญ่
-// (default fetch ไม่มี timeout แต่ reverse proxy มัก timeout ที่ ~30-60 วินาที)
-const TRPC_TIMEOUT_MS = 120_000; // 120 seconds
+// Phase 32: เพิ่ม timeout สำหรับ tRPC requests
+// - sync.trigger ใช้ 40 นาที เพราะ sync ทำงานแบบ synchronous (await จนเสร็จ)
+// - request อื่นๆ ใช้ 120 วินาที
+const TRPC_TIMEOUT_MS = 120_000; // 120 seconds (default)
+const SYNC_TRIGGER_TIMEOUT_MS = 40 * 60 * 1000; // 40 minutes for sync.trigger
 
 const trpcClient = trpc.createClient({
   links: [
@@ -65,8 +67,14 @@ const trpcClient = trpc.createClient({
       url: "/api/trpc",
       transformer: superjson,
       fetch(input, init) {
+        // Use longer timeout for sync.trigger requests (synchronous long-running)
+        const url = typeof input === "string" ? input
+          : input instanceof URL ? input.toString()
+          : (input as Request).url;
+        const isSyncTrigger = url.includes("sync.trigger");
+        const timeoutMs = isSyncTrigger ? SYNC_TRIGGER_TIMEOUT_MS : TRPC_TIMEOUT_MS;
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), TRPC_TIMEOUT_MS);
+        const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
         return globalThis.fetch(input, {
           ...(init ?? {}),
           credentials: "include",
