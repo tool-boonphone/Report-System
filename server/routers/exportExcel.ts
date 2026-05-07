@@ -285,6 +285,10 @@ export async function handleDebtExport(req: Request, res: Response) {
       `attachment; filename="${fileName}"`,
     );
 
+    // Flush headers immediately so reverse proxy / Cloud Run knows the response has started
+    // and won't kill the connection during the (potentially long) worksheet build phase.
+    res.flushHeaders();
+
     const wb = new ExcelJS.stream.xlsx.WorkbookWriter({ stream: res });
     const ws = wb.addWorksheet(variant === "target" ? "เป้าเก็บหนี้" : "ยอดเก็บหนี้");
 
@@ -350,9 +354,17 @@ export async function handleDebtExport(req: Request, res: Response) {
     ws.getRow(1).commit();
 
     // 4. Stream rows.
+    // Flush the underlying socket periodically to prevent Cloud Run / reverse-proxy
+    // from closing the connection while we're still writing a large dataset.
     let seq = 0;
+    let rowCount = 0;
     for (const r of filtered as any[]) {
       seq += 1;
+      rowCount += 1;
+      // Yield to event loop every 500 rows to keep the connection alive
+      if (rowCount % 500 === 0) {
+        await new Promise<void>((resolve) => setImmediate(resolve));
+      }
       const baseRec: Record<string, string | number> = {
         seq,
         approveDate: r.approveDate ?? "",
