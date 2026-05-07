@@ -92,6 +92,13 @@
       "when": 1778139155189,
       "tag": "0012_romantic_hellfire_club",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "5",
+      "when": 1778171639881,
+      "tag": "0013_broken_boomerang",
+      "breakpoints": true
     }
   ]
 }
