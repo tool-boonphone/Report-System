@@ -6,6 +6,7 @@ import {
   getLastSyncedAt,
   listSyncLogs,
   getRunningSyncs,
+  getDbSyncStatus,
 } from "../sync/syncLog";
 import { SECTIONS, type SectionKey } from "../../shared/const";
 
@@ -33,30 +34,42 @@ export const syncRouter = router({
       return { queued: true, section };
     }),
 
-  /** Current in-memory lock status for each section. */
+  /**
+   * Sync status — reads from DB (cross-instance safe for Cloud Run).
+   * Falls back to in-memory lock if DB returns running=false but lock is set
+   * (same-instance fast path).
+   */
   status: appProcedure.query(async () => {
-    const bpInfo = getSyncStatus("Boonphone");
-    const ffInfo = getSyncStatus("Fastfone365");
+    // Fetch DB status for both sections in parallel
+    const [bpDb, ffDb] = await Promise.all([
+      getDbSyncStatus("Boonphone"),
+      getDbSyncStatus("Fastfone365"),
+    ]);
+
+    // In-memory fallback (same instance)
+    const bpMem = getSyncStatus("Boonphone");
+    const ffMem = getSyncStatus("Fastfone365");
+
+    const bpRunning = (bpDb?.running ?? false) || isSyncRunning("Boonphone");
+    const ffRunning = (ffDb?.running ?? false) || isSyncRunning("Fastfone365");
+
     return {
       Boonphone: {
-        running: isSyncRunning("Boonphone"),
-        info: bpInfo,
-        // Convenience fields for progress bar
-        startedAt: bpInfo?.startedAt ?? null,
-        progress: bpInfo?.progress ?? null,
-        currentStage: bpInfo?.currentStage ?? null,
-        stageIndex: bpInfo?.stageIndex ?? null,
-        totalStages: bpInfo?.totalStages ?? null,
+        running: bpRunning,
+        // Prefer DB values (cross-instance), fall back to in-memory
+        startedAt: bpDb?.startedAt?.getTime() ?? bpMem?.startedAt ?? null,
+        progress: bpDb?.progress ?? bpMem?.progress ?? null,
+        currentStage: bpDb?.currentStage ?? bpMem?.currentStage ?? null,
+        stageIndex: bpMem?.stageIndex ?? null,
+        totalStages: bpMem?.totalStages ?? null,
       },
       Fastfone365: {
-        running: isSyncRunning("Fastfone365"),
-        info: ffInfo,
-        // Convenience fields for progress bar
-        startedAt: ffInfo?.startedAt ?? null,
-        progress: ffInfo?.progress ?? null,
-        currentStage: ffInfo?.currentStage ?? null,
-        stageIndex: ffInfo?.stageIndex ?? null,
-        totalStages: ffInfo?.totalStages ?? null,
+        running: ffRunning,
+        startedAt: ffDb?.startedAt?.getTime() ?? ffMem?.startedAt ?? null,
+        progress: ffDb?.progress ?? ffMem?.progress ?? null,
+        currentStage: ffDb?.currentStage ?? ffMem?.currentStage ?? null,
+        stageIndex: ffMem?.stageIndex ?? null,
+        totalStages: ffMem?.totalStages ?? null,
       },
       active: await getRunningSyncs(),
     };

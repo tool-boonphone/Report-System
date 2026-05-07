@@ -26,6 +26,7 @@ import {
 import {
   insertSyncLog,
   finishSyncLog,
+  updateSyncLogStage,
 } from "./syncLog";
 import type { SectionKey, SyncTrigger } from "../../shared/const";
 import { invalidateDebtCache } from "../debtCache";
@@ -62,12 +63,14 @@ export interface SyncLockInfo {
 
 type LockMap = Record<string, SyncLockInfo | null>;
 const _locks: LockMap = { Boonphone: null, Fastfone365: null };
+// Track the overall sync log ID per section for DB stage updates
+const _overallLogId: Record<string, number> = { Boonphone: 0, Fastfone365: 0 };
 
 export function getSyncStatus(section: SectionKey): SyncLockInfo | null {
   return _locks[section];
 }
 
-/** Update progress for a running sync. */
+/** Update progress for a running sync — writes to both in-memory lock and DB. */
 function setStage(section: SectionKey, stageIndex: number) {
   const lock = _locks[section];
   if (!lock) return;
@@ -76,13 +79,19 @@ function setStage(section: SectionKey, stageIndex: number) {
   // stage 0=partners: 5%, 1=customers: 23%, 2=contracts: 41%, 3=installments: 59%, 4=payments: 77%
   // After all stages done: 100%
   const progress = Math.round(5 + (stageIndex / totalStages) * 90);
+  const currentStage = SYNC_STAGES[stageIndex] ?? "finishing";
   _locks[section] = {
     ...lock,
     progress,
     stageIndex,
-    currentStage: SYNC_STAGES[stageIndex] ?? "finishing",
+    currentStage,
     totalStages,
   };
+  // Write to DB so other Cloud Run instances can read the same status
+  const logId = _overallLogId[section];
+  if (logId) {
+    updateSyncLogStage({ id: logId, currentStage, progress }).catch(() => {});
+  }
 }
 
 export function isSyncRunning(section: SectionKey): boolean {
@@ -181,6 +190,8 @@ async function doSync(
   triggeredBy: SyncTrigger,
 ): Promise<{ ok: boolean; rowCount: number }> {
   const overall = await insertSyncLog({ section, entity: "all", triggeredBy });
+  // Store log ID so setStage() can write progress to DB (cross-instance visibility)
+  _overallLogId[section] = overall.id;
 
   let overallRows = 0;
   try {

@@ -1,4 +1,4 @@
-import { desc, eq, and } from "drizzle-orm";
+import { desc, eq, and, gt } from "drizzle-orm";
 import { syncLogs } from "../../drizzle/schema";
 import { getDb } from "../db";
 import type { SectionKey, SyncTrigger } from "../../shared/const";
@@ -40,6 +40,70 @@ export async function finishSyncLog(params: {
       finishedAt: new Date(),
     })
     .where(eq(syncLogs.id, params.id));
+}
+
+/**
+ * Update current_stage + progress for a running sync log row.
+ * Written to DB so ALL Cloud Run instances can read the same status.
+ */
+export async function updateSyncLogStage(params: {
+  id: number;
+  currentStage: string;
+  progress: number;
+}) {
+  const db = await getDb();
+  if (!db || !params.id) return;
+  await db
+    .update(syncLogs)
+    .set({
+      currentStage: params.currentStage,
+      progress: params.progress,
+    })
+    .where(eq(syncLogs.id, params.id));
+}
+
+/**
+ * Get running sync status from DB for a section.
+ * Returns null if no sync is in_progress (or if it's stale > 95 minutes).
+ * Used by sync.status tRPC procedure so ALL instances see the same state.
+ */
+export async function getDbSyncStatus(section: SectionKey): Promise<{
+  running: boolean;
+  startedAt: Date | null;
+  currentStage: string | null;
+  progress: number | null;
+} | null> {
+  const db = await getDb();
+  if (!db) return null;
+  // Treat in_progress rows older than 95 minutes as abandoned
+  const staleThreshold = new Date(Date.now() - 95 * 60 * 1000);
+  const rows = await db
+    .select({
+      id: syncLogs.id,
+      startedAt: syncLogs.startedAt,
+      currentStage: syncLogs.currentStage,
+      progress: syncLogs.progress,
+    })
+    .from(syncLogs)
+    .where(
+      and(
+        eq(syncLogs.section, section),
+        eq(syncLogs.entity, "all"),
+        eq(syncLogs.status, "in_progress"),
+        gt(syncLogs.startedAt, staleThreshold),
+      ),
+    )
+    .orderBy(desc(syncLogs.startedAt))
+    .limit(1);
+
+  if (rows.length === 0) return { running: false, startedAt: null, currentStage: null, progress: null };
+  const row = rows[0];
+  return {
+    running: true,
+    startedAt: row.startedAt,
+    currentStage: row.currentStage ?? null,
+    progress: row.progress ?? 0,
+  };
 }
 
 /** Most recent successful sync for a given (section, entity). */

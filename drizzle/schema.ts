@@ -129,6 +129,9 @@ export const syncLogs = mysqlTable(
     triggeredBy: varchar("triggered_by", { length: 32 }).notNull(), // cron | manual | on-demand | startup
     rowCount: int("row_count").default(0),
     errorMessage: text("error_message"),
+    // Stage tracking for cross-instance progress reporting (Cloud Run multi-instance)
+    currentStage: varchar("current_stage", { length: 32 }),
+    progress: int("progress").default(0),
     startedAt: timestamp("started_at").defaultNow().notNull(),
     finishedAt: timestamp("finished_at"),
   },
