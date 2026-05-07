@@ -1,0 +1,220 @@
+{
+  "query": "SELECT id, name, is_super_admin FROM app_groups ORDER BY id;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT id, name, is_super_admin FROM app_groups ORDER BY id;",
+  "rows": [
+    {
+      "id": "1",
+      "name": "Super Admin",
+      "is_super_admin": "1"
+    },
+    {
+      "id": "210001",
+      "name": "Viewer-1777024131248",
+      "is_super_admin": "0"
+    },
+    {
+      "id": "210002",
+      "name": "Viewer-1777024183082",
+      "is_super_admin": "0"
+    },
+    {
+      "id": "240001",
+      "name": "Viewer-1777059592656",
+      "is_super_admin": "0"
+    },
+    {
+      "id": "240002",
+      "name": "Viewer-1777059685901",
+      "is_super_admin": "0"
+    },
+    {
+      "id": "240003",
+      "name": "Viewer-1777059770538",
+      "is_super_admin": "0"
+    },
+    {
+      "id": "240004",
+      "name": "Viewer-1777059792623",
+      "is_super_admin": "0"
+    },
+    {
+      "id": "240005",
+      "name": "Viewer-1777059842247",
+      "is_super_admin": "0"
+    },
+    {
+      "id": "240006",
+      "name": "Viewer-1777059894175",
+      "is_super_admin": "0"
+    },
+    {
+      "id": "240007",
+      "name": "Viewer-1777060966778",
+      "is_super_admin": "0"
+    },
+    {
+      "id": "240008",
+      "name": "Viewer-1777061304743",
+      "is_super_admin": "0"
+    },
+    {
+      "id": "240009",
+      "name": "Viewer-1777061367874",
+      "is_super_admin": "0"
+    },
+    {
+      "id": "240010",
+      "name": "Viewer-1777061414867",
+      "is_super_admin": "0"
+    },
+    {
+      "id": "240011",
+      "name": "Viewer-1777061464129",
+      "is_super_admin": "0"
+    },
+    {
+      "id": "240012",
+      "name": "Viewer-1777061526089",
+      "is_super_admin": "0"
+    },
+    {
+      "id": "270001",
+      "name": "Viewer-1777063868789",
+      "is_super_admin": "0"
+    },
+    {
+      "id": "270002",
+      "name": "Viewer-1777065477113",
+      "is_super_admin": "0"
+    },
+    {
+      "id": "270003",
+      "name": "Viewer-1777066471660",
+      "is_super_admin": "0"
+    },
+    {
+      "id": "270004",
+      "name": "Viewer-1777067038605",
+      "is_super_admin": "0"
+    },
+    {
+      "id": "270005",
+      "name": "Viewer-1777067095652",
+      "is_super_admin": "0"
+    },
+    {
+      "id": "270006",
+      "name": "Viewer-1777068410176",
+      "is_super_admin": "0"
+    },
+    {
+      "id": "270007",
+      "name": "Viewer-1777069009943",
+      "is_super_admin": "0"
+    },
+    {
+      "id": "270008",
+      "name": "Viewer-1777069366585",
+      "is_super_admin": "0"
+    },
+    {
+      "id": "270009",
+      "name": "Viewer-1777070434610",
+      "is_super_admin": "0"
+    },
+    {
+      "id": "270010",
+      "name": "Viewer-1777079143655",
+      "is_super_admin": "0"
+    },
+    {
+      "id": "300001",
+      "name": "Viewer-1777378607460",
+      "is_super_admin": "0"
+    },
+    {
+      "id": "300002",
+      "name": "Viewer-1777378643366",
+      "is_super_admin": "0"
+    },
+    {
+      "id": "330001",
+      "name": "Viewer-1777380553811",
+      "is_super_admin": "0"
+    },
+    {
+      "id": "330002",
+      "name": "Viewer-1777380612234",
+      "is_super_admin": "0"
+    },
+    {
+      "id": "330003",
+      "name": "Viewer-1777380974341",
+      "is_super_admin": "0"
+    },
+    {
+      "id": "330004",
+      "name": "Viewer-1777381270829",
+      "is_super_admin": "0"
+    },
+    {
+      "id": "330005",
+      "name": "Viewer-1777390395731",
+      "is_super_admin": "0"
+    },
+    {
+      "id": "330006",
+      "name": "Viewer-1777390503496",
+      "is_super_admin": "0"
+    },
+    {
+      "id": "330007",
+      "name": "Viewer-1777390557948",
+      "is_super_admin": "0"
+    },
+    {
+      "id": "360001",
+      "name": "Viewer-1777395116192",
+      "is_super_admin": "0"
+    },
+    {
+      "id": "360002",
+      "name": "Viewer-1777395167602",
+      "is_super_admin": "0"
+    },
+    {
+      "id": "360003",
+      "name": "Viewer-1777398943529",
+      "is_super_admin": "0"
+    },
+    {
+      "id": "360004",
+      "name": "Viewer-1777400195867",
+      "is_super_admin": "0"
+    },
+    {
+      "id": "390001",
+      "name": "Viewer-1777411017867",
+      "is_super_admin": "0"
+    },
+    {
+      "id": "390002",
+      "name": "Viewer-1777411076685",
+      "is_super_admin": "0"
+    },
+    {
+      "id": "390003",
+      "name": "Viewer-1777411282009",
+      "is_super_admin": "0"
+    },
+    {
+      "id": "390004",
+      "name": "Viewer-1777415582567",
+      "is_super_admin": "0"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tname\tis_super_admin\n1\tSuper Admin\t1\n210001\tViewer-1777024131248\t0\n210002\tViewer-1777024183082\t0\n240001\tViewer-1777059592656\t0\n240002\tViewer-1777059685901\t0\n240003\tViewer-1777059770538\t0\n240004\tViewer-1777059792623\t0\n240005\tViewer-1777059842247\t0\n240006\tViewer-1777059894175\t0\n240007\tViewer-1777060966778\t0\n240008\tViewer-1777061304743\t0\n240009\tViewer-1777061367874\t0\n240010\tViewer-1777061414867\t0\n240011\tViewer-1777061464129\t0\n240012\tViewer-1777061526089\t0\n270001\tViewer-1777063868789\t0\n270002\tViewer-1777065477113\t0\n270003\tViewer-1777066471660\t0\n270004\tViewer-1777067038605\t0\n270005\tViewer-1777067095652\t0\n270006\tViewer-1777068410176\t0\n270007\tViewer-1777069009943\t0\n270008\tViewer-1777069366585\t0\n270009\tViewer-1777070434610\t0\n270010\tViewer-1777079143655\t0\n300001\tViewer-1777378607460\t0\n300002\tViewer-1777378643366\t0\n330001\tViewer-1777380553811\t0\n330002\tViewer-1777380612234\t0\n330003\tViewer-1777380974341\t0\n330004\tViewer-1777381270829\t0\n330005\tViewer-1777390395731\t0\n330006\tViewer-1777390503496\t0\n330007\tViewer-1777390557948\t0\n360001\tViewer-1777395116192\t0\n360002\tViewer-1777395167602\t0\n360003\tViewer-1777398943529\t0\n360004\tViewer-1777400195867\t0\n390001\tViewer-1777411017867\t0\n390002\tViewer-1777411076685\t0\n390003\tViewer-1777411282009\t0\n390004\tViewer-1777415582567\t0\n",
+  "stderr": "",
+  "execution_time_ms": 1582
+}
