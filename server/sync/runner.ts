@@ -316,9 +316,9 @@ async function syncCustomers(
   });
   try {
     const byId = new Map<string, CustomerListItem>();
-    // Use limit=200 with 60s timeout per request.
-    // limit=1000 caused >20s responses that hit the default 20s timeout and aborted.
-    // At limit=200 each page responds in ~3s, well within the 60s window.
+    // Use limit=500 with 60s timeout per request.
+    // Tested: limit=500 responds in ~5.5s/page (Boonphone & Fastfone365), well within 60s.
+    // Previously limit=200 (~3s/page) but limit=500 reduces pages by 60% (Boonphone 24→10, FF365 112→45).
     //
     // Sub-progress: customers stage spans 20%→40% of overall progress.
     // We update DB every page so the UI shows live progress instead of freezing at 20%.
@@ -346,7 +346,7 @@ async function syncCustomers(
           updateSyncLogStage({ id: logId, currentStage, progress }).catch(() => {});
         }
       },
-      200,
+      500,
       60_000, // 60s per-request timeout (customers endpoint is slower than others)
     );
     await finishSyncLog({ id: log.id, status: "success", rowCount: byId.size });
