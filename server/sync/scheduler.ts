@@ -1,7 +1,11 @@
 /**
- * Simple in-process scheduler — runs once a day at 04:00 Asia/Bangkok time.
- * The process checks once a minute; when hour matches 04 (Bangkok time) and we
+ * Simple in-process scheduler — runs once a day at 09:00 Asia/Bangkok time.
+ * The process checks once a minute; when hour matches 09 (Bangkok time) and we
  * haven't already synced today, it kicks off a run for each configured section.
+ *
+ * NOTE: Changed from 04:00 → 09:00 because Boonphone runs nightly batch jobs
+ * (balance recalculations) from midnight to ~08:00, causing API to be very slow
+ * during that window. 09:00 ensures batch jobs are complete before sync starts.
  *
  * IMPORTANT: Server may run in UTC or other timezones. All time comparisons
  * MUST use Asia/Bangkok (UTC+7) to match business requirements.
@@ -19,7 +23,7 @@ function isSectionConfigured(section: SectionKey): boolean {
   return Boolean(client && client.isConfigured());
 }
 
-const SYNC_HOUR = 4; // 04:00 daily (Asia/Bangkok)
+const SYNC_HOUR = 9; // 09:00 daily (Asia/Bangkok)
 const BANGKOK_TZ = "Asia/Bangkok";
 
 let _timer: NodeJS.Timeout | null = null;
@@ -70,7 +74,7 @@ async function tick() {
     if (_lastTick[section] === slot) continue;
     if (isSyncRunning(section)) continue;
     _lastTick[section] = slot;
-    console.log(`[scheduler] ${tag} triggering daily cron sync (Bangkok time: ${hour}:${String(minute).padStart(2,"0")})`);
+    console.log(`[scheduler] ${tag} triggering daily cron sync at 09:00 (Bangkok time: ${hour}:${String(minute).padStart(2,"0")})`);
     runSectionSync(section, "cron").catch((err) =>
       console.error(`[scheduler] ${tag} failed:`, err),
     );
@@ -86,13 +90,13 @@ export async function startScheduler() {
   if (_timer) return;
   const now = new Date();
   const { hour: bangkokHour, daySlot } = getBangkokTimeParts(now);
-  console.log(`[scheduler] started (daily at 04:00 Asia/Bangkok) — current Bangkok time: ${bangkokHour}:xx, slot: ${daySlot}`);
+  console.log(`[scheduler] started (daily at 09:00 Asia/Bangkok) — current Bangkok time: ${bangkokHour}:xx, slot: ${daySlot}`);
   _timer = setInterval(() => {
     tick().catch((err) => console.error("[scheduler] tick error:", err));
   }, 60_000);
 
   // Missed-sync recovery: if today's sync hasn't run yet (last sync older than
-  // 23h) and we're past 06:00 Bangkok time, kick one immediately on startup.
+  // 23h) and we're past 09:00 Bangkok time, kick one immediately on startup.
   const pastSyncHour = bangkokHour >= SYNC_HOUR;
   if (pastSyncHour) {
     for (const section of SECTIONS as readonly SectionKey[]) {
