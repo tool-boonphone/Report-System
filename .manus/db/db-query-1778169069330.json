@@ -1,0 +1,55 @@
+{
+  "query": "\nSELECT \n  section,\n  status,\n  COUNT(*) as count\nFROM contracts\nGROUP BY section, status\nORDER BY section, count DESC;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT \n  section,\n  status,\n  COUNT(*) as count\nFROM contracts\nGROUP BY section, status\nORDER BY section, count DESC;\n",
+  "rows": [
+    {
+      "section": "Boonphone",
+      "status": "สำเร็จ",
+      "count": "4015"
+    },
+    {
+      "section": "Boonphone",
+      "status": "ระงับสัญญา",
+      "count": "76"
+    },
+    {
+      "section": "Boonphone",
+      "status": "ยกเลิกสัญญา",
+      "count": "13"
+    },
+    {
+      "section": "Boonphone",
+      "status": "สิ้นสุดสัญญา",
+      "count": "5"
+    },
+    {
+      "section": "Fastfone365",
+      "status": "สำเร็จ",
+      "count": "7265"
+    },
+    {
+      "section": "Fastfone365",
+      "status": "สิ้นสุดสัญญา",
+      "count": "7065"
+    },
+    {
+      "section": "Fastfone365",
+      "status": "หนี้เสีย",
+      "count": "3123"
+    },
+    {
+      "section": "Fastfone365",
+      "status": "ระงับสัญญา",
+      "count": "268"
+    },
+    {
+      "section": "Fastfone365",
+      "status": "ยกเลิกสัญญา",
+      "count": "88"
+    }
+  ],
+  "messages": [],
+  "stdout": "section\tstatus\tcount\nBoonphone\tสำเร็จ\t4015\nBoonphone\tระงับสัญญา\t76\nBoonphone\tยกเลิกสัญญา\t13\nBoonphone\tสิ้นสุดสัญญา\t5\nFastfone365\tสำเร็จ\t7265\nFastfone365\tสิ้นสุดสัญญา\t7065\nFastfone365\tหนี้เสีย\t3123\nFastfone365\tระงับสัญญา\t268\nFastfone365\tยกเลิกสัญญา\t88\n",
+  "stderr": "",
+  "execution_time_ms": 1598
+}

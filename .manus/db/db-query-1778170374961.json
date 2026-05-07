@@ -1,0 +1,40 @@
+{
+  "query": "\nSELECT id, entity, status, row_count, error_message, started_at, finished_at,\n  TIMESTAMPDIFF(SECOND, started_at, COALESCE(finished_at, NOW())) as duration_sec\nFROM sync_logs\nWHERE section = 'Boonphone' AND started_at >= '2026-05-07 10:00:00'\nORDER BY id ASC;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT id, entity, status, row_count, error_message, started_at, finished_at,\n  TIMESTAMPDIFF(SECOND, started_at, COALESCE(finished_at, NOW())) as duration_sec\nFROM sync_logs\nWHERE section = 'Boonphone' AND started_at >= '2026-05-07 10:00:00'\nORDER BY id ASC;\n",
+  "rows": [
+    {
+      "id": "1080001",
+      "entity": "all",
+      "status": "in_progress",
+      "row_count": "0",
+      "error_message": "NULL",
+      "started_at": "2026-05-07 10:26:02",
+      "finished_at": "NULL",
+      "duration_sec": "20812"
+    },
+    {
+      "id": "1080002",
+      "entity": "partners",
+      "status": "success",
+      "row_count": "227",
+      "error_message": "NULL",
+      "started_at": "2026-05-07 10:26:02",
+      "finished_at": "2026-05-07 10:26:13",
+      "duration_sec": "11"
+    },
+    {
+      "id": "1080003",
+      "entity": "customers",
+      "status": "in_progress",
+      "row_count": "0",
+      "error_message": "NULL",
+      "started_at": "2026-05-07 10:26:13",
+      "finished_at": "NULL",
+      "duration_sec": "20801"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tentity\tstatus\trow_count\terror_message\tstarted_at\tfinished_at\tduration_sec\n1080001\tall\tin_progress\t0\tNULL\t2026-05-07 10:26:02\tNULL\t20812\n1080002\tpartners\tsuccess\t227\tNULL\t2026-05-07 10:26:02\t2026-05-07 10:26:13\t11\n1080003\tcustomers\tin_progress\t0\tNULL\t2026-05-07 10:26:13\tNULL\t20801\n",
+  "stderr": "",
+  "execution_time_ms": 1660
+}

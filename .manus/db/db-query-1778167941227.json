@@ -1,0 +1,19 @@
+{
+  "query": "\nSELECT contract_no, status, approve_date, customer_name, product_type, finance_amount, installment_count\nFROM contracts \nWHERE contract_no = 'CT0825-KPT001-14727-01' AND section = 'Fastfone365';\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT contract_no, status, approve_date, customer_name, product_type, finance_amount, installment_count\nFROM contracts \nWHERE contract_no = 'CT0825-KPT001-14727-01' AND section = 'Fastfone365';\n",
+  "rows": [
+    {
+      "contract_no": "CT0825-KPT001-14727-01",
+      "status": "หนี้เสีย",
+      "approve_date": "2025-08-28",
+      "customer_name": "ศิริลักษณ์ เฉลิชาติ",
+      "product_type": "สินค้ามือ 2",
+      "finance_amount": "15920.00",
+      "installment_count": "8"
+    }
+  ],
+  "messages": [],
+  "stdout": "contract_no\tstatus\tapprove_date\tcustomer_name\tproduct_type\tfinance_amount\tinstallment_count\nCT0825-KPT001-14727-01\tหนี้เสีย\t2025-08-28\tศิริลักษณ์ เฉลิชาติ\tสินค้ามือ 2\t15920.00\t8\n",
+  "stderr": "",
+  "execution_time_ms": 1661
+}

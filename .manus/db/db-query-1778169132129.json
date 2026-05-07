@@ -1,0 +1,45 @@
+{
+  "query": "\nSELECT \n  contract_no,\n  status,\n  debt_type,\n  JSON_EXTRACT(raw_json, '$.debt_type') as raw_debt_type,\n  JSON_EXTRACT(raw_json, '$.contract_status_code') as raw_status\nFROM contracts\nWHERE section = 'Boonphone'\nLIMIT 5;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT \n  contract_no,\n  status,\n  debt_type,\n  JSON_EXTRACT(raw_json, '$.debt_type') as raw_debt_type,\n  JSON_EXTRACT(raw_json, '$.contract_status_code') as raw_status\nFROM contracts\nWHERE section = 'Boonphone'\nLIMIT 5;\n",
+  "rows": [
+    {
+      "contract_no": "CT0226-ACR001-1130-01",
+      "status": "สำเร็จ",
+      "debt_type": "ปกติ",
+      "raw_debt_type": "\"\"",
+      "raw_status": "\"สำเร็จ\""
+    },
+    {
+      "contract_no": "CT0226-AYA001-0265-01",
+      "status": "สำเร็จ",
+      "debt_type": "ปกติ",
+      "raw_debt_type": "\"\"",
+      "raw_status": "\"สำเร็จ\""
+    },
+    {
+      "contract_no": "CT0226-AYA001-0148-01",
+      "status": "สำเร็จ",
+      "debt_type": "ปกติ",
+      "raw_debt_type": "\"\"",
+      "raw_status": "\"สำเร็จ\""
+    },
+    {
+      "contract_no": "CT0226-AYA001-0073-01",
+      "status": "สำเร็จ",
+      "debt_type": "ปกติ",
+      "raw_debt_type": "\"\"",
+      "raw_status": "\"สำเร็จ\""
+    },
+    {
+      "contract_no": "CT0226-AYA001-0043-01",
+      "status": "สำเร็จ",
+      "debt_type": "ปกติ",
+      "raw_debt_type": "\"\"",
+      "raw_status": "\"สำเร็จ\""
+    }
+  ],
+  "messages": [],
+  "stdout": "contract_no\tstatus\tdebt_type\traw_debt_type\traw_status\nCT0226-ACR001-1130-01\tสำเร็จ\tปกติ\t\"\"\t\"สำเร็จ\"\nCT0226-AYA001-0265-01\tสำเร็จ\tปกติ\t\"\"\t\"สำเร็จ\"\nCT0226-AYA001-0148-01\tสำเร็จ\tปกติ\t\"\"\t\"สำเร็จ\"\nCT0226-AYA001-0073-01\tสำเร็จ\tปกติ\t\"\"\t\"สำเร็จ\"\nCT0226-AYA001-0043-01\tสำเร็จ\tปกติ\t\"\"\t\"สำเร็จ\"\n",
+  "stderr": "",
+  "execution_time_ms": 1513
+}

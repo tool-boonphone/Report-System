@@ -1,0 +1,8 @@
+{
+  "query": "\nSELECT \n  section,\n  contract_status,\n  COUNT(*) as count\nFROM contracts\nGROUP BY section, contract_status\nORDER BY section, count DESC;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT \n  section,\n  contract_status,\n  COUNT(*) as count\nFROM contracts\nGROUP BY section, contract_status\nORDER BY section, count DESC;\n",
+  "returncode": 1,
+  "logs": [
+    "ERROR 1054 (42S22) at line 2: Unknown column 'contract_status' in 'group statement'"
+  ]
+}

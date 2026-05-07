@@ -1,0 +1,15 @@
+{
+  "query": "\nSELECT \n  section,\n  debt_type,\n  COUNT(*) as count\nFROM contracts\nWHERE section = 'Boonphone'\nGROUP BY section, debt_type\nORDER BY count DESC;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT \n  section,\n  debt_type,\n  COUNT(*) as count\nFROM contracts\nWHERE section = 'Boonphone'\nGROUP BY section, debt_type\nORDER BY count DESC;\n",
+  "rows": [
+    {
+      "section": "Boonphone",
+      "debt_type": "ปกติ",
+      "count": "4109"
+    }
+  ],
+  "messages": [],
+  "stdout": "section\tdebt_type\tcount\nBoonphone\tปกติ\t4109\n",
+  "stderr": "",
+  "execution_time_ms": 1582
+}

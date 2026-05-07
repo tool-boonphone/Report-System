@@ -1,0 +1,60 @@
+{
+  "query": "\nSELECT id, section, entity, status, row_count, error_message, started_at, finished_at\nFROM sync_logs\nWHERE section = 'Boonphone' AND entity = 'contracts'\nORDER BY started_at DESC\nLIMIT 5;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT id, section, entity, status, row_count, error_message, started_at, finished_at\nFROM sync_logs\nWHERE section = 'Boonphone' AND entity = 'contracts'\nORDER BY started_at DESC\nLIMIT 5;\n",
+  "rows": [
+    {
+      "id": "960007",
+      "section": "Boonphone",
+      "entity": "contracts",
+      "status": "success",
+      "row_count": "4729",
+      "error_message": "NULL",
+      "started_at": "2026-05-05 21:02:21",
+      "finished_at": "2026-05-05 21:06:17"
+    },
+    {
+      "id": "660012",
+      "section": "Boonphone",
+      "entity": "contracts",
+      "status": "success",
+      "row_count": "4427",
+      "error_message": "NULL",
+      "started_at": "2026-05-01 00:55:30",
+      "finished_at": "2026-05-01 00:58:38"
+    },
+    {
+      "id": "540011",
+      "section": "Boonphone",
+      "entity": "contracts",
+      "status": "success",
+      "row_count": "4293",
+      "error_message": "NULL",
+      "started_at": "2026-04-29 10:00:58",
+      "finished_at": "2026-04-29 10:02:25"
+    },
+    {
+      "id": "510007",
+      "section": "Boonphone",
+      "entity": "contracts",
+      "status": "success",
+      "row_count": "4208",
+      "error_message": "NULL",
+      "started_at": "2026-04-28 10:00:49",
+      "finished_at": "2026-04-28 10:02:07"
+    },
+    {
+      "id": "480004",
+      "section": "Boonphone",
+      "entity": "contracts",
+      "status": "success",
+      "row_count": "4189",
+      "error_message": "NULL",
+      "started_at": "2026-04-28 06:21:28",
+      "finished_at": "2026-04-28 06:24:44"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tsection\tentity\tstatus\trow_count\terror_message\tstarted_at\tfinished_at\n960007\tBoonphone\tcontracts\tsuccess\t4729\tNULL\t2026-05-05 21:02:21\t2026-05-05 21:06:17\n660012\tBoonphone\tcontracts\tsuccess\t4427\tNULL\t2026-05-01 00:55:30\t2026-05-01 00:58:38\n540011\tBoonphone\tcontracts\tsuccess\t4293\tNULL\t2026-04-29 10:00:58\t2026-04-29 10:02:25\n510007\tBoonphone\tcontracts\tsuccess\t4208\tNULL\t2026-04-28 10:00:49\t2026-04-28 10:02:07\n480004\tBoonphone\tcontracts\tsuccess\t4189\tNULL\t2026-04-28 06:21:28\t2026-04-28 06:24:44\n",
+  "stderr": "",
+  "execution_time_ms": 1519
+}

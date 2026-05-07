@@ -1,0 +1,40 @@
+{
+  "query": "\nSELECT id, section, entity, status, row_count, error_message, started_at, finished_at\nFROM sync_logs\nWHERE section = 'Boonphone' AND started_at >= '2026-05-07 10:00:00'\nORDER BY id ASC;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT id, section, entity, status, row_count, error_message, started_at, finished_at\nFROM sync_logs\nWHERE section = 'Boonphone' AND started_at >= '2026-05-07 10:00:00'\nORDER BY id ASC;\n",
+  "rows": [
+    {
+      "id": "1080001",
+      "section": "Boonphone",
+      "entity": "all",
+      "status": "in_progress",
+      "row_count": "0",
+      "error_message": "NULL",
+      "started_at": "2026-05-07 10:26:02",
+      "finished_at": "NULL"
+    },
+    {
+      "id": "1080002",
+      "section": "Boonphone",
+      "entity": "partners",
+      "status": "success",
+      "row_count": "227",
+      "error_message": "NULL",
+      "started_at": "2026-05-07 10:26:02",
+      "finished_at": "2026-05-07 10:26:13"
+    },
+    {
+      "id": "1080003",
+      "section": "Boonphone",
+      "entity": "customers",
+      "status": "in_progress",
+      "row_count": "0",
+      "error_message": "NULL",
+      "started_at": "2026-05-07 10:26:13",
+      "finished_at": "NULL"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tsection\tentity\tstatus\trow_count\terror_message\tstarted_at\tfinished_at\n1080001\tBoonphone\tall\tin_progress\t0\tNULL\t2026-05-07 10:26:02\tNULL\n1080002\tBoonphone\tpartners\tsuccess\t227\tNULL\t2026-05-07 10:26:02\t2026-05-07 10:26:13\n1080003\tBoonphone\tcustomers\tin_progress\t0\tNULL\t2026-05-07 10:26:13\tNULL\n",
+  "stderr": "",
+  "execution_time_ms": 1617
+}

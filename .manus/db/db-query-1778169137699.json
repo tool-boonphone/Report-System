@@ -1,0 +1,31 @@
+{
+  "query": "\nSELECT \n  contract_no,\n  status,\n  debt_type,\n  JSON_EXTRACT(raw_json, '$.debt_type') as raw_debt_type,\n  JSON_EXTRACT(raw_json, '$.contract_status_code') as raw_status\nFROM contracts\nWHERE section = 'Fastfone365' AND status = 'หนี้เสีย'\nLIMIT 3;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT \n  contract_no,\n  status,\n  debt_type,\n  JSON_EXTRACT(raw_json, '$.debt_type') as raw_debt_type,\n  JSON_EXTRACT(raw_json, '$.contract_status_code') as raw_status\nFROM contracts\nWHERE section = 'Fastfone365' AND status = 'หนี้เสีย'\nLIMIT 3;\n",
+  "rows": [
+    {
+      "contract_no": "CT0126-CBI041-22273-01",
+      "status": "หนี้เสีย",
+      "debt_type": "ปกติ",
+      "raw_debt_type": "\"\"",
+      "raw_status": "\"หนี้เสีย\""
+    },
+    {
+      "contract_no": "CT0126-AYA001-22194-01",
+      "status": "หนี้เสีย",
+      "debt_type": "ปกติ",
+      "raw_debt_type": "\"\"",
+      "raw_status": "\"หนี้เสีย\""
+    },
+    {
+      "contract_no": "CT0126-RBR008-22186-01",
+      "status": "หนี้เสีย",
+      "debt_type": "ปกติ",
+      "raw_debt_type": "\"\"",
+      "raw_status": "\"หนี้เสีย\""
+    }
+  ],
+  "messages": [],
+  "stdout": "contract_no\tstatus\tdebt_type\traw_debt_type\traw_status\nCT0126-CBI041-22273-01\tหนี้เสีย\tปกติ\t\"\"\t\"หนี้เสีย\"\nCT0126-AYA001-22194-01\tหนี้เสีย\tปกติ\t\"\"\t\"หนี้เสีย\"\nCT0126-RBR008-22186-01\tหนี้เสีย\tปกติ\t\"\"\t\"หนี้เสีย\"\n",
+  "stderr": "",
+  "execution_time_ms": 1555
+}

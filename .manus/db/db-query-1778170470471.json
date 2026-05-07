@@ -1,0 +1,100 @@
+{
+  "query": "\nSELECT id, section, entity, status, error_message, started_at, finished_at\nFROM sync_logs\nWHERE status = 'in_progress'\nORDER BY started_at DESC\nLIMIT 10;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT id, section, entity, status, error_message, started_at, finished_at\nFROM sync_logs\nWHERE status = 'in_progress'\nORDER BY started_at DESC\nLIMIT 10;\n",
+  "rows": [
+    {
+      "id": "930003",
+      "section": "Fastfone365",
+      "entity": "customers",
+      "status": "in_progress",
+      "error_message": "NULL",
+      "started_at": "2026-05-05 06:06:35",
+      "finished_at": "NULL"
+    },
+    {
+      "id": "930001",
+      "section": "Fastfone365",
+      "entity": "all",
+      "status": "in_progress",
+      "error_message": "NULL",
+      "started_at": "2026-05-05 05:56:42",
+      "finished_at": "NULL"
+    },
+    {
+      "id": "870003",
+      "section": "Fastfone365",
+      "entity": "customers",
+      "status": "in_progress",
+      "error_message": "NULL",
+      "started_at": "2026-05-04 05:41:28",
+      "finished_at": "NULL"
+    },
+    {
+      "id": "870001",
+      "section": "Fastfone365",
+      "entity": "all",
+      "status": "in_progress",
+      "error_message": "NULL",
+      "started_at": "2026-05-04 05:41:08",
+      "finished_at": "NULL"
+    },
+    {
+      "id": "840003",
+      "section": "Fastfone365",
+      "entity": "customers",
+      "status": "in_progress",
+      "error_message": "NULL",
+      "started_at": "2026-05-04 03:34:22",
+      "finished_at": "NULL"
+    },
+    {
+      "id": "840001",
+      "section": "Fastfone365",
+      "entity": "all",
+      "status": "in_progress",
+      "error_message": "NULL",
+      "started_at": "2026-05-04 03:34:16",
+      "finished_at": "NULL"
+    },
+    {
+      "id": "810006",
+      "section": "Fastfone365",
+      "entity": "customers",
+      "status": "in_progress",
+      "error_message": "NULL",
+      "started_at": "2026-05-03 23:09:46",
+      "finished_at": "NULL"
+    },
+    {
+      "id": "810003",
+      "section": "Fastfone365",
+      "entity": "all",
+      "status": "in_progress",
+      "error_message": "NULL",
+      "started_at": "2026-05-03 22:59:26",
+      "finished_at": "NULL"
+    },
+    {
+      "id": "750006",
+      "section": "Fastfone365",
+      "entity": "customers",
+      "status": "in_progress",
+      "error_message": "NULL",
+      "started_at": "2026-05-02 23:48:26",
+      "finished_at": "NULL"
+    },
+    {
+      "id": "750003",
+      "section": "Fastfone365",
+      "entity": "all",
+      "status": "in_progress",
+      "error_message": "NULL",
+      "started_at": "2026-05-02 23:38:28",
+      "finished_at": "NULL"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tsection\tentity\tstatus\terror_message\tstarted_at\tfinished_at\n930003\tFastfone365\tcustomers\tin_progress\tNULL\t2026-05-05 06:06:35\tNULL\n930001\tFastfone365\tall\tin_progress\tNULL\t2026-05-05 05:56:42\tNULL\n870003\tFastfone365\tcustomers\tin_progress\tNULL\t2026-05-04 05:41:28\tNULL\n870001\tFastfone365\tall\tin_progress\tNULL\t2026-05-04 05:41:08\tNULL\n840003\tFastfone365\tcustomers\tin_progress\tNULL\t2026-05-04 03:34:22\tNULL\n840001\tFastfone365\tall\tin_progress\tNULL\t2026-05-04 03:34:16\tNULL\n810006\tFastfone365\tcustomers\tin_progress\tNULL\t2026-05-03 23:09:46\tNULL\n810003\tFastfone365\tall\tin_progress\tNULL\t2026-05-03 22:59:26\tNULL\n750006\tFastfone365\tcustomers\tin_progress\tNULL\t2026-05-02 23:48:26\tNULL\n750003\tFastfone365\tall\tin_progress\tNULL\t2026-05-02 23:38:28\tNULL\n",
+  "stderr": "",
+  "execution_time_ms": 1528
+}

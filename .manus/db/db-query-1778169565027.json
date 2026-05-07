@@ -1,0 +1,90 @@
+{
+  "query": "\nSELECT id, section, entity, status, row_count, error_message, started_at, finished_at\nFROM sync_logs\nWHERE section = 'Boonphone'\nORDER BY started_at DESC\nLIMIT 8;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT id, section, entity, status, row_count, error_message, started_at, finished_at\nFROM sync_logs\nWHERE section = 'Boonphone'\nORDER BY started_at DESC\nLIMIT 8;\n",
+  "rows": [
+    {
+      "id": "1080003",
+      "section": "Boonphone",
+      "entity": "customers",
+      "status": "in_progress",
+      "row_count": "0",
+      "error_message": "NULL",
+      "started_at": "2026-05-07 10:26:13",
+      "finished_at": "NULL"
+    },
+    {
+      "id": "1080001",
+      "section": "Boonphone",
+      "entity": "all",
+      "status": "in_progress",
+      "row_count": "0",
+      "error_message": "NULL",
+      "started_at": "2026-05-07 10:26:02",
+      "finished_at": "NULL"
+    },
+    {
+      "id": "1080002",
+      "section": "Boonphone",
+      "entity": "partners",
+      "status": "success",
+      "row_count": "227",
+      "error_message": "NULL",
+      "started_at": "2026-05-07 10:26:02",
+      "finished_at": "2026-05-07 10:26:13"
+    },
+    {
+      "id": "1050005",
+      "section": "Boonphone",
+      "entity": "customers",
+      "status": "in_progress",
+      "row_count": "0",
+      "error_message": "NULL",
+      "started_at": "2026-05-07 05:51:23",
+      "finished_at": "NULL"
+    },
+    {
+      "id": "1050002",
+      "section": "Boonphone",
+      "entity": "partners",
+      "status": "success",
+      "row_count": "227",
+      "error_message": "NULL",
+      "started_at": "2026-05-07 05:51:20",
+      "finished_at": "2026-05-07 05:51:23"
+    },
+    {
+      "id": "1050001",
+      "section": "Boonphone",
+      "entity": "all",
+      "status": "in_progress",
+      "row_count": "0",
+      "error_message": "NULL",
+      "started_at": "2026-05-07 05:51:20",
+      "finished_at": "NULL"
+    },
+    {
+      "id": "1020002",
+      "section": "Boonphone",
+      "entity": "partners",
+      "status": "error",
+      "row_count": "0",
+      "error_message": "This operation was aborted",
+      "started_at": "2026-05-07 04:33:54",
+      "finished_at": "2026-05-07 04:40:13"
+    },
+    {
+      "id": "1020001",
+      "section": "Boonphone",
+      "entity": "all",
+      "status": "error",
+      "row_count": "0",
+      "error_message": "This operation was aborted",
+      "started_at": "2026-05-07 04:33:53",
+      "finished_at": "2026-05-07 04:40:15"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tsection\tentity\tstatus\trow_count\terror_message\tstarted_at\tfinished_at\n1080003\tBoonphone\tcustomers\tin_progress\t0\tNULL\t2026-05-07 10:26:13\tNULL\n1080001\tBoonphone\tall\tin_progress\t0\tNULL\t2026-05-07 10:26:02\tNULL\n1080002\tBoonphone\tpartners\tsuccess\t227\tNULL\t2026-05-07 10:26:02\t2026-05-07 10:26:13\n1050005\tBoonphone\tcustomers\tin_progress\t0\tNULL\t2026-05-07 05:51:23\tNULL\n1050002\tBoonphone\tpartners\tsuccess\t227\tNULL\t2026-05-07 05:51:20\t2026-05-07 05:51:23\n1050001\tBoonphone\tall\tin_progress\t0\tNULL\t2026-05-07 05:51:20\tNULL\n1020002\tBoonphone\tpartners\terror\t0\tThis operation was aborted\t2026-05-07 04:33:54\t2026-05-07 04:40:13\n1020001\tBoonphone\tall\terror\t0\tThis operation was aborted\t2026-05-07 04:33:53\t2026-05-07 04:40:15\n",
+  "stderr": "",
+  "execution_time_ms": 1611
+}
