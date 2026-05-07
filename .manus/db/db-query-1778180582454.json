@@ -1,0 +1,34 @@
+{
+  "query": "SELECT id, section, entity, status, current_stage, progress, started_at, finished_at, error_message, TIMESTAMPDIFF(MINUTE, started_at, NOW()) as elapsed_min FROM sync_logs WHERE started_at > DATE_SUB(NOW(), INTERVAL 30 MINUTE) ORDER BY started_at DESC LIMIT 15;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT id, section, entity, status, current_stage, progress, started_at, finished_at, error_message, TIMESTAMPDIFF(MINUTE, started_at, NOW()) as elapsed_min FROM sync_logs WHERE started_at > DATE_SUB(NOW(), INTERVAL 30 MINUTE) ORDER BY started_at DESC LIMIT 15;",
+  "rows": [
+    {
+      "id": "1110011",
+      "section": "Boonphone",
+      "entity": "partners",
+      "status": "in_progress",
+      "current_stage": "NULL",
+      "progress": "0",
+      "started_at": "2026-05-07 18:55:25",
+      "finished_at": "NULL",
+      "error_message": "NULL",
+      "elapsed_min": "7"
+    },
+    {
+      "id": "1110010",
+      "section": "Boonphone",
+      "entity": "all",
+      "status": "in_progress",
+      "current_stage": "partners",
+      "progress": "5",
+      "started_at": "2026-05-07 18:55:22",
+      "finished_at": "NULL",
+      "error_message": "NULL",
+      "elapsed_min": "7"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tsection\tentity\tstatus\tcurrent_stage\tprogress\tstarted_at\tfinished_at\terror_message\telapsed_min\n1110011\tBoonphone\tpartners\tin_progress\tNULL\t0\t2026-05-07 18:55:25\tNULL\tNULL\t7\n1110010\tBoonphone\tall\tin_progress\tpartners\t5\t2026-05-07 18:55:22\tNULL\tNULL\t7\n",
+  "stderr": "",
+  "execution_time_ms": 1623
+}
