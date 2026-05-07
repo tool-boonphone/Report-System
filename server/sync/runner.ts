@@ -319,13 +319,31 @@ async function syncCustomers(
     // Use limit=200 with 60s timeout per request.
     // limit=1000 caused >20s responses that hit the default 20s timeout and aborted.
     // At limit=200 each page responds in ~3s, well within the 60s window.
+    //
+    // Sub-progress: customers stage spans 20%→40% of overall progress.
+    // We update DB every page so the UI shows live progress instead of freezing at 20%.
+    const STAGE_START = 20; // % when customers stage begins
+    const STAGE_END = 40;   // % when customers stage ends (contracts stage starts)
+    const logId = _overallLogId[section];
     await client.forEachPage<CustomerListItem>(
       "customer",
       (d) => d?.customers,
       { action: "all" },
-      async (items) => {
+      async (items, page, totalPages) => {
         for (const it of items) {
           byId.set(String(it.customer_id), it);
+        }
+        // Update sub-progress in DB every page so UI doesn't freeze
+        if (logId && totalPages > 0) {
+          const subPct = Math.min(page / totalPages, 1);
+          const progress = Math.round(STAGE_START + subPct * (STAGE_END - STAGE_START));
+          const currentStage = `customers (${page}/${totalPages})`;
+          // Update in-memory lock too
+          const lock = _locks[section];
+          if (lock) {
+            _locks[section] = { ...lock, progress, currentStage };
+          }
+          updateSyncLogStage({ id: logId, currentStage, progress }).catch(() => {});
         }
       },
       200,
