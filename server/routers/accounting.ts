@@ -4,7 +4,7 @@
 
 import { z } from "zod";
 import { sql } from "drizzle-orm";
-import { protectedProcedure, router } from "../_core/trpc";
+import { appProcedure, router } from "../_core/trpc";
 import {
   listIncome,
   listIncomeUpdatedBy,
@@ -46,7 +46,7 @@ export const accountingRouter = router({
   /**
    * ดึง income rows พร้อม pagination และ filter
    */
-  listIncome: protectedProcedure
+  listIncome: appProcedure
     .input(
       incomeFilterInput.extend({
         page: z.number().int().min(1).optional().default(1),
@@ -74,7 +74,7 @@ export const accountingRouter = router({
   /**
    * คำนวณ SUM badge ของ income แยกตามประเภท (ไม่ดึง rows ทั้งหมด)
    */
-  getIncomeSummary: protectedProcedure
+  getIncomeSummary: appProcedure
     .input(incomeFilterInput)
     .query(async ({ input }) => {
       const { section, search, dateFrom, dateTo, dateField, incomeTypes, updatedBy } = input;
@@ -95,7 +95,7 @@ export const accountingRouter = router({
   /**
    * ดึง distinct updatedBy สำหรับ income filter dropdown
    */
-  listIncomeUpdatedBy: protectedProcedure
+  listIncomeUpdatedBy: appProcedure
     .input(z.object({ section: z.string() }))
     .query(async ({ input }) => {
       if (input.section !== "Boonphone" && input.section !== "Fastfone365") return [];
@@ -105,7 +105,7 @@ export const accountingRouter = router({
   /**
    * ดึง expense rows พร้อม pagination และ filter
    */
-  listExpense: protectedProcedure
+  listExpense: appProcedure
     .input(
       expenseFilterInput.extend({
         page: z.number().int().min(1).optional().default(1),
@@ -132,7 +132,7 @@ export const accountingRouter = router({
   /**
    * คำนวณ SUM badge ของ expense แยกตามประเภท
    */
-  getExpenseSummary: protectedProcedure
+  getExpenseSummary: appProcedure
     .input(expenseFilterInput)
     .query(async ({ input }) => {
       const { section, search, dateFrom, dateTo } = input;
@@ -145,7 +145,7 @@ export const accountingRouter = router({
   /**
    * ดึง distinct updatedBy สำหรับ expense filter dropdown
    */
-  listExpenseUpdatedBy: protectedProcedure
+  listExpenseUpdatedBy: appProcedure
     .input(z.object({ section: z.string() }))
     .query(async ({ input }) => {
       if (input.section !== "Boonphone" && input.section !== "Fastfone365") return [];
@@ -170,7 +170,7 @@ export const accountingRouter = router({
   /**
    * สรุปรายรับ แยกตามปี หรือ เดือน
    */
-  getIncomeSummaryByPeriod: protectedProcedure
+  getIncomeSummaryByPeriod: appProcedure
     .input(
       z.object({
         section: z.string(),
@@ -194,7 +194,7 @@ export const accountingRouter = router({
   /**
    * สรุปรายจ่าย แยกตามปี หรือ เดือน
    */
-  getExpenseSummaryByPeriod: protectedProcedure
+  getExpenseSummaryByPeriod: appProcedure
     .input(
       z.object({
         section: z.string(),
