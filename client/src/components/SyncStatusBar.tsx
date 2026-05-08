@@ -5,7 +5,7 @@ import { clearIdbCache } from "@/lib/debtIdbCache";
 import { useDebtCache } from "@/contexts/DebtCacheContext";
 import { useAppAuth } from "@/hooks/useAppAuth";
 import { RefreshCw, Trash2, XCircle } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
 
@@ -79,17 +79,8 @@ export function SyncStatusBar() {
     return () => clearInterval(id);
   }, [isRunning]);
 
-  // Keep-alive ping — prevents Cloud Run from scaling down the instance during long sync
-  // Sends a lightweight GET /api/ping every 10s while sync is running.
-  // NOTE: 10s interval is intentional — customers API pages take 5-15s each,
-  // so 30s was too long and Cloud Run could still kill the instance between pages.
-  useEffect(() => {
-    if (!isRunning) return;
-    const id = setInterval(() => {
-      fetch("/api/ping").catch(() => {}); // fire-and-forget, ignore errors
-    }, 10_000);
-    return () => clearInterval(id);
-  }, [isRunning]);
+  // SSE stream ref — keeps Cloud Run alive during sync
+  const sseRef = useRef<EventSource | null>(null);
 
   const progress: number = sectionData?.progress ?? 0;
   const currentStage: string = sectionData?.currentStage ?? "";
@@ -111,21 +102,65 @@ export function SyncStatusBar() {
       ? (elapsedSecs / progress) * (100 - progress)
       : null;
 
-  // Trigger mutation — fire-and-forget, returns immediately
-  const trigger = trpc.sync.trigger.useMutation({
-    onSuccess: () => {
-      toast.info(`เริ่ม Re-Sync ${section}...`);
-      // Start polling immediately
-      utils.sync.status.invalidate();
-    },
-    onError: (err) => {
-      if (err.message?.includes("already running")) {
-        toast.warning(`Sync ${section} กำลังทำงานอยู่แล้ว`);
-      } else {
-        toast.error(`เริ่ม Sync ไม่สำเร็จ: ${err.message}`);
+  // Trigger via SSE stream — keeps Cloud Run alive during sync
+  // GET /api/sync-stream/:section maintains an open HTTP connection
+  // so Cloud Run does NOT scale-to-zero while sync is running.
+  const triggerSSE = useCallback(
+    (sec: string) => {
+      if (sseRef.current) {
+        sseRef.current.close();
+        sseRef.current = null;
       }
+      // withCredentials: true ensures browser sends session cookie with SSE request
+      const es = new EventSource(`/api/sync-stream/${sec}`, { withCredentials: true });
+      sseRef.current = es;
+
+      es.onmessage = (e) => {
+        try {
+          const msg = JSON.parse(e.data);
+          if (msg.type === "started") {
+            toast.info(`เริ่ม Re-Sync ${sec}...`);
+            utils.sync.status.invalidate();
+          } else if (msg.type === "done") {
+            toast.success(`Re-Sync ${sec} สำเร็จ (${msg.rowCount ?? 0} rows)`);
+            utils.sync.status.invalidate();
+            utils.sync.lastSyncedAt.invalidate();
+            es.close();
+            sseRef.current = null;
+          } else if (msg.type === "error") {
+            toast.error(`Sync ${sec} ล้มเหลว: ${msg.message}`);
+            utils.sync.status.invalidate();
+            es.close();
+            sseRef.current = null;
+          } else if (msg.type === "progress") {
+            // Trigger status re-fetch on progress updates
+            utils.sync.status.invalidate();
+          }
+        } catch {
+          // ignore parse errors
+        }
+      };
+
+      es.onerror = (event) => {
+        // SSE error — could be 409 (already running), 401, or network issue
+        // EventSource doesn't expose HTTP status, so we just poll status
+        utils.sync.status.invalidate();
+        // If sync is already running, the status poll will show it
+        // Don't show error toast here as it might be a false alarm
+        es.close();
+        sseRef.current = null;
+      };
     },
-  });
+    [utils],
+  );
+
+  // Cleanup SSE on unmount
+  useEffect(() => {
+    return () => {
+      sseRef.current?.close();
+      sseRef.current = null;
+    };
+  }, []);
 
   // Force-clear stuck sync mutation
   const clearStuck = trpc.sync.clearStuck.useMutation({
@@ -136,10 +171,15 @@ export function SyncStatusBar() {
     onError: (err) => toast.error(err.message),
   });
 
+  const [isTriggerPending, setIsTriggerPending] = useState(false);
+
   const handleResync = useCallback(() => {
-    if (!section || isRunning || trigger.isPending) return;
-    trigger.mutate({ section });
-  }, [section, isRunning, trigger]);
+    if (!section || isRunning || isTriggerPending) return;
+    setIsTriggerPending(true);
+    // Small delay to show loading state, then open SSE
+    setTimeout(() => setIsTriggerPending(false), 2000);
+    triggerSSE(section);
+  }, [section, isRunning, isTriggerPending, triggerSSE]);
 
   // Clear Cache handler
   const handleClearCache = async () => {
@@ -225,11 +265,11 @@ export function SyncStatusBar() {
           {/* Re-Sync API */}
           <button
             onClick={handleResync}
-            disabled={isRunning || isClearing || trigger.isPending}
+            disabled={isRunning || isClearing || isTriggerPending}
             className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 text-sm text-gray-700 disabled:opacity-50 transition-colors"
             title="ดึงข้อมูลใหม่จาก API ภายนอก (ใช้เวลาหลายนาที)"
           >
-            <RefreshCw className={`w-4 h-4 ${trigger.isPending ? "animate-spin" : ""}`} />
+            <RefreshCw className={`w-4 h-4 ${isTriggerPending ? "animate-spin" : ""}`} />
             <span className="hidden sm:inline">Re-Sync API</span>
           </button>
 
