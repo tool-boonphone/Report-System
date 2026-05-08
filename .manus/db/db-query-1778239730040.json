@@ -1,0 +1,31 @@
+{
+  "query": "SELECT COUNT(*) as cnt FROM debt_collected_cache WHERE section = 'Boonphone'; SELECT id, contract_no, paid_at, total_amount, period, is_bad_debt_row, overpaid, principal, interest, fee FROM debt_collected_cache WHERE section = 'Boonphone' LIMIT 3; SELECT COUNT(*) as cnt FROM contracts WHERE section = 'Boonphone' AND commission_net IS NOT NULL AND commission_net > 0;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT COUNT(*) as cnt FROM debt_collected_cache WHERE section = 'Boonphone'; SELECT id, contract_no, paid_at, total_amount, period, is_bad_debt_row, overpaid, principal, interest, fee FROM debt_collected_cache WHERE section = 'Boonphone' LIMIT 3; SELECT COUNT(*) as cnt FROM contracts WHERE section = 'Boonphone' AND commission_net IS NOT NULL AND commission_net > 0;",
+  "rows": [
+    {
+      "cnt": "4250"
+    },
+    {
+      "cnt": "id\tcontract_no\tpaid_at\ttotal_amount\tperiod\tis_bad_debt_row\toverpaid\tprincipal\tinterest\tfee"
+    },
+    {
+      "cnt": "540380\tCT0226-PTE003-0013-01\t2026-02-20\t3550.00\t1\t0\t0.00\t1500.00\t1950.00\t100.00"
+    },
+    {
+      "cnt": "543257\tCT0226-SRI004-0477-01\t2026-02-16\t1561.00\t1\t0\t0.00\t635.00\t826.00\t100.00"
+    },
+    {
+      "cnt": "544093\tCT0226-SRI003-0083-01\t2026-02-19\t4838.00\t1\t0\t0.00\t2060.00\t2678.00\t100.00"
+    },
+    {
+      "cnt": "cnt"
+    },
+    {
+      "cnt": "4162"
+    }
+  ],
+  "messages": [],
+  "stdout": "cnt\n4250\nid\tcontract_no\tpaid_at\ttotal_amount\tperiod\tis_bad_debt_row\toverpaid\tprincipal\tinterest\tfee\n540380\tCT0226-PTE003-0013-01\t2026-02-20\t3550.00\t1\t0\t0.00\t1500.00\t1950.00\t100.00\n543257\tCT0226-SRI004-0477-01\t2026-02-16\t1561.00\t1\t0\t0.00\t635.00\t826.00\t100.00\n544093\tCT0226-SRI003-0083-01\t2026-02-19\t4838.00\t1\t0\t0.00\t2060.00\t2678.00\t100.00\ncnt\n4162\n",
+  "stderr": "",
+  "execution_time_ms": 2294
+}

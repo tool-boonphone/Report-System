@@ -180,8 +180,10 @@ export async function listIncome(params: IncomeParams): Promise<{
     db.execute(sql.raw(dataSql)),
   ]);
 
-  const total = Number((countResult as any[])[0]?.total ?? 0);
-  const rows: IncomeRow[] = ((dataResult as any[]) ?? []).map((r: any) => ({
+  const countArr: any[] = (countResult as any)[0] ?? countResult;
+  const total = Number(countArr[0]?.total ?? 0);
+  const dataArr: any[] = (dataResult as any)[0] ?? dataResult;
+  const rows: IncomeRow[] = (dataArr ?? []).map((r: any) => ({
     id: Number(r.id),
     contractNo: r.contract_no ?? "",
     customerName: r.customer_name ?? null,
@@ -207,7 +209,8 @@ export async function listIncomeUpdatedBy(section: SectionKey): Promise<string[]
       ORDER BY updated_by ASC
     `),
   );
-  return ((result as any[]) ?? []).map((r: any) => r.updated_by).filter(Boolean);
+  const arr: any[] = (result as any)[0] ?? result;
+  return (arr ?? []).map((r: any) => r.updated_by).filter(Boolean);
 }
 
 // ─── Expense ──────────────────────────────────────────────────────────────────
@@ -263,8 +266,10 @@ export async function listExpense(params: ExpenseParams): Promise<{
     ),
   ]);
 
-  const total = Number((countResult as any[])[0]?.total ?? 0);
-  const rows: ExpenseRow[] = ((dataResult as any[]) ?? []).map((r: any) => ({
+  const countArr: any[] = (countResult as any)[0] ?? countResult;
+  const total = Number(countArr[0]?.total ?? 0);
+  const dataArr: any[] = (dataResult as any)[0] ?? dataResult;
+  const rows: ExpenseRow[] = (dataArr ?? []).map((r: any) => ({
     id: Number(r.id),
     contractNo: r.contract_no ?? "",
     approveDate: r.approve_date ?? null,
@@ -354,7 +359,7 @@ export async function getIncomeSummary(
   `;
 
   const result = await db.execute(sql.raw(querySql));
-  const rows = (result as any[]) ?? [];
+  const rows: any[] = (result as any)[0] ?? result;
 
   const summary: IncomeSummary = { "ค่างวด": 0, "ขายเครื่อง": 0, "ปิดยอด": 0, "เงินดาวน์": 0, total: 0 };
   for (const r of rows) {
@@ -394,6 +399,7 @@ export async function getExpenseSummary(
   const result = await db.execute(
     sql.raw(`SELECT SUM(commission_net) AS total FROM contracts WHERE ${whereStr}`),
   );
-  const total = Number((result as any[])[0]?.total ?? 0);
+  const arr: any[] = (result as any)[0] ?? result;
+  const total = Number(arr[0]?.total ?? 0);
   return { "ค่าคอมมิชชั่น": total, total };
 }
