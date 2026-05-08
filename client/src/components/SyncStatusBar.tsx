@@ -5,7 +5,7 @@ import { clearIdbCache } from "@/lib/debtIdbCache";
 import { useDebtCache } from "@/contexts/DebtCacheContext";
 import { useAppAuth } from "@/hooks/useAppAuth";
 import { RefreshCw, Trash2, XCircle } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
 
@@ -19,8 +19,9 @@ import { useLocation } from "wouter";
  *  - Hides both buttons
  *  - Shows a progress bar with % complete + elapsed/ETA
  *
- * Uses SSE (/api/sync-stream/:section) to keep Cloud Run connection alive
- * during sync. Falls back to polling sync.status for externally-triggered syncs.
+ * Uses polling (trpc.sync.status) to track progress.
+ * Sync is triggered via fire-and-forget tRPC mutation (returns immediately).
+ * Cloud Run keeps the sync process alive as long as the scheduler is running.
  */
 
 /** Format seconds into "Xm Ys" or "Xs" */
@@ -51,34 +52,24 @@ export function SyncStatusBar() {
   const { can } = useAppAuth();
   const canResync = can("sync_api", "sync");
 
-  // SSE-driven sync state (set when user manually triggers sync via this component)
-  const [sseRunning, setSseRunning] = useState(false);
-  const [sseProgress, setSseProgress] = useState(0);
-  const [sseStage, setSseStage] = useState("");
-  const [sseStartedAt, setSseStartedAt] = useState<number | null>(null);
-  const esRef = useRef<EventSource | null>(null);
-
   // Last synced time for the active section.
   const last = trpc.sync.lastSyncedAt.useQuery(
     { section: section ?? "Boonphone" },
     { enabled: !!section, refetchOnWindowFocus: true },
   );
 
-  // Running status — poll DB to detect externally-triggered syncs (auto-sync, other users).
-  // Only poll when SSE is NOT active (to avoid double-counting).
+  // Poll sync status from DB — fast poll when running, stop when idle.
   const status = trpc.sync.status.useQuery(undefined, {
     refetchInterval: (q) => {
-      if (sseRunning) return false; // SSE is driving progress — no need to poll
       const d = q.state.data as any;
-      if (!d) return false;
+      if (!d) return 3000;
       const s = section ?? "Boonphone";
       return d?.[s]?.running ? 2000 : false;
     },
   });
 
   const sectionData = section ? (status.data as any)?.[section] : null;
-  // isRunning = SSE active OR DB says running (for externally-triggered syncs)
-  const isRunning = sseRunning || Boolean(sectionData?.running);
+  const isRunning = Boolean(sectionData?.running);
 
   // Elapsed timer — ticks every second while running
   const [now, setNow] = useState(() => Date.now());
@@ -88,11 +79,15 @@ export function SyncStatusBar() {
     return () => clearInterval(id);
   }, [isRunning]);
 
-  // Determine progress/stage/startedAt from SSE (preferred) or DB polling
-  const progress: number = sseRunning ? sseProgress : (sectionData?.progress ?? 0);
-  const currentStage: string = sseRunning ? sseStage : (sectionData?.currentStage ?? "");
-  const startedAt: number | null = sseRunning ? sseStartedAt : (sectionData?.startedAt ?? null);
-  const stageLabel = STAGE_LABELS[currentStage] ?? currentStage;
+  const progress: number = sectionData?.progress ?? 0;
+  const currentStage: string = sectionData?.currentStage ?? "";
+  const startedAt: number | null = sectionData?.startedAt ?? null;
+
+  // Parse sub-progress from stage string e.g. "customers (3/10)"
+  const stageMatch = currentStage.match(/^(\w+)\s*\((\d+)\/(\d+)\)$/);
+  const baseStage = stageMatch ? stageMatch[1] : currentStage;
+  const stageLabel = STAGE_LABELS[baseStage] ?? baseStage;
+  const subProgress = stageMatch ? `(${stageMatch[2]}/${stageMatch[3]})` : "";
 
   // Elapsed seconds
   const elapsedMs = startedAt ? Math.max(0, now - startedAt) : 0;
@@ -104,85 +99,35 @@ export function SyncStatusBar() {
       ? (elapsedSecs / progress) * (100 - progress)
       : null;
 
-  // Cleanup SSE on unmount or section change
-  useEffect(() => {
-    return () => {
-      if (esRef.current) {
-        esRef.current.close();
-        esRef.current = null;
+  // Trigger mutation — fire-and-forget, returns immediately
+  const trigger = trpc.sync.trigger.useMutation({
+    onSuccess: () => {
+      toast.info(`เริ่ม Re-Sync ${section}...`);
+      // Start polling immediately
+      utils.sync.status.invalidate();
+    },
+    onError: (err) => {
+      if (err.message?.includes("already running")) {
+        toast.warning(`Sync ${section} กำลังทำงานอยู่แล้ว`);
+      } else {
+        toast.error(`เริ่ม Sync ไม่สำเร็จ: ${err.message}`);
       }
-    };
-  }, [section]);
+    },
+  });
 
   // Force-clear stuck sync mutation
   const clearStuck = trpc.sync.clearStuck.useMutation({
     onSuccess: (data) => {
       toast.success(`ล้าง sync ที่ค้างแล้ว (${data.cleared} รายการ) — สามารถ Re-Sync ใหม่ได้`);
-      setSseRunning(false);
-      setSseProgress(0);
-      setSseStage("");
-      if (esRef.current) { esRef.current.close(); esRef.current = null; }
       utils.sync.status.invalidate();
     },
     onError: (err) => toast.error(err.message),
   });
 
-  // Re-Sync via SSE — keeps Cloud Run connection alive during sync
   const handleResync = useCallback(() => {
-    if (!section || sseRunning) return;
-
-    // Close any existing SSE connection
-    if (esRef.current) { esRef.current.close(); esRef.current = null; }
-
-    setSseRunning(true);
-    setSseProgress(0);
-    setSseStage("เริ่มต้น");
-    setSseStartedAt(Date.now());
-
-    const es = new EventSource(`/api/sync-stream/${encodeURIComponent(section)}`);
-    esRef.current = es;
-
-    es.onmessage = (e) => {
-      try {
-        const msg = JSON.parse(e.data);
-        if (msg.type === "progress") {
-          setSseProgress(msg.progress ?? 0);
-          setSseStage(msg.currentStage ?? "");
-        } else if (msg.type === "done") {
-          setSseRunning(false);
-          setSseProgress(100);
-          setSseStage("");
-          es.close();
-          esRef.current = null;
-          toast.success(`Sync ${section} เสร็จสิ้น`);
-          utils.sync.lastSyncedAt.invalidate();
-          utils.sync.status.invalidate();
-        } else if (msg.type === "error") {
-          setSseRunning(false);
-          setSseStage("");
-          es.close();
-          esRef.current = null;
-          toast.error(`Sync ${section} ล้มเหลว: ${msg.message}`);
-          utils.sync.status.invalidate();
-        }
-        // heartbeat — ignore, just keeps connection alive
-      } catch {
-        // ignore parse errors
-      }
-    };
-
-    es.onerror = () => {
-      // SSE connection dropped — check if sync is still running via DB
-      setSseRunning(false);
-      es.close();
-      esRef.current = null;
-      // Start polling to detect if sync is still running on server
-      utils.sync.status.invalidate();
-      toast.error("การเชื่อมต่อ Sync ขาดหาย — กำลังตรวจสอบสถานะ...");
-    };
-
-    toast.info(`เริ่ม Re-Sync ${section}...`);
-  }, [section, sseRunning, utils.sync.lastSyncedAt, utils.sync.status]);
+    if (!section || isRunning || trigger.isPending) return;
+    trigger.mutate({ section });
+  }, [section, isRunning, trigger]);
 
   // Clear Cache handler
   const handleClearCache = async () => {
@@ -223,10 +168,13 @@ export function SyncStatusBar() {
         /* ---- Progress bar (แสดงแทนปุ่มขณะ Sync กำลังทำงาน) ---- */
         <div className="flex items-center gap-2">
           <div className="min-w-[180px] max-w-[260px]">
-            {/* Stage label + % */}
+            {/* Stage label + sub-progress + % */}
             <div className="flex items-center justify-between mb-0.5">
               <span className="text-xs text-blue-600 font-medium truncate">
                 {stageLabel || "กำลัง Sync..."}
+                {subProgress && (
+                  <span className="ml-1 text-blue-400">{subProgress}</span>
+                )}
               </span>
               <span className="text-xs text-blue-600 font-semibold ml-1 shrink-0">
                 {progress}%
@@ -262,14 +210,14 @@ export function SyncStatusBar() {
       ) : canResync ? (
         /* ---- ปุ่ม Re-Sync API + Clear Cache (เฉพาะผู้มีสิทธิ์) ---- */
         <div className="flex items-center gap-1.5">
-          {/* Re-Sync API — uses SSE to keep Cloud Run alive */}
+          {/* Re-Sync API */}
           <button
             onClick={handleResync}
-            disabled={isRunning || isClearing}
+            disabled={isRunning || isClearing || trigger.isPending}
             className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 text-sm text-gray-700 disabled:opacity-50 transition-colors"
             title="ดึงข้อมูลใหม่จาก API ภายนอก (ใช้เวลาหลายนาที)"
           >
-            <RefreshCw className="w-4 h-4" />
+            <RefreshCw className={`w-4 h-4 ${trigger.isPending ? "animate-spin" : ""}`} />
             <span className="hidden sm:inline">Re-Sync API</span>
           </button>
 
