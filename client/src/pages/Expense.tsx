@@ -407,7 +407,7 @@ export default function Expense() {
                   const globalIdx = (page - 1) * pageSize + idx + 1;
                   return (
                     <tr
-                      key={row.id}
+                      key={`${row.contractNo}-${idx}`}
                       className="border-b border-gray-100 hover:bg-red-50 transition-colors"
                     >
                       <td className="px-3 py-2 text-center text-gray-400 text-xs">{globalIdx}</td>
