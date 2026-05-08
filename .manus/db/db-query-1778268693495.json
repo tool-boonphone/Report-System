@@ -1,0 +1,35 @@
+{
+  "query": "SELECT paid_at, SUBSTRING(paid_at, 1, 7), contract_no FROM payment_transactions WHERE section = 'Fastfone365' LIMIT 5;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT paid_at, SUBSTRING(paid_at, 1, 7), contract_no FROM payment_transactions WHERE section = 'Fastfone365' LIMIT 5;",
+  "rows": [
+    {
+      "paid_at": "2024-09-06",
+      "SUBSTRING(paid_at, 1, 7)": "2024-09",
+      "contract_no": "CT0824-NRT001-00004-01"
+    },
+    {
+      "paid_at": "2024-09-06",
+      "SUBSTRING(paid_at, 1, 7)": "2024-09",
+      "contract_no": "CT0824-NRT001-00001-01"
+    },
+    {
+      "paid_at": "2024-09-06",
+      "SUBSTRING(paid_at, 1, 7)": "2024-09",
+      "contract_no": "CT0824-CBI001-00003-01"
+    },
+    {
+      "paid_at": "2024-09-06",
+      "SUBSTRING(paid_at, 1, 7)": "2024-09",
+      "contract_no": "CT0824-NRT001-00004-01"
+    },
+    {
+      "paid_at": "2024-08-27",
+      "SUBSTRING(paid_at, 1, 7)": "2024-08",
+      "contract_no": "CT0824-NRT001-00012-01"
+    }
+  ],
+  "messages": [],
+  "stdout": "paid_at\tSUBSTRING(paid_at, 1, 7)\tcontract_no\n2024-09-06\t2024-09\tCT0824-NRT001-00004-01\n2024-09-06\t2024-09\tCT0824-NRT001-00001-01\n2024-09-06\t2024-09\tCT0824-CBI001-00003-01\n2024-09-06\t2024-09\tCT0824-NRT001-00004-01\n2024-08-27\t2024-08\tCT0824-NRT001-00012-01\n",
+  "stderr": "",
+  "execution_time_ms": 1758
+}

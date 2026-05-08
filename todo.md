@@ -1366,3 +1366,15 @@ Task list:
 - [ ] P142-7: เพิ่มเมนู "บัญชี" (group) ใน TopNav.tsx พร้อม sub-menu รายรับ + รายจ่าย
 - [ ] P142-8: เพิ่ม routes /income และ /expense ใน App.tsx
 - [ ] P142-9: Commit + Push GitHub + Checkpoint
+
+## Fix: ยอดเก็บหนี้ตรงกับ Fastfone Report (source IS NULL = close rows)
+
+- [ ] เพิ่ม column `payment_tx_amount` ใน debt_collected_cache schema (= payment_transactions.amount ของ close row)
+- [ ] แก้ populateCache.ts ให้เก็บ payment_tx_amount จาก p.total (total_paid_amount) ของ close rows
+- [ ] แก้ AMOUNT_CASE ใน accountingDb.ts ให้ใช้ payment_tx_amount แทน total_amount สำหรับ ปิดยอด และ ค่างวด
+- [ ] แก้ getIncomeSummary ใน accountingDb.ts ให้ยอดรวมตรงกับ Fastfone
+- [ ] แก้ getIncomeSummaryByPeriod ใน accountingDb.ts ให้ยอดรายเดือน/รายปีตรงกับ Fastfone
+- [ ] แก้ listIncome ใน accountingDb.ts ให้ยอดรายรายการตรงกับ Fastfone
+- [ ] แก้ monthlySummaryDb.ts ให้ total_paid ตรงกับ Fastfone (ใช้ payment_tx_amount)
+- [ ] Run migration SQL เพิ่ม column payment_tx_amount
+- [ ] ตรวจสอบตัวเลขรายวัน/รายเดือน/รายปีในทุกเมนูให้ตรงกับ Fastfone

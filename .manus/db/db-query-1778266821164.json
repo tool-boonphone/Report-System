@@ -1,0 +1,35 @@
+{
+  "query": "SELECT payment_tx_amount, total_amount, id FROM debt_collected_cache WHERE section = 'Boonphone' LIMIT 5;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT payment_tx_amount, total_amount, id FROM debt_collected_cache WHERE section = 'Boonphone' LIMIT 5;",
+  "rows": [
+    {
+      "payment_tx_amount": "2880.00",
+      "total_amount": "2880.00",
+      "id": "540001"
+    },
+    {
+      "payment_tx_amount": "2880.00",
+      "total_amount": "2880.00",
+      "id": "540002"
+    },
+    {
+      "payment_tx_amount": "2880.00",
+      "total_amount": "2880.00",
+      "id": "540003"
+    },
+    {
+      "payment_tx_amount": "2880.00",
+      "total_amount": "2880.00",
+      "id": "540004"
+    },
+    {
+      "payment_tx_amount": "1995.00",
+      "total_amount": "1995.00",
+      "id": "540005"
+    }
+  ],
+  "messages": [],
+  "stdout": "payment_tx_amount\ttotal_amount\tid\n2880.00\t2880.00\t540001\n2880.00\t2880.00\t540002\n2880.00\t2880.00\t540003\n2880.00\t2880.00\t540004\n1995.00\t1995.00\t540005\n",
+  "stderr": "",
+  "execution_time_ms": 1830
+}

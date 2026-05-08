@@ -1,0 +1,58 @@
+{
+  "query": "\nSELECT column_name, column_type \nFROM information_schema.columns \nWHERE table_name = 'debt_collected_cache' \nORDER BY ordinal_position\nLIMIT 31 OFFSET 19;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT column_name, column_type \nFROM information_schema.columns \nWHERE table_name = 'debt_collected_cache' \nORDER BY ordinal_position\nLIMIT 31 OFFSET 19;\n",
+  "rows": [
+    {
+      "column_name": "fee",
+      "column_type": "decimal(12,2)"
+    },
+    {
+      "column_name": "penalty",
+      "column_type": "decimal(12,2)"
+    },
+    {
+      "column_name": "unlock_fee",
+      "column_type": "decimal(12,2)"
+    },
+    {
+      "column_name": "discount",
+      "column_type": "decimal(12,2)"
+    },
+    {
+      "column_name": "overpaid",
+      "column_type": "decimal(12,2)"
+    },
+    {
+      "column_name": "bad_debt",
+      "column_type": "decimal(12,2)"
+    },
+    {
+      "column_name": "total_amount",
+      "column_type": "decimal(12,2)"
+    },
+    {
+      "column_name": "updated_by",
+      "column_type": "varchar(128)"
+    },
+    {
+      "column_name": "is_bad_debt_row",
+      "column_type": "tinyint(1)"
+    },
+    {
+      "column_name": "populated_at",
+      "column_type": "timestamp"
+    },
+    {
+      "column_name": "updated_at",
+      "column_type": "varchar(32)"
+    },
+    {
+      "column_name": "is_close_row",
+      "column_type": "tinyint(1)"
+    }
+  ],
+  "messages": [],
+  "stdout": "column_name\tcolumn_type\nfee\tdecimal(12,2)\npenalty\tdecimal(12,2)\nunlock_fee\tdecimal(12,2)\ndiscount\tdecimal(12,2)\noverpaid\tdecimal(12,2)\nbad_debt\tdecimal(12,2)\ntotal_amount\tdecimal(12,2)\nupdated_by\tvarchar(128)\nis_bad_debt_row\ttinyint(1)\npopulated_at\ttimestamp\nupdated_at\tvarchar(32)\nis_close_row\ttinyint(1)\n",
+  "stderr": "",
+  "execution_time_ms": 1773
+}

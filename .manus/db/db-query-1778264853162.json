@@ -1,0 +1,17 @@
+{
+  "query": "\nSELECT \n  COUNT(*) AS total_rows,\n  SUM(CASE WHEN JSON_EXTRACT(raw_json, '$.close_installment_amount') IS NOT NULL THEN 1 ELSE 0 END) AS has_close,\n  SUM(CASE WHEN JSON_EXTRACT(raw_json, '$.principal_paid') IS NOT NULL THEN 1 ELSE 0 END) AS has_principal,\n  SUM(CASE WHEN JSON_EXTRACT(raw_json, '$.source') = 'installment' THEN 1 ELSE 0 END) AS source_installment,\n  SUM(CASE WHEN JSON_EXTRACT(raw_json, '$.source') IS NULL THEN 1 ELSE 0 END) AS source_null\nFROM payment_transactions\nWHERE section = 'Fastfone365'\n  AND DATE(paid_at) BETWEEN '2026-04-01' AND '2026-04-30';\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT \n  COUNT(*) AS total_rows,\n  SUM(CASE WHEN JSON_EXTRACT(raw_json, '$.close_installment_amount') IS NOT NULL THEN 1 ELSE 0 END) AS has_close,\n  SUM(CASE WHEN JSON_EXTRACT(raw_json, '$.principal_paid') IS NOT NULL THEN 1 ELSE 0 END) AS has_principal,\n  SUM(CASE WHEN JSON_EXTRACT(raw_json, '$.source') = 'installment' THEN 1 ELSE 0 END) AS source_installment,\n  SUM(CASE WHEN JSON_EXTRACT(raw_json, '$.source') IS NULL THEN 1 ELSE 0 END) AS source_null\nFROM payment_transactions\nWHERE section = 'Fastfone365'\n  AND DATE(paid_at) BETWEEN '2026-04-01' AND '2026-04-30';\n",
+  "rows": [
+    {
+      "total_rows": "10715",
+      "has_close": "6233",
+      "has_principal": "6233",
+      "source_installment": "4482",
+      "source_null": "6233"
+    }
+  ],
+  "messages": [],
+  "stdout": "total_rows\thas_close\thas_principal\tsource_installment\tsource_null\n10715\t6233\t6233\t4482\t6233\n",
+  "stderr": "",
+  "execution_time_ms": 1970
+}

@@ -1,0 +1,50 @@
+{
+  "query": "SELECT \n  dcc.payment_external_id,\n  dcc.is_close_row,\n  dcc.payment_tx_amount,\n  pt.external_id,\n  pt.amount,\n  JSON_EXTRACT(pt.raw_json, '$.source') AS source\nFROM debt_collected_cache dcc\nLEFT JOIN payment_transactions pt ON pt.external_id = dcc.payment_external_id AND pt.section = dcc.section\nWHERE dcc.section = 'Fastfone365' AND dcc.is_close_row = 1\nLIMIT 5;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT \n  dcc.payment_external_id,\n  dcc.is_close_row,\n  dcc.payment_tx_amount,\n  pt.external_id,\n  pt.amount,\n  JSON_EXTRACT(pt.raw_json, '$.source') AS source\nFROM debt_collected_cache dcc\nLEFT JOIN payment_transactions pt ON pt.external_id = dcc.payment_external_id AND pt.section = dcc.section\nWHERE dcc.section = 'Fastfone365' AND dcc.is_close_row = 1\nLIMIT 5;",
+  "rows": [
+    {
+      "payment_external_id": "10014-close-p2-s1",
+      "is_close_row": "1",
+      "payment_tx_amount": "3497.00",
+      "external_id": "NULL",
+      "amount": "NULL",
+      "source": "NULL"
+    },
+    {
+      "payment_external_id": "10014-close-p3-s1",
+      "is_close_row": "1",
+      "payment_tx_amount": "2098.20",
+      "external_id": "NULL",
+      "amount": "NULL",
+      "source": "NULL"
+    },
+    {
+      "payment_external_id": "10018-close-p6-s1",
+      "is_close_row": "1",
+      "payment_tx_amount": "3040.00",
+      "external_id": "NULL",
+      "amount": "NULL",
+      "source": "NULL"
+    },
+    {
+      "payment_external_id": "10018-close-p7-s1",
+      "is_close_row": "1",
+      "payment_tx_amount": "3040.00",
+      "external_id": "NULL",
+      "amount": "NULL",
+      "source": "NULL"
+    },
+    {
+      "payment_external_id": "10018-close-p8-s1",
+      "is_close_row": "1",
+      "payment_tx_amount": "1216.00",
+      "external_id": "NULL",
+      "amount": "NULL",
+      "source": "NULL"
+    }
+  ],
+  "messages": [],
+  "stdout": "payment_external_id\tis_close_row\tpayment_tx_amount\texternal_id\tamount\tsource\n10014-close-p2-s1\t1\t3497.00\tNULL\tNULL\tNULL\n10014-close-p3-s1\t1\t2098.20\tNULL\tNULL\tNULL\n10018-close-p6-s1\t1\t3040.00\tNULL\tNULL\tNULL\n10018-close-p7-s1\t1\t3040.00\tNULL\tNULL\tNULL\n10018-close-p8-s1\t1\t1216.00\tNULL\tNULL\tNULL\n",
+  "stderr": "",
+  "execution_time_ms": 1831
+}

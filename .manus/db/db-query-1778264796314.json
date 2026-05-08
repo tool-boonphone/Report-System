@@ -1,0 +1,20 @@
+{
+  "query": "\nSELECT \n  paid_at,\n  CAST(amount AS DECIMAL(18,2)) AS amount,\n  LEFT(raw_json, 800) AS raw_json_preview\nFROM payment_transactions\nWHERE section = 'Fastfone365'\n  AND DATE(paid_at) = '2026-04-01'\nLIMIT 2;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT \n  paid_at,\n  CAST(amount AS DECIMAL(18,2)) AS amount,\n  LEFT(raw_json, 800) AS raw_json_preview\nFROM payment_transactions\nWHERE section = 'Fastfone365'\n  AND DATE(paid_at) = '2026-04-01'\nLIMIT 2;\n",
+  "rows": [
+    {
+      "paid_at": "2026-04-01",
+      "amount": "2922.00",
+      "raw_json_preview": "{\"installmentExternalId\": \"23555-2\", \"source\": \"installment\"}"
+    },
+    {
+      "paid_at": "2026-04-01",
+      "amount": "2998.00",
+      "raw_json_preview": "{\"installmentExternalId\": \"23554-2\", \"source\": \"installment\"}"
+    }
+  ],
+  "messages": [],
+  "stdout": "paid_at\tamount\traw_json_preview\n2026-04-01\t2922.00\t{\"installmentExternalId\": \"23555-2\", \"source\": \"installment\"}\n2026-04-01\t2998.00\t{\"installmentExternalId\": \"23554-2\", \"source\": \"installment\"}\n",
+  "stderr": "",
+  "execution_time_ms": 1916
+}

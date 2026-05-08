@@ -1,0 +1,80 @@
+{
+  "query": "\nSELECT\n  DATE(paid_at) AS paid_date,\n  SUM(CAST(amount AS DECIMAL(18,2))) AS sum_amount,\n  SUM(CAST(JSON_EXTRACT(raw_json, '$.principal_paid') AS DECIMAL(18,2))) AS sum_principal,\n  SUM(CAST(JSON_EXTRACT(raw_json, '$.interest_paid') AS DECIMAL(18,2))) AS sum_interest,\n  SUM(CAST(JSON_EXTRACT(raw_json, '$.fee_paid') AS DECIMAL(18,2))) AS sum_fee,\n  SUM(CAST(JSON_EXTRACT(raw_json, '$.penalty_paid') AS DECIMAL(18,2))) AS sum_penalty,\n  SUM(CAST(JSON_EXTRACT(raw_json, '$.unlock_fee_paid') AS DECIMAL(18,2))) AS sum_unlock_fee,\n  SUM(CAST(JSON_EXTRACT(raw_json, '$.overpaid_amount') AS DECIMAL(18,2))) AS sum_overpaid,\n  SUM(CAST(JSON_EXTRACT(raw_json, '$.bad_debt_amount') AS DECIMAL(18,2))) AS sum_bad_debt,\n  SUM(CAST(JSON_EXTRACT(raw_json, '$.discount_amount') AS DECIMAL(18,2))) AS sum_discount,\n  SUM(CAST(JSON_EXTRACT(raw_json, '$.total_paid_amount') AS DECIMAL(18,2))) AS sum_total_paid,\n  SUM(CAST(JSON_EXTRACT(raw_json, '$.close_installment_amount') AS DECIMAL(18,2))) AS sum_close\nFROM payment_transactions\nWHERE section = 'Fastfone365'\n  AND JSON_EXTRACT(raw_json, '$.source') IS NULL\n  AND DATE(paid_at) BETWEEN '2026-04-01' AND '2026-04-05'\nGROUP BY DATE(paid_at)\nORDER BY paid_date ASC;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT\n  DATE(paid_at) AS paid_date,\n  SUM(CAST(amount AS DECIMAL(18,2))) AS sum_amount,\n  SUM(CAST(JSON_EXTRACT(raw_json, '$.principal_paid') AS DECIMAL(18,2))) AS sum_principal,\n  SUM(CAST(JSON_EXTRACT(raw_json, '$.interest_paid') AS DECIMAL(18,2))) AS sum_interest,\n  SUM(CAST(JSON_EXTRACT(raw_json, '$.fee_paid') AS DECIMAL(18,2))) AS sum_fee,\n  SUM(CAST(JSON_EXTRACT(raw_json, '$.penalty_paid') AS DECIMAL(18,2))) AS sum_penalty,\n  SUM(CAST(JSON_EXTRACT(raw_json, '$.unlock_fee_paid') AS DECIMAL(18,2))) AS sum_unlock_fee,\n  SUM(CAST(JSON_EXTRACT(raw_json, '$.overpaid_amount') AS DECIMAL(18,2))) AS sum_overpaid,\n  SUM(CAST(JSON_EXTRACT(raw_json, '$.bad_debt_amount') AS DECIMAL(18,2))) AS sum_bad_debt,\n  SUM(CAST(JSON_EXTRACT(raw_json, '$.discount_amount') AS DECIMAL(18,2))) AS sum_discount,\n  SUM(CAST(JSON_EXTRACT(raw_json, '$.total_paid_amount') AS DECIMAL(18,2))) AS sum_total_paid,\n  SUM(CAST(JSON_EXTRACT(raw_json, '$.close_installment_amount') AS DECIMAL(18,2))) AS sum_close\nFROM payment_transactions\nWHERE section = 'Fastfone365'\n  AND JSON_EXTRACT(raw_json, '$.source') IS NULL\n  AND DATE(paid_at) BETWEEN '2026-04-01' AND '2026-04-05'\nGROUP BY DATE(paid_at)\nORDER BY paid_date ASC;\n",
+  "rows": [
+    {
+      "paid_date": "2026-04-01",
+      "sum_amount": "802022.89",
+      "sum_principal": "346120.95",
+      "sum_interest": "413689.94",
+      "sum_fee": "28085.00",
+      "sum_penalty": "13540.00",
+      "sum_unlock_fee": "0.00",
+      "sum_overpaid": "1270.00",
+      "sum_bad_debt": "0.00",
+      "sum_discount": "683.00",
+      "sum_total_paid": "802022.89",
+      "sum_close": "787212.89"
+    },
+    {
+      "paid_date": "2026-04-02",
+      "sum_amount": "509662.63",
+      "sum_principal": "210872.08",
+      "sum_interest": "264002.55",
+      "sum_fee": "17383.00",
+      "sum_penalty": "4589.00",
+      "sum_unlock_fee": "0.00",
+      "sum_overpaid": "12816.00",
+      "sum_bad_debt": "0.00",
+      "sum_discount": "0.00",
+      "sum_total_paid": "509662.63",
+      "sum_close": "492257.63"
+    },
+    {
+      "paid_date": "2026-04-03",
+      "sum_amount": "746091.80",
+      "sum_principal": "253146.75",
+      "sum_interest": "303189.01",
+      "sum_fee": "19092.00",
+      "sum_penalty": "7019.00",
+      "sum_unlock_fee": "0.00",
+      "sum_overpaid": "164061.24",
+      "sum_bad_debt": "0.00",
+      "sum_discount": "416.20",
+      "sum_total_paid": "746091.80",
+      "sum_close": "575011.56"
+    },
+    {
+      "paid_date": "2026-04-04",
+      "sum_amount": "420563.00",
+      "sum_principal": "175633.25",
+      "sum_interest": "223059.75",
+      "sum_fee": "14103.00",
+      "sum_penalty": "6372.00",
+      "sum_unlock_fee": "0.00",
+      "sum_overpaid": "1395.00",
+      "sum_bad_debt": "0.00",
+      "sum_discount": "0.00",
+      "sum_total_paid": "420563.00",
+      "sum_close": "412796.00"
+    },
+    {
+      "paid_date": "2026-04-05",
+      "sum_amount": "854930.00",
+      "sum_principal": "360284.00",
+      "sum_interest": "445775.00",
+      "sum_fee": "29741.00",
+      "sum_penalty": "10415.00",
+      "sum_unlock_fee": "0.00",
+      "sum_overpaid": "8715.00",
+      "sum_bad_debt": "0.00",
+      "sum_discount": "0.00",
+      "sum_total_paid": "854930.00",
+      "sum_close": "835800.00"
+    }
+  ],
+  "messages": [],
+  "stdout": "paid_date\tsum_amount\tsum_principal\tsum_interest\tsum_fee\tsum_penalty\tsum_unlock_fee\tsum_overpaid\tsum_bad_debt\tsum_discount\tsum_total_paid\tsum_close\n2026-04-01\t802022.89\t346120.95\t413689.94\t28085.00\t13540.00\t0.00\t1270.00\t0.00\t683.00\t802022.89\t787212.89\n2026-04-02\t509662.63\t210872.08\t264002.55\t17383.00\t4589.00\t0.00\t12816.00\t0.00\t0.00\t509662.63\t492257.63\n2026-04-03\t746091.80\t253146.75\t303189.01\t19092.00\t7019.00\t0.00\t164061.24\t0.00\t416.20\t746091.80\t575011.56\n2026-04-04\t420563.00\t175633.25\t223059.75\t14103.00\t6372.00\t0.00\t1395.00\t0.00\t0.00\t420563.00\t412796.00\n2026-04-05\t854930.00\t360284.00\t445775.00\t29741.00\t10415.00\t0.00\t8715.00\t0.00\t0.00\t854930.00\t835800.00\n",
+  "stderr": "",
+  "execution_time_ms": 2078
+}

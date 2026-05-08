@@ -1,0 +1,20 @@
+{
+  "query": "\nSELECT \n  JSON_EXTRACT(raw_json, '$.source') AS source_value,\n  COUNT(*) AS cnt,\n  SUM(CAST(amount AS DECIMAL(18,2))) AS total_amount\nFROM payment_transactions\nWHERE section = 'Fastfone365'\n  AND DATE(paid_at) BETWEEN '2026-04-01' AND '2026-04-30'\nGROUP BY JSON_EXTRACT(raw_json, '$.source')\nORDER BY cnt DESC;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT \n  JSON_EXTRACT(raw_json, '$.source') AS source_value,\n  COUNT(*) AS cnt,\n  SUM(CAST(amount AS DECIMAL(18,2))) AS total_amount\nFROM payment_transactions\nWHERE section = 'Fastfone365'\n  AND DATE(paid_at) BETWEEN '2026-04-01' AND '2026-04-30'\nGROUP BY JSON_EXTRACT(raw_json, '$.source')\nORDER BY cnt DESC;\n",
+  "rows": [
+    {
+      "source_value": "NULL",
+      "cnt": "6233",
+      "total_amount": "15329550.00"
+    },
+    {
+      "source_value": "\"installment\"",
+      "cnt": "4482",
+      "total_amount": "12283470.90"
+    }
+  ],
+  "messages": [],
+  "stdout": "source_value\tcnt\ttotal_amount\nNULL\t6233\t15329550.00\n\"installment\"\t4482\t12283470.90\n",
+  "stderr": "",
+  "execution_time_ms": 2116
+}

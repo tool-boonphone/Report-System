@@ -1,0 +1,250 @@
+{
+  "query": "\nSELECT\n  DATE(paid_at) AS paid_date,\n  SUM(CASE WHEN JSON_EXTRACT(raw_json, '$.source') IS NULL THEN CAST(amount AS DECIMAL(18,2)) ELSE 0 END) AS report_system_amount,\n  SUM(CASE WHEN JSON_EXTRACT(raw_json, '$.source') = 'installment' THEN CAST(amount AS DECIMAL(18,2)) ELSE 0 END) AS installment_amount,\n  SUM(CAST(amount AS DECIMAL(18,2))) AS total_amount,\n  SUM(CASE WHEN JSON_EXTRACT(raw_json, '$.source') IS NULL THEN 1 ELSE 0 END) AS close_rows,\n  SUM(CASE WHEN JSON_EXTRACT(raw_json, '$.source') = 'installment' THEN 1 ELSE 0 END) AS installment_rows\nFROM payment_transactions\nWHERE section = 'Fastfone365'\n  AND DATE(paid_at) BETWEEN '2026-04-01' AND '2026-04-30'\nGROUP BY DATE(paid_at)\nORDER BY paid_date ASC;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT\n  DATE(paid_at) AS paid_date,\n  SUM(CASE WHEN JSON_EXTRACT(raw_json, '$.source') IS NULL THEN CAST(amount AS DECIMAL(18,2)) ELSE 0 END) AS report_system_amount,\n  SUM(CASE WHEN JSON_EXTRACT(raw_json, '$.source') = 'installment' THEN CAST(amount AS DECIMAL(18,2)) ELSE 0 END) AS installment_amount,\n  SUM(CAST(amount AS DECIMAL(18,2))) AS total_amount,\n  SUM(CASE WHEN JSON_EXTRACT(raw_json, '$.source') IS NULL THEN 1 ELSE 0 END) AS close_rows,\n  SUM(CASE WHEN JSON_EXTRACT(raw_json, '$.source') = 'installment' THEN 1 ELSE 0 END) AS installment_rows\nFROM payment_transactions\nWHERE section = 'Fastfone365'\n  AND DATE(paid_at) BETWEEN '2026-04-01' AND '2026-04-30'\nGROUP BY DATE(paid_at)\nORDER BY paid_date ASC;\n",
+  "rows": [
+    {
+      "paid_date": "2026-04-01",
+      "report_system_amount": "802022.89",
+      "installment_amount": "865565.89",
+      "total_amount": "1667588.78",
+      "close_rows": "328",
+      "installment_rows": "308"
+    },
+    {
+      "paid_date": "2026-04-02",
+      "report_system_amount": "509662.63",
+      "installment_amount": "637151.00",
+      "total_amount": "1146813.63",
+      "close_rows": "215",
+      "installment_rows": "240"
+    },
+    {
+      "paid_date": "2026-04-03",
+      "report_system_amount": "746091.80",
+      "installment_amount": "503818.80",
+      "total_amount": "1249910.60",
+      "close_rows": "239",
+      "installment_rows": "172"
+    },
+    {
+      "paid_date": "2026-04-04",
+      "report_system_amount": "420563.00",
+      "installment_amount": "424334.00",
+      "total_amount": "844897.00",
+      "close_rows": "178",
+      "installment_rows": "153"
+    },
+    {
+      "paid_date": "2026-04-05",
+      "report_system_amount": "854930.00",
+      "installment_amount": "806983.00",
+      "total_amount": "1661913.00",
+      "close_rows": "334",
+      "installment_rows": "291"
+    },
+    {
+      "paid_date": "2026-04-06",
+      "report_system_amount": "662866.00",
+      "installment_amount": "658816.65",
+      "total_amount": "1321682.65",
+      "close_rows": "184",
+      "installment_rows": "235"
+    },
+    {
+      "paid_date": "2026-04-07",
+      "report_system_amount": "360083.30",
+      "installment_amount": "381768.80",
+      "total_amount": "741852.10",
+      "close_rows": "173",
+      "installment_rows": "137"
+    },
+    {
+      "paid_date": "2026-04-08",
+      "report_system_amount": "531042.00",
+      "installment_amount": "426924.00",
+      "total_amount": "957966.00",
+      "close_rows": "188",
+      "installment_rows": "152"
+    },
+    {
+      "paid_date": "2026-04-09",
+      "report_system_amount": "439091.88",
+      "installment_amount": "366842.46",
+      "total_amount": "805934.34",
+      "close_rows": "185",
+      "installment_rows": "136"
+    },
+    {
+      "paid_date": "2026-04-10",
+      "report_system_amount": "1144673.60",
+      "installment_amount": "1105469.23",
+      "total_amount": "2250142.83",
+      "close_rows": "455",
+      "installment_rows": "396"
+    },
+    {
+      "paid_date": "2026-04-11",
+      "report_system_amount": "367147.00",
+      "installment_amount": "456786.04",
+      "total_amount": "823933.04",
+      "close_rows": "146",
+      "installment_rows": "161"
+    },
+    {
+      "paid_date": "2026-04-12",
+      "report_system_amount": "328851.80",
+      "installment_amount": "387390.30",
+      "total_amount": "716242.10",
+      "close_rows": "144",
+      "installment_rows": "136"
+    },
+    {
+      "paid_date": "2026-04-13",
+      "report_system_amount": "180308.00",
+      "installment_amount": "206499.00",
+      "total_amount": "386807.00",
+      "close_rows": "80",
+      "installment_rows": "66"
+    },
+    {
+      "paid_date": "2026-04-14",
+      "report_system_amount": "186054.00",
+      "installment_amount": "180140.00",
+      "total_amount": "366194.00",
+      "close_rows": "84",
+      "installment_rows": "65"
+    },
+    {
+      "paid_date": "2026-04-15",
+      "report_system_amount": "478593.00",
+      "installment_amount": "432386.00",
+      "total_amount": "910979.00",
+      "close_rows": "198",
+      "installment_rows": "156"
+    },
+    {
+      "paid_date": "2026-04-16",
+      "report_system_amount": "443273.60",
+      "installment_amount": "1120393.38",
+      "total_amount": "1563666.98",
+      "close_rows": "215",
+      "installment_rows": "415"
+    },
+    {
+      "paid_date": "2026-04-17",
+      "report_system_amount": "382490.20",
+      "installment_amount": "329652.20",
+      "total_amount": "712142.40",
+      "close_rows": "178",
+      "installment_rows": "137"
+    },
+    {
+      "paid_date": "2026-04-18",
+      "report_system_amount": "289428.20",
+      "installment_amount": "303743.20",
+      "total_amount": "593171.40",
+      "close_rows": "130",
+      "installment_rows": "111"
+    },
+    {
+      "paid_date": "2026-04-19",
+      "report_system_amount": "197490.00",
+      "installment_amount": "215951.68",
+      "total_amount": "413441.68",
+      "close_rows": "97",
+      "installment_rows": "82"
+    },
+    {
+      "paid_date": "2026-04-20",
+      "report_system_amount": "744782.80",
+      "installment_amount": "637411.80",
+      "total_amount": "1382194.60",
+      "close_rows": "316",
+      "installment_rows": "232"
+    },
+    {
+      "paid_date": "2026-04-21",
+      "report_system_amount": "371059.40",
+      "installment_amount": "542077.40",
+      "total_amount": "913136.80",
+      "close_rows": "177",
+      "installment_rows": "205"
+    },
+    {
+      "paid_date": "2026-04-22",
+      "report_system_amount": "283143.75",
+      "installment_amount": "413272.00",
+      "total_amount": "696415.75",
+      "close_rows": "133",
+      "installment_rows": "153"
+    },
+    {
+      "paid_date": "2026-04-23",
+      "report_system_amount": "294010.75",
+      "installment_amount": "440403.87",
+      "total_amount": "734414.62",
+      "close_rows": "122",
+      "installment_rows": "176"
+    },
+    {
+      "paid_date": "2026-04-24",
+      "report_system_amount": "475122.20",
+      "installment_amount": "439690.20",
+      "total_amount": "914812.40",
+      "close_rows": "195",
+      "installment_rows": "167"
+    },
+    {
+      "paid_date": "2026-04-25",
+      "report_system_amount": "683186.00",
+      "installment_amount": "0.00",
+      "total_amount": "683186.00",
+      "close_rows": "276",
+      "installment_rows": "0"
+    },
+    {
+      "paid_date": "2026-04-26",
+      "report_system_amount": "272447.00",
+      "installment_amount": "0.00",
+      "total_amount": "272447.00",
+      "close_rows": "115",
+      "installment_rows": "0"
+    },
+    {
+      "paid_date": "2026-04-27",
+      "report_system_amount": "459175.00",
+      "installment_amount": "0.00",
+      "total_amount": "459175.00",
+      "close_rows": "196",
+      "installment_rows": "0"
+    },
+    {
+      "paid_date": "2026-04-28",
+      "report_system_amount": "461123.20",
+      "installment_amount": "0.00",
+      "total_amount": "461123.20",
+      "close_rows": "200",
+      "installment_rows": "0"
+    },
+    {
+      "paid_date": "2026-04-29",
+      "report_system_amount": "351586.00",
+      "installment_amount": "0.00",
+      "total_amount": "351586.00",
+      "close_rows": "131",
+      "installment_rows": "0"
+    },
+    {
+      "paid_date": "2026-04-30",
+      "report_system_amount": "1609251.00",
+      "installment_amount": "0.00",
+      "total_amount": "1609251.00",
+      "close_rows": "621",
+      "installment_rows": "0"
+    }
+  ],
+  "messages": [],
+  "stdout": "paid_date\treport_system_amount\tinstallment_amount\ttotal_amount\tclose_rows\tinstallment_rows\n2026-04-01\t802022.89\t865565.89\t1667588.78\t328\t308\n2026-04-02\t509662.63\t637151.00\t1146813.63\t215\t240\n2026-04-03\t746091.80\t503818.80\t1249910.60\t239\t172\n2026-04-04\t420563.00\t424334.00\t844897.00\t178\t153\n2026-04-05\t854930.00\t806983.00\t1661913.00\t334\t291\n2026-04-06\t662866.00\t658816.65\t1321682.65\t184\t235\n2026-04-07\t360083.30\t381768.80\t741852.10\t173\t137\n2026-04-08\t531042.00\t426924.00\t957966.00\t188\t152\n2026-04-09\t439091.88\t366842.46\t805934.34\t185\t136\n2026-04-10\t1144673.60\t1105469.23\t2250142.83\t455\t396\n2026-04-11\t367147.00\t456786.04\t823933.04\t146\t161\n2026-04-12\t328851.80\t387390.30\t716242.10\t144\t136\n2026-04-13\t180308.00\t206499.00\t386807.00\t80\t66\n2026-04-14\t186054.00\t180140.00\t366194.00\t84\t65\n2026-04-15\t478593.00\t432386.00\t910979.00\t198\t156\n2026-04-16\t443273.60\t1120393.38\t1563666.98\t215\t415\n2026-04-17\t382490.20\t329652.20\t712142.40\t178\t137\n2026-04-18\t289428.20\t303743.20\t593171.40\t130\t111\n2026-04-19\t197490.00\t215951.68\t413441.68\t97\t82\n2026-04-20\t744782.80\t637411.80\t1382194.60\t316\t232\n2026-04-21\t371059.40\t542077.40\t913136.80\t177\t205\n2026-04-22\t283143.75\t413272.00\t696415.75\t133\t153\n2026-04-23\t294010.75\t440403.87\t734414.62\t122\t176\n2026-04-24\t475122.20\t439690.20\t914812.40\t195\t167\n2026-04-25\t683186.00\t0.00\t683186.00\t276\t0\n2026-04-26\t272447.00\t0.00\t272447.00\t115\t0\n2026-04-27\t459175.00\t0.00\t459175.00\t196\t0\n2026-04-28\t461123.20\t0.00\t461123.20\t200\t0\n2026-04-29\t351586.00\t0.00\t351586.00\t131\t0\n2026-04-30\t1609251.00\t0.00\t1609251.00\t621\t0\n",
+  "stderr": "",
+  "execution_time_ms": 2041
+}

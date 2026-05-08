@@ -1,0 +1,8 @@
+{
+  "query": "\nSELECT\n  DATE(paid_at) AS paid_date,\n  SUM(total_amount) AS cache_total,\n  SUM(principal_amount) AS cache_principal,\n  SUM(interest_amount) AS cache_interest,\n  SUM(fee_amount) AS cache_fee,\n  SUM(penalty_amount) AS cache_penalty,\n  SUM(overpaid_amount) AS cache_overpaid,\n  COUNT(*) AS cache_rows\nFROM debt_collected_cache\nWHERE section = 'Fastfone365'\n  AND DATE(paid_at) BETWEEN '2026-04-01' AND '2026-04-30'\nGROUP BY DATE(paid_at)\nORDER BY paid_date ASC\nLIMIT 10;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT\n  DATE(paid_at) AS paid_date,\n  SUM(total_amount) AS cache_total,\n  SUM(principal_amount) AS cache_principal,\n  SUM(interest_amount) AS cache_interest,\n  SUM(fee_amount) AS cache_fee,\n  SUM(penalty_amount) AS cache_penalty,\n  SUM(overpaid_amount) AS cache_overpaid,\n  COUNT(*) AS cache_rows\nFROM debt_collected_cache\nWHERE section = 'Fastfone365'\n  AND DATE(paid_at) BETWEEN '2026-04-01' AND '2026-04-30'\nGROUP BY DATE(paid_at)\nORDER BY paid_date ASC\nLIMIT 10;\n",
+  "returncode": 1,
+  "logs": [
+    "ERROR 1054 (42S22) at line 2: Unknown column 'principal_amount' in 'where clause'"
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "query": "\nSELECT section, MIN(paid_at) AS min_date, MAX(paid_at) AS max_date, COUNT(*) AS total_rows\nFROM debt_collected_cache\nWHERE section = 'fastfone365'\nGROUP BY section;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT section, MIN(paid_at) AS min_date, MAX(paid_at) AS max_date, COUNT(*) AS total_rows\nFROM debt_collected_cache\nWHERE section = 'fastfone365'\nGROUP BY section;\n",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 1818
+}

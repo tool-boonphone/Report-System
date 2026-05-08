@@ -1,0 +1,190 @@
+{
+  "query": "\nSELECT\n  SUBSTRING(paid_at, 9, 2) AS day_num,\n  SUM(CASE WHEN is_bad_debt_row = 1 THEN 0\n           WHEN is_close_row = 1 THEN 0\n           ELSE COALESCE(total_amount, 0) + COALESCE(overpaid, 0) END) AS kw,\n  SUM(CASE WHEN is_close_row = 1 AND is_bad_debt_row = 0\n           THEN COALESCE(total_amount, 0) ELSE 0 END) AS close_amount,\n  SUM(CASE WHEN is_bad_debt_row = 1\n           THEN COALESCE(bad_debt, 0) ELSE 0 END) AS sell\nFROM debt_collected_cache\nWHERE section = 'Fastfone365'\n  AND SUBSTRING(paid_at, 1, 7) = '2026-04'\n  AND paid_at IS NOT NULL AND paid_at != ''\nGROUP BY SUBSTRING(paid_at, 9, 2)\nORDER BY day_num ASC;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT\n  SUBSTRING(paid_at, 9, 2) AS day_num,\n  SUM(CASE WHEN is_bad_debt_row = 1 THEN 0\n           WHEN is_close_row = 1 THEN 0\n           ELSE COALESCE(total_amount, 0) + COALESCE(overpaid, 0) END) AS kw,\n  SUM(CASE WHEN is_close_row = 1 AND is_bad_debt_row = 0\n           THEN COALESCE(total_amount, 0) ELSE 0 END) AS close_amount,\n  SUM(CASE WHEN is_bad_debt_row = 1\n           THEN COALESCE(bad_debt, 0) ELSE 0 END) AS sell\nFROM debt_collected_cache\nWHERE section = 'Fastfone365'\n  AND SUBSTRING(paid_at, 1, 7) = '2026-04'\n  AND paid_at IS NOT NULL AND paid_at != ''\nGROUP BY SUBSTRING(paid_at, 9, 2)\nORDER BY day_num ASC;\n",
+  "rows": [
+    {
+      "day_num": "01",
+      "kw": "800559.89",
+      "close_amount": "0.00",
+      "sell": "0.00"
+    },
+    {
+      "day_num": "02",
+      "kw": "522478.63",
+      "close_amount": "0.00",
+      "sell": "0.00"
+    },
+    {
+      "day_num": "03",
+      "kw": "490767.00",
+      "close_amount": "0.00",
+      "sell": "254800.00"
+    },
+    {
+      "day_num": "04",
+      "kw": "421958.00",
+      "close_amount": "0.00",
+      "sell": "0.00"
+    },
+    {
+      "day_num": "05",
+      "kw": "863645.00",
+      "close_amount": "0.00",
+      "sell": "0.00"
+    },
+    {
+      "day_num": "06",
+      "kw": "317416.00",
+      "close_amount": "0.00",
+      "sell": "299500.00"
+    },
+    {
+      "day_num": "07",
+      "kw": "345351.50",
+      "close_amount": "0.00",
+      "sell": "0.00"
+    },
+    {
+      "day_num": "08",
+      "kw": "452905.00",
+      "close_amount": "0.00",
+      "sell": "86500.00"
+    },
+    {
+      "day_num": "09",
+      "kw": "441518.46",
+      "close_amount": "0.00",
+      "sell": "0.00"
+    },
+    {
+      "day_num": "10",
+      "kw": "1139308.63",
+      "close_amount": "0.00",
+      "sell": "0.00"
+    },
+    {
+      "day_num": "11",
+      "kw": "369480.00",
+      "close_amount": "0.00",
+      "sell": "0.00"
+    },
+    {
+      "day_num": "12",
+      "kw": "335810.00",
+      "close_amount": "0.00",
+      "sell": "0.00"
+    },
+    {
+      "day_num": "13",
+      "kw": "184377.00",
+      "close_amount": "0.00",
+      "sell": "0.00"
+    },
+    {
+      "day_num": "14",
+      "kw": "187095.00",
+      "close_amount": "0.00",
+      "sell": "0.00"
+    },
+    {
+      "day_num": "15",
+      "kw": "479055.00",
+      "close_amount": "0.00",
+      "sell": "0.00"
+    },
+    {
+      "day_num": "16",
+      "kw": "439804.00",
+      "close_amount": "0.00",
+      "sell": "0.00"
+    },
+    {
+      "day_num": "17",
+      "kw": "366214.00",
+      "close_amount": "0.00",
+      "sell": "0.00"
+    },
+    {
+      "day_num": "18",
+      "kw": "288126.00",
+      "close_amount": "0.00",
+      "sell": "0.00"
+    },
+    {
+      "day_num": "19",
+      "kw": "200194.00",
+      "close_amount": "0.00",
+      "sell": "0.00"
+    },
+    {
+      "day_num": "20",
+      "kw": "741960.00",
+      "close_amount": "0.00",
+      "sell": "0.00"
+    },
+    {
+      "day_num": "21",
+      "kw": "372603.00",
+      "close_amount": "0.00",
+      "sell": "0.00"
+    },
+    {
+      "day_num": "22",
+      "kw": "268195.75",
+      "close_amount": "0.00",
+      "sell": "0.00"
+    },
+    {
+      "day_num": "23",
+      "kw": "302315.75",
+      "close_amount": "0.00",
+      "sell": "0.00"
+    },
+    {
+      "day_num": "24",
+      "kw": "463616.00",
+      "close_amount": "0.00",
+      "sell": "0.00"
+    },
+    {
+      "day_num": "25",
+      "kw": "690452.00",
+      "close_amount": "0.00",
+      "sell": "0.00"
+    },
+    {
+      "day_num": "26",
+      "kw": "272885.00",
+      "close_amount": "0.00",
+      "sell": "0.00"
+    },
+    {
+      "day_num": "27",
+      "kw": "463202.00",
+      "close_amount": "0.00",
+      "sell": "0.00"
+    },
+    {
+      "day_num": "28",
+      "kw": "451750.00",
+      "close_amount": "0.00",
+      "sell": "0.00"
+    },
+    {
+      "day_num": "29",
+      "kw": "350352.00",
+      "close_amount": "0.00",
+      "sell": "0.00"
+    },
+    {
+      "day_num": "30",
+      "kw": "1611868.00",
+      "close_amount": "0.00",
+      "sell": "0.00"
+    }
+  ],
+  "messages": [],
+  "stdout": "day_num\tkw\tclose_amount\tsell\n01\t800559.89\t0.00\t0.00\n02\t522478.63\t0.00\t0.00\n03\t490767.00\t0.00\t254800.00\n04\t421958.00\t0.00\t0.00\n05\t863645.00\t0.00\t0.00\n06\t317416.00\t0.00\t299500.00\n07\t345351.50\t0.00\t0.00\n08\t452905.00\t0.00\t86500.00\n09\t441518.46\t0.00\t0.00\n10\t1139308.63\t0.00\t0.00\n11\t369480.00\t0.00\t0.00\n12\t335810.00\t0.00\t0.00\n13\t184377.00\t0.00\t0.00\n14\t187095.00\t0.00\t0.00\n15\t479055.00\t0.00\t0.00\n16\t439804.00\t0.00\t0.00\n17\t366214.00\t0.00\t0.00\n18\t288126.00\t0.00\t0.00\n19\t200194.00\t0.00\t0.00\n20\t741960.00\t0.00\t0.00\n21\t372603.00\t0.00\t0.00\n22\t268195.75\t0.00\t0.00\n23\t302315.75\t0.00\t0.00\n24\t463616.00\t0.00\t0.00\n25\t690452.00\t0.00\t0.00\n26\t272885.00\t0.00\t0.00\n27\t463202.00\t0.00\t0.00\n28\t451750.00\t0.00\t0.00\n29\t350352.00\t0.00\t0.00\n30\t1611868.00\t0.00\t0.00\n",
+  "stderr": "",
+  "execution_time_ms": 1928
+}

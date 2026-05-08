@@ -1,0 +1,30 @@
+{
+  "query": "SELECT DISTINCT status, COUNT(*) as cnt FROM contracts WHERE section = 'Fastfone365' GROUP BY status ORDER BY cnt DESC LIMIT 20;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT DISTINCT status, COUNT(*) as cnt FROM contracts WHERE section = 'Fastfone365' GROUP BY status ORDER BY cnt DESC LIMIT 20;",
+  "rows": [
+    {
+      "status": "สำเร็จ",
+      "cnt": "7265"
+    },
+    {
+      "status": "สิ้นสุดสัญญา",
+      "cnt": "7065"
+    },
+    {
+      "status": "หนี้เสีย",
+      "cnt": "3123"
+    },
+    {
+      "status": "ระงับสัญญา",
+      "cnt": "268"
+    },
+    {
+      "status": "ยกเลิกสัญญา",
+      "cnt": "88"
+    }
+  ],
+  "messages": [],
+  "stdout": "status\tcnt\nสำเร็จ\t7265\nสิ้นสุดสัญญา\t7065\nหนี้เสีย\t3123\nระงับสัญญา\t268\nยกเลิกสัญญา\t88\n",
+  "stderr": "",
+  "execution_time_ms": 1772
+}

@@ -1,0 +1,20 @@
+{
+  "query": "SELECT section, COUNT(*) AS total_rows, MAX(populated_at) AS latest FROM debt_collected_cache GROUP BY section;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT section, COUNT(*) AS total_rows, MAX(populated_at) AS latest FROM debt_collected_cache GROUP BY section;",
+  "rows": [
+    {
+      "section": "Boonphone",
+      "total_rows": "4250",
+      "latest": "2026-05-08 04:59:03"
+    },
+    {
+      "section": "Fastfone365",
+      "total_rows": "3514",
+      "latest": "2026-05-08 19:02:10"
+    }
+  ],
+  "messages": [],
+  "stdout": "section\ttotal_rows\tlatest\nBoonphone\t4250\t2026-05-08 04:59:03\nFastfone365\t3514\t2026-05-08 19:02:10\n",
+  "stderr": "",
+  "execution_time_ms": 1821
+}

@@ -1,0 +1,8 @@
+{
+  "query": "SELECT contract_no, customer_name, updated_by FROM contracts WHERE section = 'Fastfone365' AND contract_no = 'CT1024-SNI001-00284-01' LIMIT 1;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT contract_no, customer_name, updated_by FROM contracts WHERE section = 'Fastfone365' AND contract_no = 'CT1024-SNI001-00284-01' LIMIT 1;",
+  "returncode": 1,
+  "logs": [
+    "ERROR 1054 (42S22) at line 1: Unknown column 'updated_by' in 'field list'"
+  ]
+}

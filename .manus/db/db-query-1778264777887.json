@@ -1,0 +1,170 @@
+{
+  "query": "\nSELECT\n  DATE(paid_at) AS paid_date,\n  SUM(CAST(amount AS DECIMAL(18,2))) AS sum_amount,\n  SUM(CAST(JSON_EXTRACT(raw_json, '$.close_installment_amount') AS DECIMAL(18,2))) AS sum_close,\n  SUM(CAST(JSON_EXTRACT(raw_json, '$.overpaid_amount') AS DECIMAL(18,2))) AS sum_overpaid,\n  SUM(CAST(JSON_EXTRACT(raw_json, '$.bad_debt_amount') AS DECIMAL(18,2))) AS sum_bad_debt,\n  SUM(CAST(amount AS DECIMAL(18,2))) \n    - SUM(CAST(JSON_EXTRACT(raw_json, '$.close_installment_amount') AS DECIMAL(18,2)))\n    - SUM(CAST(JSON_EXTRACT(raw_json, '$.overpaid_amount') AS DECIMAL(18,2))) AS net_amount\nFROM payment_transactions\nWHERE section = 'Fastfone365'\n  AND DATE(paid_at) BETWEEN '2026-04-01' AND '2026-04-30'\nGROUP BY DATE(paid_at)\nORDER BY paid_date ASC\nLIMIT 20;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT\n  DATE(paid_at) AS paid_date,\n  SUM(CAST(amount AS DECIMAL(18,2))) AS sum_amount,\n  SUM(CAST(JSON_EXTRACT(raw_json, '$.close_installment_amount') AS DECIMAL(18,2))) AS sum_close,\n  SUM(CAST(JSON_EXTRACT(raw_json, '$.overpaid_amount') AS DECIMAL(18,2))) AS sum_overpaid,\n  SUM(CAST(JSON_EXTRACT(raw_json, '$.bad_debt_amount') AS DECIMAL(18,2))) AS sum_bad_debt,\n  SUM(CAST(amount AS DECIMAL(18,2))) \n    - SUM(CAST(JSON_EXTRACT(raw_json, '$.close_installment_amount') AS DECIMAL(18,2)))\n    - SUM(CAST(JSON_EXTRACT(raw_json, '$.overpaid_amount') AS DECIMAL(18,2))) AS net_amount\nFROM payment_transactions\nWHERE section = 'Fastfone365'\n  AND DATE(paid_at) BETWEEN '2026-04-01' AND '2026-04-30'\nGROUP BY DATE(paid_at)\nORDER BY paid_date ASC\nLIMIT 20;\n",
+  "rows": [
+    {
+      "paid_date": "2026-04-01",
+      "sum_amount": "1667588.78",
+      "sum_close": "787212.89",
+      "sum_overpaid": "1270.00",
+      "sum_bad_debt": "0.00",
+      "net_amount": "879105.89"
+    },
+    {
+      "paid_date": "2026-04-02",
+      "sum_amount": "1146813.63",
+      "sum_close": "492257.63",
+      "sum_overpaid": "12816.00",
+      "sum_bad_debt": "0.00",
+      "net_amount": "641740.00"
+    },
+    {
+      "paid_date": "2026-04-03",
+      "sum_amount": "1249910.60",
+      "sum_close": "575011.56",
+      "sum_overpaid": "164061.24",
+      "sum_bad_debt": "0.00",
+      "net_amount": "510837.80"
+    },
+    {
+      "paid_date": "2026-04-04",
+      "sum_amount": "844897.00",
+      "sum_close": "412796.00",
+      "sum_overpaid": "1395.00",
+      "sum_bad_debt": "0.00",
+      "net_amount": "430706.00"
+    },
+    {
+      "paid_date": "2026-04-05",
+      "sum_amount": "1661913.00",
+      "sum_close": "835800.00",
+      "sum_overpaid": "8715.00",
+      "sum_bad_debt": "0.00",
+      "net_amount": "817398.00"
+    },
+    {
+      "paid_date": "2026-04-06",
+      "sum_amount": "1321682.65",
+      "sum_close": "446141.84",
+      "sum_overpaid": "210574.16",
+      "sum_bad_debt": "0.00",
+      "net_amount": "664966.65"
+    },
+    {
+      "paid_date": "2026-04-07",
+      "sum_amount": "741852.10",
+      "sum_close": "355632.80",
+      "sum_overpaid": "0.00",
+      "sum_bad_debt": "0.00",
+      "net_amount": "386219.30"
+    },
+    {
+      "paid_date": "2026-04-08",
+      "sum_amount": "957966.00",
+      "sum_close": "456381.00",
+      "sum_overpaid": "68129.00",
+      "sum_bad_debt": "0.00",
+      "net_amount": "433456.00"
+    },
+    {
+      "paid_date": "2026-04-09",
+      "sum_amount": "805934.34",
+      "sum_close": "427708.30",
+      "sum_overpaid": "2426.58",
+      "sum_bad_debt": "0.00",
+      "net_amount": "375799.46"
+    },
+    {
+      "paid_date": "2026-04-10",
+      "sum_amount": "2250142.83",
+      "sum_close": "1124515.09",
+      "sum_overpaid": "4305.63",
+      "sum_bad_debt": "0.00",
+      "net_amount": "1121322.11"
+    },
+    {
+      "paid_date": "2026-04-11",
+      "sum_amount": "823933.04",
+      "sum_close": "360552.00",
+      "sum_overpaid": "2333.00",
+      "sum_bad_debt": "0.00",
+      "net_amount": "461048.04"
+    },
+    {
+      "paid_date": "2026-04-12",
+      "sum_amount": "716242.10",
+      "sum_close": "311252.80",
+      "sum_overpaid": "11399.00",
+      "sum_bad_debt": "0.00",
+      "net_amount": "393590.30"
+    },
+    {
+      "paid_date": "2026-04-13",
+      "sum_amount": "386807.00",
+      "sum_close": "173446.00",
+      "sum_overpaid": "4069.00",
+      "sum_bad_debt": "0.00",
+      "net_amount": "209292.00"
+    },
+    {
+      "paid_date": "2026-04-14",
+      "sum_amount": "366194.00",
+      "sum_close": "182265.00",
+      "sum_overpaid": "1041.00",
+      "sum_bad_debt": "0.00",
+      "net_amount": "182888.00"
+    },
+    {
+      "paid_date": "2026-04-15",
+      "sum_amount": "910979.00",
+      "sum_close": "471145.00",
+      "sum_overpaid": "462.00",
+      "sum_bad_debt": "0.00",
+      "net_amount": "439372.00"
+    },
+    {
+      "paid_date": "2026-04-16",
+      "sum_amount": "1563666.98",
+      "sum_close": "434525.60",
+      "sum_overpaid": "748.00",
+      "sum_bad_debt": "0.00",
+      "net_amount": "1128393.38"
+    },
+    {
+      "paid_date": "2026-04-17",
+      "sum_amount": "712142.40",
+      "sum_close": "373201.20",
+      "sum_overpaid": "783.00",
+      "sum_bad_debt": "0.00",
+      "net_amount": "338158.20"
+    },
+    {
+      "paid_date": "2026-04-18",
+      "sum_amount": "593171.40",
+      "sum_close": "284010.20",
+      "sum_overpaid": "2269.00",
+      "sum_bad_debt": "0.00",
+      "net_amount": "306892.20"
+    },
+    {
+      "paid_date": "2026-04-19",
+      "sum_amount": "413441.68",
+      "sum_close": "188262.00",
+      "sum_overpaid": "2704.00",
+      "sum_bad_debt": "0.00",
+      "net_amount": "222475.68"
+    },
+    {
+      "paid_date": "2026-04-20",
+      "sum_amount": "1382194.60",
+      "sum_close": "731356.80",
+      "sum_overpaid": "298.00",
+      "sum_bad_debt": "0.00",
+      "net_amount": "650539.80"
+    }
+  ],
+  "messages": [],
+  "stdout": "paid_date\tsum_amount\tsum_close\tsum_overpaid\tsum_bad_debt\tnet_amount\n2026-04-01\t1667588.78\t787212.89\t1270.00\t0.00\t879105.89\n2026-04-02\t1146813.63\t492257.63\t12816.00\t0.00\t641740.00\n2026-04-03\t1249910.60\t575011.56\t164061.24\t0.00\t510837.80\n2026-04-04\t844897.00\t412796.00\t1395.00\t0.00\t430706.00\n2026-04-05\t1661913.00\t835800.00\t8715.00\t0.00\t817398.00\n2026-04-06\t1321682.65\t446141.84\t210574.16\t0.00\t664966.65\n2026-04-07\t741852.10\t355632.80\t0.00\t0.00\t386219.30\n2026-04-08\t957966.00\t456381.00\t68129.00\t0.00\t433456.00\n2026-04-09\t805934.34\t427708.30\t2426.58\t0.00\t375799.46\n2026-04-10\t2250142.83\t1124515.09\t4305.63\t0.00\t1121322.11\n2026-04-11\t823933.04\t360552.00\t2333.00\t0.00\t461048.04\n2026-04-12\t716242.10\t311252.80\t11399.00\t0.00\t393590.30\n2026-04-13\t386807.00\t173446.00\t4069.00\t0.00\t209292.00\n2026-04-14\t366194.00\t182265.00\t1041.00\t0.00\t182888.00\n2026-04-15\t910979.00\t471145.00\t462.00\t0.00\t439372.00\n2026-04-16\t1563666.98\t434525.60\t748.00\t0.00\t1128393.38\n2026-04-17\t712142.40\t373201.20\t783.00\t0.00\t338158.20\n2026-04-18\t593171.40\t284010.20\t2269.00\t0.00\t306892.20\n2026-04-19\t413441.68\t188262.00\t2704.00\t0.00\t222475.68\n2026-04-20\t1382194.60\t731356.80\t298.00\t0.00\t650539.80\n",
+  "stderr": "",
+  "execution_time_ms": 1987
+}

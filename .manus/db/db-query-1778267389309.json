@@ -1,0 +1,60 @@
+{
+  "query": "SELECT \n  DATE(pt.paid_at) AS paid_date,\n  SUM(CASE WHEN JSON_EXTRACT(pt.raw_json, '$.source') IS NULL THEN CAST(pt.amount AS DECIMAL(18,2)) ELSE 0 END) AS fastfone_report,\n  SUM(CAST(dcc.payment_tx_amount AS DECIMAL(18,2))) AS our_cache\nFROM payment_transactions pt\nLEFT JOIN debt_collected_cache dcc \n  ON dcc.payment_external_id = pt.external_id \n  AND dcc.section = pt.section\nWHERE pt.section = 'Fastfone365'\n  AND DATE(pt.paid_at) BETWEEN '2026-04-01' AND '2026-04-30'\n  AND JSON_EXTRACT(pt.raw_json, '$.source') IS NULL\nGROUP BY DATE(pt.paid_at)\nORDER BY paid_date\nLIMIT 10;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT \n  DATE(pt.paid_at) AS paid_date,\n  SUM(CASE WHEN JSON_EXTRACT(pt.raw_json, '$.source') IS NULL THEN CAST(pt.amount AS DECIMAL(18,2)) ELSE 0 END) AS fastfone_report,\n  SUM(CAST(dcc.payment_tx_amount AS DECIMAL(18,2))) AS our_cache\nFROM payment_transactions pt\nLEFT JOIN debt_collected_cache dcc \n  ON dcc.payment_external_id = pt.external_id \n  AND dcc.section = pt.section\nWHERE pt.section = 'Fastfone365'\n  AND DATE(pt.paid_at) BETWEEN '2026-04-01' AND '2026-04-30'\n  AND JSON_EXTRACT(pt.raw_json, '$.source') IS NULL\nGROUP BY DATE(pt.paid_at)\nORDER BY paid_date\nLIMIT 10;",
+  "rows": [
+    {
+      "paid_date": "2026-04-01",
+      "fastfone_report": "802022.89",
+      "our_cache": "NULL"
+    },
+    {
+      "paid_date": "2026-04-02",
+      "fastfone_report": "509662.63",
+      "our_cache": "NULL"
+    },
+    {
+      "paid_date": "2026-04-03",
+      "fastfone_report": "746091.80",
+      "our_cache": "NULL"
+    },
+    {
+      "paid_date": "2026-04-04",
+      "fastfone_report": "420563.00",
+      "our_cache": "NULL"
+    },
+    {
+      "paid_date": "2026-04-05",
+      "fastfone_report": "854930.00",
+      "our_cache": "NULL"
+    },
+    {
+      "paid_date": "2026-04-06",
+      "fastfone_report": "662866.00",
+      "our_cache": "NULL"
+    },
+    {
+      "paid_date": "2026-04-07",
+      "fastfone_report": "360083.30",
+      "our_cache": "NULL"
+    },
+    {
+      "paid_date": "2026-04-08",
+      "fastfone_report": "531042.00",
+      "our_cache": "NULL"
+    },
+    {
+      "paid_date": "2026-04-09",
+      "fastfone_report": "439091.88",
+      "our_cache": "NULL"
+    },
+    {
+      "paid_date": "2026-04-10",
+      "fastfone_report": "1144673.60",
+      "our_cache": "NULL"
+    }
+  ],
+  "messages": [],
+  "stdout": "paid_date\tfastfone_report\tour_cache\n2026-04-01\t802022.89\tNULL\n2026-04-02\t509662.63\tNULL\n2026-04-03\t746091.80\tNULL\n2026-04-04\t420563.00\tNULL\n2026-04-05\t854930.00\tNULL\n2026-04-06\t662866.00\tNULL\n2026-04-07\t360083.30\tNULL\n2026-04-08\t531042.00\tNULL\n2026-04-09\t439091.88\tNULL\n2026-04-10\t1144673.60\tNULL\n",
+  "stderr": "",
+  "execution_time_ms": 2057
+}

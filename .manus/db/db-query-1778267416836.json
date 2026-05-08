@@ -1,0 +1,50 @@
+{
+  "query": "SELECT \n  LEFT(paid_at, 10) AS paid_date,\n  SUM(CAST(payment_tx_amount AS DECIMAL(18,2))) AS cache_sum\nFROM debt_collected_cache\nWHERE section = 'Fastfone365'\n  AND is_close_row = 1\n  AND LEFT(paid_at, 10) BETWEEN '2026-04-01' AND '2026-04-30'\nGROUP BY LEFT(paid_at, 10)\nORDER BY paid_date\nLIMIT 10;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT \n  LEFT(paid_at, 10) AS paid_date,\n  SUM(CAST(payment_tx_amount AS DECIMAL(18,2))) AS cache_sum\nFROM debt_collected_cache\nWHERE section = 'Fastfone365'\n  AND is_close_row = 1\n  AND LEFT(paid_at, 10) BETWEEN '2026-04-01' AND '2026-04-30'\nGROUP BY LEFT(paid_at, 10)\nORDER BY paid_date\nLIMIT 10;",
+  "rows": [
+    {
+      "paid_date": "2026-04-01",
+      "cache_sum": "2733.00"
+    },
+    {
+      "paid_date": "2026-04-03",
+      "cache_sum": "3745.80"
+    },
+    {
+      "paid_date": "2026-04-06",
+      "cache_sum": "47679.00"
+    },
+    {
+      "paid_date": "2026-04-07",
+      "cache_sum": "14731.80"
+    },
+    {
+      "paid_date": "2026-04-10",
+      "cache_sum": "9670.60"
+    },
+    {
+      "paid_date": "2026-04-12",
+      "cache_sum": "4440.80"
+    },
+    {
+      "paid_date": "2026-04-16",
+      "cache_sum": "4217.60"
+    },
+    {
+      "paid_date": "2026-04-17",
+      "cache_sum": "17059.20"
+    },
+    {
+      "paid_date": "2026-04-18",
+      "cache_sum": "3571.20"
+    },
+    {
+      "paid_date": "2026-04-20",
+      "cache_sum": "3120.80"
+    }
+  ],
+  "messages": [],
+  "stdout": "paid_date\tcache_sum\n2026-04-01\t2733.00\n2026-04-03\t3745.80\n2026-04-06\t47679.00\n2026-04-07\t14731.80\n2026-04-10\t9670.60\n2026-04-12\t4440.80\n2026-04-16\t4217.60\n2026-04-17\t17059.20\n2026-04-18\t3571.20\n2026-04-20\t3120.80\n",
+  "stderr": "",
+  "execution_time_ms": 2047
+}

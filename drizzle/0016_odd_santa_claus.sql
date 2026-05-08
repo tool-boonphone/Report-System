@@ -1,0 +1,1 @@
+ALTER TABLE `debt_collected_cache` ADD `payment_tx_amount` decimal(12,2) DEFAULT '0' NOT NULL;

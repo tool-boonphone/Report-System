@@ -1,0 +1,160 @@
+{
+  "query": "\nSELECT\n  SUBSTRING(paid_at, 9, 2) AS day_num,\n  SUM(CAST(amount AS DECIMAL(18,2))) AS total_amount,\n  COUNT(*) AS tx_count\nFROM payment_transactions\nWHERE section = 'Fastfone365'\n  AND SUBSTRING(paid_at, 1, 7) = '2026-04'\n  AND paid_at IS NOT NULL AND paid_at != ''\nGROUP BY SUBSTRING(paid_at, 9, 2)\nORDER BY day_num ASC;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT\n  SUBSTRING(paid_at, 9, 2) AS day_num,\n  SUM(CAST(amount AS DECIMAL(18,2))) AS total_amount,\n  COUNT(*) AS tx_count\nFROM payment_transactions\nWHERE section = 'Fastfone365'\n  AND SUBSTRING(paid_at, 1, 7) = '2026-04'\n  AND paid_at IS NOT NULL AND paid_at != ''\nGROUP BY SUBSTRING(paid_at, 9, 2)\nORDER BY day_num ASC;\n",
+  "rows": [
+    {
+      "day_num": "01",
+      "total_amount": "1667588.78",
+      "tx_count": "636"
+    },
+    {
+      "day_num": "02",
+      "total_amount": "1146813.63",
+      "tx_count": "455"
+    },
+    {
+      "day_num": "03",
+      "total_amount": "1249910.60",
+      "tx_count": "411"
+    },
+    {
+      "day_num": "04",
+      "total_amount": "844897.00",
+      "tx_count": "331"
+    },
+    {
+      "day_num": "05",
+      "total_amount": "1661913.00",
+      "tx_count": "625"
+    },
+    {
+      "day_num": "06",
+      "total_amount": "1321682.65",
+      "tx_count": "419"
+    },
+    {
+      "day_num": "07",
+      "total_amount": "741852.10",
+      "tx_count": "310"
+    },
+    {
+      "day_num": "08",
+      "total_amount": "957966.00",
+      "tx_count": "340"
+    },
+    {
+      "day_num": "09",
+      "total_amount": "805934.34",
+      "tx_count": "321"
+    },
+    {
+      "day_num": "10",
+      "total_amount": "2250142.83",
+      "tx_count": "851"
+    },
+    {
+      "day_num": "11",
+      "total_amount": "823933.04",
+      "tx_count": "307"
+    },
+    {
+      "day_num": "12",
+      "total_amount": "716242.10",
+      "tx_count": "280"
+    },
+    {
+      "day_num": "13",
+      "total_amount": "386807.00",
+      "tx_count": "146"
+    },
+    {
+      "day_num": "14",
+      "total_amount": "366194.00",
+      "tx_count": "149"
+    },
+    {
+      "day_num": "15",
+      "total_amount": "910979.00",
+      "tx_count": "354"
+    },
+    {
+      "day_num": "16",
+      "total_amount": "1563666.98",
+      "tx_count": "630"
+    },
+    {
+      "day_num": "17",
+      "total_amount": "712142.40",
+      "tx_count": "315"
+    },
+    {
+      "day_num": "18",
+      "total_amount": "593171.40",
+      "tx_count": "241"
+    },
+    {
+      "day_num": "19",
+      "total_amount": "413441.68",
+      "tx_count": "179"
+    },
+    {
+      "day_num": "20",
+      "total_amount": "1382194.60",
+      "tx_count": "548"
+    },
+    {
+      "day_num": "21",
+      "total_amount": "913136.80",
+      "tx_count": "382"
+    },
+    {
+      "day_num": "22",
+      "total_amount": "696415.75",
+      "tx_count": "286"
+    },
+    {
+      "day_num": "23",
+      "total_amount": "734414.62",
+      "tx_count": "298"
+    },
+    {
+      "day_num": "24",
+      "total_amount": "914812.40",
+      "tx_count": "362"
+    },
+    {
+      "day_num": "25",
+      "total_amount": "683186.00",
+      "tx_count": "276"
+    },
+    {
+      "day_num": "26",
+      "total_amount": "272447.00",
+      "tx_count": "115"
+    },
+    {
+      "day_num": "27",
+      "total_amount": "459175.00",
+      "tx_count": "196"
+    },
+    {
+      "day_num": "28",
+      "total_amount": "461123.20",
+      "tx_count": "200"
+    },
+    {
+      "day_num": "29",
+      "total_amount": "351586.00",
+      "tx_count": "131"
+    },
+    {
+      "day_num": "30",
+      "total_amount": "1609251.00",
+      "tx_count": "621"
+    }
+  ],
+  "messages": [],
+  "stdout": "day_num\ttotal_amount\ttx_count\n01\t1667588.78\t636\n02\t1146813.63\t455\n03\t1249910.60\t411\n04\t844897.00\t331\n05\t1661913.00\t625\n06\t1321682.65\t419\n07\t741852.10\t310\n08\t957966.00\t340\n09\t805934.34\t321\n10\t2250142.83\t851\n11\t823933.04\t307\n12\t716242.10\t280\n13\t386807.00\t146\n14\t366194.00\t149\n15\t910979.00\t354\n16\t1563666.98\t630\n17\t712142.40\t315\n18\t593171.40\t241\n19\t413441.68\t179\n20\t1382194.60\t548\n21\t913136.80\t382\n22\t696415.75\t286\n23\t734414.62\t298\n24\t914812.40\t362\n25\t683186.00\t276\n26\t272447.00\t115\n27\t459175.00\t196\n28\t461123.20\t200\n29\t351586.00\t131\n30\t1609251.00\t621\n",
+  "stderr": "",
+  "execution_time_ms": 2013
+}

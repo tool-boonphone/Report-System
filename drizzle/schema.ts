@@ -428,6 +428,8 @@ export const debtCollectedCache = mysqlTable(
     overpaid: decimal("overpaid", { precision: 12, scale: 2 }).notNull().default("0"),
     badDebt: decimal("bad_debt", { precision: 12, scale: 2 }).notNull().default("0"),
     totalAmount: decimal("total_amount", { precision: 12, scale: 2 }).notNull().default("0"),
+    // Raw payment_transactions.amount (ตรงกับ Fastfone Report — source IS NULL rows)
+    paymentTxAmount: decimal("payment_tx_amount", { precision: 12, scale: 2 }).notNull().default("0"),
     // Metadata
     updatedBy: varchar("updated_by", { length: 128 }),
     updatedAt: varchar("updated_at", { length: 32 }),

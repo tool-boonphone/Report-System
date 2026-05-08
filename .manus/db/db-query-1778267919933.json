@@ -1,0 +1,17 @@
+{
+  "query": "\nSELECT\n  period,\n  SUM(installment_amt) AS kw,\n  SUM(close_amt) AS close_sum,\n  SUM(bad_debt_amt) AS bad_debt_sum,\n  SUM(installment_amt) + SUM(close_amt) + SUM(bad_debt_amt) AS total\nFROM (\n  SELECT\n    SUBSTRING(paid_at, 1, 7) AS period,\n    CAST(COALESCE(amount, 0) AS DECIMAL(18,2))\n      - CAST(COALESCE(JSON_EXTRACT(raw_json, '$.close_installment_amount'), 0) AS DECIMAL(18,2))\n      - CAST(COALESCE(JSON_EXTRACT(raw_json, '$.bad_debt_amount'), 0) AS DECIMAL(18,2)) AS installment_amt,\n    CAST(COALESCE(JSON_EXTRACT(raw_json, '$.close_installment_amount'), 0) AS DECIMAL(18,2)) AS close_amt,\n    CAST(COALESCE(JSON_EXTRACT(raw_json, '$.bad_debt_amount'), 0) AS DECIMAL(18,2)) AS bad_debt_amt\n  FROM payment_transactions\n  WHERE section = 'Fastfone365'\n    AND JSON_EXTRACT(raw_json, '$.source') IS NULL\n    AND SUBSTRING(paid_at, 1, 7) = '2026-04'\n    AND paid_at IS NOT NULL AND paid_at != ''\n) AS sub\nGROUP BY period;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT\n  period,\n  SUM(installment_amt) AS kw,\n  SUM(close_amt) AS close_sum,\n  SUM(bad_debt_amt) AS bad_debt_sum,\n  SUM(installment_amt) + SUM(close_amt) + SUM(bad_debt_amt) AS total\nFROM (\n  SELECT\n    SUBSTRING(paid_at, 1, 7) AS period,\n    CAST(COALESCE(amount, 0) AS DECIMAL(18,2))\n      - CAST(COALESCE(JSON_EXTRACT(raw_json, '$.close_installment_amount'), 0) AS DECIMAL(18,2))\n      - CAST(COALESCE(JSON_EXTRACT(raw_json, '$.bad_debt_amount'), 0) AS DECIMAL(18,2)) AS installment_amt,\n    CAST(COALESCE(JSON_EXTRACT(raw_json, '$.close_installment_amount'), 0) AS DECIMAL(18,2)) AS close_amt,\n    CAST(COALESCE(JSON_EXTRACT(raw_json, '$.bad_debt_amount'), 0) AS DECIMAL(18,2)) AS bad_debt_amt\n  FROM payment_transactions\n  WHERE section = 'Fastfone365'\n    AND JSON_EXTRACT(raw_json, '$.source') IS NULL\n    AND SUBSTRING(paid_at, 1, 7) = '2026-04'\n    AND paid_at IS NOT NULL AND paid_at != ''\n) AS sub\nGROUP BY period;\n",
+  "rows": [
+    {
+      "period": "2026-04",
+      "kw": "805563.24",
+      "close_sum": "14523986.76",
+      "bad_debt_sum": "0.00",
+      "total": "15329550.00"
+    }
+  ],
+  "messages": [],
+  "stdout": "period\tkw\tclose_sum\tbad_debt_sum\ttotal\n2026-04\t805563.24\t14523986.76\t0.00\t15329550.00\n",
+  "stderr": "",
+  "execution_time_ms": 2077
+}

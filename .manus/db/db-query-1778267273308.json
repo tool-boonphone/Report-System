@@ -1,0 +1,15 @@
+{
+  "query": "SELECT section, COUNT(*) AS total_rows, SUM(CAST(payment_tx_amount AS DECIMAL(18,2))) AS sum_tx_amount FROM debt_collected_cache WHERE section = 'Fastfone365';",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT section, COUNT(*) AS total_rows, SUM(CAST(payment_tx_amount AS DECIMAL(18,2))) AS sum_tx_amount FROM debt_collected_cache WHERE section = 'Fastfone365';",
+  "rows": [
+    {
+      "section": "Fastfone365",
+      "total_rows": "101469",
+      "sum_tx_amount": "237383539.53"
+    }
+  ],
+  "messages": [],
+  "stdout": "section\ttotal_rows\tsum_tx_amount\nFastfone365\t101469\t237383539.53\n",
+  "stderr": "",
+  "execution_time_ms": 2126
+}

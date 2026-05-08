@@ -1,0 +1,65 @@
+{
+  "query": "SELECT \n  external_id,\n  amount,\n  DATE(paid_at) AS paid_date,\n  JSON_EXTRACT(raw_json, '$.principal_paid') AS principal_paid,\n  JSON_EXTRACT(raw_json, '$.interest_paid') AS interest_paid,\n  JSON_EXTRACT(raw_json, '$.fee_paid') AS fee_paid,\n  JSON_EXTRACT(raw_json, '$.penalty_paid') AS penalty_paid,\n  JSON_EXTRACT(raw_json, '$.close_installment_amount') AS close_amount,\n  JSON_EXTRACT(raw_json, '$.bad_debt_amount') AS bad_debt_amount\nFROM payment_transactions\nWHERE section = 'Fastfone365'\n  AND JSON_EXTRACT(raw_json, '$.source') IS NULL\n  AND DATE(paid_at) = '2026-04-01'\nLIMIT 5;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT \n  external_id,\n  amount,\n  DATE(paid_at) AS paid_date,\n  JSON_EXTRACT(raw_json, '$.principal_paid') AS principal_paid,\n  JSON_EXTRACT(raw_json, '$.interest_paid') AS interest_paid,\n  JSON_EXTRACT(raw_json, '$.fee_paid') AS fee_paid,\n  JSON_EXTRACT(raw_json, '$.penalty_paid') AS penalty_paid,\n  JSON_EXTRACT(raw_json, '$.close_installment_amount') AS close_amount,\n  JSON_EXTRACT(raw_json, '$.bad_debt_amount') AS bad_debt_amount\nFROM payment_transactions\nWHERE section = 'Fastfone365'\n  AND JSON_EXTRACT(raw_json, '$.source') IS NULL\n  AND DATE(paid_at) = '2026-04-01'\nLIMIT 5;",
+  "rows": [
+    {
+      "external_id": "117217",
+      "amount": "1000.00",
+      "paid_date": "2026-04-01",
+      "principal_paid": "0",
+      "interest_paid": "1000",
+      "fee_paid": "0",
+      "penalty_paid": "0",
+      "close_amount": "1000",
+      "bad_debt_amount": "0"
+    },
+    {
+      "external_id": "117218",
+      "amount": "2559.00",
+      "paid_date": "2026-04-01",
+      "principal_paid": "1069",
+      "interest_paid": "1390",
+      "fee_paid": "100",
+      "penalty_paid": "0",
+      "close_amount": "2559",
+      "bad_debt_amount": "0"
+    },
+    {
+      "external_id": "117298",
+      "amount": "1938.00",
+      "paid_date": "2026-04-01",
+      "principal_paid": "875",
+      "interest_paid": "963",
+      "fee_paid": "100",
+      "penalty_paid": "0",
+      "close_amount": "1938",
+      "bad_debt_amount": "0"
+    },
+    {
+      "external_id": "117297",
+      "amount": "1940.00",
+      "paid_date": "2026-04-01",
+      "principal_paid": "800",
+      "interest_paid": "1040",
+      "fee_paid": "100",
+      "penalty_paid": "0",
+      "close_amount": "1940",
+      "bad_debt_amount": "0"
+    },
+    {
+      "external_id": "117295",
+      "amount": "1000.00",
+      "paid_date": "2026-04-01",
+      "principal_paid": "0",
+      "interest_paid": "1000",
+      "fee_paid": "0",
+      "penalty_paid": "0",
+      "close_amount": "1000",
+      "bad_debt_amount": "0"
+    }
+  ],
+  "messages": [],
+  "stdout": "external_id\tamount\tpaid_date\tprincipal_paid\tinterest_paid\tfee_paid\tpenalty_paid\tclose_amount\tbad_debt_amount\n117217\t1000.00\t2026-04-01\t0\t1000\t0\t0\t1000\t0\n117218\t2559.00\t2026-04-01\t1069\t1390\t100\t0\t2559\t0\n117298\t1938.00\t2026-04-01\t875\t963\t100\t0\t1938\t0\n117297\t1940.00\t2026-04-01\t800\t1040\t100\t0\t1940\t0\n117295\t1000.00\t2026-04-01\t0\t1000\t0\t0\t1000\t0\n",
+  "stderr": "",
+  "execution_time_ms": 1975
+}

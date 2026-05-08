@@ -1,0 +1,45 @@
+{
+  "query": "SELECT \n  DATE(paid_at) AS paid_date,\n  SUM(CAST(amount AS DECIMAL(18,2))) AS total_amount,\n  SUM(CAST(JSON_EXTRACT(raw_json, '$.close_installment_amount') AS DECIMAL(18,2))) AS close_sum,\n  SUM(CAST(JSON_EXTRACT(raw_json, '$.bad_debt_amount') AS DECIMAL(18,2))) AS bad_debt_sum,\n  SUM(CAST(amount AS DECIMAL(18,2))) \n    - SUM(CAST(JSON_EXTRACT(raw_json, '$.close_installment_amount') AS DECIMAL(18,2)))\n    - SUM(CAST(JSON_EXTRACT(raw_json, '$.bad_debt_amount') AS DECIMAL(18,2))) AS installment_sum\nFROM payment_transactions\nWHERE section = 'Fastfone365'\n  AND JSON_EXTRACT(raw_json, '$.source') IS NULL\n  AND DATE(paid_at) BETWEEN '2026-04-01' AND '2026-04-05'\nGROUP BY DATE(paid_at)\nORDER BY paid_date;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT \n  DATE(paid_at) AS paid_date,\n  SUM(CAST(amount AS DECIMAL(18,2))) AS total_amount,\n  SUM(CAST(JSON_EXTRACT(raw_json, '$.close_installment_amount') AS DECIMAL(18,2))) AS close_sum,\n  SUM(CAST(JSON_EXTRACT(raw_json, '$.bad_debt_amount') AS DECIMAL(18,2))) AS bad_debt_sum,\n  SUM(CAST(amount AS DECIMAL(18,2))) \n    - SUM(CAST(JSON_EXTRACT(raw_json, '$.close_installment_amount') AS DECIMAL(18,2)))\n    - SUM(CAST(JSON_EXTRACT(raw_json, '$.bad_debt_amount') AS DECIMAL(18,2))) AS installment_sum\nFROM payment_transactions\nWHERE section = 'Fastfone365'\n  AND JSON_EXTRACT(raw_json, '$.source') IS NULL\n  AND DATE(paid_at) BETWEEN '2026-04-01' AND '2026-04-05'\nGROUP BY DATE(paid_at)\nORDER BY paid_date;",
+  "rows": [
+    {
+      "paid_date": "2026-04-01",
+      "total_amount": "802022.89",
+      "close_sum": "787212.89",
+      "bad_debt_sum": "0.00",
+      "installment_sum": "14810.00"
+    },
+    {
+      "paid_date": "2026-04-02",
+      "total_amount": "509662.63",
+      "close_sum": "492257.63",
+      "bad_debt_sum": "0.00",
+      "installment_sum": "17405.00"
+    },
+    {
+      "paid_date": "2026-04-03",
+      "total_amount": "746091.80",
+      "close_sum": "575011.56",
+      "bad_debt_sum": "0.00",
+      "installment_sum": "171080.24"
+    },
+    {
+      "paid_date": "2026-04-04",
+      "total_amount": "420563.00",
+      "close_sum": "412796.00",
+      "bad_debt_sum": "0.00",
+      "installment_sum": "7767.00"
+    },
+    {
+      "paid_date": "2026-04-05",
+      "total_amount": "854930.00",
+      "close_sum": "835800.00",
+      "bad_debt_sum": "0.00",
+      "installment_sum": "19130.00"
+    }
+  ],
+  "messages": [],
+  "stdout": "paid_date\ttotal_amount\tclose_sum\tbad_debt_sum\tinstallment_sum\n2026-04-01\t802022.89\t787212.89\t0.00\t14810.00\n2026-04-02\t509662.63\t492257.63\t0.00\t17405.00\n2026-04-03\t746091.80\t575011.56\t0.00\t171080.24\n2026-04-04\t420563.00\t412796.00\t0.00\t7767.00\n2026-04-05\t854930.00\t835800.00\t0.00\t19130.00\n",
+  "stderr": "",
+  "execution_time_ms": 2207
+}

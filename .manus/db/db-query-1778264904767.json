@@ -1,0 +1,75 @@
+{
+  "query": "\nSELECT\n  DATE(paid_at) AS paid_date,\n  SUM(total_amount) AS cache_total,\n  SUM(principal) AS cache_principal,\n  SUM(interest) AS cache_interest,\n  SUM(fee) AS cache_fee,\n  SUM(penalty) AS cache_penalty,\n  SUM(overpaid) AS cache_overpaid,\n  SUM(bad_debt) AS cache_bad_debt,\n  SUM(CASE WHEN is_close_row = 1 THEN total_amount ELSE 0 END) AS close_row_total,\n  SUM(CASE WHEN is_close_row = 0 THEN total_amount ELSE 0 END) AS normal_row_total,\n  COUNT(*) AS cache_rows\nFROM debt_collected_cache\nWHERE section = 'Fastfone365'\n  AND DATE(paid_at) BETWEEN '2026-04-01' AND '2026-04-05'\nGROUP BY DATE(paid_at)\nORDER BY paid_date ASC;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT\n  DATE(paid_at) AS paid_date,\n  SUM(total_amount) AS cache_total,\n  SUM(principal) AS cache_principal,\n  SUM(interest) AS cache_interest,\n  SUM(fee) AS cache_fee,\n  SUM(penalty) AS cache_penalty,\n  SUM(overpaid) AS cache_overpaid,\n  SUM(bad_debt) AS cache_bad_debt,\n  SUM(CASE WHEN is_close_row = 1 THEN total_amount ELSE 0 END) AS close_row_total,\n  SUM(CASE WHEN is_close_row = 0 THEN total_amount ELSE 0 END) AS normal_row_total,\n  COUNT(*) AS cache_rows\nFROM debt_collected_cache\nWHERE section = 'Fastfone365'\n  AND DATE(paid_at) BETWEEN '2026-04-01' AND '2026-04-05'\nGROUP BY DATE(paid_at)\nORDER BY paid_date ASC;\n",
+  "rows": [
+    {
+      "paid_date": "2026-04-01",
+      "cache_total": "799289.89",
+      "cache_principal": "344722.95",
+      "cache_interest": "411871.94",
+      "cache_fee": "27885.00",
+      "cache_penalty": "13540.00",
+      "cache_overpaid": "1270.00",
+      "cache_bad_debt": "0.00",
+      "close_row_total": "0.00",
+      "normal_row_total": "799289.89",
+      "cache_rows": "326"
+    },
+    {
+      "paid_date": "2026-04-02",
+      "cache_total": "509662.63",
+      "cache_principal": "210872.08",
+      "cache_interest": "264002.55",
+      "cache_fee": "17383.00",
+      "cache_penalty": "4589.00",
+      "cache_overpaid": "12816.00",
+      "cache_bad_debt": "0.00",
+      "close_row_total": "0.00",
+      "normal_row_total": "509662.63",
+      "cache_rows": "218"
+    },
+    {
+      "paid_date": "2026-04-03",
+      "cache_total": "487546.00",
+      "cache_principal": "210644.00",
+      "cache_interest": "251277.00",
+      "cache_fee": "15385.00",
+      "cache_penalty": "7019.00",
+      "cache_overpaid": "3221.00",
+      "cache_bad_debt": "254800.00",
+      "close_row_total": "0.00",
+      "normal_row_total": "487546.00",
+      "cache_rows": "237"
+    },
+    {
+      "paid_date": "2026-04-04",
+      "cache_total": "420563.00",
+      "cache_principal": "175633.25",
+      "cache_interest": "223059.75",
+      "cache_fee": "14103.00",
+      "cache_penalty": "6372.00",
+      "cache_overpaid": "1395.00",
+      "cache_bad_debt": "0.00",
+      "close_row_total": "0.00",
+      "normal_row_total": "420563.00",
+      "cache_rows": "178"
+    },
+    {
+      "paid_date": "2026-04-05",
+      "cache_total": "854930.00",
+      "cache_principal": "360284.00",
+      "cache_interest": "445775.00",
+      "cache_fee": "29741.00",
+      "cache_penalty": "10415.00",
+      "cache_overpaid": "8715.00",
+      "cache_bad_debt": "0.00",
+      "close_row_total": "0.00",
+      "normal_row_total": "854930.00",
+      "cache_rows": "334"
+    }
+  ],
+  "messages": [],
+  "stdout": "paid_date\tcache_total\tcache_principal\tcache_interest\tcache_fee\tcache_penalty\tcache_overpaid\tcache_bad_debt\tclose_row_total\tnormal_row_total\tcache_rows\n2026-04-01\t799289.89\t344722.95\t411871.94\t27885.00\t13540.00\t1270.00\t0.00\t0.00\t799289.89\t326\n2026-04-02\t509662.63\t210872.08\t264002.55\t17383.00\t4589.00\t12816.00\t0.00\t0.00\t509662.63\t218\n2026-04-03\t487546.00\t210644.00\t251277.00\t15385.00\t7019.00\t3221.00\t254800.00\t0.00\t487546.00\t237\n2026-04-04\t420563.00\t175633.25\t223059.75\t14103.00\t6372.00\t1395.00\t0.00\t0.00\t420563.00\t178\n2026-04-05\t854930.00\t360284.00\t445775.00\t29741.00\t10415.00\t8715.00\t0.00\t0.00\t854930.00\t334\n",
+  "stderr": "",
+  "execution_time_ms": 1930
+}

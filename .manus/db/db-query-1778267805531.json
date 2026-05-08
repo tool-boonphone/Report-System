@@ -1,0 +1,9 @@
+{
+  "query": "\nSELECT\n  pt.contract_no,\n  DATE_FORMAT(pt.paid_at, '%Y-%m') AS paid_month,\n  SUM(CAST(COALESCE(pt.amount, 0) AS DECIMAL(18,2))) AS total_paid_from_pt,\n  SUM(CAST(COALESCE(JSON_EXTRACT(pt.raw_json, '$.close_installment_amount'), 0) AS DECIMAL(18,2))) AS close_sum,\n  SUM(CAST(COALESCE(JSON_EXTRACT(pt.raw_json, '$.bad_debt_amount'), 0) AS DECIMAL(18,2))) AS bad_debt_sum\nFROM payment_transactions pt\nWHERE pt.section = 'fastfone365'\n  AND JSON_EXTRACT(pt.raw_json, '$.source') IS NULL\n  AND DATE_FORMAT(pt.paid_at, '%Y-%m') = '2026-04'\nGROUP BY pt.contract_no, paid_month\nLIMIT 5;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT\n  pt.contract_no,\n  DATE_FORMAT(pt.paid_at, '%Y-%m') AS paid_month,\n  SUM(CAST(COALESCE(pt.amount, 0) AS DECIMAL(18,2))) AS total_paid_from_pt,\n  SUM(CAST(COALESCE(JSON_EXTRACT(pt.raw_json, '$.close_installment_amount'), 0) AS DECIMAL(18,2))) AS close_sum,\n  SUM(CAST(COALESCE(JSON_EXTRACT(pt.raw_json, '$.bad_debt_amount'), 0) AS DECIMAL(18,2))) AS bad_debt_sum\nFROM payment_transactions pt\nWHERE pt.section = 'fastfone365'\n  AND JSON_EXTRACT(pt.raw_json, '$.source') IS NULL\n  AND DATE_FORMAT(pt.paid_at, '%Y-%m') = '2026-04'\nGROUP BY pt.contract_no, paid_month\nLIMIT 5;\n",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 1775
+}

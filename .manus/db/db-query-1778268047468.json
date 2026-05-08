@@ -1,0 +1,50 @@
+{
+  "query": "\n-- ทดสอบสูตรที่ถูกต้อง: แยก principal+interest+fee+penalty+unlock+overpaid vs close vs bad_debt\nSELECT\n  SUBSTRING(pt.paid_at, 1, 10) AS paid_date,\n  SUM(CAST(pt.amount AS DECIMAL(18,2))) AS total,\n  -- ค่างวด = principal + interest + fee + penalty + unlock_fee + overpaid\n  SUM(\n    CAST(COALESCE(JSON_EXTRACT(pt.raw_json, '$.principal_paid'), 0) AS DECIMAL(18,2)) +\n    CAST(COALESCE(JSON_EXTRACT(pt.raw_json, '$.interest_paid'), 0) AS DECIMAL(18,2)) +\n    CAST(COALESCE(JSON_EXTRACT(pt.raw_json, '$.fee_paid'), 0) AS DECIMAL(18,2)) +\n    CAST(COALESCE(JSON_EXTRACT(pt.raw_json, '$.penalty_paid'), 0) AS DECIMAL(18,2)) +\n    CAST(COALESCE(JSON_EXTRACT(pt.raw_json, '$.unlock_fee_paid'), 0) AS DECIMAL(18,2)) +\n    CAST(COALESCE(JSON_EXTRACT(pt.raw_json, '$.overpaid'), 0) AS DECIMAL(18,2))\n  ) AS kw_sum,\n  -- ปิดยอด = close_installment_amount\n  SUM(CAST(COALESCE(JSON_EXTRACT(pt.raw_json, '$.close_installment_amount'), 0) AS DECIMAL(18,2))) AS close_sum,\n  -- ขายเครื่อง = bad_debt_amount\n  SUM(CAST(COALESCE(JSON_EXTRACT(pt.raw_json, '$.bad_debt_amount'), 0) AS DECIMAL(18,2))) AS bad_debt_sum,\n  -- ตรวจสอบว่า kw + close + bad_debt = total\n  SUM(\n    CAST(COALESCE(JSON_EXTRACT(pt.raw_json, '$.principal_paid'), 0) AS DECIMAL(18,2)) +\n    CAST(COALESCE(JSON_EXTRACT(pt.raw_json, '$.interest_paid'), 0) AS DECIMAL(18,2)) +\n    CAST(COALESCE(JSON_EXTRACT(pt.raw_json, '$.fee_paid'), 0) AS DECIMAL(18,2)) +\n    CAST(COALESCE(JSON_EXTRACT(pt.raw_json, '$.penalty_paid'), 0) AS DECIMAL(18,2)) +\n    CAST(COALESCE(JSON_EXTRACT(pt.raw_json, '$.unlock_fee_paid'), 0) AS DECIMAL(18,2)) +\n    CAST(COALESCE(JSON_EXTRACT(pt.raw_json, '$.overpaid'), 0) AS DECIMAL(18,2)) +\n    CAST(COALESCE(JSON_EXTRACT(pt.raw_json, '$.close_installment_amount'), 0) AS DECIMAL(18,2)) +\n    CAST(COALESCE(JSON_EXTRACT(pt.raw_json, '$.bad_debt_amount'), 0) AS DECIMAL(18,2))\n  ) AS check_sum\nFROM payment_transactions pt\nWHERE pt.section = 'Fastfone365'\n  AND JSON_EXTRACT(pt.raw_json, '$.source') IS NULL\n  AND SUBSTRING(pt.paid_at, 1, 7) = '2026-04'\nGROUP BY paid_date\nORDER BY paid_date\nLIMIT 5;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \n-- ทดสอบสูตรที่ถูกต้อง: แยก principal+interest+fee+penalty+unlock+overpaid vs close vs bad_debt\nSELECT\n  SUBSTRING(pt.paid_at, 1, 10) AS paid_date,\n  SUM(CAST(pt.amount AS DECIMAL(18,2))) AS total,\n  -- ค่างวด = principal + interest + fee + penalty + unlock_fee + overpaid\n  SUM(\n    CAST(COALESCE(JSON_EXTRACT(pt.raw_json, '$.principal_paid'), 0) AS DECIMAL(18,2)) +\n    CAST(COALESCE(JSON_EXTRACT(pt.raw_json, '$.interest_paid'), 0) AS DECIMAL(18,2)) +\n    CAST(COALESCE(JSON_EXTRACT(pt.raw_json, '$.fee_paid'), 0) AS DECIMAL(18,2)) +\n    CAST(COALESCE(JSON_EXTRACT(pt.raw_json, '$.penalty_paid'), 0) AS DECIMAL(18,2)) +\n    CAST(COALESCE(JSON_EXTRACT(pt.raw_json, '$.unlock_fee_paid'), 0) AS DECIMAL(18,2)) +\n    CAST(COALESCE(JSON_EXTRACT(pt.raw_json, '$.overpaid'), 0) AS DECIMAL(18,2))\n  ) AS kw_sum,\n  -- ปิดยอด = close_installment_amount\n  SUM(CAST(COALESCE(JSON_EXTRACT(pt.raw_json, '$.close_installment_amount'), 0) AS DECIMAL(18,2))) AS close_sum,\n  -- ขายเครื่อง = bad_debt_amount\n  SUM(CAST(COALESCE(JSON_EXTRACT(pt.raw_json, '$.bad_debt_amount'), 0) AS DECIMAL(18,2))) AS bad_debt_sum,\n  -- ตรวจสอบว่า kw + close + bad_debt = total\n  SUM(\n    CAST(COALESCE(JSON_EXTRACT(pt.raw_json, '$.principal_paid'), 0) AS DECIMAL(18,2)) +\n    CAST(COALESCE(JSON_EXTRACT(pt.raw_json, '$.interest_paid'), 0) AS DECIMAL(18,2)) +\n    CAST(COALESCE(JSON_EXTRACT(pt.raw_json, '$.fee_paid'), 0) AS DECIMAL(18,2)) +\n    CAST(COALESCE(JSON_EXTRACT(pt.raw_json, '$.penalty_paid'), 0) AS DECIMAL(18,2)) +\n    CAST(COALESCE(JSON_EXTRACT(pt.raw_json, '$.unlock_fee_paid'), 0) AS DECIMAL(18,2)) +\n    CAST(COALESCE(JSON_EXTRACT(pt.raw_json, '$.overpaid'), 0) AS DECIMAL(18,2)) +\n    CAST(COALESCE(JSON_EXTRACT(pt.raw_json, '$.close_installment_amount'), 0) AS DECIMAL(18,2)) +\n    CAST(COALESCE(JSON_EXTRACT(pt.raw_json, '$.bad_debt_amount'), 0) AS DECIMAL(18,2))\n  ) AS check_sum\nFROM payment_transactions pt\nWHERE pt.section = 'Fastfone365'\n  AND JSON_EXTRACT(pt.raw_json, '$.source') IS NULL\n  AND SUBSTRING(pt.paid_at, 1, 7) = '2026-04'\nGROUP BY paid_date\nORDER BY paid_date\nLIMIT 5;\n",
+  "rows": [
+    {
+      "paid_date": "2026-04-01",
+      "total": "802022.89",
+      "kw_sum": "801435.89",
+      "close_sum": "787212.89",
+      "bad_debt_sum": "0.00",
+      "check_sum": "1588648.78"
+    },
+    {
+      "paid_date": "2026-04-02",
+      "total": "509662.63",
+      "kw_sum": "496846.63",
+      "close_sum": "492257.63",
+      "bad_debt_sum": "0.00",
+      "check_sum": "989104.26"
+    },
+    {
+      "paid_date": "2026-04-03",
+      "total": "746091.80",
+      "kw_sum": "582446.76",
+      "close_sum": "575011.56",
+      "bad_debt_sum": "0.00",
+      "check_sum": "1157458.32"
+    },
+    {
+      "paid_date": "2026-04-04",
+      "total": "420563.00",
+      "kw_sum": "419168.00",
+      "close_sum": "412796.00",
+      "bad_debt_sum": "0.00",
+      "check_sum": "831964.00"
+    },
+    {
+      "paid_date": "2026-04-05",
+      "total": "854930.00",
+      "kw_sum": "846215.00",
+      "close_sum": "835800.00",
+      "bad_debt_sum": "0.00",
+      "check_sum": "1682015.00"
+    }
+  ],
+  "messages": [],
+  "stdout": "paid_date\ttotal\tkw_sum\tclose_sum\tbad_debt_sum\tcheck_sum\n2026-04-01\t802022.89\t801435.89\t787212.89\t0.00\t1588648.78\n2026-04-02\t509662.63\t496846.63\t492257.63\t0.00\t989104.26\n2026-04-03\t746091.80\t582446.76\t575011.56\t0.00\t1157458.32\n2026-04-04\t420563.00\t419168.00\t412796.00\t0.00\t831964.00\n2026-04-05\t854930.00\t846215.00\t835800.00\t0.00\t1682015.00\n",
+  "stderr": "",
+  "execution_time_ms": 2074
+}

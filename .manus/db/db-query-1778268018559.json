@@ -1,0 +1,80 @@
+{
+  "query": "\n-- ทดสอบ query ใหม่จาก payment_transactions (source IS NULL) รายวัน เม.ย. 2569\n-- เทียบกับ sum_close_type ที่ตรงกับ Fastfone Report\nSELECT\n  SUBSTRING(pt.paid_at, 1, 10) AS paid_date,\n  SUM(CAST(pt.amount AS DECIMAL(18,2))) AS our_total,\n  SUM(CAST(COALESCE(JSON_EXTRACT(pt.raw_json, '$.close_installment_amount'), 0) AS DECIMAL(18,2))) AS close_sum,\n  SUM(CAST(pt.amount AS DECIMAL(18,2))\n    - CAST(COALESCE(JSON_EXTRACT(pt.raw_json, '$.close_installment_amount'), 0) AS DECIMAL(18,2))\n    - CAST(COALESCE(JSON_EXTRACT(pt.raw_json, '$.bad_debt_amount'), 0) AS DECIMAL(18,2))) AS installment_sum,\n  SUM(CAST(COALESCE(JSON_EXTRACT(pt.raw_json, '$.bad_debt_amount'), 0) AS DECIMAL(18,2))) AS bad_debt_sum\nFROM payment_transactions pt\nWHERE pt.section = 'Fastfone365'\n  AND JSON_EXTRACT(pt.raw_json, '$.source') IS NULL\n  AND SUBSTRING(pt.paid_at, 1, 7) = '2026-04'\nGROUP BY paid_date\nORDER BY paid_date\nLIMIT 10;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \n-- ทดสอบ query ใหม่จาก payment_transactions (source IS NULL) รายวัน เม.ย. 2569\n-- เทียบกับ sum_close_type ที่ตรงกับ Fastfone Report\nSELECT\n  SUBSTRING(pt.paid_at, 1, 10) AS paid_date,\n  SUM(CAST(pt.amount AS DECIMAL(18,2))) AS our_total,\n  SUM(CAST(COALESCE(JSON_EXTRACT(pt.raw_json, '$.close_installment_amount'), 0) AS DECIMAL(18,2))) AS close_sum,\n  SUM(CAST(pt.amount AS DECIMAL(18,2))\n    - CAST(COALESCE(JSON_EXTRACT(pt.raw_json, '$.close_installment_amount'), 0) AS DECIMAL(18,2))\n    - CAST(COALESCE(JSON_EXTRACT(pt.raw_json, '$.bad_debt_amount'), 0) AS DECIMAL(18,2))) AS installment_sum,\n  SUM(CAST(COALESCE(JSON_EXTRACT(pt.raw_json, '$.bad_debt_amount'), 0) AS DECIMAL(18,2))) AS bad_debt_sum\nFROM payment_transactions pt\nWHERE pt.section = 'Fastfone365'\n  AND JSON_EXTRACT(pt.raw_json, '$.source') IS NULL\n  AND SUBSTRING(pt.paid_at, 1, 7) = '2026-04'\nGROUP BY paid_date\nORDER BY paid_date\nLIMIT 10;\n",
+  "rows": [
+    {
+      "paid_date": "2026-04-01",
+      "our_total": "802022.89",
+      "close_sum": "787212.89",
+      "installment_sum": "14810.00",
+      "bad_debt_sum": "0.00"
+    },
+    {
+      "paid_date": "2026-04-02",
+      "our_total": "509662.63",
+      "close_sum": "492257.63",
+      "installment_sum": "17405.00",
+      "bad_debt_sum": "0.00"
+    },
+    {
+      "paid_date": "2026-04-03",
+      "our_total": "746091.80",
+      "close_sum": "575011.56",
+      "installment_sum": "171080.24",
+      "bad_debt_sum": "0.00"
+    },
+    {
+      "paid_date": "2026-04-04",
+      "our_total": "420563.00",
+      "close_sum": "412796.00",
+      "installment_sum": "7767.00",
+      "bad_debt_sum": "0.00"
+    },
+    {
+      "paid_date": "2026-04-05",
+      "our_total": "854930.00",
+      "close_sum": "835800.00",
+      "installment_sum": "19130.00",
+      "bad_debt_sum": "0.00"
+    },
+    {
+      "paid_date": "2026-04-06",
+      "our_total": "662866.00",
+      "close_sum": "446141.84",
+      "installment_sum": "216724.16",
+      "bad_debt_sum": "0.00"
+    },
+    {
+      "paid_date": "2026-04-07",
+      "our_total": "360083.30",
+      "close_sum": "355632.80",
+      "installment_sum": "4450.50",
+      "bad_debt_sum": "0.00"
+    },
+    {
+      "paid_date": "2026-04-08",
+      "our_total": "531042.00",
+      "close_sum": "456381.00",
+      "installment_sum": "74661.00",
+      "bad_debt_sum": "0.00"
+    },
+    {
+      "paid_date": "2026-04-09",
+      "our_total": "439091.88",
+      "close_sum": "427708.30",
+      "installment_sum": "11383.58",
+      "bad_debt_sum": "0.00"
+    },
+    {
+      "paid_date": "2026-04-10",
+      "our_total": "1144673.60",
+      "close_sum": "1124515.09",
+      "installment_sum": "20158.51",
+      "bad_debt_sum": "0.00"
+    }
+  ],
+  "messages": [],
+  "stdout": "paid_date\tour_total\tclose_sum\tinstallment_sum\tbad_debt_sum\n2026-04-01\t802022.89\t787212.89\t14810.00\t0.00\n2026-04-02\t509662.63\t492257.63\t17405.00\t0.00\n2026-04-03\t746091.80\t575011.56\t171080.24\t0.00\n2026-04-04\t420563.00\t412796.00\t7767.00\t0.00\n2026-04-05\t854930.00\t835800.00\t19130.00\t0.00\n2026-04-06\t662866.00\t446141.84\t216724.16\t0.00\n2026-04-07\t360083.30\t355632.80\t4450.50\t0.00\n2026-04-08\t531042.00\t456381.00\t74661.00\t0.00\n2026-04-09\t439091.88\t427708.30\t11383.58\t0.00\n2026-04-10\t1144673.60\t1124515.09\t20158.51\t0.00\n",
+  "stderr": "",
+  "execution_time_ms": 2030
+}

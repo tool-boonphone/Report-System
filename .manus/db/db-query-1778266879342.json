@@ -1,0 +1,16 @@
+{
+  "query": "SELECT section, COUNT(*) AS total_rows, SUM(CAST(payment_tx_amount AS DECIMAL(18,2))) AS sum_tx_amount, MAX(populated_at) AS latest FROM debt_collected_cache GROUP BY section;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT section, COUNT(*) AS total_rows, SUM(CAST(payment_tx_amount AS DECIMAL(18,2))) AS sum_tx_amount, MAX(populated_at) AS latest FROM debt_collected_cache GROUP BY section;",
+  "rows": [
+    {
+      "section": "Boonphone",
+      "total_rows": "4250",
+      "sum_tx_amount": "10406620.00",
+      "latest": "2026-05-08 04:59:03"
+    }
+  ],
+  "messages": [],
+  "stdout": "section\ttotal_rows\tsum_tx_amount\tlatest\nBoonphone\t4250\t10406620.00\t2026-05-08 04:59:03\n",
+  "stderr": "",
+  "execution_time_ms": 1851
+}

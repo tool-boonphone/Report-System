@@ -1,0 +1,70 @@
+{
+  "query": "\nSELECT \n  paid_at,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.payment_date')) AS payment_date_raw,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.created_at')) AS created_at_raw,\n  CAST(amount AS DECIMAL(18,2)) AS amount\nFROM payment_transactions\nWHERE section = 'Fastfone365'\n  AND SUBSTRING(paid_at, 1, 7) = '2026-04'\nORDER BY paid_at DESC\nLIMIT 10;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT \n  paid_at,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.payment_date')) AS payment_date_raw,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.created_at')) AS created_at_raw,\n  CAST(amount AS DECIMAL(18,2)) AS amount\nFROM payment_transactions\nWHERE section = 'Fastfone365'\n  AND SUBSTRING(paid_at, 1, 7) = '2026-04'\nORDER BY paid_at DESC\nLIMIT 10;\n",
+  "rows": [
+    {
+      "paid_at": "2026-04-30",
+      "payment_date_raw": "2026-04-30",
+      "created_at_raw": "2026-04-30 17:00:53",
+      "amount": "6280.00"
+    },
+    {
+      "paid_at": "2026-04-30",
+      "payment_date_raw": "2026-04-30",
+      "created_at_raw": "2026-04-30 16:59:35",
+      "amount": "1604.00"
+    },
+    {
+      "paid_at": "2026-04-30",
+      "payment_date_raw": "2026-04-30",
+      "created_at_raw": "2026-04-30 13:58:11",
+      "amount": "2081.00"
+    },
+    {
+      "paid_at": "2026-04-30",
+      "payment_date_raw": "2026-04-30",
+      "created_at_raw": "2026-04-30 11:11:37",
+      "amount": "1955.00"
+    },
+    {
+      "paid_at": "2026-04-30",
+      "payment_date_raw": "2026-04-30",
+      "created_at_raw": "2026-04-30 14:35:07",
+      "amount": "3000.00"
+    },
+    {
+      "paid_at": "2026-04-30",
+      "payment_date_raw": "2026-04-30",
+      "created_at_raw": "2026-04-30 11:12:56",
+      "amount": "2765.00"
+    },
+    {
+      "paid_at": "2026-04-30",
+      "payment_date_raw": "2026-04-30",
+      "created_at_raw": "2026-04-30 11:24:58",
+      "amount": "3105.00"
+    },
+    {
+      "paid_at": "2026-04-30",
+      "payment_date_raw": "2026-04-30",
+      "created_at_raw": "2026-04-30 11:13:33",
+      "amount": "2559.00"
+    },
+    {
+      "paid_at": "2026-04-30",
+      "payment_date_raw": "2026-04-30",
+      "created_at_raw": "2026-04-30 11:14:39",
+      "amount": "3277.00"
+    },
+    {
+      "paid_at": "2026-04-30",
+      "payment_date_raw": "2026-04-30",
+      "created_at_raw": "2026-04-30 11:16:16",
+      "amount": "2386.00"
+    }
+  ],
+  "messages": [],
+  "stdout": "paid_at\tpayment_date_raw\tcreated_at_raw\tamount\n2026-04-30\t2026-04-30\t2026-04-30 17:00:53\t6280.00\n2026-04-30\t2026-04-30\t2026-04-30 16:59:35\t1604.00\n2026-04-30\t2026-04-30\t2026-04-30 13:58:11\t2081.00\n2026-04-30\t2026-04-30\t2026-04-30 11:11:37\t1955.00\n2026-04-30\t2026-04-30\t2026-04-30 14:35:07\t3000.00\n2026-04-30\t2026-04-30\t2026-04-30 11:12:56\t2765.00\n2026-04-30\t2026-04-30\t2026-04-30 11:24:58\t3105.00\n2026-04-30\t2026-04-30\t2026-04-30 11:13:33\t2559.00\n2026-04-30\t2026-04-30\t2026-04-30 11:14:39\t3277.00\n2026-04-30\t2026-04-30\t2026-04-30 11:16:16\t2386.00\n",
+  "stderr": "",
+  "execution_time_ms": 1725
+}

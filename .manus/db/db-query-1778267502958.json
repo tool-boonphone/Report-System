@@ -1,0 +1,40 @@
+{
+  "query": "SELECT external_id, contract_external_id, contract_no, customer_name, updated_by, updated_at, paid_at, amount FROM payment_transactions WHERE section = 'Fastfone365' AND JSON_EXTRACT(raw_json, '$.source') IS NULL LIMIT 3;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT external_id, contract_external_id, contract_no, customer_name, updated_by, updated_at, paid_at, amount FROM payment_transactions WHERE section = 'Fastfone365' AND JSON_EXTRACT(raw_json, '$.source') IS NULL LIMIT 3;",
+  "rows": [
+    {
+      "external_id": "32618",
+      "contract_external_id": "1000",
+      "contract_no": "CT1024-SNI001-00284-01",
+      "customer_name": "NULL",
+      "updated_by": "NULL",
+      "updated_at": "2025-04-24 11:28:23",
+      "paid_at": "2025-04-24",
+      "amount": "3160.00"
+    },
+    {
+      "external_id": "28269",
+      "contract_external_id": "10",
+      "contract_no": "CT0824-NYK001-00005-01",
+      "customer_name": "NULL",
+      "updated_by": "NULL",
+      "updated_at": "2025-04-08 12:51:29",
+      "paid_at": "2025-04-07",
+      "amount": "2935.00"
+    },
+    {
+      "external_id": "23133",
+      "contract_external_id": "1000",
+      "contract_no": "CT1024-SNI001-00284-01",
+      "customer_name": "NULL",
+      "updated_by": "NULL",
+      "updated_at": "2025-03-21 12:06:57",
+      "paid_at": "2025-03-21",
+      "amount": "3010.00"
+    }
+  ],
+  "messages": [],
+  "stdout": "external_id\tcontract_external_id\tcontract_no\tcustomer_name\tupdated_by\tupdated_at\tpaid_at\tamount\n32618\t1000\tCT1024-SNI001-00284-01\tNULL\tNULL\t2025-04-24 11:28:23\t2025-04-24\t3160.00\n28269\t10\tCT0824-NYK001-00005-01\tNULL\tNULL\t2025-04-08 12:51:29\t2025-04-07\t2935.00\n23133\t1000\tCT1024-SNI001-00284-01\tNULL\tNULL\t2025-03-21 12:06:57\t2025-03-21\t3010.00\n",
+  "stderr": "",
+  "execution_time_ms": 1805
+}

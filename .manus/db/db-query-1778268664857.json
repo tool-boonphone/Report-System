@@ -1,0 +1,214 @@
+{
+  "query": "SELECT COLUMN_NAME, DATA_TYPE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'contracts' AND TABLE_SCHEMA = DATABASE() ORDER BY ORDINAL_POSITION;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT COLUMN_NAME, DATA_TYPE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'contracts' AND TABLE_SCHEMA = DATABASE() ORDER BY ORDINAL_POSITION;",
+  "rows": [
+    {
+      "COLUMN_NAME": "id",
+      "DATA_TYPE": "int"
+    },
+    {
+      "COLUMN_NAME": "section",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "external_id",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "contract_no",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "submit_date",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "approve_date",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "channel",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "status",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "partner_code",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "partner_name",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "partner_province",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "partner_status",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "commission_net",
+      "DATA_TYPE": "decimal"
+    },
+    {
+      "COLUMN_NAME": "customer_name",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "nationality",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "citizen_id",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "gender",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "age",
+      "DATA_TYPE": "int"
+    },
+    {
+      "COLUMN_NAME": "occupation",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "salary",
+      "DATA_TYPE": "decimal"
+    },
+    {
+      "COLUMN_NAME": "workplace",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "phone",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "id_district",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "id_province",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "addr_district",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "addr_province",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "work_district",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "work_province",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "promotion_name",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "device",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "product_type",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "model",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "imei",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "serial_no",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "sell_price",
+      "DATA_TYPE": "decimal"
+    },
+    {
+      "COLUMN_NAME": "device_status",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "down_payment",
+      "DATA_TYPE": "decimal"
+    },
+    {
+      "COLUMN_NAME": "finance_amount",
+      "DATA_TYPE": "decimal"
+    },
+    {
+      "COLUMN_NAME": "installment_count",
+      "DATA_TYPE": "int"
+    },
+    {
+      "COLUMN_NAME": "multiplier",
+      "DATA_TYPE": "decimal"
+    },
+    {
+      "COLUMN_NAME": "installment_amount",
+      "DATA_TYPE": "decimal"
+    },
+    {
+      "COLUMN_NAME": "payment_day",
+      "DATA_TYPE": "int"
+    },
+    {
+      "COLUMN_NAME": "paid_installments",
+      "DATA_TYPE": "int"
+    },
+    {
+      "COLUMN_NAME": "debt_type",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "raw_json",
+      "DATA_TYPE": "json"
+    },
+    {
+      "COLUMN_NAME": "synced_at",
+      "DATA_TYPE": "timestamp"
+    },
+    {
+      "COLUMN_NAME": "bad_debt_amount",
+      "DATA_TYPE": "decimal"
+    },
+    {
+      "COLUMN_NAME": "bad_debt_date",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "suspended_from_period",
+      "DATA_TYPE": "int"
+    },
+    {
+      "COLUMN_NAME": "bad_debt_updated_by",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "bad_debt_updated_at",
+      "DATA_TYPE": "varchar"
+    }
+  ],
+  "messages": [],
+  "stdout": "COLUMN_NAME\tDATA_TYPE\nid\tint\nsection\tvarchar\nexternal_id\tvarchar\ncontract_no\tvarchar\nsubmit_date\tvarchar\napprove_date\tvarchar\nchannel\tvarchar\nstatus\tvarchar\npartner_code\tvarchar\npartner_name\tvarchar\npartner_province\tvarchar\npartner_status\tvarchar\ncommission_net\tdecimal\ncustomer_name\tvarchar\nnationality\tvarchar\ncitizen_id\tvarchar\ngender\tvarchar\nage\tint\noccupation\tvarchar\nsalary\tdecimal\nworkplace\tvarchar\nphone\tvarchar\nid_district\tvarchar\nid_province\tvarchar\naddr_district\tvarchar\naddr_province\tvarchar\nwork_district\tvarchar\nwork_province\tvarchar\npromotion_name\tvarchar\ndevice\tvarchar\nproduct_type\tvarchar\nmodel\tvarchar\nimei\tvarchar\nserial_no\tvarchar\nsell_price\tdecimal\ndevice_status\tvarchar\ndown_payment\tdecimal\nfinance_amount\tdecimal\ninstallment_count\tint\nmultiplier\tdecimal\ninstallment_amount\tdecimal\npayment_day\tint\npaid_installments\tint\ndebt_type\tvarchar\nraw_json\tjson\nsynced_at\ttimestamp\nbad_debt_amount\tdecimal\nbad_debt_date\tvarchar\nsuspended_from_period\tint\nbad_debt_updated_by\tvarchar\nbad_debt_updated_at\tvarchar\n",
+  "stderr": "",
+  "execution_time_ms": 1853
+}
