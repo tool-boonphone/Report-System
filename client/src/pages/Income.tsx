@@ -83,7 +83,7 @@ export default function Income() {
   const canExport = can("income", "export");
 
   // ── Active Tab ──
-  const [activeTab, setActiveTab] = useState<ActiveTab>("all");
+  const [activeTab, setActiveTab] = useState<ActiveTab>("yearly");
 
   // ── Filter state (all tab) ──
   const [search, setSearch] = useState("");

@@ -485,7 +485,7 @@ export async function getIncomeSummaryByPeriod(
     FROM debt_collected_cache
     WHERE ${whereStr} AND paid_at IS NOT NULL AND paid_at != ''
     GROUP BY ${periodExpr}
-    ORDER BY ${periodExpr} DESC
+    ORDER BY ${periodExpr} ASC
   `;
 
   const result = await db.execute(sql.raw(querySql));
@@ -553,7 +553,7 @@ export async function getExpenseSummaryByPeriod(
     FROM contracts c
     WHERE ${whereStr} AND c.approve_date != ''
     GROUP BY ${periodExpr}
-    ORDER BY ${periodExpr} DESC
+    ORDER BY ${periodExpr} ASC
   `;
 
   const result = await db.execute(sql.raw(querySql));

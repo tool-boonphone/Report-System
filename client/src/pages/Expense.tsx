@@ -68,7 +68,7 @@ export default function Expense() {
   const canExport = can("expense", "export");
 
   // ── Active Tab ──
-  const [activeTab, setActiveTab] = useState<ActiveTab>("all");
+  const [activeTab, setActiveTab] = useState<ActiveTab>("yearly");
 
   // ── Filter state (all tab) ──
   const [search, setSearch] = useState("");
