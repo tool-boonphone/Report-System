@@ -1,0 +1,60 @@
+{
+  "query": "SELECT receipt_no, status, JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.payment_status')) as payment_status, JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.remark')) as remark, CAST(JSON_EXTRACT(raw_json, '$.principal_paid') AS DECIMAL(12,2)) as principal_paid, CAST(JSON_EXTRACT(raw_json, '$.bad_debt_amount') AS DECIMAL(12,2)) as bad_debt_amount, CAST(JSON_EXTRACT(raw_json, '$.close_installment_amount') AS DECIMAL(12,2)) as close_installment_amount, CAST(JSON_EXTRACT(raw_json, '$.total_paid_amount') AS DECIMAL(12,2)) as total_paid_amount FROM payment_transactions WHERE section = 'Fastfone365' AND receipt_no LIKE 'TXRTC%' LIMIT 5",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT receipt_no, status, JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.payment_status')) as payment_status, JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.remark')) as remark, CAST(JSON_EXTRACT(raw_json, '$.principal_paid') AS DECIMAL(12,2)) as principal_paid, CAST(JSON_EXTRACT(raw_json, '$.bad_debt_amount') AS DECIMAL(12,2)) as bad_debt_amount, CAST(JSON_EXTRACT(raw_json, '$.close_installment_amount') AS DECIMAL(12,2)) as close_installment_amount, CAST(JSON_EXTRACT(raw_json, '$.total_paid_amount') AS DECIMAL(12,2)) as total_paid_amount FROM payment_transactions WHERE section = 'Fastfone365' AND receipt_no LIKE 'TXRTC%' LIMIT 5",
+  "rows": [
+    {
+      "receipt_no": "TXRTC0225-RYG002-9218-01",
+      "status": "Active",
+      "payment_status": "Active",
+      "remark": "กรณีลูกค้าต้องการปิดค่างวด งวดที่ 12 3,825 = (-20%) = 3060 บาท ยอดที่ลูกค้าต้องชำระปิดยอดคือ 3060 บาทค่ะ",
+      "principal_paid": "1619.00",
+      "bad_debt_amount": "0.00",
+      "close_installment_amount": "3060.00",
+      "total_paid_amount": "3060.00"
+    },
+    {
+      "receipt_no": "TXRTC0325-NRT001-10718-01",
+      "status": "Active",
+      "payment_status": "Active",
+      "remark": "กรณีลูกค้าต้องการปิดค่างวด งวดที่ 10 ต้องชำระเต็มจำนวน ยอด 2,579.21 บาท งวดที่ 11-12 2,579.21x2 = 5,158.42 (-20%) = 4,126.736+2,579.21 =6,705.9 บาท ยอดที่ลูกค้าต้องชำระปิดยอดคือ 6,705.9 บาทครับ(โอนเกิน 0.05)",
+      "principal_paid": "1077.92",
+      "bad_debt_amount": "0.00",
+      "close_installment_amount": "2579.21",
+      "total_paid_amount": "2579.21"
+    },
+    {
+      "receipt_no": "TXRTC0325-NRT001-10718-01",
+      "status": "Active",
+      "payment_status": "Active",
+      "remark": "กรณีลูกค้าต้องการปิดค่างวด งวดที่ 10 ต้องชำระเต็มจำนวน ยอด 2,579.21 บาท งวดที่ 11-12 2,579.21x2 = 5,158.42 (-20%) = 4,126.736+2,579.21 =6,705.9 บาท ยอดที่ลูกค้าต้องชำระปิดยอดคือ 6,705.9 บาทครับ(โอนเกิน 0.05)",
+      "principal_paid": "1077.92",
+      "bad_debt_amount": "0.00",
+      "close_installment_amount": "2579.21",
+      "total_paid_amount": "2579.21"
+    },
+    {
+      "receipt_no": "TXRTC0325-NRT001-10718-01",
+      "status": "Active",
+      "payment_status": "Active",
+      "remark": "กรณีลูกค้าต้องการปิดค่างวด งวดที่ 10 ต้องชำระเต็มจำนวน ยอด 2,579.21 บาท งวดที่ 11-12 2,579.21x2 = 5,158.42 (-20%) = 4,126.736+2,579.21 =6,705.9 บาท ยอดที่ลูกค้าต้องชำระปิดยอดคือ 6,705.9 บาทครับ(โอนเกิน 0.05)",
+      "principal_paid": "1077.92",
+      "bad_debt_amount": "0.00",
+      "close_installment_amount": "1547.53",
+      "total_paid_amount": "1547.53"
+    },
+    {
+      "receipt_no": "TXRTC0725-NYK003-13301-01",
+      "status": "Active",
+      "payment_status": "Active",
+      "remark": "งวดที่ 7-12 ยอด 4,324 * 6 = 25944-20% = 20755.20 บาท ค่ะ",
+      "principal_paid": "1837.00",
+      "bad_debt_amount": "0.00",
+      "close_installment_amount": "4324.00",
+      "total_paid_amount": "4324.00"
+    }
+  ],
+  "messages": [],
+  "stdout": "receipt_no\tstatus\tpayment_status\tremark\tprincipal_paid\tbad_debt_amount\tclose_installment_amount\ttotal_paid_amount\nTXRTC0225-RYG002-9218-01\tActive\tActive\tกรณีลูกค้าต้องการปิดค่างวด งวดที่ 12 3,825 = (-20%) = 3060 บาท ยอดที่ลูกค้าต้องชำระปิดยอดคือ 3060 บาทค่ะ\t1619.00\t0.00\t3060.00\t3060.00\nTXRTC0325-NRT001-10718-01\tActive\tActive\tกรณีลูกค้าต้องการปิดค่างวด งวดที่ 10 ต้องชำระเต็มจำนวน ยอด 2,579.21 บาท งวดที่ 11-12 2,579.21x2 = 5,158.42 (-20%) = 4,126.736+2,579.21 =6,705.9 บาท ยอดที่ลูกค้าต้องชำระปิดยอดคือ 6,705.9 บาทครับ(โอนเกิน 0.05)\t1077.92\t0.00\t2579.21\t2579.21\nTXRTC0325-NRT001-10718-01\tActive\tActive\tกรณีลูกค้าต้องการปิดค่างวด งวดที่ 10 ต้องชำระเต็มจำนวน ยอด 2,579.21 บาท งวดที่ 11-12 2,579.21x2 = 5,158.42 (-20%) = 4,126.736+2,579.21 =6,705.9 บาท ยอดที่ลูกค้าต้องชำระปิดยอดคือ 6,705.9 บาทครับ(โอนเกิน 0.05)\t1077.92\t0.00\t2579.21\t2579.21\nTXRTC0325-NRT001-10718-01\tActive\tActive\tกรณีลูกค้าต้องการปิดค่างวด งวดที่ 10 ต้องชำระเต็มจำนวน ยอด 2,579.21 บาท งวดที่ 11-12 2,579.21x2 = 5,158.42 (-20%) = 4,126.736+2,579.21 =6,705.9 บาท ยอดที่ลูกค้าต้องชำระปิดยอดคือ 6,705.9 บาทครับ(โอนเกิน 0.05)\t1077.92\t0.00\t1547.53\t1547.53\nTXRTC0725-NYK003-13301-01\tActive\tActive\tงวดที่ 7-12 ยอด 4,324 * 6 = 25944-20% = 20755.20 บาท ค่ะ\t1837.00\t0.00\t4324.00\t4324.00\n",
+  "stderr": "",
+  "execution_time_ms": 1771
+}

@@ -1,0 +1,28 @@
+{
+  "query": "SELECT section, receipt_no, status, JSON_KEYS(raw_json) as json_keys FROM payment_transactions WHERE section = 'Boonphone' LIMIT 3",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT section, receipt_no, status, JSON_KEYS(raw_json) as json_keys FROM payment_transactions WHERE section = 'Boonphone' LIMIT 3",
+  "rows": [
+    {
+      "section": "Boonphone",
+      "receipt_no": "TXRTC0226-PTE007-0351-01",
+      "status": "Active",
+      "json_keys": "[\"bad_debt_amount\", \"close_installment_amount\", \"contract_code\", \"contract_id\", \"created_at\", \"discount_amount\", \"fee_paid\", \"interest_paid\", \"overpaid_amount\", \"payment_date\", \"payment_id\", \"payment_method\", \"payment_status\", \"penalty_paid\", \"principal_paid\", \"receipt_no\", \"remark\", \"total_paid_amount\", \"unlock_fee_paid\", \"updated_at\"]"
+    },
+    {
+      "section": "Boonphone",
+      "receipt_no": "TXRTC0226-PTE007-0351-01",
+      "status": "Active",
+      "json_keys": "[\"bad_debt_amount\", \"close_installment_amount\", \"contract_code\", \"contract_id\", \"created_at\", \"discount_amount\", \"fee_paid\", \"interest_paid\", \"overpaid_amount\", \"payment_date\", \"payment_id\", \"payment_method\", \"payment_status\", \"penalty_paid\", \"principal_paid\", \"receipt_no\", \"remark\", \"total_paid_amount\", \"unlock_fee_paid\", \"updated_at\"]"
+    },
+    {
+      "section": "Boonphone",
+      "receipt_no": "TXRT0226-SRI004-0477-01-1",
+      "status": "Active",
+      "json_keys": "[\"bad_debt_amount\", \"close_installment_amount\", \"contract_code\", \"contract_id\", \"created_at\", \"discount_amount\", \"fee_paid\", \"interest_paid\", \"overpaid_amount\", \"payment_date\", \"payment_id\", \"payment_method\", \"payment_status\", \"penalty_paid\", \"principal_paid\", \"receipt_no\", \"remark\", \"total_paid_amount\", \"unlock_fee_paid\", \"updated_at\"]"
+    }
+  ],
+  "messages": [],
+  "stdout": "section\treceipt_no\tstatus\tjson_keys\nBoonphone\tTXRTC0226-PTE007-0351-01\tActive\t[\"bad_debt_amount\", \"close_installment_amount\", \"contract_code\", \"contract_id\", \"created_at\", \"discount_amount\", \"fee_paid\", \"interest_paid\", \"overpaid_amount\", \"payment_date\", \"payment_id\", \"payment_method\", \"payment_status\", \"penalty_paid\", \"principal_paid\", \"receipt_no\", \"remark\", \"total_paid_amount\", \"unlock_fee_paid\", \"updated_at\"]\nBoonphone\tTXRTC0226-PTE007-0351-01\tActive\t[\"bad_debt_amount\", \"close_installment_amount\", \"contract_code\", \"contract_id\", \"created_at\", \"discount_amount\", \"fee_paid\", \"interest_paid\", \"overpaid_amount\", \"payment_date\", \"payment_id\", \"payment_method\", \"payment_status\", \"penalty_paid\", \"principal_paid\", \"receipt_no\", \"remark\", \"total_paid_amount\", \"unlock_fee_paid\", \"updated_at\"]\nBoonphone\tTXRT0226-SRI004-0477-01-1\tActive\t[\"bad_debt_amount\", \"close_installment_amount\", \"contract_code\", \"contract_id\", \"created_at\", \"discount_amount\", \"fee_paid\", \"interest_paid\", \"overpaid_amount\", \"payment_date\", \"payment_id\", \"payment_method\", \"payment_status\", \"penalty_paid\", \"principal_paid\", \"receipt_no\", \"remark\", \"total_paid_amount\", \"unlock_fee_paid\", \"updated_at\"]\n",
+  "stderr": "",
+  "execution_time_ms": 1784
+}

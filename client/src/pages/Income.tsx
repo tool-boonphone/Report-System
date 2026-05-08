@@ -2,7 +2,8 @@
  * Income.tsx — หน้ารายรับ (บัญชี > รายรับ)
  *
  * แสดงรายการรับชำระทั้งหมดจาก debt_collected_cache
- * แยกประเภท: ค่างวด, ขายเครื่อง, ปิดยอด, เงินดาวน์
+ * แยกประเภท: ค่างวด, ขายเครื่อง, ปิดยอด
+ * หมายเหตุ: "เงินดาวน์" ซ่อนไว้ก่อน (ไม่มีในข้อมูลจริง)
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppShell } from "@/components/AppShell";
@@ -24,25 +25,27 @@ import {
 } from "@/components/ui/pagination";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-type IncomeType = "ค่างวด" | "ขายเครื่อง" | "ปิดยอด" | "เงินดาวน์";
+// "เงินดาวน์" ซ่อนไว้ก่อน — ไม่มีในข้อมูลจริง
+type IncomeType = "ค่างวด" | "ขายเครื่อง" | "ปิดยอด";
 type DateField = "paidAt" | "updatedAt";
 type SortKey = "no" | "paidAt" | "incomeType" | "contractNo" | "amount" | "updatedBy" | "updatedAt";
 type SortDir = "asc" | "desc";
 
-const ALL_INCOME_TYPES: IncomeType[] = ["ค่างวด", "ขายเครื่อง", "ปิดยอด", "เงินดาวน์"];
+// "เงินดาวน์" ซ่อนไว้ก่อน — ไม่มีในข้อมูลจริง (period = 0 ไม่ปรากฏใน API)
+const ALL_INCOME_TYPES: IncomeType[] = ["ค่างวด", "ขายเครื่อง", "ปิดยอด"];
 
 const TYPE_COLORS: Record<IncomeType, { bg: string; text: string; dot: string }> = {
   "ค่างวด":    { bg: "bg-blue-50",   text: "text-blue-700",   dot: "bg-blue-500" },
   "ขายเครื่อง": { bg: "bg-orange-50", text: "text-orange-700", dot: "bg-orange-500" },
   "ปิดยอด":    { bg: "bg-purple-50", text: "text-purple-700", dot: "bg-purple-500" },
-  "เงินดาวน์":  { bg: "bg-green-50",  text: "text-green-700",  dot: "bg-green-500" },
+  // "เงินดาวน์" ซ่อนไว้ก่อน
 };
 
 const BADGE_COLORS: Record<IncomeType, string> = {
   "ค่างวด":    "bg-blue-600",
   "ขายเครื่อง": "bg-orange-500",
   "ปิดยอด":    "bg-purple-600",
-  "เงินดาวน์":  "bg-green-600",
+  // "เงินดาวน์" ซ่อนไว้ก่อน
 };
 
 function fmtMoney(n: number | null | undefined): string {
@@ -172,7 +175,7 @@ export default function Income() {
     "ค่างวด": summaryData?.["ค่างวด"] ?? 0,
     "ขายเครื่อง": summaryData?.["ขายเครื่อง"] ?? 0,
     "ปิดยอด": summaryData?.["ปิดยอด"] ?? 0,
-    "เงินดาวน์": summaryData?.["เงินดาวน์"] ?? 0,
+    // "เงินดาวน์" ซ่อนไว้ก่อน
   }), [summaryData]);
 
   const totalVisible = useMemo(() => {

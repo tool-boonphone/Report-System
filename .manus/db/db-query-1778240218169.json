@@ -1,0 +1,37 @@
+{
+  "query": "SELECT COUNT(*) as cnt FROM debt_collected_cache WHERE section = 'Boonphone' AND overpaid > 0 AND principal = 0 AND interest = 0 AND fee = 0; SELECT overpaid, principal, interest, fee, total_amount, period, is_bad_debt_row FROM debt_collected_cache WHERE section = 'Boonphone' AND overpaid > 0 LIMIT 5; SELECT COUNT(*) as cnt_overpaid FROM debt_collected_cache WHERE section = 'Boonphone' AND overpaid > 0;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT COUNT(*) as cnt FROM debt_collected_cache WHERE section = 'Boonphone' AND overpaid > 0 AND principal = 0 AND interest = 0 AND fee = 0; SELECT overpaid, principal, interest, fee, total_amount, period, is_bad_debt_row FROM debt_collected_cache WHERE section = 'Boonphone' AND overpaid > 0 LIMIT 5; SELECT COUNT(*) as cnt_overpaid FROM debt_collected_cache WHERE section = 'Boonphone' AND overpaid > 0;",
+  "rows": [
+    {
+      "cnt": "1"
+    },
+    {
+      "cnt": "overpaid\tprincipal\tinterest\tfee\ttotal_amount\tperiod\tis_bad_debt_row"
+    },
+    {
+      "cnt": "2.00\t660.00\t858.00\t100.00\t1620.00\t1\t0"
+    },
+    {
+      "cnt": "1.00\t660.00\t856.00\t100.00\t1667.00\t1\t0"
+    },
+    {
+      "cnt": "40.00\t807.00\t1048.00\t100.00\t1995.00\t1\t0"
+    },
+    {
+      "cnt": "58.00\t1000.00\t1300.00\t100.00\t2458.00\t1\t0"
+    },
+    {
+      "cnt": "470.00\t867.00\t1127.00\t100.00\t2914.00\t1\t0"
+    },
+    {
+      "cnt": "cnt_overpaid"
+    },
+    {
+      "cnt": "122"
+    }
+  ],
+  "messages": [],
+  "stdout": "cnt\n1\noverpaid\tprincipal\tinterest\tfee\ttotal_amount\tperiod\tis_bad_debt_row\n2.00\t660.00\t858.00\t100.00\t1620.00\t1\t0\n1.00\t660.00\t856.00\t100.00\t1667.00\t1\t0\n40.00\t807.00\t1048.00\t100.00\t1995.00\t1\t0\n58.00\t1000.00\t1300.00\t100.00\t2458.00\t1\t0\n470.00\t867.00\t1127.00\t100.00\t2914.00\t1\t0\ncnt_overpaid\n122\n",
+  "stderr": "",
+  "execution_time_ms": 2324
+}

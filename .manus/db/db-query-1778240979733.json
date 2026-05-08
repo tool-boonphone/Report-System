@@ -1,0 +1,82 @@
+{
+  "query": "SELECT receipt_no, status, JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.remark')) as remark, CAST(JSON_EXTRACT(raw_json, '$.principal_paid') AS DECIMAL(12,2)) as principal_paid, CAST(JSON_EXTRACT(raw_json, '$.bad_debt_amount') AS DECIMAL(12,2)) as bad_debt_amount, CAST(JSON_EXTRACT(raw_json, '$.total_paid_amount') AS DECIMAL(12,2)) as total_paid_amount FROM payment_transactions WHERE section = 'Fastfone365' AND receipt_no LIKE 'PRETX%' LIMIT 9",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT receipt_no, status, JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.remark')) as remark, CAST(JSON_EXTRACT(raw_json, '$.principal_paid') AS DECIMAL(12,2)) as principal_paid, CAST(JSON_EXTRACT(raw_json, '$.bad_debt_amount') AS DECIMAL(12,2)) as bad_debt_amount, CAST(JSON_EXTRACT(raw_json, '$.total_paid_amount') AS DECIMAL(12,2)) as total_paid_amount FROM payment_transactions WHERE section = 'Fastfone365' AND receipt_no LIKE 'PRETX%' LIMIT 9",
+  "rows": [
+    {
+      "receipt_no": "PRETXRT0126-AYA004-20932-01-4",
+      "status": "Active",
+      "remark": "จบงวด เม.ย.",
+      "principal_paid": "1338.00",
+      "bad_debt_amount": "0.00",
+      "total_paid_amount": "3177.00"
+    },
+    {
+      "receipt_no": "PRETXRT0126-PTE010-20937-01-5",
+      "status": "Active",
+      "remark": "จบงวด เม.ย.",
+      "principal_paid": "867.00",
+      "bad_debt_amount": "0.00",
+      "total_paid_amount": "2094.00"
+    },
+    {
+      "receipt_no": "PRETXRT0126-PTE010-20937-01-4",
+      "status": "Active",
+      "remark": "จบงวด มี.ค. ค้างค่าปรับ100บาท",
+      "principal_paid": "867.00",
+      "bad_debt_amount": "0.00",
+      "total_paid_amount": "2094.00"
+    },
+    {
+      "receipt_no": "PRETXRT0126-AYA004-20932-01-3",
+      "status": "Active",
+      "remark": "จบงวด มี.ค.",
+      "principal_paid": "1338.00",
+      "bad_debt_amount": "0.00",
+      "total_paid_amount": "3527.00"
+    },
+    {
+      "receipt_no": "PRETXRT0126-PTE010-20937-01-3",
+      "status": "Active",
+      "remark": "จบงวด ก.พ. ค้างค่าปรับ 750 บาท",
+      "principal_paid": "594.00",
+      "bad_debt_amount": "0.00",
+      "total_paid_amount": "594.00"
+    },
+    {
+      "receipt_no": "PRETXRT0126-PTE010-20937-01-2",
+      "status": "Active",
+      "remark": "ชำระบางส่วน",
+      "principal_paid": "273.00",
+      "bad_debt_amount": "0.00",
+      "total_paid_amount": "1000.00"
+    },
+    {
+      "receipt_no": "PRETXRT0126-AYA004-20932-01-2",
+      "status": "Active",
+      "remark": "ชำระค่าปรับ ก.พ.",
+      "principal_paid": "0.00",
+      "bad_debt_amount": "0.00",
+      "total_paid_amount": "350.00"
+    },
+    {
+      "receipt_no": "PRETXRT0126-AYA004-20932-01-1",
+      "status": "Active",
+      "remark": "จบงวด ก.พ./ค้างค่าปรับ ก.พ.ยอด350บาท",
+      "principal_paid": "1338.00",
+      "bad_debt_amount": "0.00",
+      "total_paid_amount": "3177.00"
+    },
+    {
+      "receipt_no": "PRETXRT0126-PTE010-20937-01-1",
+      "status": "Active",
+      "remark": "บางส่วน งวด กพ",
+      "principal_paid": "0.00",
+      "bad_debt_amount": "0.00",
+      "total_paid_amount": "500.00"
+    }
+  ],
+  "messages": [],
+  "stdout": "receipt_no\tstatus\tremark\tprincipal_paid\tbad_debt_amount\ttotal_paid_amount\nPRETXRT0126-AYA004-20932-01-4\tActive\tจบงวด เม.ย.\t1338.00\t0.00\t3177.00\nPRETXRT0126-PTE010-20937-01-5\tActive\tจบงวด เม.ย.\t867.00\t0.00\t2094.00\nPRETXRT0126-PTE010-20937-01-4\tActive\tจบงวด มี.ค. ค้างค่าปรับ100บาท\t867.00\t0.00\t2094.00\nPRETXRT0126-AYA004-20932-01-3\tActive\tจบงวด มี.ค.\t1338.00\t0.00\t3527.00\nPRETXRT0126-PTE010-20937-01-3\tActive\tจบงวด ก.พ. ค้างค่าปรับ 750 บาท\t594.00\t0.00\t594.00\nPRETXRT0126-PTE010-20937-01-2\tActive\tชำระบางส่วน\t273.00\t0.00\t1000.00\nPRETXRT0126-AYA004-20932-01-2\tActive\tชำระค่าปรับ ก.พ.\t0.00\t0.00\t350.00\nPRETXRT0126-AYA004-20932-01-1\tActive\tจบงวด ก.พ./ค้างค่าปรับ ก.พ.ยอด350บาท\t1338.00\t0.00\t3177.00\nPRETXRT0126-PTE010-20937-01-1\tActive\tบางส่วน งวด กพ\t0.00\t0.00\t500.00\n",
+  "stderr": "",
+  "execution_time_ms": 1909
+}

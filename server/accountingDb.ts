@@ -3,8 +3,11 @@
  *
  * รายรับ (Income):
  *   - ดึงจาก debt_collected_cache ทุก row
- *   - แยกประเภทตาม: ค่างวด, ขายเครื่อง (is_bad_debt_row=1), ปิดยอด (overpaid>0 & principal=0),
- *     เงินดาวน์ (period=0)
+ *   - แยกประเภทตาม:
+ *       is_bad_debt_row = 1  → ขายเครื่อง  (ยอด = bad_debt)
+ *       is_close_row = 1     → ปิดยอด     (ยอด = total_amount)
+ *       otherwise            → ค่างวด     (ยอด = total_amount)
+ *   - "เงินดาวน์" ซ่อนไว้ก่อน (period = 0 ไม่มีในข้อมูลจริง)
  *
  * รายจ่าย (Expense):
  *   - ดึงจาก contracts.commission_net (ค่าคอมมิชชั่น)
@@ -66,8 +69,36 @@ export interface ExpenseParams {
 // ─── Income ───────────────────────────────────────────────────────────────────
 
 /**
+ * Income type CASE expression:
+ *   is_bad_debt_row = 1  → ขายเครื่อง
+ *   is_close_row = 1     → ปิดยอด
+ *   otherwise            → ค่างวด
+ *
+ * NOTE: "เงินดาวน์" (period = 0) ซ่อนไว้ก่อน — ไม่มีในข้อมูลจริง
+ */
+const INCOME_TYPE_CASE = `
+  CASE
+    WHEN is_bad_debt_row = 1 THEN 'ขายเครื่อง'
+    WHEN is_close_row = 1 THEN 'ปิดยอด'
+    ELSE 'ค่างวด'
+  END
+`;
+
+/**
+ * Amount CASE expression:
+ *   ขายเครื่อง → bad_debt column
+ *   ปิดยอด / ค่างวด → total_amount column
+ */
+const AMOUNT_CASE = `
+  CASE
+    WHEN is_bad_debt_row = 1 THEN COALESCE(bad_debt, 0)
+    ELSE COALESCE(total_amount, 0)
+  END
+`;
+
+/**
  * ดึง income rows พร้อม pagination
- * ใช้ CASE WHEN ใน SQL เพื่อจำแนก income_type ตาม logic เดียวกับ DebtReport
+ * ใช้ CASE WHEN ใน SQL เพื่อจำแนก income_type ตาม is_close_row / is_bad_debt_row
  */
 export async function listIncome(params: IncomeParams): Promise<{
   rows: IncomeRow[];
@@ -98,7 +129,7 @@ export async function listIncome(params: IncomeParams): Promise<{
   const conditions: string[] = [`section = '${esc(section)}'`];
 
   if (search) {
-    conditions.push(`contract_no LIKE '%${esc(search)}%'`);
+    conditions.push(`(contract_no LIKE '%${esc(search)}%' OR customer_name LIKE '%${esc(search)}%')`);
   }
   if (dateFrom) {
     conditions.push(`${dateCol} >= '${esc(dateFrom)}'`);
@@ -109,30 +140,6 @@ export async function listIncome(params: IncomeParams): Promise<{
   if (updatedBy) {
     conditions.push(`updated_by = '${esc(updatedBy)}'`);
   }
-
-  // Income type CASE expression
-  // Logic:
-  //   period = 0 → เงินดาวน์
-  //   is_bad_debt_row = 1 → ขายเครื่อง
-  //   overpaid > 0 AND principal = 0 AND interest = 0 AND fee = 0 → ปิดยอด
-  //   otherwise → ค่างวด
-  const incomeTypeCaseExpr = `
-    CASE
-      WHEN (period = 0 OR period IS NULL) THEN 'เงินดาวน์'
-      WHEN is_bad_debt_row = 1 THEN 'ขายเครื่อง'
-      WHEN overpaid > 0 AND principal = 0 AND interest = 0 AND fee = 0 THEN 'ปิดยอด'
-      ELSE 'ค่างวด'
-    END
-  `;
-
-  // Amount CASE expression
-  const amountCaseExpr = `
-    CASE
-      WHEN is_bad_debt_row = 1 THEN COALESCE(bad_debt, 0)
-      WHEN overpaid > 0 AND principal = 0 AND interest = 0 AND fee = 0 THEN COALESCE(overpaid, 0)
-      ELSE COALESCE(total_amount, 0)
-    END
-  `;
 
   // Income type filter (applied as outer WHERE on subquery)
   let incomeTypeFilter = "";
@@ -147,7 +154,7 @@ export async function listIncome(params: IncomeParams): Promise<{
   const countSql = `
     SELECT COUNT(*) AS total
     FROM (
-      SELECT ${incomeTypeCaseExpr} AS income_type
+      SELECT ${INCOME_TYPE_CASE} AS income_type
       FROM debt_collected_cache
       WHERE ${whereStr}
     ) AS sub
@@ -165,8 +172,8 @@ export async function listIncome(params: IncomeParams): Promise<{
         paid_at,
         updated_by,
         updated_at,
-        ${incomeTypeCaseExpr} AS income_type,
-        ${amountCaseExpr} AS amount
+        ${INCOME_TYPE_CASE} AS income_type,
+        ${AMOUNT_CASE} AS amount
       FROM debt_collected_cache
       WHERE ${whereStr}
     ) AS sub
@@ -316,26 +323,10 @@ export async function getIncomeSummary(
   const dateCol = dateField === "paidAt" ? "paid_at" : "updated_at";
 
   const conditions: string[] = [`section = '${esc(section)}'`];
-  if (search) conditions.push(`contract_no LIKE '%${esc(search)}%'`);
+  if (search) conditions.push(`(contract_no LIKE '%${esc(search)}%' OR customer_name LIKE '%${esc(search)}%')`);
   if (dateFrom) conditions.push(`${dateCol} >= '${esc(dateFrom)}'`);
   if (dateTo) conditions.push(`${dateCol} <= '${esc(dateTo)} 23:59:59'`);
   if (updatedBy) conditions.push(`updated_by = '${esc(updatedBy)}'`);
-
-  const incomeTypeCaseExpr = `
-    CASE
-      WHEN (period = 0 OR period IS NULL) THEN 'เงินดาวน์'
-      WHEN is_bad_debt_row = 1 THEN 'ขายเครื่อง'
-      WHEN overpaid > 0 AND principal = 0 AND interest = 0 AND fee = 0 THEN 'ปิดยอด'
-      ELSE 'ค่างวด'
-    END
-  `;
-  const amountCaseExpr = `
-    CASE
-      WHEN is_bad_debt_row = 1 THEN COALESCE(bad_debt, 0)
-      WHEN overpaid > 0 AND principal = 0 AND interest = 0 AND fee = 0 THEN COALESCE(overpaid, 0)
-      ELSE COALESCE(total_amount, 0)
-    END
-  `;
 
   let incomeTypeFilter = "";
   if (incomeTypes && incomeTypes.length > 0) {
@@ -349,8 +340,8 @@ export async function getIncomeSummary(
     SELECT income_type, SUM(amount) AS sum_amount
     FROM (
       SELECT
-        ${incomeTypeCaseExpr} AS income_type,
-        ${amountCaseExpr} AS amount
+        ${INCOME_TYPE_CASE} AS income_type,
+        ${AMOUNT_CASE} AS amount
       FROM debt_collected_cache
       WHERE ${whereStr}
     ) AS sub

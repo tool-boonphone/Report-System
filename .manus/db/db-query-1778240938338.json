@@ -1,0 +1,25 @@
+{
+  "query": "SELECT SUBSTRING(receipt_no, 1, 5) as prefix, COUNT(*) as cnt, SUM(CAST(JSON_EXTRACT(raw_json, '$.total_paid_amount') AS DECIMAL(12,2))) as total FROM payment_transactions WHERE section = 'Boonphone' GROUP BY SUBSTRING(receipt_no, 1, 5) ORDER BY cnt DESC LIMIT 20",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT SUBSTRING(receipt_no, 1, 5) as prefix, COUNT(*) as cnt, SUM(CAST(JSON_EXTRACT(raw_json, '$.total_paid_amount') AS DECIMAL(12,2))) as total FROM payment_transactions WHERE section = 'Boonphone' GROUP BY SUBSTRING(receipt_no, 1, 5) ORDER BY cnt DESC LIMIT 20",
+  "rows": [
+    {
+      "prefix": "TXRT0",
+      "cnt": "4154",
+      "total": "10386926.00"
+    },
+    {
+      "prefix": "TXRTC",
+      "cnt": "62",
+      "total": "203349.60"
+    },
+    {
+      "prefix": "NULL",
+      "cnt": "14",
+      "total": "19694.00"
+    }
+  ],
+  "messages": [],
+  "stdout": "prefix\tcnt\ttotal\nTXRT0\t4154\t10386926.00\nTXRTC\t62\t203349.60\nNULL\t14\t19694.00\n",
+  "stderr": "",
+  "execution_time_ms": 1889
+}

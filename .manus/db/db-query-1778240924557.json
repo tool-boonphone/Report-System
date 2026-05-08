@@ -1,0 +1,100 @@
+{
+  "query": "SELECT receipt_no, status, JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.payment_status')) as payment_status, JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.remark')) as remark, CAST(JSON_EXTRACT(raw_json, '$.principal_paid') AS DECIMAL(12,2)) as principal_paid, CAST(JSON_EXTRACT(raw_json, '$.bad_debt_amount') AS DECIMAL(12,2)) as bad_debt_amount, CAST(JSON_EXTRACT(raw_json, '$.close_installment_amount') AS DECIMAL(12,2)) as close_installment_amount FROM payment_transactions WHERE section = 'Boonphone' LIMIT 10",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT receipt_no, status, JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.payment_status')) as payment_status, JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.remark')) as remark, CAST(JSON_EXTRACT(raw_json, '$.principal_paid') AS DECIMAL(12,2)) as principal_paid, CAST(JSON_EXTRACT(raw_json, '$.bad_debt_amount') AS DECIMAL(12,2)) as bad_debt_amount, CAST(JSON_EXTRACT(raw_json, '$.close_installment_amount') AS DECIMAL(12,2)) as close_installment_amount FROM payment_transactions WHERE section = 'Boonphone' LIMIT 10",
+  "rows": [
+    {
+      "receipt_no": "TXRTC0226-PTE007-0351-01",
+      "status": "Active",
+      "payment_status": "Active",
+      "remark": "ลูกค้าปิดยอด งวดที่1 (จ่ายเต็ม) 5,398 บาท งวดที่2-15 (มีส่วนลด20%) 5,398*14 - 20% = 60,457.60 บาท รวมยอด 60,457.60 + 5,398 = 65,855.60 บาท ค่ะ",
+      "principal_paid": "2119.00",
+      "bad_debt_amount": "0.00",
+      "close_installment_amount": "5398.00"
+    },
+    {
+      "receipt_no": "TXRTC0226-PTE007-0351-01",
+      "status": "Active",
+      "payment_status": "Active",
+      "remark": "ลูกค้าปิดยอด งวดที่1 (จ่ายเต็ม) 5,398 บาท งวดที่2-15 (มีส่วนลด20%) 5,398*14 - 20% = 60,457.60 บาท รวมยอด 60,457.60 + 5,398 = 65,855.60 บาท ค่ะ",
+      "principal_paid": "2119.00",
+      "bad_debt_amount": "0.00",
+      "close_installment_amount": "5398.00"
+    },
+    {
+      "receipt_no": "TXRTC0226-PTE007-0351-01",
+      "status": "Active",
+      "payment_status": "Active",
+      "remark": "ลูกค้าปิดยอด งวดที่1 (จ่ายเต็ม) 5,398 บาท งวดที่2-15 (มีส่วนลด20%) 5,398*14 - 20% = 60,457.60 บาท รวมยอด 60,457.60 + 5,398 = 65,855.60 บาท ค่ะ",
+      "principal_paid": "2119.00",
+      "bad_debt_amount": "0.00",
+      "close_installment_amount": "5398.00"
+    },
+    {
+      "receipt_no": "TXRTC0226-PTE007-0351-01",
+      "status": "Active",
+      "payment_status": "Active",
+      "remark": "ลูกค้าปิดยอด งวดที่1 (จ่ายเต็ม) 5,398 บาท งวดที่2-15 (มีส่วนลด20%) 5,398*14 - 20% = 60,457.60 บาท รวมยอด 60,457.60 + 5,398 = 65,855.60 บาท ค่ะ",
+      "principal_paid": "2119.00",
+      "bad_debt_amount": "0.00",
+      "close_installment_amount": "5398.00"
+    },
+    {
+      "receipt_no": "TXRTC0226-PTE007-0351-01",
+      "status": "Active",
+      "payment_status": "Active",
+      "remark": "ลูกค้าปิดยอด งวดที่1 (จ่ายเต็ม) 5,398 บาท งวดที่2-15 (มีส่วนลด20%) 5,398*14 - 20% = 60,457.60 บาท รวมยอด 60,457.60 + 5,398 = 65,855.60 บาท ค่ะ",
+      "principal_paid": "2119.00",
+      "bad_debt_amount": "0.00",
+      "close_installment_amount": "5398.00"
+    },
+    {
+      "receipt_no": "TXRTC0226-PTE007-0351-01",
+      "status": "Active",
+      "payment_status": "Active",
+      "remark": "ลูกค้าปิดยอด งวดที่1 (จ่ายเต็ม) 5,398 บาท งวดที่2-15 (มีส่วนลด20%) 5,398*14 - 20% = 60,457.60 บาท รวมยอด 60,457.60 + 5,398 = 65,855.60 บาท ค่ะ",
+      "principal_paid": "2119.00",
+      "bad_debt_amount": "0.00",
+      "close_installment_amount": "5398.00"
+    },
+    {
+      "receipt_no": "TXRTC0226-PTE007-0351-01",
+      "status": "Active",
+      "payment_status": "Active",
+      "remark": "ลูกค้าปิดยอด งวดที่1 (จ่ายเต็ม) 5,398 บาท งวดที่2-15 (มีส่วนลด20%) 5,398*14 - 20% = 60,457.60 บาท รวมยอด 60,457.60 + 5,398 = 65,855.60 บาท ค่ะ",
+      "principal_paid": "2119.00",
+      "bad_debt_amount": "0.00",
+      "close_installment_amount": "5398.00"
+    },
+    {
+      "receipt_no": "TXRTC0226-PTE007-0351-01",
+      "status": "Active",
+      "payment_status": "Active",
+      "remark": "ลูกค้าปิดยอด งวดที่1 (จ่ายเต็ม) 5,398 บาท งวดที่2-15 (มีส่วนลด20%) 5,398*14 - 20% = 60,457.60 บาท รวมยอด 60,457.60 + 5,398 = 65,855.60 บาท ค่ะ",
+      "principal_paid": "2119.00",
+      "bad_debt_amount": "0.00",
+      "close_installment_amount": "5398.00"
+    },
+    {
+      "receipt_no": "TXRTC0226-PTE007-0351-01",
+      "status": "Active",
+      "payment_status": "Active",
+      "remark": "ลูกค้าปิดยอด งวดที่1 (จ่ายเต็ม) 5,398 บาท งวดที่2-15 (มีส่วนลด20%) 5,398*14 - 20% = 60,457.60 บาท รวมยอด 60,457.60 + 5,398 = 65,855.60 บาท ค่ะ",
+      "principal_paid": "2119.00",
+      "bad_debt_amount": "0.00",
+      "close_installment_amount": "5398.00"
+    },
+    {
+      "receipt_no": "TXRT0226-SRI004-0477-01-1",
+      "status": "Active",
+      "payment_status": "Active",
+      "remark": "จบงวด ก.พ",
+      "principal_paid": "635.00",
+      "bad_debt_amount": "0.00",
+      "close_installment_amount": "1561.00"
+    }
+  ],
+  "messages": [],
+  "stdout": "receipt_no\tstatus\tpayment_status\tremark\tprincipal_paid\tbad_debt_amount\tclose_installment_amount\nTXRTC0226-PTE007-0351-01\tActive\tActive\tลูกค้าปิดยอด งวดที่1 (จ่ายเต็ม) 5,398 บาท งวดที่2-15 (มีส่วนลด20%) 5,398*14 - 20% = 60,457.60 บาท รวมยอด 60,457.60 + 5,398 = 65,855.60 บาท ค่ะ\t2119.00\t0.00\t5398.00\nTXRTC0226-PTE007-0351-01\tActive\tActive\tลูกค้าปิดยอด งวดที่1 (จ่ายเต็ม) 5,398 บาท งวดที่2-15 (มีส่วนลด20%) 5,398*14 - 20% = 60,457.60 บาท รวมยอด 60,457.60 + 5,398 = 65,855.60 บาท ค่ะ\t2119.00\t0.00\t5398.00\nTXRTC0226-PTE007-0351-01\tActive\tActive\tลูกค้าปิดยอด งวดที่1 (จ่ายเต็ม) 5,398 บาท งวดที่2-15 (มีส่วนลด20%) 5,398*14 - 20% = 60,457.60 บาท รวมยอด 60,457.60 + 5,398 = 65,855.60 บาท ค่ะ\t2119.00\t0.00\t5398.00\nTXRTC0226-PTE007-0351-01\tActive\tActive\tลูกค้าปิดยอด งวดที่1 (จ่ายเต็ม) 5,398 บาท งวดที่2-15 (มีส่วนลด20%) 5,398*14 - 20% = 60,457.60 บาท รวมยอด 60,457.60 + 5,398 = 65,855.60 บาท ค่ะ\t2119.00\t0.00\t5398.00\nTXRTC0226-PTE007-0351-01\tActive\tActive\tลูกค้าปิดยอด งวดที่1 (จ่ายเต็ม) 5,398 บาท งวดที่2-15 (มีส่วนลด20%) 5,398*14 - 20% = 60,457.60 บาท รวมยอด 60,457.60 + 5,398 = 65,855.60 บาท ค่ะ\t2119.00\t0.00\t5398.00\nTXRTC0226-PTE007-0351-01\tActive\tActive\tลูกค้าปิดยอด งวดที่1 (จ่ายเต็ม) 5,398 บาท งวดที่2-15 (มีส่วนลด20%) 5,398*14 - 20% = 60,457.60 บาท รวมยอด 60,457.60 + 5,398 = 65,855.60 บาท ค่ะ\t2119.00\t0.00\t5398.00\nTXRTC0226-PTE007-0351-01\tActive\tActive\tลูกค้าปิดยอด งวดที่1 (จ่ายเต็ม) 5,398 บาท งวดที่2-15 (มีส่วนลด20%) 5,398*14 - 20% = 60,457.60 บาท รวมยอด 60,457.60 + 5,398 = 65,855.60 บาท ค่ะ\t2119.00\t0.00\t5398.00\nTXRTC0226-PTE007-0351-01\tActive\tActive\tลูกค้าปิดยอด งวดที่1 (จ่ายเต็ม) 5,398 บาท งวดที่2-15 (มีส่วนลด20%) 5,398*14 - 20% = 60,457.60 บาท รวมยอด 60,457.60 + 5,398 = 65,855.60 บาท ค่ะ\t2119.00\t0.00\t5398.00\nTXRTC0226-PTE007-0351-01\tActive\tActive\tลูกค้าปิดยอด งวดที่1 (จ่ายเต็ม) 5,398 บาท งวดที่2-15 (มีส่วนลด20%) 5,398*14 - 20% = 60,457.60 บาท รวมยอด 60,457.60 + 5,398 = 65,855.60 บาท ค่ะ\t2119.00\t0.00\t5398.00\nTXRT0226-SRI004-0477-01-1\tActive\tActive\tจบงวด ก.พ\t635.00\t0.00\t1561.00\n",
+  "stderr": "",
+  "execution_time_ms": 1775
+}

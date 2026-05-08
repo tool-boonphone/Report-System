@@ -1,0 +1,50 @@
+{
+  "query": "SELECT receipt_no, status, JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.remark')) as remark, CAST(JSON_EXTRACT(raw_json, '$.principal_paid') AS DECIMAL(12,2)) as principal_paid, CAST(JSON_EXTRACT(raw_json, '$.bad_debt_amount') AS DECIMAL(12,2)) as bad_debt_amount, CAST(JSON_EXTRACT(raw_json, '$.total_paid_amount') AS DECIMAL(12,2)) as total_paid_amount FROM payment_transactions WHERE section = 'Fastfone365' AND receipt_no LIKE 'TXRT0%' LIMIT 5",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT receipt_no, status, JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.remark')) as remark, CAST(JSON_EXTRACT(raw_json, '$.principal_paid') AS DECIMAL(12,2)) as principal_paid, CAST(JSON_EXTRACT(raw_json, '$.bad_debt_amount') AS DECIMAL(12,2)) as bad_debt_amount, CAST(JSON_EXTRACT(raw_json, '$.total_paid_amount') AS DECIMAL(12,2)) as total_paid_amount FROM payment_transactions WHERE section = 'Fastfone365' AND receipt_no LIKE 'TXRT0%' LIMIT 5",
+  "rows": [
+    {
+      "receipt_no": "TXRT0225-SNI003-10257-01-13",
+      "status": "Active",
+      "remark": "จบงวด ม.ค.",
+      "principal_paid": "199.95",
+      "bad_debt_amount": "0.00",
+      "total_paid_amount": "560.00"
+    },
+    {
+      "receipt_no": "TXRT0525-KBI002-12296-01-14",
+      "status": "Active",
+      "remark": "จบงวด สุดท้าย",
+      "principal_paid": "2258.00",
+      "bad_debt_amount": "0.00",
+      "total_paid_amount": "6691.00"
+    },
+    {
+      "receipt_no": "TXRT0925-SNI015-15926-01-6",
+      "status": "Active",
+      "remark": "จบงวด พย ไม่มีค้างปรับค้าง เคสช่วยเหลือ น้ำท่วม งวด พยเท่านั้น",
+      "principal_paid": "469.00",
+      "bad_debt_amount": "0.00",
+      "total_paid_amount": "2969.00"
+    },
+    {
+      "receipt_no": "TXRT0425-CPN001-11818-01-9",
+      "status": "Active",
+      "remark": "จบงวด ม.ค.",
+      "principal_paid": "862.00",
+      "bad_debt_amount": "0.00",
+      "total_paid_amount": "2081.00"
+    },
+    {
+      "receipt_no": "TXRT0925-PRI001-15435-01-4",
+      "status": "Active",
+      "remark": "จบงวด ม.ค",
+      "principal_paid": "1194.00",
+      "bad_debt_amount": "0.00",
+      "total_paid_amount": "2846.00"
+    }
+  ],
+  "messages": [],
+  "stdout": "receipt_no\tstatus\tremark\tprincipal_paid\tbad_debt_amount\ttotal_paid_amount\nTXRT0225-SNI003-10257-01-13\tActive\tจบงวด ม.ค.\t199.95\t0.00\t560.00\nTXRT0525-KBI002-12296-01-14\tActive\tจบงวด สุดท้าย\t2258.00\t0.00\t6691.00\nTXRT0925-SNI015-15926-01-6\tActive\tจบงวด พย ไม่มีค้างปรับค้าง เคสช่วยเหลือ น้ำท่วม งวด พยเท่านั้น\t469.00\t0.00\t2969.00\nTXRT0425-CPN001-11818-01-9\tActive\tจบงวด ม.ค.\t862.00\t0.00\t2081.00\nTXRT0925-PRI001-15435-01-4\tActive\tจบงวด ม.ค\t1194.00\t0.00\t2846.00\n",
+  "stderr": "",
+  "execution_time_ms": 1795
+}

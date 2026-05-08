@@ -1,0 +1,35 @@
+{
+  "query": "SELECT SUBSTRING(receipt_no, 1, 5) as prefix, COUNT(*) as cnt, SUM(CAST(JSON_EXTRACT(raw_json, '$.total_paid_amount') AS DECIMAL(12,2))) as total FROM payment_transactions WHERE section = 'Fastfone365' GROUP BY SUBSTRING(receipt_no, 1, 5) ORDER BY cnt DESC LIMIT 20",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT SUBSTRING(receipt_no, 1, 5) as prefix, COUNT(*) as cnt, SUM(CAST(JSON_EXTRACT(raw_json, '$.total_paid_amount') AS DECIMAL(12,2))) as total FROM payment_transactions WHERE section = 'Fastfone365' GROUP BY SUBSTRING(receipt_no, 1, 5) ORDER BY cnt DESC LIMIT 20",
+  "rows": [
+    {
+      "prefix": "NULL",
+      "cnt": "103642",
+      "total": "NULL"
+    },
+    {
+      "prefix": "TXRT0",
+      "cnt": "63691",
+      "total": "157595412.03"
+    },
+    {
+      "prefix": "TXRT1",
+      "cnt": "54574",
+      "total": "142180527.91"
+    },
+    {
+      "prefix": "TXRTC",
+      "cnt": "3034",
+      "total": "7295541.56"
+    },
+    {
+      "prefix": "PRETX",
+      "cnt": "9",
+      "total": "16513.00"
+    }
+  ],
+  "messages": [],
+  "stdout": "prefix\tcnt\ttotal\nNULL\t103642\tNULL\nTXRT0\t63691\t157595412.03\nTXRT1\t54574\t142180527.91\nTXRTC\t3034\t7295541.56\nPRETX\t9\t16513.00\n",
+  "stderr": "",
+  "execution_time_ms": 1972
+}

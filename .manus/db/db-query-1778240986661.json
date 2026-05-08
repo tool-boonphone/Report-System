@@ -1,0 +1,122 @@
+{
+  "query": "SELECT receipt_no, status, JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.remark')) as remark, CAST(JSON_EXTRACT(raw_json, '$.principal_paid') AS DECIMAL(12,2)) as principal_paid, CAST(JSON_EXTRACT(raw_json, '$.bad_debt_amount') AS DECIMAL(12,2)) as bad_debt_amount, CAST(JSON_EXTRACT(raw_json, '$.total_paid_amount') AS DECIMAL(12,2)) as total_paid_amount FROM payment_transactions WHERE section = 'Boonphone' AND receipt_no IS NULL LIMIT 14",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT receipt_no, status, JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.remark')) as remark, CAST(JSON_EXTRACT(raw_json, '$.principal_paid') AS DECIMAL(12,2)) as principal_paid, CAST(JSON_EXTRACT(raw_json, '$.bad_debt_amount') AS DECIMAL(12,2)) as bad_debt_amount, CAST(JSON_EXTRACT(raw_json, '$.total_paid_amount') AS DECIMAL(12,2)) as total_paid_amount FROM payment_transactions WHERE section = 'Boonphone' AND receipt_no IS NULL LIMIT 14",
+  "rows": [
+    {
+      "receipt_no": "NULL",
+      "status": "Active",
+      "remark": "บางส่วน",
+      "principal_paid": "340.00",
+      "bad_debt_amount": "0.00",
+      "total_paid_amount": "532.00"
+    },
+    {
+      "receipt_no": "NULL",
+      "status": "Active",
+      "remark": "ชำระยอดบางส่วนงวดเม.ย.",
+      "principal_paid": "0.00",
+      "bad_debt_amount": "0.00",
+      "total_paid_amount": "500.00"
+    },
+    {
+      "receipt_no": "NULL",
+      "status": "Active",
+      "remark": "จบงวด เม.ย",
+      "principal_paid": "807.00",
+      "bad_debt_amount": "0.00",
+      "total_paid_amount": "1955.00"
+    },
+    {
+      "receipt_no": "NULL",
+      "status": "Active",
+      "remark": "บางส่วน",
+      "principal_paid": "0.00",
+      "bad_debt_amount": "0.00",
+      "total_paid_amount": "342.00"
+    },
+    {
+      "receipt_no": "NULL",
+      "status": "Active",
+      "remark": "บางส่วนงวด เม.ย",
+      "principal_paid": "500.00",
+      "bad_debt_amount": "0.00",
+      "total_paid_amount": "500.00"
+    },
+    {
+      "receipt_no": "NULL",
+      "status": "Active",
+      "remark": "จบงวด เม.ย ชำระเกินทบงวดถัดไป",
+      "principal_paid": "840.00",
+      "bad_debt_amount": "0.00",
+      "total_paid_amount": "2094.00"
+    },
+    {
+      "receipt_no": "NULL",
+      "status": "Active",
+      "remark": "จบงวด เมย",
+      "principal_paid": "867.00",
+      "bad_debt_amount": "0.00",
+      "total_paid_amount": "2094.00"
+    },
+    {
+      "receipt_no": "NULL",
+      "status": "Active",
+      "remark": "จบงวด เม.ย",
+      "principal_paid": "867.00",
+      "bad_debt_amount": "0.00",
+      "total_paid_amount": "2094.00"
+    },
+    {
+      "receipt_no": "NULL",
+      "status": "Active",
+      "remark": "จบงวดเม.ย.",
+      "principal_paid": "867.00",
+      "bad_debt_amount": "0.00",
+      "total_paid_amount": "2094.00"
+    },
+    {
+      "receipt_no": "NULL",
+      "status": "Active",
+      "remark": "จบงวด เมษา",
+      "principal_paid": "1167.00",
+      "bad_debt_amount": "0.00",
+      "total_paid_amount": "2784.00"
+    },
+    {
+      "receipt_no": "NULL",
+      "status": "Active",
+      "remark": "ค่างวดบางส่วน เม.ย",
+      "principal_paid": "0.00",
+      "bad_debt_amount": "0.00",
+      "total_paid_amount": "900.00"
+    },
+    {
+      "receipt_no": "NULL",
+      "status": "Active",
+      "remark": "จบงวด เม.ย ค้างปรับ 700",
+      "principal_paid": "1397.00",
+      "bad_debt_amount": "0.00",
+      "total_paid_amount": "1397.00"
+    },
+    {
+      "receipt_no": "NULL",
+      "status": "Active",
+      "remark": "จบงวด พ..ค.",
+      "principal_paid": "807.00",
+      "bad_debt_amount": "0.00",
+      "total_paid_amount": "1955.00"
+    },
+    {
+      "receipt_no": "NULL",
+      "status": "Active",
+      "remark": "จบงวด เม.ย . ค้างปรับ 450",
+      "principal_paid": "453.00",
+      "bad_debt_amount": "0.00",
+      "total_paid_amount": "453.00"
+    }
+  ],
+  "messages": [],
+  "stdout": "receipt_no\tstatus\tremark\tprincipal_paid\tbad_debt_amount\ttotal_paid_amount\nNULL\tActive\tบางส่วน\t340.00\t0.00\t532.00\nNULL\tActive\tชำระยอดบางส่วนงวดเม.ย.\t0.00\t0.00\t500.00\nNULL\tActive\tจบงวด เม.ย\t807.00\t0.00\t1955.00\nNULL\tActive\tบางส่วน\t0.00\t0.00\t342.00\nNULL\tActive\tบางส่วนงวด เม.ย\t500.00\t0.00\t500.00\nNULL\tActive\tจบงวด เม.ย ชำระเกินทบงวดถัดไป\t840.00\t0.00\t2094.00\nNULL\tActive\tจบงวด เมย\t867.00\t0.00\t2094.00\nNULL\tActive\tจบงวด เม.ย\t867.00\t0.00\t2094.00\nNULL\tActive\tจบงวดเม.ย.\t867.00\t0.00\t2094.00\nNULL\tActive\tจบงวด เมษา\t1167.00\t0.00\t2784.00\nNULL\tActive\tค่างวดบางส่วน เม.ย\t0.00\t0.00\t900.00\nNULL\tActive\tจบงวด เม.ย ค้างปรับ 700\t1397.00\t0.00\t1397.00\nNULL\tActive\tจบงวด พ..ค.\t807.00\t0.00\t1955.00\nNULL\tActive\tจบงวด เม.ย . ค้างปรับ 450\t453.00\t0.00\t453.00\n",
+  "stderr": "",
+  "execution_time_ms": 1800
+}

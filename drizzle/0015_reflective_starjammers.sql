@@ -1,0 +1,1 @@
+ALTER TABLE `debt_collected_cache` ADD `is_close_row` boolean DEFAULT false NOT NULL;

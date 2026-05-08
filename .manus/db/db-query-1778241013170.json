@@ -1,0 +1,50 @@
+{
+  "query": "SELECT contract_status, is_bad_debt_row, COUNT(*) as cnt, SUM(principal) as sum_principal, SUM(bad_debt) as sum_bad_debt, SUM(total_amount) as sum_total FROM debt_collected_cache GROUP BY contract_status, is_bad_debt_row ORDER BY cnt DESC",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT contract_status, is_bad_debt_row, COUNT(*) as cnt, SUM(principal) as sum_principal, SUM(bad_debt) as sum_bad_debt, SUM(total_amount) as sum_total FROM debt_collected_cache GROUP BY contract_status, is_bad_debt_row ORDER BY cnt DESC",
+  "rows": [
+    {
+      "contract_status": "สิ้นสุดสัญญา",
+      "is_bad_debt_row": "0",
+      "cnt": "70801",
+      "sum_principal": "74060677.27",
+      "sum_bad_debt": "0.00",
+      "sum_total": "172026106.51"
+    },
+    {
+      "contract_status": "สำเร็จ",
+      "is_bad_debt_row": "0",
+      "cnt": "40851",
+      "sum_principal": "40652880.27",
+      "sum_bad_debt": "0.00",
+      "sum_total": "98302787.32"
+    },
+    {
+      "contract_status": "หนี้เสีย",
+      "is_bad_debt_row": "0",
+      "cnt": "7060",
+      "sum_principal": "6224393.99",
+      "sum_bad_debt": "0.00",
+      "sum_total": "15534176.30"
+    },
+    {
+      "contract_status": "หนี้เสีย",
+      "is_bad_debt_row": "1",
+      "cnt": "3122",
+      "sum_principal": "0.00",
+      "sum_bad_debt": "22698411.58",
+      "sum_total": "0.00"
+    },
+    {
+      "contract_status": "ระงับสัญญา",
+      "is_bad_debt_row": "0",
+      "cnt": "716",
+      "sum_principal": "644736.08",
+      "sum_bad_debt": "0.00",
+      "sum_total": "1606465.48"
+    }
+  ],
+  "messages": [],
+  "stdout": "contract_status\tis_bad_debt_row\tcnt\tsum_principal\tsum_bad_debt\tsum_total\nสิ้นสุดสัญญา\t0\t70801\t74060677.27\t0.00\t172026106.51\nสำเร็จ\t0\t40851\t40652880.27\t0.00\t98302787.32\nหนี้เสีย\t0\t7060\t6224393.99\t0.00\t15534176.30\nหนี้เสีย\t1\t3122\t0.00\t22698411.58\t0.00\nระงับสัญญา\t0\t716\t644736.08\t0.00\t1606465.48\n",
+  "stderr": "",
+  "execution_time_ms": 1931
+}

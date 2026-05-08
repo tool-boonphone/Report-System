@@ -180,12 +180,22 @@ export async function populateDebtCache(
       // listDebtCollectedStream uses `status` field (not `contractStatus`)
       const contractStatus = (contract as any).status ?? meta?.status ?? null;
 
-      for (const p of (contract as any).payments ?? []) {
-        // Skip TXRTC close rows — they are not real payments
-        if (p.isCloseRow) continue;
+      // Track close-row count per contract to generate unique payExtId
+      const closeRowCounters = new Map<number, number>();
 
-        // Build a stable paymentExternalId from period + splitIndex
-        const payExtId = `${extId}-p${p.period ?? 0}-s${p.splitIndex ?? 0}`;
+      for (const p of (contract as any).payments ?? []) {
+        // Build a stable paymentExternalId
+        // - Normal rows: {extId}-p{period}-s{splitIndex}
+        // - Close rows (TXRTC): {extId}-close-p{period}-s{counter} (may share period with normal rows)
+        let payExtId: string;
+        if (p.isCloseRow) {
+          const period = p.period ?? 0;
+          const counter = (closeRowCounters.get(period) ?? 0) + 1;
+          closeRowCounters.set(period, counter);
+          payExtId = `${extId}-close-p${period}-s${counter}`;
+        } else {
+          payExtId = `${extId}-p${p.period ?? 0}-s${p.splitIndex ?? 0}`;
+        }
 
         insertRows.push({
           section,
@@ -220,6 +230,7 @@ export async function populateDebtCache(
           updatedBy: p.updatedBy ?? null,
           updatedAt: p.updatedAt ?? null,
           isBadDebtRow: !!p.isBadDebtRow,
+          isCloseRow: !!p.isCloseRow,
         });
       }
     }

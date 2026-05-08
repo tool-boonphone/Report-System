@@ -1,0 +1,65 @@
+{
+  "query": "SELECT contract_no, contract_status, period, principal, interest, fee, bad_debt, total_amount, is_bad_debt_row FROM debt_collected_cache WHERE is_bad_debt_row = 1 LIMIT 5",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT contract_no, contract_status, period, principal, interest, fee, bad_debt, total_amount, is_bad_debt_row FROM debt_collected_cache WHERE is_bad_debt_row = 1 LIMIT 5",
+  "rows": [
+    {
+      "contract_no": "CT0225-NYK003-9251-01",
+      "contract_status": "หนี้เสีย",
+      "period": "1",
+      "principal": "0.00",
+      "interest": "0.00",
+      "fee": "0.00",
+      "bad_debt": "14050.00",
+      "total_amount": "0.00",
+      "is_bad_debt_row": "1"
+    },
+    {
+      "contract_no": "CT0225-PTE002-9248-01",
+      "contract_status": "หนี้เสีย",
+      "period": "2",
+      "principal": "0.00",
+      "interest": "0.00",
+      "fee": "0.00",
+      "bad_debt": "5000.00",
+      "total_amount": "0.00",
+      "is_bad_debt_row": "1"
+    },
+    {
+      "contract_no": "CT0225-AYA001-9257-01",
+      "contract_status": "หนี้เสีย",
+      "period": "4",
+      "principal": "0.00",
+      "interest": "0.00",
+      "fee": "0.00",
+      "bad_debt": "5000.00",
+      "total_amount": "0.00",
+      "is_bad_debt_row": "1"
+    },
+    {
+      "contract_no": "CT0225-NYK003-9259-01",
+      "contract_status": "หนี้เสีย",
+      "period": "2",
+      "principal": "0.00",
+      "interest": "0.00",
+      "fee": "0.00",
+      "bad_debt": "9500.00",
+      "total_amount": "0.00",
+      "is_bad_debt_row": "1"
+    },
+    {
+      "contract_no": "CT1024-SPK001-00053-01",
+      "contract_status": "หนี้เสีย",
+      "period": "3",
+      "principal": "0.00",
+      "interest": "0.00",
+      "fee": "0.00",
+      "bad_debt": "4500.00",
+      "total_amount": "0.00",
+      "is_bad_debt_row": "1"
+    }
+  ],
+  "messages": [],
+  "stdout": "contract_no\tcontract_status\tperiod\tprincipal\tinterest\tfee\tbad_debt\ttotal_amount\tis_bad_debt_row\nCT0225-NYK003-9251-01\tหนี้เสีย\t1\t0.00\t0.00\t0.00\t14050.00\t0.00\t1\nCT0225-PTE002-9248-01\tหนี้เสีย\t2\t0.00\t0.00\t0.00\t5000.00\t0.00\t1\nCT0225-AYA001-9257-01\tหนี้เสีย\t4\t0.00\t0.00\t0.00\t5000.00\t0.00\t1\nCT0225-NYK003-9259-01\tหนี้เสีย\t2\t0.00\t0.00\t0.00\t9500.00\t0.00\t1\nCT1024-SPK001-00053-01\tหนี้เสีย\t3\t0.00\t0.00\t0.00\t4500.00\t0.00\t1\n",
+  "stderr": "",
+  "execution_time_ms": 1771
+}

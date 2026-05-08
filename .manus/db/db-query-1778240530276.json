@@ -1,0 +1,9 @@
+{
+  "query": "SELECT contract_no, contract_status, period, principal, interest, fee, penalty, unlock_fee, discount, overpaid, bad_debt, total_amount, is_bad_debt_row FROM debt_collected_cache WHERE section = 'Boonphone' AND (period = 0 OR period IS NULL) LIMIT 10",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT contract_no, contract_status, period, principal, interest, fee, penalty, unlock_fee, discount, overpaid, bad_debt, total_amount, is_bad_debt_row FROM debt_collected_cache WHERE section = 'Boonphone' AND (period = 0 OR period IS NULL) LIMIT 10",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 1785
+}

@@ -1,0 +1,60 @@
+{
+  "query": "SELECT receipt_no, status, JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.payment_status')) as payment_status, JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.remark')) as remark, CAST(JSON_EXTRACT(raw_json, '$.principal_paid') AS DECIMAL(12,2)) as principal_paid, CAST(JSON_EXTRACT(raw_json, '$.bad_debt_amount') AS DECIMAL(12,2)) as bad_debt_amount, CAST(JSON_EXTRACT(raw_json, '$.close_installment_amount') AS DECIMAL(12,2)) as close_installment_amount, CAST(JSON_EXTRACT(raw_json, '$.total_paid_amount') AS DECIMAL(12,2)) as total_paid_amount FROM payment_transactions WHERE section = 'Fastfone365' AND receipt_no IS NULL LIMIT 5",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT receipt_no, status, JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.payment_status')) as payment_status, JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.remark')) as remark, CAST(JSON_EXTRACT(raw_json, '$.principal_paid') AS DECIMAL(12,2)) as principal_paid, CAST(JSON_EXTRACT(raw_json, '$.bad_debt_amount') AS DECIMAL(12,2)) as bad_debt_amount, CAST(JSON_EXTRACT(raw_json, '$.close_installment_amount') AS DECIMAL(12,2)) as close_installment_amount, CAST(JSON_EXTRACT(raw_json, '$.total_paid_amount') AS DECIMAL(12,2)) as total_paid_amount FROM payment_transactions WHERE section = 'Fastfone365' AND receipt_no IS NULL LIMIT 5",
+  "rows": [
+    {
+      "receipt_no": "NULL",
+      "status": "ยืนยันการชำระ",
+      "payment_status": "NULL",
+      "remark": "NULL",
+      "principal_paid": "NULL",
+      "bad_debt_amount": "NULL",
+      "close_installment_amount": "NULL",
+      "total_paid_amount": "NULL"
+    },
+    {
+      "receipt_no": "NULL",
+      "status": "ยืนยันการชำระ",
+      "payment_status": "NULL",
+      "remark": "NULL",
+      "principal_paid": "NULL",
+      "bad_debt_amount": "NULL",
+      "close_installment_amount": "NULL",
+      "total_paid_amount": "NULL"
+    },
+    {
+      "receipt_no": "NULL",
+      "status": "ยืนยันการชำระ",
+      "payment_status": "NULL",
+      "remark": "NULL",
+      "principal_paid": "NULL",
+      "bad_debt_amount": "NULL",
+      "close_installment_amount": "NULL",
+      "total_paid_amount": "NULL"
+    },
+    {
+      "receipt_no": "NULL",
+      "status": "ยืนยันการชำระ",
+      "payment_status": "NULL",
+      "remark": "NULL",
+      "principal_paid": "NULL",
+      "bad_debt_amount": "NULL",
+      "close_installment_amount": "NULL",
+      "total_paid_amount": "NULL"
+    },
+    {
+      "receipt_no": "NULL",
+      "status": "ยืนยันการชำระ",
+      "payment_status": "NULL",
+      "remark": "NULL",
+      "principal_paid": "NULL",
+      "bad_debt_amount": "NULL",
+      "close_installment_amount": "NULL",
+      "total_paid_amount": "NULL"
+    }
+  ],
+  "messages": [],
+  "stdout": "receipt_no\tstatus\tpayment_status\tremark\tprincipal_paid\tbad_debt_amount\tclose_installment_amount\ttotal_paid_amount\nNULL\tยืนยันการชำระ\tNULL\tNULL\tNULL\tNULL\tNULL\tNULL\nNULL\tยืนยันการชำระ\tNULL\tNULL\tNULL\tNULL\tNULL\tNULL\nNULL\tยืนยันการชำระ\tNULL\tNULL\tNULL\tNULL\tNULL\tNULL\nNULL\tยืนยันการชำระ\tNULL\tNULL\tNULL\tNULL\tNULL\tNULL\nNULL\tยืนยันการชำระ\tNULL\tNULL\tNULL\tNULL\tNULL\tNULL\n",
+  "stderr": "",
+  "execution_time_ms": 1801
+}

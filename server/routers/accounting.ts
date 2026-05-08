@@ -14,7 +14,8 @@ import {
   type ExpenseType,
 } from "../accountingDb";
 
-const INCOME_TYPES: IncomeType[] = ["ค่างวด", "ขายเครื่อง", "ปิดยอด", "เงินดาวน์"];
+// "เงินดาวน์" ซ่อนไว้ก่อน — ไม่มีในข้อมูลจริง
+const INCOME_TYPES: IncomeType[] = ["ค่างวด", "ขายเครื่อง", "ปิดยอด"];
 const EXPENSE_TYPES: ExpenseType[] = ["ค่าคอมมิชชั่น"];
 
 const incomeFilterInput = z.object({
@@ -23,7 +24,8 @@ const incomeFilterInput = z.object({
   dateFrom: z.string().optional(),
   dateTo: z.string().optional(),
   dateField: z.enum(["paidAt", "updatedAt"]).optional().default("paidAt"),
-  incomeTypes: z.array(z.enum(["ค่างวด", "ขายเครื่อง", "ปิดยอด", "เงินดาวน์"])).optional(),
+  // "เงินดาวน์" ซ่อนไว้ก่อน
+  incomeTypes: z.array(z.enum(["ค่างวด", "ขายเครื่อง", "ปิดยอด"])).optional(),
   updatedBy: z.string().optional(),
 });
 
@@ -134,3 +136,6 @@ export const accountingRouter = router({
       return getExpenseSummary({ section, search, dateFrom, dateTo });
     }),
 });
+
+// Export INCOME_TYPES for use in other files
+export { INCOME_TYPES, EXPENSE_TYPES };

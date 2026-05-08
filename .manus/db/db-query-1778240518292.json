@@ -1,0 +1,70 @@
+{
+  "query": "SELECT contract_no, contract_status, period, principal, interest, fee, penalty, unlock_fee, discount, overpaid, bad_debt, total_amount, is_bad_debt_row FROM debt_collected_cache WHERE section = 'Boonphone' AND contract_status = 'สิ้นสุดสัญญา' LIMIT 20",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT contract_no, contract_status, period, principal, interest, fee, penalty, unlock_fee, discount, overpaid, bad_debt, total_amount, is_bad_debt_row FROM debt_collected_cache WHERE section = 'Boonphone' AND contract_status = 'สิ้นสุดสัญญา' LIMIT 20",
+  "rows": [
+    {
+      "contract_no": "CT0226-KBI003-0247-01",
+      "contract_status": "สิ้นสุดสัญญา",
+      "period": "1",
+      "principal": "2640.00",
+      "interest": "1584.00",
+      "fee": "100.00",
+      "penalty": "0.00",
+      "unlock_fee": "0.00",
+      "discount": "0.00",
+      "overpaid": "0.00",
+      "bad_debt": "0.00",
+      "total_amount": "4324.00",
+      "is_bad_debt_row": "0"
+    },
+    {
+      "contract_no": "CT0226-UTT002-0453-01",
+      "contract_status": "สิ้นสุดสัญญา",
+      "period": "1",
+      "principal": "807.00",
+      "interest": "1048.00",
+      "fee": "100.00",
+      "penalty": "0.00",
+      "unlock_fee": "0.00",
+      "discount": "0.00",
+      "overpaid": "0.00",
+      "bad_debt": "0.00",
+      "total_amount": "1955.00",
+      "is_bad_debt_row": "0"
+    },
+    {
+      "contract_no": "CT0226-UTT002-0453-01",
+      "contract_status": "สิ้นสุดสัญญา",
+      "period": "1",
+      "principal": "807.00",
+      "interest": "1048.00",
+      "fee": "100.00",
+      "penalty": "0.00",
+      "unlock_fee": "0.00",
+      "discount": "0.00",
+      "overpaid": "0.00",
+      "bad_debt": "0.00",
+      "total_amount": "1955.00",
+      "is_bad_debt_row": "0"
+    },
+    {
+      "contract_no": "CT0226-PTE012-1317-01",
+      "contract_status": "สิ้นสุดสัญญา",
+      "period": "1",
+      "principal": "2113.00",
+      "interest": "2746.00",
+      "fee": "100.00",
+      "penalty": "0.00",
+      "unlock_fee": "0.00",
+      "discount": "0.00",
+      "overpaid": "0.00",
+      "bad_debt": "0.00",
+      "total_amount": "4959.00",
+      "is_bad_debt_row": "0"
+    }
+  ],
+  "messages": [],
+  "stdout": "contract_no\tcontract_status\tperiod\tprincipal\tinterest\tfee\tpenalty\tunlock_fee\tdiscount\toverpaid\tbad_debt\ttotal_amount\tis_bad_debt_row\nCT0226-KBI003-0247-01\tสิ้นสุดสัญญา\t1\t2640.00\t1584.00\t100.00\t0.00\t0.00\t0.00\t0.00\t0.00\t4324.00\t0\nCT0226-UTT002-0453-01\tสิ้นสุดสัญญา\t1\t807.00\t1048.00\t100.00\t0.00\t0.00\t0.00\t0.00\t0.00\t1955.00\t0\nCT0226-UTT002-0453-01\tสิ้นสุดสัญญา\t1\t807.00\t1048.00\t100.00\t0.00\t0.00\t0.00\t0.00\t0.00\t1955.00\t0\nCT0226-PTE012-1317-01\tสิ้นสุดสัญญา\t1\t2113.00\t2746.00\t100.00\t0.00\t0.00\t0.00\t0.00\t0.00\t4959.00\t0\n",
+  "stderr": "",
+  "execution_time_ms": 1823
+}
