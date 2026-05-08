@@ -79,6 +79,16 @@ export function SyncStatusBar() {
     return () => clearInterval(id);
   }, [isRunning]);
 
+  // Keep-alive ping — prevents Cloud Run from scaling down the instance during long sync
+  // Sends a lightweight GET /api/ping every 30s while sync is running
+  useEffect(() => {
+    if (!isRunning) return;
+    const id = setInterval(() => {
+      fetch("/api/ping").catch(() => {}); // fire-and-forget, ignore errors
+    }, 30_000);
+    return () => clearInterval(id);
+  }, [isRunning]);
+
   const progress: number = sectionData?.progress ?? 0;
   const currentStage: string = sectionData?.currentStage ?? "";
   const startedAt: number | null = sectionData?.startedAt ?? null;
