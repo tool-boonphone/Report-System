@@ -136,8 +136,7 @@ export async function getBadDebtSummary(params: {
       SELECT
         contract_external_id,
         SUM(CASE WHEN is_bad_debt_row = 1 THEN CAST(bad_debt AS DECIMAL(18,2)) ELSE 0 END)        AS device_sale_amount,
-        SUM(CASE WHEN is_bad_debt_row = 0 THEN CAST(total_amount AS DECIMAL(18,2)) ELSE 0 END)    AS installment_paid,
-        COUNT(CASE WHEN is_bad_debt_row = 0 THEN 1 END)                                            AS paid_installments
+        SUM(CASE WHEN is_bad_debt_row = 0 THEN CAST(total_amount AS DECIMAL(18,2)) ELSE 0 END)    AS installment_paid
       FROM debt_collected_cache
       WHERE section = '${params.section}'
         AND contract_external_id IN (${idsLiteral})
@@ -145,12 +144,36 @@ export async function getBadDebtSummary(params: {
     `)
   );
   const collectedArr: Array<any> = (collectedRaw as any)[0] ?? collectedRaw;
+
+  // ─── Step 2b: Count paid installments from debt_target_cache ─────────────
+  // นับงวดที่เงินต้นถูกตัดครบ (paid_amount >= total_amount) ตรงกับ logic แถบเป้าเก็บหนี้
+  // ไม่ใช่นับ payment rows ใน debt_collected_cache ซึ่งอาจมีหลาย rows ต่อ 1 งวด
+  const targetCountRaw = await db.execute(
+    sql.raw(`
+      SELECT
+        contract_external_id,
+        COUNT(CASE WHEN CAST(paid_amount AS DECIMAL(18,4)) >= CAST(total_amount AS DECIMAL(18,4))
+                        AND CAST(total_amount AS DECIMAL(18,4)) > 0
+                        AND is_bad_debt = 0
+                   THEN 1 END) AS paid_installments
+      FROM debt_target_cache
+      WHERE section = '${params.section}'
+        AND contract_external_id IN (${idsLiteral})
+      GROUP BY contract_external_id
+    `)
+  );
+  const targetCountArr: Array<any> = (targetCountRaw as any)[0] ?? targetCountRaw;
+  const targetCountMap = new Map<string, number>();
+  for (const r of targetCountArr) {
+    targetCountMap.set(r.contract_external_id, Number(r.paid_installments ?? 0));
+  }
+
   const collectedMap = new Map<string, { deviceSaleAmount: number; installmentPaid: number; paidInstallments: number }>();
   for (const r of collectedArr) {
     collectedMap.set(r.contract_external_id, {
       deviceSaleAmount: Number(r.device_sale_amount ?? 0),
       installmentPaid: Number(r.installment_paid ?? 0),
-      paidInstallments: Number(r.paid_installments ?? 0),
+      paidInstallments: targetCountMap.get(r.contract_external_id) ?? 0,
     });
   }
 
