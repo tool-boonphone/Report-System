@@ -106,6 +106,8 @@ const PT_AMOUNT_CASE = `CAST(COALESCE(pt.amount, 0) AS DECIMAL(18,2))`;
 // Base WHERE: เฉพาะ close rows (source IS NULL) ที่ตรงกับ Fastfone/Boonphone Report
 const PT_INCOME_BASE_WHERE = `JSON_EXTRACT(pt.raw_json, '$.source') IS NULL`;
 
+
+
 /**
  * Subquery สำหรับหาวันสุดท้ายที่ชำระของแต่ละสัญญาหนี้เสีย
  * ใช้ LEFT JOIN กับ payment_transactions pt ด้วย contract_no + section
@@ -464,7 +466,6 @@ export async function getIncomeSummaryByPeriod(
   const esc = (v: string) => v.replace(/'/g, "''");
   const secEsc = esc(section);
 
-  // WHERE conditions สำหรับ payment_transactions หลัก
   const conditions: string[] = [
     `pt.section = '${secEsc}'`,
     `JSON_EXTRACT(pt.raw_json, '$.source') IS NULL`,
