@@ -1,0 +1,19 @@
+{
+  "query": "\nSELECT c.contract_no, c.installment_count, c.installment_amount, c.finance_amount,\n       COUNT(i.id) as inst_count_in_db,\n       SUM(CAST(JSON_EXTRACT(i.raw_json, '$.amount') AS DECIMAL(18,2))) as total_amount_sum,\n       c.status\nFROM contracts c\nLEFT JOIN installments i ON i.contract_external_id = c.external_id\nWHERE c.contract_no = 'CT0824-NRT001-00010-01'\nGROUP BY c.id;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT c.contract_no, c.installment_count, c.installment_amount, c.finance_amount,\n       COUNT(i.id) as inst_count_in_db,\n       SUM(CAST(JSON_EXTRACT(i.raw_json, '$.amount') AS DECIMAL(18,2))) as total_amount_sum,\n       c.status\nFROM contracts c\nLEFT JOIN installments i ON i.contract_external_id = c.external_id\nWHERE c.contract_no = 'CT0824-NRT001-00010-01'\nGROUP BY c.id;\n",
+  "rows": [
+    {
+      "contract_no": "CT0824-NRT001-00010-01",
+      "installment_count": "8",
+      "installment_amount": "6400.00",
+      "finance_amount": "24000.00",
+      "inst_count_in_db": "16",
+      "total_amount_sum": "51200.00",
+      "status": "หนี้เสีย"
+    }
+  ],
+  "messages": [],
+  "stdout": "contract_no\tinstallment_count\tinstallment_amount\tfinance_amount\tinst_count_in_db\ttotal_amount_sum\tstatus\nCT0824-NRT001-00010-01\t8\t6400.00\t24000.00\t16\t51200.00\tหนี้เสีย\n",
+  "stderr": "",
+  "execution_time_ms": 3836
+}
