@@ -399,6 +399,24 @@ export default function Contracts() {
     return rows;
   }, [allRows, filters, sortField, sortDir]);
 
+  // ----- Badge sums (computed from filteredRows) -----
+  const badgeSums = useMemo(() => {
+    let sellPrice = 0;
+    let downPayment = 0;
+    let financeAmount = 0;
+    let commission = 0;
+    for (const r of filteredRows) {
+      sellPrice += Number(r.sellPrice ?? 0);
+      downPayment += Number(r.downPayment ?? 0);
+      financeAmount += Number(r.financeAmount ?? 0);
+      commission += Number(r.commissionNet ?? 0);
+    }
+    return { sellPrice, downPayment, financeAmount, commission };
+  }, [filteredRows]);
+
+  const fmtMoney = (n: number) =>
+    n.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
   // ----- Derived UI -----
   const activeFilterCount = useMemo(() => {
     let n = 0;
@@ -652,27 +670,51 @@ export default function Contracts() {
           )}
         </div>
 
-        {/* Row counter */}
-        <div className="mb-2 text-sm text-gray-600">
-          {listQuery.isLoading ? (
-            <span className="inline-flex items-center gap-2 text-gray-500">
-              <Spinner /> กำลังโหลดข้อมูลทั้งหมด…
-            </span>
-          ) : (
-            <>
-              แสดง{" "}
-              <span className="font-medium text-gray-900">
-                {totalFilteredRows.toLocaleString("th-TH")}
-              </span>{" "}
-              จาก{" "}
-              <span className="font-medium text-gray-900">
-                {totalAllRows.toLocaleString("th-TH")}
-              </span>{" "}
-              แถว
-              {totalFilteredRows < totalAllRows && (
-                <span className="text-gray-400"> (กรองอยู่)</span>
-              )}
-            </>
+        {/* Row counter + Badge row */}
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          {/* Left: row count */}
+          <div className="text-sm text-gray-600">
+            {listQuery.isLoading ? (
+              <span className="inline-flex items-center gap-2 text-gray-500">
+                <Spinner /> กำลังโหลดข้อมูลทั้งหมด…
+              </span>
+            ) : (
+              <>
+                แสดง{" "}
+                <span className="font-medium text-gray-900">
+                  {totalFilteredRows.toLocaleString("th-TH")}
+                </span>{" "}
+                จาก{" "}
+                <span className="font-medium text-gray-900">
+                  {totalAllRows.toLocaleString("th-TH")}
+                </span>{" "}
+                แถว
+                {totalFilteredRows < totalAllRows && (
+                  <span className="text-gray-400"> (กรองอยู่)</span>
+                )}
+              </>
+            )}
+          </div>
+          {/* Right: summary badges */}
+          {!listQuery.isLoading && (
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 border border-blue-200">
+                <span className="text-xs font-medium text-blue-600">ราคาขาย</span>
+                <span className="text-xs font-bold text-blue-800">{fmtMoney(badgeSums.sellPrice)}</span>
+              </div>
+              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200">
+                <span className="text-xs font-medium text-emerald-600">ยอดดาวน์</span>
+                <span className="text-xs font-bold text-emerald-800">{fmtMoney(badgeSums.downPayment)}</span>
+              </div>
+              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-violet-50 border border-violet-200">
+                <span className="text-xs font-medium text-violet-600">ยอดจัดไฟแนนซ์</span>
+                <span className="text-xs font-bold text-violet-800">{fmtMoney(badgeSums.financeAmount)}</span>
+              </div>
+              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 border border-amber-200">
+                <span className="text-xs font-medium text-amber-600">ค่าคอมมิชชั่น</span>
+                <span className="text-xs font-bold text-amber-800">{fmtMoney(badgeSums.commission)}</span>
+              </div>
+            </div>
           )}
         </div>
 
