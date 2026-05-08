@@ -1,0 +1,58 @@
+{
+  "query": "\nSELECT id, section, entity, status, progress,\n       FROM_UNIXTIME(started_at/1000) as started, \n       FROM_UNIXTIME(finished_at/1000) as finished\nFROM sync_logs \nWHERE section = 'Boonphone' AND status = 'success'\nORDER BY id DESC \nLIMIT 5;\n\nSELECT COUNT(*) as total_contracts FROM contracts WHERE section = 'Boonphone';\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT id, section, entity, status, progress,\n       FROM_UNIXTIME(started_at/1000) as started, \n       FROM_UNIXTIME(finished_at/1000) as finished\nFROM sync_logs \nWHERE section = 'Boonphone' AND status = 'success'\nORDER BY id DESC \nLIMIT 5;\n\nSELECT COUNT(*) as total_contracts FROM contracts WHERE section = 'Boonphone';\n",
+  "rows": [
+    {
+      "id": "1140012",
+      "section": "Boonphone",
+      "entity": "partners",
+      "status": "success",
+      "progress": "0",
+      "started": "2612-01-12 14:53:52.9440",
+      "finished": "2612-01-12 14:53:52.9560"
+    },
+    {
+      "id": "1140009",
+      "section": "Boonphone",
+      "entity": "partners",
+      "status": "success",
+      "progress": "0",
+      "started": "2612-01-12 14:53:52.1100",
+      "finished": "2612-01-12 14:53:52.1120"
+    },
+    {
+      "id": "1140006",
+      "section": "Boonphone",
+      "entity": "partners",
+      "status": "success",
+      "progress": "0",
+      "started": "2612-01-12 14:53:52.0170",
+      "finished": "2612-01-12 14:53:52.0190"
+    },
+    {
+      "id": "1110016",
+      "section": "Boonphone",
+      "entity": "partners",
+      "status": "success",
+      "progress": "0",
+      "started": "2612-01-12 14:39:54.1540",
+      "finished": "2612-01-12 14:39:54.1560"
+    },
+    {
+      "id": "1110013",
+      "section": "Boonphone",
+      "entity": "partners",
+      "status": "success",
+      "progress": "0",
+      "started": "2612-01-12 14:39:51.1120",
+      "finished": "2612-01-12 14:39:51.1150"
+    }
+  ],
+  "messages": [
+    "total_contracts",
+    "4109"
+  ],
+  "stdout": "id\tsection\tentity\tstatus\tprogress\tstarted\tfinished\n1140012\tBoonphone\tpartners\tsuccess\t0\t2612-01-12 14:53:52.9440\t2612-01-12 14:53:52.9560\n1140009\tBoonphone\tpartners\tsuccess\t0\t2612-01-12 14:53:52.1100\t2612-01-12 14:53:52.1120\n1140006\tBoonphone\tpartners\tsuccess\t0\t2612-01-12 14:53:52.0170\t2612-01-12 14:53:52.0190\n1110016\tBoonphone\tpartners\tsuccess\t0\t2612-01-12 14:39:54.1540\t2612-01-12 14:39:54.1560\n1110013\tBoonphone\tpartners\tsuccess\t0\t2612-01-12 14:39:51.1120\t2612-01-12 14:39:51.1150\ntotal_contracts\n4109\n",
+  "stderr": "",
+  "execution_time_ms": 2081
+}

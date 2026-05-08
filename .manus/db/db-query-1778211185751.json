@@ -1,0 +1,110 @@
+{
+  "query": "\nSELECT id, section, entity, status, progress, error_message,\n       FROM_UNIXTIME(started_at/1000) as started, \n       FROM_UNIXTIME(finished_at/1000) as finished\nFROM sync_logs \nWHERE section = 'Boonphone' AND entity = 'all'\nORDER BY id DESC \nLIMIT 10;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT id, section, entity, status, progress, error_message,\n       FROM_UNIXTIME(started_at/1000) as started, \n       FROM_UNIXTIME(finished_at/1000) as finished\nFROM sync_logs \nWHERE section = 'Boonphone' AND entity = 'all'\nORDER BY id DESC \nLIMIT 10;\n",
+  "rows": [
+    {
+      "id": "1140011",
+      "section": "Boonphone",
+      "entity": "all",
+      "status": "error",
+      "progress": "28",
+      "error_message": "Auto-cleared on startup: previous Cloud Run instance was killed during sync",
+      "started": "2612-01-12 14:53:52.9440",
+      "finished": "2612-01-12 14:53:53.0360"
+    },
+    {
+      "id": "1140008",
+      "section": "Boonphone",
+      "entity": "all",
+      "status": "error",
+      "progress": "22",
+      "error_message": "Auto-cleared on startup: previous Cloud Run instance was killed during sync",
+      "started": "2612-01-12 14:53:52.1100",
+      "finished": "2612-01-12 14:53:52.1320"
+    },
+    {
+      "id": "1140005",
+      "section": "Boonphone",
+      "entity": "all",
+      "status": "error",
+      "progress": "20",
+      "error_message": "Auto-cleared on startup: previous Cloud Run instance was killed during sync",
+      "started": "2612-01-12 14:53:52.0170",
+      "finished": "2612-01-12 14:53:52.0340"
+    },
+    {
+      "id": "1140002",
+      "section": "Boonphone",
+      "entity": "all",
+      "status": "error",
+      "progress": "5",
+      "error_message": "Force-cleared: process killed (Cloud Run instance restart)",
+      "started": "2612-01-12 14:53:40.0010",
+      "finished": "2612-01-12 14:53:51.4440"
+    },
+    {
+      "id": "1110015",
+      "section": "Boonphone",
+      "entity": "all",
+      "status": "error",
+      "progress": "22",
+      "error_message": "Force-cleared: Boonphone API slow during batch window (midnight-08:00)",
+      "started": "2612-01-12 14:39:54.1540",
+      "finished": "2612-01-12 14:39:55.3220"
+    },
+    {
+      "id": "1110012",
+      "section": "Boonphone",
+      "entity": "all",
+      "status": "error",
+      "progress": "23",
+      "error_message": "Force-cleared: Boonphone API slow/unresponsive",
+      "started": "2612-01-12 14:39:51.1120",
+      "finished": "2612-01-12 14:39:54.0220"
+    },
+    {
+      "id": "1110010",
+      "section": "Boonphone",
+      "entity": "all",
+      "status": "error",
+      "progress": "5",
+      "error_message": "Force-cleared: Cloud Run killed background process",
+      "started": "2612-01-12 14:39:45.5220",
+      "finished": "2612-01-12 14:39:50.3180"
+    },
+    {
+      "id": "1110007",
+      "section": "Boonphone",
+      "entity": "all",
+      "status": "error",
+      "progress": "20",
+      "error_message": "Force-cleared by admin: manual reset",
+      "started": "2612-01-12 14:39:41.2310",
+      "finished": "2612-01-12 14:39:44.9050"
+    },
+    {
+      "id": "1110004",
+      "section": "Boonphone",
+      "entity": "all",
+      "status": "error",
+      "progress": "20",
+      "error_message": "Force-cleared: stuck in_progress (abandoned after 20+ min)",
+      "started": "2612-01-12 14:39:30.2090",
+      "finished": "2612-01-12 14:39:33.8560"
+    },
+    {
+      "id": "1110001",
+      "section": "Boonphone",
+      "entity": "all",
+      "status": "error",
+      "progress": "0",
+      "error_message": "Force-cleared: stuck in_progress (abandoned)",
+      "started": "2612-01-12 14:39:22.5540",
+      "finished": "2612-01-12 14:39:30.0140"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tsection\tentity\tstatus\tprogress\terror_message\tstarted\tfinished\n1140011\tBoonphone\tall\terror\t28\tAuto-cleared on startup: previous Cloud Run instance was killed during sync\t2612-01-12 14:53:52.9440\t2612-01-12 14:53:53.0360\n1140008\tBoonphone\tall\terror\t22\tAuto-cleared on startup: previous Cloud Run instance was killed during sync\t2612-01-12 14:53:52.1100\t2612-01-12 14:53:52.1320\n1140005\tBoonphone\tall\terror\t20\tAuto-cleared on startup: previous Cloud Run instance was killed during sync\t2612-01-12 14:53:52.0170\t2612-01-12 14:53:52.0340\n1140002\tBoonphone\tall\terror\t5\tForce-cleared: process killed (Cloud Run instance restart)\t2612-01-12 14:53:40.0010\t2612-01-12 14:53:51.4440\n1110015\tBoonphone\tall\terror\t22\tForce-cleared: Boonphone API slow during batch window (midnight-08:00)\t2612-01-12 14:39:54.1540\t2612-01-12 14:39:55.3220\n1110012\tBoonphone\tall\terror\t23\tForce-cleared: Boonphone API slow/unresponsive\t2612-01-12 14:39:51.1120\t2612-01-12 14:39:54.0220\n1110010\tBoonphone\tall\terror\t5\tForce-cleared: Cloud Run killed background process\t2612-01-12 14:39:45.5220\t2612-01-12 14:39:50.3180\n1110007\tBoonphone\tall\terror\t20\tForce-cleared by admin: manual reset\t2612-01-12 14:39:41.2310\t2612-01-12 14:39:44.9050\n1110004\tBoonphone\tall\terror\t20\tForce-cleared: stuck in_progress (abandoned after 20+ min)\t2612-01-12 14:39:30.2090\t2612-01-12 14:39:33.8560\n1110001\tBoonphone\tall\terror\t0\tForce-cleared: stuck in_progress (abandoned)\t2612-01-12 14:39:22.5540\t2612-01-12 14:39:30.0140\n",
+  "stderr": "",
+  "execution_time_ms": 1755
+}

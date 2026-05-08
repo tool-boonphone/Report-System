@@ -1,0 +1,16 @@
+{
+  "query": "\n-- sync ที่สำเร็จล่าสุดของ Boonphone\nSELECT id, section, entity, status, progress,\n       FROM_UNIXTIME(started_at/1000) as started, \n       FROM_UNIXTIME(finished_at/1000) as finished\nFROM sync_logs \nWHERE section = 'Boonphone' AND status = 'success'\nORDER BY id DESC \nLIMIT 5;\n\n-- จำนวน contracts ปัจจุบัน\nSELECT COUNT(*) as total_contracts FROM contracts WHERE section = 'Boonphone';\n\n-- contracts ที่เพิ่งเพิ่มล่าสุด\nSELECT MAX(updated_at) as latest_update, COUNT(*) as count FROM contracts WHERE section = 'Boonphone';\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \n-- sync ที่สำเร็จล่าสุดของ Boonphone\nSELECT id, section, entity, status, progress,\n       FROM_UNIXTIME(started_at/1000) as started, \n       FROM_UNIXTIME(finished_at/1000) as finished\nFROM sync_logs \nWHERE section = 'Boonphone' AND status = 'success'\nORDER BY id DESC \nLIMIT 5;\n\n-- จำนวน contracts ปัจจุบัน\nSELECT COUNT(*) as total_contracts FROM contracts WHERE section = 'Boonphone';\n\n-- contracts ที่เพิ่งเพิ่มล่าสุด\nSELECT MAX(updated_at) as latest_update, COUNT(*) as count FROM contracts WHERE section = 'Boonphone';\n",
+  "returncode": 1,
+  "logs": [
+    "id\tsection\tentity\tstatus\tprogress\tstarted\tfinished",
+    "1140012\tBoonphone\tpartners\tsuccess\t0\t2612-01-12 14:53:52.9440\t2612-01-12 14:53:52.9560",
+    "1140009\tBoonphone\tpartners\tsuccess\t0\t2612-01-12 14:53:52.1100\t2612-01-12 14:53:52.1120",
+    "1140006\tBoonphone\tpartners\tsuccess\t0\t2612-01-12 14:53:52.0170\t2612-01-12 14:53:52.0190",
+    "1110016\tBoonphone\tpartners\tsuccess\t0\t2612-01-12 14:39:54.1540\t2612-01-12 14:39:54.1560",
+    "1110013\tBoonphone\tpartners\tsuccess\t0\t2612-01-12 14:39:51.1120\t2612-01-12 14:39:51.1150",
+    "total_contracts",
+    "4109",
+    "ERROR 1054 (42S22) at line 15: Unknown column 'updated_at' in 'where clause'"
+  ]
+}

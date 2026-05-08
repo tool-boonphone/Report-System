@@ -1,0 +1,65 @@
+{
+  "query": "\nSELECT id, section, entity, status, progress, current_stage,\n       FROM_UNIXTIME(started_at/1000) as started, \n       FROM_UNIXTIME(finished_at/1000) as finished,\n       ROUND((COALESCE(finished_at, UNIX_TIMESTAMP()*1000) - started_at)/1000) as elapsed_secs\nFROM sync_logs \nWHERE section = 'Boonphone'\nORDER BY started_at DESC \nLIMIT 5;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT id, section, entity, status, progress, current_stage,\n       FROM_UNIXTIME(started_at/1000) as started, \n       FROM_UNIXTIME(finished_at/1000) as finished,\n       ROUND((COALESCE(finished_at, UNIX_TIMESTAMP()*1000) - started_at)/1000) as elapsed_secs\nFROM sync_logs \nWHERE section = 'Boonphone'\nORDER BY started_at DESC \nLIMIT 5;\n",
+  "rows": [
+    {
+      "id": "1140013",
+      "section": "Boonphone",
+      "entity": "customers",
+      "status": "error",
+      "progress": "0",
+      "current_stage": "NULL",
+      "started": "2612-01-12 14:53:52.9560",
+      "finished": "2612-01-12 14:53:53.0360",
+      "elapsed_secs": "-20260508031"
+    },
+    {
+      "id": "1140012",
+      "section": "Boonphone",
+      "entity": "partners",
+      "status": "success",
+      "progress": "0",
+      "current_stage": "NULL",
+      "started": "2612-01-12 14:53:52.9440",
+      "finished": "2612-01-12 14:53:52.9560",
+      "elapsed_secs": "-20260508031"
+    },
+    {
+      "id": "1140011",
+      "section": "Boonphone",
+      "entity": "all",
+      "status": "error",
+      "progress": "28",
+      "current_stage": "customers (4/10)",
+      "started": "2612-01-12 14:53:52.9440",
+      "finished": "2612-01-12 14:53:53.0360",
+      "elapsed_secs": "-20260508031"
+    },
+    {
+      "id": "1140010",
+      "section": "Boonphone",
+      "entity": "customers",
+      "status": "error",
+      "progress": "0",
+      "current_stage": "NULL",
+      "started": "2612-01-12 14:53:52.1120",
+      "finished": "2612-01-12 14:53:52.1320",
+      "elapsed_secs": "-20260508030"
+    },
+    {
+      "id": "1140008",
+      "section": "Boonphone",
+      "entity": "all",
+      "status": "error",
+      "progress": "22",
+      "current_stage": "customers (1/10)",
+      "started": "2612-01-12 14:53:52.1100",
+      "finished": "2612-01-12 14:53:52.1320",
+      "elapsed_secs": "-20260508030"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tsection\tentity\tstatus\tprogress\tcurrent_stage\tstarted\tfinished\telapsed_secs\n1140013\tBoonphone\tcustomers\terror\t0\tNULL\t2612-01-12 14:53:52.9560\t2612-01-12 14:53:53.0360\t-20260508031\n1140012\tBoonphone\tpartners\tsuccess\t0\tNULL\t2612-01-12 14:53:52.9440\t2612-01-12 14:53:52.9560\t-20260508031\n1140011\tBoonphone\tall\terror\t28\tcustomers (4/10)\t2612-01-12 14:53:52.9440\t2612-01-12 14:53:53.0360\t-20260508031\n1140010\tBoonphone\tcustomers\terror\t0\tNULL\t2612-01-12 14:53:52.1120\t2612-01-12 14:53:52.1320\t-20260508030\n1140008\tBoonphone\tall\terror\t22\tcustomers (1/10)\t2612-01-12 14:53:52.1100\t2612-01-12 14:53:52.1320\t-20260508030\n",
+  "stderr": "",
+  "execution_time_ms": 1737
+}
