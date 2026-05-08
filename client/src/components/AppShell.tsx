@@ -9,8 +9,30 @@ import { useLocation } from "wouter";
 import { TopNav } from "./TopNav";
 import { AIChatPanel } from "./AIChatPanel";
 
-/** Key ที่ใช้เก็บ returnPath ใน sessionStorage */
+/** Key ที่ใช้เก็บ returnPath ใน localStorage (ใช้ localStorage แทน sessionStorage เพื่อให้รอดจาก OAuth redirect) */
 export const DATA_LOADING_RETURN_KEY = "dl_return_path";
+/** Key สำหรับเก็บ timestamp ของ returnPath เพื่อป้องกัน stale path */
+const DATA_LOADING_RETURN_TS_KEY = "dl_return_path_ts";
+/** TTL ของ returnPath: 10 นาที */
+const RETURN_PATH_TTL_MS = 10 * 60 * 1000;
+
+/** บันทึก returnPath พร้อม timestamp ลง localStorage */
+export function saveReturnPath(path: string) {
+  localStorage.setItem(DATA_LOADING_RETURN_KEY, path);
+  localStorage.setItem(DATA_LOADING_RETURN_TS_KEY, String(Date.now()));
+}
+
+/** อ่าน returnPath จาก localStorage แล้วล้างออก (ถ้าหมดอายุจะ return null) */
+export function popReturnPath(): string | null {
+  const path = localStorage.getItem(DATA_LOADING_RETURN_KEY);
+  const ts = localStorage.getItem(DATA_LOADING_RETURN_TS_KEY);
+  localStorage.removeItem(DATA_LOADING_RETURN_KEY);
+  localStorage.removeItem(DATA_LOADING_RETURN_TS_KEY);
+  if (!path || path === "/data-loading") return null;
+  // ตรวจสอบ TTL
+  if (ts && Date.now() - parseInt(ts, 10) > RETURN_PATH_TTL_MS) return null;
+  return path;
+}
 
 /**
  * AppShell guards authenticated routes:
@@ -18,7 +40,7 @@ export const DATA_LOADING_RETURN_KEY = "dl_return_path";
  *  - If not authenticated → /login
  *  - If authenticated but no section picked → /select-section
  *  - If section set but cache empty (e.g. browser refresh) → /data-loading
- *    (บันทึก returnPath ใน sessionStorage เพื่อให้ DataLoadingScreen กลับมาหน้าเดิม)
+ *    (บันทึก returnPath ใน localStorage เพื่อให้ DataLoadingScreen กลับมาหน้าเดิม)
  *  - Otherwise render children inside TopNav layout
  */
 export function AppShell({
@@ -52,8 +74,8 @@ export function AppShell({
     if (requireSection && hasSection && section && location !== "/data-loading") {
       const cache = debtCache.getCache(section as SectionKey);
       if (!cache.target || !cache.collected) {
-        // บันทึก returnPath เพื่อให้ DataLoadingScreen กลับมาหน้าเดิมหลังโหลดเสร็จ
-        sessionStorage.setItem(DATA_LOADING_RETURN_KEY, location);
+        // บันทึก returnPath ลง localStorage (รอดจาก OAuth redirect)
+        saveReturnPath(location);
         navigate("/data-loading", { replace: true });
       }
     }

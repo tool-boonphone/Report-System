@@ -467,14 +467,12 @@ export async function getIncomeSummaryByPeriod(
   }
   const whereStr = conditions.join(" AND ");
 
-  const periodExpr =
-    groupBy === "year"
-      ? `SUBSTRING(paid_at, 1, 4)`
-      : `SUBSTRING(paid_at, 1, 7)`;
-
+  const periodLen = groupBy === "year" ? 4 : 7;
+  // ใช้ subquery เพื่อ alias period ก่อน GROUP BY
+  // หลีกเลี่ยง MySQL only_full_group_by error
   const querySql = `
     SELECT
-      ${periodExpr} AS period,
+      period,
       SUM(CASE WHEN is_bad_debt_row = 1 THEN 0
                WHEN is_close_row = 1 THEN 0
                ELSE COALESCE(total_amount, 0) END) AS \`ค่างวด\`,
@@ -482,10 +480,18 @@ export async function getIncomeSummaryByPeriod(
                THEN COALESCE(total_amount, 0) ELSE 0 END) AS \`ปิดยอด\`,
       SUM(CASE WHEN is_bad_debt_row = 1
                THEN COALESCE(bad_debt, 0) ELSE 0 END) AS \`ขายเครื่อง\`
-    FROM debt_collected_cache
-    WHERE ${whereStr} AND paid_at IS NOT NULL AND paid_at != ''
-    GROUP BY ${periodExpr}
-    ORDER BY ${periodExpr} ASC
+    FROM (
+      SELECT
+        SUBSTRING(paid_at, 1, ${periodLen}) AS period,
+        is_bad_debt_row,
+        is_close_row,
+        total_amount,
+        bad_debt
+      FROM debt_collected_cache
+      WHERE ${whereStr} AND paid_at IS NOT NULL AND paid_at != ''
+    ) AS sub
+    GROUP BY period
+    ORDER BY period ASC
   `;
 
   const result = await db.execute(sql.raw(querySql));

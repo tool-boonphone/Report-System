@@ -16,7 +16,7 @@
 import { BRAND_ACCENT, BRAND_LOGOS } from "@/config/brand";
 import { useDebtCache } from "@/contexts/DebtCacheContext";
 import { useAppAuth } from "@/hooks/useAppAuth";
-import { DATA_LOADING_RETURN_KEY } from "@/components/AppShell";
+import { popReturnPath } from "@/components/AppShell";
 import { useSection } from "@/contexts/SectionContext";
 import { trpc } from "@/lib/trpc";
 import type { SectionKey } from "@shared/const";
@@ -183,12 +183,6 @@ function SyncWaitingScreen({
 
 // ─── DataLoadingScreen ────────────────────────────────────────────────────────
 
-/** อ่าน returnPath จาก sessionStorage แล้วล้างออก เพื่อให้กลับมาหน้าเดิมหลังโหลดเสร็จ */
-function popReturnPath(): string {
-  const p = sessionStorage.getItem(DATA_LOADING_RETURN_KEY);
-  if (p) sessionStorage.removeItem(DATA_LOADING_RETURN_KEY);
-  return p && p !== "/data-loading" ? p : "/contracts";
-}
 
 export default function DataLoadingScreen() {
   const { isLoading: authLoading, isAuthenticated } = useAppAuth();
@@ -392,11 +386,9 @@ export default function DataLoadingScreen() {
 
     // ตรวจสอบว่า memory cache มีข้อมูลอยู่แล้วหรือไม่
     const memCache = debtCache.getCache(section as SectionKey);
-    if (memCache.target && memCache.collected) {
-      navigate(popReturnPath(), { replace: true });
+    if (memCache.target && memCache.collected) {        navigate(popReturnPath() ?? "/contracts", { replace: true });
       return;
     }
-
     // ป้องกัน IDB check ซ้ำ
     if (idbCheckedRef.current) return;
     idbCheckedRef.current = true;
@@ -407,7 +399,7 @@ export default function DataLoadingScreen() {
         // มี IDB cache ที่ยังไม่หมดอายุ → restore เข้า memory แล้วไปหน้า contracts ทันที
         debtCache.setTargetRows(section as SectionKey, idbEntry.targetRows);
         debtCache.setCollectedRows(section as SectionKey, idbEntry.collectedRows, idbEntry.hasPrincipalBreakdown);
-        navigate(popReturnPath(), { replace: true });
+        navigate(popReturnPath() ?? "/contracts", { replace: true });
       } else {
         // ไม่มี IDB cache → โหลดจาก API ตามปกติ
         startPreload(section as SectionKey);
@@ -424,7 +416,7 @@ export default function DataLoadingScreen() {
     const allDone = LOAD_ITEMS.every((item) => statuses[item.key] === "done");
     if (allDone && startedRef.current) {
       const timer = setTimeout(() => {
-        navigate(popReturnPath(), { replace: true });
+        navigate(popReturnPath() ?? "/contracts", { replace: true });
       }, 800);
       return () => clearTimeout(timer);
     }
