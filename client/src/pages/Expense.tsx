@@ -112,19 +112,6 @@ export default function Expense() {
     { enabled: !!section && canView },
   );
 
-  // All data for badge sums
-  const { data: allForBadge } = trpc.accounting.listExpense.useQuery(
-    {
-      section: section ?? "Boonphone",
-      search: search || undefined,
-      dateFrom: dateFrom || undefined,
-      dateTo: dateTo || undefined,
-      page: 1,
-      pageSize: 100000,
-    },
-    { enabled: !!section && canView },
-  );
-
   // All data for Export
   const { data: exportData, refetch: refetchExport } = trpc.accounting.listExpense.useQuery(
     {
@@ -143,15 +130,20 @@ export default function Expense() {
   const total = data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
-  // ── Badge sums ──
-  const badgeSums = useMemo(() => {
-    const allRows = allForBadge?.rows ?? [];
-    const sums: Record<ExpenseType, number> = { "ค่าคอมมิชชั่น": 0 };
-    for (const r of allRows) {
-      sums[r.expenseType as ExpenseType] = (sums[r.expenseType as ExpenseType] ?? 0) + r.amount;
-    }
-    return sums;
-  }, [allForBadge]);
+  // ── Badge sums — ใช้ getExpenseSummary ที่คำนวณ SUM ใน SQL โดยตรง ──
+  const { data: expSummaryData } = trpc.accounting.getExpenseSummary.useQuery(
+    {
+      section: section ?? "Boonphone",
+      search: search || undefined,
+      dateFrom: dateFrom || undefined,
+      dateTo: dateTo || undefined,
+    },
+    { enabled: !!section && canView },
+  );
+
+  const badgeSums = useMemo<Record<ExpenseType, number>>(() => ({
+    "ค่าคอมมิชชั่น": expSummaryData?.["ค่าคอมมิชชั่น"] ?? 0,
+  }), [expSummaryData]);
 
   const totalVisible = useMemo(() => {
     return ALL_EXPENSE_TYPES.filter((t) => activeTypes.has(t)).reduce((s, t) => s + (badgeSums[t] ?? 0), 0);

@@ -8,6 +8,8 @@ import {
   listIncome,
   listIncomeUpdatedBy,
   listExpense,
+  getIncomeSummary,
+  getExpenseSummary,
   type IncomeType,
   type ExpenseType,
 } from "../accountingDb";
@@ -15,27 +17,37 @@ import {
 const INCOME_TYPES: IncomeType[] = ["ค่างวด", "ขายเครื่อง", "ปิดยอด", "เงินดาวน์"];
 const EXPENSE_TYPES: ExpenseType[] = ["ค่าคอมมิชชั่น"];
 
+const incomeFilterInput = z.object({
+  section: z.string(),
+  search: z.string().optional(),
+  dateFrom: z.string().optional(),
+  dateTo: z.string().optional(),
+  dateField: z.enum(["paidAt", "updatedAt"]).optional().default("paidAt"),
+  incomeTypes: z.array(z.enum(["ค่างวด", "ขายเครื่อง", "ปิดยอด", "เงินดาวน์"])).optional(),
+  updatedBy: z.string().optional(),
+});
+
+const expenseFilterInput = z.object({
+  section: z.string(),
+  search: z.string().optional(),
+  dateFrom: z.string().optional(),
+  dateTo: z.string().optional(),
+  expenseTypes: z.array(z.enum(["ค่าคอมมิชชั่น"])).optional(),
+});
+
 export const accountingRouter = router({
   /**
    * ดึง income rows พร้อม pagination และ filter
    */
   listIncome: protectedProcedure
     .input(
-      z.object({
-        section: z.string(),
-        search: z.string().optional(),
-        dateFrom: z.string().optional(),
-        dateTo: z.string().optional(),
-        dateField: z.enum(["paidAt", "updatedAt"]).optional().default("paidAt"),
-        incomeTypes: z.array(z.enum(["ค่างวด", "ขายเครื่อง", "ปิดยอด", "เงินดาวน์"])).optional(),
-        updatedBy: z.string().optional(),
+      incomeFilterInput.extend({
         page: z.number().int().min(1).optional().default(1),
         pageSize: z.number().int().min(1).max(1000).optional().default(50),
       }),
     )
     .query(async ({ input }) => {
       const { section, search, dateFrom, dateTo, dateField, incomeTypes, updatedBy, page, pageSize } = input;
-      // Validate section
       if (section !== "Boonphone" && section !== "Fastfone365") {
         return { rows: [], total: 0 };
       }
@@ -49,6 +61,27 @@ export const accountingRouter = router({
         updatedBy,
         page,
         pageSize,
+      });
+    }),
+
+  /**
+   * คำนวณ SUM badge ของ income แยกตามประเภท (ไม่ดึง rows ทั้งหมด)
+   */
+  getIncomeSummary: protectedProcedure
+    .input(incomeFilterInput)
+    .query(async ({ input }) => {
+      const { section, search, dateFrom, dateTo, dateField, incomeTypes, updatedBy } = input;
+      if (section !== "Boonphone" && section !== "Fastfone365") {
+        return { "ค่างวด": 0, "ขายเครื่อง": 0, "ปิดยอด": 0, "เงินดาวน์": 0, total: 0 };
+      }
+      return getIncomeSummary({
+        section,
+        search,
+        dateFrom,
+        dateTo,
+        dateField,
+        incomeTypes: incomeTypes as IncomeType[] | undefined,
+        updatedBy,
       });
     }),
 
@@ -67,12 +100,7 @@ export const accountingRouter = router({
    */
   listExpense: protectedProcedure
     .input(
-      z.object({
-        section: z.string(),
-        search: z.string().optional(),
-        dateFrom: z.string().optional(),
-        dateTo: z.string().optional(),
-        expenseTypes: z.array(z.enum(["ค่าคอมมิชชั่น"])).optional(),
+      expenseFilterInput.extend({
         page: z.number().int().min(1).optional().default(1),
         pageSize: z.number().int().min(1).max(1000).optional().default(50),
       }),
@@ -91,5 +119,18 @@ export const accountingRouter = router({
         page,
         pageSize,
       });
+    }),
+
+  /**
+   * คำนวณ SUM badge ของ expense แยกตามประเภท
+   */
+  getExpenseSummary: protectedProcedure
+    .input(expenseFilterInput)
+    .query(async ({ input }) => {
+      const { section, search, dateFrom, dateTo } = input;
+      if (section !== "Boonphone" && section !== "Fastfone365") {
+        return { "ค่าคอมมิชชั่น": 0, total: 0 };
+      }
+      return getExpenseSummary({ section, search, dateFrom, dateTo });
     }),
 });

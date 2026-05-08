@@ -155,10 +155,8 @@ export default function Income() {
   const total = data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
-  // ── Badge sums (from current page — for full sum use all data) ──
-  // We'll compute badge sums from all rows in current filter (total is server-side)
-  // For badge display, we query without pagination for sums
-  const { data: allForBadge } = trpc.accounting.listIncome.useQuery(
+  // ── Badge sums — ใช้ getIncomeSummary ที่คำนวณ SUM ใน SQL โดยตรง (ไม่ดึง rows ทั้งหมด) ──
+  const { data: summaryData } = trpc.accounting.getIncomeSummary.useQuery(
     {
       section: section ?? "Boonphone",
       search: search || undefined,
@@ -166,22 +164,16 @@ export default function Income() {
       dateTo: dateTo || undefined,
       dateField,
       updatedBy: updatedBy || undefined,
-      page: 1,
-      pageSize: 100000,
     },
     { enabled: !!section && canView },
   );
 
-  const badgeSums = useMemo(() => {
-    const allRows = allForBadge?.rows ?? [];
-    const sums: Record<IncomeType, number> = {
-      "ค่างวด": 0, "ขายเครื่อง": 0, "ปิดยอด": 0, "เงินดาวน์": 0,
-    };
-    for (const r of allRows) {
-      sums[r.incomeType as IncomeType] = (sums[r.incomeType as IncomeType] ?? 0) + r.amount;
-    }
-    return sums;
-  }, [allForBadge]);
+  const badgeSums = useMemo<Record<IncomeType, number>>(() => ({
+    "ค่างวด": summaryData?.["ค่างวด"] ?? 0,
+    "ขายเครื่อง": summaryData?.["ขายเครื่อง"] ?? 0,
+    "ปิดยอด": summaryData?.["ปิดยอด"] ?? 0,
+    "เงินดาวน์": summaryData?.["เงินดาวน์"] ?? 0,
+  }), [summaryData]);
 
   const totalVisible = useMemo(() => {
     return ALL_INCOME_TYPES.filter((t) => activeTypes.has(t)).reduce((s, t) => s + (badgeSums[t] ?? 0), 0);
