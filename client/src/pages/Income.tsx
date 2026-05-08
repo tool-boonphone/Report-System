@@ -32,7 +32,7 @@ type SortKey = "no" | "paidAt" | "incomeType" | "contractNo" | "amount" | "updat
 type SortDir = "asc" | "desc";
 
 // "เงินดาวน์" ซ่อนไว้ก่อน — ไม่มีในข้อมูลจริง (period = 0 ไม่ปรากฏใน API)
-const ALL_INCOME_TYPES: IncomeType[] = ["ค่างวด", "ขายเครื่อง", "ปิดยอด"];
+const ALL_INCOME_TYPES: IncomeType[] = ["ค่างวด", "ปิดยอด", "ขายเครื่อง"];
 
 const TYPE_COLORS: Record<IncomeType, { bg: string; text: string; dot: string }> = {
   "ค่างวด":    { bg: "bg-blue-50",   text: "text-blue-700",   dot: "bg-blue-500" },
