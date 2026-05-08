@@ -94,6 +94,8 @@ export type MonthlySummaryParams = {
   installTotalApproveMonths?: string[]; // multi YYYY-MM (approve_date)
   installTotalProductType?: string;
   installTotalDeviceFamily?: string;
+  // Global search — ค้นหาตามเลขสัญญา / ชื่อลูกค้า / เบอร์โทร
+  search?: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -140,12 +142,18 @@ const BUCKET_CASE_DTC = `
   END
 `;
 
+/** Escape value for SQL LIKE — prevent injection and wildcard abuse */
+function escapeLike(s: string): string {
+  return s.replace(/'/g, "''").replace(/%/g, "\\%").replace(/_/g, "\\_");
+}
+
 /** Build WHERE clause for debt_target_cache (base — no date filter) */
 function dtcWhere(section: string, opts: {
   productType?: string;
   deviceFamily?: string;
   approveDate?: string;
   approveMonths?: string[];
+  search?: string;
 }): string {
   let w = `dtc.section = '${section}'
     AND dtc.approve_date IS NOT NULL
@@ -165,6 +173,10 @@ function dtcWhere(section: string, opts: {
     const list = opts.approveMonths.map((m) => `'${m}'`).join(",");
     w += `\n    AND DATE_FORMAT(dtc.approve_date, '%Y-%m') IN (${list})`;
   }
+  if (opts.search) {
+    const s = escapeLike(opts.search);
+    w += `\n    AND (dtc.contract_no LIKE '%${s}%' OR dtc.customer_name LIKE '%${s}%')`;
+  }
   return w;
 }
 
@@ -174,6 +186,7 @@ function dccWhere(section: string, opts: {
   deviceFamily?: string;
   paidAtDate?: string;
   paidAtMonths?: string[];
+  search?: string;
 }): string {
   let w = `dcc.section = '${section}'
     AND dcc.approve_date IS NOT NULL
@@ -193,6 +206,10 @@ function dccWhere(section: string, opts: {
     const list = opts.paidAtMonths.map((m) => `'${m}'`).join(",");
     w += `\n    AND DATE_FORMAT(dcc.paid_at, '%Y-%m') IN (${list})`;
   }
+  if (opts.search) {
+    const s = escapeLike(opts.search);
+    w += `\n    AND (dcc.contract_no LIKE '%${s}%' OR dcc.customer_name LIKE '%${s}%')`;
+  }
   return w;
 }
 
@@ -205,6 +222,7 @@ async function queryCount(section: SectionKey, opts: {
   deviceFamily?: string;
   approveDate?: string;
   approveMonths?: string[];
+  search?: string;
 }): Promise<Array<{
   approve_month: string;
   bucket: string;
@@ -240,6 +258,7 @@ async function queryTarget(
     approveMonths?: string[];
     productType?: string;
     deviceFamily?: string;
+    search?: string;
   },
 ): Promise<Array<{
   approve_month: string;
@@ -259,6 +278,7 @@ async function queryTarget(
     productType: opts.productType,
     deviceFamily: opts.deviceFamily,
     approveMonths: opts.approveMonths,
+    search: opts.search,
   });
 
   // due_date filter
@@ -330,6 +350,7 @@ async function queryPaid(
     paidAtMonths?: string[];
     productType?: string;
     deviceFamily?: string;
+    search?: string;
   },
 ): Promise<Array<{
   approve_month: string;
@@ -383,7 +404,7 @@ async function queryPaid(
            AND mx.max_period = dtc.period
     ) dtc_latest ON dtc_latest.section = dcc.section
                 AND dtc_latest.contract_external_id = dcc.contract_external_id
-    WHERE ${dccWhere(section, opts)}
+    WHERE ${dccWhere(section, { paidAtDate: opts.paidAtDate, paidAtMonths: opts.paidAtMonths, productType: opts.productType, deviceFamily: opts.deviceFamily, search: opts.search })}
     GROUP BY approve_month, bucket
     ORDER BY approve_month DESC
   `;
@@ -403,6 +424,7 @@ async function queryDue(
     dueAtMonths?: string[];
     productType?: string;
     deviceFamily?: string;
+    search?: string;
   },
 ): Promise<Array<{
   approve_month: string;
@@ -430,6 +452,7 @@ async function queryDue(
   const baseWhere = dtcWhere(section, {
     productType: opts.productType,
     deviceFamily: opts.deviceFamily,
+    search: opts.search,
   });
 
   /*
@@ -488,6 +511,7 @@ async function queryNotYetDue(
     approveMonths?: string[];
     productType?: string;
     deviceFamily?: string;
+    search?: string;
   },
 ): Promise<Array<{
   approve_month: string;
@@ -507,6 +531,7 @@ async function queryNotYetDue(
     productType: opts.productType,
     deviceFamily: opts.deviceFamily,
     approveMonths: opts.approveMonths,
+    search: opts.search,
   });
 
   // due_date filter
@@ -577,6 +602,7 @@ async function queryInstallTotal(
     approveMonths?: string[];
     productType?: string;
     deviceFamily?: string;
+    search?: string;
   },
 ): Promise<Array<{
   approve_month: string;
@@ -667,6 +693,7 @@ async function queryInstallTotal(
       AND COALESCE(c.status, '') NOT IN ('ยกเลิกสัญญา')
       AND c.installment_amount > 0
       AND c.installment_count > 0
+      ${opts.search ? `AND (c.contract_no LIKE '%${escapeLike(opts.search)}%' OR c.customer_name LIKE '%${escapeLike(opts.search)}%')` : ''}
     GROUP BY approve_month, bucket
     ORDER BY approve_month DESC
   `;
@@ -689,6 +716,7 @@ export async function getMonthlySummary(
       deviceFamily:   params.countDeviceFamily,
       approveDate:    params.countApproveDate,
       approveMonths:  params.countApproveMonths,
+      search:         params.search,
     }),
     queryTarget(section, {
       dueDate:        params.targetDueDate,
@@ -696,18 +724,21 @@ export async function getMonthlySummary(
       approveMonths:  params.targetApproveMonths,
       productType:    params.targetProductType,
       deviceFamily:   params.targetDeviceFamily,
+      search:         params.search,
     }),
     queryPaid(section, {
       paidAtDate:    params.paidAtDate,
       paidAtMonths:  params.paidAtMonths,
       productType:   params.paidProductType,
       deviceFamily:  params.paidDeviceFamily,
+      search:        params.search,
     }),
     queryDue(section, {
       dueAtDate:    params.dueAtDate,
       dueAtMonths:  params.dueAtMonths,
       productType:  params.dueProductType,
       deviceFamily: params.dueDeviceFamily,
+      search:       params.search,
     }),
     queryNotYetDue(section, {
       dueDate:        params.notYetDueDueDate,
@@ -715,11 +746,13 @@ export async function getMonthlySummary(
       approveMonths:  params.notYetDueApproveMonths,
       productType:    params.notYetDueProductType,
       deviceFamily:   params.notYetDueDeviceFamily,
+      search:         params.search,
     }),
     queryInstallTotal(section, {
       approveMonths:  params.installTotalApproveMonths,
       productType:    params.installTotalProductType,
       deviceFamily:   params.installTotalDeviceFamily,
+      search:         params.search,
     }),
   ]);
 

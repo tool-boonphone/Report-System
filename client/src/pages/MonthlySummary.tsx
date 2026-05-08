@@ -23,7 +23,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import {
   Banknote, CalendarDays, Check, ChevronsUpDown, Coins, Download,
   Eye, EyeOff, Gavel, Percent, Smartphone, Tag, TrendingUp, X,
-  ArrowUp, ArrowDown, Info,
+  ArrowUp, ArrowDown, Info, Search,
 } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
@@ -576,7 +576,16 @@ export default function MonthlySummary() {
 
   const[sortDir,setSortDir]=useState<SortDir>("asc");
 
-  // ── query input ───────────────────────────────────────────────────────────
+  // ── search state (debounced) ───────────────────────────────────────────────────────────────────────────────────
+  const[searchInput,setSearchInput]=useState("");
+  const[search,setSearch]=useState("");
+  // debounce search 400ms
+  useEffect(()=>{
+    const t=setTimeout(()=>setSearch(searchInput.trim()),400);
+    return()=>clearTimeout(t);
+  },[searchInput]);
+
+  // ── query input ───────────────────────────────────────────────────────────────────────────────────
   const queryInput=useMemo(()=>{
     if(!section)return null;
     return{
@@ -612,6 +621,8 @@ export default function MonthlySummary() {
       notYetDueApproveMonths:notYetDueApproveMonths.size>0?Array.from(notYetDueApproveMonths):undefined,
       notYetDueProductType:notYetDueProductType.size===1?Array.from(notYetDueProductType)[0]:undefined,
       notYetDueDeviceFamily:(notYetDueDeviceFamily as "iOS"|"Android"|undefined)||undefined,
+      // global search
+      search:search||undefined,
     };
   },[section,
     countApproveDate,countApproveMonths,countProductType,countDeviceFamily,
@@ -620,6 +631,7 @@ export default function MonthlySummary() {
     paidAtDate,paidAtMonths,paidProductType,paidDeviceFamily,
     dueAtDate,dueAtMonths,dueProductType,dueDeviceFamily,
     notYetDueDueDate,notYetDueDueMonths,notYetDueApproveMonths,notYetDueProductType,notYetDueDeviceFamily,
+    search,
   ]);
 
   const query=trpc.monthlySummary.get.useQuery(queryInput as any,{enabled:canView&&!!queryInput});
@@ -739,12 +751,12 @@ export default function MonthlySummary() {
   },0),[grandTotal,hiddenBuckets,showBadDebtSale,paidVis]);
 
   // filter counts
-  const countFilterCount=[countApproveDate,countApproveMonths.size>0,countApproveYears.size>0,countProductType.size>0,countDeviceFamily].filter(Boolean).length;
-  const targetFilterCount=[targetDueDate,targetDueMonths.size>0,targetApproveMonths.size>0,targetApproveYears.size>0,targetProductType.size>0,targetDeviceFamily].filter(Boolean).length;
-  const paidFilterCount=[paidAtDate,paidAtMonths.size>0,paidProductType.size>0,paidDeviceFamily].filter(Boolean).length;
-  const dueFilterCount=[dueAtDate,dueAtMonths.size>0,dueProductType.size>0,dueDeviceFamily].filter(Boolean).length;
-  const notYetDueFilterCount=[notYetDueDueDate,notYetDueDueMonths.size>0,notYetDueApproveMonths.size>0,notYetDueApproveYears.size>0,notYetDueProductType.size>0,notYetDueDeviceFamily].filter(Boolean).length;
-  const installFilterCount=[installApproveMonths.size>0,installApproveYears.size>0,installProductType.size>0,installDeviceFamily].filter(Boolean).length;
+  const countFilterCount=[search,countApproveDate,countApproveMonths.size>0,countApproveYears.size>0,countProductType.size>0,countDeviceFamily].filter(Boolean).length;
+  const targetFilterCount=[search,targetDueDate,targetDueMonths.size>0,targetApproveMonths.size>0,targetApproveYears.size>0,targetProductType.size>0,targetDeviceFamily].filter(Boolean).length;
+  const paidFilterCount=[search,paidAtDate,paidAtMonths.size>0,paidProductType.size>0,paidDeviceFamily].filter(Boolean).length;
+  const dueFilterCount=[search,dueAtDate,dueAtMonths.size>0,dueProductType.size>0,dueDeviceFamily].filter(Boolean).length;
+  const notYetDueFilterCount=[search,notYetDueDueDate,notYetDueDueMonths.size>0,notYetDueApproveMonths.size>0,notYetDueApproveYears.size>0,notYetDueProductType.size>0,notYetDueDeviceFamily].filter(Boolean).length;
+  const installFilterCount=[search,installApproveMonths.size>0,installApproveYears.size>0,installProductType.size>0,installDeviceFamily].filter(Boolean).length;
   const activeFilterCount=tab==="count"?countFilterCount:tab==="installTotal"?installFilterCount:tab==="target"?targetFilterCount:tab==="paid"?paidFilterCount:tab==="due"?dueFilterCount:notYetDueFilterCount;
 
   // ── Export Excel ──────────────────────────────────────────────────────────
@@ -956,6 +968,24 @@ export default function MonthlySummary() {
         {/* ── Filter bar ───────────────────────────────────────────── */}
         <div className="bg-white border-b border-gray-200 shadow-sm">
             <div className="px-4 pb-3 pt-2 flex flex-wrap items-center gap-2">
+              {/* Search box — แสดงทุก tab ยกเว้น combined */}
+              {tab!=="combined"&&(
+                <div className="relative flex items-center">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none"/>
+                  <input
+                    type="text"
+                    value={searchInput}
+                    onChange={(e)=>setSearchInput(e.target.value)}
+                    placeholder="ค้นหา: สัญญา / ลูกค้า"
+                    className="h-9 pl-8 pr-7 rounded-md border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 w-[200px]"
+                  />
+                  {searchInput&&(
+                    <button type="button" onClick={()=>{setSearchInput("");setSearch("");}} className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center justify-center w-5 h-5 rounded-full bg-gray-100 hover:bg-red-100 text-gray-400 hover:text-red-500">
+                      <X className="w-3 h-3"/>
+                    </button>
+                  )}
+                </div>
+              )}
               {/* Tab 1: จำนวนสัญญา */}
               {tab==="count"&&(
                 <>
@@ -982,7 +1012,7 @@ export default function MonthlySummary() {
                   <DeviceFamilyFilter value={countDeviceFamily} onChange={setCountDeviceFamily}/>
                   <MultiSelectFilter label="ประเภทสินค้า" selected={countProductType} onChange={setCountProductType} options={productTypes} placeholder="ทุกประเภทสินค้า"/>
                   {countFilterCount>0&&(
-                    <button type="button" onClick={()=>{setCountApproveDate("");setCountApproveMonths(new Set());setCountApproveYears(new Set());setCountProductType(new Set());setCountDeviceFamily("");}}
+                    <button type="button" onClick={()=>{setSearchInput("");setSearch("");setCountApproveDate("");setCountApproveMonths(new Set());setCountApproveYears(new Set());setCountProductType(new Set());setCountDeviceFamily("");}}
                       className="flex items-center gap-1 h-9 px-2.5 rounded-md border border-red-200 bg-red-50 text-red-600 text-xs hover:bg-red-100 transition-colors">
                       <X className="w-3.5 h-3.5"/>ล้างทั้งหมด
                     </button>
@@ -1005,7 +1035,7 @@ export default function MonthlySummary() {
                   <DeviceFamilyFilter value={installDeviceFamily} onChange={setInstallDeviceFamily}/>
                   <MultiSelectFilter label="ประเภทสินค้า" selected={installProductType} onChange={setInstallProductType} options={productTypes} placeholder="ทุกประเภทสินค้า"/>
                   {installFilterCount>0&&(
-                    <button type="button" onClick={()=>{setInstallApproveMonths(new Set());setInstallApproveYears(new Set());setInstallProductType(new Set());setInstallDeviceFamily("");}}
+                    <button type="button" onClick={()=>{setSearchInput("");setSearch("");setInstallApproveMonths(new Set());setInstallApproveYears(new Set());setInstallProductType(new Set());setInstallDeviceFamily("");}}
                       className="flex items-center gap-1 h-9 px-2.5 rounded-md border border-red-200 bg-red-50 text-red-600 text-xs hover:bg-red-100 transition-colors">
                       <X className="w-3.5 h-3.5"/>ล้างทั้งหมด
                     </button>
@@ -1043,7 +1073,7 @@ export default function MonthlySummary() {
                   <DeviceFamilyFilter value={targetDeviceFamily} onChange={setTargetDeviceFamily}/>
                   <MultiSelectFilter label="ประเภทสินค้า" selected={targetProductType} onChange={setTargetProductType} options={productTypes} placeholder="ทุกประเภทสินค้า"/>
                   {targetFilterCount>0&&(
-                    <button type="button" onClick={()=>{setTargetDueDate("");setTargetDueMonths(new Set());setTargetApproveMonths(new Set());setTargetApproveYears(new Set());setTargetProductType(new Set());setTargetDeviceFamily("");}}
+                    <button type="button" onClick={()=>{setSearchInput("");setSearch("");setTargetDueDate("");setTargetDueMonths(new Set());setTargetApproveMonths(new Set());setTargetApproveYears(new Set());setTargetProductType(new Set());setTargetDeviceFamily("");}}
                       className="flex items-center gap-1 h-9 px-2.5 rounded-md border border-red-200 bg-red-50 text-red-600 text-xs hover:bg-red-100 transition-colors">
                       <X className="w-3.5 h-3.5"/>ล้างทั้งหมด
                     </button>
@@ -1071,7 +1101,7 @@ export default function MonthlySummary() {
                   <DeviceFamilyFilter value={paidDeviceFamily} onChange={setPaidDeviceFamily}/>
                   <MultiSelectFilter label="ประเภทสินค้า" selected={paidProductType} onChange={setPaidProductType} options={productTypes} placeholder="ทุกประเภทสินค้า"/>
                   {paidFilterCount>0&&(
-                    <button type="button" onClick={()=>{setPaidAtDate("");setPaidAtMonths(new Set());setPaidProductType(new Set());setPaidDeviceFamily("");}}
+                    <button type="button" onClick={()=>{setSearchInput("");setSearch("");setPaidAtDate("");setPaidAtMonths(new Set());setPaidProductType(new Set());setPaidDeviceFamily("");}}
                       className="flex items-center gap-1 h-9 px-2.5 rounded-md border border-red-200 bg-red-50 text-red-600 text-xs hover:bg-red-100 transition-colors">
                       <X className="w-3.5 h-3.5"/>ล้างทั้งหมด
                     </button>
@@ -1099,7 +1129,7 @@ export default function MonthlySummary() {
                   <DeviceFamilyFilter value={dueDeviceFamily} onChange={setDueDeviceFamily}/>
                   <MultiSelectFilter label="ประเภทสินค้า" selected={dueProductType} onChange={setDueProductType} options={productTypes} placeholder="ทุกประเภทสินค้า"/>
                   {dueFilterCount>0&&(
-                    <button type="button" onClick={()=>{setDueAtDate("");setDueAtMonths(new Set());setDueProductType(new Set());setDueDeviceFamily("");}}
+                    <button type="button" onClick={()=>{setSearchInput("");setSearch("");setDueAtDate("");setDueAtMonths(new Set());setDueProductType(new Set());setDueDeviceFamily("");}}
                       className="flex items-center gap-1 h-9 px-2.5 rounded-md border border-red-200 bg-red-50 text-red-600 text-xs hover:bg-red-100 transition-colors">
                       <X className="w-3.5 h-3.5"/>ล้างทั้งหมด
                     </button>
@@ -1137,7 +1167,7 @@ export default function MonthlySummary() {
                   <DeviceFamilyFilter value={notYetDueDeviceFamily} onChange={setNotYetDueDeviceFamily}/>
                   <MultiSelectFilter label="ประเภทสินค้า" selected={notYetDueProductType} onChange={setNotYetDueProductType} options={productTypes} placeholder="ทุกประเภทสินค้า"/>
                   {notYetDueFilterCount>0&&(
-                    <button type="button" onClick={()=>{setNotYetDueDueDate("");setNotYetDueDueMonths(new Set());setNotYetDueApproveMonths(new Set());setNotYetDueApproveYears(new Set());setNotYetDueProductType(new Set());setNotYetDueDeviceFamily("");}}
+                    <button type="button" onClick={()=>{setSearchInput("");setSearch("");setNotYetDueDueDate("");setNotYetDueDueMonths(new Set());setNotYetDueApproveMonths(new Set());setNotYetDueApproveYears(new Set());setNotYetDueProductType(new Set());setNotYetDueDeviceFamily("");}}
                       className="flex items-center gap-1 h-9 px-2.5 rounded-md border border-red-200 bg-red-50 text-red-600 text-xs hover:bg-red-100 transition-colors">
                       <X className="w-3.5 h-3.5"/>ล้างทั้งหมด
                     </button>
@@ -1160,7 +1190,7 @@ export default function MonthlySummary() {
                   <DeviceFamilyFilter value={combinedDeviceFamily} onChange={setCombinedDeviceFamily}/>
                   <MultiSelectFilter label="ประเภทสินค้า" selected={combinedProductType} onChange={setCombinedProductType} options={productTypes} placeholder="ทุกประเภทสินค้า"/>
                   {[combinedApproveMonths.size>0,combinedApproveYears.size>0,combinedProductType.size>0,combinedDeviceFamily].filter(Boolean).length>0&&(
-                    <button type="button" onClick={()=>{setCombinedApproveMonths(new Set());setCombinedApproveYears(new Set());setCombinedProductType(new Set());setCombinedDeviceFamily("");}}
+                    <button type="button" onClick={()=>{setSearchInput("");setSearch("");setCombinedApproveMonths(new Set());setCombinedApproveYears(new Set());setCombinedProductType(new Set());setCombinedDeviceFamily("");}}
                       className="flex items-center gap-1 h-9 px-2.5 rounded-md border border-red-200 bg-red-50 text-red-600 text-xs hover:bg-red-100 transition-colors">
                       <X className="w-3.5 h-3.5"/>ล้างทั้งหมด
                     </button>

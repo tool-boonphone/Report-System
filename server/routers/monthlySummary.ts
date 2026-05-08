@@ -65,6 +65,8 @@ export const monthlySummaryRouter = router({
         installTotalApproveMonths: z.array(MonthStr).optional(),
         installTotalProductType:   z.string().optional(),
         installTotalDeviceFamily:  DeviceFamily,
+        // Global search
+        search: z.string().max(100).optional(),
       }),
     )
     .query(async ({ input }) => {
