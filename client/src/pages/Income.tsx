@@ -286,7 +286,8 @@ export default function Income() {
     <AppShell fullHeight>
       <div className="flex flex-col h-full">
         {/* ── Header: ชื่อเมนู + Export ── */}
-        <div className="px-4 pt-4 pb-2 flex items-center justify-between border-b border-gray-200">
+        <div className="border-b border-gray-200">
+        <div className="max-w-screen-2xl mx-auto px-3 sm:px-4 pt-4 pb-2 flex items-center justify-between">
           <h1 className="text-lg font-semibold text-gray-800">รายรับ</h1>
           {canExport && (
             <button
@@ -298,10 +299,11 @@ export default function Income() {
             </button>
           )}
         </div>
+        </div>
 
         {/* ── Filter bar ── */}
         <div className="bg-white border-b border-gray-200 shadow-sm">
-          <div className="px-4 pb-3 pt-2 flex flex-wrap items-center gap-2">
+          <div className="max-w-screen-2xl mx-auto px-3 sm:px-4 pb-3 pt-2 flex flex-wrap items-center gap-2">
             {/* Search */}
             <div className="relative flex items-center">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
@@ -401,7 +403,8 @@ export default function Income() {
         </div>
 
         {/* ── Count + Badges ── */}
-        <div className="px-4 py-2 flex flex-wrap items-center gap-2 border-b border-gray-100 bg-gray-50">
+        <div className="border-b border-gray-100 bg-gray-50">
+        <div className="max-w-screen-2xl mx-auto px-3 sm:px-4 py-2 flex flex-wrap items-center gap-2">
           <span className="text-sm text-gray-500">
             {total.toLocaleString()} รายการ
           </span>
@@ -435,6 +438,7 @@ export default function Income() {
               <span>{fmtMoney(totalVisible)}</span>
             </div>
           </div>
+        </div>
         </div>
 
         {/* ── Table ── */}
