@@ -1,0 +1,50 @@
+{
+  "query": "\nSELECT c.contract_no, c.approve_date, c.commission_net, c.section,\n       i.updated_by, i.updated_at\nFROM contracts c\nINNER JOIN installments i ON i.contract_no = c.contract_no AND i.section = c.section\nWHERE c.commission_net IS NOT NULL AND c.commission_net > 0 \n  AND i.updated_by IS NOT NULL AND i.updated_by != '' AND i.updated_by != 'NULL'\nORDER BY i.updated_at DESC\nLIMIT 5\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT c.contract_no, c.approve_date, c.commission_net, c.section,\n       i.updated_by, i.updated_at\nFROM contracts c\nINNER JOIN installments i ON i.contract_no = c.contract_no AND i.section = c.section\nWHERE c.commission_net IS NOT NULL AND c.commission_net > 0 \n  AND i.updated_by IS NOT NULL AND i.updated_by != '' AND i.updated_by != 'NULL'\nORDER BY i.updated_at DESC\nLIMIT 5\n",
+  "rows": [
+    {
+      "contract_no": "CT0426-RBR001-3060-01",
+      "approve_date": "2026-04-01",
+      "commission_net": "1911.40",
+      "section": "Boonphone",
+      "updated_by": "adminaoi",
+      "updated_at": "2026-05-08 11:53:19"
+    },
+    {
+      "contract_no": "CT0226-KKN001-0027-01",
+      "approve_date": "2026-02-01",
+      "commission_net": "2228.00",
+      "section": "Boonphone",
+      "updated_by": "admindol",
+      "updated_at": "2026-05-08 11:52:06"
+    },
+    {
+      "contract_no": "CT0226-SRI004-0233-01",
+      "approve_date": "2026-02-05",
+      "commission_net": "1054.69",
+      "section": "Boonphone",
+      "updated_by": "adminploy",
+      "updated_at": "2026-05-08 11:47:46"
+    },
+    {
+      "contract_no": "CT0326-RBR002-2521-01",
+      "approve_date": "2026-03-22",
+      "commission_net": "2228.00",
+      "section": "Boonphone",
+      "updated_by": "adminaum",
+      "updated_at": "2026-05-08 11:47:39"
+    },
+    {
+      "contract_no": "CT0226-CCO002-0052-01",
+      "approve_date": "2026-02-01",
+      "commission_net": "1296.80",
+      "section": "Boonphone",
+      "updated_by": "admindol",
+      "updated_at": "2026-05-08 11:47:38"
+    }
+  ],
+  "messages": [],
+  "stdout": "contract_no\tapprove_date\tcommission_net\tsection\tupdated_by\tupdated_at\nCT0426-RBR001-3060-01\t2026-04-01\t1911.40\tBoonphone\tadminaoi\t2026-05-08 11:53:19\nCT0226-KKN001-0027-01\t2026-02-01\t2228.00\tBoonphone\tadmindol\t2026-05-08 11:52:06\nCT0226-SRI004-0233-01\t2026-02-05\t1054.69\tBoonphone\tadminploy\t2026-05-08 11:47:46\nCT0326-RBR002-2521-01\t2026-03-22\t2228.00\tBoonphone\tadminaum\t2026-05-08 11:47:39\nCT0226-CCO002-0052-01\t2026-02-01\t1296.80\tBoonphone\tadmindol\t2026-05-08 11:47:38\n",
+  "stderr": "",
+  "execution_time_ms": 2244
+}

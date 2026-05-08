@@ -14,7 +14,7 @@ import { trpc } from "@/lib/trpc";
 import { Spinner } from "@/components/ui/spinner";
 import {
   CalendarDays, ChevronDown, ChevronUp, ChevronsUpDown,
-  Download, Eye, EyeOff, Search, X,
+  Download, Eye, EyeOff, Search, User, X,
 } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
@@ -25,7 +25,7 @@ import {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type ExpenseType = "ค่าคอมมิชชั่น";
-type SortKey = "no" | "approveDate" | "expenseType" | "contractNo" | "amount";
+type SortKey = "no" | "approveDate" | "expenseType" | "contractNo" | "amount" | "updatedBy" | "updatedAt";
 type SortDir = "asc" | "desc";
 
 const ALL_EXPENSE_TYPES: ExpenseType[] = ["ค่าคอมมิชชั่น"];
@@ -51,6 +51,16 @@ function fmtDate(s: string | null | undefined): string {
   return d.toLocaleDateString("th-TH", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
+function fmtDateTime(s: string | null | undefined): string {
+  if (!s) return "-";
+  const d = new Date(s);
+  if (isNaN(d.getTime())) return s;
+  return d.toLocaleString("th-TH", {
+    day: "2-digit", month: "2-digit", year: "numeric",
+    hour: "2-digit", minute: "2-digit",
+  });
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function Expense() {
   const { section } = useSection();
@@ -67,6 +77,7 @@ export default function Expense() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [activeTypes, setActiveTypes] = useState<Set<ExpenseType>>(new Set(ALL_EXPENSE_TYPES));
+  const [updatedByFilter, setUpdatedByFilter] = useState("");
 
   // ── Pagination ──
   const [page, setPage] = useState(1);
@@ -85,7 +96,7 @@ export default function Expense() {
   }, [searchInput]);
 
   // Reset page on filter change
-  useEffect(() => { setPage(1); }, [search, dateFrom, dateTo, activeTypes, pageSize]);
+  useEffect(() => { setPage(1); }, [search, dateFrom, dateTo, activeTypes, pageSize, updatedByFilter]);
 
   // ── Nav actions ──
   useEffect(() => {
@@ -106,6 +117,7 @@ export default function Expense() {
       dateFrom: dateFrom || undefined,
       dateTo: dateTo || undefined,
       expenseTypes: expenseTypesParam,
+      updatedBy: updatedByFilter || undefined,
       page,
       pageSize,
     },
@@ -113,17 +125,24 @@ export default function Expense() {
   );
 
   // All data for Export
-  const { data: exportData, refetch: refetchExport } = trpc.accounting.listExpense.useQuery(
+  const { refetch: refetchExport } = trpc.accounting.listExpense.useQuery(
     {
       section: section ?? "Boonphone",
       search: search || undefined,
       dateFrom: dateFrom || undefined,
       dateTo: dateTo || undefined,
       expenseTypes: expenseTypesParam,
+      updatedBy: updatedByFilter || undefined,
       page: 1,
       pageSize: 10000,
     },
     { enabled: false },
+  );
+
+  // ── updatedBy dropdown list ──
+  const { data: updatedByList } = trpc.accounting.listExpenseUpdatedBy.useQuery(
+    { section: section ?? "Boonphone" },
+    { enabled: !!section && canView },
   );
 
   const rows = data?.rows ?? [];
@@ -160,6 +179,8 @@ export default function Expense() {
       else if (sortKey === "expenseType") { av = a.expenseType; bv = b.expenseType; }
       else if (sortKey === "contractNo") { av = a.contractNo; bv = b.contractNo; }
       else if (sortKey === "amount") { av = a.amount; bv = b.amount; }
+      else if (sortKey === "updatedBy") { av = (a as any).updatedBy ?? ""; bv = (b as any).updatedBy ?? ""; }
+      else if (sortKey === "updatedAt") { av = (a as any).updatedAt ?? ""; bv = (b as any).updatedAt ?? ""; }
       if (av < bv) return sortDir === "asc" ? -1 : 1;
       if (av > bv) return sortDir === "asc" ? 1 : -1;
       return 0;
@@ -192,12 +213,14 @@ export default function Expense() {
     setSearchInput(""); setSearch("");
     setDateFrom(""); setDateTo("");
     setActiveTypes(new Set(ALL_EXPENSE_TYPES));
+    setUpdatedByFilter("");
     setPage(1);
   };
 
   const filterCount = [
     search, dateFrom, dateTo,
     activeTypes.size < ALL_EXPENSE_TYPES.length ? "type" : "",
+    updatedByFilter,
   ].filter(Boolean).length;
 
   // ── Export Excel ──
@@ -207,18 +230,20 @@ export default function Expense() {
       const { data: exp } = await refetchExport();
       const exportRows = exp?.rows ?? [];
       const wsData = [
-        ["No.", "วันที่สัญญา", "ประเภท", "เลขที่สัญญา", "ยอดเงิน"],
+        ["No.", "วันที่สัญญา", "ประเภท", "เลขที่สัญญา", "ยอดเงิน", "ทำรายการโดย", "ทำรายการเมื่อ"],
         ...exportRows.map((r, i) => [
           i + 1,
           fmtDate(r.approveDate),
           r.expenseType,
           r.contractNo,
           r.amount,
+          (r as any).updatedBy ?? "",
+          fmtDateTime((r as any).updatedAt),
         ]),
       ];
       const ws = XLSX.utils.aoa_to_sheet(wsData);
       ws["!cols"] = [
-        { wch: 6 }, { wch: 14 }, { wch: 18 }, { wch: 24 }, { wch: 14 },
+        { wch: 6 }, { wch: 14 }, { wch: 18 }, { wch: 24 }, { wch: 14 }, { wch: 20 }, { wch: 20 },
       ];
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "รายจ่าย");
@@ -309,6 +334,30 @@ export default function Expense() {
               </div>
             </div>
 
+            {/* ทำรายการโดย */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-gray-500 whitespace-nowrap">ทำรายการโดย:</span>
+              <div className="relative flex items-center">
+                <User className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+                <select
+                  value={updatedByFilter}
+                  onChange={(e) => setUpdatedByFilter(e.target.value)}
+                  className="h-9 pl-8 pr-7 rounded-md border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 w-[180px] appearance-none"
+                >
+                  <option value="">ทั้งหมด</option>
+                  {(updatedByList ?? []).map((u) => (
+                    <option key={u} value={u}>{u}</option>
+                  ))}
+                </select>
+                {updatedByFilter && (
+                  <button type="button" onClick={() => setUpdatedByFilter("")}
+                    className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center justify-center w-5 h-5 rounded-full bg-gray-100 hover:bg-red-100 text-gray-400 hover:text-red-500">
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+            </div>
+
             {/* Clear all */}
             {filterCount > 0 && (
               <button type="button" onClick={clearAll}
@@ -382,6 +431,8 @@ export default function Expense() {
                     { key: "expenseType" as SortKey, label: "ประเภท", cls: "w-36" },
                     { key: "contractNo" as SortKey, label: "เลขที่สัญญา", cls: "min-w-[160px]" },
                     { key: "amount" as SortKey, label: "ยอดเงิน", cls: "w-32 text-right" },
+                    { key: "updatedBy" as SortKey, label: "ทำรายการโดย", cls: "min-w-[140px]" },
+                    { key: "updatedAt" as SortKey, label: "ทำรายการเมื่อ", cls: "min-w-[160px]" },
                   ].map(({ key, label, cls }) => (
                     <th
                       key={key}
@@ -404,6 +455,7 @@ export default function Expense() {
                 {sortedRows.map((row, idx) => {
                   const typeColor = TYPE_COLORS[row.expenseType as ExpenseType] ?? { bg: "bg-gray-50", text: "text-gray-700", dot: "bg-gray-400" };
                   const globalIdx = (page - 1) * pageSize + idx + 1;
+                  const rowAny = row as any;
                   return (
                     <tr
                       key={`${row.contractNo}-${idx}`}
@@ -422,6 +474,12 @@ export default function Expense() {
                       </td>
                       <td className="px-3 py-2 font-mono text-xs text-gray-700">{row.contractNo}</td>
                       <td className="px-3 py-2 text-right font-semibold text-gray-800">{fmtMoney(row.amount)}</td>
+                      <td className="px-3 py-2 text-sm text-gray-600 whitespace-nowrap">
+                        {rowAny.updatedBy ?? <span className="text-gray-300">-</span>}
+                      </td>
+                      <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">
+                        {rowAny.updatedAt ? fmtDateTime(rowAny.updatedAt) : <span className="text-gray-300">-</span>}
+                      </td>
                     </tr>
                   );
                 })}
@@ -434,58 +492,60 @@ export default function Expense() {
         {/* ── Pagination ── */}
         {total > 0 && (
           <div className="border-t border-gray-200 bg-white">
-          <div className="max-w-screen-2xl mx-auto w-full px-3 sm:px-4 py-3 flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-2 text-sm text-gray-500">
-              <span>แสดง</span>
-              <select
-                value={pageSize}
-                onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
-                className="h-8 px-2 rounded border border-gray-200 text-sm"
-              >
-                {[50, 100, 500, 1000].map((n) => (
-                  <option key={n} value={n}>{n}</option>
-                ))}
-              </select>
-              <span>รายการ / หน้า &nbsp;|&nbsp; รวม {total.toLocaleString()} รายการ</span>
+            <div className="max-w-screen-2xl mx-auto w-full px-3 sm:px-4 py-3 flex flex-wrap items-center gap-2">
+              {/* Page size + total count — ชิดซ้าย */}
+              <div className="flex items-center gap-2 text-sm text-gray-500 mr-auto">
+                <span>แสดง</span>
+                <select
+                  value={pageSize}
+                  onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
+                  className="h-8 px-2 rounded border border-gray-200 text-sm"
+                >
+                  {[50, 100, 500, 1000].map((n) => (
+                    <option key={n} value={n}>{n}</option>
+                  ))}
+                </select>
+                <span>รายการ / หน้า &nbsp;|&nbsp; รวม {total.toLocaleString()} รายการ</span>
+              </div>
+              {/* Pagination controls — ชิดขวา */}
+              <Pagination className="w-auto mx-0">
+                <PaginationContent>
+                  <PaginationItem>
+                    <PaginationPrevious
+                      href="#"
+                      onClick={(e) => { e.preventDefault(); if (page > 1) setPage(page - 1); }}
+                      className={page <= 1 ? "pointer-events-none opacity-40" : ""}
+                    />
+                  </PaginationItem>
+                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                    let p = i + 1;
+                    if (totalPages > 5) {
+                      if (page <= 3) p = i + 1;
+                      else if (page >= totalPages - 2) p = totalPages - 4 + i;
+                      else p = page - 2 + i;
+                    }
+                    return (
+                      <PaginationItem key={p}>
+                        <PaginationLink
+                          href="#"
+                          isActive={p === page}
+                          onClick={(e) => { e.preventDefault(); setPage(p); }}
+                        >
+                          {p}
+                        </PaginationLink>
+                      </PaginationItem>
+                    );
+                  })}
+                  <PaginationItem>
+                    <PaginationNext
+                      href="#"
+                      onClick={(e) => { e.preventDefault(); if (page < totalPages) setPage(page + 1); }}
+                      className={page >= totalPages ? "pointer-events-none opacity-40" : ""}
+                    />
+                  </PaginationItem>
+                </PaginationContent>
+              </Pagination>
             </div>
-            <Pagination>
-              <PaginationContent>
-                <PaginationItem>
-                  <PaginationPrevious
-                    href="#"
-                    onClick={(e) => { e.preventDefault(); if (page > 1) setPage(page - 1); }}
-                    className={page <= 1 ? "pointer-events-none opacity-40" : ""}
-                  />
-                </PaginationItem>
-                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                  let p = i + 1;
-                  if (totalPages > 5) {
-                    if (page <= 3) p = i + 1;
-                    else if (page >= totalPages - 2) p = totalPages - 4 + i;
-                    else p = page - 2 + i;
-                  }
-                  return (
-                    <PaginationItem key={p}>
-                      <PaginationLink
-                        href="#"
-                        isActive={p === page}
-                        onClick={(e) => { e.preventDefault(); setPage(p); }}
-                      >
-                        {p}
-                      </PaginationLink>
-                    </PaginationItem>
-                  );
-                })}
-                <PaginationItem>
-                  <PaginationNext
-                    href="#"
-                    onClick={(e) => { e.preventDefault(); if (page < totalPages) setPage(page + 1); }}
-                    className={page >= totalPages ? "pointer-events-none opacity-40" : ""}
-                  />
-                </PaginationItem>
-              </PaginationContent>
-            </Pagination>
-          </div>
           </div>
         )}
       </div>

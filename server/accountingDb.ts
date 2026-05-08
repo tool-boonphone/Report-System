@@ -54,6 +54,8 @@ export interface ExpenseRow {
   amount: number;
   partnerCode: string | null;
   partnerName: string | null;
+  updatedBy: string | null;
+  updatedAt: string | null;
 }
 
 export interface ExpenseParams {
@@ -62,6 +64,7 @@ export interface ExpenseParams {
   dateFrom?: string;
   dateTo?: string;
   expenseTypes?: ExpenseType[];
+  updatedBy?: string;
   page?: number;
   pageSize?: number;
 }
@@ -235,44 +238,58 @@ export async function listExpense(params: ExpenseParams): Promise<{
     search,
     dateFrom,
     dateTo,
+    updatedBy,
     page = 1,
     pageSize = 50,
   } = params;
-
   const offset = (page - 1) * pageSize;
   const esc = (v: string) => v.replace(/'/g, "''");
-
   const conditions: string[] = [
-    `section = '${esc(section)}'`,
-    `commission_net IS NOT NULL`,
-    `commission_net > 0`,
+    `c.section = '${esc(section)}'`,
+    `c.commission_net IS NOT NULL`,
+    `c.commission_net > 0`,
   ];
-
   if (search) {
-    conditions.push(`contract_no LIKE '%${esc(search)}%'`);
+    conditions.push(`c.contract_no LIKE '%${esc(search)}%'`);
   }
   if (dateFrom) {
-    conditions.push(`approve_date >= '${esc(dateFrom)}'`);
+    conditions.push(`c.approve_date >= '${esc(dateFrom)}'`);
   }
   if (dateTo) {
-    conditions.push(`approve_date <= '${esc(dateTo)}'`);
+    conditions.push(`c.approve_date <= '${esc(dateTo)}'`);
   }
-
+  if (updatedBy) {
+    conditions.push(`latest_i.updated_by = '${esc(updatedBy)}'`);
+  }
   const whereStr = conditions.join(" AND ");
-
+  // JOIN installments เพื่อดึง updated_by ของ installment ล่าสุดใน contract นั้น
+  const joinSql = `
+    FROM contracts c
+    LEFT JOIN (
+      SELECT contract_no, section,
+             updated_by, updated_at
+      FROM installments
+      WHERE (contract_no, section, updated_at) IN (
+        SELECT contract_no, section, MAX(updated_at)
+        FROM installments
+        WHERE updated_by IS NOT NULL AND updated_by != ''
+        GROUP BY contract_no, section
+      )
+    ) AS latest_i ON latest_i.contract_no = c.contract_no AND latest_i.section = c.section
+  `;
   const [countResult, dataResult] = await Promise.all([
-    db.execute(sql.raw(`SELECT COUNT(*) AS total FROM contracts WHERE ${whereStr}`)),
+    db.execute(sql.raw(`SELECT COUNT(*) AS total ${joinSql} WHERE ${whereStr}`)),
     db.execute(
       sql.raw(`
-        SELECT id, contract_no, approve_date, commission_net, partner_code, partner_name
-        FROM contracts
+        SELECT c.id, c.contract_no, c.approve_date, c.commission_net, c.partner_code, c.partner_name,
+               latest_i.updated_by, latest_i.updated_at
+        ${joinSql}
         WHERE ${whereStr}
-        ORDER BY approve_date DESC, id DESC
+        ORDER BY c.approve_date DESC, c.id DESC
         LIMIT ${pageSize} OFFSET ${offset}
       `),
     ),
   ]);
-
   const countArr: any[] = (countResult as any)[0] ?? countResult;
   const total = Number(countArr[0]?.total ?? 0);
   const dataArr: any[] = (dataResult as any)[0] ?? dataResult;
@@ -284,9 +301,30 @@ export async function listExpense(params: ExpenseParams): Promise<{
     amount: Number(r.commission_net ?? 0),
     partnerCode: r.partner_code ?? null,
     partnerName: r.partner_name ?? null,
+    updatedBy: r.updated_by ?? null,
+    updatedAt: r.updated_at ?? null,
   }));
-
   return { rows, total };
+}
+
+/** ดึง distinct updatedBy สำหรับ expense filter dropdown */
+export async function listExpenseUpdatedBy(section: SectionKey): Promise<string[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const esc = (v: string) => v.replace(/'/g, "''");
+  const result = await db.execute(
+    sql.raw(`
+      SELECT DISTINCT i.updated_by
+      FROM installments i
+      INNER JOIN contracts c ON c.contract_no = i.contract_no AND c.section = i.section
+      WHERE c.section = '${esc(section)}'
+        AND c.commission_net IS NOT NULL AND c.commission_net > 0
+        AND i.updated_by IS NOT NULL AND i.updated_by != ''
+      ORDER BY i.updated_by ASC
+    `),
+  );
+  const arr: any[] = (result as any)[0] ?? result;
+  return (arr ?? []).map((r: any) => r.updated_by).filter(Boolean);
 }
 
 // ─── Summary (Badge sums) ─────────────────────────────────────────────────────

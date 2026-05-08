@@ -1,0 +1,40 @@
+{
+  "query": "SELECT section, updated_by, updated_at, contract_no FROM installments WHERE updated_by IS NOT NULL AND updated_by != '' LIMIT 5",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT section, updated_by, updated_at, contract_no FROM installments WHERE updated_by IS NOT NULL AND updated_by != '' LIMIT 5",
+  "rows": [
+    {
+      "section": "Boonphone",
+      "updated_by": "adminploy",
+      "updated_at": "2026-05-06 18:04:14",
+      "contract_no": "CT0426-PTE012-4043-01"
+    },
+    {
+      "section": "Boonphone",
+      "updated_by": "adminaum",
+      "updated_at": "2026-05-06 12:48:52",
+      "contract_no": "CT0426-UTT002-4036-01"
+    },
+    {
+      "section": "Boonphone",
+      "updated_by": "storebas",
+      "updated_at": "2026-04-27 11:52:13",
+      "contract_no": "CT0426-CCO015-3972-01"
+    },
+    {
+      "section": "Boonphone",
+      "updated_by": "admindol",
+      "updated_at": "2026-05-08 10:21:52",
+      "contract_no": "CT0426-AYA005-3911-01"
+    },
+    {
+      "section": "Boonphone",
+      "updated_by": "admindol",
+      "updated_at": "2026-05-02 12:39:09",
+      "contract_no": "CT0426-SRI004-3891-01"
+    }
+  ],
+  "messages": [],
+  "stdout": "section\tupdated_by\tupdated_at\tcontract_no\nBoonphone\tadminploy\t2026-05-06 18:04:14\tCT0426-PTE012-4043-01\nBoonphone\tadminaum\t2026-05-06 12:48:52\tCT0426-UTT002-4036-01\nBoonphone\tstorebas\t2026-04-27 11:52:13\tCT0426-CCO015-3972-01\nBoonphone\tadmindol\t2026-05-08 10:21:52\tCT0426-AYA005-3911-01\nBoonphone\tadmindol\t2026-05-02 12:39:09\tCT0426-SRI004-3891-01\n",
+  "stderr": "",
+  "execution_time_ms": 1808
+}

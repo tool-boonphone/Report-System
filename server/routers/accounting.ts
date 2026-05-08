@@ -3,6 +3,7 @@
  */
 
 import { z } from "zod";
+import { sql } from "drizzle-orm";
 import { protectedProcedure, router } from "../_core/trpc";
 import {
   listIncome,
@@ -13,6 +14,7 @@ import {
   type IncomeType,
   type ExpenseType,
 } from "../accountingDb";
+import { getDb } from "../db";
 
 // "เงินดาวน์" ซ่อนไว้ก่อน — ไม่มีในข้อมูลจริง
 const INCOME_TYPES: IncomeType[] = ["ค่างวด", "ขายเครื่อง", "ปิดยอด"];
@@ -35,6 +37,7 @@ const expenseFilterInput = z.object({
   dateFrom: z.string().optional(),
   dateTo: z.string().optional(),
   expenseTypes: z.array(z.enum(["ค่าคอมมิชชั่น"])).optional(),
+  updatedBy: z.string().optional(),
 });
 
 export const accountingRouter = router({
@@ -108,7 +111,7 @@ export const accountingRouter = router({
       }),
     )
     .query(async ({ input }) => {
-      const { section, search, dateFrom, dateTo, expenseTypes, page, pageSize } = input;
+      const { section, search, dateFrom, dateTo, expenseTypes, updatedBy, page, pageSize } = input;
       if (section !== "Boonphone" && section !== "Fastfone365") {
         return { rows: [], total: 0 };
       }
@@ -118,6 +121,7 @@ export const accountingRouter = router({
         dateFrom,
         dateTo,
         expenseTypes: expenseTypes as ExpenseType[] | undefined,
+        updatedBy,
         page,
         pageSize,
       });
@@ -134,6 +138,31 @@ export const accountingRouter = router({
         return { "ค่าคอมมิชชั่น": 0, total: 0 };
       }
       return getExpenseSummary({ section, search, dateFrom, dateTo });
+    }),
+
+  /**
+   * ดึง distinct updatedBy สำหรับ expense filter dropdown
+   */
+  listExpenseUpdatedBy: protectedProcedure
+    .input(z.object({ section: z.string() }))
+    .query(async ({ input }) => {
+      if (input.section !== "Boonphone" && input.section !== "Fastfone365") return [];
+      const db = await getDb();
+      if (!db) return [];
+      const esc = (v: string) => v.replace(/'/g, "''");
+      const result = await db.execute(
+        sql.raw(`
+          SELECT DISTINCT i.updated_by
+          FROM installments i
+          INNER JOIN contracts c ON c.contract_no = i.contract_no AND c.section = i.section
+          WHERE i.section = '${esc(input.section)}'
+            AND i.updated_by IS NOT NULL AND i.updated_by != ''
+            AND c.commission_net IS NOT NULL AND c.commission_net > 0
+          ORDER BY i.updated_by ASC
+        `),
+      );
+      const arr: any[] = (result as any)[0] ?? result;
+      return (arr ?? []).map((r: any) => r.updated_by).filter(Boolean) as string[];
     }),
 });
 

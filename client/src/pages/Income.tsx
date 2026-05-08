@@ -516,8 +516,9 @@ export default function Income() {
         {/* ── Pagination ── */}
         {total > 0 && (
           <div className="border-t border-gray-200 bg-white">
-          <div className="max-w-screen-2xl mx-auto w-full px-3 sm:px-4 py-3 flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-2 text-sm text-gray-500">
+          <div className="max-w-screen-2xl mx-auto w-full px-3 sm:px-4 py-3 flex flex-wrap items-center gap-2">
+              {/* Page size + total count — ชิดซ้าย */}
+            <div className="flex items-center gap-2 text-sm text-gray-500 mr-auto">
               <span>แสดง</span>
               <select
                 value={pageSize}
@@ -530,7 +531,8 @@ export default function Income() {
               </select>
               <span>รายการ / หน้า &nbsp;|&nbsp; รวม {total.toLocaleString()} รายการ</span>
             </div>
-            <Pagination>
+            {/* Pagination controls — ชิดขวา */}
+            <Pagination className="w-auto mx-0">
               <PaginationContent>
                 <PaginationItem>
                   <PaginationPrevious
