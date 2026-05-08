@@ -15,7 +15,7 @@ import { trpc } from "@/lib/trpc";
 import { Spinner } from "@/components/ui/spinner";
 import {
   CalendarDays, ChevronDown, ChevronUp, ChevronsUpDown,
-  Download, Eye, EyeOff, Search, X,
+  Download, Eye, EyeOff, Search, User, X,
 } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
@@ -364,28 +364,29 @@ export default function Income() {
               </div>
             </div>
 
-            {/* Updated by filter */}
-            {updatedByList && updatedByList.length > 0 && (
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs text-gray-500 whitespace-nowrap">ผู้ทำรายการ:</span>
+            {/* ทำรายการโดย */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-gray-500 whitespace-nowrap">ทำรายการโดย:</span>
+              <div className="relative flex items-center">
+                <User className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
                 <select
                   value={updatedBy}
                   onChange={(e) => setUpdatedBy(e.target.value)}
-                  className="h-9 px-2 rounded-md border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 max-w-[160px]"
+                  className="h-9 pl-8 pr-7 rounded-md border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 w-[180px] appearance-none"
                 >
                   <option value="">ทั้งหมด</option>
-                  {updatedByList.map((u) => (
+                  {(updatedByList ?? []).map((u) => (
                     <option key={u} value={u}>{u}</option>
                   ))}
                 </select>
                 {updatedBy && (
                   <button type="button" onClick={() => setUpdatedBy("")}
-                    className="flex items-center justify-center w-6 h-6 rounded-full bg-gray-100 hover:bg-red-100 text-gray-400 hover:text-red-500">
-                    <X className="w-3.5 h-3.5" />
+                    className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center justify-center w-5 h-5 rounded-full bg-gray-100 hover:bg-red-100 text-gray-400 hover:text-red-500">
+                    <X className="w-3 h-3" />
                   </button>
                 )}
               </div>
-            )}
+            </div>
 
             {/* Clear all */}
             {filterCount > 0 && (
