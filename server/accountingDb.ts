@@ -483,9 +483,9 @@ export async function getIncomeSummaryByPeriod(
       SUM(CASE WHEN is_bad_debt_row = 1
                THEN COALESCE(bad_debt, 0) ELSE 0 END) AS \`ขายเครื่อง\`
     FROM debt_collected_cache
-    WHERE ${whereStr} AND paid_at IS NOT NULL
-    GROUP BY period
-    ORDER BY period ${groupBy === "year" ? "DESC" : "DESC"}
+    WHERE ${whereStr} AND paid_at IS NOT NULL AND paid_at != ''
+    GROUP BY ${periodExpr}
+    ORDER BY ${periodExpr} DESC
   `;
 
   const result = await db.execute(sql.raw(querySql));
@@ -551,9 +551,9 @@ export async function getExpenseSummaryByPeriod(
       ${periodExpr} AS period,
       SUM(COALESCE(c.commission_net, 0)) AS \`ค่าคอมมิชชั่น\`
     FROM contracts c
-    WHERE ${whereStr}
-    GROUP BY period
-    ORDER BY period DESC
+    WHERE ${whereStr} AND c.approve_date != ''
+    GROUP BY ${periodExpr}
+    ORDER BY ${periodExpr} DESC
   `;
 
   const result = await db.execute(sql.raw(querySql));
