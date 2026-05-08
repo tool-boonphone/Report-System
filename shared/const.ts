@@ -29,6 +29,8 @@ export const MENU_CODES = [
   "settings_users", // ตั้งค่า > จัดการผู้ใช้งาน
   "settings_groups", // ตั้งค่า > จัดการสิทธิ์
   "sync_api", // Re-Sync API (ดึงข้อมูลใหม่จาก Partner API)
+  "income", // บัญชี > รายรับ
+  "expense", // บัญชี > รายจ่าย
 ] as const;
 export type MenuCode = (typeof MENU_CODES)[number];
 
@@ -44,6 +46,8 @@ export const MENU_LABELS: Record<MenuCode, string> = {
   settings_users: "จัดการผู้ใช้งาน",
   settings_groups: "จัดการสิทธิ์",
   sync_api: "Re-Sync API",
+  income: "รายรับ",
+  expense: "รายจ่าย",
 };
 
 /** Permission actions attached to every menu. */

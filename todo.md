@@ -1355,3 +1355,14 @@ Task list:
 - [x] เพิ่ม totalBadDebt และ totalAll ใน yearlyRows return object
 - [x] แทนที่ inline badge ใน TAB 2 (สรุปรายเดือน) ด้วย BadDebtRateBadge
 - [x] แทนที่ inline badge ใน TAB 3 (สรุปรายปี) ด้วย BadDebtRateBadge
+
+## Phase 142 — เมนูบัญชี: รายรับ + รายจ่าย
+- [ ] P142-1: เพิ่ม MenuCode "income" และ "expense" ใน shared/const.ts
+- [ ] P142-2: สร้าง server/accountingDb.ts (query helpers สำหรับ income จาก debt_collected_cache และ expense จาก contracts.commission_net)
+- [ ] P142-3: สร้าง server/routers/accounting.ts (income + expense procedures)
+- [ ] P142-4: Register accountingRouter ใน server/routers.ts
+- [ ] P142-5: สร้างหน้า client/src/pages/Income.tsx พร้อม filter bar, badge, ตาราง, Export Excel
+- [ ] P142-6: สร้างหน้า client/src/pages/Expense.tsx พร้อม filter bar, badge, ตาราง, Export Excel
+- [ ] P142-7: เพิ่มเมนู "บัญชี" (group) ใน TopNav.tsx พร้อม sub-menu รายรับ + รายจ่าย
+- [ ] P142-8: เพิ่ม routes /income และ /expense ใน App.tsx
+- [ ] P142-9: Commit + Push GitHub + Checkpoint

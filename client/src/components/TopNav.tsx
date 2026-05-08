@@ -8,6 +8,7 @@ import { SECTIONS } from "@shared/const";
 import {
   AlertTriangle,
   Banknote,
+  BookOpen,
   CalendarDays,
   ChevronDown,
   ChevronRight,
@@ -16,6 +17,7 @@ import {
   LayoutDashboard,
   LogOut,
   Menu as MenuIcon,
+  Receipt,
   Settings,
   Shield,
   TrendingDown,
@@ -33,6 +35,8 @@ type MenuCode =
   | "suspected_bad_debt"
   | "bad_debt_summary"
   | "monthly_summary"
+  | "income"
+  | "expense"
   | "settings_users"
   | "settings_groups";
 
@@ -73,6 +77,16 @@ const MAIN_NAV: NavEntry[] = [
       { kind: "leaf", label: "เป้า-ยอดเก็บ", path: "/debt-report", icon: Banknote, menuCode: "debt_report" },
       { kind: "leaf", label: "หนี้สงสัยจะเสีย", path: "/suspected-bad-debt", icon: AlertTriangle, menuCode: "suspected_bad_debt" },
       { kind: "leaf", label: "หนี้เสีย", path: "/bad-debt-summary", icon: TrendingDown, menuCode: "bad_debt_summary" },
+    ],
+  },
+  {
+    kind: "group",
+    label: "บัญชี",
+    icon: BookOpen,
+    childCodes: ["income", "expense"],
+    children: [
+      { kind: "leaf", label: "รายรับ", path: "/income", icon: Receipt, menuCode: "income" },
+      { kind: "leaf", label: "รายจ่าย", path: "/expense", icon: TrendingDown, menuCode: "expense" },
     ],
   },
 ];

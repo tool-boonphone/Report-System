@@ -20,6 +20,8 @@ import SuspectedBadDebt from "./pages/SuspectedBadDebt";
 import DataLoadingScreen from "./pages/DataLoadingScreen";
 import UsersSettings from "./pages/settings/Users";
 import GroupsSettings from "./pages/settings/Groups";
+import Income from "./pages/Income";
+import Expense from "./pages/Expense";
 
 function Router() {
   return (
@@ -36,6 +38,8 @@ function Router() {
       <Route path="/suspected-bad-debt" component={SuspectedBadDebt} />
       <Route path="/bad-debt-summary" component={BadDebtSummary} />
       <Route path="/monthly-summary" component={MonthlySummary} />
+      <Route path="/income" component={Income} />
+      <Route path="/expense" component={Expense} />
       <Route path="/settings/users" component={UsersSettings} />
       <Route path="/settings/groups" component={GroupsSettings} />
       <Route path="/404" component={NotFound} />

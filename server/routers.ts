@@ -10,6 +10,7 @@ import { aiRouter } from "./routers/ai";
 import { monthlySummaryRouter } from "./routers/monthlySummary";
 import { suspectedBadDebtRouter } from "./routers/suspectedBadDebt";
 import { cacheRouter } from "./routers/cache";
+import { accountingRouter } from "./routers/accounting";
 
 export const appRouter = router({
   system: systemRouter,
@@ -23,6 +24,7 @@ export const appRouter = router({
   monthlySummary: monthlySummaryRouter,
   suspectedBadDebt: suspectedBadDebtRouter,
   cache: cacheRouter,
+  accounting: accountingRouter,
 });
 
 export type AppRouter = typeof appRouter;
