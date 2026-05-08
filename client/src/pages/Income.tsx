@@ -302,8 +302,8 @@ export default function Income() {
         </div>
 
         {/* ── Filter bar ── */}
-        <div className="bg-white border-b border-gray-200 shadow-sm">
-          <div className="max-w-screen-2xl mx-auto px-3 sm:px-4 pb-3 pt-2 flex flex-wrap items-center gap-2">
+        <div className="border-b border-gray-200 shadow-sm">
+          <div className="max-w-screen-2xl mx-auto px-3 sm:px-4 pb-3 pt-2 flex flex-wrap items-center gap-2 bg-white">
             {/* Search */}
             <div className="relative flex items-center">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
@@ -403,8 +403,8 @@ export default function Income() {
         </div>
 
         {/* ── Count + Badges ── */}
-        <div className="border-b border-gray-100 bg-gray-50">
-        <div className="max-w-screen-2xl mx-auto px-3 sm:px-4 py-2 flex flex-wrap items-center gap-2">
+        <div className="border-b border-gray-100">
+        <div className="max-w-screen-2xl mx-auto px-3 sm:px-4 py-2 flex flex-wrap items-center gap-2 bg-gray-50">
           <span className="text-sm text-gray-500">
             {total.toLocaleString()} รายการ
           </span>
