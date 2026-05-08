@@ -1,0 +1,18 @@
+{
+  "query": "\nSELECT \n  COUNT(*) as total_rows,\n  SUM(CASE WHEN paid_at IS NULL THEN 1 ELSE 0 END) as null_paid_at,\n  SUM(CASE WHEN paid_at = '' THEN 1 ELSE 0 END) as empty_paid_at,\n  SUM(CASE WHEN paid_at IS NOT NULL AND paid_at != '' THEN 1 ELSE 0 END) as has_paid_at,\n  MIN(paid_at) as min_paid_at,\n  MAX(paid_at) as max_paid_at\nFROM debt_collected_cache\nWHERE section = 'Fastfone365';\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT \n  COUNT(*) as total_rows,\n  SUM(CASE WHEN paid_at IS NULL THEN 1 ELSE 0 END) as null_paid_at,\n  SUM(CASE WHEN paid_at = '' THEN 1 ELSE 0 END) as empty_paid_at,\n  SUM(CASE WHEN paid_at IS NOT NULL AND paid_at != '' THEN 1 ELSE 0 END) as has_paid_at,\n  MIN(paid_at) as min_paid_at,\n  MAX(paid_at) as max_paid_at\nFROM debt_collected_cache\nWHERE section = 'Fastfone365';\n",
+  "rows": [
+    {
+      "total_rows": "118300",
+      "null_paid_at": "19",
+      "empty_paid_at": "0",
+      "has_paid_at": "118281",
+      "min_paid_at": "2024-08-27",
+      "max_paid_at": "2026-05-05"
+    }
+  ],
+  "messages": [],
+  "stdout": "total_rows\tnull_paid_at\tempty_paid_at\thas_paid_at\tmin_paid_at\tmax_paid_at\n118300\t19\t0\t118281\t2024-08-27\t2026-05-05\n",
+  "stderr": "",
+  "execution_time_ms": 2022
+}

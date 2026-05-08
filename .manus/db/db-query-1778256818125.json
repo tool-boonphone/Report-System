@@ -1,0 +1,31 @@
+{
+  "query": "\nSELECT \n  SUBSTRING(paid_at, 1, 4) AS period,\n  COUNT(*) as row_count,\n  SUM(CASE WHEN is_bad_debt_row = 1 THEN 0\n           WHEN is_close_row = 1 THEN 0\n           ELSE COALESCE(total_amount, 0) END) AS kw,\n  SUM(CASE WHEN is_close_row = 1 AND is_bad_debt_row = 0\n           THEN COALESCE(total_amount, 0) ELSE 0 END) AS close_amt,\n  SUM(CASE WHEN is_bad_debt_row = 1\n           THEN COALESCE(bad_debt, 0) ELSE 0 END) AS sell_amt\nFROM debt_collected_cache\nWHERE section = 'Fastfone365' AND paid_at IS NOT NULL AND paid_at != ''\nGROUP BY SUBSTRING(paid_at, 1, 4)\nORDER BY SUBSTRING(paid_at, 1, 4) ASC;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT \n  SUBSTRING(paid_at, 1, 4) AS period,\n  COUNT(*) as row_count,\n  SUM(CASE WHEN is_bad_debt_row = 1 THEN 0\n           WHEN is_close_row = 1 THEN 0\n           ELSE COALESCE(total_amount, 0) END) AS kw,\n  SUM(CASE WHEN is_close_row = 1 AND is_bad_debt_row = 0\n           THEN COALESCE(total_amount, 0) ELSE 0 END) AS close_amt,\n  SUM(CASE WHEN is_bad_debt_row = 1\n           THEN COALESCE(bad_debt, 0) ELSE 0 END) AS sell_amt\nFROM debt_collected_cache\nWHERE section = 'Fastfone365' AND paid_at IS NOT NULL AND paid_at != ''\nGROUP BY SUBSTRING(paid_at, 1, 4)\nORDER BY SUBSTRING(paid_at, 1, 4) ASC;\n",
+  "rows": [
+    {
+      "period": "2024",
+      "row_count": "5534",
+      "kw": "13978979.00",
+      "close_amt": "0.00",
+      "sell_amt": "0.00"
+    },
+    {
+      "period": "2025",
+      "row_count": "83375",
+      "kw": "195240457.60",
+      "close_amt": "0.00",
+      "sell_amt": "14442740.08"
+    },
+    {
+      "period": "2026",
+      "row_count": "29372",
+      "kw": "67843479.01",
+      "close_amt": "0.00",
+      "sell_amt": "8255671.50"
+    }
+  ],
+  "messages": [],
+  "stdout": "period\trow_count\tkw\tclose_amt\tsell_amt\n2024\t5534\t13978979.00\t0.00\t0.00\n2025\t83375\t195240457.60\t0.00\t14442740.08\n2026\t29372\t67843479.01\t0.00\t8255671.50\n",
+  "stderr": "",
+  "execution_time_ms": 2020
+}
