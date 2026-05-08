@@ -432,7 +432,9 @@ export default function DataLoadingScreen() {
 
   // ─── Auth guard ───────────────────────────────────────────────────────────
 
-  if (authLoading || !isAuthenticated) {
+  // ถ้าเริ่มโหลดแล้ว (startedRef.current) ไม่ redirect ไป login
+  // เพราะ auth.me อาจ refetch ระหว่างโหลดข้อมูล Fastfone ที่ใช้เวลานาน
+  if (!startedRef.current && (authLoading || !isAuthenticated)) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
