@@ -14,7 +14,7 @@
 import type { SectionKey } from "../../shared/const";
 import { SECTIONS } from "../../shared/const";
 import { runSectionSync, isSyncRunning } from "./runner";
-import { getLastSyncedAt, getLastErrorAt } from "./syncLog";
+import { getLastSyncedAt, getLastErrorAt, clearAllStuckSyncLogs } from "./syncLog";
 import { buildClientFromEnv } from "../api/partnerClient";
 
 /** Returns true if both base URL + credentials are present for the section. */
@@ -91,6 +91,10 @@ export async function startScheduler() {
   const now = new Date();
   const { hour: bangkokHour, daySlot } = getBangkokTimeParts(now);
   console.log(`[scheduler] started (daily at 09:00 Asia/Bangkok) — current Bangkok time: ${bangkokHour}:xx, slot: ${daySlot}`);
+
+  // On startup: clear any orphaned in_progress rows left by a previous
+  // Cloud Run instance that was killed mid-sync.
+  await clearAllStuckSyncLogs();
   _timer = setInterval(() => {
     tick().catch((err) => console.error("[scheduler] tick error:", err));
   }, 60_000);

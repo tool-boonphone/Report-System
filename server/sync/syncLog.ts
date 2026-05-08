@@ -133,6 +133,30 @@ export async function clearStuckSyncLogs(section: SectionKey): Promise<number> {
   return affectedRows;
 }
 
+/**
+ * Clear ALL in_progress sync logs across all sections.
+ * Called on server startup to clean up orphaned rows left by a previous
+ * Cloud Run instance that was killed mid-sync.
+ * Returns total number of rows cleared.
+ */
+export async function clearAllStuckSyncLogs(): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  const result = await db
+    .update(syncLogs)
+    .set({
+      status: "error",
+      finishedAt: new Date(),
+      errorMessage: "Auto-cleared on startup: previous Cloud Run instance was killed during sync",
+    })
+    .where(eq(syncLogs.status, "in_progress"));
+  const affectedRows = (result[0] as any)?.affectedRows ?? 0;
+  if (affectedRows > 0) {
+    console.log(`[syncLog] startup cleanup: cleared ${affectedRows} stuck in_progress row(s) from previous instance`);
+  }
+  return affectedRows;
+}
+
 /** Most recent successful sync for a given (section, entity). */
 export async function getLastSyncedAt(params: {
   section: SectionKey;
