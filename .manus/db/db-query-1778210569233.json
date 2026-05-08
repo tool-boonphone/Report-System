@@ -1,0 +1,130 @@
+{
+  "query": "SELECT section, entity, status, triggered_by, started_at, finished_at, current_stage, progress, error_message, row_count FROM sync_logs ORDER BY started_at DESC LIMIT 10;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT section, entity, status, triggered_by, started_at, finished_at, current_stage, progress, error_message, row_count FROM sync_logs ORDER BY started_at DESC LIMIT 10;",
+  "rows": [
+    {
+      "section": "Boonphone",
+      "entity": "customers",
+      "status": "error",
+      "triggered_by": "on-demand",
+      "started_at": "2026-05-08 03:21:12",
+      "finished_at": "2026-05-08 03:21:32",
+      "current_stage": "NULL",
+      "progress": "0",
+      "error_message": "Auto-cleared on startup: previous Cloud Run instance was killed during sync",
+      "row_count": "0"
+    },
+    {
+      "section": "Boonphone",
+      "entity": "partners",
+      "status": "success",
+      "triggered_by": "on-demand",
+      "started_at": "2026-05-08 03:21:10",
+      "finished_at": "2026-05-08 03:21:12",
+      "current_stage": "NULL",
+      "progress": "0",
+      "error_message": "NULL",
+      "row_count": "227"
+    },
+    {
+      "section": "Boonphone",
+      "entity": "all",
+      "status": "error",
+      "triggered_by": "manual",
+      "started_at": "2026-05-08 03:21:10",
+      "finished_at": "2026-05-08 03:21:32",
+      "current_stage": "customers (1/10)",
+      "progress": "22",
+      "error_message": "Auto-cleared on startup: previous Cloud Run instance was killed during sync",
+      "row_count": "0"
+    },
+    {
+      "section": "Boonphone",
+      "entity": "customers",
+      "status": "error",
+      "triggered_by": "on-demand",
+      "started_at": "2026-05-08 03:20:19",
+      "finished_at": "2026-05-08 03:20:34",
+      "current_stage": "NULL",
+      "progress": "0",
+      "error_message": "Auto-cleared on startup: previous Cloud Run instance was killed during sync",
+      "row_count": "0"
+    },
+    {
+      "section": "Boonphone",
+      "entity": "all",
+      "status": "error",
+      "triggered_by": "manual",
+      "started_at": "2026-05-08 03:20:17",
+      "finished_at": "2026-05-08 03:20:34",
+      "current_stage": "customers",
+      "progress": "20",
+      "error_message": "Auto-cleared on startup: previous Cloud Run instance was killed during sync",
+      "row_count": "0"
+    },
+    {
+      "section": "Boonphone",
+      "entity": "partners",
+      "status": "success",
+      "triggered_by": "on-demand",
+      "started_at": "2026-05-08 03:20:17",
+      "finished_at": "2026-05-08 03:20:19",
+      "current_stage": "NULL",
+      "progress": "0",
+      "error_message": "NULL",
+      "row_count": "227"
+    },
+    {
+      "section": "Fastfone365",
+      "entity": "all",
+      "status": "error",
+      "triggered_by": "cron",
+      "started_at": "2026-05-08 02:00:01",
+      "finished_at": "2026-05-08 03:14:44",
+      "current_stage": "partners",
+      "progress": "5",
+      "error_message": "Force-cleared: process killed (Cloud Run instance restart)",
+      "row_count": "0"
+    },
+    {
+      "section": "Boonphone",
+      "entity": "all",
+      "status": "error",
+      "triggered_by": "cron",
+      "started_at": "2026-05-08 02:00:01",
+      "finished_at": "2026-05-08 03:14:44",
+      "current_stage": "partners",
+      "progress": "5",
+      "error_message": "Force-cleared: process killed (Cloud Run instance restart)",
+      "row_count": "0"
+    },
+    {
+      "section": "Fastfone365",
+      "entity": "partners",
+      "status": "error",
+      "triggered_by": "on-demand",
+      "started_at": "2026-05-08 02:00:01",
+      "finished_at": "2026-05-08 03:14:44",
+      "current_stage": "NULL",
+      "progress": "0",
+      "error_message": "Force-cleared: process killed (Cloud Run instance restart)",
+      "row_count": "0"
+    },
+    {
+      "section": "Boonphone",
+      "entity": "partners",
+      "status": "error",
+      "triggered_by": "on-demand",
+      "started_at": "2026-05-08 02:00:01",
+      "finished_at": "2026-05-08 03:14:44",
+      "current_stage": "NULL",
+      "progress": "0",
+      "error_message": "Force-cleared: process killed (Cloud Run instance restart)",
+      "row_count": "0"
+    }
+  ],
+  "messages": [],
+  "stdout": "section\tentity\tstatus\ttriggered_by\tstarted_at\tfinished_at\tcurrent_stage\tprogress\terror_message\trow_count\nBoonphone\tcustomers\terror\ton-demand\t2026-05-08 03:21:12\t2026-05-08 03:21:32\tNULL\t0\tAuto-cleared on startup: previous Cloud Run instance was killed during sync\t0\nBoonphone\tpartners\tsuccess\ton-demand\t2026-05-08 03:21:10\t2026-05-08 03:21:12\tNULL\t0\tNULL\t227\nBoonphone\tall\terror\tmanual\t2026-05-08 03:21:10\t2026-05-08 03:21:32\tcustomers (1/10)\t22\tAuto-cleared on startup: previous Cloud Run instance was killed during sync\t0\nBoonphone\tcustomers\terror\ton-demand\t2026-05-08 03:20:19\t2026-05-08 03:20:34\tNULL\t0\tAuto-cleared on startup: previous Cloud Run instance was killed during sync\t0\nBoonphone\tall\terror\tmanual\t2026-05-08 03:20:17\t2026-05-08 03:20:34\tcustomers\t20\tAuto-cleared on startup: previous Cloud Run instance was killed during sync\t0\nBoonphone\tpartners\tsuccess\ton-demand\t2026-05-08 03:20:17\t2026-05-08 03:20:19\tNULL\t0\tNULL\t227\nFastfone365\tall\terror\tcron\t2026-05-08 02:00:01\t2026-05-08 03:14:44\tpartners\t5\tForce-cleared: process killed (Cloud Run instance restart)\t0\nBoonphone\tall\terror\tcron\t2026-05-08 02:00:01\t2026-05-08 03:14:44\tpartners\t5\tForce-cleared: process killed (Cloud Run instance restart)\t0\nFastfone365\tpartners\terror\ton-demand\t2026-05-08 02:00:01\t2026-05-08 03:14:44\tNULL\t0\tForce-cleared: process killed (Cloud Run instance restart)\t0\nBoonphone\tpartners\terror\ton-demand\t2026-05-08 02:00:01\t2026-05-08 03:14:44\tNULL\t0\tForce-cleared: process killed (Cloud Run instance restart)\t0\n",
+  "stderr": "",
+  "execution_time_ms": 1774
+}
