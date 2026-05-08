@@ -1,0 +1,9 @@
+{
+  "query": "\nUPDATE sync_logs \nSET finished_at = DATE_SUB(NOW(), INTERVAL 2 HOUR) \nWHERE section='Boonphone' AND entity='all' AND status='error' \nAND started_at > DATE_SUB(NOW(), INTERVAL 3 HOUR)\nORDER BY id DESC LIMIT 5;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nUPDATE sync_logs \nSET finished_at = DATE_SUB(NOW(), INTERVAL 2 HOUR) \nWHERE section='Boonphone' AND entity='all' AND status='error' \nAND started_at > DATE_SUB(NOW(), INTERVAL 3 HOUR)\nORDER BY id DESC LIMIT 5;\n",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 1807
+}

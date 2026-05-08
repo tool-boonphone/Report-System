@@ -1,0 +1,80 @@
+{
+  "query": "\nSELECT entity, status, started_at, finished_at, error_message\nFROM sync_logs \nWHERE section='Boonphone' \nORDER BY id DESC \nLIMIT 10;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT entity, status, started_at, finished_at, error_message\nFROM sync_logs \nWHERE section='Boonphone' \nORDER BY id DESC \nLIMIT 10;\n",
+  "rows": [
+    {
+      "entity": "payments",
+      "status": "success",
+      "started_at": "2026-05-08 04:56:03",
+      "finished_at": "2026-05-08 04:56:23",
+      "error_message": "NULL"
+    },
+    {
+      "entity": "customers",
+      "status": "error",
+      "started_at": "2026-05-08 04:36:46",
+      "finished_at": "2026-05-08 04:37:04",
+      "error_message": "Auto-cleared on startup: previous Cloud Run instance was killed during sync"
+    },
+    {
+      "entity": "partners",
+      "status": "success",
+      "started_at": "2026-05-08 04:36:44",
+      "finished_at": "2026-05-08 04:36:46",
+      "error_message": "NULL"
+    },
+    {
+      "entity": "all",
+      "status": "error",
+      "started_at": "2026-05-08 04:36:44",
+      "finished_at": "2026-05-08 04:37:04",
+      "error_message": "Auto-cleared on startup: previous Cloud Run instance was killed during sync"
+    },
+    {
+      "entity": "installments",
+      "status": "success",
+      "started_at": "2026-05-08 04:29:54",
+      "finished_at": "2026-05-08 04:56:03",
+      "error_message": "NULL"
+    },
+    {
+      "entity": "contracts",
+      "status": "success",
+      "started_at": "2026-05-08 04:26:18",
+      "finished_at": "2026-05-08 04:29:54",
+      "error_message": "NULL"
+    },
+    {
+      "entity": "customers",
+      "status": "success",
+      "started_at": "2026-05-08 04:25:05",
+      "finished_at": "2026-05-08 04:26:18",
+      "error_message": "NULL"
+    },
+    {
+      "entity": "partners",
+      "status": "success",
+      "started_at": "2026-05-08 04:24:55",
+      "finished_at": "2026-05-08 04:25:05",
+      "error_message": "NULL"
+    },
+    {
+      "entity": "all",
+      "status": "success",
+      "started_at": "2026-05-08 04:24:55",
+      "finished_at": "2026-05-08 04:56:23",
+      "error_message": "NULL"
+    },
+    {
+      "entity": "customers",
+      "status": "error",
+      "started_at": "2026-05-08 04:22:10",
+      "finished_at": "2026-05-08 04:22:35",
+      "error_message": "Auto-cleared on startup: previous Cloud Run instance was killed during sync"
+    }
+  ],
+  "messages": [],
+  "stdout": "entity\tstatus\tstarted_at\tfinished_at\terror_message\npayments\tsuccess\t2026-05-08 04:56:03\t2026-05-08 04:56:23\tNULL\ncustomers\terror\t2026-05-08 04:36:46\t2026-05-08 04:37:04\tAuto-cleared on startup: previous Cloud Run instance was killed during sync\npartners\tsuccess\t2026-05-08 04:36:44\t2026-05-08 04:36:46\tNULL\nall\terror\t2026-05-08 04:36:44\t2026-05-08 04:37:04\tAuto-cleared on startup: previous Cloud Run instance was killed during sync\ninstallments\tsuccess\t2026-05-08 04:29:54\t2026-05-08 04:56:03\tNULL\ncontracts\tsuccess\t2026-05-08 04:26:18\t2026-05-08 04:29:54\tNULL\ncustomers\tsuccess\t2026-05-08 04:25:05\t2026-05-08 04:26:18\tNULL\npartners\tsuccess\t2026-05-08 04:24:55\t2026-05-08 04:25:05\tNULL\nall\tsuccess\t2026-05-08 04:24:55\t2026-05-08 04:56:23\tNULL\ncustomers\terror\t2026-05-08 04:22:10\t2026-05-08 04:22:35\tAuto-cleared on startup: previous Cloud Run instance was killed during sync\n",
+  "stderr": "",
+  "execution_time_ms": 1688
+}

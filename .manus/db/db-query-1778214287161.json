@@ -1,0 +1,15 @@
+{
+  "query": "\nSELECT s.id as session_id, u.name, u.role \nFROM app_sessions s \nJOIN users u ON s.user_id = u.id \nWHERE u.role = 'admin'\nAND s.expires_at > NOW()\nORDER BY s.created_at DESC \nLIMIT 1;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT s.id as session_id, u.name, u.role \nFROM app_sessions s \nJOIN users u ON s.user_id = u.id \nWHERE u.role = 'admin'\nAND s.expires_at > NOW()\nORDER BY s.created_at DESC \nLIMIT 1;\n",
+  "rows": [
+    {
+      "session_id": "we_pGBNQegObZuR0CiGlEw8ZysQWHepw73tq3t2OGL7pud4_",
+      "name": "BoonPhone Admin",
+      "role": "admin"
+    }
+  ],
+  "messages": [],
+  "stdout": "session_id\tname\trole\nwe_pGBNQegObZuR0CiGlEw8ZysQWHepw73tq3t2OGL7pud4_\tBoonPhone Admin\tadmin\n",
+  "stderr": "",
+  "execution_time_ms": 1734
+}
