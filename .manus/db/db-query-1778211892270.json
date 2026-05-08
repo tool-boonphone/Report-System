@@ -1,0 +1,65 @@
+{
+  "query": "\nSELECT id, section, entity, status, progress, row_count, \n       started_at, finished_at, current_stage\nFROM sync_logs \nWHERE section='Boonphone' AND entity='all' AND status='success'\nORDER BY id DESC \nLIMIT 5;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT id, section, entity, status, progress, row_count, \n       started_at, finished_at, current_stage\nFROM sync_logs \nWHERE section='Boonphone' AND entity='all' AND status='success'\nORDER BY id DESC \nLIMIT 5;\n",
+  "rows": [
+    {
+      "id": "960002",
+      "section": "Boonphone",
+      "entity": "all",
+      "status": "success",
+      "progress": "0",
+      "row_count": "61580",
+      "started_at": "2026-05-05 21:01:00",
+      "finished_at": "2026-05-05 21:26:37",
+      "current_stage": "NULL"
+    },
+    {
+      "id": "660009",
+      "section": "Boonphone",
+      "entity": "all",
+      "status": "success",
+      "progress": "0",
+      "row_count": "57794",
+      "started_at": "2026-05-01 00:54:32",
+      "finished_at": "2026-05-01 01:17:15",
+      "current_stage": "NULL"
+    },
+    {
+      "id": "540006",
+      "section": "Boonphone",
+      "entity": "all",
+      "status": "success",
+      "progress": "0",
+      "row_count": "52874",
+      "started_at": "2026-04-29 10:00:10",
+      "finished_at": "2026-04-29 10:04:03",
+      "current_stage": "NULL"
+    },
+    {
+      "id": "510001",
+      "section": "Boonphone",
+      "entity": "all",
+      "status": "success",
+      "progress": "0",
+      "row_count": "52170",
+      "started_at": "2026-04-28 10:00:03",
+      "finished_at": "2026-04-28 10:03:41",
+      "current_stage": "NULL"
+    },
+    {
+      "id": "450001",
+      "section": "Boonphone",
+      "entity": "all",
+      "status": "success",
+      "progress": "0",
+      "row_count": "51881",
+      "started_at": "2026-04-27 22:54:26",
+      "finished_at": "2026-04-27 23:01:17",
+      "current_stage": "NULL"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tsection\tentity\tstatus\tprogress\trow_count\tstarted_at\tfinished_at\tcurrent_stage\n960002\tBoonphone\tall\tsuccess\t0\t61580\t2026-05-05 21:01:00\t2026-05-05 21:26:37\tNULL\n660009\tBoonphone\tall\tsuccess\t0\t57794\t2026-05-01 00:54:32\t2026-05-01 01:17:15\tNULL\n540006\tBoonphone\tall\tsuccess\t0\t52874\t2026-04-29 10:00:10\t2026-04-29 10:04:03\tNULL\n510001\tBoonphone\tall\tsuccess\t0\t52170\t2026-04-28 10:00:03\t2026-04-28 10:03:41\tNULL\n450001\tBoonphone\tall\tsuccess\t0\t51881\t2026-04-27 22:54:26\t2026-04-27 23:01:17\tNULL\n",
+  "stderr": "",
+  "execution_time_ms": 1822
+}

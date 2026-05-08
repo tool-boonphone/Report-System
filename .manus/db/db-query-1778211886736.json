@@ -1,0 +1,120 @@
+{
+  "query": "\nSELECT id, section, entity, status, progress, row_count, \n       started_at, finished_at, current_stage\nFROM sync_logs \nWHERE section='Boonphone' AND status='success'\nORDER BY id DESC \nLIMIT 10;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT id, section, entity, status, progress, row_count, \n       started_at, finished_at, current_stage\nFROM sync_logs \nWHERE section='Boonphone' AND status='success'\nORDER BY id DESC \nLIMIT 10;\n",
+  "rows": [
+    {
+      "id": "1140015",
+      "section": "Boonphone",
+      "entity": "partners",
+      "status": "success",
+      "progress": "0",
+      "row_count": "227",
+      "started_at": "2026-05-08 03:41:54",
+      "finished_at": "2026-05-08 03:42:04",
+      "current_stage": "NULL"
+    },
+    {
+      "id": "1140012",
+      "section": "Boonphone",
+      "entity": "partners",
+      "status": "success",
+      "progress": "0",
+      "row_count": "227",
+      "started_at": "2026-05-08 03:29:44",
+      "finished_at": "2026-05-08 03:29:56",
+      "current_stage": "NULL"
+    },
+    {
+      "id": "1140009",
+      "section": "Boonphone",
+      "entity": "partners",
+      "status": "success",
+      "progress": "0",
+      "row_count": "227",
+      "started_at": "2026-05-08 03:21:10",
+      "finished_at": "2026-05-08 03:21:12",
+      "current_stage": "NULL"
+    },
+    {
+      "id": "1140006",
+      "section": "Boonphone",
+      "entity": "partners",
+      "status": "success",
+      "progress": "0",
+      "row_count": "227",
+      "started_at": "2026-05-08 03:20:17",
+      "finished_at": "2026-05-08 03:20:19",
+      "current_stage": "NULL"
+    },
+    {
+      "id": "1110016",
+      "section": "Boonphone",
+      "entity": "partners",
+      "status": "success",
+      "progress": "0",
+      "row_count": "227",
+      "started_at": "2026-05-07 19:41:54",
+      "finished_at": "2026-05-07 19:41:56",
+      "current_stage": "NULL"
+    },
+    {
+      "id": "1110013",
+      "section": "Boonphone",
+      "entity": "partners",
+      "status": "success",
+      "progress": "0",
+      "row_count": "227",
+      "started_at": "2026-05-07 19:11:12",
+      "finished_at": "2026-05-07 19:11:15",
+      "current_stage": "NULL"
+    },
+    {
+      "id": "1110008",
+      "section": "Boonphone",
+      "entity": "partners",
+      "status": "success",
+      "progress": "0",
+      "row_count": "227",
+      "started_at": "2026-05-07 18:12:31",
+      "finished_at": "2026-05-07 18:12:33",
+      "current_stage": "NULL"
+    },
+    {
+      "id": "1110005",
+      "section": "Boonphone",
+      "entity": "partners",
+      "status": "success",
+      "progress": "0",
+      "row_count": "227",
+      "started_at": "2026-05-07 17:02:09",
+      "finished_at": "2026-05-07 17:02:16",
+      "current_stage": "NULL"
+    },
+    {
+      "id": "1110002",
+      "section": "Boonphone",
+      "entity": "partners",
+      "status": "success",
+      "progress": "0",
+      "row_count": "227",
+      "started_at": "2026-05-07 16:25:54",
+      "finished_at": "2026-05-07 16:26:02",
+      "current_stage": "NULL"
+    },
+    {
+      "id": "1080002",
+      "section": "Boonphone",
+      "entity": "partners",
+      "status": "success",
+      "progress": "0",
+      "row_count": "227",
+      "started_at": "2026-05-07 10:26:02",
+      "finished_at": "2026-05-07 10:26:13",
+      "current_stage": "NULL"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tsection\tentity\tstatus\tprogress\trow_count\tstarted_at\tfinished_at\tcurrent_stage\n1140015\tBoonphone\tpartners\tsuccess\t0\t227\t2026-05-08 03:41:54\t2026-05-08 03:42:04\tNULL\n1140012\tBoonphone\tpartners\tsuccess\t0\t227\t2026-05-08 03:29:44\t2026-05-08 03:29:56\tNULL\n1140009\tBoonphone\tpartners\tsuccess\t0\t227\t2026-05-08 03:21:10\t2026-05-08 03:21:12\tNULL\n1140006\tBoonphone\tpartners\tsuccess\t0\t227\t2026-05-08 03:20:17\t2026-05-08 03:20:19\tNULL\n1110016\tBoonphone\tpartners\tsuccess\t0\t227\t2026-05-07 19:41:54\t2026-05-07 19:41:56\tNULL\n1110013\tBoonphone\tpartners\tsuccess\t0\t227\t2026-05-07 19:11:12\t2026-05-07 19:11:15\tNULL\n1110008\tBoonphone\tpartners\tsuccess\t0\t227\t2026-05-07 18:12:31\t2026-05-07 18:12:33\tNULL\n1110005\tBoonphone\tpartners\tsuccess\t0\t227\t2026-05-07 17:02:09\t2026-05-07 17:02:16\tNULL\n1110002\tBoonphone\tpartners\tsuccess\t0\t227\t2026-05-07 16:25:54\t2026-05-07 16:26:02\tNULL\n1080002\tBoonphone\tpartners\tsuccess\t0\t227\t2026-05-07 10:26:02\t2026-05-07 10:26:13\tNULL\n",
+  "stderr": "",
+  "execution_time_ms": 1786
+}
