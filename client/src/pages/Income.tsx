@@ -439,6 +439,7 @@ export default function Income() {
 
         {/* ── Table ── */}
         <div className="flex-1 overflow-auto">
+          <div className="max-w-4xl mx-auto px-4 py-2">
           {isLoading ? (
             <div className="flex items-center justify-center py-20">
               <Spinner className="w-6 h-6 text-blue-500" />
@@ -511,6 +512,7 @@ export default function Income() {
               </tbody>
             </table>
           )}
+          </div>
         </div>
 
         {/* ── Pagination ── */}
