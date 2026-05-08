@@ -11,6 +11,8 @@ import {
   listExpense,
   getIncomeSummary,
   getExpenseSummary,
+  getIncomeSummaryByPeriod,
+  getExpenseSummaryByPeriod,
   type IncomeType,
   type ExpenseType,
 } from "../accountingDb";
@@ -163,6 +165,54 @@ export const accountingRouter = router({
       );
       const arr: any[] = (result as any)[0] ?? result;
       return (arr ?? []).map((r: any) => r.updated_by).filter(Boolean) as string[];
+    }),
+
+  /**
+   * สรุปรายรับ แยกตามปี หรือ เดือน
+   */
+  getIncomeSummaryByPeriod: protectedProcedure
+    .input(
+      z.object({
+        section: z.string(),
+        groupBy: z.enum(["year", "month"]),
+        years: z.array(z.number().int()).optional(),
+        months: z.array(z.number().int().min(1).max(12)).optional(),
+      }),
+    )
+    .query(async ({ input }) => {
+      const { section, groupBy, years, months } = input;
+      if (section !== "Boonphone" && section !== "Fastfone365") return [];
+      try {
+        return await getIncomeSummaryByPeriod({ section, groupBy, years, months });
+      } catch (e: any) {
+        const mysqlMsg = e?.cause?.message ?? e?.cause?.sqlMessage ?? e?.message ?? String(e);
+        console.error('[getIncomeSummaryByPeriod] error:', mysqlMsg);
+        throw e;
+      }
+    }),
+
+  /**
+   * สรุปรายจ่าย แยกตามปี หรือ เดือน
+   */
+  getExpenseSummaryByPeriod: protectedProcedure
+    .input(
+      z.object({
+        section: z.string(),
+        groupBy: z.enum(["year", "month"]),
+        years: z.array(z.number().int()).optional(),
+        months: z.array(z.number().int().min(1).max(12)).optional(),
+      }),
+    )
+    .query(async ({ input }) => {
+      const { section, groupBy, years, months } = input;
+      if (section !== "Boonphone" && section !== "Fastfone365") return [];
+      try {
+        return await getExpenseSummaryByPeriod({ section, groupBy, years, months });
+      } catch (e: any) {
+        const mysqlMsg = e?.cause?.message ?? e?.cause?.sqlMessage ?? e?.message ?? String(e);
+        console.error('[getExpenseSummaryByPeriod] error:', mysqlMsg);
+        throw e;
+      }
     }),
 });
 

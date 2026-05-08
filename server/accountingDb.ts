@@ -432,3 +432,139 @@ export async function getExpenseSummary(
   const total = Number(arr[0]?.total ?? 0);
   return { "ค่าคอมมิชชั่น": total, total };
 }
+
+// ─── Income Summary (Yearly / Monthly) ────────────────────────────────────────
+
+export interface IncomeSummaryRow {
+  period: string;          // "2024" หรือ "2024-01"
+  "ค่างวด": number;
+  "ปิดยอด": number;
+  "ขายเครื่อง": number;
+  total: number;
+}
+
+export interface IncomeSummaryParams {
+  section: SectionKey;
+  groupBy: "year" | "month";
+  years?: number[];          // filter ปี (multi)
+  months?: number[];         // filter เดือน (multi, 1-12)
+}
+
+export async function getIncomeSummaryByPeriod(
+  params: IncomeSummaryParams,
+): Promise<IncomeSummaryRow[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const { section, groupBy, years, months } = params;
+  const esc = (v: string) => v.replace(/'/g, "''");
+
+  const conditions: string[] = [`section = '${esc(section)}'`];
+  if (years && years.length > 0) {
+    conditions.push(`SUBSTRING(paid_at, 1, 4) IN (${years.map(y => "'" + y + "'").join(",")})`);
+  }
+  if (months && months.length > 0) {
+    conditions.push(`SUBSTRING(paid_at, 6, 2) IN (${months.map(m => "'" + String(m).padStart(2,'0') + "'").join(",")})`);
+  }
+  const whereStr = conditions.join(" AND ");
+
+  const periodExpr =
+    groupBy === "year"
+      ? `SUBSTRING(paid_at, 1, 4)`
+      : `SUBSTRING(paid_at, 1, 7)`;
+
+  const querySql = `
+    SELECT
+      ${periodExpr} AS period,
+      SUM(CASE WHEN is_bad_debt_row = 1 THEN 0
+               WHEN is_close_row = 1 THEN 0
+               ELSE COALESCE(total_amount, 0) END) AS \`ค่างวด\`,
+      SUM(CASE WHEN is_close_row = 1 AND is_bad_debt_row = 0
+               THEN COALESCE(total_amount, 0) ELSE 0 END) AS \`ปิดยอด\`,
+      SUM(CASE WHEN is_bad_debt_row = 1
+               THEN COALESCE(bad_debt, 0) ELSE 0 END) AS \`ขายเครื่อง\`
+    FROM debt_collected_cache
+    WHERE ${whereStr} AND paid_at IS NOT NULL
+    GROUP BY period
+    ORDER BY period ${groupBy === "year" ? "DESC" : "DESC"}
+  `;
+
+  const result = await db.execute(sql.raw(querySql));
+  const arr: any[] = (result as any)[0] ?? result;
+  return (arr ?? []).map((r: any) => {
+    const kw = Number(r["ค่างวด"] ?? 0);
+    const close = Number(r["ปิดยอด"] ?? 0);
+    const sell = Number(r["ขายเครื่อง"] ?? 0);
+    return {
+      period: r.period ?? "",
+      "ค่างวด": kw,
+      "ปิดยอด": close,
+      "ขายเครื่อง": sell,
+      total: kw + close + sell,
+    };
+  });
+}
+
+// ─── Expense Summary (Yearly / Monthly) ───────────────────────────────────────
+
+export interface ExpenseSummaryRow {
+  period: string;
+  "ค่าคอมมิชชั่น": number;
+  total: number;
+}
+
+export interface ExpenseSummaryParams {
+  section: SectionKey;
+  groupBy: "year" | "month";
+  years?: number[];
+  months?: number[];
+}
+
+export async function getExpenseSummaryByPeriod(
+  params: ExpenseSummaryParams,
+): Promise<ExpenseSummaryRow[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const { section, groupBy, years, months } = params;
+  const esc = (v: string) => v.replace(/'/g, "''");
+
+  const conditions: string[] = [
+    `c.section = '${esc(section)}'`,
+    `c.commission_net IS NOT NULL`,
+    `c.commission_net > 0`,
+    `c.approve_date IS NOT NULL`,
+  ];
+  if (years && years.length > 0) {
+    conditions.push(`SUBSTRING(c.approve_date, 1, 4) IN (${years.map(y => "'" + y + "'").join(",")})`);
+  }
+  if (months && months.length > 0) {
+    conditions.push(`SUBSTRING(c.approve_date, 6, 2) IN (${months.map(m => "'" + String(m).padStart(2,'0') + "'").join(",")})`);
+  }
+  const whereStr = conditions.join(" AND ");
+
+  const periodExpr =
+    groupBy === "year"
+      ? `SUBSTRING(c.approve_date, 1, 4)`
+      : `SUBSTRING(c.approve_date, 1, 7)`;
+
+  const querySql = `
+    SELECT
+      ${periodExpr} AS period,
+      SUM(COALESCE(c.commission_net, 0)) AS \`ค่าคอมมิชชั่น\`
+    FROM contracts c
+    WHERE ${whereStr}
+    GROUP BY period
+    ORDER BY period DESC
+  `;
+
+  const result = await db.execute(sql.raw(querySql));
+  const arr: any[] = (result as any)[0] ?? result;
+  return (arr ?? []).map((r: any) => {
+    const comm = Number(r["ค่าคอมมิชชั่น"] ?? 0);
+    return {
+      period: r.period ?? "",
+      "ค่าคอมมิชชั่น": comm,
+      total: comm,
+    };
+  });
+}
+
