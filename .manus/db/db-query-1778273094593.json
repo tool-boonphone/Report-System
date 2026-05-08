@@ -1,0 +1,50 @@
+{
+  "query": "\nSELECT \n  DATE(pt.paid_at) AS day,\n  SUM(CAST(COALESCE(pt.amount, 0) AS DECIMAL(18,2))) AS total\nFROM payment_transactions pt\nWHERE pt.section = 'Fastfone365'\n  AND JSON_EXTRACT(pt.raw_json, '$.source') IS NULL\n  AND pt.paid_at >= '2026-04-21'\n  AND pt.paid_at < '2026-05-01'\n  AND pt.id = (\n    SELECT MIN(pt_d.id)\n    FROM payment_transactions pt_d\n    WHERE pt_d.section = pt.section\n      AND pt_d.contract_no = pt.contract_no\n      AND pt_d.paid_at = pt.paid_at\n      AND pt_d.amount = pt.amount\n      AND JSON_EXTRACT(pt_d.raw_json, '$.source') IS NULL\n  )\nGROUP BY DATE(pt.paid_at)\nORDER BY day\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT \n  DATE(pt.paid_at) AS day,\n  SUM(CAST(COALESCE(pt.amount, 0) AS DECIMAL(18,2))) AS total\nFROM payment_transactions pt\nWHERE pt.section = 'Fastfone365'\n  AND JSON_EXTRACT(pt.raw_json, '$.source') IS NULL\n  AND pt.paid_at >= '2026-04-21'\n  AND pt.paid_at < '2026-05-01'\n  AND pt.id = (\n    SELECT MIN(pt_d.id)\n    FROM payment_transactions pt_d\n    WHERE pt_d.section = pt.section\n      AND pt_d.contract_no = pt.contract_no\n      AND pt_d.paid_at = pt.paid_at\n      AND pt_d.amount = pt.amount\n      AND JSON_EXTRACT(pt_d.raw_json, '$.source') IS NULL\n  )\nGROUP BY DATE(pt.paid_at)\nORDER BY day\n",
+  "rows": [
+    {
+      "day": "2026-04-21",
+      "total": "370059.40"
+    },
+    {
+      "day": "2026-04-22",
+      "total": "283143.75"
+    },
+    {
+      "day": "2026-04-23",
+      "total": "292510.75"
+    },
+    {
+      "day": "2026-04-24",
+      "total": "474122.20"
+    },
+    {
+      "day": "2026-04-25",
+      "total": "679024.00"
+    },
+    {
+      "day": "2026-04-26",
+      "total": "271447.00"
+    },
+    {
+      "day": "2026-04-27",
+      "total": "458875.00"
+    },
+    {
+      "day": "2026-04-28",
+      "total": "461123.20"
+    },
+    {
+      "day": "2026-04-29",
+      "total": "351586.00"
+    },
+    {
+      "day": "2026-04-30",
+      "total": "1609151.00"
+    }
+  ],
+  "messages": [],
+  "stdout": "day\ttotal\n2026-04-21\t370059.40\n2026-04-22\t283143.75\n2026-04-23\t292510.75\n2026-04-24\t474122.20\n2026-04-25\t679024.00\n2026-04-26\t271447.00\n2026-04-27\t458875.00\n2026-04-28\t461123.20\n2026-04-29\t351586.00\n2026-04-30\t1609151.00\n",
+  "stderr": "",
+  "execution_time_ms": 4471
+}

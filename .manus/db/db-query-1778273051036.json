@@ -1,0 +1,9 @@
+{
+  "query": "\nSELECT \n  DATE(pt.paid_at) AS day,\n  SUM(CAST(COALESCE(pt.amount, 0) AS DECIMAL(18,2))) AS total\nFROM payment_transactions pt\nWHERE pt.section = 'fastfone'\n  AND JSON_EXTRACT(pt.raw_json, '$.source') IS NULL\n  AND pt.paid_at >= '2026-04-01'\n  AND pt.paid_at < '2026-05-01'\n  AND pt.id = (\n    SELECT MIN(pt_d.id)\n    FROM payment_transactions pt_d\n    WHERE pt_d.section = pt.section\n      AND pt_d.contract_no = pt.contract_no\n      AND pt_d.paid_at = pt.paid_at\n      AND pt_d.amount = pt.amount\n      AND JSON_EXTRACT(pt_d.raw_json, '$.source') IS NULL\n  )\nGROUP BY DATE(pt.paid_at)\nORDER BY day\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT \n  DATE(pt.paid_at) AS day,\n  SUM(CAST(COALESCE(pt.amount, 0) AS DECIMAL(18,2))) AS total\nFROM payment_transactions pt\nWHERE pt.section = 'fastfone'\n  AND JSON_EXTRACT(pt.raw_json, '$.source') IS NULL\n  AND pt.paid_at >= '2026-04-01'\n  AND pt.paid_at < '2026-05-01'\n  AND pt.id = (\n    SELECT MIN(pt_d.id)\n    FROM payment_transactions pt_d\n    WHERE pt_d.section = pt.section\n      AND pt_d.contract_no = pt.contract_no\n      AND pt_d.paid_at = pt.paid_at\n      AND pt_d.amount = pt.amount\n      AND JSON_EXTRACT(pt_d.raw_json, '$.source') IS NULL\n  )\nGROUP BY DATE(pt.paid_at)\nORDER BY day\n",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 4385
+}

@@ -1,0 +1,14 @@
+{
+  "query": "\nSELECT \n  COUNT(*) AS cnt,\n  SUM(CAST(COALESCE(pt.amount, 0) AS DECIMAL(18,2))) AS total\nFROM payment_transactions pt\nWHERE pt.section = 'Fastfone365'\n  AND JSON_EXTRACT(pt.raw_json, '$.source') IS NULL\n  AND pt.paid_at >= '2026-04-01'\n  AND pt.paid_at < '2026-05-01'\n  AND pt.synced_at < '2026-05-06 00:00:00'\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT \n  COUNT(*) AS cnt,\n  SUM(CAST(COALESCE(pt.amount, 0) AS DECIMAL(18,2))) AS total\nFROM payment_transactions pt\nWHERE pt.section = 'Fastfone365'\n  AND JSON_EXTRACT(pt.raw_json, '$.source') IS NULL\n  AND pt.paid_at >= '2026-04-01'\n  AND pt.paid_at < '2026-05-01'\n  AND pt.synced_at < '2026-05-06 00:00:00'\n",
+  "rows": [
+    {
+      "cnt": "1",
+      "total": "5570.00"
+    }
+  ],
+  "messages": [],
+  "stdout": "cnt\ttotal\n1\t5570.00\n",
+  "stderr": "",
+  "execution_time_ms": 2017
+}

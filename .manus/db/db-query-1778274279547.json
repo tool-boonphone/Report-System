@@ -1,0 +1,90 @@
+{
+  "query": "\nSELECT \n  pt.id,\n  pt.external_id,\n  pt.contract_no,\n  DATE(pt.paid_at) AS paid_date,\n  pt.amount,\n  pt.synced_at\nFROM payment_transactions pt\nWHERE pt.section = 'Fastfone365'\n  AND JSON_EXTRACT(pt.raw_json, '$.source') IS NULL\n  AND pt.paid_at >= '2026-04-01'\n  AND pt.paid_at < '2026-05-01'\nORDER BY pt.id DESC\nLIMIT 10\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT \n  pt.id,\n  pt.external_id,\n  pt.contract_no,\n  DATE(pt.paid_at) AS paid_date,\n  pt.amount,\n  pt.synced_at\nFROM payment_transactions pt\nWHERE pt.section = 'Fastfone365'\n  AND JSON_EXTRACT(pt.raw_json, '$.source') IS NULL\n  AND pt.paid_at >= '2026-04-01'\n  AND pt.paid_at < '2026-05-01'\nORDER BY pt.id DESC\nLIMIT 10\n",
+  "rows": [
+    {
+      "id": "964061",
+      "external_id": "124121",
+      "contract_no": "CT1225-PTE012-19633-01",
+      "paid_date": "2026-04-16",
+      "amount": "500.00",
+      "synced_at": "2026-05-06 03:08:33"
+    },
+    {
+      "id": "963516",
+      "external_id": "124006",
+      "contract_no": "CT0825-RYG001-14396-01",
+      "paid_date": "2026-04-20",
+      "amount": "3145.00",
+      "synced_at": "2026-05-06 03:08:24"
+    },
+    {
+      "id": "962953",
+      "external_id": "123944",
+      "contract_no": "CT0126-RBR008-21284-01",
+      "paid_date": "2026-04-22",
+      "amount": "150.00",
+      "synced_at": "2026-05-06 03:08:14"
+    },
+    {
+      "id": "962806",
+      "external_id": "123212",
+      "contract_no": "CT0126-NBI017-21413-04",
+      "paid_date": "2026-04-23",
+      "amount": "5770.00",
+      "synced_at": "2026-05-06 03:08:14"
+    },
+    {
+      "id": "962082",
+      "external_id": "124257",
+      "contract_no": "CT0126-PTE002-21181-01",
+      "paid_date": "2026-04-27",
+      "amount": "2164.00",
+      "synced_at": "2026-05-06 03:08:13"
+    },
+    {
+      "id": "962001",
+      "external_id": "123174",
+      "contract_no": "CT0126-SBR003-21711-01",
+      "paid_date": "2026-04-28",
+      "amount": "20.00",
+      "synced_at": "2026-05-06 03:08:13"
+    },
+    {
+      "id": "961861",
+      "external_id": "122753",
+      "contract_no": "CT1025-PRI001-17827-01",
+      "paid_date": "2026-04-28",
+      "amount": "2846.00",
+      "synced_at": "2026-05-06 03:08:04"
+    },
+    {
+      "id": "961826",
+      "external_id": "122632",
+      "contract_no": "CT0126-PBI006-21223-01",
+      "paid_date": "2026-04-28",
+      "amount": "1268.00",
+      "synced_at": "2026-05-06 03:08:04"
+    },
+    {
+      "id": "961769",
+      "external_id": "122646",
+      "contract_no": "CT0825-RYG001-14654-01",
+      "paid_date": "2026-04-29",
+      "amount": "3277.00",
+      "synced_at": "2026-05-06 03:08:04"
+    },
+    {
+      "id": "961725",
+      "external_id": "122878",
+      "contract_no": "CT1025-KPT001-17736-01",
+      "paid_date": "2026-04-29",
+      "amount": "4111.00",
+      "synced_at": "2026-05-06 03:08:04"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\texternal_id\tcontract_no\tpaid_date\tamount\tsynced_at\n964061\t124121\tCT1225-PTE012-19633-01\t2026-04-16\t500.00\t2026-05-06 03:08:33\n963516\t124006\tCT0825-RYG001-14396-01\t2026-04-20\t3145.00\t2026-05-06 03:08:24\n962953\t123944\tCT0126-RBR008-21284-01\t2026-04-22\t150.00\t2026-05-06 03:08:14\n962806\t123212\tCT0126-NBI017-21413-04\t2026-04-23\t5770.00\t2026-05-06 03:08:14\n962082\t124257\tCT0126-PTE002-21181-01\t2026-04-27\t2164.00\t2026-05-06 03:08:13\n962001\t123174\tCT0126-SBR003-21711-01\t2026-04-28\t20.00\t2026-05-06 03:08:13\n961861\t122753\tCT1025-PRI001-17827-01\t2026-04-28\t2846.00\t2026-05-06 03:08:04\n961826\t122632\tCT0126-PBI006-21223-01\t2026-04-28\t1268.00\t2026-05-06 03:08:04\n961769\t122646\tCT0825-RYG001-14654-01\t2026-04-29\t3277.00\t2026-05-06 03:08:04\n961725\t122878\tCT1025-KPT001-17736-01\t2026-04-29\t4111.00\t2026-05-06 03:08:04\n",
+  "stderr": "",
+  "execution_time_ms": 1820
+}

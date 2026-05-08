@@ -1,0 +1,28 @@
+{
+  "query": "\nSELECT pt.id, pt.external_id, pt.contract_no, DATE(pt.paid_at) AS paid_date, pt.amount, pt.synced_at,\n       JSON_EXTRACT(pt.raw_json, '$.source') AS source_val\nFROM payment_transactions pt\nWHERE pt.section = 'Fastfone365'\n  AND pt.contract_no = 'CT0126-NBI017-21413-04'\n  AND pt.paid_at >= '2026-04-23'\n  AND pt.paid_at < '2026-04-24'\nORDER BY pt.id ASC\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT pt.id, pt.external_id, pt.contract_no, DATE(pt.paid_at) AS paid_date, pt.amount, pt.synced_at,\n       JSON_EXTRACT(pt.raw_json, '$.source') AS source_val\nFROM payment_transactions pt\nWHERE pt.section = 'Fastfone365'\n  AND pt.contract_no = 'CT0126-NBI017-21413-04'\n  AND pt.paid_at >= '2026-04-23'\n  AND pt.paid_at < '2026-04-24'\nORDER BY pt.id ASC\n",
+  "rows": [
+    {
+      "id": "390170",
+      "external_id": "121575",
+      "contract_no": "CT0126-NBI017-21413-04",
+      "paid_date": "2026-04-23",
+      "amount": "5570.00",
+      "synced_at": "2026-04-29 21:09:19",
+      "source_val": "NULL"
+    },
+    {
+      "id": "962806",
+      "external_id": "123212",
+      "contract_no": "CT0126-NBI017-21413-04",
+      "paid_date": "2026-04-23",
+      "amount": "5770.00",
+      "synced_at": "2026-05-06 03:08:14",
+      "source_val": "NULL"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\texternal_id\tcontract_no\tpaid_date\tamount\tsynced_at\tsource_val\n390170\t121575\tCT0126-NBI017-21413-04\t2026-04-23\t5570.00\t2026-04-29 21:09:19\tNULL\n962806\t123212\tCT0126-NBI017-21413-04\t2026-04-23\t5770.00\t2026-05-06 03:08:14\tNULL\n",
+  "stderr": "",
+  "execution_time_ms": 1721
+}

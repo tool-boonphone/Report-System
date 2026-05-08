@@ -1,0 +1,14 @@
+{
+  "query": "\nSELECT \n  SUM(CAST(COALESCE(pt.amount, 0) AS DECIMAL(18,2))) AS grand_total,\n  COUNT(*) AS row_count\nFROM payment_transactions pt\nWHERE pt.section = 'Fastfone365'\n  AND JSON_EXTRACT(pt.raw_json, '$.source') IS NULL\n  AND pt.paid_at >= '2026-04-01'\n  AND pt.paid_at < '2026-05-01'\n  AND NOT (\n    pt.external_id LIKE 'pay-%'\n    AND EXISTS (\n      SELECT 1 FROM payment_transactions pt_new\n      WHERE pt_new.section = pt.section\n        AND pt_new.contract_no = pt.contract_no\n        AND pt_new.paid_at = pt.paid_at\n        AND pt_new.amount = pt.amount\n        AND pt_new.external_id NOT LIKE 'pay-%'\n        AND JSON_EXTRACT(pt_new.raw_json, '$.source') IS NULL\n    )\n  )\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT \n  SUM(CAST(COALESCE(pt.amount, 0) AS DECIMAL(18,2))) AS grand_total,\n  COUNT(*) AS row_count\nFROM payment_transactions pt\nWHERE pt.section = 'Fastfone365'\n  AND JSON_EXTRACT(pt.raw_json, '$.source') IS NULL\n  AND pt.paid_at >= '2026-04-01'\n  AND pt.paid_at < '2026-05-01'\n  AND NOT (\n    pt.external_id LIKE 'pay-%'\n    AND EXISTS (\n      SELECT 1 FROM payment_transactions pt_new\n      WHERE pt_new.section = pt.section\n        AND pt_new.contract_no = pt.contract_no\n        AND pt_new.paid_at = pt.paid_at\n        AND pt_new.amount = pt.amount\n        AND pt_new.external_id NOT LIKE 'pay-%'\n        AND JSON_EXTRACT(pt_new.raw_json, '$.source') IS NULL\n    )\n  )\n",
+  "rows": [
+    {
+      "grand_total": "15329550.00",
+      "row_count": "6233"
+    }
+  ],
+  "messages": [],
+  "stdout": "grand_total\trow_count\n15329550.00\t6233\n",
+  "stderr": "",
+  "execution_time_ms": 2241
+}

@@ -1,0 +1,130 @@
+{
+  "query": "\nSELECT \n  pt.id,\n  pt.external_id,\n  pt.contract_no,\n  pt.paid_at,\n  pt.amount,\n  pt.synced_at\nFROM payment_transactions pt\nWHERE pt.section = 'Fastfone365'\n  AND pt.contract_no IN ('CT1225-UTT004-19554-01', 'CT0925-PBI004-16015-01')\n  AND pt.paid_at >= '2026-04-01'\n  AND pt.paid_at < '2026-05-01'\n  AND JSON_EXTRACT(pt.raw_json, '$.source') IS NULL\nORDER BY pt.contract_no, pt.paid_at, pt.id\nLIMIT 20\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT \n  pt.id,\n  pt.external_id,\n  pt.contract_no,\n  pt.paid_at,\n  pt.amount,\n  pt.synced_at\nFROM payment_transactions pt\nWHERE pt.section = 'Fastfone365'\n  AND pt.contract_no IN ('CT1225-UTT004-19554-01', 'CT0925-PBI004-16015-01')\n  AND pt.paid_at >= '2026-04-01'\n  AND pt.paid_at < '2026-05-01'\n  AND JSON_EXTRACT(pt.raw_json, '$.source') IS NULL\nORDER BY pt.contract_no, pt.paid_at, pt.id\nLIMIT 20\n",
+  "rows": [
+    {
+      "id": "393352",
+      "external_id": "118310",
+      "contract_no": "CT0925-PBI004-16015-01",
+      "paid_at": "2026-04-06",
+      "amount": "3967.00",
+      "synced_at": "2026-05-06 03:08:45"
+    },
+    {
+      "id": "393353",
+      "external_id": "118311",
+      "contract_no": "CT0925-PBI004-16015-01",
+      "paid_at": "2026-04-06",
+      "amount": "3967.00",
+      "synced_at": "2026-05-06 03:08:45"
+    },
+    {
+      "id": "393354",
+      "external_id": "118312",
+      "contract_no": "CT0925-PBI004-16015-01",
+      "paid_at": "2026-04-06",
+      "amount": "3967.00",
+      "synced_at": "2026-05-06 03:08:45"
+    },
+    {
+      "id": "393355",
+      "external_id": "118313",
+      "contract_no": "CT0925-PBI004-16015-01",
+      "paid_at": "2026-04-06",
+      "amount": "3967.00",
+      "synced_at": "2026-05-06 03:08:45"
+    },
+    {
+      "id": "393356",
+      "external_id": "118314",
+      "contract_no": "CT0925-PBI004-16015-01",
+      "paid_at": "2026-04-06",
+      "amount": "3967.00",
+      "synced_at": "2026-05-06 03:08:45"
+    },
+    {
+      "id": "393357",
+      "external_id": "118315",
+      "contract_no": "CT0925-PBI004-16015-01",
+      "paid_at": "2026-04-06",
+      "amount": "0.00",
+      "synced_at": "2026-05-06 03:08:45"
+    },
+    {
+      "id": "391298",
+      "external_id": "120326",
+      "contract_no": "CT1225-UTT004-19554-01",
+      "paid_at": "2026-04-17",
+      "amount": "1811.00",
+      "synced_at": "2026-05-06 03:08:24"
+    },
+    {
+      "id": "391299",
+      "external_id": "120327",
+      "contract_no": "CT1225-UTT004-19554-01",
+      "paid_at": "2026-04-17",
+      "amount": "1811.00",
+      "synced_at": "2026-05-06 03:08:24"
+    },
+    {
+      "id": "391300",
+      "external_id": "120328",
+      "contract_no": "CT1225-UTT004-19554-01",
+      "paid_at": "2026-04-17",
+      "amount": "1811.00",
+      "synced_at": "2026-05-06 03:08:24"
+    },
+    {
+      "id": "391301",
+      "external_id": "120329",
+      "contract_no": "CT1225-UTT004-19554-01",
+      "paid_at": "2026-04-17",
+      "amount": "1811.00",
+      "synced_at": "2026-05-06 03:08:24"
+    },
+    {
+      "id": "391302",
+      "external_id": "120330",
+      "contract_no": "CT1225-UTT004-19554-01",
+      "paid_at": "2026-04-17",
+      "amount": "1811.00",
+      "synced_at": "2026-05-06 03:08:24"
+    },
+    {
+      "id": "391303",
+      "external_id": "120331",
+      "contract_no": "CT1225-UTT004-19554-01",
+      "paid_at": "2026-04-17",
+      "amount": "1811.00",
+      "synced_at": "2026-05-06 03:08:24"
+    },
+    {
+      "id": "391304",
+      "external_id": "120332",
+      "contract_no": "CT1225-UTT004-19554-01",
+      "paid_at": "2026-04-17",
+      "amount": "1811.00",
+      "synced_at": "2026-05-06 03:08:24"
+    },
+    {
+      "id": "391305",
+      "external_id": "120333",
+      "contract_no": "CT1225-UTT004-19554-01",
+      "paid_at": "2026-04-17",
+      "amount": "724.40",
+      "synced_at": "2026-05-06 03:08:24"
+    },
+    {
+      "id": "391306",
+      "external_id": "120334",
+      "contract_no": "CT1225-UTT004-19554-01",
+      "paid_at": "2026-04-17",
+      "amount": "0.00",
+      "synced_at": "2026-05-06 03:08:24"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\texternal_id\tcontract_no\tpaid_at\tamount\tsynced_at\n393352\t118310\tCT0925-PBI004-16015-01\t2026-04-06\t3967.00\t2026-05-06 03:08:45\n393353\t118311\tCT0925-PBI004-16015-01\t2026-04-06\t3967.00\t2026-05-06 03:08:45\n393354\t118312\tCT0925-PBI004-16015-01\t2026-04-06\t3967.00\t2026-05-06 03:08:45\n393355\t118313\tCT0925-PBI004-16015-01\t2026-04-06\t3967.00\t2026-05-06 03:08:45\n393356\t118314\tCT0925-PBI004-16015-01\t2026-04-06\t3967.00\t2026-05-06 03:08:45\n393357\t118315\tCT0925-PBI004-16015-01\t2026-04-06\t0.00\t2026-05-06 03:08:45\n391298\t120326\tCT1225-UTT004-19554-01\t2026-04-17\t1811.00\t2026-05-06 03:08:24\n391299\t120327\tCT1225-UTT004-19554-01\t2026-04-17\t1811.00\t2026-05-06 03:08:24\n391300\t120328\tCT1225-UTT004-19554-01\t2026-04-17\t1811.00\t2026-05-06 03:08:24\n391301\t120329\tCT1225-UTT004-19554-01\t2026-04-17\t1811.00\t2026-05-06 03:08:24\n391302\t120330\tCT1225-UTT004-19554-01\t2026-04-17\t1811.00\t2026-05-06 03:08:24\n391303\t120331\tCT1225-UTT004-19554-01\t2026-04-17\t1811.00\t2026-05-06 03:08:24\n391304\t120332\tCT1225-UTT004-19554-01\t2026-04-17\t1811.00\t2026-05-06 03:08:24\n391305\t120333\tCT1225-UTT004-19554-01\t2026-04-17\t724.40\t2026-05-06 03:08:24\n391306\t120334\tCT1225-UTT004-19554-01\t2026-04-17\t0.00\t2026-05-06 03:08:24\n",
+  "stderr": "",
+  "execution_time_ms": 2230
+}

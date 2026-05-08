@@ -1,0 +1,70 @@
+{
+  "query": "\nSELECT \n  contract_no, paid_at, amount, COUNT(*) AS cnt\nFROM payment_transactions\nWHERE section = 'Fastfone365'\n  AND JSON_EXTRACT(raw_json, '$.source') IS NULL\n  AND paid_at >= '2026-04-01'\n  AND paid_at < '2026-05-01'\n  AND external_id NOT LIKE 'pay-%'\nGROUP BY contract_no, paid_at, amount\nHAVING cnt > 1\nORDER BY cnt DESC\nLIMIT 10\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT \n  contract_no, paid_at, amount, COUNT(*) AS cnt\nFROM payment_transactions\nWHERE section = 'Fastfone365'\n  AND JSON_EXTRACT(raw_json, '$.source') IS NULL\n  AND paid_at >= '2026-04-01'\n  AND paid_at < '2026-05-01'\n  AND external_id NOT LIKE 'pay-%'\nGROUP BY contract_no, paid_at, amount\nHAVING cnt > 1\nORDER BY cnt DESC\nLIMIT 10\n",
+  "rows": [
+    {
+      "contract_no": "CT1225-UTT004-19554-01",
+      "paid_at": "2026-04-17",
+      "amount": "1811.00",
+      "cnt": "7"
+    },
+    {
+      "contract_no": "CT0925-PBI004-16015-01",
+      "paid_at": "2026-04-06",
+      "amount": "3967.00",
+      "cnt": "5"
+    },
+    {
+      "contract_no": "CT1225-AYA001-19637-01",
+      "paid_at": "2026-04-27",
+      "amount": "100.00",
+      "cnt": "4"
+    },
+    {
+      "contract_no": "CT0525-NYK003-12265-01",
+      "paid_at": "2026-04-25",
+      "amount": "2081.00",
+      "cnt": "3"
+    },
+    {
+      "contract_no": "CT0625-SNI009-12997-01",
+      "paid_at": "2026-04-12",
+      "amount": "1708.00",
+      "cnt": "2"
+    },
+    {
+      "contract_no": "CT1125-PTE010-18867-01",
+      "paid_at": "2026-04-30",
+      "amount": "100.00",
+      "cnt": "2"
+    },
+    {
+      "contract_no": "CT1025-NBI020-17176-01",
+      "paid_at": "2026-04-07",
+      "amount": "1920.00",
+      "cnt": "2"
+    },
+    {
+      "contract_no": "CT0825-SRI001-14536-01",
+      "paid_at": "2026-04-01",
+      "amount": "750.00",
+      "cnt": "2"
+    },
+    {
+      "contract_no": "CT1225-PBI006-19774-01",
+      "paid_at": "2026-04-24",
+      "amount": "1000.00",
+      "cnt": "2"
+    },
+    {
+      "contract_no": "CT0126-PBI006-20578-01",
+      "paid_at": "2026-04-23",
+      "amount": "500.00",
+      "cnt": "2"
+    }
+  ],
+  "messages": [],
+  "stdout": "contract_no\tpaid_at\tamount\tcnt\nCT1225-UTT004-19554-01\t2026-04-17\t1811.00\t7\nCT0925-PBI004-16015-01\t2026-04-06\t3967.00\t5\nCT1225-AYA001-19637-01\t2026-04-27\t100.00\t4\nCT0525-NYK003-12265-01\t2026-04-25\t2081.00\t3\nCT0625-SNI009-12997-01\t2026-04-12\t1708.00\t2\nCT1125-PTE010-18867-01\t2026-04-30\t100.00\t2\nCT1025-NBI020-17176-01\t2026-04-07\t1920.00\t2\nCT0825-SRI001-14536-01\t2026-04-01\t750.00\t2\nCT1225-PBI006-19774-01\t2026-04-24\t1000.00\t2\nCT0126-PBI006-20578-01\t2026-04-23\t500.00\t2\n",
+  "stderr": "",
+  "execution_time_ms": 2214
+}
