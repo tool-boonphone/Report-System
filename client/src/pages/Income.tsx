@@ -287,7 +287,7 @@ export default function Income() {
       <div className="flex flex-col h-full">
         {/* ── Header: ชื่อเมนู + Export ── */}
         <div className="border-b border-gray-200">
-        <div className="max-w-screen-2xl mx-auto px-3 sm:px-4 pt-4 pb-2 flex items-center justify-between">
+        <div className="max-w-screen-2xl mx-auto w-full px-3 sm:px-4 pt-4 pb-2 flex items-center justify-between">
           <h1 className="text-lg font-semibold text-gray-800">รายรับ</h1>
           {canExport && (
             <button
@@ -303,7 +303,7 @@ export default function Income() {
 
         {/* ── Filter bar ── */}
         <div className="border-b border-gray-200 shadow-sm">
-          <div className="max-w-screen-2xl mx-auto px-3 sm:px-4 pb-3 pt-2 flex flex-wrap items-center gap-2 bg-white">
+          <div className="max-w-screen-2xl mx-auto w-full px-3 sm:px-4 pb-3 pt-2 flex flex-wrap items-center gap-2 bg-white">
             {/* Search */}
             <div className="relative flex items-center">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
@@ -404,7 +404,7 @@ export default function Income() {
 
         {/* ── Count + Badges ── */}
         <div className="border-b border-gray-100">
-        <div className="max-w-screen-2xl mx-auto px-3 sm:px-4 py-2 flex flex-wrap items-center gap-2 bg-gray-50">
+        <div className="max-w-screen-2xl mx-auto w-full px-3 sm:px-4 py-2 flex flex-wrap items-center gap-2 bg-gray-50">
           <span className="text-sm text-gray-500">
             {total.toLocaleString()} รายการ
           </span>
@@ -443,7 +443,7 @@ export default function Income() {
 
         {/* ── Table ── */}
         <div className="flex-1 overflow-auto">
-          <div className="max-w-screen-2xl mx-auto px-3 sm:px-4 py-2">
+          <div className="max-w-screen-2xl mx-auto w-full px-3 sm:px-4 py-2">
           {isLoading ? (
             <div className="flex items-center justify-center py-20">
               <Spinner className="w-6 h-6 text-blue-500" />
@@ -521,7 +521,7 @@ export default function Income() {
 
         {/* ── Pagination ── */}
         {total > 0 && (
-          <div className="max-w-screen-2xl mx-auto px-3 sm:px-4 py-3 border-t border-gray-200 bg-white flex flex-wrap items-center justify-between gap-2">
+          <div className="max-w-screen-2xl mx-auto w-full px-3 sm:px-4 py-3 border-t border-gray-200 bg-white flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2 text-sm text-gray-500">
               <span>แสดง</span>
               <select
