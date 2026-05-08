@@ -784,7 +784,7 @@ export async function getCollectedChunk(params: {
       ORDER BY contract_external_id, period
     `),
     db.execute(sql`
-      SELECT external_id, phone
+      SELECT external_id, phone, CAST(installment_amount AS DECIMAL(18,2)) AS installment_amount
       FROM contracts
       WHERE section = ${section}
         AND external_id IN (${sql.raw(idListSql)})
@@ -797,8 +797,10 @@ export async function getCollectedChunk(params: {
 
   // ── 3. Build maps ─────────────────────────────────────────────────────────
   const phoneMap = new Map<string, string | null>();
+  const contractInstAmtMapChunk = new Map<string, number | null>();
   for (const r of phoneRows) {
     phoneMap.set(String(r.external_id), r.phone ?? null);
+    contractInstAmtMapChunk.set(String(r.external_id), r.installment_amount != null ? Number(r.installment_amount) : null);
   }
 
   const targetByContract = new Map<string, any[]>();
@@ -897,7 +899,8 @@ export async function getCollectedChunk(params: {
       phone: phoneMap.get(extId) ?? null,
       productType: first.product_type ?? null,
       installmentCount: first.installment_count != null ? Number(first.installment_count) : null,
-      installmentAmount: (first.installment_count != null && Number(first.installment_count) > 0) ? Math.round((totalAmount / Number(first.installment_count)) * 100) / 100 : null,
+      // Phase 9AK fix: ใช้ installment_amount จาก contracts table โดยตรง (ไม่คำนวณจาก totalAmount)
+      installmentAmount: contractInstAmtMapChunk.get(extId) ?? null,
       totalAmount,
       totalPaid,
       remaining: Math.max(totalAmount - totalPaid, 0),
