@@ -1,0 +1,32 @@
+{
+  "query": "\nSELECT \n  (SELECT COUNT(*) FROM contracts WHERE section='Boonphone') as bp_contracts,\n  (SELECT MAX(CAST(external_id AS UNSIGNED)) FROM contracts WHERE section='Boonphone') as max_external_id;\n\nSELECT contract_no, submit_date, external_id \nFROM contracts WHERE section='Boonphone' \nORDER BY CAST(external_id AS UNSIGNED) DESC \nLIMIT 5;\n\nSELECT id, entity, status, started_at, finished_at, row_count, \n       LEFT(error_message, 100) as err \nFROM sync_logs WHERE section='Boonphone' \nORDER BY id DESC LIMIT 10;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT \n  (SELECT COUNT(*) FROM contracts WHERE section='Boonphone') as bp_contracts,\n  (SELECT MAX(CAST(external_id AS UNSIGNED)) FROM contracts WHERE section='Boonphone') as max_external_id;\n\nSELECT contract_no, submit_date, external_id \nFROM contracts WHERE section='Boonphone' \nORDER BY CAST(external_id AS UNSIGNED) DESC \nLIMIT 5;\n\nSELECT id, entity, status, started_at, finished_at, row_count, \n       LEFT(error_message, 100) as err \nFROM sync_logs WHERE section='Boonphone' \nORDER BY id DESC LIMIT 10;\n",
+  "rows": [
+    {
+      "bp_contracts": "4109",
+      "max_external_id": "4985"
+    }
+  ],
+  "messages": [
+    "contract_no\tsubmit_date\texternal_id",
+    "CT0526-RBR001-4706-01\t2026-05-05\t4985",
+    "CT0526-CTI002-4705-01\t2026-05-05\t4984",
+    "CT0526-UTT002-4704-01\t2026-05-05\t4983",
+    "CT0526-CCO002-4703-01\t2026-05-05\t4982",
+    "CT0526-PTE003-4697-01\t2026-05-05\t4981",
+    "id\tentity\tstatus\tstarted_at\tfinished_at\trow_count\terr",
+    "1140019\tcustomers\terror\t2026-05-08 04:12:17\t2026-05-08 04:12:45\t0\tAuto-cleared on startup: previous Cloud Run instance was killed during sync",
+    "1140018\tpartners\tsuccess\t2026-05-08 04:12:08\t2026-05-08 04:12:17\t227\tNULL",
+    "1140017\tall\terror\t2026-05-08 04:12:08\t2026-05-08 04:12:45\t0\tAuto-cleared on startup: previous Cloud Run instance was killed during sync",
+    "1140016\tcustomers\terror\t2026-05-08 03:42:04\t2026-05-08 03:42:14\t0\tAuto-cleared on startup: previous Cloud Run instance was killed during sync",
+    "1140015\tpartners\tsuccess\t2026-05-08 03:41:54\t2026-05-08 03:42:04\t227\tNULL",
+    "1140014\tall\terror\t2026-05-08 03:41:54\t2026-05-08 02:06:59\t0\tReset: allowing new sync attempt",
+    "1140013\tcustomers\terror\t2026-05-08 03:29:56\t2026-05-08 03:30:36\t0\tAuto-cleared on startup: previous Cloud Run instance was killed during sync",
+    "1140012\tpartners\tsuccess\t2026-05-08 03:29:44\t2026-05-08 03:29:56\t227\tNULL",
+    "1140011\tall\terror\t2026-05-08 03:29:44\t2026-05-08 02:06:59\t0\tReset: allowing new sync attempt",
+    "1140010\tcustomers\terror\t2026-05-08 03:21:12\t2026-05-08 03:21:32\t0\tAuto-cleared on startup: previous Cloud Run instance was killed during sync"
+  ],
+  "stdout": "bp_contracts\tmax_external_id\n4109\t4985\ncontract_no\tsubmit_date\texternal_id\nCT0526-RBR001-4706-01\t2026-05-05\t4985\nCT0526-CTI002-4705-01\t2026-05-05\t4984\nCT0526-UTT002-4704-01\t2026-05-05\t4983\nCT0526-CCO002-4703-01\t2026-05-05\t4982\nCT0526-PTE003-4697-01\t2026-05-05\t4981\nid\tentity\tstatus\tstarted_at\tfinished_at\trow_count\terr\n1140019\tcustomers\terror\t2026-05-08 04:12:17\t2026-05-08 04:12:45\t0\tAuto-cleared on startup: previous Cloud Run instance was killed during sync\n1140018\tpartners\tsuccess\t2026-05-08 04:12:08\t2026-05-08 04:12:17\t227\tNULL\n1140017\tall\terror\t2026-05-08 04:12:08\t2026-05-08 04:12:45\t0\tAuto-cleared on startup: previous Cloud Run instance was killed during sync\n1140016\tcustomers\terror\t2026-05-08 03:42:04\t2026-05-08 03:42:14\t0\tAuto-cleared on startup: previous Cloud Run instance was killed during sync\n1140015\tpartners\tsuccess\t2026-05-08 03:41:54\t2026-05-08 03:42:04\t227\tNULL\n1140014\tall\terror\t2026-05-08 03:41:54\t2026-05-08 02:06:59\t0\tReset: allowing new sync attempt\n1140013\tcustomers\terror\t2026-05-08 03:29:56\t2026-05-08 03:30:36\t0\tAuto-cleared on startup: previous Cloud Run instance was killed during sync\n1140012\tpartners\tsuccess\t2026-05-08 03:29:44\t2026-05-08 03:29:56\t227\tNULL\n1140011\tall\terror\t2026-05-08 03:29:44\t2026-05-08 02:06:59\t0\tReset: allowing new sync attempt\n1140010\tcustomers\terror\t2026-05-08 03:21:12\t2026-05-08 03:21:32\t0\tAuto-cleared on startup: previous Cloud Run instance was killed during sync\n",
+  "stderr": "",
+  "execution_time_ms": 2231
+}
