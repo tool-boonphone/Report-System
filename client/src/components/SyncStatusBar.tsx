@@ -80,12 +80,14 @@ export function SyncStatusBar() {
   }, [isRunning]);
 
   // Keep-alive ping — prevents Cloud Run from scaling down the instance during long sync
-  // Sends a lightweight GET /api/ping every 30s while sync is running
+  // Sends a lightweight GET /api/ping every 10s while sync is running.
+  // NOTE: 10s interval is intentional — customers API pages take 5-15s each,
+  // so 30s was too long and Cloud Run could still kill the instance between pages.
   useEffect(() => {
     if (!isRunning) return;
     const id = setInterval(() => {
       fetch("/api/ping").catch(() => {}); // fire-and-forget, ignore errors
-    }, 30_000);
+    }, 10_000);
     return () => clearInterval(id);
   }, [isRunning]);
 

@@ -56,7 +56,7 @@ async function startServer() {
   app.post("/api/debt/cache/invalidate", handleDebtCacheInvalidate);
   // SSE sync stream — keeps Cloud Run connection alive during long sync
   app.get("/api/sync-stream/:section", handleSyncStream);
-  // Keep-alive ping — frontend polls this every 30s during sync to prevent Cloud Run idle scale-down
+  // Keep-alive ping — frontend polls this every 10s during sync to prevent Cloud Run idle scale-down
   app.get("/api/ping", (_req, res) => res.json({ ok: true, ts: Date.now() }));
   // Internal backfill endpoint — no auth, only for local/admin use
   app.post("/api/internal/backfill-cache", async (req, res) => {
