@@ -475,7 +475,7 @@ export async function getIncomeSummaryByPeriod(
       period,
       SUM(CASE WHEN is_bad_debt_row = 1 THEN 0
                WHEN is_close_row = 1 THEN 0
-               ELSE COALESCE(total_amount, 0) END) AS \`ค่างวด\`,
+               ELSE COALESCE(total_amount, 0) + COALESCE(overpaid, 0) END) AS \`ค่างวด\`,
       SUM(CASE WHEN is_close_row = 1 AND is_bad_debt_row = 0
                THEN COALESCE(total_amount, 0) ELSE 0 END) AS \`ปิดยอด\`,
       SUM(CASE WHEN is_bad_debt_row = 1
@@ -486,6 +486,7 @@ export async function getIncomeSummaryByPeriod(
         is_bad_debt_row,
         is_close_row,
         total_amount,
+        overpaid,
         bad_debt
       FROM debt_collected_cache
       WHERE ${whereStr} AND paid_at IS NOT NULL AND paid_at != ''
