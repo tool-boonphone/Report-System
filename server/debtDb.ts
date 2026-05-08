@@ -1586,7 +1586,18 @@ export async function listDebtTarget(params: { section: SectionKey }) {
       (s, r) => s + Number(r.paid_amount ?? 0),
       0,
     );
-    const totalAmount = list.reduce((s, r) => s + Number(r.amount ?? 0), 0);
+    // Phase FIX: ยอดผ่อนรวม = ผ่อนงวดละ × จำนวนงวดทั้งหมด (ไม่กรองสถานะ)
+    // ใช้ installmentAmount × installmentCount จาก contracts table เพื่อให้ถูกต้องสำหรับสัญญาหนี้เสีย/ระงับสัญญา
+    // ที่ API ส่ง amount=0 มาให้บางงวด ทำให้ sum จาก raw amount ได้ไม่ครบ
+    const totalAmount = (() => {
+      const instAmt = c.installment_amount != null ? Number(c.installment_amount) : null;
+      const instCnt = c.installment_count != null ? Number(c.installment_count) : null;
+      if (instAmt != null && instAmt > 0 && instCnt != null && instCnt > 0) {
+        return instAmt * instCnt;
+      }
+      // Fallback: sum from raw installments (for contracts without installment_amount)
+      return list.reduce((s, r) => s + Number(r.amount ?? 0), 0);
+    })();
     const { label: debtStatus, daysOverdue } = deriveDebtStatus(
       c.status ?? null,
       list,
@@ -3027,7 +3038,15 @@ export async function* listDebtTargetStream(params: {
     const extId = String(c.external_id);
     const list = instByContract.get(extId) ?? [];
     const totalPaid = list.reduce((s, r) => s + Number(r.paid_amount ?? 0), 0);
-    const totalAmount = list.reduce((s, r) => s + Number(r.amount ?? 0), 0);
+    // Phase FIX: ยอดผ่อนรวม = ผ่อนงวดละ × จำนวนงวดทั้งหมด (ไม่กรองสถานะ)
+    const totalAmount = (() => {
+      const instAmt = c.installment_amount != null ? Number(c.installment_amount) : null;
+      const instCnt = c.installment_count != null ? Number(c.installment_count) : null;
+      if (instAmt != null && instAmt > 0 && instCnt != null && instCnt > 0) {
+        return instAmt * instCnt;
+      }
+      return list.reduce((s, r) => s + Number(r.amount ?? 0), 0);
+    })();
     const { label: debtStatus, daysOverdue } = deriveDebtStatus(c.status ?? null, list, today);
     const baselineAmount = c.installment_amount != null ? Number(c.installment_amount) : null;
     const maxClosedPeriod = closedByContract.get(extId) ?? 0;
