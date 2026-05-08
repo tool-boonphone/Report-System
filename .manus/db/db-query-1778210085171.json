@@ -1,0 +1,13 @@
+{
+  "query": "UPDATE sync_logs SET status = 'error', finished_at = NOW(), error_message = 'Force-cleared: process killed (Cloud Run instance restart)' WHERE status = 'in_progress'; SELECT ROW_COUNT() as cleared;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute UPDATE sync_logs SET status = 'error', finished_at = NOW(), error_message = 'Force-cleared: process killed (Cloud Run instance restart)' WHERE status = 'in_progress'; SELECT ROW_COUNT() as cleared;",
+  "rows": [
+    {
+      "cleared": "4"
+    }
+  ],
+  "messages": [],
+  "stdout": "cleared\n4\n",
+  "stderr": "",
+  "execution_time_ms": 2000
+}
