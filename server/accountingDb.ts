@@ -2,16 +2,19 @@
  * accountingDb.ts — Query helpers สำหรับหน้าบัญชี (รายรับ + รายจ่าย)
  *
  * รายรับ (Income):
- *   - ดึงจาก debt_collected_cache ทุก row
- *   - แยกประเภทตาม:
- *       is_bad_debt_row = 1  → ขายเครื่อง  (ยอด = bad_debt)
- *       is_close_row = 1     → ปิดยอด     (ยอด = total_amount)
- *       otherwise            → ค่างวด     (ยอด = total_amount)
- *   - "เงินดาวน์" ซ่อนไว้ก่อน (period = 0 ไม่มีในข้อมูลจริง)
+ *   - ดึงจาก payment_transactions WHERE JSON_EXTRACT(raw_json, '$.source') IS NULL
+ *     (เฉพาะ close rows ที่มี principal_paid, interest_paid ฯลฯ ครบถ้วน)
+ *   - ยอดรวม = payment_transactions.amount ตรงกับ Fastfone/Boonphone Report เป๊ะ
+ *   - แยกประเภทตาม logic:
+ *       ขายเครื่อง = payment ในวันสุดท้ายของสัญญาที่มีสถานะ 'หนี้เสีย'
+ *                    (c.status = 'หนี้เสีย' AND DATE(pt.paid_at) = last paid date ของสัญญานั้น)
+ *       ปิดยอด     = มี close_installment_amount > 0 ใน raw_json (สัญญาสิ้นสุด ลูกค้าชำระครบ)
+ *       ค่างวด     = payment ปกติที่ไม่ใช่สองประเภทข้างต้น
+ *   - ยอดของแต่ละประเภท = pt.amount (ไม่ต้องแยกย่อย เพราะ 1 row = 1 payment)
+ *   - ค่างวด + ปิดยอด + ขายเครื่อง = total = ตรงกับ Fastfone/Boonphone Report เป๊ะ
  *
  * รายจ่าย (Expense):
  *   - ดึงจาก contracts.commission_net (ค่าคอมมิชชั่น)
- *   - รองรับประเภทอื่นในอนาคต
  */
 
 import { sql } from "drizzle-orm";
@@ -37,8 +40,8 @@ export interface IncomeRow {
 export interface IncomeParams {
   section: SectionKey;
   search?: string;
-  dateFrom?: string;         // YYYY-MM-DD
-  dateTo?: string;           // YYYY-MM-DD
+  dateFrom?: string;
+  dateTo?: string;
   dateField?: "paidAt" | "updatedAt";
   incomeTypes?: IncomeType[];
   updatedBy?: string;
@@ -69,40 +72,61 @@ export interface ExpenseParams {
   pageSize?: number;
 }
 
-// ─── Income ───────────────────────────────────────────────────────────────────
+// ─── Income SQL Helpers ────────────────────────────────────────────────────────
 
 /**
- * Income type CASE expression:
- *   is_bad_debt_row = 1  → ขายเครื่อง
- *   is_close_row = 1     → ปิดยอด
- *   otherwise            → ค่างวด
+ * Income type CASE expression (ต้องใช้ร่วมกับ JOIN contracts c และ bad_debt_last_days bdl)
  *
- * NOTE: "เงินดาวน์" (period = 0) ซ่อนไว้ก่อน — ไม่มีในข้อมูลจริง
+ * ขายเครื่อง = payment ในวันสุดท้ายของสัญญาหนี้เสีย
+ *   - c.status = 'หนี้เสีย'
+ *   - DATE(pt.paid_at) = วันสุดท้ายที่มีการชำระของสัญญานั้น (จาก subquery bad_debt_last_days)
+ * ปิดยอด = มี close_installment_amount > 0 ใน raw_json
+ * ค่างวด = อื่นๆ
+ *
+ * หมายเหตุ: ต้อง LEFT JOIN bad_debt_last_days bdl ก่อนใช้ expression นี้
  */
-const INCOME_TYPE_CASE = `
+const PT_INCOME_TYPE_CASE = `
   CASE
-    WHEN is_bad_debt_row = 1 THEN 'ขายเครื่อง'
-    WHEN is_close_row = 1 THEN 'ปิดยอด'
+    WHEN c.status = 'หนี้เสีย'
+      AND bdl.last_paid_date IS NOT NULL
+      AND DATE(pt.paid_at) = bdl.last_paid_date
+      THEN 'ขายเครื่อง'
+    WHEN CAST(COALESCE(JSON_EXTRACT(pt.raw_json, '$.close_installment_amount'), 0) AS DECIMAL(18,2)) > 0
+      THEN 'ปิดยอด'
     ELSE 'ค่างวด'
   END
 `;
 
 /**
- * Amount CASE expression:
- *   ขายเครื่อง → bad_debt column
- *   ปิดยอด / ค่างวด → total_amount column
+ * Amount CASE expression — ยอดของแต่ละ row = pt.amount เสมอ
+ * (1 payment row = 1 ยอด ไม่ว่าจะเป็นประเภทใด)
  */
-const AMOUNT_CASE = `
-  CASE
-    WHEN is_bad_debt_row = 1 THEN COALESCE(bad_debt, 0)
-    ELSE COALESCE(total_amount, 0)
-  END
-`;
+const PT_AMOUNT_CASE = `CAST(COALESCE(pt.amount, 0) AS DECIMAL(18,2))`;
+
+// Base WHERE: เฉพาะ close rows (source IS NULL) ที่ตรงกับ Fastfone/Boonphone Report
+const PT_INCOME_BASE_WHERE = `JSON_EXTRACT(pt.raw_json, '$.source') IS NULL`;
 
 /**
- * ดึง income rows พร้อม pagination
- * ใช้ CASE WHEN ใน SQL เพื่อจำแนก income_type ตาม is_close_row / is_bad_debt_row
+ * Subquery สำหรับหาวันสุดท้ายที่ชำระของแต่ละสัญญาหนี้เสีย
+ * ใช้ LEFT JOIN กับ payment_transactions pt ด้วย contract_no + section
+ *
+ * @param section - SectionKey ที่ต้องการ (ใส่ escaped string)
  */
+function buildBadDebtLastDaysSubquery(section: string): string {
+  return `
+    SELECT
+      pt2.contract_no,
+      pt2.section,
+      DATE(MAX(pt2.paid_at)) AS last_paid_date
+    FROM payment_transactions pt2
+    WHERE pt2.section = '${section}'
+      AND JSON_EXTRACT(pt2.raw_json, '$.source') IS NULL
+    GROUP BY pt2.contract_no, pt2.section
+  `;
+}
+
+// ─── Income ───────────────────────────────────────────────────────────────────
+
 export async function listIncome(params: IncomeParams): Promise<{
   rows: IncomeRow[];
   total: number;
@@ -111,40 +135,25 @@ export async function listIncome(params: IncomeParams): Promise<{
   if (!db) return { rows: [], total: 0 };
 
   const {
-    section,
-    search,
-    dateFrom,
-    dateTo,
-    dateField = "paidAt",
-    incomeTypes,
-    updatedBy,
-    page = 1,
-    pageSize = 50,
+    section, search, dateFrom, dateTo,
+    dateField = "paidAt", incomeTypes, updatedBy,
+    page = 1, pageSize = 50,
   } = params;
 
   const offset = (page - 1) * pageSize;
   const esc = (v: string) => v.replace(/'/g, "''");
+  const secEsc = esc(section);
+  const dateCol = dateField === "paidAt" ? "pt.paid_at" : "pt.updated_at";
 
-  // Date column
-  const dateCol = dateField === "paidAt" ? "paid_at" : "updated_at";
+  const conditions: string[] = [
+    `pt.section = '${secEsc}'`,
+    PT_INCOME_BASE_WHERE,
+  ];
+  if (search) conditions.push(`(pt.contract_no LIKE '%${esc(search)}%' OR c.customer_name LIKE '%${esc(search)}%')`);
+  if (dateFrom) conditions.push(`${dateCol} >= '${esc(dateFrom)}'`);
+  if (dateTo) conditions.push(`${dateCol} <= '${esc(dateTo)} 23:59:59'`);
+  if (updatedBy) conditions.push(`pt.updated_by = '${esc(updatedBy)}'`);
 
-  // Build WHERE conditions
-  const conditions: string[] = [`section = '${esc(section)}'`];
-
-  if (search) {
-    conditions.push(`(contract_no LIKE '%${esc(search)}%' OR customer_name LIKE '%${esc(search)}%')`);
-  }
-  if (dateFrom) {
-    conditions.push(`${dateCol} >= '${esc(dateFrom)}'`);
-  }
-  if (dateTo) {
-    conditions.push(`${dateCol} <= '${esc(dateTo)} 23:59:59'`);
-  }
-  if (updatedBy) {
-    conditions.push(`updated_by = '${esc(updatedBy)}'`);
-  }
-
-  // Income type filter (applied as outer WHERE on subquery)
   let incomeTypeFilter = "";
   if (incomeTypes && incomeTypes.length > 0) {
     const quoted = incomeTypes.map((t) => `'${esc(t)}'`).join(", ");
@@ -152,32 +161,35 @@ export async function listIncome(params: IncomeParams): Promise<{
   }
 
   const whereStr = conditions.join(" AND ");
+  const bdlSubquery = buildBadDebtLastDaysSubquery(secEsc);
 
-  // Total count query
   const countSql = `
     SELECT COUNT(*) AS total
     FROM (
-      SELECT ${INCOME_TYPE_CASE} AS income_type
-      FROM debt_collected_cache
+      SELECT ${PT_INCOME_TYPE_CASE} AS income_type
+      FROM payment_transactions pt
+      LEFT JOIN contracts c ON c.contract_no = pt.contract_no AND c.section = pt.section
+      LEFT JOIN (${bdlSubquery}) AS bdl ON bdl.contract_no = pt.contract_no AND bdl.section = pt.section
       WHERE ${whereStr}
     ) AS sub
     ${incomeTypeFilter}
   `;
 
-  // Data query
   const dataSql = `
     SELECT *
     FROM (
       SELECT
-        id,
-        contract_no,
-        customer_name,
-        paid_at,
-        updated_by,
-        updated_at,
-        ${INCOME_TYPE_CASE} AS income_type,
-        ${AMOUNT_CASE} AS amount
-      FROM debt_collected_cache
+        pt.id,
+        pt.contract_no,
+        c.customer_name,
+        pt.paid_at,
+        pt.updated_by,
+        pt.updated_at,
+        ${PT_INCOME_TYPE_CASE} AS income_type,
+        ${PT_AMOUNT_CASE} AS amount
+      FROM payment_transactions pt
+      LEFT JOIN contracts c ON c.contract_no = pt.contract_no AND c.section = pt.section
+      LEFT JOIN (${bdlSubquery}) AS bdl ON bdl.contract_no = pt.contract_no AND bdl.section = pt.section
       WHERE ${whereStr}
     ) AS sub
     ${incomeTypeFilter}
@@ -207,15 +219,17 @@ export async function listIncome(params: IncomeParams): Promise<{
   return { rows, total };
 }
 
-/** ดึง distinct updatedBy สำหรับ income filter dropdown */
 export async function listIncomeUpdatedBy(section: SectionKey): Promise<string[]> {
   const db = await getDb();
   if (!db) return [];
+  const esc = (v: string) => v.replace(/'/g, "''");
   const result = await db.execute(
     sql.raw(`
       SELECT DISTINCT updated_by
-      FROM debt_collected_cache
-      WHERE section = '${section.replace(/'/g, "''")}' AND updated_by IS NOT NULL AND updated_by != ''
+      FROM payment_transactions
+      WHERE section = '${esc(section)}'
+        AND JSON_EXTRACT(raw_json, '$.source') IS NULL
+        AND updated_by IS NOT NULL AND updated_by != ''
       ORDER BY updated_by ASC
     `),
   );
@@ -225,7 +239,6 @@ export async function listIncomeUpdatedBy(section: SectionKey): Promise<string[]
 
 // ─── Expense ──────────────────────────────────────────────────────────────────
 
-/** ดึง expense rows (ค่าคอมมิชชั่น) พร้อม pagination */
 export async function listExpense(params: ExpenseParams): Promise<{
   rows: ExpenseRow[];
   total: number;
@@ -234,13 +247,8 @@ export async function listExpense(params: ExpenseParams): Promise<{
   if (!db) return { rows: [], total: 0 };
 
   const {
-    section,
-    search,
-    dateFrom,
-    dateTo,
-    updatedBy,
-    page = 1,
-    pageSize = 50,
+    section, search, dateFrom, dateTo, updatedBy,
+    page = 1, pageSize = 50,
   } = params;
   const offset = (page - 1) * pageSize;
   const esc = (v: string) => v.replace(/'/g, "''");
@@ -249,25 +257,16 @@ export async function listExpense(params: ExpenseParams): Promise<{
     `c.commission_net IS NOT NULL`,
     `c.commission_net > 0`,
   ];
-  if (search) {
-    conditions.push(`c.contract_no LIKE '%${esc(search)}%'`);
-  }
-  if (dateFrom) {
-    conditions.push(`c.approve_date >= '${esc(dateFrom)}'`);
-  }
-  if (dateTo) {
-    conditions.push(`c.approve_date <= '${esc(dateTo)}'`);
-  }
-  if (updatedBy) {
-    conditions.push(`latest_i.updated_by = '${esc(updatedBy)}'`);
-  }
+  if (search) conditions.push(`c.contract_no LIKE '%${esc(search)}%'`);
+  if (dateFrom) conditions.push(`c.approve_date >= '${esc(dateFrom)}'`);
+  if (dateTo) conditions.push(`c.approve_date <= '${esc(dateTo)}'`);
+  if (updatedBy) conditions.push(`latest_i.updated_by = '${esc(updatedBy)}'`);
   const whereStr = conditions.join(" AND ");
-  // JOIN installments เพื่อดึง updated_by ของ installment ล่าสุดใน contract นั้น
+
   const joinSql = `
     FROM contracts c
     LEFT JOIN (
-      SELECT contract_no, section,
-             updated_by, updated_at
+      SELECT contract_no, section, updated_by, updated_at
       FROM installments
       WHERE (contract_no, section, updated_at) IN (
         SELECT contract_no, section, MAX(updated_at)
@@ -279,16 +278,14 @@ export async function listExpense(params: ExpenseParams): Promise<{
   `;
   const [countResult, dataResult] = await Promise.all([
     db.execute(sql.raw(`SELECT COUNT(*) AS total ${joinSql} WHERE ${whereStr}`)),
-    db.execute(
-      sql.raw(`
-        SELECT c.id, c.contract_no, c.approve_date, c.commission_net, c.partner_code, c.partner_name,
-               latest_i.updated_by, latest_i.updated_at
-        ${joinSql}
-        WHERE ${whereStr}
-        ORDER BY c.approve_date DESC, c.id DESC
-        LIMIT ${pageSize} OFFSET ${offset}
-      `),
-    ),
+    db.execute(sql.raw(`
+      SELECT c.id, c.contract_no, c.approve_date, c.commission_net, c.partner_code, c.partner_name,
+             latest_i.updated_by, latest_i.updated_at
+      ${joinSql}
+      WHERE ${whereStr}
+      ORDER BY c.approve_date DESC, c.id DESC
+      LIMIT ${pageSize} OFFSET ${offset}
+    `)),
   ]);
   const countArr: any[] = (countResult as any)[0] ?? countResult;
   const total = Number(countArr[0]?.total ?? 0);
@@ -307,7 +304,6 @@ export async function listExpense(params: ExpenseParams): Promise<{
   return { rows, total };
 }
 
-/** ดึง distinct updatedBy สำหรับ expense filter dropdown */
 export async function listExpenseUpdatedBy(section: SectionKey): Promise<string[]> {
   const db = await getDb();
   if (!db) return [];
@@ -337,10 +333,6 @@ export interface IncomeSummary {
   total: number;
 }
 
-/**
- * คำนวณ SUM ของแต่ละ income type ใน SQL โดยตรง
- * ใช้สำหรับ Badge display แทนการดึง rows ทั้งหมดมา sum ฝั่ง client
- */
 export async function getIncomeSummary(
   params: Omit<IncomeParams, "page" | "pageSize">,
 ): Promise<IncomeSummary> {
@@ -348,23 +340,22 @@ export async function getIncomeSummary(
   if (!db) return { "ค่างวด": 0, "ขายเครื่อง": 0, "ปิดยอด": 0, "เงินดาวน์": 0, total: 0 };
 
   const {
-    section,
-    search,
-    dateFrom,
-    dateTo,
-    dateField = "paidAt",
-    incomeTypes,
-    updatedBy,
+    section, search, dateFrom, dateTo,
+    dateField = "paidAt", incomeTypes, updatedBy,
   } = params;
 
   const esc = (v: string) => v.replace(/'/g, "''");
-  const dateCol = dateField === "paidAt" ? "paid_at" : "updated_at";
+  const secEsc = esc(section);
+  const dateCol = dateField === "paidAt" ? "pt.paid_at" : "pt.updated_at";
 
-  const conditions: string[] = [`section = '${esc(section)}'`];
-  if (search) conditions.push(`(contract_no LIKE '%${esc(search)}%' OR customer_name LIKE '%${esc(search)}%')`);
+  const conditions: string[] = [
+    `pt.section = '${secEsc}'`,
+    PT_INCOME_BASE_WHERE,
+  ];
+  if (search) conditions.push(`(pt.contract_no LIKE '%${esc(search)}%' OR c.customer_name LIKE '%${esc(search)}%')`);
   if (dateFrom) conditions.push(`${dateCol} >= '${esc(dateFrom)}'`);
   if (dateTo) conditions.push(`${dateCol} <= '${esc(dateTo)} 23:59:59'`);
-  if (updatedBy) conditions.push(`updated_by = '${esc(updatedBy)}'`);
+  if (updatedBy) conditions.push(`pt.updated_by = '${esc(updatedBy)}'`);
 
   let incomeTypeFilter = "";
   if (incomeTypes && incomeTypes.length > 0) {
@@ -373,14 +364,17 @@ export async function getIncomeSummary(
   }
 
   const whereStr = conditions.join(" AND ");
+  const bdlSubquery = buildBadDebtLastDaysSubquery(secEsc);
 
   const querySql = `
     SELECT income_type, SUM(amount) AS sum_amount
     FROM (
       SELECT
-        ${INCOME_TYPE_CASE} AS income_type,
-        ${AMOUNT_CASE} AS amount
-      FROM debt_collected_cache
+        ${PT_INCOME_TYPE_CASE} AS income_type,
+        ${PT_AMOUNT_CASE} AS amount
+      FROM payment_transactions pt
+      LEFT JOIN contracts c ON c.contract_no = pt.contract_no AND c.section = pt.section
+      LEFT JOIN (${bdlSubquery}) AS bdl ON bdl.contract_no = pt.contract_no AND bdl.section = pt.section
       WHERE ${whereStr}
     ) AS sub
     ${incomeTypeFilter}
@@ -405,7 +399,6 @@ export interface ExpenseSummary {
   total: number;
 }
 
-/** คำนวณ SUM ของแต่ละ expense type ใน SQL โดยตรง */
 export async function getExpenseSummary(
   params: Omit<ExpenseParams, "page" | "pageSize">,
 ): Promise<ExpenseSummary> {
@@ -436,7 +429,7 @@ export async function getExpenseSummary(
 // ─── Income Summary (Yearly / Monthly) ────────────────────────────────────────
 
 export interface IncomeSummaryRow {
-  period: string;          // "2024" หรือ "2024-01"
+  period: string;
   "ค่างวด": number;
   "ปิดยอด": number;
   "ขายเครื่อง": number;
@@ -446,10 +439,22 @@ export interface IncomeSummaryRow {
 export interface IncomeSummaryParams {
   section: SectionKey;
   groupBy: "year" | "month";
-  years?: number[];          // filter ปี (multi)
-  months?: number[];         // filter เดือน (multi, 1-12)
+  years?: number[];
+  months?: number[];
 }
 
+/**
+ * คำนวณยอดรายรับแยกตาม period (year/month)
+ * ดึงจาก payment_transactions (source IS NULL) — ตรงกับ Fastfone/Boonphone Report เป๊ะ
+ *
+ * Logic แยกประเภท:
+ * - ขายเครื่อง = payment ในวันสุดท้ายของสัญญาหนี้เสีย
+ *                (c.status = 'หนี้เสีย' AND DATE(pt.paid_at) = last_paid_date ของสัญญานั้น)
+ * - ปิดยอด     = มี close_installment_amount > 0 ใน raw_json
+ * - ค่างวด     = อื่นๆ
+ *
+ * ยอดของแต่ละ row = pt.amount เสมอ → รวมกัน = total = ตรงกับ Report ระบบ
+ */
 export async function getIncomeSummaryByPeriod(
   params: IncomeSummaryParams,
 ): Promise<IncomeSummaryRow[]> {
@@ -457,39 +462,50 @@ export async function getIncomeSummaryByPeriod(
   if (!db) return [];
   const { section, groupBy, years, months } = params;
   const esc = (v: string) => v.replace(/'/g, "''");
+  const secEsc = esc(section);
 
-  const conditions: string[] = [`section = '${esc(section)}'`];
+  // WHERE conditions สำหรับ payment_transactions หลัก
+  const conditions: string[] = [
+    `pt.section = '${secEsc}'`,
+    `JSON_EXTRACT(pt.raw_json, '$.source') IS NULL`,
+    `pt.paid_at IS NOT NULL`,
+    `pt.paid_at != ''`,
+  ];
   if (years && years.length > 0) {
-    conditions.push(`SUBSTRING(paid_at, 1, 4) IN (${years.map(y => "'" + y + "'").join(",")})`);
+    conditions.push(`SUBSTRING(pt.paid_at, 1, 4) IN (${years.map(y => "'" + y + "'").join(",")})`);
   }
   if (months && months.length > 0) {
-    conditions.push(`SUBSTRING(paid_at, 6, 2) IN (${months.map(m => "'" + String(m).padStart(2,'0') + "'").join(",")})`);
+    conditions.push(`SUBSTRING(pt.paid_at, 6, 2) IN (${months.map(m => "'" + String(m).padStart(2,'0') + "'").join(",")})`);
   }
   const whereStr = conditions.join(" AND ");
-
   const periodLen = groupBy === "year" ? 4 : 7;
-  // ใช้ subquery เพื่อ alias period ก่อน GROUP BY
-  // หลีกเลี่ยง MySQL only_full_group_by error
+
+  // Subquery: หาวันสุดท้ายที่ชำระของแต่ละสัญญาหนี้เสีย
+  const bdlSubquery = buildBadDebtLastDaysSubquery(secEsc);
+
   const querySql = `
     SELECT
       period,
-      SUM(CASE WHEN is_bad_debt_row = 1 THEN 0
-               WHEN is_close_row = 1 THEN 0
-               ELSE COALESCE(total_amount, 0) + COALESCE(overpaid, 0) END) AS \`ค่างวด\`,
-      SUM(CASE WHEN is_close_row = 1 AND is_bad_debt_row = 0
-               THEN COALESCE(total_amount, 0) ELSE 0 END) AS \`ปิดยอด\`,
-      SUM(CASE WHEN is_bad_debt_row = 1
-               THEN COALESCE(bad_debt, 0) ELSE 0 END) AS \`ขายเครื่อง\`
+      SUM(CASE WHEN income_type = 'ค่างวด'     THEN amt ELSE 0 END) AS kw,
+      SUM(CASE WHEN income_type = 'ปิดยอด'     THEN amt ELSE 0 END) AS close_sum,
+      SUM(CASE WHEN income_type = 'ขายเครื่อง' THEN amt ELSE 0 END) AS bad_debt_sum
     FROM (
       SELECT
-        SUBSTRING(paid_at, 1, ${periodLen}) AS period,
-        is_bad_debt_row,
-        is_close_row,
-        total_amount,
-        overpaid,
-        bad_debt
-      FROM debt_collected_cache
-      WHERE ${whereStr} AND paid_at IS NOT NULL AND paid_at != ''
+        SUBSTRING(pt.paid_at, 1, ${periodLen}) AS period,
+        CAST(COALESCE(pt.amount, 0) AS DECIMAL(18,2)) AS amt,
+        CASE
+          WHEN c.status = 'หนี้เสีย'
+            AND bdl.last_paid_date IS NOT NULL
+            AND DATE(pt.paid_at) = bdl.last_paid_date
+            THEN 'ขายเครื่อง'
+          WHEN CAST(COALESCE(JSON_EXTRACT(pt.raw_json, '$.close_installment_amount'), 0) AS DECIMAL(18,2)) > 0
+            THEN 'ปิดยอด'
+          ELSE 'ค่างวด'
+        END AS income_type
+      FROM payment_transactions pt
+      LEFT JOIN contracts c ON c.contract_no = pt.contract_no AND c.section = pt.section
+      LEFT JOIN (${bdlSubquery}) AS bdl ON bdl.contract_no = pt.contract_no AND bdl.section = pt.section
+      WHERE ${whereStr}
     ) AS sub
     GROUP BY period
     ORDER BY period ASC
@@ -498,9 +514,9 @@ export async function getIncomeSummaryByPeriod(
   const result = await db.execute(sql.raw(querySql));
   const arr: any[] = (result as any)[0] ?? result;
   return (arr ?? []).map((r: any) => {
-    const kw = Number(r["ค่างวด"] ?? 0);
-    const close = Number(r["ปิดยอด"] ?? 0);
-    const sell = Number(r["ขายเครื่อง"] ?? 0);
+    const kw = Number(r.kw ?? 0);
+    const close = Number(r.close_sum ?? 0);
+    const sell = Number(r.bad_debt_sum ?? 0);
     return {
       period: r.period ?? "",
       "ค่างวด": kw,
@@ -556,7 +572,7 @@ export async function getExpenseSummaryByPeriod(
   const querySql = `
     SELECT
       ${periodExpr} AS period,
-      SUM(COALESCE(c.commission_net, 0)) AS \`ค่าคอมมิชชั่น\`
+      SUM(COALESCE(c.commission_net, 0)) AS comm
     FROM contracts c
     WHERE ${whereStr} AND c.approve_date != ''
     GROUP BY ${periodExpr}
@@ -566,7 +582,7 @@ export async function getExpenseSummaryByPeriod(
   const result = await db.execute(sql.raw(querySql));
   const arr: any[] = (result as any)[0] ?? result;
   return (arr ?? []).map((r: any) => {
-    const comm = Number(r["ค่าคอมมิชชั่น"] ?? 0);
+    const comm = Number(r.comm ?? 0);
     return {
       period: r.period ?? "",
       "ค่าคอมมิชชั่น": comm,
@@ -574,4 +590,3 @@ export async function getExpenseSummaryByPeriod(
     };
   });
 }
-
