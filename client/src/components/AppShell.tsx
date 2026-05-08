@@ -9,12 +9,16 @@ import { useLocation } from "wouter";
 import { TopNav } from "./TopNav";
 import { AIChatPanel } from "./AIChatPanel";
 
+/** Key ที่ใช้เก็บ returnPath ใน sessionStorage */
+export const DATA_LOADING_RETURN_KEY = "dl_return_path";
+
 /**
  * AppShell guards authenticated routes:
  *  - If loading → spinner
  *  - If not authenticated → /login
  *  - If authenticated but no section picked → /select-section
  *  - If section set but cache empty (e.g. browser refresh) → /data-loading
+ *    (บันทึก returnPath ใน sessionStorage เพื่อให้ DataLoadingScreen กลับมาหน้าเดิม)
  *  - Otherwise render children inside TopNav layout
  */
 export function AppShell({
@@ -48,6 +52,8 @@ export function AppShell({
     if (requireSection && hasSection && section && location !== "/data-loading") {
       const cache = debtCache.getCache(section as SectionKey);
       if (!cache.target || !cache.collected) {
+        // บันทึก returnPath เพื่อให้ DataLoadingScreen กลับมาหน้าเดิมหลังโหลดเสร็จ
+        sessionStorage.setItem(DATA_LOADING_RETURN_KEY, location);
         navigate("/data-loading", { replace: true });
       }
     }

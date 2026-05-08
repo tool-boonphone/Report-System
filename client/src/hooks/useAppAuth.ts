@@ -9,9 +9,11 @@ import { useCallback, useMemo } from "react";
 export function useAppAuth() {
   const utils = trpc.useUtils();
   const meQuery = trpc.auth.me.useQuery(undefined, {
-    retry: false,
+    retry: 2,              // retry 2 ครั้งเมื่อ network blip
+    retryDelay: 1500,
     refetchOnWindowFocus: false,
-    staleTime: 60_000,
+    staleTime: 10 * 60_000,  // 10 นาที — ไม่ refetch ถี่เกินไป
+    gcTime: 60 * 60_000,     // 1 ชั่วโมง — ไม่ clear cache ระหว่าง navigate
   });
 
   const logoutMutation = trpc.auth.logout.useMutation({
