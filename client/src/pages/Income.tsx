@@ -480,7 +480,7 @@ export default function Income() {
               </thead>
               <tbody>
                 {sortedRows.map((row, idx) => {
-                  const typeColor = TYPE_COLORS[row.incomeType as IncomeType];
+                  const typeColor = TYPE_COLORS[row.incomeType as IncomeType] ?? { bg: "bg-gray-50", text: "text-gray-700", dot: "bg-gray-400" };
                   const globalIdx = (page - 1) * pageSize + idx + 1;
                   return (
                     <tr

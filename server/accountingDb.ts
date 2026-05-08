@@ -118,7 +118,7 @@ export async function listIncome(params: IncomeParams): Promise<{
   //   otherwise → ค่างวด
   const incomeTypeCaseExpr = `
     CASE
-      WHEN period = 0 THEN 'เงินดาวน์'
+      WHEN (period = 0 OR period IS NULL) THEN 'เงินดาวน์'
       WHEN is_bad_debt_row = 1 THEN 'ขายเครื่อง'
       WHEN overpaid > 0 AND principal = 0 AND interest = 0 AND fee = 0 THEN 'ปิดยอด'
       ELSE 'ค่างวด'
@@ -318,7 +318,7 @@ export async function getIncomeSummary(
 
   const incomeTypeCaseExpr = `
     CASE
-      WHEN period = 0 THEN 'เงินดาวน์'
+      WHEN (period = 0 OR period IS NULL) THEN 'เงินดาวน์'
       WHEN is_bad_debt_row = 1 THEN 'ขายเครื่อง'
       WHEN overpaid > 0 AND principal = 0 AND interest = 0 AND fee = 0 THEN 'ปิดยอด'
       ELSE 'ค่างวด'
