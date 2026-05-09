@@ -31,6 +31,7 @@ import {
 import type { SectionKey, SyncTrigger } from "../../shared/const";
 import { invalidateDebtCache } from "../debtCache";
 import { buildAllDebtExports } from "../debtExportBuilder";
+import { fillPeriodNosForSection } from "./fillPeriodNos";
 import { populateDebtCache } from "./populateCache";
 
 const OVERALL_TIMEOUT_MS = 180 * 60 * 1000; // 180 minutes ceiling per section (Fastfone365 has 17k contracts + enrichment)
@@ -234,6 +235,17 @@ async function doSync(
     } catch (payErr: any) {
       payFailed = true;
       console.warn(`[runner] ${section}: payments sync failed (non-fatal for cache):`, payErr?.message ?? payErr);
+    }
+
+    // 5b) Fill period_no / sub_no for all payment_transactions of this section.
+    // Best-effort: if this fails, log and continue (cache will still use old assignPayPeriods).
+    if (!payFailed) {
+      try {
+        const fillCount = await fillPeriodNosForSection(section);
+        console.log(`[runner] ${section}: filled period_no/sub_no for ${fillCount} payment rows`);
+      } catch (fillErr: any) {
+        console.warn(`[runner] ${section}: fillPeriodNos failed (non-fatal):`, fillErr?.message ?? fillErr);
+      }
     }
 
     // 6) Compute & store bad-debt summary per contract

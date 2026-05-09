@@ -328,6 +328,7 @@ export function assignPayPeriods(
   payments: PayRawRow[],
   installmentList: Array<{ period: number | null; amount: number }>,
   contractNo?: string | null,
+  section?: string | null,
 ): Array<PayRawRow & { splitIndex: number; isCloseRow: boolean; isBadDebtRow: boolean }> {
   if (!payments.length) return [];
   const schedule = installmentList
@@ -446,9 +447,20 @@ export function assignPayPeriods(
           }
           if (coveredCheck < 0) coveredCheck = 0;
         }
-        useSuffixPeriod = suffixMatchesPeriod;
+        // Phase 80: Fastfone365 uses X-N format where X = period, N = sub-payment index.
+        // The suffix X always reliably identifies the period regardless of amount-based
+        // cursor walk validation. Bypass Phase 79B for Fastfone365.
+        if (section === 'Fastfone365') {
+          useSuffixPeriod = true;
+        } else {
+          useSuffixPeriod = suffixMatchesPeriod;
+        }
       } else {
-        useSuffixPeriod = allUnique;
+        if (section === 'Fastfone365') {
+          useSuffixPeriod = true;
+        } else {
+          useSuffixPeriod = allUnique;
+        }
       }
     }
   }

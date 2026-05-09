@@ -1536,9 +1536,8 @@ export default function DebtSummary() {
                               baseStyle.background = "#f0f9ff"; // sky-50
                               baseStyle.color = "#15803d"; // green-700
                             } else if (isArrears) {
-                              // Arrears carry (ไม่ใช่ currentPeriod+partial/paid): amber-100 bg + amber-800 bold
-                              baseStyle.background = "#fef3c7"; // amber-100
-                              baseStyle.color = "#92400e"; // amber-800
+                              // Arrears carry (ไม่ใช่ currentPeriod+partial/paid): สีส้ม orange เท่านั้น (ไม่มี BG)
+                              baseStyle.color = "#c2410c"; // orange-700
                               baseStyle.fontWeight = "700";
                             } else if (isFuturePeriod && isPaid) {
                               // งวดอนาคตที่ชำระครบแล้ว: ฟ้าตัวตรง

@@ -311,6 +311,16 @@ export const paymentTransactions = mysqlTable(
     updatedBy: varchar("updated_by", { length: 128 }),
     /** วันเวลาที่แก้ไขล่าสุด — จาก updated_at */
     updatedAt: varchar("updated_at", { length: 32 }),
+    /**
+     * งวดที่ชำระ — คำนวณจาก computePayPeriods() (pure accumulation, ไม่พึ่ง receipt_no)
+     * NULL = ยังไม่ได้คำนวณ (pre-migration rows)
+     */
+    periodNo: int("period_no"),
+    /**
+     * ลำดับย่อยภายในงวด — 1 = ชำระครั้งแรกของงวดนี้, 2 = ครั้งที่สอง ฯลฯ
+     * NULL = ยังไม่ได้คำนวณ
+     */
+    subNo: int("sub_no"),
   },
   (t) => ({
     sectionExternalIdx: uniqueIndex("payments_section_external_idx").on(

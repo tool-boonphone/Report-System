@@ -1,0 +1,9 @@
+{
+  "query": "ALTER TABLE `payment_transactions` ADD `period_no` int;\nALTER TABLE `payment_transactions` ADD `sub_no` int;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute ALTER TABLE `payment_transactions` ADD `period_no` int;\nALTER TABLE `payment_transactions` ADD `sub_no` int;",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 2370
+}

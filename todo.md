@@ -1378,3 +1378,14 @@ Task list:
 - [ ] แก้ monthlySummaryDb.ts ให้ total_paid ตรงกับ Fastfone (ใช้ payment_tx_amount)
 - [ ] Run migration SQL เพิ่ม column payment_tx_amount
 - [ ] ตรวจสอบตัวเลขรายวัน/รายเดือน/รายปีในทุกเมนูให้ตรงกับ Fastfone
+
+## Phase 10 — period_no/sub_no System (Pure Accumulation Logic)
+
+- [ ] Migration: เพิ่ม period_no (INT) และ sub_no (INT) ใน payment_transactions table
+- [ ] เขียน computePayPeriods() ใหม่ (pure accumulation, no receipt_no dependency, split support)
+- [ ] Integrate computePayPeriods() เข้า sync pipeline (fill period_no/sub_no ตอน upsert payments)
+- [ ] Backfill script: คำนวณ period_no/sub_no สำหรับ payment_transactions ที่มีอยู่แล้วทั้งหมด
+- [ ] อัพเดท populateCache.ts ให้ใช้ period_no/sub_no จาก DB แทน assignPayPeriods
+- [ ] อัพเดท queryCacheDb.ts ให้ใช้ period_no/sub_no จาก cache
+- [ ] ตัด BG amber-100 ออกจาก isArrears ใน DebtSummary.tsx (คงสีตัวอักษร orange ไว้)
+- [ ] Push GitHub + checkpoint
