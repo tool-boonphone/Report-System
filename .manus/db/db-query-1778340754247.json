@@ -1,0 +1,40 @@
+{
+  "query": "SELECT p.section, p.contract_external_id, COUNT(p.id) as pay_cnt, COUNT(i.id) as inst_cnt FROM payment_transactions p LEFT JOIN installments i ON i.section = p.section AND i.contract_external_id = p.contract_external_id WHERE p.period_no IS NULL AND p.section = 'Fastfone365' GROUP BY p.section, p.contract_external_id LIMIT 5;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT p.section, p.contract_external_id, COUNT(p.id) as pay_cnt, COUNT(i.id) as inst_cnt FROM payment_transactions p LEFT JOIN installments i ON i.section = p.section AND i.contract_external_id = p.contract_external_id WHERE p.period_no IS NULL AND p.section = 'Fastfone365' GROUP BY p.section, p.contract_external_id LIMIT 5;",
+  "rows": [
+    {
+      "section": "Fastfone365",
+      "contract_external_id": "10",
+      "pay_cnt": "72",
+      "inst_cnt": "72"
+    },
+    {
+      "section": "Fastfone365",
+      "contract_external_id": "10003",
+      "pay_cnt": "64",
+      "inst_cnt": "64"
+    },
+    {
+      "section": "Fastfone365",
+      "contract_external_id": "10006",
+      "pay_cnt": "144",
+      "inst_cnt": "144"
+    },
+    {
+      "section": "Fastfone365",
+      "contract_external_id": "10009",
+      "pay_cnt": "104",
+      "inst_cnt": "104"
+    },
+    {
+      "section": "Fastfone365",
+      "contract_external_id": "1001",
+      "pay_cnt": "100",
+      "inst_cnt": "100"
+    }
+  ],
+  "messages": [],
+  "stdout": "section\tcontract_external_id\tpay_cnt\tinst_cnt\nFastfone365\t10\t72\t72\nFastfone365\t10003\t64\t64\nFastfone365\t10006\t144\t144\nFastfone365\t10009\t104\t104\nFastfone365\t1001\t100\t100\n",
+  "stderr": "",
+  "execution_time_ms": 1739
+}

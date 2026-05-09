@@ -1,0 +1,25 @@
+{
+  "query": "SELECT section, COUNT(*) as cnt FROM payment_transactions WHERE period_no IS NULL GROUP BY section LIMIT 5;\nSELECT section, contract_external_id, COUNT(*) as cnt FROM payment_transactions WHERE period_no IS NULL AND section='Fastfone365' GROUP BY section, contract_external_id LIMIT 5;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT section, COUNT(*) as cnt FROM payment_transactions WHERE period_no IS NULL GROUP BY section LIMIT 5;\nSELECT section, contract_external_id, COUNT(*) as cnt FROM payment_transactions WHERE period_no IS NULL AND section='Fastfone365' GROUP BY section, contract_external_id LIMIT 5;",
+  "rows": [
+    {
+      "section": "Boonphone",
+      "cnt": "66"
+    },
+    {
+      "section": "Fastfone365",
+      "cnt": "36325"
+    }
+  ],
+  "messages": [
+    "section\tcontract_external_id\tcnt",
+    "Fastfone365\t10\t9",
+    "Fastfone365\t10003\t8",
+    "Fastfone365\t10006\t12",
+    "Fastfone365\t10009\t13",
+    "Fastfone365\t1001\t10"
+  ],
+  "stdout": "section\tcnt\nBoonphone\t66\nFastfone365\t36325\nsection\tcontract_external_id\tcnt\nFastfone365\t10\t9\nFastfone365\t10003\t8\nFastfone365\t10006\t12\nFastfone365\t10009\t13\nFastfone365\t1001\t10\n",
+  "stderr": "",
+  "execution_time_ms": 2158
+}

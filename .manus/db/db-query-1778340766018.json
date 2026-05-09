@@ -1,0 +1,9 @@
+{
+  "query": "SELECT DISTINCT p.contract_external_id FROM payment_transactions p LEFT JOIN contracts c ON c.section = p.section AND c.external_id = p.contract_external_id WHERE p.period_no IS NULL AND p.section = 'Fastfone365' AND c.id IS NULL LIMIT 10;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT DISTINCT p.contract_external_id FROM payment_transactions p LEFT JOIN contracts c ON c.section = p.section AND c.external_id = p.contract_external_id WHERE p.period_no IS NULL AND p.section = 'Fastfone365' AND c.id IS NULL LIMIT 10;",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 1987
+}
