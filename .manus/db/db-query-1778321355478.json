@@ -1,0 +1,22 @@
+{
+  "query": "\n-- Step 1: ลบ contracts ที่เป็น ff365 (ซ้ำกับ Fastfone365)\nDELETE FROM contracts WHERE section = 'ff365';\n\n-- Step 2: ลบ installments ที่เป็น ff365\nDELETE FROM installments WHERE section = 'ff365';\n\n-- Step 3: ลบ contracts ที่เป็น boonphone (ซ้ำกับ Boonphone ที่มี 4,212 rows)\n-- แต่ก่อนต้องตรวจสอบว่า boonphone มีข้อมูลใหม่กว่า Boonphone ไหม\nSELECT section, COUNT(*) as cnt FROM contracts GROUP BY section;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \n-- Step 1: ลบ contracts ที่เป็น ff365 (ซ้ำกับ Fastfone365)\nDELETE FROM contracts WHERE section = 'ff365';\n\n-- Step 2: ลบ installments ที่เป็น ff365\nDELETE FROM installments WHERE section = 'ff365';\n\n-- Step 3: ลบ contracts ที่เป็น boonphone (ซ้ำกับ Boonphone ที่มี 4,212 rows)\n-- แต่ก่อนต้องตรวจสอบว่า boonphone มีข้อมูลใหม่กว่า Boonphone ไหม\nSELECT section, COUNT(*) as cnt FROM contracts GROUP BY section;\n",
+  "rows": [
+    {
+      "section": "Boonphone",
+      "cnt": "4212"
+    },
+    {
+      "section": "boonphone",
+      "cnt": "17809"
+    },
+    {
+      "section": "Fastfone365",
+      "cnt": "17809"
+    }
+  ],
+  "messages": [],
+  "stdout": "section\tcnt\nBoonphone\t4212\nboonphone\t17809\nFastfone365\t17809\n",
+  "stderr": "",
+  "execution_time_ms": 7021
+}

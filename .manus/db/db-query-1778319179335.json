@@ -1,0 +1,16 @@
+{
+  "query": "SELECT \n  JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.detail')) as detail,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.type')) as type_field,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.payment_detail')) as payment_detail,\n  COUNT(*) as cnt\nFROM payment_transactions\nWHERE section = 'ff365'\nGROUP BY detail, type_field, payment_detail\nORDER BY cnt DESC\nLIMIT 15;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT \n  JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.detail')) as detail,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.type')) as type_field,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.payment_detail')) as payment_detail,\n  COUNT(*) as cnt\nFROM payment_transactions\nWHERE section = 'ff365'\nGROUP BY detail, type_field, payment_detail\nORDER BY cnt DESC\nLIMIT 15;",
+  "rows": [
+    {
+      "detail": "NULL",
+      "type_field": "NULL",
+      "payment_detail": "NULL",
+      "cnt": "122019"
+    }
+  ],
+  "messages": [],
+  "stdout": "detail\ttype_field\tpayment_detail\tcnt\nNULL\tNULL\tNULL\t122019\n",
+  "stderr": "",
+  "execution_time_ms": 2732
+}

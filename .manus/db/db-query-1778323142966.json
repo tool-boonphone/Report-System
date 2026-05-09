@@ -1,0 +1,100 @@
+{
+  "query": "\nSELECT section, entity, triggered_by, status, row_count, started_at, finished_at\nFROM sync_logs\nWHERE entity = 'contracts'\nORDER BY started_at DESC\nLIMIT 10;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT section, entity, triggered_by, status, row_count, started_at, finished_at\nFROM sync_logs\nWHERE entity = 'contracts'\nORDER BY started_at DESC\nLIMIT 10;\n",
+  "rows": [
+    {
+      "section": "boonphone",
+      "entity": "contracts",
+      "triggered_by": "on-demand",
+      "status": "success",
+      "row_count": "19249",
+      "started_at": "2026-05-09 09:15:24",
+      "finished_at": "2026-05-09 09:26:00"
+    },
+    {
+      "section": "boonphone",
+      "entity": "contracts",
+      "triggered_by": "on-demand",
+      "status": "error",
+      "row_count": "0",
+      "started_at": "2026-05-09 08:38:46",
+      "finished_at": "2026-05-09 09:10:09"
+    },
+    {
+      "section": "boonphone",
+      "entity": "contracts",
+      "triggered_by": "on-demand",
+      "status": "error",
+      "row_count": "0",
+      "started_at": "2026-05-09 07:56:13",
+      "finished_at": "2026-05-09 08:24:13"
+    },
+    {
+      "section": "ff365",
+      "entity": "contracts",
+      "triggered_by": "on-demand",
+      "status": "success",
+      "row_count": "18876",
+      "started_at": "2026-05-09 06:44:20",
+      "finished_at": "2026-05-09 06:53:55"
+    },
+    {
+      "section": "ff365",
+      "entity": "contracts",
+      "triggered_by": "on-demand",
+      "status": "success",
+      "row_count": "18876",
+      "started_at": "2026-05-09 06:24:17",
+      "finished_at": "2026-05-09 06:34:05"
+    },
+    {
+      "section": "ff365",
+      "entity": "contracts",
+      "triggered_by": "on-demand",
+      "status": "success",
+      "row_count": "18876",
+      "started_at": "2026-05-09 06:11:25",
+      "finished_at": "2026-05-09 06:18:26"
+    },
+    {
+      "section": "ff365",
+      "entity": "contracts",
+      "triggered_by": "on-demand",
+      "status": "success",
+      "row_count": "18876",
+      "started_at": "2026-05-09 05:57:15",
+      "finished_at": "2026-05-09 06:04:21"
+    },
+    {
+      "section": "ff365",
+      "entity": "contracts",
+      "triggered_by": "on-demand",
+      "status": "success",
+      "row_count": "18876",
+      "started_at": "2026-05-09 05:51:12",
+      "finished_at": "2026-05-09 05:58:13"
+    },
+    {
+      "section": "ff365",
+      "entity": "contracts",
+      "triggered_by": "on-demand",
+      "status": "success",
+      "row_count": "21836",
+      "started_at": "2026-05-09 05:18:38",
+      "finished_at": "2026-05-09 05:40:11"
+    },
+    {
+      "section": "ff365",
+      "entity": "contracts",
+      "triggered_by": "on-demand",
+      "status": "error",
+      "row_count": "0",
+      "started_at": "2026-05-09 04:56:28",
+      "finished_at": "2026-05-09 05:11:44"
+    }
+  ],
+  "messages": [],
+  "stdout": "section\tentity\ttriggered_by\tstatus\trow_count\tstarted_at\tfinished_at\nboonphone\tcontracts\ton-demand\tsuccess\t19249\t2026-05-09 09:15:24\t2026-05-09 09:26:00\nboonphone\tcontracts\ton-demand\terror\t0\t2026-05-09 08:38:46\t2026-05-09 09:10:09\nboonphone\tcontracts\ton-demand\terror\t0\t2026-05-09 07:56:13\t2026-05-09 08:24:13\nff365\tcontracts\ton-demand\tsuccess\t18876\t2026-05-09 06:44:20\t2026-05-09 06:53:55\nff365\tcontracts\ton-demand\tsuccess\t18876\t2026-05-09 06:24:17\t2026-05-09 06:34:05\nff365\tcontracts\ton-demand\tsuccess\t18876\t2026-05-09 06:11:25\t2026-05-09 06:18:26\nff365\tcontracts\ton-demand\tsuccess\t18876\t2026-05-09 05:57:15\t2026-05-09 06:04:21\nff365\tcontracts\ton-demand\tsuccess\t18876\t2026-05-09 05:51:12\t2026-05-09 05:58:13\nff365\tcontracts\ton-demand\tsuccess\t21836\t2026-05-09 05:18:38\t2026-05-09 05:40:11\nff365\tcontracts\ton-demand\terror\t0\t2026-05-09 04:56:28\t2026-05-09 05:11:44\n",
+  "stderr": "",
+  "execution_time_ms": 1824
+}

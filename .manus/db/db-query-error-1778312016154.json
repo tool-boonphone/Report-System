@@ -1,0 +1,8 @@
+{
+  "query": "SELECT id, transaction_id, payment_time, created_by, updated_by, section FROM payment_transactions WHERE section='ff365' AND payment_time IS NULL LIMIT 10;\nSELECT COUNT(*) as null_pt, MIN(id) as min_id, MAX(id) as max_id FROM payment_transactions WHERE section='ff365' AND payment_time IS NULL;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT id, transaction_id, payment_time, created_by, updated_by, section FROM payment_transactions WHERE section='ff365' AND payment_time IS NULL LIMIT 10;\nSELECT COUNT(*) as null_pt, MIN(id) as min_id, MAX(id) as max_id FROM payment_transactions WHERE section='ff365' AND payment_time IS NULL;",
+  "returncode": 1,
+  "logs": [
+    "ERROR 1054 (42S22) at line 1: Unknown column 'transaction_id' in 'field list'"
+  ]
+}

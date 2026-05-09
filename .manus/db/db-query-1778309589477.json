@@ -1,0 +1,93 @@
+{
+  "query": "SELECT id, entity, status, row_count, TIMESTAMPDIFF(MINUTE, started_at, NOW()) as elapsed_min, error_message FROM sync_logs WHERE section='ff365' ORDER BY id DESC LIMIT 10;\nSELECT section, COUNT(*) as cnt, SUM(CASE WHEN payment_time IS NOT NULL THEN 1 ELSE 0 END) as has_pt, SUM(CASE WHEN created_by IS NOT NULL THEN 1 ELSE 0 END) as has_cb FROM payment_transactions GROUP BY section;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT id, entity, status, row_count, TIMESTAMPDIFF(MINUTE, started_at, NOW()) as elapsed_min, error_message FROM sync_logs WHERE section='ff365' ORDER BY id DESC LIMIT 10;\nSELECT section, COUNT(*) as cnt, SUM(CASE WHEN payment_time IS NOT NULL THEN 1 ELSE 0 END) as has_pt, SUM(CASE WHEN created_by IS NOT NULL THEN 1 ELSE 0 END) as has_cb FROM payment_transactions GROUP BY section;",
+  "rows": [
+    {
+      "id": "1230062",
+      "entity": "contracts",
+      "status": "in_progress",
+      "row_count": "0",
+      "elapsed_min": "8",
+      "error_message": "NULL"
+    },
+    {
+      "id": "1230061",
+      "entity": "customers",
+      "status": "success",
+      "row_count": "22290",
+      "elapsed_min": "13",
+      "error_message": "NULL"
+    },
+    {
+      "id": "1230060",
+      "entity": "partners",
+      "status": "success",
+      "row_count": "693",
+      "elapsed_min": "13",
+      "error_message": "NULL"
+    },
+    {
+      "id": "1230059",
+      "entity": "all",
+      "status": "in_progress",
+      "row_count": "0",
+      "elapsed_min": "13",
+      "error_message": "NULL"
+    },
+    {
+      "id": "1230058",
+      "entity": "installments",
+      "status": "error",
+      "row_count": "0",
+      "elapsed_min": "19",
+      "error_message": "Auto-cleared on startup: previous Cloud Run instance was killed during sync"
+    },
+    {
+      "id": "1230057",
+      "entity": "contracts",
+      "status": "success",
+      "row_count": "18876",
+      "elapsed_min": "28",
+      "error_message": "NULL"
+    },
+    {
+      "id": "1230056",
+      "entity": "customers",
+      "status": "success",
+      "row_count": "22290",
+      "elapsed_min": "33",
+      "error_message": "NULL"
+    },
+    {
+      "id": "1230055",
+      "entity": "partners",
+      "status": "success",
+      "row_count": "693",
+      "elapsed_min": "33",
+      "error_message": "NULL"
+    },
+    {
+      "id": "1230054",
+      "entity": "all",
+      "status": "error",
+      "row_count": "0",
+      "elapsed_min": "33",
+      "error_message": "Auto-cleared on startup: previous Cloud Run instance was killed during sync"
+    },
+    {
+      "id": "1230053",
+      "entity": "installments",
+      "status": "error",
+      "row_count": "0",
+      "elapsed_min": "34",
+      "error_message": "Manually cleared: stuck in_progress"
+    }
+  ],
+  "messages": [
+    "section\tcnt\thas_pt\thas_cb",
+    "Boonphone\t4274\t0\t0"
+  ],
+  "stdout": "id\tentity\tstatus\trow_count\telapsed_min\terror_message\n1230062\tcontracts\tin_progress\t0\t8\tNULL\n1230061\tcustomers\tsuccess\t22290\t13\tNULL\n1230060\tpartners\tsuccess\t693\t13\tNULL\n1230059\tall\tin_progress\t0\t13\tNULL\n1230058\tinstallments\terror\t0\t19\tAuto-cleared on startup: previous Cloud Run instance was killed during sync\n1230057\tcontracts\tsuccess\t18876\t28\tNULL\n1230056\tcustomers\tsuccess\t22290\t33\tNULL\n1230055\tpartners\tsuccess\t693\t33\tNULL\n1230054\tall\terror\t0\t33\tAuto-cleared on startup: previous Cloud Run instance was killed during sync\n1230053\tinstallments\terror\t0\t34\tManually cleared: stuck in_progress\nsection\tcnt\thas_pt\thas_cb\nBoonphone\t4274\t0\t0\n",
+  "stderr": "",
+  "execution_time_ms": 1991
+}

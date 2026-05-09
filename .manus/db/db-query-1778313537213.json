@@ -1,0 +1,38 @@
+{
+  "query": "SELECT id, entity, status, row_count, TIMESTAMPDIFF(MINUTE, started_at, NOW()) as elapsed_min \nFROM sync_logs WHERE section='boonphone' ORDER BY id DESC LIMIT 8;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT id, entity, status, row_count, TIMESTAMPDIFF(MINUTE, started_at, NOW()) as elapsed_min \nFROM sync_logs WHERE section='boonphone' ORDER BY id DESC LIMIT 8;",
+  "rows": [
+    {
+      "id": "1230068",
+      "entity": "contracts",
+      "status": "in_progress",
+      "row_count": "0",
+      "elapsed_min": "2"
+    },
+    {
+      "id": "1230067",
+      "entity": "customers",
+      "status": "success",
+      "row_count": "22290",
+      "elapsed_min": "7"
+    },
+    {
+      "id": "1230066",
+      "entity": "partners",
+      "status": "success",
+      "row_count": "693",
+      "elapsed_min": "7"
+    },
+    {
+      "id": "1230065",
+      "entity": "all",
+      "status": "in_progress",
+      "row_count": "0",
+      "elapsed_min": "7"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tentity\tstatus\trow_count\telapsed_min\n1230068\tcontracts\tin_progress\t0\t2\n1230067\tcustomers\tsuccess\t22290\t7\n1230066\tpartners\tsuccess\t693\t7\n1230065\tall\tin_progress\t0\t7\n",
+  "stderr": "",
+  "execution_time_ms": 1743
+}

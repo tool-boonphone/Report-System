@@ -1,0 +1,69 @@
+{
+  "query": "SELECT id, entity, status, row_count,\n  DATE_FORMAT(started_at, '%H:%i:%s') as started,\n  DATE_FORMAT(finished_at, '%H:%i:%s') as finished,\n  TIMESTAMPDIFF(MINUTE, started_at, IFNULL(finished_at, NOW())) as duration_min\nFROM sync_logs WHERE section='boonphone' ORDER BY id DESC LIMIT 6;\n\nSELECT COUNT(*) as payment_count FROM payment_transactions WHERE section='Boonphone';\nSELECT COUNT(*) as contract_count FROM contracts WHERE section='Boonphone';",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT id, entity, status, row_count,\n  DATE_FORMAT(started_at, '%H:%i:%s') as started,\n  DATE_FORMAT(finished_at, '%H:%i:%s') as finished,\n  TIMESTAMPDIFF(MINUTE, started_at, IFNULL(finished_at, NOW())) as duration_min\nFROM sync_logs WHERE section='boonphone' ORDER BY id DESC LIMIT 6;\n\nSELECT COUNT(*) as payment_count FROM payment_transactions WHERE section='Boonphone';\nSELECT COUNT(*) as contract_count FROM contracts WHERE section='Boonphone';",
+  "rows": [
+    {
+      "id": "1230072",
+      "entity": "contracts",
+      "status": "in_progress",
+      "row_count": "0",
+      "started": "08:38:46",
+      "finished": "NULL",
+      "duration_min": "30"
+    },
+    {
+      "id": "1230071",
+      "entity": "customers",
+      "status": "success",
+      "row_count": "22290",
+      "started": "08:34:19",
+      "finished": "08:38:45",
+      "duration_min": "4"
+    },
+    {
+      "id": "1230070",
+      "entity": "partners",
+      "status": "success",
+      "row_count": "693",
+      "started": "08:34:09",
+      "finished": "08:34:19",
+      "duration_min": "0"
+    },
+    {
+      "id": "1230069",
+      "entity": "all",
+      "status": "in_progress",
+      "row_count": "0",
+      "started": "08:34:09",
+      "finished": "NULL",
+      "duration_min": "35"
+    },
+    {
+      "id": "1230068",
+      "entity": "contracts",
+      "status": "error",
+      "row_count": "0",
+      "started": "07:56:13",
+      "finished": "08:24:13",
+      "duration_min": "28"
+    },
+    {
+      "id": "1230067",
+      "entity": "customers",
+      "status": "success",
+      "row_count": "22290",
+      "started": "07:51:41",
+      "finished": "07:56:13",
+      "duration_min": "4"
+    }
+  ],
+  "messages": [
+    "payment_count",
+    "0",
+    "contract_count",
+    "4212"
+  ],
+  "stdout": "id\tentity\tstatus\trow_count\tstarted\tfinished\tduration_min\n1230072\tcontracts\tin_progress\t0\t08:38:46\tNULL\t30\n1230071\tcustomers\tsuccess\t22290\t08:34:19\t08:38:45\t4\n1230070\tpartners\tsuccess\t693\t08:34:09\t08:34:19\t0\n1230069\tall\tin_progress\t0\t08:34:09\tNULL\t35\n1230068\tcontracts\terror\t0\t07:56:13\t08:24:13\t28\n1230067\tcustomers\tsuccess\t22290\t07:51:41\t07:56:13\t4\npayment_count\n0\ncontract_count\n4212\n",
+  "stderr": "",
+  "execution_time_ms": 2295
+}

@@ -1,0 +1,58 @@
+{
+  "query": "SELECT id, entity, status, row_count, DATE_FORMAT(started_at, '%H:%i:%s') as started, TIMESTAMPDIFF(MINUTE, started_at, NOW()) as elapsed_min\nFROM sync_logs WHERE section='boonphone' ORDER BY id DESC LIMIT 6;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT id, entity, status, row_count, DATE_FORMAT(started_at, '%H:%i:%s') as started, TIMESTAMPDIFF(MINUTE, started_at, NOW()) as elapsed_min\nFROM sync_logs WHERE section='boonphone' ORDER BY id DESC LIMIT 6;",
+  "rows": [
+    {
+      "id": "1230071",
+      "entity": "customers",
+      "status": "in_progress",
+      "row_count": "0",
+      "started": "08:34:19",
+      "elapsed_min": "0"
+    },
+    {
+      "id": "1230070",
+      "entity": "partners",
+      "status": "success",
+      "row_count": "693",
+      "started": "08:34:09",
+      "elapsed_min": "1"
+    },
+    {
+      "id": "1230069",
+      "entity": "all",
+      "status": "in_progress",
+      "row_count": "0",
+      "started": "08:34:09",
+      "elapsed_min": "1"
+    },
+    {
+      "id": "1230068",
+      "entity": "contracts",
+      "status": "error",
+      "row_count": "0",
+      "started": "07:56:13",
+      "elapsed_min": "39"
+    },
+    {
+      "id": "1230067",
+      "entity": "customers",
+      "status": "success",
+      "row_count": "22290",
+      "started": "07:51:41",
+      "elapsed_min": "43"
+    },
+    {
+      "id": "1230066",
+      "entity": "partners",
+      "status": "success",
+      "row_count": "693",
+      "started": "07:51:32",
+      "elapsed_min": "43"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tentity\tstatus\trow_count\tstarted\telapsed_min\n1230071\tcustomers\tin_progress\t0\t08:34:19\t0\n1230070\tpartners\tsuccess\t693\t08:34:09\t1\n1230069\tall\tin_progress\t0\t08:34:09\t1\n1230068\tcontracts\terror\t0\t07:56:13\t39\n1230067\tcustomers\tsuccess\t22290\t07:51:41\t43\n1230066\tpartners\tsuccess\t693\t07:51:32\t43\n",
+  "stderr": "",
+  "execution_time_ms": 1828
+}

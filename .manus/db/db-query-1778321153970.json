@@ -1,0 +1,100 @@
+{
+  "query": "\nSELECT section, entity, status, started_at, finished_at, row_count, error_message \nFROM sync_logs \nORDER BY started_at DESC \nLIMIT 10;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT section, entity, status, started_at, finished_at, row_count, error_message \nFROM sync_logs \nORDER BY started_at DESC \nLIMIT 10;\n",
+  "rows": [
+    {
+      "section": "boonphone",
+      "entity": "payments",
+      "status": "success",
+      "started_at": "2026-05-09 09:39:31",
+      "finished_at": "2026-05-09 10:00:16",
+      "row_count": "122046",
+      "error_message": "NULL"
+    },
+    {
+      "section": "boonphone",
+      "entity": "installments",
+      "status": "success",
+      "started_at": "2026-05-09 09:26:02",
+      "finished_at": "2026-05-09 09:39:31",
+      "row_count": "171363",
+      "error_message": "NULL"
+    },
+    {
+      "section": "boonphone",
+      "entity": "contracts",
+      "status": "success",
+      "started_at": "2026-05-09 09:15:24",
+      "finished_at": "2026-05-09 09:26:00",
+      "row_count": "19249",
+      "error_message": "NULL"
+    },
+    {
+      "section": "boonphone",
+      "entity": "customers",
+      "status": "success",
+      "started_at": "2026-05-09 09:10:28",
+      "finished_at": "2026-05-09 09:15:24",
+      "row_count": "22290",
+      "error_message": "NULL"
+    },
+    {
+      "section": "boonphone",
+      "entity": "partners",
+      "status": "success",
+      "started_at": "2026-05-09 09:10:18",
+      "finished_at": "2026-05-09 09:10:28",
+      "row_count": "693",
+      "error_message": "NULL"
+    },
+    {
+      "section": "boonphone",
+      "entity": "all",
+      "status": "error",
+      "started_at": "2026-05-09 09:10:17",
+      "finished_at": "2026-05-09 09:11:14",
+      "row_count": "0",
+      "error_message": "Auto-cleared on startup: previous Cloud Run instance was killed during sync"
+    },
+    {
+      "section": "boonphone",
+      "entity": "contracts",
+      "status": "error",
+      "started_at": "2026-05-09 08:38:46",
+      "finished_at": "2026-05-09 09:10:09",
+      "row_count": "0",
+      "error_message": "Force-cleared: duplicate sync processes killed"
+    },
+    {
+      "section": "boonphone",
+      "entity": "customers",
+      "status": "success",
+      "started_at": "2026-05-09 08:34:19",
+      "finished_at": "2026-05-09 08:38:45",
+      "row_count": "22290",
+      "error_message": "NULL"
+    },
+    {
+      "section": "boonphone",
+      "entity": "all",
+      "status": "error",
+      "started_at": "2026-05-09 08:34:09",
+      "finished_at": "2026-05-09 09:10:09",
+      "row_count": "0",
+      "error_message": "Force-cleared: duplicate sync processes killed"
+    },
+    {
+      "section": "boonphone",
+      "entity": "partners",
+      "status": "success",
+      "started_at": "2026-05-09 08:34:09",
+      "finished_at": "2026-05-09 08:34:19",
+      "row_count": "693",
+      "error_message": "NULL"
+    }
+  ],
+  "messages": [],
+  "stdout": "section\tentity\tstatus\tstarted_at\tfinished_at\trow_count\terror_message\nboonphone\tpayments\tsuccess\t2026-05-09 09:39:31\t2026-05-09 10:00:16\t122046\tNULL\nboonphone\tinstallments\tsuccess\t2026-05-09 09:26:02\t2026-05-09 09:39:31\t171363\tNULL\nboonphone\tcontracts\tsuccess\t2026-05-09 09:15:24\t2026-05-09 09:26:00\t19249\tNULL\nboonphone\tcustomers\tsuccess\t2026-05-09 09:10:28\t2026-05-09 09:15:24\t22290\tNULL\nboonphone\tpartners\tsuccess\t2026-05-09 09:10:18\t2026-05-09 09:10:28\t693\tNULL\nboonphone\tall\terror\t2026-05-09 09:10:17\t2026-05-09 09:11:14\t0\tAuto-cleared on startup: previous Cloud Run instance was killed during sync\nboonphone\tcontracts\terror\t2026-05-09 08:38:46\t2026-05-09 09:10:09\t0\tForce-cleared: duplicate sync processes killed\nboonphone\tcustomers\tsuccess\t2026-05-09 08:34:19\t2026-05-09 08:38:45\t22290\tNULL\nboonphone\tall\terror\t2026-05-09 08:34:09\t2026-05-09 09:10:09\t0\tForce-cleared: duplicate sync processes killed\nboonphone\tpartners\tsuccess\t2026-05-09 08:34:09\t2026-05-09 08:34:19\t693\tNULL\n",
+  "stderr": "",
+  "execution_time_ms": 1791
+}

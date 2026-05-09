@@ -1,0 +1,170 @@
+{
+  "query": "-- rows ที่ paid_at = พ.ย. 2024 แต่ created_at ไม่ใช่ พ.ย. 2024\nSELECT external_id, contract_no, paid_at, amount, created_by, created_at\nFROM payment_transactions\nWHERE section = 'ff365' \n  AND paid_at BETWEEN '2024-11-01' AND '2024-11-30'\n  AND (created_at IS NULL OR created_at NOT LIKE '2024-11%')\nORDER BY created_at DESC\nLIMIT 20;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute -- rows ที่ paid_at = พ.ย. 2024 แต่ created_at ไม่ใช่ พ.ย. 2024\nSELECT external_id, contract_no, paid_at, amount, created_by, created_at\nFROM payment_transactions\nWHERE section = 'ff365' \n  AND paid_at BETWEEN '2024-11-01' AND '2024-11-30'\n  AND (created_at IS NULL OR created_at NOT LIKE '2024-11%')\nORDER BY created_at DESC\nLIMIT 20;",
+  "rows": [
+    {
+      "external_id": "54611",
+      "contract_no": "CT1024-SNI001-00274-01",
+      "paid_at": "2024-11-16",
+      "amount": "2900.00",
+      "created_by": "adminkaew",
+      "created_at": "2025-07-12 18:18:05"
+    },
+    {
+      "external_id": "52367",
+      "contract_no": "CT1024-SNI001-00164-01",
+      "paid_at": "2024-11-21",
+      "amount": "4871.00",
+      "created_by": "adminkaew",
+      "created_at": "2025-07-04 17:34:39"
+    },
+    {
+      "external_id": "51611",
+      "contract_no": "CT0924-NYK002-00012-02",
+      "paid_at": "2024-11-26",
+      "amount": "942.00",
+      "created_by": "adminkaew",
+      "created_at": "2025-07-02 13:40:09"
+    },
+    {
+      "external_id": "48246",
+      "contract_no": "CT0924-SNI001-00045-02",
+      "paid_at": "2024-11-16",
+      "amount": "250.00",
+      "created_by": "adminkaew",
+      "created_at": "2025-06-21 11:14:02"
+    },
+    {
+      "external_id": "48201",
+      "contract_no": "CT0924-SNI001-00045-02",
+      "paid_at": "2024-11-16",
+      "amount": "1911.00",
+      "created_by": "adminkaew",
+      "created_at": "2025-06-21 10:44:47"
+    },
+    {
+      "external_id": "37240",
+      "contract_no": "CT0924-NRT001-00076-01",
+      "paid_at": "2024-11-09",
+      "amount": "1867.00",
+      "created_by": "admins",
+      "created_at": "2025-05-10 11:49:53"
+    },
+    {
+      "external_id": "25967",
+      "contract_no": "CT0924-SNI001-00100-01",
+      "paid_at": "2024-11-30",
+      "amount": "3000.00",
+      "created_by": "adminkaew",
+      "created_at": "2025-03-31 20:37:32"
+    },
+    {
+      "external_id": "21699",
+      "contract_no": "CT1124-SKA002-2116-01",
+      "paid_at": "2024-11-27",
+      "amount": "100.00",
+      "created_by": "adminmint",
+      "created_at": "2025-03-16 13:57:51"
+    },
+    {
+      "external_id": "21697",
+      "contract_no": "CT1124-SKA002-2116-01",
+      "paid_at": "2024-11-25",
+      "amount": "100.00",
+      "created_by": "adminmint",
+      "created_at": "2025-03-16 13:56:53"
+    },
+    {
+      "external_id": "21696",
+      "contract_no": "CT1124-SKA002-2116-01",
+      "paid_at": "2024-11-20",
+      "amount": "98.00",
+      "created_by": "adminmint",
+      "created_at": "2025-03-16 13:56:11"
+    },
+    {
+      "external_id": "21695",
+      "contract_no": "CT1124-SKA002-2116-01",
+      "paid_at": "2024-11-19",
+      "amount": "300.00",
+      "created_by": "adminmint",
+      "created_at": "2025-03-16 13:55:39"
+    },
+    {
+      "external_id": "21693",
+      "contract_no": "CT1124-SKA002-2116-01",
+      "paid_at": "2024-11-16",
+      "amount": "1000.00",
+      "created_by": "adminmint",
+      "created_at": "2025-03-16 13:55:12"
+    },
+    {
+      "external_id": "21691",
+      "contract_no": "CT1124-SKA002-2116-01",
+      "paid_at": "2024-11-12",
+      "amount": "200.00",
+      "created_by": "adminmint",
+      "created_at": "2025-03-16 13:54:36"
+    },
+    {
+      "external_id": "21690",
+      "contract_no": "CT1124-SKA002-2116-01",
+      "paid_at": "2024-11-10",
+      "amount": "240.00",
+      "created_by": "adminmint",
+      "created_at": "2025-03-16 13:54:03"
+    },
+    {
+      "external_id": "20015",
+      "contract_no": "CT0824-NRT001-00056-02",
+      "paid_at": "2024-11-28",
+      "amount": "50.00",
+      "created_by": "adminkaew",
+      "created_at": "2025-03-10 10:51:34"
+    },
+    {
+      "external_id": "20013",
+      "contract_no": "CT0824-NRT001-00056-02",
+      "paid_at": "2024-11-28",
+      "amount": "2927.00",
+      "created_by": "adminkaew",
+      "created_at": "2025-03-10 10:51:09"
+    },
+    {
+      "external_id": "16652",
+      "contract_no": "CT1024-NRT001-1381-01",
+      "paid_at": "2024-11-30",
+      "amount": "1990.00",
+      "created_by": "adminkaew",
+      "created_at": "2025-02-26 15:54:41"
+    },
+    {
+      "external_id": "16624",
+      "contract_no": "CT1024-NRT001-1309-02",
+      "paid_at": "2024-11-29",
+      "amount": "3433.00",
+      "created_by": "adminkaew",
+      "created_at": "2025-02-26 14:54:06"
+    },
+    {
+      "external_id": "15932",
+      "contract_no": "CT1024-SPK001-00019-02",
+      "paid_at": "2024-11-09",
+      "amount": "5533.00",
+      "created_by": "adminview",
+      "created_at": "2025-02-24 11:56:04"
+    },
+    {
+      "external_id": "15917",
+      "contract_no": "CT1024-NRT001-00247-01",
+      "paid_at": "2024-11-21",
+      "amount": "2376.00",
+      "created_by": "adminview",
+      "created_at": "2025-02-24 11:42:56"
+    }
+  ],
+  "messages": [],
+  "stdout": "external_id\tcontract_no\tpaid_at\tamount\tcreated_by\tcreated_at\n54611\tCT1024-SNI001-00274-01\t2024-11-16\t2900.00\tadminkaew\t2025-07-12 18:18:05\n52367\tCT1024-SNI001-00164-01\t2024-11-21\t4871.00\tadminkaew\t2025-07-04 17:34:39\n51611\tCT0924-NYK002-00012-02\t2024-11-26\t942.00\tadminkaew\t2025-07-02 13:40:09\n48246\tCT0924-SNI001-00045-02\t2024-11-16\t250.00\tadminkaew\t2025-06-21 11:14:02\n48201\tCT0924-SNI001-00045-02\t2024-11-16\t1911.00\tadminkaew\t2025-06-21 10:44:47\n37240\tCT0924-NRT001-00076-01\t2024-11-09\t1867.00\tadmins\t2025-05-10 11:49:53\n25967\tCT0924-SNI001-00100-01\t2024-11-30\t3000.00\tadminkaew\t2025-03-31 20:37:32\n21699\tCT1124-SKA002-2116-01\t2024-11-27\t100.00\tadminmint\t2025-03-16 13:57:51\n21697\tCT1124-SKA002-2116-01\t2024-11-25\t100.00\tadminmint\t2025-03-16 13:56:53\n21696\tCT1124-SKA002-2116-01\t2024-11-20\t98.00\tadminmint\t2025-03-16 13:56:11\n21695\tCT1124-SKA002-2116-01\t2024-11-19\t300.00\tadminmint\t2025-03-16 13:55:39\n21693\tCT1124-SKA002-2116-01\t2024-11-16\t1000.00\tadminmint\t2025-03-16 13:55:12\n21691\tCT1124-SKA002-2116-01\t2024-11-12\t200.00\tadminmint\t2025-03-16 13:54:36\n21690\tCT1124-SKA002-2116-01\t2024-11-10\t240.00\tadminmint\t2025-03-16 13:54:03\n20015\tCT0824-NRT001-00056-02\t2024-11-28\t50.00\tadminkaew\t2025-03-10 10:51:34\n20013\tCT0824-NRT001-00056-02\t2024-11-28\t2927.00\tadminkaew\t2025-03-10 10:51:09\n16652\tCT1024-NRT001-1381-01\t2024-11-30\t1990.00\tadminkaew\t2025-02-26 15:54:41\n16624\tCT1024-NRT001-1309-02\t2024-11-29\t3433.00\tadminkaew\t2025-02-26 14:54:06\n15932\tCT1024-SPK001-00019-02\t2024-11-09\t5533.00\tadminview\t2025-02-24 11:56:04\n15917\tCT1024-NRT001-00247-01\t2024-11-21\t2376.00\tadminview\t2025-02-24 11:42:56\n",
+  "stderr": "",
+  "execution_time_ms": 1749
+}

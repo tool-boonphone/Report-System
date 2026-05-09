@@ -1,0 +1,130 @@
+{
+  "query": "SELECT \n  JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.remark')) as remark,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.close_installment_amount')) as close_amount,\n  COUNT(*) as cnt,\n  SUM(amount) as total\nFROM payment_transactions\nWHERE section = 'ff365'\nGROUP BY remark, close_amount\nORDER BY cnt DESC\nLIMIT 20;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT \n  JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.remark')) as remark,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.close_installment_amount')) as close_amount,\n  COUNT(*) as cnt,\n  SUM(amount) as total\nFROM payment_transactions\nWHERE section = 'ff365'\nGROUP BY remark, close_amount\nORDER BY cnt DESC\nLIMIT 20;",
+  "rows": [
+    {
+      "remark": "",
+      "close_amount": "2903",
+      "cnt": "735",
+      "total": "2199349.00"
+    },
+    {
+      "remark": "",
+      "close_amount": "2646",
+      "cnt": "647",
+      "total": "1763370.00"
+    },
+    {
+      "remark": "",
+      "close_amount": "1000",
+      "cnt": "520",
+      "total": "525000.00"
+    },
+    {
+      "remark": "",
+      "close_amount": "50",
+      "cnt": "478",
+      "total": "32410.00"
+    },
+    {
+      "remark": "",
+      "close_amount": "1675",
+      "cnt": "439",
+      "total": "761225.00"
+    },
+    {
+      "remark": "",
+      "close_amount": "500",
+      "cnt": "429",
+      "total": "221700.00"
+    },
+    {
+      "remark": "",
+      "close_amount": "2331",
+      "cnt": "426",
+      "total": "1028205.00"
+    },
+    {
+      "remark": "จบงวด ธ.ค.",
+      "close_amount": "2559",
+      "cnt": "350",
+      "total": "912294.00"
+    },
+    {
+      "remark": "จบงวด พ.ย.",
+      "close_amount": "2559",
+      "cnt": "325",
+      "total": "844241.00"
+    },
+    {
+      "remark": "",
+      "close_amount": "2388",
+      "cnt": "291",
+      "total": "705258.00"
+    },
+    {
+      "remark": "",
+      "close_amount": "100",
+      "cnt": "288",
+      "total": "38157.00"
+    },
+    {
+      "remark": "จบงวด ก.พ.",
+      "close_amount": "2559",
+      "cnt": "283",
+      "total": "731211.00"
+    },
+    {
+      "remark": "จบงวด ม.ค.",
+      "close_amount": "2559",
+      "cnt": "279",
+      "total": "725163.00"
+    },
+    {
+      "remark": "",
+      "close_amount": "3370",
+      "cnt": "270",
+      "total": "935650.00"
+    },
+    {
+      "remark": "",
+      "close_amount": "1990",
+      "cnt": "268",
+      "total": "547170.00"
+    },
+    {
+      "remark": "",
+      "close_amount": "2305",
+      "cnt": "263",
+      "total": "619645.00"
+    },
+    {
+      "remark": "",
+      "close_amount": "2462",
+      "cnt": "263",
+      "total": "668756.00"
+    },
+    {
+      "remark": "",
+      "close_amount": "3604",
+      "cnt": "247",
+      "total": "917784.00"
+    },
+    {
+      "remark": "จบงวด มี.ค.",
+      "close_amount": "2559",
+      "cnt": "246",
+      "total": "635062.00"
+    },
+    {
+      "remark": "",
+      "close_amount": "2000",
+      "cnt": "236",
+      "total": "478400.00"
+    }
+  ],
+  "messages": [],
+  "stdout": "remark\tclose_amount\tcnt\ttotal\n\t2903\t735\t2199349.00\n\t2646\t647\t1763370.00\n\t1000\t520\t525000.00\n\t50\t478\t32410.00\n\t1675\t439\t761225.00\n\t500\t429\t221700.00\n\t2331\t426\t1028205.00\nจบงวด ธ.ค.\t2559\t350\t912294.00\nจบงวด พ.ย.\t2559\t325\t844241.00\n\t2388\t291\t705258.00\n\t100\t288\t38157.00\nจบงวด ก.พ.\t2559\t283\t731211.00\nจบงวด ม.ค.\t2559\t279\t725163.00\n\t3370\t270\t935650.00\n\t1990\t268\t547170.00\n\t2305\t263\t619645.00\n\t2462\t263\t668756.00\n\t3604\t247\t917784.00\nจบงวด มี.ค.\t2559\t246\t635062.00\n\t2000\t236\t478400.00\n",
+  "stderr": "",
+  "execution_time_ms": 2791
+}

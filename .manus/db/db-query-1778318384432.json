@@ -1,0 +1,15 @@
+{
+  "query": "SELECT MAX(paid_at) as latest_paid_at, \n  COUNT(*) as count_today,\n  SUM(amount) as total_today\nFROM payment_transactions\nWHERE section = 'ff365' AND paid_at >= '2026-05-09';",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT MAX(paid_at) as latest_paid_at, \n  COUNT(*) as count_today,\n  SUM(amount) as total_today\nFROM payment_transactions\nWHERE section = 'ff365' AND paid_at >= '2026-05-09';",
+  "rows": [
+    {
+      "latest_paid_at": "2026-05-09",
+      "count_today": "85",
+      "total_today": "185941.00"
+    }
+  ],
+  "messages": [],
+  "stdout": "latest_paid_at\tcount_today\ttotal_today\n2026-05-09\t85\t185941.00\n",
+  "stderr": "",
+  "execution_time_ms": 1828
+}

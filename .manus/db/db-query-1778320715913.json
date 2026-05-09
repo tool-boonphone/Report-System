@@ -1,0 +1,30 @@
+{
+  "query": "SELECT method, COUNT(*) as cnt, SUM(amount) as total_amount\nFROM payment_transactions\nWHERE section = 'ff365'\nGROUP BY method\nORDER BY cnt DESC;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT method, COUNT(*) as cnt, SUM(amount) as total_amount\nFROM payment_transactions\nWHERE section = 'ff365'\nGROUP BY method\nORDER BY cnt DESC;",
+  "rows": [
+    {
+      "method": "โอนตรง",
+      "cnt": "99330",
+      "total_amount": "253825119.69"
+    },
+    {
+      "method": "โอนเงิน",
+      "cnt": "22676",
+      "total_amount": "54949732.71"
+    },
+    {
+      "method": "K-shop",
+      "cnt": "12",
+      "total_amount": "22730.17"
+    },
+    {
+      "method": "เงินสด",
+      "cnt": "1",
+      "total_amount": "400.00"
+    }
+  ],
+  "messages": [],
+  "stdout": "method\tcnt\ttotal_amount\nโอนตรง\t99330\t253825119.69\nโอนเงิน\t22676\t54949732.71\nK-shop\t12\t22730.17\nเงินสด\t1\t400.00\n",
+  "stderr": "",
+  "execution_time_ms": 2655
+}

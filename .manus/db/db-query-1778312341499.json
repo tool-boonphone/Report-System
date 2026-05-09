@@ -1,0 +1,54 @@
+{
+  "query": "-- rows ที่ payment_time IS NULL ในปี 2026 - กระจายตามเดือน\nSELECT LEFT(paid_at, 7) as ym, COUNT(*) as cnt \nFROM payment_transactions WHERE section='ff365' AND payment_time IS NULL AND paid_at >= '2026-01-01'\nGROUP BY ym ORDER BY ym;\n\n-- rows ที่ payment_time มีค่า ในปี 2026 - กระจายตามเดือน  \nSELECT LEFT(paid_at, 7) as ym, COUNT(*) as cnt \nFROM payment_transactions WHERE section='ff365' AND payment_time IS NOT NULL AND paid_at >= '2026-01-01'\nGROUP BY ym ORDER BY ym;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute -- rows ที่ payment_time IS NULL ในปี 2026 - กระจายตามเดือน\nSELECT LEFT(paid_at, 7) as ym, COUNT(*) as cnt \nFROM payment_transactions WHERE section='ff365' AND payment_time IS NULL AND paid_at >= '2026-01-01'\nGROUP BY ym ORDER BY ym;\n\n-- rows ที่ payment_time มีค่า ในปี 2026 - กระจายตามเดือน  \nSELECT LEFT(paid_at, 7) as ym, COUNT(*) as cnt \nFROM payment_transactions WHERE section='ff365' AND payment_time IS NOT NULL AND paid_at >= '2026-01-01'\nGROUP BY ym ORDER BY ym;",
+  "rows": [
+    {
+      "ym": "2026-01",
+      "cnt": "142"
+    },
+    {
+      "ym": "2026-02",
+      "cnt": "118"
+    },
+    {
+      "ym": "2026-03",
+      "cnt": "160"
+    },
+    {
+      "ym": "2026-04",
+      "cnt": "66"
+    },
+    {
+      "ym": "2026-05",
+      "cnt": "35"
+    },
+    {
+      "ym": "ym",
+      "cnt": "cnt"
+    },
+    {
+      "ym": "2026-01",
+      "cnt": "6848"
+    },
+    {
+      "ym": "2026-02",
+      "cnt": "7431"
+    },
+    {
+      "ym": "2026-03",
+      "cnt": "7840"
+    },
+    {
+      "ym": "2026-04",
+      "cnt": "6168"
+    },
+    {
+      "ym": "2026-05",
+      "cnt": "1738"
+    }
+  ],
+  "messages": [],
+  "stdout": "ym\tcnt\n2026-01\t142\n2026-02\t118\n2026-03\t160\n2026-04\t66\n2026-05\t35\nym\tcnt\n2026-01\t6848\n2026-02\t7431\n2026-03\t7840\n2026-04\t6168\n2026-05\t1738\n",
+  "stderr": "",
+  "execution_time_ms": 2186
+}

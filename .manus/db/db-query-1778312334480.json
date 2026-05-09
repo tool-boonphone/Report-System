@@ -1,0 +1,30 @@
+{
+  "query": "-- ช่วงวันที่ของ rows ที่ payment_time IS NULL\nSELECT MIN(paid_at) as oldest, MAX(paid_at) as newest, COUNT(*) as cnt \nFROM payment_transactions WHERE section='ff365' AND payment_time IS NULL;\n\n-- ช่วงวันที่ของ rows ที่ payment_time มีค่า\nSELECT MIN(paid_at) as oldest, MAX(paid_at) as newest, COUNT(*) as cnt \nFROM payment_transactions WHERE section='ff365' AND payment_time IS NOT NULL;\n\n-- กระจายตัวของ payment_time IS NULL ตามปี\nSELECT LEFT(paid_at, 4) as yr, COUNT(*) as cnt \nFROM payment_transactions WHERE section='ff365' AND payment_time IS NULL \nGROUP BY yr ORDER BY yr;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute -- ช่วงวันที่ของ rows ที่ payment_time IS NULL\nSELECT MIN(paid_at) as oldest, MAX(paid_at) as newest, COUNT(*) as cnt \nFROM payment_transactions WHERE section='ff365' AND payment_time IS NULL;\n\n-- ช่วงวันที่ของ rows ที่ payment_time มีค่า\nSELECT MIN(paid_at) as oldest, MAX(paid_at) as newest, COUNT(*) as cnt \nFROM payment_transactions WHERE section='ff365' AND payment_time IS NOT NULL;\n\n-- กระจายตัวของ payment_time IS NULL ตามปี\nSELECT LEFT(paid_at, 4) as yr, COUNT(*) as cnt \nFROM payment_transactions WHERE section='ff365' AND payment_time IS NULL \nGROUP BY yr ORDER BY yr;",
+  "rows": [
+    {
+      "oldest": "2024-08-27",
+      "newest": "2026-05-09",
+      "cnt": "25245"
+    },
+    {
+      "oldest": "oldest",
+      "newest": "newest",
+      "cnt": "cnt"
+    },
+    {
+      "oldest": "2024-09-08",
+      "newest": "2026-05-09",
+      "cnt": "96774"
+    }
+  ],
+  "messages": [
+    "yr\tcnt",
+    "2024\t5560",
+    "2025\t19164",
+    "2026\t521"
+  ],
+  "stdout": "oldest\tnewest\tcnt\n2024-08-27\t2026-05-09\t25245\noldest\tnewest\tcnt\n2024-09-08\t2026-05-09\t96774\nyr\tcnt\n2024\t5560\n2025\t19164\n2026\t521\n",
+  "stderr": "",
+  "execution_time_ms": 2719
+}

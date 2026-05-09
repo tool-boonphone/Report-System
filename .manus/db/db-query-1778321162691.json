@@ -1,0 +1,18 @@
+{
+  "query": "\nSELECT section, COUNT(*) as count FROM payment_transactions GROUP BY section;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT section, COUNT(*) as count FROM payment_transactions GROUP BY section;\n",
+  "rows": [
+    {
+      "section": "ff365",
+      "count": "122019"
+    },
+    {
+      "section": "boonphone",
+      "count": "122045"
+    }
+  ],
+  "messages": [],
+  "stdout": "section\tcount\nff365\t122019\nboonphone\t122045\n",
+  "stderr": "",
+  "execution_time_ms": 1896
+}

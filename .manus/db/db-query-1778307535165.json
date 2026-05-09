@@ -1,0 +1,9 @@
+{
+  "query": "UPDATE sync_logs SET status='error', error_message='Manually cleared: stuck in_progress' WHERE status='in_progress' AND section='ff365';",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute UPDATE sync_logs SET status='error', error_message='Manually cleared: stuck in_progress' WHERE status='in_progress' AND section='ff365';",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 1787
+}

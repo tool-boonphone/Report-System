@@ -1,0 +1,55 @@
+{
+  "query": "SELECT id, payment_time, created_by, updated_by, JSON_EXTRACT(raw_json, '$.payment_time') as raw_payment_time, JSON_EXTRACT(raw_json, '$.paid_at') as raw_paid_at FROM payment_transactions WHERE section='ff365' AND payment_time IS NULL LIMIT 5;\nSELECT id, payment_time, created_by, updated_by, JSON_EXTRACT(raw_json, '$.payment_time') as raw_payment_time FROM payment_transactions WHERE section='ff365' AND payment_time IS NOT NULL LIMIT 3;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT id, payment_time, created_by, updated_by, JSON_EXTRACT(raw_json, '$.payment_time') as raw_payment_time, JSON_EXTRACT(raw_json, '$.paid_at') as raw_paid_at FROM payment_transactions WHERE section='ff365' AND payment_time IS NULL LIMIT 5;\nSELECT id, payment_time, created_by, updated_by, JSON_EXTRACT(raw_json, '$.payment_time') as raw_payment_time FROM payment_transactions WHERE section='ff365' AND payment_time IS NOT NULL LIMIT 3;",
+  "rows": [
+    {
+      "id": "1266390",
+      "payment_time": "NULL",
+      "created_by": "adminaun",
+      "updated_by": "adminaun",
+      "raw_payment_time": "null",
+      "raw_paid_at": "NULL"
+    },
+    {
+      "id": "1266393",
+      "payment_time": "NULL",
+      "created_by": "adminmint",
+      "updated_by": "adminmint",
+      "raw_payment_time": "null",
+      "raw_paid_at": "NULL"
+    },
+    {
+      "id": "1266394",
+      "payment_time": "NULL",
+      "created_by": "adminjubjib",
+      "updated_by": "adminjubjib",
+      "raw_payment_time": "null",
+      "raw_paid_at": "NULL"
+    },
+    {
+      "id": "1266395",
+      "payment_time": "NULL",
+      "created_by": "adminmint",
+      "updated_by": "adminmint",
+      "raw_payment_time": "null",
+      "raw_paid_at": "NULL"
+    },
+    {
+      "id": "1266396",
+      "payment_time": "NULL",
+      "created_by": "adminaun",
+      "updated_by": "adminaun",
+      "raw_payment_time": "null",
+      "raw_paid_at": "NULL"
+    }
+  ],
+  "messages": [
+    "id\tpayment_time\tcreated_by\tupdated_by\traw_payment_time",
+    "1144275\t13:45:00\tadminkaew\tadminkaew\t\"13:45:00\"",
+    "1144276\t13:41:00\tadminkaew\tadminkaew\t\"13:41:00\"",
+    "1144277\t13:37:00\tadminpahn\tadminpahn\t\"13:37:00\""
+  ],
+  "stdout": "id\tpayment_time\tcreated_by\tupdated_by\traw_payment_time\traw_paid_at\n1266390\tNULL\tadminaun\tadminaun\tnull\tNULL\n1266393\tNULL\tadminmint\tadminmint\tnull\tNULL\n1266394\tNULL\tadminjubjib\tadminjubjib\tnull\tNULL\n1266395\tNULL\tadminmint\tadminmint\tnull\tNULL\n1266396\tNULL\tadminaun\tadminaun\tnull\tNULL\nid\tpayment_time\tcreated_by\tupdated_by\traw_payment_time\n1144275\t13:45:00\tadminkaew\tadminkaew\t\"13:45:00\"\n1144276\t13:41:00\tadminkaew\tadminkaew\t\"13:41:00\"\n1144277\t13:37:00\tadminpahn\tadminpahn\t\"13:37:00\"\n",
+  "stderr": "",
+  "execution_time_ms": 2027
+}

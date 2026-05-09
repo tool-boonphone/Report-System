@@ -1,0 +1,19 @@
+{
+  "query": "SELECT JSON_KEYS(raw_json) as json_keys\nFROM payment_transactions\nWHERE section = 'ff365' AND raw_json IS NOT NULL\nLIMIT 3;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT JSON_KEYS(raw_json) as json_keys\nFROM payment_transactions\nWHERE section = 'ff365' AND raw_json IS NOT NULL\nLIMIT 3;",
+  "rows": [
+    {
+      "json_keys": "[\"bad_debt_amount\", \"close_installment_amount\", \"contract_code\", \"contract_id\", \"created_at\", \"created_by\", \"discount_amount\", \"fee_paid\", \"interest_paid\", \"overpaid_amount\", \"payment_date\", \"payment_id\", \"payment_method\", \"payment_status\", \"payment_time\", \"penalty_paid\", \"principal_paid\", \"receipt_no\", \"remark\", \"total_paid_amount\", \"unlock_fee_paid\", \"updated_at\", \"updated_by\"]"
+    },
+    {
+      "json_keys": "[\"bad_debt_amount\", \"close_installment_amount\", \"contract_code\", \"contract_id\", \"created_at\", \"created_by\", \"discount_amount\", \"fee_paid\", \"interest_paid\", \"overpaid_amount\", \"payment_date\", \"payment_id\", \"payment_method\", \"payment_status\", \"payment_time\", \"penalty_paid\", \"principal_paid\", \"receipt_no\", \"remark\", \"total_paid_amount\", \"unlock_fee_paid\", \"updated_at\", \"updated_by\"]"
+    },
+    {
+      "json_keys": "[\"bad_debt_amount\", \"close_installment_amount\", \"contract_code\", \"contract_id\", \"created_at\", \"created_by\", \"discount_amount\", \"fee_paid\", \"interest_paid\", \"overpaid_amount\", \"payment_date\", \"payment_id\", \"payment_method\", \"payment_status\", \"payment_time\", \"penalty_paid\", \"principal_paid\", \"receipt_no\", \"remark\", \"total_paid_amount\", \"unlock_fee_paid\", \"updated_at\", \"updated_by\"]"
+    }
+  ],
+  "messages": [],
+  "stdout": "json_keys\n[\"bad_debt_amount\", \"close_installment_amount\", \"contract_code\", \"contract_id\", \"created_at\", \"created_by\", \"discount_amount\", \"fee_paid\", \"interest_paid\", \"overpaid_amount\", \"payment_date\", \"payment_id\", \"payment_method\", \"payment_status\", \"payment_time\", \"penalty_paid\", \"principal_paid\", \"receipt_no\", \"remark\", \"total_paid_amount\", \"unlock_fee_paid\", \"updated_at\", \"updated_by\"]\n[\"bad_debt_amount\", \"close_installment_amount\", \"contract_code\", \"contract_id\", \"created_at\", \"created_by\", \"discount_amount\", \"fee_paid\", \"interest_paid\", \"overpaid_amount\", \"payment_date\", \"payment_id\", \"payment_method\", \"payment_status\", \"payment_time\", \"penalty_paid\", \"principal_paid\", \"receipt_no\", \"remark\", \"total_paid_amount\", \"unlock_fee_paid\", \"updated_at\", \"updated_by\"]\n[\"bad_debt_amount\", \"close_installment_amount\", \"contract_code\", \"contract_id\", \"created_at\", \"created_by\", \"discount_amount\", \"fee_paid\", \"interest_paid\", \"overpaid_amount\", \"payment_date\", \"payment_id\", \"payment_method\", \"payment_status\", \"payment_time\", \"penalty_paid\", \"principal_paid\", \"receipt_no\", \"remark\", \"total_paid_amount\", \"unlock_fee_paid\", \"updated_at\", \"updated_by\"]\n",
+  "stderr": "",
+  "execution_time_ms": 1697
+}

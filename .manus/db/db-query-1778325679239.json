@@ -1,0 +1,30 @@
+{
+  "query": "SELECT status, COUNT(*) as count FROM contracts WHERE section = 'Fastfone365' GROUP BY status ORDER BY count DESC;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT status, COUNT(*) as count FROM contracts WHERE section = 'Fastfone365' GROUP BY status ORDER BY count DESC;",
+  "rows": [
+    {
+      "status": "สำเร็จ",
+      "count": "7191"
+    },
+    {
+      "status": "สิ้นสุดสัญญา",
+      "count": "7118"
+    },
+    {
+      "status": "หนี้เสีย",
+      "count": "3123"
+    },
+    {
+      "status": "ระงับสัญญา",
+      "count": "289"
+    },
+    {
+      "status": "ยกเลิกสัญญา",
+      "count": "88"
+    }
+  ],
+  "messages": [],
+  "stdout": "status\tcount\nสำเร็จ\t7191\nสิ้นสุดสัญญา\t7118\nหนี้เสีย\t3123\nระงับสัญญา\t289\nยกเลิกสัญญา\t88\n",
+  "stderr": "",
+  "execution_time_ms": 1905
+}

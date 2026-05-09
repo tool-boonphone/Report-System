@@ -1,0 +1,66 @@
+{
+  "query": "SELECT id, entity, status, row_count, TIMESTAMPDIFF(MINUTE, started_at, NOW()) as elapsed_min FROM sync_logs WHERE section='ff365' ORDER BY id DESC LIMIT 8;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT id, entity, status, row_count, TIMESTAMPDIFF(MINUTE, started_at, NOW()) as elapsed_min FROM sync_logs WHERE section='ff365' ORDER BY id DESC LIMIT 8;",
+  "rows": [
+    {
+      "id": "1230064",
+      "entity": "payments",
+      "status": "success",
+      "row_count": "122022",
+      "elapsed_min": "23"
+    },
+    {
+      "id": "1230063",
+      "entity": "installments",
+      "status": "success",
+      "row_count": "171363",
+      "elapsed_min": "38"
+    },
+    {
+      "id": "1230062",
+      "entity": "contracts",
+      "status": "success",
+      "row_count": "18876",
+      "elapsed_min": "48"
+    },
+    {
+      "id": "1230061",
+      "entity": "customers",
+      "status": "success",
+      "row_count": "22290",
+      "elapsed_min": "53"
+    },
+    {
+      "id": "1230060",
+      "entity": "partners",
+      "status": "success",
+      "row_count": "693",
+      "elapsed_min": "53"
+    },
+    {
+      "id": "1230059",
+      "entity": "all",
+      "status": "in_progress",
+      "row_count": "0",
+      "elapsed_min": "53"
+    },
+    {
+      "id": "1230058",
+      "entity": "installments",
+      "status": "error",
+      "row_count": "0",
+      "elapsed_min": "58"
+    },
+    {
+      "id": "1230057",
+      "entity": "contracts",
+      "status": "success",
+      "row_count": "18876",
+      "elapsed_min": "68"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tentity\tstatus\trow_count\telapsed_min\n1230064\tpayments\tsuccess\t122022\t23\n1230063\tinstallments\tsuccess\t171363\t38\n1230062\tcontracts\tsuccess\t18876\t48\n1230061\tcustomers\tsuccess\t22290\t53\n1230060\tpartners\tsuccess\t693\t53\n1230059\tall\tin_progress\t0\t53\n1230058\tinstallments\terror\t0\t58\n1230057\tcontracts\tsuccess\t18876\t68\n",
+  "stderr": "",
+  "execution_time_ms": 1737
+}

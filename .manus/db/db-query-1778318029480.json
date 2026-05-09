@@ -1,0 +1,120 @@
+{
+  "query": "SELECT \n  DATE_FORMAT(paid_at, '%Y-%m') as month,\n  COUNT(*) as row_count,\n  SUM(amount) as total_amount\nFROM payment_transactions\nWHERE section = 'ff365'\nGROUP BY DATE_FORMAT(paid_at, '%Y-%m')\nORDER BY month;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT \n  DATE_FORMAT(paid_at, '%Y-%m') as month,\n  COUNT(*) as row_count,\n  SUM(amount) as total_amount\nFROM payment_transactions\nWHERE section = 'ff365'\nGROUP BY DATE_FORMAT(paid_at, '%Y-%m')\nORDER BY month;",
+  "rows": [
+    {
+      "month": "2024-08",
+      "row_count": "1",
+      "total_amount": "1000.00"
+    },
+    {
+      "month": "2024-09",
+      "row_count": "125",
+      "total_amount": "300503.00"
+    },
+    {
+      "month": "2024-10",
+      "row_count": "434",
+      "total_amount": "1071412.00"
+    },
+    {
+      "month": "2024-11",
+      "row_count": "1048",
+      "total_amount": "2873723.00"
+    },
+    {
+      "month": "2024-12",
+      "row_count": "3991",
+      "total_amount": "9899260.00"
+    },
+    {
+      "month": "2025-01",
+      "row_count": "5527",
+      "total_amount": "13334718.75"
+    },
+    {
+      "month": "2025-02",
+      "row_count": "6233",
+      "total_amount": "14326997.94"
+    },
+    {
+      "month": "2025-03",
+      "row_count": "8021",
+      "total_amount": "19826923.35"
+    },
+    {
+      "month": "2025-04",
+      "row_count": "8115",
+      "total_amount": "19770006.80"
+    },
+    {
+      "month": "2025-05",
+      "row_count": "8129",
+      "total_amount": "22209923.65"
+    },
+    {
+      "month": "2025-06",
+      "row_count": "8062",
+      "total_amount": "21556954.36"
+    },
+    {
+      "month": "2025-07",
+      "row_count": "8102",
+      "total_amount": "20554193.44"
+    },
+    {
+      "month": "2025-08",
+      "row_count": "6814",
+      "total_amount": "17144984.09"
+    },
+    {
+      "month": "2025-09",
+      "row_count": "6396",
+      "total_amount": "15972419.26"
+    },
+    {
+      "month": "2025-10",
+      "row_count": "6419",
+      "total_amount": "15542249.92"
+    },
+    {
+      "month": "2025-11",
+      "row_count": "6684",
+      "total_amount": "16893679.84"
+    },
+    {
+      "month": "2025-12",
+      "row_count": "7372",
+      "total_amount": "18273473.03"
+    },
+    {
+      "month": "2026-01",
+      "row_count": "6990",
+      "total_amount": "18906579.99"
+    },
+    {
+      "month": "2026-02",
+      "row_count": "7549",
+      "total_amount": "20529693.24"
+    },
+    {
+      "month": "2026-03",
+      "row_count": "8000",
+      "total_amount": "20114938.61"
+    },
+    {
+      "month": "2026-04",
+      "row_count": "6234",
+      "total_amount": "15329896.00"
+    },
+    {
+      "month": "2026-05",
+      "row_count": "1773",
+      "total_amount": "4364452.30"
+    }
+  ],
+  "messages": [],
+  "stdout": "month\trow_count\ttotal_amount\n2024-08\t1\t1000.00\n2024-09\t125\t300503.00\n2024-10\t434\t1071412.00\n2024-11\t1048\t2873723.00\n2024-12\t3991\t9899260.00\n2025-01\t5527\t13334718.75\n2025-02\t6233\t14326997.94\n2025-03\t8021\t19826923.35\n2025-04\t8115\t19770006.80\n2025-05\t8129\t22209923.65\n2025-06\t8062\t21556954.36\n2025-07\t8102\t20554193.44\n2025-08\t6814\t17144984.09\n2025-09\t6396\t15972419.26\n2025-10\t6419\t15542249.92\n2025-11\t6684\t16893679.84\n2025-12\t7372\t18273473.03\n2026-01\t6990\t18906579.99\n2026-02\t7549\t20529693.24\n2026-03\t8000\t20114938.61\n2026-04\t6234\t15329896.00\n2026-05\t1773\t4364452.30\n",
+  "stderr": "",
+  "execution_time_ms": 2025
+}

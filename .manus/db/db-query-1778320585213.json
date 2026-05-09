@@ -1,0 +1,68 @@
+{
+  "query": "SELECT \n  JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.principal_paid')) as principal_paid,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.interest_paid')) as interest_paid,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.fee_paid')) as fee_paid,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.penalty_paid')) as penalty_paid,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.unlock_fee_paid')) as unlock_fee_paid,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.discount_amount')) as discount_amount,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.overpaid_amount')) as overpaid_amount,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.bad_debt_amount')) as bad_debt_amount,\n  amount\nFROM payment_transactions\nWHERE section = 'ff365'\n  AND JSON_EXTRACT(raw_json, '$.penalty_paid') > 0\nLIMIT 5;\n\n-- ดู keys ทั้งหมดใน raw_json\nSELECT JSON_KEYS(raw_json) as all_keys\nFROM payment_transactions\nWHERE section = 'ff365'\nLIMIT 1;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT \n  JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.principal_paid')) as principal_paid,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.interest_paid')) as interest_paid,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.fee_paid')) as fee_paid,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.penalty_paid')) as penalty_paid,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.unlock_fee_paid')) as unlock_fee_paid,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.discount_amount')) as discount_amount,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.overpaid_amount')) as overpaid_amount,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.bad_debt_amount')) as bad_debt_amount,\n  amount\nFROM payment_transactions\nWHERE section = 'ff365'\n  AND JSON_EXTRACT(raw_json, '$.penalty_paid') > 0\nLIMIT 5;\n\n-- ดู keys ทั้งหมดใน raw_json\nSELECT JSON_KEYS(raw_json) as all_keys\nFROM payment_transactions\nWHERE section = 'ff365'\nLIMIT 1;",
+  "rows": [
+    {
+      "principal_paid": "1100",
+      "interest_paid": "1100",
+      "fee_paid": "0",
+      "penalty_paid": "50",
+      "unlock_fee_paid": "0",
+      "discount_amount": "0",
+      "overpaid_amount": "0",
+      "bad_debt_amount": "0",
+      "amount": "2250.00"
+    },
+    {
+      "principal_paid": "925",
+      "interest_paid": "925",
+      "fee_paid": "0",
+      "penalty_paid": "50",
+      "unlock_fee_paid": "0",
+      "discount_amount": "0",
+      "overpaid_amount": "0",
+      "bad_debt_amount": "0",
+      "amount": "1900.00"
+    },
+    {
+      "principal_paid": "1467.5",
+      "interest_paid": "1467.5",
+      "fee_paid": "0",
+      "penalty_paid": "100",
+      "unlock_fee_paid": "0",
+      "discount_amount": "0",
+      "overpaid_amount": "0",
+      "bad_debt_amount": "0",
+      "amount": "3035.00"
+    },
+    {
+      "principal_paid": "1249",
+      "interest_paid": "1249",
+      "fee_paid": "0",
+      "penalty_paid": "50",
+      "unlock_fee_paid": "0",
+      "discount_amount": "0",
+      "overpaid_amount": "0",
+      "bad_debt_amount": "0",
+      "amount": "2548.00"
+    },
+    {
+      "principal_paid": "1849",
+      "interest_paid": "1999",
+      "fee_paid": "0",
+      "penalty_paid": "50",
+      "unlock_fee_paid": "0",
+      "discount_amount": "0",
+      "overpaid_amount": "0",
+      "bad_debt_amount": "0",
+      "amount": "3898.00"
+    }
+  ],
+  "messages": [
+    "all_keys",
+    "[\"bad_debt_amount\", \"close_installment_amount\", \"contract_code\", \"contract_id\", \"created_at\", \"created_by\", \"discount_amount\", \"fee_paid\", \"interest_paid\", \"overpaid_amount\", \"payment_date\", \"payment_id\", \"payment_method\", \"payment_status\", \"payment_time\", \"penalty_paid\", \"principal_paid\", \"receipt_no\", \"remark\", \"total_paid_amount\", \"unlock_fee_paid\", \"updated_at\", \"updated_by\"]"
+  ],
+  "stdout": "principal_paid\tinterest_paid\tfee_paid\tpenalty_paid\tunlock_fee_paid\tdiscount_amount\toverpaid_amount\tbad_debt_amount\tamount\n1100\t1100\t0\t50\t0\t0\t0\t0\t2250.00\n925\t925\t0\t50\t0\t0\t0\t0\t1900.00\n1467.5\t1467.5\t0\t100\t0\t0\t0\t0\t3035.00\n1249\t1249\t0\t50\t0\t0\t0\t0\t2548.00\n1849\t1999\t0\t50\t0\t0\t0\t0\t3898.00\nall_keys\n[\"bad_debt_amount\", \"close_installment_amount\", \"contract_code\", \"contract_id\", \"created_at\", \"created_by\", \"discount_amount\", \"fee_paid\", \"interest_paid\", \"overpaid_amount\", \"payment_date\", \"payment_id\", \"payment_method\", \"payment_status\", \"payment_time\", \"penalty_paid\", \"principal_paid\", \"receipt_no\", \"remark\", \"total_paid_amount\", \"unlock_fee_paid\", \"updated_at\", \"updated_by\"]\n",
+  "stderr": "",
+  "execution_time_ms": 2021
+}

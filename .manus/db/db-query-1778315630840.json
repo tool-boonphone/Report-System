@@ -1,0 +1,24 @@
+{
+  "query": "SELECT id, entity, status, error_message, DATE_FORMAT(started_at, '%H:%i:%s') as started\nFROM sync_logs WHERE section='boonphone' AND status='error' ORDER BY id DESC LIMIT 3;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT id, entity, status, error_message, DATE_FORMAT(started_at, '%H:%i:%s') as started\nFROM sync_logs WHERE section='boonphone' AND status='error' ORDER BY id DESC LIMIT 3;",
+  "rows": [
+    {
+      "id": "1230068",
+      "entity": "contracts",
+      "status": "error",
+      "error_message": "Auto-cleared on startup: previous Cloud Run instance was killed during sync",
+      "started": "07:56:13"
+    },
+    {
+      "id": "1230065",
+      "entity": "all",
+      "status": "error",
+      "error_message": "Auto-cleared on startup: previous Cloud Run instance was killed during sync",
+      "started": "07:51:32"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tentity\tstatus\terror_message\tstarted\n1230068\tcontracts\terror\tAuto-cleared on startup: previous Cloud Run instance was killed during sync\t07:56:13\n1230065\tall\terror\tAuto-cleared on startup: previous Cloud Run instance was killed during sync\t07:51:32\n",
+  "stderr": "",
+  "execution_time_ms": 1720
+}

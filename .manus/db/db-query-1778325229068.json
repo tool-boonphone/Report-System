@@ -1,0 +1,50 @@
+{
+  "query": "SELECT contract_no, amount, raw_json->>'$.remark' as remark, raw_json->>'$.bad_debt_amount' as bad_debt, raw_json->>'$.close_installment_amount' as close_amt, raw_json->>'$.unlock_fee_paid' as unlock_fee FROM payment_transactions WHERE section = 'Fastfone365' AND (raw_json->>'$.bad_debt_amount' > 0 OR raw_json->>'$.unlock_fee_paid' > 0) LIMIT 5;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT contract_no, amount, raw_json->>'$.remark' as remark, raw_json->>'$.bad_debt_amount' as bad_debt, raw_json->>'$.close_installment_amount' as close_amt, raw_json->>'$.unlock_fee_paid' as unlock_fee FROM payment_transactions WHERE section = 'Fastfone365' AND (raw_json->>'$.bad_debt_amount' > 0 OR raw_json->>'$.unlock_fee_paid' > 0) LIMIT 5;",
+  "rows": [
+    {
+      "contract_no": "CT1024-NYK001-00128-01",
+      "amount": "3250.00",
+      "remark": "",
+      "bad_debt": "0",
+      "close_amt": "1700",
+      "unlock_fee": "1000"
+    },
+    {
+      "contract_no": "CT1024-SNI001-00164-01",
+      "amount": "4871.00",
+      "remark": "จบงวด",
+      "bad_debt": "0",
+      "close_amt": "3171",
+      "unlock_fee": "1000"
+    },
+    {
+      "contract_no": "CT1124-SKA002-4030-01",
+      "amount": "4286.00",
+      "remark": "แก้ไขข้อมูลการชำระเงินค่างวด TXRT1124-SKA002-4030-01-TXRT1124-SKA002-4030-01-1(สัญญาเลขที่ CT1124-SKA002-4030-01) จากยอดค่าปลดล็อก : 0.00 บาท เป็น : 1,000.00 บาท จากยอดยอดชำระรวม : 3,286.00 บาท เป็น : 4,286.00 บาท",
+      "bad_debt": "0",
+      "close_amt": "2436",
+      "unlock_fee": "1000"
+    },
+    {
+      "contract_no": "CT0824-SNI001-00008-01",
+      "amount": "1816.00",
+      "remark": "",
+      "bad_debt": "0",
+      "close_amt": "12",
+      "unlock_fee": "854"
+    },
+    {
+      "contract_no": "CT1024-SPK001-1548-01",
+      "amount": "4197.00",
+      "remark": "",
+      "bad_debt": "0",
+      "close_amt": "2297",
+      "unlock_fee": "1000"
+    }
+  ],
+  "messages": [],
+  "stdout": "contract_no\tamount\tremark\tbad_debt\tclose_amt\tunlock_fee\nCT1024-NYK001-00128-01\t3250.00\t\t0\t1700\t1000\nCT1024-SNI001-00164-01\t4871.00\tจบงวด\t0\t3171\t1000\nCT1124-SKA002-4030-01\t4286.00\tแก้ไขข้อมูลการชำระเงินค่างวด TXRT1124-SKA002-4030-01-TXRT1124-SKA002-4030-01-1(สัญญาเลขที่ CT1124-SKA002-4030-01) จากยอดค่าปลดล็อก : 0.00 บาท เป็น : 1,000.00 บาท จากยอดยอดชำระรวม : 3,286.00 บาท เป็น : 4,286.00 บาท\t0\t2436\t1000\nCT0824-SNI001-00008-01\t1816.00\t\t0\t12\t854\nCT1024-SPK001-1548-01\t4197.00\t\t0\t2297\t1000\n",
+  "stderr": "",
+  "execution_time_ms": 1943
+}

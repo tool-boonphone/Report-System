@@ -1,0 +1,20 @@
+{
+  "query": "SELECT DATE_FORMAT(paid_at, '%Y-%m') as month, COUNT(*) as row_count, SUM(amount) as total_amount\nFROM payment_transactions\nWHERE section = 'ff365' AND paid_at >= '2026-04-01' AND paid_at <= '2026-05-08'\nGROUP BY DATE_FORMAT(paid_at, '%Y-%m')\nORDER BY month;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT DATE_FORMAT(paid_at, '%Y-%m') as month, COUNT(*) as row_count, SUM(amount) as total_amount\nFROM payment_transactions\nWHERE section = 'ff365' AND paid_at >= '2026-04-01' AND paid_at <= '2026-05-08'\nGROUP BY DATE_FORMAT(paid_at, '%Y-%m')\nORDER BY month;",
+  "rows": [
+    {
+      "month": "2026-04",
+      "row_count": "6234",
+      "total_amount": "15329896.00"
+    },
+    {
+      "month": "2026-05",
+      "row_count": "1688",
+      "total_amount": "4178511.30"
+    }
+  ],
+  "messages": [],
+  "stdout": "month\trow_count\ttotal_amount\n2026-04\t6234\t15329896.00\n2026-05\t1688\t4178511.30\n",
+  "stderr": "",
+  "execution_time_ms": 1859
+}

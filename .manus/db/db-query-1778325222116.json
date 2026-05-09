@@ -1,0 +1,55 @@
+{
+  "query": "SELECT contract_no, amount, method, paid_at, receipt_no, created_by, raw_json FROM payment_transactions WHERE section = 'Fastfone365' AND (raw_json->>'$.remark' LIKE '%ปิด%' OR raw_json->>'$.close_installment_amount' > 0 AND raw_json->>'$.bad_debt_amount' = 0) LIMIT 5;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT contract_no, amount, method, paid_at, receipt_no, created_by, raw_json FROM payment_transactions WHERE section = 'Fastfone365' AND (raw_json->>'$.remark' LIKE '%ปิด%' OR raw_json->>'$.close_installment_amount' > 0 AND raw_json->>'$.bad_debt_amount' = 0) LIMIT 5;",
+  "rows": [
+    {
+      "contract_no": "CT0824-NRT001-00017-01",
+      "amount": "1675.00",
+      "method": "โอนเงิน",
+      "paid_at": "2024-09-14",
+      "receipt_no": "TXRT0824-NRT001-00017-01-1-1",
+      "created_by": "adminaun",
+      "raw_json": "{\"bad_debt_amount\": 0, \"close_installment_amount\": 1675, \"contract_code\": \"CT0824-NRT001-00017-01\", \"contract_id\": 26, \"created_at\": \"2024-09-14 10:17:40\", \"created_by\": \"adminaun\", \"discount_amount\": 0, \"fee_paid\": 0, \"interest_paid\": 837.5, \"overpaid_amount\": 0, \"payment_date\": \"2024-09-14\", \"payment_id\": 21, \"payment_method\": \"โอนเงิน\", \"payment_status\": \"Active\", \"payment_time\": null, \"penalty_paid\": 0, \"principal_paid\": 837.5, \"receipt_no\": \"TXRT0824-NRT001-00017-01-1-1\", \"remark\": \"\", \"total_paid_amount\": 1675, \"unlock_fee_paid\": 0, \"updated_at\": \"2024-09-14 10:17:40\", \"updated_by\": \"adminaun\"}"
+    },
+    {
+      "contract_no": "CT0824-NRT001-00014-01",
+      "amount": "2462.00",
+      "method": "โอนเงิน",
+      "paid_at": "2024-09-12",
+      "receipt_no": "TXRT0824-NRT001-00014-01-1-1",
+      "created_by": "adminmint",
+      "raw_json": "{\"bad_debt_amount\": 0, \"close_installment_amount\": 2462, \"contract_code\": \"CT0824-NRT001-00014-01\", \"contract_id\": 22, \"created_at\": \"2024-09-12 19:01:53\", \"created_by\": \"adminmint\", \"discount_amount\": 0, \"fee_paid\": 0, \"interest_paid\": 1231, \"overpaid_amount\": 0, \"payment_date\": \"2024-09-12\", \"payment_id\": 20, \"payment_method\": \"โอนเงิน\", \"payment_status\": \"Active\", \"payment_time\": null, \"penalty_paid\": 0, \"principal_paid\": 1231, \"receipt_no\": \"TXRT0824-NRT001-00014-01-1-1\", \"remark\": \"\", \"total_paid_amount\": 2462, \"unlock_fee_paid\": 0, \"updated_at\": \"2024-09-12 19:01:53\", \"updated_by\": \"adminmint\"}"
+    },
+    {
+      "contract_no": "CT0824-NRT001-00007-01",
+      "amount": "50.00",
+      "method": "โอนเงิน",
+      "paid_at": "2024-09-11",
+      "receipt_no": "TXRT0824-NRT001-00007-01-1-2",
+      "created_by": "adminjubjib",
+      "raw_json": "{\"bad_debt_amount\": 0, \"close_installment_amount\": 50, \"contract_code\": \"CT0824-NRT001-00007-01\", \"contract_id\": 15, \"created_at\": \"2024-09-11 10:36:34\", \"created_by\": \"adminjubjib\", \"discount_amount\": 0, \"fee_paid\": 0, \"interest_paid\": 0, \"overpaid_amount\": 0, \"payment_date\": \"2024-09-11\", \"payment_id\": 16, \"payment_method\": \"โอนเงิน\", \"payment_status\": \"Active\", \"payment_time\": null, \"penalty_paid\": 0, \"principal_paid\": 50, \"receipt_no\": \"TXRT0824-NRT001-00007-01-1-2\", \"remark\": \"\", \"total_paid_amount\": 50, \"unlock_fee_paid\": 0, \"updated_at\": \"2024-09-11 10:36:34\", \"updated_by\": \"adminjubjib\"}"
+    },
+    {
+      "contract_no": "CT0824-NRT001-00013-01",
+      "amount": "2147.00",
+      "method": "โอนเงิน",
+      "paid_at": "2024-09-11",
+      "receipt_no": "TXRT0824-NRT001-00013-01-1-1",
+      "created_by": "adminmint",
+      "raw_json": "{\"bad_debt_amount\": 0, \"close_installment_amount\": 2147, \"contract_code\": \"CT0824-NRT001-00013-01\", \"contract_id\": 21, \"created_at\": \"2024-09-11 13:23:48\", \"created_by\": \"adminmint\", \"discount_amount\": 0, \"fee_paid\": 0, \"interest_paid\": 1073.5, \"overpaid_amount\": 0, \"payment_date\": \"2024-09-11\", \"payment_id\": 17, \"payment_method\": \"โอนเงิน\", \"payment_status\": \"Active\", \"payment_time\": null, \"penalty_paid\": 0, \"principal_paid\": 1073.5, \"receipt_no\": \"TXRT0824-NRT001-00013-01-1-1\", \"remark\": \"\", \"total_paid_amount\": 2147, \"unlock_fee_paid\": 0, \"updated_at\": \"2024-09-11 13:23:48\", \"updated_by\": \"adminmint\"}"
+    },
+    {
+      "contract_no": "CT0824-NRT001-00027-01",
+      "amount": "2305.00",
+      "method": "โอนเงิน",
+      "paid_at": "2024-09-11",
+      "receipt_no": "TXRT0824-NRT001-00027-01-1-1",
+      "created_by": "adminaun",
+      "raw_json": "{\"bad_debt_amount\": 0, \"close_installment_amount\": 2305, \"contract_code\": \"CT0824-NRT001-00027-01\", \"contract_id\": 42, \"created_at\": \"2024-09-11 14:51:35\", \"created_by\": \"adminaun\", \"discount_amount\": 0, \"fee_paid\": 0, \"interest_paid\": 1152.5, \"overpaid_amount\": 0, \"payment_date\": \"2024-09-11\", \"payment_id\": 18, \"payment_method\": \"โอนเงิน\", \"payment_status\": \"Active\", \"payment_time\": null, \"penalty_paid\": 0, \"principal_paid\": 1152.5, \"receipt_no\": \"TXRT0824-NRT001-00027-01-1-1\", \"remark\": \"\", \"total_paid_amount\": 2305, \"unlock_fee_paid\": 0, \"updated_at\": \"2024-09-11 14:51:35\", \"updated_by\": \"adminaun\"}"
+    }
+  ],
+  "messages": [],
+  "stdout": "contract_no\tamount\tmethod\tpaid_at\treceipt_no\tcreated_by\traw_json\nCT0824-NRT001-00017-01\t1675.00\tโอนเงิน\t2024-09-14\tTXRT0824-NRT001-00017-01-1-1\tadminaun\t{\"bad_debt_amount\": 0, \"close_installment_amount\": 1675, \"contract_code\": \"CT0824-NRT001-00017-01\", \"contract_id\": 26, \"created_at\": \"2024-09-14 10:17:40\", \"created_by\": \"adminaun\", \"discount_amount\": 0, \"fee_paid\": 0, \"interest_paid\": 837.5, \"overpaid_amount\": 0, \"payment_date\": \"2024-09-14\", \"payment_id\": 21, \"payment_method\": \"โอนเงิน\", \"payment_status\": \"Active\", \"payment_time\": null, \"penalty_paid\": 0, \"principal_paid\": 837.5, \"receipt_no\": \"TXRT0824-NRT001-00017-01-1-1\", \"remark\": \"\", \"total_paid_amount\": 1675, \"unlock_fee_paid\": 0, \"updated_at\": \"2024-09-14 10:17:40\", \"updated_by\": \"adminaun\"}\nCT0824-NRT001-00014-01\t2462.00\tโอนเงิน\t2024-09-12\tTXRT0824-NRT001-00014-01-1-1\tadminmint\t{\"bad_debt_amount\": 0, \"close_installment_amount\": 2462, \"contract_code\": \"CT0824-NRT001-00014-01\", \"contract_id\": 22, \"created_at\": \"2024-09-12 19:01:53\", \"created_by\": \"adminmint\", \"discount_amount\": 0, \"fee_paid\": 0, \"interest_paid\": 1231, \"overpaid_amount\": 0, \"payment_date\": \"2024-09-12\", \"payment_id\": 20, \"payment_method\": \"โอนเงิน\", \"payment_status\": \"Active\", \"payment_time\": null, \"penalty_paid\": 0, \"principal_paid\": 1231, \"receipt_no\": \"TXRT0824-NRT001-00014-01-1-1\", \"remark\": \"\", \"total_paid_amount\": 2462, \"unlock_fee_paid\": 0, \"updated_at\": \"2024-09-12 19:01:53\", \"updated_by\": \"adminmint\"}\nCT0824-NRT001-00007-01\t50.00\tโอนเงิน\t2024-09-11\tTXRT0824-NRT001-00007-01-1-2\tadminjubjib\t{\"bad_debt_amount\": 0, \"close_installment_amount\": 50, \"contract_code\": \"CT0824-NRT001-00007-01\", \"contract_id\": 15, \"created_at\": \"2024-09-11 10:36:34\", \"created_by\": \"adminjubjib\", \"discount_amount\": 0, \"fee_paid\": 0, \"interest_paid\": 0, \"overpaid_amount\": 0, \"payment_date\": \"2024-09-11\", \"payment_id\": 16, \"payment_method\": \"โอนเงิน\", \"payment_status\": \"Active\", \"payment_time\": null, \"penalty_paid\": 0, \"principal_paid\": 50, \"receipt_no\": \"TXRT0824-NRT001-00007-01-1-2\", \"remark\": \"\", \"total_paid_amount\": 50, \"unlock_fee_paid\": 0, \"updated_at\": \"2024-09-11 10:36:34\", \"updated_by\": \"adminjubjib\"}\nCT0824-NRT001-00013-01\t2147.00\tโอนเงิน\t2024-09-11\tTXRT0824-NRT001-00013-01-1-1\tadminmint\t{\"bad_debt_amount\": 0, \"close_installment_amount\": 2147, \"contract_code\": \"CT0824-NRT001-00013-01\", \"contract_id\": 21, \"created_at\": \"2024-09-11 13:23:48\", \"created_by\": \"adminmint\", \"discount_amount\": 0, \"fee_paid\": 0, \"interest_paid\": 1073.5, \"overpaid_amount\": 0, \"payment_date\": \"2024-09-11\", \"payment_id\": 17, \"payment_method\": \"โอนเงิน\", \"payment_status\": \"Active\", \"payment_time\": null, \"penalty_paid\": 0, \"principal_paid\": 1073.5, \"receipt_no\": \"TXRT0824-NRT001-00013-01-1-1\", \"remark\": \"\", \"total_paid_amount\": 2147, \"unlock_fee_paid\": 0, \"updated_at\": \"2024-09-11 13:23:48\", \"updated_by\": \"adminmint\"}\nCT0824-NRT001-00027-01\t2305.00\tโอนเงิน\t2024-09-11\tTXRT0824-NRT001-00027-01-1-1\tadminaun\t{\"bad_debt_amount\": 0, \"close_installment_amount\": 2305, \"contract_code\": \"CT0824-NRT001-00027-01\", \"contract_id\": 42, \"created_at\": \"2024-09-11 14:51:35\", \"created_by\": \"adminaun\", \"discount_amount\": 0, \"fee_paid\": 0, \"interest_paid\": 1152.5, \"overpaid_amount\": 0, \"payment_date\": \"2024-09-11\", \"payment_id\": 18, \"payment_method\": \"โอนเงิน\", \"payment_status\": \"Active\", \"payment_time\": null, \"penalty_paid\": 0, \"principal_paid\": 1152.5, \"receipt_no\": \"TXRT0824-NRT001-00027-01-1-1\", \"remark\": \"\", \"total_paid_amount\": 2305, \"unlock_fee_paid\": 0, \"updated_at\": \"2024-09-11 14:51:35\", \"updated_by\": \"adminaun\"}\n",
+  "stderr": "",
+  "execution_time_ms": 1905
+}

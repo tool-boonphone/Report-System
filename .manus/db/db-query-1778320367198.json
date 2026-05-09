@@ -1,0 +1,124 @@
+{
+  "query": "-- ดู remark ที่มีคำว่า ขาย หรือ เครื่อง\nSELECT external_id, contract_no, paid_at, amount,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.remark')) as remark,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.principal_paid')) as principal_paid,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.interest_paid')) as interest_paid,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.close_installment_amount')) as close_amount,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.fee_paid')) as fee_paid\nFROM payment_transactions\nWHERE section = 'ff365'\n  AND (\n    JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.remark')) LIKE '%ขาย%'\n    OR JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.remark')) LIKE '%เครื่อง%'\n  )\nLIMIT 10;\n\n-- ดู CSV ประเภท \"ขายเครื่อง\" มีกี่ rows และ pattern อะไร\n-- ดู contracts ที่ status = ระงับสัญญา หรือ ยกเลิกสัญญา\nSELECT c.status, COUNT(*) as cnt\nFROM contracts c\nWHERE section = 'ff365'\n  AND c.status IN ('ระงับสัญญา', 'ยกเลิกสัญญา')\nGROUP BY c.status;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute -- ดู remark ที่มีคำว่า ขาย หรือ เครื่อง\nSELECT external_id, contract_no, paid_at, amount,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.remark')) as remark,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.principal_paid')) as principal_paid,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.interest_paid')) as interest_paid,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.close_installment_amount')) as close_amount,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.fee_paid')) as fee_paid\nFROM payment_transactions\nWHERE section = 'ff365'\n  AND (\n    JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.remark')) LIKE '%ขาย%'\n    OR JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.remark')) LIKE '%เครื่อง%'\n  )\nLIMIT 10;\n\n-- ดู CSV ประเภท \"ขายเครื่อง\" มีกี่ rows และ pattern อะไร\n-- ดู contracts ที่ status = ระงับสัญญา หรือ ยกเลิกสัญญา\nSELECT c.status, COUNT(*) as cnt\nFROM contracts c\nWHERE section = 'ff365'\n  AND c.status IN ('ระงับสัญญา', 'ยกเลิกสัญญา')\nGROUP BY c.status;",
+  "rows": [
+    {
+      "external_id": "101038",
+      "contract_no": "CT1225-CBI038-19452-01",
+      "paid_at": "2026-01-31",
+      "amount": "500.00",
+      "remark": "ชำระค่าปลดล็อกให้ล็อกแล้วไม่มีใบแจ้งความดเจอเครื่องแล้ว",
+      "principal_paid": "0",
+      "interest_paid": "0",
+      "close_amount": "0",
+      "fee_paid": "0"
+    },
+    {
+      "external_id": "10198",
+      "contract_no": "CT1124-NYK001-3004-02",
+      "paid_at": "2025-01-28",
+      "amount": "700.00",
+      "remark": "มีค่าปลดล็อกเครื่อง1000บาท วันที่28/1/68",
+      "principal_paid": "700",
+      "interest_paid": "0",
+      "close_amount": "700",
+      "fee_paid": "0"
+    },
+    {
+      "external_id": "10242",
+      "contract_no": "CT1124-NPT002-2922-01",
+      "paid_at": "2025-01-28",
+      "amount": "5281.00",
+      "remark": "ชำระยอดเกิน219 เป็นค่าปลดล็อกเครื่องค่ะ",
+      "principal_paid": "2062",
+      "interest_paid": "2369",
+      "close_amount": "4431",
+      "fee_paid": "0"
+    },
+    {
+      "external_id": "10570",
+      "contract_no": "CT1124-SKA002-4295-01",
+      "paid_at": "2025-01-30",
+      "amount": "3036.00",
+      "remark": "ยอด3500 เอาเข้ายอดค้าง436 งวด ธค.67ยอดเกิน28บาท เอาเข้าค่าปลดล็อกเครื่องคะ",
+      "principal_paid": "1112",
+      "interest_paid": "1324",
+      "close_amount": "2436",
+      "fee_paid": "0"
+    },
+    {
+      "external_id": "10355",
+      "contract_no": "CT1124-SKA002-2480-02",
+      "paid_at": "2025-01-29",
+      "amount": "2903.00",
+      "remark": "ชำระยอดค่างวด เดือน ธค.67ด้วย มีค่าปลดล็อกเครื่อง1000บาท ค้างค่าปรับเดือน ธค.67และมค.68ค่ะให้ชำระค่าปรับ3000บาทค่ะแก้ไขข้อมูลการชำระเงินค่างวด TXRT1124-SKA002-2480-02-2(สัญญาเลขที่ CT1124-SKA002-2480-02)",
+      "principal_paid": "335",
+      "interest_paid": "1568",
+      "close_amount": "1903",
+      "fee_paid": "0"
+    },
+    {
+      "external_id": "10396",
+      "contract_no": "CT1124-SPK001-4296-01",
+      "paid_at": "2025-01-29",
+      "amount": "2986.00",
+      "remark": "สลีปไม่ตรงเนื่องจากโอนเงินเกิน 14 และลูกค้าโอนชำระค่าปลดล็อกเครื่อง 986 +14บาทที่เกิน = 1000 บาทค่าปลดล็อกแก้ไขข้อมูลการชำระเงินค่างวด TXRT1124-SPK001-4296-01-2(สัญญาเลขที่ CT1124-SPK001-4296-01)",
+      "principal_paid": "1112",
+      "interest_paid": "1324",
+      "close_amount": "2436",
+      "fee_paid": "0"
+    },
+    {
+      "external_id": "106279",
+      "contract_no": "CT1025-CMI010-17321-01",
+      "paid_at": "2026-02-21",
+      "amount": "6054.00",
+      "remark": "จบงวด ธค - มค แอดโทรหาลุกค้าแจ้งว่าเครื่องตำรวจหาเจอแล้ว แอดมินจึงให้ชำระค่างวด2งวด ธคค้างชำระ 2,777+มค 3,277 รวม 6054 บาท โดยไม่เรียกเก็บค่าปลดล็อกและค่าปรับงวด ธค-มค ค่ะ",
+      "principal_paid": "1382",
+      "interest_paid": "1295",
+      "close_amount": "2777",
+      "fee_paid": "100"
+    },
+    {
+      "external_id": "11006",
+      "contract_no": "CT1224-SKA002-6499-01",
+      "paid_at": "2025-02-01",
+      "amount": "2250.00",
+      "remark": "มีค่าปลดล็อกเครื่อง1000บาทค่ะ",
+      "principal_paid": "750",
+      "interest_paid": "850",
+      "close_amount": "1600",
+      "fee_paid": "0"
+    },
+    {
+      "external_id": "10724",
+      "contract_no": "CT1124-SNI001-3365-01",
+      "paid_at": "2025-01-31",
+      "amount": "2623.00",
+      "remark": "สลีปไม่ตรงเนื่องจาก มีค่าปลดล็อกเครื่อง 1000  บาท",
+      "principal_paid": "1212",
+      "interest_paid": "511",
+      "close_amount": "1723",
+      "fee_paid": "0"
+    },
+    {
+      "external_id": "10763",
+      "contract_no": "CT1124-KKN001-4731-02",
+      "paid_at": "2025-01-31",
+      "amount": "2700.00",
+      "remark": "มีค่าปลดล็อกเครื่อง 1000บาทค่ะแก้ไขข้อมูลการชำระเงินค่างวด TXRT1124-KKN001-4731-02-2(สัญญาเลขที่ CT1124-KKN001-4731-02) จากวันที่ : 2025-12-31 เป็นวันที่ : 2025-01-31",
+      "principal_paid": "1238",
+      "interest_paid": "1462",
+      "close_amount": "2700",
+      "fee_paid": "0"
+    }
+  ],
+  "messages": [
+    "status\tcnt",
+    "ยกเลิกสัญญา\t88",
+    "ระงับสัญญา\t289"
+  ],
+  "stdout": "external_id\tcontract_no\tpaid_at\tamount\tremark\tprincipal_paid\tinterest_paid\tclose_amount\tfee_paid\n101038\tCT1225-CBI038-19452-01\t2026-01-31\t500.00\tชำระค่าปลดล็อกให้ล็อกแล้วไม่มีใบแจ้งความดเจอเครื่องแล้ว\t0\t0\t0\t0\n10198\tCT1124-NYK001-3004-02\t2025-01-28\t700.00\tมีค่าปลดล็อกเครื่อง1000บาท วันที่28/1/68\t700\t0\t700\t0\n10242\tCT1124-NPT002-2922-01\t2025-01-28\t5281.00\tชำระยอดเกิน219 เป็นค่าปลดล็อกเครื่องค่ะ\t2062\t2369\t4431\t0\n10570\tCT1124-SKA002-4295-01\t2025-01-30\t3036.00\tยอด3500 เอาเข้ายอดค้าง436 งวด ธค.67ยอดเกิน28บาท เอาเข้าค่าปลดล็อกเครื่องคะ\t1112\t1324\t2436\t0\n10355\tCT1124-SKA002-2480-02\t2025-01-29\t2903.00\tชำระยอดค่างวด เดือน ธค.67ด้วย มีค่าปลดล็อกเครื่อง1000บาท ค้างค่าปรับเดือน ธค.67และมค.68ค่ะให้ชำระค่าปรับ3000บาทค่ะแก้ไขข้อมูลการชำระเงินค่างวด TXRT1124-SKA002-2480-02-2(สัญญาเลขที่ CT1124-SKA002-2480-02)\t335\t1568\t1903\t0\n10396\tCT1124-SPK001-4296-01\t2025-01-29\t2986.00\tสลีปไม่ตรงเนื่องจากโอนเงินเกิน 14 และลูกค้าโอนชำระค่าปลดล็อกเครื่อง 986 +14บาทที่เกิน = 1000 บาทค่าปลดล็อกแก้ไขข้อมูลการชำระเงินค่างวด TXRT1124-SPK001-4296-01-2(สัญญาเลขที่ CT1124-SPK001-4296-01)\t1112\t1324\t2436\t0\n106279\tCT1025-CMI010-17321-01\t2026-02-21\t6054.00\tจบงวด ธค - มค แอดโทรหาลุกค้าแจ้งว่าเครื่องตำรวจหาเจอแล้ว แอดมินจึงให้ชำระค่างวด2งวด ธคค้างชำระ 2,777+มค 3,277 รวม 6054 บาท โดยไม่เรียกเก็บค่าปลดล็อกและค่าปรับงวด ธค-มค ค่ะ\t1382\t1295\t2777\t100\n11006\tCT1224-SKA002-6499-01\t2025-02-01\t2250.00\tมีค่าปลดล็อกเครื่อง1000บาทค่ะ\t750\t850\t1600\t0\n10724\tCT1124-SNI001-3365-01\t2025-01-31\t2623.00\tสลีปไม่ตรงเนื่องจาก มีค่าปลดล็อกเครื่อง 1000  บาท\t1212\t511\t1723\t0\n10763\tCT1124-KKN001-4731-02\t2025-01-31\t2700.00\tมีค่าปลดล็อกเครื่อง 1000บาทค่ะแก้ไขข้อมูลการชำระเงินค่างวด TXRT1124-KKN001-4731-02-2(สัญญาเลขที่ CT1124-KKN001-4731-02) จากวันที่ : 2025-12-31 เป็นวันที่ : 2025-01-31\t1238\t1462\t2700\t0\nstatus\tcnt\nยกเลิกสัญญา\t88\nระงับสัญญา\t289\n",
+  "stderr": "",
+  "execution_time_ms": 1965
+}

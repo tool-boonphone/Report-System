@@ -1,0 +1,24 @@
+{
+  "query": "SELECT id, entity, status, started_at, TIMESTAMPDIFF(MINUTE, started_at, NOW()) as elapsed_min FROM sync_logs WHERE section='ff365' AND status='in_progress' ORDER BY id DESC LIMIT 5;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT id, entity, status, started_at, TIMESTAMPDIFF(MINUTE, started_at, NOW()) as elapsed_min FROM sync_logs WHERE section='ff365' AND status='in_progress' ORDER BY id DESC LIMIT 5;",
+  "rows": [
+    {
+      "id": "1230062",
+      "entity": "contracts",
+      "status": "in_progress",
+      "started_at": "2026-05-09 06:44:20",
+      "elapsed_min": "7"
+    },
+    {
+      "id": "1230059",
+      "entity": "all",
+      "status": "in_progress",
+      "started_at": "2026-05-09 06:39:21",
+      "elapsed_min": "12"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tentity\tstatus\tstarted_at\telapsed_min\n1230062\tcontracts\tin_progress\t2026-05-09 06:44:20\t7\n1230059\tall\tin_progress\t2026-05-09 06:39:21\t12\n",
+  "stderr": "",
+  "execution_time_ms": 1715
+}

@@ -1,0 +1,120 @@
+{
+  "query": "-- ดู transactions พ.ย. 2024 ทั้งหมด เรียงตาม amount DESC\nSELECT external_id, contract_no, paid_at, amount, status, created_by, created_at,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.detail')) as detail,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.type')) as type_field\nFROM payment_transactions\nWHERE section = 'ff365' AND paid_at BETWEEN '2024-11-01' AND '2024-11-30'\nORDER BY amount DESC\nLIMIT 10;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute -- ดู transactions พ.ย. 2024 ทั้งหมด เรียงตาม amount DESC\nSELECT external_id, contract_no, paid_at, amount, status, created_by, created_at,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.detail')) as detail,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.type')) as type_field\nFROM payment_transactions\nWHERE section = 'ff365' AND paid_at BETWEEN '2024-11-01' AND '2024-11-30'\nORDER BY amount DESC\nLIMIT 10;",
+  "rows": [
+    {
+      "external_id": "1095",
+      "contract_no": "CT1024-NRT001-00216-01",
+      "paid_at": "2024-11-20",
+      "amount": "14100.00",
+      "status": "Active",
+      "created_by": "adminkaew",
+      "created_at": "2024-11-20 15:22:15",
+      "detail": "NULL",
+      "type_field": "NULL"
+    },
+    {
+      "external_id": "1206",
+      "contract_no": "CT0924-NRT001-00135-01",
+      "paid_at": "2024-11-24",
+      "amount": "12260.00",
+      "status": "Active",
+      "created_by": "adminkaew",
+      "created_at": "2024-11-25 10:08:28",
+      "detail": "NULL",
+      "type_field": "NULL"
+    },
+    {
+      "external_id": "759",
+      "contract_no": "CT1024-NRT001-00233-01",
+      "paid_at": "2024-11-08",
+      "amount": "11980.00",
+      "status": "Active",
+      "created_by": "adminkaew",
+      "created_at": "2024-11-09 17:47:32",
+      "detail": "NULL",
+      "type_field": "NULL"
+    },
+    {
+      "external_id": "1218",
+      "contract_no": "CT0924-NRT001-00131-01",
+      "paid_at": "2024-11-25",
+      "amount": "10930.00",
+      "status": "Active",
+      "created_by": "adminkaew",
+      "created_at": "2024-11-25 10:50:12",
+      "detail": "NULL",
+      "type_field": "NULL"
+    },
+    {
+      "external_id": "905",
+      "contract_no": "CT1024-NRT001-00231-03",
+      "paid_at": "2024-11-13",
+      "amount": "10744.00",
+      "status": "Active",
+      "created_by": "adminmint",
+      "created_at": "2024-11-13 11:32:18",
+      "detail": "NULL",
+      "type_field": "NULL"
+    },
+    {
+      "external_id": "1031",
+      "contract_no": "CT1024-SKM001-00005-02",
+      "paid_at": "2024-11-18",
+      "amount": "9954.00",
+      "status": "Active",
+      "created_by": "seen admins",
+      "created_at": "2024-11-18 10:39:59",
+      "detail": "NULL",
+      "type_field": "NULL"
+    },
+    {
+      "external_id": "1022",
+      "contract_no": "CT0924-NYK001-00041-01",
+      "paid_at": "2024-11-17",
+      "amount": "9555.00",
+      "status": "Active",
+      "created_by": "adminmint",
+      "created_at": "2024-11-17 16:46:13",
+      "detail": "NULL",
+      "type_field": "NULL"
+    },
+    {
+      "external_id": "983",
+      "contract_no": "CT1024-SPK001-00046-01",
+      "paid_at": "2024-11-16",
+      "amount": "9377.00",
+      "status": "Active",
+      "created_by": "adminkaew",
+      "created_at": "2024-11-16 14:18:21",
+      "detail": "NULL",
+      "type_field": "NULL"
+    },
+    {
+      "external_id": "985",
+      "contract_no": "CT1024-SPK001-00043-01",
+      "paid_at": "2024-11-16",
+      "amount": "9377.00",
+      "status": "Active",
+      "created_by": "adminkaew",
+      "created_at": "2024-11-16 14:26:24",
+      "detail": "NULL",
+      "type_field": "NULL"
+    },
+    {
+      "external_id": "767",
+      "contract_no": "CT0924-NRT001-00100-01",
+      "paid_at": "2024-11-10",
+      "amount": "9060.00",
+      "status": "Active",
+      "created_by": "adminjubjib",
+      "created_at": "2024-11-10 10:15:50",
+      "detail": "NULL",
+      "type_field": "NULL"
+    }
+  ],
+  "messages": [],
+  "stdout": "external_id\tcontract_no\tpaid_at\tamount\tstatus\tcreated_by\tcreated_at\tdetail\ttype_field\n1095\tCT1024-NRT001-00216-01\t2024-11-20\t14100.00\tActive\tadminkaew\t2024-11-20 15:22:15\tNULL\tNULL\n1206\tCT0924-NRT001-00135-01\t2024-11-24\t12260.00\tActive\tadminkaew\t2024-11-25 10:08:28\tNULL\tNULL\n759\tCT1024-NRT001-00233-01\t2024-11-08\t11980.00\tActive\tadminkaew\t2024-11-09 17:47:32\tNULL\tNULL\n1218\tCT0924-NRT001-00131-01\t2024-11-25\t10930.00\tActive\tadminkaew\t2024-11-25 10:50:12\tNULL\tNULL\n905\tCT1024-NRT001-00231-03\t2024-11-13\t10744.00\tActive\tadminmint\t2024-11-13 11:32:18\tNULL\tNULL\n1031\tCT1024-SKM001-00005-02\t2024-11-18\t9954.00\tActive\tseen admins\t2024-11-18 10:39:59\tNULL\tNULL\n1022\tCT0924-NYK001-00041-01\t2024-11-17\t9555.00\tActive\tadminmint\t2024-11-17 16:46:13\tNULL\tNULL\n983\tCT1024-SPK001-00046-01\t2024-11-16\t9377.00\tActive\tadminkaew\t2024-11-16 14:18:21\tNULL\tNULL\n985\tCT1024-SPK001-00043-01\t2024-11-16\t9377.00\tActive\tadminkaew\t2024-11-16 14:26:24\tNULL\tNULL\n767\tCT0924-NRT001-00100-01\t2024-11-10\t9060.00\tActive\tadminjubjib\t2024-11-10 10:15:50\tNULL\tNULL\n",
+  "stderr": "",
+  "execution_time_ms": 1753
+}

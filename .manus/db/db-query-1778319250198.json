@@ -1,0 +1,37 @@
+{
+  "query": "SELECT external_id, contract_no, paid_at, amount, method, status, raw_json\nFROM payment_transactions\nWHERE section = 'ff365'\nLIMIT 3;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT external_id, contract_no, paid_at, amount, method, status, raw_json\nFROM payment_transactions\nWHERE section = 'ff365'\nLIMIT 3;",
+  "rows": [
+    {
+      "external_id": "125061",
+      "contract_no": "CT0925-SNI009-16135-01",
+      "paid_at": "2026-05-09",
+      "amount": "350.00",
+      "method": "โอนตรง",
+      "status": "Active",
+      "raw_json": "{\"bad_debt_amount\": 0, \"close_installment_amount\": 0, \"contract_code\": \"CT0925-SNI009-16135-01\", \"contract_id\": 17157, \"created_at\": \"2026-05-09 13:47:47\", \"created_by\": \"adminkaew\", \"discount_amount\": 0, \"fee_paid\": 0, \"interest_paid\": 0, \"overpaid_amount\": 0, \"payment_date\": \"2026-05-09\", \"payment_id\": 125061, \"payment_method\": \"โอนตรง\", \"payment_status\": \"Active\", \"payment_time\": \"13:45:00\", \"penalty_paid\": 350, \"principal_paid\": 0, \"receipt_no\": \"TXRT0925-SNI009-16135-01-8\", \"remark\": \"ชำระค่าปรับ เม.ย.\", \"total_paid_amount\": 350, \"unlock_fee_paid\": 0, \"updated_at\": \"2026-05-09 13:47:47\", \"updated_by\": \"adminkaew\"}"
+    },
+    {
+      "external_id": "125059",
+      "contract_no": "CT0925-SNI009-16135-01",
+      "paid_at": "2026-05-09",
+      "amount": "8185.00",
+      "method": "โอนตรง",
+      "status": "Active",
+      "raw_json": "{\"bad_debt_amount\": 0, \"close_installment_amount\": 8185, \"contract_code\": \"CT0925-SNI009-16135-01\", \"contract_id\": 17157, \"created_at\": \"2026-05-09 13:44:33\", \"created_by\": \"adminkaew\", \"discount_amount\": 0, \"fee_paid\": 100, \"interest_paid\": 4235, \"overpaid_amount\": 0, \"payment_date\": \"2026-05-09\", \"payment_id\": 125059, \"payment_method\": \"โอนตรง\", \"payment_status\": \"Active\", \"payment_time\": \"13:41:00\", \"penalty_paid\": 0, \"principal_paid\": 3850, \"receipt_no\": \"TXRT0925-SNI009-16135-01-7\", \"remark\": \"จบงวด เม.ย./ค้างค่าปรับ เม.ย. ยอด 350 บาท\", \"total_paid_amount\": 8185, \"unlock_fee_paid\": 0, \"updated_at\": \"2026-05-09 13:44:33\", \"updated_by\": \"adminkaew\"}"
+    },
+    {
+      "external_id": "125057",
+      "contract_no": "CT0126-PBI006-21670-01",
+      "paid_at": "2026-05-09",
+      "amount": "1500.00",
+      "method": "โอนตรง",
+      "status": "Active",
+      "raw_json": "{\"bad_debt_amount\": 0, \"close_installment_amount\": 1500, \"contract_code\": \"CT0126-PBI006-21670-01\", \"contract_id\": 23113, \"created_at\": \"2026-05-09 13:38:35\", \"created_by\": \"adminpahn\", \"discount_amount\": 0, \"fee_paid\": 0, \"interest_paid\": 1500, \"overpaid_amount\": 0, \"payment_date\": \"2026-05-09\", \"payment_id\": 125057, \"payment_method\": \"โอนตรง\", \"payment_status\": \"Active\", \"payment_time\": \"13:37:00\", \"penalty_paid\": 0, \"principal_paid\": 0, \"receipt_no\": \"TXRT0126-PBI006-21670-01-3\", \"remark\": \"เม.ย. 1500\", \"total_paid_amount\": 1500, \"unlock_fee_paid\": 0, \"updated_at\": \"2026-05-09 13:38:35\", \"updated_by\": \"adminpahn\"}"
+    }
+  ],
+  "messages": [],
+  "stdout": "external_id\tcontract_no\tpaid_at\tamount\tmethod\tstatus\traw_json\n125061\tCT0925-SNI009-16135-01\t2026-05-09\t350.00\tโอนตรง\tActive\t{\"bad_debt_amount\": 0, \"close_installment_amount\": 0, \"contract_code\": \"CT0925-SNI009-16135-01\", \"contract_id\": 17157, \"created_at\": \"2026-05-09 13:47:47\", \"created_by\": \"adminkaew\", \"discount_amount\": 0, \"fee_paid\": 0, \"interest_paid\": 0, \"overpaid_amount\": 0, \"payment_date\": \"2026-05-09\", \"payment_id\": 125061, \"payment_method\": \"โอนตรง\", \"payment_status\": \"Active\", \"payment_time\": \"13:45:00\", \"penalty_paid\": 350, \"principal_paid\": 0, \"receipt_no\": \"TXRT0925-SNI009-16135-01-8\", \"remark\": \"ชำระค่าปรับ เม.ย.\", \"total_paid_amount\": 350, \"unlock_fee_paid\": 0, \"updated_at\": \"2026-05-09 13:47:47\", \"updated_by\": \"adminkaew\"}\n125059\tCT0925-SNI009-16135-01\t2026-05-09\t8185.00\tโอนตรง\tActive\t{\"bad_debt_amount\": 0, \"close_installment_amount\": 8185, \"contract_code\": \"CT0925-SNI009-16135-01\", \"contract_id\": 17157, \"created_at\": \"2026-05-09 13:44:33\", \"created_by\": \"adminkaew\", \"discount_amount\": 0, \"fee_paid\": 100, \"interest_paid\": 4235, \"overpaid_amount\": 0, \"payment_date\": \"2026-05-09\", \"payment_id\": 125059, \"payment_method\": \"โอนตรง\", \"payment_status\": \"Active\", \"payment_time\": \"13:41:00\", \"penalty_paid\": 0, \"principal_paid\": 3850, \"receipt_no\": \"TXRT0925-SNI009-16135-01-7\", \"remark\": \"จบงวด เม.ย./ค้างค่าปรับ เม.ย. ยอด 350 บาท\", \"total_paid_amount\": 8185, \"unlock_fee_paid\": 0, \"updated_at\": \"2026-05-09 13:44:33\", \"updated_by\": \"adminkaew\"}\n125057\tCT0126-PBI006-21670-01\t2026-05-09\t1500.00\tโอนตรง\tActive\t{\"bad_debt_amount\": 0, \"close_installment_amount\": 1500, \"contract_code\": \"CT0126-PBI006-21670-01\", \"contract_id\": 23113, \"created_at\": \"2026-05-09 13:38:35\", \"created_by\": \"adminpahn\", \"discount_amount\": 0, \"fee_paid\": 0, \"interest_paid\": 1500, \"overpaid_amount\": 0, \"payment_date\": \"2026-05-09\", \"payment_id\": 125057, \"payment_method\": \"โอนตรง\", \"payment_status\": \"Active\", \"payment_time\": \"13:37:00\", \"penalty_paid\": 0, \"principal_paid\": 0, \"receipt_no\": \"TXRT0126-PBI006-21670-01-3\", \"remark\": \"เม.ย. 1500\", \"total_paid_amount\": 1500, \"unlock_fee_paid\": 0, \"updated_at\": \"2026-05-09 13:38:35\", \"updated_by\": \"adminpahn\"}\n",
+  "stderr": "",
+  "execution_time_ms": 1728
+}

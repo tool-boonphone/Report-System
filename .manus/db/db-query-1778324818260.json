@@ -1,0 +1,159 @@
+{
+  "query": "DESCRIBE payment_transactions; SELECT * FROM payment_transactions WHERE section = 'Fastfone365' LIMIT 3;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute DESCRIBE payment_transactions; SELECT * FROM payment_transactions WHERE section = 'Fastfone365' LIMIT 3;",
+  "rows": [
+    {
+      "Field": "id",
+      "Type": "int",
+      "Null": "NO",
+      "Key": "PRI",
+      "Default": "NULL",
+      "Extra": "auto_increment"
+    },
+    {
+      "Field": "section",
+      "Type": "varchar(32)",
+      "Null": "NO",
+      "Key": "MUL",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "external_id",
+      "Type": "varchar(64)",
+      "Null": "NO",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "contract_external_id",
+      "Type": "varchar(64)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "contract_no",
+      "Type": "varchar(64)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "customer_name",
+      "Type": "varchar(255)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "paid_at",
+      "Type": "varchar(32)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "amount",
+      "Type": "decimal(12,2)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "method",
+      "Type": "varchar(64)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "status",
+      "Type": "varchar(32)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "raw_json",
+      "Type": "json",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "synced_at",
+      "Type": "timestamp",
+      "Null": "NO",
+      "Key": "",
+      "Default": "CURRENT_TIMESTAMP",
+      "Extra": ""
+    },
+    {
+      "Field": "updated_by",
+      "Type": "varchar(128)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "updated_at",
+      "Type": "varchar(32)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "receipt_no",
+      "Type": "varchar(128)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "payment_time",
+      "Type": "varchar(8)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "created_by",
+      "Type": "varchar(128)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "created_at",
+      "Type": "varchar(32)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    }
+  ],
+  "messages": [
+    "id\tsection\texternal_id\tcontract_external_id\tcontract_no\tcustomer_name\tpaid_at\tamount\tmethod\tstatus\traw_json\tsynced_at\tupdated_by\tupdated_at\treceipt_no\tpayment_time\tcreated_by\tcreated_at",
+    "1174075\tFastfone365\t94870\t11526\tCT0325-SRI001-10678-01\tNULL\t2026-01-05\t2580.00\tโอนตรง\tActive\t{\"bad_debt_amount\": 0, \"close_installment_amount\": 2572.8900000000003, \"contract_code\": \"CT0325-SRI001-10678-01\", \"contract_id\": 11526, \"created_at\": \"2026-01-05 17:58:44\", \"created_by\": \"adminploy\", \"discount_amount\": 0, \"fee_paid\": 100, \"interest_paid\": 1394.97, \"overpaid_amount\": 7.11, \"payment_date\": \"2026-01-05\", \"payment_id\": 94870, \"payment_method\": \"โอนตรง\", \"payment_status\": \"Active\", \"payment_time\": \"09:13:00\", \"penalty_paid\": 0, \"principal_paid\": 1077.92, \"receipt_no\": \"TXRT0325-SRI001-10678-01-10\", \"remark\": \"จบงวด มค.\", \"total_paid_amount\": 2580, \"unlock_fee_paid\": 0, \"updated_at\": \"2026-01-05 17:58:44\", \"updated_by\": \"adminploy\"}\t2026-05-09 07:14:48\tadminploy\t2026-01-05 17:58:44\tTXRT0325-SRI001-10678-01-10\t09:13:00\tadminploy\t2026-01-05 17:58:44",
+    "1174076\tFastfone365\t94864\t18875\tCT1025-AYA013-17822-01\tNULL\t2026-01-05\t1360.00\tโอนตรง\tActive\t{\"bad_debt_amount\": 0, \"close_installment_amount\": 1360, \"contract_code\": \"CT1025-AYA013-17822-01\", \"contract_id\": 18875, \"created_at\": \"2026-01-05 17:56:09\", \"created_by\": \"adminfirst\", \"discount_amount\": 0, \"fee_paid\": 100, \"interest_paid\": 660, \"overpaid_amount\": 0, \"payment_date\": \"2026-01-05\", \"payment_id\": 94864, \"payment_method\": \"โอนตรง\", \"payment_status\": \"Active\", \"payment_time\": \"09:12:00\", \"penalty_paid\": 0, \"principal_paid\": 600, \"receipt_no\": \"TXRT1025-AYA013-17822-01-2\", \"remark\": \"จบงวด ม.ค.\", \"total_paid_amount\": 1360, \"unlock_fee_paid\": 0, \"updated_at\": \"2026-01-05 17:56:09\", \"updated_by\": \"adminfirst\"}\t2026-05-09 07:14:48\tadminfirst\t2026-01-05 17:56:09\tTXRT1025-AYA013-17822-01-2\t09:12:00\tadminfirst\t2026-01-05 17:56:09",
+    "1174077\tFastfone365\t94858\t20775\tCT1225-AYA001-19656-01\tNULL\t2026-01-05\t2530.00\tโอนตรง\tActive\t{\"bad_debt_amount\": 0, \"close_installment_amount\": 2530, \"contract_code\": \"CT1225-AYA001-19656-01\", \"contract_id\": 20775, \"created_at\": \"2026-01-05 17:53:10\", \"created_by\": \"admincartoon\", \"discount_amount\": 0, \"fee_paid\": 100, \"interest_paid\": 1373, \"overpaid_amount\": 0, \"payment_date\": \"2026-01-05\", \"payment_id\": 94858, \"payment_method\": \"โอนตรง\", \"payment_status\": \"Active\", \"payment_time\": \"09:07:00\", \"penalty_paid\": 0, \"principal_paid\": 1057, \"receipt_no\": \"TXRT1225-AYA001-19656-01-1\", \"remark\": \"จบงวด มค\", \"total_paid_amount\": 2530, \"unlock_fee_paid\": 0, \"updated_at\": \"2026-01-05 17:53:10\", \"updated_by\": \"admincartoon\"}\t2026-05-09 07:14:48\tadmincartoon\t2026-01-05 17:53:10\tTXRT1225-AYA001-19656-01-1\t09:07:00\tadmincartoon\t2026-01-05 17:53:10"
+  ],
+  "stdout": "Field\tType\tNull\tKey\tDefault\tExtra\nid\tint\tNO\tPRI\tNULL\tauto_increment\nsection\tvarchar(32)\tNO\tMUL\tNULL\t\nexternal_id\tvarchar(64)\tNO\t\tNULL\t\ncontract_external_id\tvarchar(64)\tYES\t\tNULL\t\ncontract_no\tvarchar(64)\tYES\t\tNULL\t\ncustomer_name\tvarchar(255)\tYES\t\tNULL\t\npaid_at\tvarchar(32)\tYES\t\tNULL\t\namount\tdecimal(12,2)\tYES\t\tNULL\t\nmethod\tvarchar(64)\tYES\t\tNULL\t\nstatus\tvarchar(32)\tYES\t\tNULL\t\nraw_json\tjson\tYES\t\tNULL\t\nsynced_at\ttimestamp\tNO\t\tCURRENT_TIMESTAMP\t\nupdated_by\tvarchar(128)\tYES\t\tNULL\t\nupdated_at\tvarchar(32)\tYES\t\tNULL\t\nreceipt_no\tvarchar(128)\tYES\t\tNULL\t\npayment_time\tvarchar(8)\tYES\t\tNULL\t\ncreated_by\tvarchar(128)\tYES\t\tNULL\t\ncreated_at\tvarchar(32)\tYES\t\tNULL\t\nid\tsection\texternal_id\tcontract_external_id\tcontract_no\tcustomer_name\tpaid_at\tamount\tmethod\tstatus\traw_json\tsynced_at\tupdated_by\tupdated_at\treceipt_no\tpayment_time\tcreated_by\tcreated_at\n1174075\tFastfone365\t94870\t11526\tCT0325-SRI001-10678-01\tNULL\t2026-01-05\t2580.00\tโอนตรง\tActive\t{\"bad_debt_amount\": 0, \"close_installment_amount\": 2572.8900000000003, \"contract_code\": \"CT0325-SRI001-10678-01\", \"contract_id\": 11526, \"created_at\": \"2026-01-05 17:58:44\", \"created_by\": \"adminploy\", \"discount_amount\": 0, \"fee_paid\": 100, \"interest_paid\": 1394.97, \"overpaid_amount\": 7.11, \"payment_date\": \"2026-01-05\", \"payment_id\": 94870, \"payment_method\": \"โอนตรง\", \"payment_status\": \"Active\", \"payment_time\": \"09:13:00\", \"penalty_paid\": 0, \"principal_paid\": 1077.92, \"receipt_no\": \"TXRT0325-SRI001-10678-01-10\", \"remark\": \"จบงวด มค.\", \"total_paid_amount\": 2580, \"unlock_fee_paid\": 0, \"updated_at\": \"2026-01-05 17:58:44\", \"updated_by\": \"adminploy\"}\t2026-05-09 07:14:48\tadminploy\t2026-01-05 17:58:44\tTXRT0325-SRI001-10678-01-10\t09:13:00\tadminploy\t2026-01-05 17:58:44\n1174076\tFastfone365\t94864\t18875\tCT1025-AYA013-17822-01\tNULL\t2026-01-05\t1360.00\tโอนตรง\tActive\t{\"bad_debt_amount\": 0, \"close_installment_amount\": 1360, \"contract_code\": \"CT1025-AYA013-17822-01\", \"contract_id\": 18875, \"created_at\": \"2026-01-05 17:56:09\", \"created_by\": \"adminfirst\", \"discount_amount\": 0, \"fee_paid\": 100, \"interest_paid\": 660, \"overpaid_amount\": 0, \"payment_date\": \"2026-01-05\", \"payment_id\": 94864, \"payment_method\": \"โอนตรง\", \"payment_status\": \"Active\", \"payment_time\": \"09:12:00\", \"penalty_paid\": 0, \"principal_paid\": 600, \"receipt_no\": \"TXRT1025-AYA013-17822-01-2\", \"remark\": \"จบงวด ม.ค.\", \"total_paid_amount\": 1360, \"unlock_fee_paid\": 0, \"updated_at\": \"2026-01-05 17:56:09\", \"updated_by\": \"adminfirst\"}\t2026-05-09 07:14:48\tadminfirst\t2026-01-05 17:56:09\tTXRT1025-AYA013-17822-01-2\t09:12:00\tadminfirst\t2026-01-05 17:56:09\n1174077\tFastfone365\t94858\t20775\tCT1225-AYA001-19656-01\tNULL\t2026-01-05\t2530.00\tโอนตรง\tActive\t{\"bad_debt_amount\": 0, \"close_installment_amount\": 2530, \"contract_code\": \"CT1225-AYA001-19656-01\", \"contract_id\": 20775, \"created_at\": \"2026-01-05 17:53:10\", \"created_by\": \"admincartoon\", \"discount_amount\": 0, \"fee_paid\": 100, \"interest_paid\": 1373, \"overpaid_amount\": 0, \"payment_date\": \"2026-01-05\", \"payment_id\": 94858, \"payment_method\": \"โอนตรง\", \"payment_status\": \"Active\", \"payment_time\": \"09:07:00\", \"penalty_paid\": 0, \"principal_paid\": 1057, \"receipt_no\": \"TXRT1225-AYA001-19656-01-1\", \"remark\": \"จบงวด มค\", \"total_paid_amount\": 2530, \"unlock_fee_paid\": 0, \"updated_at\": \"2026-01-05 17:53:10\", \"updated_by\": \"admincartoon\"}\t2026-05-09 07:14:48\tadmincartoon\t2026-01-05 17:53:10\tTXRT1225-AYA001-19656-01-1\t09:07:00\tadmincartoon\t2026-01-05 17:53:10\n",
+  "stderr": "",
+  "execution_time_ms": 1945
+}

@@ -1,0 +1,77 @@
+{
+  "query": "SELECT \n  external_id, contract_no, paid_at, amount,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.remark')) as remark,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.principal_paid')) as principal_paid,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.interest_paid')) as interest_paid,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.close_installment_amount')) as close_installment_amount,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.penalty_paid')) as penalty_paid,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.fee_paid')) as fee_paid\nFROM payment_transactions\nWHERE section = 'ff365'\n  AND JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.remark')) LIKE '%จบงวด%'\nLIMIT 5;\n\nSELECT \n  external_id, contract_no, paid_at, amount,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.remark')) as remark,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.principal_paid')) as principal_paid,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.interest_paid')) as interest_paid,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.close_installment_amount')) as close_installment_amount,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.penalty_paid')) as penalty_paid\nFROM payment_transactions\nWHERE section = 'ff365'\n  AND JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.remark')) NOT LIKE '%จบงวด%'\n  AND JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.remark')) != ''\nLIMIT 5;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT \n  external_id, contract_no, paid_at, amount,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.remark')) as remark,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.principal_paid')) as principal_paid,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.interest_paid')) as interest_paid,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.close_installment_amount')) as close_installment_amount,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.penalty_paid')) as penalty_paid,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.fee_paid')) as fee_paid\nFROM payment_transactions\nWHERE section = 'ff365'\n  AND JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.remark')) LIKE '%จบงวด%'\nLIMIT 5;\n\nSELECT \n  external_id, contract_no, paid_at, amount,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.remark')) as remark,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.principal_paid')) as principal_paid,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.interest_paid')) as interest_paid,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.close_installment_amount')) as close_installment_amount,\n  JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.penalty_paid')) as penalty_paid\nFROM payment_transactions\nWHERE section = 'ff365'\n  AND JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.remark')) NOT LIKE '%จบงวด%'\n  AND JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.remark')) != ''\nLIMIT 5;",
+  "rows": [
+    {
+      "external_id": "100023",
+      "contract_no": "CT0525-UDN011-12725-01",
+      "paid_at": "2026-01-27",
+      "amount": "1780.00",
+      "remark": "จบงวด มค",
+      "principal_paid": "800",
+      "interest_paid": "880",
+      "close_installment_amount": "1780",
+      "penalty_paid": "0",
+      "fee_paid": "100"
+    },
+    {
+      "external_id": "100024",
+      "contract_no": "CT0825-PNB002-14665-01",
+      "paid_at": "2026-01-27",
+      "amount": "4860.00",
+      "remark": "จบงวด มค",
+      "principal_paid": "2267",
+      "interest_paid": "2493",
+      "close_installment_amount": "4860",
+      "penalty_paid": "0",
+      "fee_paid": "100"
+    },
+    {
+      "external_id": "100018",
+      "contract_no": "CT0325-PTE001-11394-01",
+      "paid_at": "2026-01-27",
+      "amount": "4074.00",
+      "remark": "จบงวด มค.",
+      "principal_paid": "1728",
+      "interest_paid": "2246",
+      "close_installment_amount": "4074",
+      "penalty_paid": "0",
+      "fee_paid": "100"
+    },
+    {
+      "external_id": "100015",
+      "contract_no": "CT1225-KBI007-20367-01",
+      "paid_at": "2026-01-27",
+      "amount": "3859.00",
+      "remark": "จบงวด มค.",
+      "principal_paid": "1790",
+      "interest_paid": "1969",
+      "close_installment_amount": "3859",
+      "penalty_paid": "0",
+      "fee_paid": "100"
+    },
+    {
+      "external_id": "100016",
+      "contract_no": "CT1225-SNI015-20135-01",
+      "paid_at": "2026-01-27",
+      "amount": "2020.00",
+      "remark": "จบงวด ม.ค.",
+      "principal_paid": "867",
+      "interest_paid": "953",
+      "close_installment_amount": "1920",
+      "penalty_paid": "100",
+      "fee_paid": "100"
+    }
+  ],
+  "messages": [
+    "external_id\tcontract_no\tpaid_at\tamount\tremark\tprincipal_paid\tinterest_paid\tclose_installment_amount\tpenalty_paid",
+    "100019\tCT0725-CBI007-13537-01\t2026-01-27\t800.00\tบางส่วนงวด มค\t0\t717\t800\t0",
+    "100017\tCT0925-KBI002-9912-02\t2026-01-27\t1359.00\tชำระบางส่วน ม.ค.\t0\t1359\t1359\t0",
+    "100013\tCT0125-CCO015-7910-01\t2026-01-27\t3000.00\tบางส่วน มค.\t0\t3000\t3000\t0",
+    "100011\tCT0925-AYA001-15693-01\t2026-01-27\t2000.00\tบางส่วน งวดมค\t398\t1502\t2000\t0",
+    "100007\tCT0925-KPT001-15849-01\t2026-01-27\t2400.00\tชำระบางส่วน ม.ค.\t910\t1390\t2400\t0"
+  ],
+  "stdout": "external_id\tcontract_no\tpaid_at\tamount\tremark\tprincipal_paid\tinterest_paid\tclose_installment_amount\tpenalty_paid\tfee_paid\n100023\tCT0525-UDN011-12725-01\t2026-01-27\t1780.00\tจบงวด มค\t800\t880\t1780\t0\t100\n100024\tCT0825-PNB002-14665-01\t2026-01-27\t4860.00\tจบงวด มค\t2267\t2493\t4860\t0\t100\n100018\tCT0325-PTE001-11394-01\t2026-01-27\t4074.00\tจบงวด มค.\t1728\t2246\t4074\t0\t100\n100015\tCT1225-KBI007-20367-01\t2026-01-27\t3859.00\tจบงวด มค.\t1790\t1969\t3859\t0\t100\n100016\tCT1225-SNI015-20135-01\t2026-01-27\t2020.00\tจบงวด ม.ค.\t867\t953\t1920\t100\t100\nexternal_id\tcontract_no\tpaid_at\tamount\tremark\tprincipal_paid\tinterest_paid\tclose_installment_amount\tpenalty_paid\n100019\tCT0725-CBI007-13537-01\t2026-01-27\t800.00\tบางส่วนงวด มค\t0\t717\t800\t0\n100017\tCT0925-KBI002-9912-02\t2026-01-27\t1359.00\tชำระบางส่วน ม.ค.\t0\t1359\t1359\t0\n100013\tCT0125-CCO015-7910-01\t2026-01-27\t3000.00\tบางส่วน มค.\t0\t3000\t3000\t0\n100011\tCT0925-AYA001-15693-01\t2026-01-27\t2000.00\tบางส่วน งวดมค\t398\t1502\t2000\t0\n100007\tCT0925-KPT001-15849-01\t2026-01-27\t2400.00\tชำระบางส่วน ม.ค.\t910\t1390\t2400\t0\n",
+  "stderr": "",
+  "execution_time_ms": 2024
+}

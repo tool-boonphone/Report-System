@@ -1,0 +1,80 @@
+{
+  "query": "SELECT id, external_id, paid_at, payment_time, created_by FROM payment_transactions WHERE section='ff365' AND payment_time IS NULL ORDER BY id DESC LIMIT 10;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT id, external_id, paid_at, payment_time, created_by FROM payment_transactions WHERE section='ff365' AND payment_time IS NULL ORDER BY id DESC LIMIT 10;",
+  "rows": [
+    {
+      "id": "1266423",
+      "external_id": "1",
+      "paid_at": "2024-08-27",
+      "payment_time": "NULL",
+      "created_by": "adminnui"
+    },
+    {
+      "id": "1266422",
+      "external_id": "15104",
+      "paid_at": "2024-09-06",
+      "payment_time": "NULL",
+      "created_by": "seen admins"
+    },
+    {
+      "id": "1266421",
+      "external_id": "15103",
+      "paid_at": "2024-09-06",
+      "payment_time": "NULL",
+      "created_by": "seen admins"
+    },
+    {
+      "id": "1266420",
+      "external_id": "5",
+      "paid_at": "2024-09-06",
+      "payment_time": "NULL",
+      "created_by": "adminnui"
+    },
+    {
+      "id": "1266419",
+      "external_id": "3",
+      "paid_at": "2024-09-06",
+      "payment_time": "NULL",
+      "created_by": "adminview"
+    },
+    {
+      "id": "1266418",
+      "external_id": "2",
+      "paid_at": "2024-09-06",
+      "payment_time": "NULL",
+      "created_by": "adminnui"
+    },
+    {
+      "id": "1266417",
+      "external_id": "6",
+      "paid_at": "2024-09-07",
+      "payment_time": "NULL",
+      "created_by": "adminnui"
+    },
+    {
+      "id": "1266416",
+      "external_id": "15592",
+      "paid_at": "2024-09-08",
+      "payment_time": "NULL",
+      "created_by": "adminjubjib"
+    },
+    {
+      "id": "1266415",
+      "external_id": "15591",
+      "paid_at": "2024-09-08",
+      "payment_time": "NULL",
+      "created_by": "adminjubjib"
+    },
+    {
+      "id": "1266414",
+      "external_id": "15590",
+      "paid_at": "2024-09-08",
+      "payment_time": "NULL",
+      "created_by": "adminjubjib"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\texternal_id\tpaid_at\tpayment_time\tcreated_by\n1266423\t1\t2024-08-27\tNULL\tadminnui\n1266422\t15104\t2024-09-06\tNULL\tseen admins\n1266421\t15103\t2024-09-06\tNULL\tseen admins\n1266420\t5\t2024-09-06\tNULL\tadminnui\n1266419\t3\t2024-09-06\tNULL\tadminview\n1266418\t2\t2024-09-06\tNULL\tadminnui\n1266417\t6\t2024-09-07\tNULL\tadminnui\n1266416\t15592\t2024-09-08\tNULL\tadminjubjib\n1266415\t15591\t2024-09-08\tNULL\tadminjubjib\n1266414\t15590\t2024-09-08\tNULL\tadminjubjib\n",
+  "stderr": "",
+  "execution_time_ms": 1877
+}

@@ -1,0 +1,22 @@
+{
+  "query": "\n-- ดู contract_no ตัวอย่างของแต่ละ section\nSELECT section, MIN(contract_no) as min_no, MAX(contract_no) as max_no, COUNT(*) as cnt FROM contracts GROUP BY section;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \n-- ดู contract_no ตัวอย่างของแต่ละ section\nSELECT section, MIN(contract_no) as min_no, MAX(contract_no) as max_no, COUNT(*) as cnt FROM contracts GROUP BY section;\n",
+  "rows": [
+    {
+      "section": "Fastfone365",
+      "min_no": "CT0125-AYA001-6949-02",
+      "max_no": "CT1225-UTT004-20286-01",
+      "cnt": "17809"
+    },
+    {
+      "section": "Boonphone",
+      "min_no": "CT0125-AYA001-6949-02",
+      "max_no": "CT1225-UTT004-20286-01",
+      "cnt": "17809"
+    }
+  ],
+  "messages": [],
+  "stdout": "section\tmin_no\tmax_no\tcnt\nFastfone365\tCT0125-AYA001-6949-02\tCT1225-UTT004-20286-01\t17809\nBoonphone\tCT0125-AYA001-6949-02\tCT1225-UTT004-20286-01\t17809\n",
+  "stderr": "",
+  "execution_time_ms": 1812
+}

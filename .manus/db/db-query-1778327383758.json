@@ -1,0 +1,82 @@
+{
+  "query": "\nSELECT id, section, entity, status, progress, current_stage, row_count, triggered_by,\n  DATE_FORMAT(started_at, '%H:%i:%s') AS started,\n  DATE_FORMAT(finished_at, '%H:%i:%s') AS finished\nFROM sync_logs\nWHERE section IN ('Boonphone', 'boonphone')\nORDER BY started_at DESC\nLIMIT 6;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT id, section, entity, status, progress, current_stage, row_count, triggered_by,\n  DATE_FORMAT(started_at, '%H:%i:%s') AS started,\n  DATE_FORMAT(finished_at, '%H:%i:%s') AS finished\nFROM sync_logs\nWHERE section IN ('Boonphone', 'boonphone')\nORDER BY started_at DESC\nLIMIT 6;\n",
+  "rows": [
+    {
+      "id": "1260008",
+      "section": "Boonphone",
+      "entity": "contracts",
+      "status": "in_progress",
+      "progress": "0",
+      "current_stage": "NULL",
+      "row_count": "0",
+      "triggered_by": "on-demand",
+      "started": "11:02:23",
+      "finished": "NULL"
+    },
+    {
+      "id": "1260007",
+      "section": "Boonphone",
+      "entity": "customers",
+      "status": "success",
+      "progress": "0",
+      "current_stage": "NULL",
+      "row_count": "4841",
+      "triggered_by": "on-demand",
+      "started": "11:01:22",
+      "finished": "11:02:22"
+    },
+    {
+      "id": "1260005",
+      "section": "Boonphone",
+      "entity": "all",
+      "status": "in_progress",
+      "progress": "35",
+      "current_stage": "contracts",
+      "row_count": "0",
+      "triggered_by": "manual",
+      "started": "11:01:14",
+      "finished": "NULL"
+    },
+    {
+      "id": "1260006",
+      "section": "Boonphone",
+      "entity": "partners",
+      "status": "success",
+      "progress": "0",
+      "current_stage": "NULL",
+      "row_count": "228",
+      "triggered_by": "on-demand",
+      "started": "11:01:14",
+      "finished": "11:01:21"
+    },
+    {
+      "id": "1260004",
+      "section": "Boonphone",
+      "entity": "contracts",
+      "status": "error",
+      "progress": "0",
+      "current_stage": "NULL",
+      "row_count": "0",
+      "triggered_by": "on-demand",
+      "started": "10:47:13",
+      "finished": "10:49:06"
+    },
+    {
+      "id": "1260003",
+      "section": "Boonphone",
+      "entity": "customers",
+      "status": "success",
+      "progress": "0",
+      "current_stage": "NULL",
+      "row_count": "4841",
+      "triggered_by": "on-demand",
+      "started": "10:45:41",
+      "finished": "10:47:13"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tsection\tentity\tstatus\tprogress\tcurrent_stage\trow_count\ttriggered_by\tstarted\tfinished\n1260008\tBoonphone\tcontracts\tin_progress\t0\tNULL\t0\ton-demand\t11:02:23\tNULL\n1260007\tBoonphone\tcustomers\tsuccess\t0\tNULL\t4841\ton-demand\t11:01:22\t11:02:22\n1260005\tBoonphone\tall\tin_progress\t35\tcontracts\t0\tmanual\t11:01:14\tNULL\n1260006\tBoonphone\tpartners\tsuccess\t0\tNULL\t228\ton-demand\t11:01:14\t11:01:21\n1260004\tBoonphone\tcontracts\terror\t0\tNULL\t0\ton-demand\t10:47:13\t10:49:06\n1260003\tBoonphone\tcustomers\tsuccess\t0\tNULL\t4841\ton-demand\t10:45:41\t10:47:13\n",
+  "stderr": "",
+  "execution_time_ms": 1785
+}

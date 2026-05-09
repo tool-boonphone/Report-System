@@ -1,0 +1,33 @@
+{
+  "query": "SELECT method, COUNT(*) as cnt, SUM(amount) as total\nFROM payment_transactions\nWHERE section = 'ff365'\nGROUP BY method\nORDER BY cnt DESC;\n\nSELECT status, COUNT(*) as cnt\nFROM payment_transactions\nWHERE section = 'ff365'\nGROUP BY status;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT method, COUNT(*) as cnt, SUM(amount) as total\nFROM payment_transactions\nWHERE section = 'ff365'\nGROUP BY method\nORDER BY cnt DESC;\n\nSELECT status, COUNT(*) as cnt\nFROM payment_transactions\nWHERE section = 'ff365'\nGROUP BY status;",
+  "rows": [
+    {
+      "method": "โอนตรง",
+      "cnt": "99330",
+      "total": "253825119.69"
+    },
+    {
+      "method": "โอนเงิน",
+      "cnt": "22676",
+      "total": "54949732.71"
+    },
+    {
+      "method": "K-shop",
+      "cnt": "12",
+      "total": "22730.17"
+    },
+    {
+      "method": "เงินสด",
+      "cnt": "1",
+      "total": "400.00"
+    }
+  ],
+  "messages": [
+    "status\tcnt",
+    "Active\t122019"
+  ],
+  "stdout": "method\tcnt\ttotal\nโอนตรง\t99330\t253825119.69\nโอนเงิน\t22676\t54949732.71\nK-shop\t12\t22730.17\nเงินสด\t1\t400.00\nstatus\tcnt\nActive\t122019\n",
+  "stderr": "",
+  "execution_time_ms": 2161
+}

@@ -1,0 +1,83 @@
+{
+  "query": "SELECT status, COUNT(*) as cnt\nFROM contracts\nWHERE section = 'ff365'\nGROUP BY status\nORDER BY cnt DESC;\n\nSHOW COLUMNS FROM contracts;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT status, COUNT(*) as cnt\nFROM contracts\nWHERE section = 'ff365'\nGROUP BY status\nORDER BY cnt DESC;\n\nSHOW COLUMNS FROM contracts;",
+  "rows": [
+    {
+      "status": "สำเร็จ",
+      "cnt": "7182"
+    },
+    {
+      "status": "สิ้นสุดสัญญา",
+      "cnt": "7127"
+    },
+    {
+      "status": "หนี้เสีย",
+      "cnt": "3123"
+    },
+    {
+      "status": "ระงับสัญญา",
+      "cnt": "289"
+    },
+    {
+      "status": "ยกเลิกสัญญา",
+      "cnt": "88"
+    }
+  ],
+  "messages": [
+    "Field\tType\tNull\tKey\tDefault\tExtra",
+    "id\tint\tNO\tPRI\tNULL\tauto_increment",
+    "section\tvarchar(32)\tNO\tMUL\tNULL\t",
+    "external_id\tvarchar(64)\tNO\t\tNULL\t",
+    "contract_no\tvarchar(64)\tNO\t\tNULL\t",
+    "submit_date\tvarchar(20)\tYES\t\tNULL\t",
+    "approve_date\tvarchar(20)\tYES\t\tNULL\t",
+    "channel\tvarchar(64)\tYES\t\tNULL\t",
+    "status\tvarchar(32)\tYES\t\tNULL\t",
+    "partner_code\tvarchar(255)\tYES\t\tNULL\t",
+    "partner_name\tvarchar(255)\tYES\t\tNULL\t",
+    "partner_province\tvarchar(64)\tYES\t\tNULL\t",
+    "partner_status\tvarchar(32)\tYES\t\tNULL\t",
+    "commission_net\tdecimal(12,2)\tYES\t\tNULL\t",
+    "customer_name\tvarchar(255)\tYES\t\tNULL\t",
+    "nationality\tvarchar(64)\tYES\t\tNULL\t",
+    "citizen_id\tvarchar(32)\tYES\t\tNULL\t",
+    "gender\tvarchar(16)\tYES\t\tNULL\t",
+    "age\tint\tYES\t\tNULL\t",
+    "occupation\tvarchar(512)\tYES\t\tNULL\t",
+    "salary\tdecimal(12,2)\tYES\t\tNULL\t",
+    "workplace\tvarchar(1024)\tYES\t\tNULL\t",
+    "phone\tvarchar(32)\tYES\t\tNULL\t",
+    "id_district\tvarchar(128)\tYES\t\tNULL\t",
+    "id_province\tvarchar(128)\tYES\t\tNULL\t",
+    "addr_district\tvarchar(128)\tYES\t\tNULL\t",
+    "addr_province\tvarchar(128)\tYES\t\tNULL\t",
+    "work_district\tvarchar(128)\tYES\t\tNULL\t",
+    "work_province\tvarchar(128)\tYES\t\tNULL\t",
+    "promotion_name\tvarchar(255)\tYES\t\tNULL\t",
+    "device\tvarchar(64)\tYES\t\tNULL\t",
+    "product_type\tvarchar(64)\tYES\t\tNULL\t",
+    "model\tvarchar(128)\tYES\t\tNULL\t",
+    "imei\tvarchar(64)\tYES\t\tNULL\t",
+    "serial_no\tvarchar(64)\tYES\t\tNULL\t",
+    "sell_price\tdecimal(12,2)\tYES\t\tNULL\t",
+    "device_status\tvarchar(32)\tYES\t\tNULL\t",
+    "down_payment\tdecimal(12,2)\tYES\t\tNULL\t",
+    "finance_amount\tdecimal(12,2)\tYES\t\tNULL\t",
+    "installment_count\tint\tYES\t\tNULL\t",
+    "multiplier\tdecimal(6,2)\tYES\t\tNULL\t",
+    "installment_amount\tdecimal(12,2)\tYES\t\tNULL\t",
+    "payment_day\tint\tYES\t\tNULL\t",
+    "paid_installments\tint\tYES\t\t0\t",
+    "debt_type\tvarchar(32)\tYES\t\tNULL\t",
+    "raw_json\tjson\tYES\t\tNULL\t",
+    "synced_at\ttimestamp\tNO\t\tCURRENT_TIMESTAMP\t",
+    "bad_debt_amount\tdecimal(12,2)\tYES\t\tNULL\t",
+    "bad_debt_date\tvarchar(20)\tYES\t\tNULL\t",
+    "suspended_from_period\tint\tYES\t\tNULL\t",
+    "bad_debt_updated_by\tvarchar(128)\tYES\t\tNULL\t",
+    "bad_debt_updated_at\tvarchar(32)\tYES\t\tNULL\t"
+  ],
+  "stdout": "status\tcnt\nสำเร็จ\t7182\nสิ้นสุดสัญญา\t7127\nหนี้เสีย\t3123\nระงับสัญญา\t289\nยกเลิกสัญญา\t88\nField\tType\tNull\tKey\tDefault\tExtra\nid\tint\tNO\tPRI\tNULL\tauto_increment\nsection\tvarchar(32)\tNO\tMUL\tNULL\t\nexternal_id\tvarchar(64)\tNO\t\tNULL\t\ncontract_no\tvarchar(64)\tNO\t\tNULL\t\nsubmit_date\tvarchar(20)\tYES\t\tNULL\t\napprove_date\tvarchar(20)\tYES\t\tNULL\t\nchannel\tvarchar(64)\tYES\t\tNULL\t\nstatus\tvarchar(32)\tYES\t\tNULL\t\npartner_code\tvarchar(255)\tYES\t\tNULL\t\npartner_name\tvarchar(255)\tYES\t\tNULL\t\npartner_province\tvarchar(64)\tYES\t\tNULL\t\npartner_status\tvarchar(32)\tYES\t\tNULL\t\ncommission_net\tdecimal(12,2)\tYES\t\tNULL\t\ncustomer_name\tvarchar(255)\tYES\t\tNULL\t\nnationality\tvarchar(64)\tYES\t\tNULL\t\ncitizen_id\tvarchar(32)\tYES\t\tNULL\t\ngender\tvarchar(16)\tYES\t\tNULL\t\nage\tint\tYES\t\tNULL\t\noccupation\tvarchar(512)\tYES\t\tNULL\t\nsalary\tdecimal(12,2)\tYES\t\tNULL\t\nworkplace\tvarchar(1024)\tYES\t\tNULL\t\nphone\tvarchar(32)\tYES\t\tNULL\t\nid_district\tvarchar(128)\tYES\t\tNULL\t\nid_province\tvarchar(128)\tYES\t\tNULL\t\naddr_district\tvarchar(128)\tYES\t\tNULL\t\naddr_province\tvarchar(128)\tYES\t\tNULL\t\nwork_district\tvarchar(128)\tYES\t\tNULL\t\nwork_province\tvarchar(128)\tYES\t\tNULL\t\npromotion_name\tvarchar(255)\tYES\t\tNULL\t\ndevice\tvarchar(64)\tYES\t\tNULL\t\nproduct_type\tvarchar(64)\tYES\t\tNULL\t\nmodel\tvarchar(128)\tYES\t\tNULL\t\nimei\tvarchar(64)\tYES\t\tNULL\t\nserial_no\tvarchar(64)\tYES\t\tNULL\t\nsell_price\tdecimal(12,2)\tYES\t\tNULL\t\ndevice_status\tvarchar(32)\tYES\t\tNULL\t\ndown_payment\tdecimal(12,2)\tYES\t\tNULL\t\nfinance_amount\tdecimal(12,2)\tYES\t\tNULL\t\ninstallment_count\tint\tYES\t\tNULL\t\nmultiplier\tdecimal(6,2)\tYES\t\tNULL\t\ninstallment_amount\tdecimal(12,2)\tYES\t\tNULL\t\npayment_day\tint\tYES\t\tNULL\t\npaid_installments\tint\tYES\t\t0\t\ndebt_type\tvarchar(32)\tYES\t\tNULL\t\nraw_json\tjson\tYES\t\tNULL\t\nsynced_at\ttimestamp\tNO\t\tCURRENT_TIMESTAMP\t\nbad_debt_amount\tdecimal(12,2)\tYES\t\tNULL\t\nbad_debt_date\tvarchar(20)\tYES\t\tNULL\t\nsuspended_from_period\tint\tYES\t\tNULL\t\nbad_debt_updated_by\tvarchar(128)\tYES\t\tNULL\t\nbad_debt_updated_at\tvarchar(32)\tYES\t\tNULL\t\n",
+  "stderr": "",
+  "execution_time_ms": 1965
+}

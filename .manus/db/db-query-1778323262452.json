@@ -1,0 +1,170 @@
+{
+  "query": "\nSELECT section, entity, triggered_by, status, row_count, started_at\nFROM sync_logs\nWHERE section IN ('boonphone', 'ff365')\nORDER BY started_at DESC\nLIMIT 20;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT section, entity, triggered_by, status, row_count, started_at\nFROM sync_logs\nWHERE section IN ('boonphone', 'ff365')\nORDER BY started_at DESC\nLIMIT 20;\n",
+  "rows": [
+    {
+      "section": "boonphone",
+      "entity": "payments",
+      "triggered_by": "on-demand",
+      "status": "success",
+      "row_count": "122046",
+      "started_at": "2026-05-09 09:39:31"
+    },
+    {
+      "section": "boonphone",
+      "entity": "installments",
+      "triggered_by": "on-demand",
+      "status": "success",
+      "row_count": "171363",
+      "started_at": "2026-05-09 09:26:02"
+    },
+    {
+      "section": "boonphone",
+      "entity": "contracts",
+      "triggered_by": "on-demand",
+      "status": "success",
+      "row_count": "19249",
+      "started_at": "2026-05-09 09:15:24"
+    },
+    {
+      "section": "boonphone",
+      "entity": "customers",
+      "triggered_by": "on-demand",
+      "status": "success",
+      "row_count": "22290",
+      "started_at": "2026-05-09 09:10:28"
+    },
+    {
+      "section": "boonphone",
+      "entity": "partners",
+      "triggered_by": "on-demand",
+      "status": "success",
+      "row_count": "693",
+      "started_at": "2026-05-09 09:10:18"
+    },
+    {
+      "section": "boonphone",
+      "entity": "all",
+      "triggered_by": "manual",
+      "status": "success",
+      "row_count": "312658",
+      "started_at": "2026-05-09 09:10:17"
+    },
+    {
+      "section": "boonphone",
+      "entity": "contracts",
+      "triggered_by": "on-demand",
+      "status": "error",
+      "row_count": "0",
+      "started_at": "2026-05-09 08:38:46"
+    },
+    {
+      "section": "boonphone",
+      "entity": "customers",
+      "triggered_by": "on-demand",
+      "status": "success",
+      "row_count": "22290",
+      "started_at": "2026-05-09 08:34:19"
+    },
+    {
+      "section": "boonphone",
+      "entity": "all",
+      "triggered_by": "manual",
+      "status": "error",
+      "row_count": "0",
+      "started_at": "2026-05-09 08:34:09"
+    },
+    {
+      "section": "boonphone",
+      "entity": "partners",
+      "triggered_by": "on-demand",
+      "status": "success",
+      "row_count": "693",
+      "started_at": "2026-05-09 08:34:09"
+    },
+    {
+      "section": "boonphone",
+      "entity": "contracts",
+      "triggered_by": "on-demand",
+      "status": "error",
+      "row_count": "0",
+      "started_at": "2026-05-09 07:56:13"
+    },
+    {
+      "section": "boonphone",
+      "entity": "customers",
+      "triggered_by": "on-demand",
+      "status": "success",
+      "row_count": "22290",
+      "started_at": "2026-05-09 07:51:41"
+    },
+    {
+      "section": "boonphone",
+      "entity": "partners",
+      "triggered_by": "on-demand",
+      "status": "success",
+      "row_count": "693",
+      "started_at": "2026-05-09 07:51:32"
+    },
+    {
+      "section": "boonphone",
+      "entity": "all",
+      "triggered_by": "manual",
+      "status": "error",
+      "row_count": "0",
+      "started_at": "2026-05-09 07:51:32"
+    },
+    {
+      "section": "ff365",
+      "entity": "payments",
+      "triggered_by": "on-demand",
+      "status": "success",
+      "row_count": "122022",
+      "started_at": "2026-05-09 07:09:15"
+    },
+    {
+      "section": "ff365",
+      "entity": "installments",
+      "triggered_by": "on-demand",
+      "status": "success",
+      "row_count": "171363",
+      "started_at": "2026-05-09 06:53:55"
+    },
+    {
+      "section": "ff365",
+      "entity": "contracts",
+      "triggered_by": "on-demand",
+      "status": "success",
+      "row_count": "18876",
+      "started_at": "2026-05-09 06:44:20"
+    },
+    {
+      "section": "ff365",
+      "entity": "customers",
+      "triggered_by": "on-demand",
+      "status": "success",
+      "row_count": "22290",
+      "started_at": "2026-05-09 06:39:32"
+    },
+    {
+      "section": "ff365",
+      "entity": "partners",
+      "triggered_by": "on-demand",
+      "status": "success",
+      "row_count": "693",
+      "started_at": "2026-05-09 06:39:22"
+    },
+    {
+      "section": "ff365",
+      "entity": "all",
+      "triggered_by": "manual",
+      "status": "success",
+      "row_count": "312261",
+      "started_at": "2026-05-09 06:39:21"
+    }
+  ],
+  "messages": [],
+  "stdout": "section\tentity\ttriggered_by\tstatus\trow_count\tstarted_at\nboonphone\tpayments\ton-demand\tsuccess\t122046\t2026-05-09 09:39:31\nboonphone\tinstallments\ton-demand\tsuccess\t171363\t2026-05-09 09:26:02\nboonphone\tcontracts\ton-demand\tsuccess\t19249\t2026-05-09 09:15:24\nboonphone\tcustomers\ton-demand\tsuccess\t22290\t2026-05-09 09:10:28\nboonphone\tpartners\ton-demand\tsuccess\t693\t2026-05-09 09:10:18\nboonphone\tall\tmanual\tsuccess\t312658\t2026-05-09 09:10:17\nboonphone\tcontracts\ton-demand\terror\t0\t2026-05-09 08:38:46\nboonphone\tcustomers\ton-demand\tsuccess\t22290\t2026-05-09 08:34:19\nboonphone\tall\tmanual\terror\t0\t2026-05-09 08:34:09\nboonphone\tpartners\ton-demand\tsuccess\t693\t2026-05-09 08:34:09\nboonphone\tcontracts\ton-demand\terror\t0\t2026-05-09 07:56:13\nboonphone\tcustomers\ton-demand\tsuccess\t22290\t2026-05-09 07:51:41\nboonphone\tpartners\ton-demand\tsuccess\t693\t2026-05-09 07:51:32\nboonphone\tall\tmanual\terror\t0\t2026-05-09 07:51:32\nff365\tpayments\ton-demand\tsuccess\t122022\t2026-05-09 07:09:15\nff365\tinstallments\ton-demand\tsuccess\t171363\t2026-05-09 06:53:55\nff365\tcontracts\ton-demand\tsuccess\t18876\t2026-05-09 06:44:20\nff365\tcustomers\ton-demand\tsuccess\t22290\t2026-05-09 06:39:32\nff365\tpartners\ton-demand\tsuccess\t693\t2026-05-09 06:39:22\nff365\tall\tmanual\tsuccess\t312261\t2026-05-09 06:39:21\n",
+  "stderr": "",
+  "execution_time_ms": 1700
+}

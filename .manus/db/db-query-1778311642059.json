@@ -1,0 +1,56 @@
+{
+  "query": "SELECT id, entity, status, row_count, TIMESTAMPDIFF(MINUTE, started_at, NOW()) as elapsed_min FROM sync_logs WHERE section='ff365' ORDER BY id DESC LIMIT 6;\nSELECT section, COUNT(*) as cnt, SUM(CASE WHEN payment_time IS NOT NULL THEN 1 ELSE 0 END) as has_pt, SUM(CASE WHEN created_by IS NOT NULL THEN 1 ELSE 0 END) as has_cb FROM payment_transactions GROUP BY section;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT id, entity, status, row_count, TIMESTAMPDIFF(MINUTE, started_at, NOW()) as elapsed_min FROM sync_logs WHERE section='ff365' ORDER BY id DESC LIMIT 6;\nSELECT section, COUNT(*) as cnt, SUM(CASE WHEN payment_time IS NOT NULL THEN 1 ELSE 0 END) as has_pt, SUM(CASE WHEN created_by IS NOT NULL THEN 1 ELSE 0 END) as has_cb FROM payment_transactions GROUP BY section;",
+  "rows": [
+    {
+      "id": "1230064",
+      "entity": "payments",
+      "status": "in_progress",
+      "row_count": "0",
+      "elapsed_min": "18"
+    },
+    {
+      "id": "1230063",
+      "entity": "installments",
+      "status": "success",
+      "row_count": "171363",
+      "elapsed_min": "33"
+    },
+    {
+      "id": "1230062",
+      "entity": "contracts",
+      "status": "success",
+      "row_count": "18876",
+      "elapsed_min": "43"
+    },
+    {
+      "id": "1230061",
+      "entity": "customers",
+      "status": "success",
+      "row_count": "22290",
+      "elapsed_min": "47"
+    },
+    {
+      "id": "1230060",
+      "entity": "partners",
+      "status": "success",
+      "row_count": "693",
+      "elapsed_min": "47"
+    },
+    {
+      "id": "1230059",
+      "entity": "all",
+      "status": "in_progress",
+      "row_count": "0",
+      "elapsed_min": "48"
+    }
+  ],
+  "messages": [
+    "section\tcnt\thas_pt\thas_cb",
+    "Boonphone\t4274\t0\t0",
+    "ff365\t98996\t96235\t98996"
+  ],
+  "stdout": "id\tentity\tstatus\trow_count\telapsed_min\n1230064\tpayments\tin_progress\t0\t18\n1230063\tinstallments\tsuccess\t171363\t33\n1230062\tcontracts\tsuccess\t18876\t43\n1230061\tcustomers\tsuccess\t22290\t47\n1230060\tpartners\tsuccess\t693\t47\n1230059\tall\tin_progress\t0\t48\nsection\tcnt\thas_pt\thas_cb\nBoonphone\t4274\t0\t0\nff365\t98996\t96235\t98996\n",
+  "stderr": "",
+  "execution_time_ms": 2408
+}

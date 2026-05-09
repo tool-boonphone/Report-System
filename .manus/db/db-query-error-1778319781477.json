@@ -1,0 +1,14 @@
+{
+  "query": "-- ดู contract status ที่มีใน DB\nSELECT status, COUNT(*) as cnt\nFROM contracts\nWHERE section = 'ff365'\nGROUP BY status\nORDER BY cnt DESC;\n\n-- ดู transactions ของ contracts ที่ status = Closed/Completed\nSELECT pt.external_id, pt.contract_no, pt.paid_at, pt.amount,\n  JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.remark')) as remark,\n  JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.principal_paid')) as principal_paid,\n  JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.interest_paid')) as interest_paid,\n  JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.close_installment_amount')) as close_amount,\n  c.status as contract_status,\n  c.close_date\nFROM payment_transactions pt\nJOIN contracts c ON pt.contract_no = c.contract_no AND pt.section = c.section\nWHERE pt.section = 'ff365'\n  AND c.status IN ('Closed', 'Completed', 'ปิดยอด', 'close', 'closed', 'completed')\nLIMIT 5;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute -- ดู contract status ที่มีใน DB\nSELECT status, COUNT(*) as cnt\nFROM contracts\nWHERE section = 'ff365'\nGROUP BY status\nORDER BY cnt DESC;\n\n-- ดู transactions ของ contracts ที่ status = Closed/Completed\nSELECT pt.external_id, pt.contract_no, pt.paid_at, pt.amount,\n  JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.remark')) as remark,\n  JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.principal_paid')) as principal_paid,\n  JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.interest_paid')) as interest_paid,\n  JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.close_installment_amount')) as close_amount,\n  c.status as contract_status,\n  c.close_date\nFROM payment_transactions pt\nJOIN contracts c ON pt.contract_no = c.contract_no AND pt.section = c.section\nWHERE pt.section = 'ff365'\n  AND c.status IN ('Closed', 'Completed', 'ปิดยอด', 'close', 'closed', 'completed')\nLIMIT 5;",
+  "returncode": 1,
+  "logs": [
+    "status\tcnt",
+    "สำเร็จ\t7182",
+    "สิ้นสุดสัญญา\t7127",
+    "หนี้เสีย\t3123",
+    "ระงับสัญญา\t289",
+    "ยกเลิกสัญญา\t88",
+    "ERROR 1054 (42S22) at line 9: Unknown column 'c.close_date' in 'field list'"
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "query": "UPDATE sync_logs SET status='error', finished_at=NOW(), error_message='Force-cleared: duplicate sync processes killed'\nWHERE section='boonphone' AND status='in_progress';",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute UPDATE sync_logs SET status='error', finished_at=NOW(), error_message='Force-cleared: duplicate sync processes killed'\nWHERE section='boonphone' AND status='in_progress';",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 1891
+}

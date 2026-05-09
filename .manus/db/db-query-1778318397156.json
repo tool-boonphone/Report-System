@@ -1,0 +1,14 @@
+{
+  "query": "SELECT finished_at, DATE_FORMAT(finished_at, '%Y-%m-%d %H:%i:%s') as finished_str\nFROM sync_logs \nWHERE section='ff365' AND entity='payments' AND status='success'\nORDER BY finished_at DESC LIMIT 1;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT finished_at, DATE_FORMAT(finished_at, '%Y-%m-%d %H:%i:%s') as finished_str\nFROM sync_logs \nWHERE section='ff365' AND entity='payments' AND status='success'\nORDER BY finished_at DESC LIMIT 1;",
+  "rows": [
+    {
+      "finished_at": "2026-05-09 07:31:19",
+      "finished_str": "2026-05-09 07:31:19"
+    }
+  ],
+  "messages": [],
+  "stdout": "finished_at\tfinished_str\n2026-05-09 07:31:19\t2026-05-09 07:31:19\n",
+  "stderr": "",
+  "execution_time_ms": 1814
+}

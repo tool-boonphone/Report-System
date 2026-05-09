@@ -1,0 +1,45 @@
+{
+  "query": "SELECT id, external_id, paid_at, payment_time, created_by FROM payment_transactions WHERE section='ff365' AND payment_time IS NULL AND paid_at >= '2026-01-01' ORDER BY id DESC LIMIT 5;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT id, external_id, paid_at, payment_time, created_by FROM payment_transactions WHERE section='ff365' AND payment_time IS NULL AND paid_at >= '2026-01-01' ORDER BY id DESC LIMIT 5;",
+  "rows": [
+    {
+      "id": "1174169",
+      "external_id": "94812",
+      "paid_at": "2026-01-05",
+      "payment_time": "NULL",
+      "created_by": "ACC Ploy"
+    },
+    {
+      "id": "1174168",
+      "external_id": "94811",
+      "paid_at": "2026-01-05",
+      "payment_time": "NULL",
+      "created_by": "ACC Ploy"
+    },
+    {
+      "id": "1174167",
+      "external_id": "94810",
+      "paid_at": "2026-01-05",
+      "payment_time": "NULL",
+      "created_by": "ACC Ploy"
+    },
+    {
+      "id": "1174166",
+      "external_id": "94809",
+      "paid_at": "2026-01-05",
+      "payment_time": "NULL",
+      "created_by": "ACC Ploy"
+    },
+    {
+      "id": "1174165",
+      "external_id": "94808",
+      "paid_at": "2026-01-05",
+      "payment_time": "NULL",
+      "created_by": "ACC Ploy"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\texternal_id\tpaid_at\tpayment_time\tcreated_by\n1174169\t94812\t2026-01-05\tNULL\tACC Ploy\n1174168\t94811\t2026-01-05\tNULL\tACC Ploy\n1174167\t94810\t2026-01-05\tNULL\tACC Ploy\n1174166\t94809\t2026-01-05\tNULL\tACC Ploy\n1174165\t94808\t2026-01-05\tNULL\tACC Ploy\n",
+  "stderr": "",
+  "execution_time_ms": 1883
+}

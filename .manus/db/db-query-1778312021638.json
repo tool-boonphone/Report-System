@@ -1,0 +1,168 @@
+{
+  "query": "DESCRIBE payment_transactions;\nSELECT id, payment_time, created_by, updated_by FROM payment_transactions WHERE section='ff365' AND payment_time IS NULL LIMIT 10;\nSELECT COUNT(*) as null_pt FROM payment_transactions WHERE section='ff365' AND payment_time IS NULL;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute DESCRIBE payment_transactions;\nSELECT id, payment_time, created_by, updated_by FROM payment_transactions WHERE section='ff365' AND payment_time IS NULL LIMIT 10;\nSELECT COUNT(*) as null_pt FROM payment_transactions WHERE section='ff365' AND payment_time IS NULL;",
+  "rows": [
+    {
+      "Field": "id",
+      "Type": "int",
+      "Null": "NO",
+      "Key": "PRI",
+      "Default": "NULL",
+      "Extra": "auto_increment"
+    },
+    {
+      "Field": "section",
+      "Type": "varchar(32)",
+      "Null": "NO",
+      "Key": "MUL",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "external_id",
+      "Type": "varchar(64)",
+      "Null": "NO",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "contract_external_id",
+      "Type": "varchar(64)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "contract_no",
+      "Type": "varchar(64)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "customer_name",
+      "Type": "varchar(255)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "paid_at",
+      "Type": "varchar(32)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "amount",
+      "Type": "decimal(12,2)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "method",
+      "Type": "varchar(64)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "status",
+      "Type": "varchar(32)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "raw_json",
+      "Type": "json",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "synced_at",
+      "Type": "timestamp",
+      "Null": "NO",
+      "Key": "",
+      "Default": "CURRENT_TIMESTAMP",
+      "Extra": ""
+    },
+    {
+      "Field": "updated_by",
+      "Type": "varchar(128)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "updated_at",
+      "Type": "varchar(32)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "receipt_no",
+      "Type": "varchar(128)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "payment_time",
+      "Type": "varchar(8)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "created_by",
+      "Type": "varchar(128)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "created_at",
+      "Type": "varchar(32)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    }
+  ],
+  "messages": [
+    "id\tpayment_time\tcreated_by\tupdated_by",
+    "1266390\tNULL\tadminaun\tadminaun",
+    "1266393\tNULL\tadminmint\tadminmint",
+    "1266394\tNULL\tadminjubjib\tadminjubjib",
+    "1266395\tNULL\tadminmint\tadminmint",
+    "1266396\tNULL\tadminaun\tadminaun",
+    "1266397\tNULL\tadminjubjib\tadminjubjib",
+    "1266398\tNULL\tadminnui\tadminnui",
+    "1266399\tNULL\tadminview\tadminview",
+    "1266400\tNULL\tadminnui\tadminnui",
+    "1266401\tNULL\tadminview\tadminview",
+    "null_pt",
+    "25245"
+  ],
+  "stdout": "Field\tType\tNull\tKey\tDefault\tExtra\nid\tint\tNO\tPRI\tNULL\tauto_increment\nsection\tvarchar(32)\tNO\tMUL\tNULL\t\nexternal_id\tvarchar(64)\tNO\t\tNULL\t\ncontract_external_id\tvarchar(64)\tYES\t\tNULL\t\ncontract_no\tvarchar(64)\tYES\t\tNULL\t\ncustomer_name\tvarchar(255)\tYES\t\tNULL\t\npaid_at\tvarchar(32)\tYES\t\tNULL\t\namount\tdecimal(12,2)\tYES\t\tNULL\t\nmethod\tvarchar(64)\tYES\t\tNULL\t\nstatus\tvarchar(32)\tYES\t\tNULL\t\nraw_json\tjson\tYES\t\tNULL\t\nsynced_at\ttimestamp\tNO\t\tCURRENT_TIMESTAMP\t\nupdated_by\tvarchar(128)\tYES\t\tNULL\t\nupdated_at\tvarchar(32)\tYES\t\tNULL\t\nreceipt_no\tvarchar(128)\tYES\t\tNULL\t\npayment_time\tvarchar(8)\tYES\t\tNULL\t\ncreated_by\tvarchar(128)\tYES\t\tNULL\t\ncreated_at\tvarchar(32)\tYES\t\tNULL\t\nid\tpayment_time\tcreated_by\tupdated_by\n1266390\tNULL\tadminaun\tadminaun\n1266393\tNULL\tadminmint\tadminmint\n1266394\tNULL\tadminjubjib\tadminjubjib\n1266395\tNULL\tadminmint\tadminmint\n1266396\tNULL\tadminaun\tadminaun\n1266397\tNULL\tadminjubjib\tadminjubjib\n1266398\tNULL\tadminnui\tadminnui\n1266399\tNULL\tadminview\tadminview\n1266400\tNULL\tadminnui\tadminnui\n1266401\tNULL\tadminview\tadminview\nnull_pt\n25245\n",
+  "stderr": "",
+  "execution_time_ms": 2547
+}

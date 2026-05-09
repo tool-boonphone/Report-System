@@ -1,0 +1,40 @@
+{
+  "query": "\nSELECT 'contracts' as tbl, section, COUNT(*) as cnt FROM contracts GROUP BY section\nUNION ALL\nSELECT 'installments', section, COUNT(*) FROM installments GROUP BY section\nUNION ALL\nSELECT 'payment_transactions', section, COUNT(*) FROM payment_transactions GROUP BY section\nORDER BY tbl, section;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT 'contracts' as tbl, section, COUNT(*) as cnt FROM contracts GROUP BY section\nUNION ALL\nSELECT 'installments', section, COUNT(*) FROM installments GROUP BY section\nUNION ALL\nSELECT 'payment_transactions', section, COUNT(*) FROM payment_transactions GROUP BY section\nORDER BY tbl, section;\n",
+  "rows": [
+    {
+      "tbl": "contracts",
+      "section": "Fastfone365",
+      "cnt": "17809"
+    },
+    {
+      "tbl": "contracts",
+      "section": "boonphone",
+      "cnt": "17809"
+    },
+    {
+      "tbl": "installments",
+      "section": "Fastfone365",
+      "cnt": "171363"
+    },
+    {
+      "tbl": "installments",
+      "section": "boonphone",
+      "cnt": "171363"
+    },
+    {
+      "tbl": "payment_transactions",
+      "section": "boonphone",
+      "cnt": "122045"
+    },
+    {
+      "tbl": "payment_transactions",
+      "section": "ff365",
+      "cnt": "122019"
+    }
+  ],
+  "messages": [],
+  "stdout": "tbl\tsection\tcnt\ncontracts\tFastfone365\t17809\ncontracts\tboonphone\t17809\ninstallments\tFastfone365\t171363\ninstallments\tboonphone\t171363\npayment_transactions\tboonphone\t122045\npayment_transactions\tff365\t122019\n",
+  "stderr": "",
+  "execution_time_ms": 2151
+}

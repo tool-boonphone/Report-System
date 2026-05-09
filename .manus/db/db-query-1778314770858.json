@@ -1,0 +1,25 @@
+{
+  "query": "SELECT COUNT(*) as contract_count FROM contracts WHERE section='Boonphone';\nSELECT COUNT(*) as installment_count FROM installments WHERE section='Boonphone';\nSELECT COUNT(*) as payment_count FROM payment_transactions WHERE section='Boonphone';",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT COUNT(*) as contract_count FROM contracts WHERE section='Boonphone';\nSELECT COUNT(*) as installment_count FROM installments WHERE section='Boonphone';\nSELECT COUNT(*) as payment_count FROM payment_transactions WHERE section='Boonphone';",
+  "rows": [
+    {
+      "contract_count": "4212"
+    },
+    {
+      "contract_count": "installment_count"
+    },
+    {
+      "contract_count": "50166"
+    },
+    {
+      "contract_count": "payment_count"
+    },
+    {
+      "contract_count": "0"
+    }
+  ],
+  "messages": [],
+  "stdout": "contract_count\n4212\ninstallment_count\n50166\npayment_count\n0\n",
+  "stderr": "",
+  "execution_time_ms": 2305
+}
