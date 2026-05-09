@@ -1,4 +1,4 @@
-import { desc, eq, and, gt } from "drizzle-orm";
+import { desc, eq, and, gt, lt } from "drizzle-orm";
 import { syncLogs } from "../../drizzle/schema";
 import { getDb } from "../db";
 import type { SectionKey, SyncTrigger } from "../../shared/const";
@@ -142,6 +142,10 @@ export async function clearStuckSyncLogs(section: SectionKey): Promise<number> {
 export async function clearAllStuckSyncLogs(): Promise<number> {
   const db = await getDb();
   if (!db) return 0;
+  // Only clear rows that have been in_progress for more than 95 minutes.
+  // This prevents clearing sync_logs from run-manual-sync processes that are
+  // still actively running when the dev server restarts.
+  const cutoff = new Date(Date.now() - 95 * 60 * 1000);
   const result = await db
     .update(syncLogs)
     .set({
@@ -149,10 +153,15 @@ export async function clearAllStuckSyncLogs(): Promise<number> {
       finishedAt: new Date(),
       errorMessage: "Auto-cleared on startup: previous Cloud Run instance was killed during sync",
     })
-    .where(eq(syncLogs.status, "in_progress"));
+    .where(
+      and(
+        eq(syncLogs.status, "in_progress"),
+        lt(syncLogs.startedAt, cutoff),
+      ),
+    );
   const affectedRows = (result[0] as any)?.affectedRows ?? 0;
   if (affectedRows > 0) {
-    console.log(`[syncLog] startup cleanup: cleared ${affectedRows} stuck in_progress row(s) from previous instance`);
+    console.log(`[syncLog] startup cleanup: cleared ${affectedRows} stuck in_progress row(s) older than 95 min`);
   }
   return affectedRows;
 }

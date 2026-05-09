@@ -33,7 +33,7 @@ import { invalidateDebtCache } from "../debtCache";
 import { buildAllDebtExports } from "../debtExportBuilder";
 import { populateDebtCache } from "./populateCache";
 
-const OVERALL_TIMEOUT_MS = 90 * 60 * 1000; // 90 minutes ceiling per section (Fastfone365 has 17k contracts)
+const OVERALL_TIMEOUT_MS = 180 * 60 * 1000; // 180 minutes ceiling per section (Fastfone365 has 17k contracts + enrichment)
 // A sync row older than this with status=in_progress is treated as abandoned.
 const STALE_INPROGRESS_MS = OVERALL_TIMEOUT_MS + 5 * 60 * 1000;
 
@@ -504,17 +504,11 @@ async function syncInstallments(
       }
     }
     if (buffer.length) rowCount += await upsertInstallments(buffer);
-    // Enrich installments with updated_by/updated_at from contract?action=detail
-    // Both Boonphone and FF365: bulk endpoint does NOT include updated_by — must fetch from detail.
-    try {
-      const enriched = await enrichInstallmentsWithUpdatedBy(client, section);
-      rowCount += enriched;
-    } catch (err: any) {
-      console.warn(
-        `[sync] ${section} installments updated_by backfill skipped:`,
-        err?.message ?? err,
-      );
-    }
+    // NOTE: installments updated_by enrichment ถูก disable แล้ว
+    // API ใหม่ stamp created_by/updated_by ไว้ที่ payment_transactions โดยตรง
+    // ทั้ง Boonphone และ FF365 ใช้ API เดียวกัน ดังนั้น updated_by ใน report
+    // จะดึงจาก payment_transactions.updated_by แทน (แม่นยำกว่า ไม่ต้องเดาจากวันที่)
+    // enrichInstallmentsWithUpdatedBy(client, section) — ไม่เรียกอีกต่อไป
     await finishSyncLog({ id: log.id, status: "success", rowCount });
     return rowCount;
   } catch (err: any) {
@@ -603,29 +597,40 @@ async function enrichInstallmentsWithUpdatedBy(
   const contractIds = rows.map((r) => r.contractExternalId);
   const CONCURRENCY = 5;
   const FLUSH_EVERY = 200;
+  type EnrichRow = { contractExternalId: string; period: number; updatedBy: string | null; updatedAt: string | null };
   // Map: contractExternalId → Array<{ period, updatedBy, updatedAt }>
-  const updates: Array<{ contractExternalId: string; period: number; updatedBy: string | null; updatedAt: string | null }> = [];
+  const updates: Array<EnrichRow> = [];
   let flushed = 0;
+
+  // Open a single persistent connection for all flush operations
+  const mysqlLib = await import("mysql2/promise");
+  const enrichConn = await mysqlLib.default.createConnection(process.env.DATABASE_URL!);
 
   async function flush() {
     if (updates.length === 0) return;
-    const batch = updates.splice(0, updates.length);
-    for (const row of batch) {
-      if (!row.updatedBy && !row.updatedAt) continue; // skip if API has no data
-      await db!
-        .update(installments)
-        .set({
-          updatedBy: row.updatedBy,
-          updatedAt: row.updatedAt,
-          syncedAt: sql`CURRENT_TIMESTAMP`,
-        })
-        .where(
-          and(
-            eq(installments.section, section),
-            eq(installments.contractExternalId, row.contractExternalId),
-            eq(installments.period, row.period),
-          ),
-        );
+    const batch = updates.splice(0, updates.length).filter((r: EnrichRow) => r.updatedBy || r.updatedAt);
+    if (batch.length === 0) return;
+    // Group by contractExternalId for batch UPDATE efficiency
+    const grouped = new Map<string, EnrichRow[]>();
+    for (const r of batch) {
+      if (!grouped.has(r.contractExternalId)) grouped.set(r.contractExternalId, []);
+      grouped.get(r.contractExternalId)!.push(r);
+    }
+    for (const contractExtId of Array.from(grouped.keys())) {
+      const batchRows = grouped.get(contractExtId)!;
+      if (batchRows.length === 0) continue;
+      // Build CASE WHEN for updatedBy and updatedAt
+      const periodList = batchRows.map((r: EnrichRow) => r.period).join(",");
+      const caseUpdatedBy = batchRows.map((r: EnrichRow) => `WHEN period = ${r.period} THEN ${r.updatedBy ? enrichConn.escape(r.updatedBy) : 'NULL'}`).join(" ");
+      const caseUpdatedAt = batchRows.map((r: EnrichRow) => `WHEN period = ${r.period} THEN ${r.updatedAt ? enrichConn.escape(r.updatedAt) : 'NULL'}`).join(" ");
+      await enrichConn.execute(
+        `UPDATE installments SET 
+          updated_by = CASE ${caseUpdatedBy} ELSE updated_by END,
+          updated_at = CASE ${caseUpdatedAt} ELSE updated_at END,
+          synced_at = CURRENT_TIMESTAMP
+        WHERE section = ? AND contract_external_id = ? AND period IN (${periodList})`,
+        [section, contractExtId]
+      );
     }
     flushed += batch.length;
   }
@@ -661,10 +666,14 @@ async function enrichInstallmentsWithUpdatedBy(
     }
   }
 
-  await Promise.all(
-    Array.from({ length: CONCURRENCY }, () => worker()),
-  );
-  await flush();
+  try {
+    await Promise.all(
+      Array.from({ length: CONCURRENCY }, () => worker()),
+    );
+    await flush();
+  } finally {
+    await enrichConn.end();
+  }
   console.log(`[sync] ${section} installments updated_by enriched: ${flushed} rows from ${contractIds.length} contracts`);
   return flushed;
 }
@@ -684,7 +693,7 @@ async function enrichContractsWithDeviceIds(
 ): Promise<number> {
   const { getDb } = await import("../db");
   const { contracts } = await import("../../drizzle/schema");
-  const { and, eq, or, isNull, sql } = await import("drizzle-orm");
+  const { and, eq, or, isNull } = await import("drizzle-orm");
   const db = await getDb();
   if (!db) return 0;
 
@@ -699,30 +708,25 @@ async function enrichContractsWithDeviceIds(
     );
   if (targets.length === 0) return 0;
 
+  // Use a single dedicated MySQL connection for all UPDATE queries
+  // to avoid exhausting the connection pool during enrichment.
+  const mysql = await import("mysql2/promise");
+  const enrichConn = await mysql.createConnection(process.env.DATABASE_URL!);
+
   const CONCURRENCY = 5;
   const FLUSH_EVERY = 200;
-  const updates: Array<{ section: SectionKey; externalId: string; imei: string | null; serialNo: string | null }> = [];
+  const updates: Array<{ externalId: string; imei: string | null; serialNo: string | null }> = [];
   let flushed = 0;
 
   async function flush() {
     if (updates.length === 0) return;
-    // Use raw SQL UPDATE ... WHERE: we only want to patch 2 columns, not
-    // re-run the full 40-column upsert path.
     const batch = updates.splice(0, updates.length);
     for (const row of batch) {
-      await db!
-        .update(contracts)
-        .set({
-          imei: row.imei,
-          serialNo: row.serialNo,
-          syncedAt: sql`CURRENT_TIMESTAMP`,
-        })
-        .where(
-          and(
-            eq(contracts.section, row.section),
-            eq(contracts.externalId, row.externalId),
-          ),
-        );
+      await enrichConn.execute(
+        `UPDATE contracts SET imei = ?, serial_no = ?, synced_at = CURRENT_TIMESTAMP
+         WHERE section = ? AND external_id = ?`,
+        [row.imei, row.serialNo, section, row.externalId],
+      );
     }
     flushed += batch.length;
   }
@@ -742,7 +746,7 @@ async function enrichContractsWithDeviceIds(
         const serial = product.serial_no ? String(product.serial_no) : null;
         // Skip if the API has no data either — avoids a pointless UPDATE.
         if (imei || serial) {
-          updates.push({ section, externalId: extId, imei, serialNo: serial });
+          updates.push({ externalId: extId, imei, serialNo: serial });
         }
         if (updates.length >= FLUSH_EVERY) await flush();
       } catch {
@@ -750,10 +754,15 @@ async function enrichContractsWithDeviceIds(
       }
     }
   }
-  await Promise.all(
-    Array.from({ length: CONCURRENCY }, () => worker()),
-  );
-  await flush();
+
+  try {
+    await Promise.all(
+      Array.from({ length: CONCURRENCY }, () => worker()),
+    );
+    await flush();
+  } finally {
+    await enrichConn.end();
+  }
   return flushed;
 }
 

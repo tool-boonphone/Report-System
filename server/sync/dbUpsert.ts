@@ -89,6 +89,13 @@ export async function upsertInstallments(rows: AnyRow[]): Promise<number> {
     const merged = mergeBatch(batch);
     const sample = unionKeys(merged);
     const setObj = buildUpsertSet(sample, installments as any);
+    // Preserve updatedBy/updatedAt that were enriched from contract detail API.
+    // The bulk installments endpoint does NOT return these fields (they come back
+    // as null), so overwriting them on every re-sync would wipe out the enriched
+    // values and force a full re-enrichment of all 17k+ contracts every time.
+    // Use COALESCE so the existing DB value is kept when the incoming value is NULL.
+    setObj.updatedBy = sql.raw("COALESCE(VALUES(`updated_by`), `updated_by`)");
+    setObj.updatedAt = sql.raw("COALESCE(VALUES(`updated_at`), `updated_at`)");
     await db
       .insert(installments)
       .values(merged as any)

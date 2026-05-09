@@ -276,31 +276,37 @@ type PaymentItem = {
   contract_id?: number | string;
   contract_code?: string;
   payment_date?: string;
+  payment_time?: string;  // เวลาชำระเงิน (HH:mm:ss) — เพิ่มใหม่จาก API
   payment_status?: string;
   payment_method?: string;
   total_paid_amount?: number;
-  created_at?: string;
-  updated_at?: string;  // วันเวลาที่บันทึก — ส่งมาจาก API (FF365 เท่านั้น)
-  updated_by?: string;  // ผู้บันทึก — ส่งมาจาก API ถ้ามี
-  receipt_no?: string;  // เลขที่ใบเสร็จ — TXRT prefix สำหรับ FF365 ใช้ระบุ period
+  created_at?: string;   // วันเวลาที่สร้างรายการ
+  created_by?: string;   // ผู้สร้างรายการ — เพิ่มใหม่จาก API
+  updated_at?: string;   // วันเวลาที่แก้ไขล่าสุด
+  updated_by?: string;   // ผู้แก้ไขล่าสุด
+  receipt_no?: string;   // เลขที่ใบเสร็จ — TXRT prefix สำหรับ FF365 ใช้ระบุ period
 };
 
 export function mapPayment(section: SectionKey, it: PaymentItem) {
-  // เก็บ updated_at/updated_by ลง column โดยตรง เพื่อไม่ต้อง JOIN installments ทุกครั้งที่ query
+  // เก็บทุก field ลง column โดยตรง เพื่อไม่ต้อง JOIN installments ทุกครั้งที่ query
   return {
     section,
     externalId: String(it.payment_id),
     contractExternalId: it.contract_id ? String(it.contract_id) : null,
     contractNo: it.contract_code ?? null,
     paidAt: it.payment_date ?? toDate(it.created_at) ?? null,
+    paymentTime: it.payment_time ?? null,
     amount: toNumStr(it.total_paid_amount),
     method: it.payment_method ?? null,
     status: it.payment_status ?? null,
     rawJson: it as any,
     // เลขที่ใบเสร็จ — TXRT prefix สำหรับ FF365 ใช้ระบุ period ใน assignPayPeriods
     receiptNo: it.receipt_no ?? null,
-    // เก็บ datetime เต็ม (YYYY-MM-DD HH:mm:ss) ไม่ใช่แค่ date เพื่อให้แสดงเวลาบันทึกได้
-    updatedAt: it.updated_at ? String(it.updated_at) : null,
+    // เก็บ created_by/created_at จาก API โดยตรง
+    createdBy: it.created_by ?? null,
+    createdAt: it.created_at ? String(it.created_at) : null,
+    // เก็บ updated_by/updated_at จาก API โดยตรง
     updatedBy: it.updated_by ?? null,
+    updatedAt: it.updated_at ? String(it.updated_at) : null,
   };
 }

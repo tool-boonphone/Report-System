@@ -3494,23 +3494,10 @@ export async function* listDebtCollectedStream(params: {
     }
 
     // Query payments for this batch only (per-batch to avoid OOM with 222K rows)
-    // Use CTE + MIN(CONCAT) approach to find updated_by from installments (both Boonphone & FF365)
-    // Priority: date_match (±1 day) > next (>= payment_date)
-    // updated_by/updated_at are now first-class columns (backfilled from contract?action=detail for both sections)
+    // updated_by/updated_at ดึงจาก payment_transactions column โดยตรง
+    // API ใหม่ stamp ชื่อผู้ทำรายการไว้ที่ transaction โดยตรง ทั้ง Boonphone และ FF365
+    // ไม่จำเป็นต้อง JOIN installments อีกต่อไป
     const payRaw = await db.execute(sql.raw(`
-      WITH inst_dates AS (
-        SELECT
-          contract_external_id,
-          section,
-          updated_by,
-          DATE(updated_at) AS updated_date
-        FROM installments
-        WHERE section = '${sectionLiteral}'
-          AND contract_external_id IN (${batchIdsLiteral})
-          AND external_id LIKE CONCAT(contract_external_id, '-%')
-          AND updated_by IS NOT NULL
-          AND updated_by != 'null'
-      )
       SELECT pt.contract_external_id,
              pt.external_id AS payment_external_id,
              pt.paid_at,
@@ -3528,47 +3515,12 @@ export async function* listDebtCollectedStream(params: {
              pt.receipt_no AS receipt_no,
              JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.remark'))     AS remark,
              pt.status AS ff_status,
-             JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.updated_at')) AS updated_at,
-             COALESCE(
-               SUBSTRING_INDEX(MIN(CASE
-                 WHEN id.updated_date BETWEEN
-                   DATE(JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.payment_date'))) - INTERVAL 1 DAY
-                   AND DATE(JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.payment_date'))) + INTERVAL 1 DAY
-                 THEN CONCAT(id.updated_date, '||', id.updated_by)
-                 ELSE NULL
-               END), '||', -1),
-               SUBSTRING_INDEX(MIN(CASE
-                 WHEN id.updated_date >= DATE(JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.payment_date')))
-                 THEN CONCAT(id.updated_date, '||', id.updated_by)
-                 ELSE NULL
-               END), '||', -1)
-             ) AS updated_by
+             -- updated_at/updated_by: ดึงจาก column โดยตรง (บันทึกตอน sync จาก API)
+             pt.updated_at,
+             pt.updated_by
         FROM payment_transactions pt
-        LEFT JOIN inst_dates id
-               ON id.section = pt.section
-              AND id.contract_external_id = pt.contract_external_id
        WHERE pt.section = '${sectionLiteral}'
          AND pt.contract_external_id IN (${batchIdsLiteral})
-       GROUP BY
-             pt.contract_external_id,
-             pt.external_id,
-             pt.paid_at,
-             pt.amount,
-             JSON_EXTRACT(pt.raw_json, '$.principal_paid'),
-             JSON_EXTRACT(pt.raw_json, '$.interest_paid'),
-             JSON_EXTRACT(pt.raw_json, '$.fee_paid'),
-             JSON_EXTRACT(pt.raw_json, '$.penalty_paid'),
-             JSON_EXTRACT(pt.raw_json, '$.unlock_fee_paid'),
-             JSON_EXTRACT(pt.raw_json, '$.discount_amount'),
-             JSON_EXTRACT(pt.raw_json, '$.overpaid_amount'),
-             JSON_EXTRACT(pt.raw_json, '$.close_installment_amount'),
-             JSON_EXTRACT(pt.raw_json, '$.bad_debt_amount'),
-             JSON_EXTRACT(pt.raw_json, '$.payment_id'),
-             pt.receipt_no,
-             JSON_EXTRACT(pt.raw_json, '$.remark'),
-             pt.status,
-             JSON_EXTRACT(pt.raw_json, '$.updated_at'),
-             JSON_EXTRACT(pt.raw_json, '$.payment_date')
        ORDER BY pt.contract_external_id, pt.paid_at, CAST(JSON_EXTRACT(pt.raw_json, '$.payment_id') AS UNSIGNED)
     `));
     const payRows: any[] = (payRaw as any)[0] ?? payRaw;
