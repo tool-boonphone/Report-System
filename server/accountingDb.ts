@@ -87,12 +87,19 @@ export interface ExpenseParams {
  */
 const PT_INCOME_TYPE_CASE = `
   CASE
+    -- ขายเครื่อง: สัญญาหนี้เสีย + transaction อยู่ใน batch สุดท้าย (paid_at วันสุดท้าย + created_at ตรงกันเป๊ะ)
     WHEN c.status = 'หนี้เสีย'
       AND bdl.last_paid_date IS NOT NULL
       AND DATE(pt.paid_at) = bdl.last_paid_date
+      AND bdl.last_created_at IS NOT NULL
+      AND pt.created_at = bdl.last_created_at
       THEN 'ขายเครื่อง'
+    -- ปิดยอด: สัญญาสิ้นสุดสัญญา + transaction อยู่ใน batch สุดท้าย (paid_at วันสุดท้าย + created_at ตรงกันเป๊ะ)
     WHEN c.status = 'สิ้นสุดสัญญา'
-      AND CAST(COALESCE(JSON_EXTRACT(pt.raw_json, '$.close_installment_amount'), 0) AS DECIMAL(18,2)) > 0
+      AND bdl.last_paid_date IS NOT NULL
+      AND DATE(pt.paid_at) = bdl.last_paid_date
+      AND bdl.last_created_at IS NOT NULL
+      AND pt.created_at = bdl.last_created_at
       THEN 'ปิดยอด'
     ELSE 'ค่างวด'
   END
@@ -116,15 +123,29 @@ const PT_INCOME_BASE_WHERE = `JSON_EXTRACT(pt.raw_json, '$.source') IS NULL`;
  * @param section - SectionKey ที่ต้องการ (ใส่ escaped string)
  */
 function buildBadDebtLastDaysSubquery(section: string): string {
+  // หา batch สุดท้ายของแต่ละสัญญา โดยใช้ MAX(created_at) เป็นตัวระบุ batch
+  // ทุก transaction ใน batch เดียวกันจะมี created_at ตรงกันเป๊ะ (same second)
   return `
     SELECT
-      pt2.contract_no,
-      pt2.section,
-      DATE(MAX(pt2.paid_at)) AS last_paid_date
-    FROM payment_transactions pt2
-    WHERE pt2.section = '${section}'
-      AND JSON_EXTRACT(pt2.raw_json, '$.source') IS NULL
-    GROUP BY pt2.contract_no, pt2.section
+      inner_q.contract_no,
+      inner_q.section,
+      inner_q.last_paid_date,
+      inner_q.last_created_at
+    FROM (
+      SELECT
+        pt2.contract_no,
+        pt2.section,
+        DATE(pt2.paid_at) AS last_paid_date,
+        pt2.created_at AS last_created_at,
+        ROW_NUMBER() OVER (
+          PARTITION BY pt2.contract_no, pt2.section
+          ORDER BY pt2.paid_at DESC, pt2.created_at DESC
+        ) AS rn
+      FROM payment_transactions pt2
+      WHERE pt2.section = '${section}'
+        AND JSON_EXTRACT(pt2.raw_json, '$.source') IS NULL
+    ) AS inner_q
+    WHERE inner_q.rn = 1
   `;
 }
 
@@ -496,11 +517,19 @@ export async function getIncomeSummaryByPeriod(
         SUBSTRING(pt.paid_at, 1, ${periodLen}) AS period,
         CAST(COALESCE(pt.amount, 0) AS DECIMAL(18,2)) AS amt,
         CASE
+          -- ขายเครื่อง: สัญญาหนี้เสีย + batch สุดท้าย (paid_at วันสุดท้าย + created_at ตรงกันเป๊ะ)
           WHEN c.status = 'หนี้เสีย'
             AND bdl.last_paid_date IS NOT NULL
             AND DATE(pt.paid_at) = bdl.last_paid_date
+            AND bdl.last_created_at IS NOT NULL
+            AND pt.created_at = bdl.last_created_at
             THEN 'ขายเครื่อง'
-          WHEN CAST(COALESCE(JSON_EXTRACT(pt.raw_json, '$.close_installment_amount'), 0) AS DECIMAL(18,2)) > 0
+          -- ปิดยอด: สัญญาสิ้นสุดสัญญา + batch สุดท้าย (paid_at วันสุดท้าย + created_at ตรงกันเป๊ะ)
+          WHEN c.status = 'สิ้นสุดสัญญา'
+            AND bdl.last_paid_date IS NOT NULL
+            AND DATE(pt.paid_at) = bdl.last_paid_date
+            AND bdl.last_created_at IS NOT NULL
+            AND pt.created_at = bdl.last_created_at
             THEN 'ปิดยอด'
           ELSE 'ค่างวด'
         END AS income_type
