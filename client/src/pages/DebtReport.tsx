@@ -1008,6 +1008,7 @@ export default function DebtReport() {
           { key: "total", label: "ยอดที่ชำระรวม", width: 100, align: "right" },
           { key: "updatedBy", label: "บันทึกโดย", width: 120 },
           { key: "updatedAt", label: "บันทึกเมื่อ", width: 130 },
+          { key: "remark", label: "หมายเหตุ", width: 180 },
         ];
 
   const GROUP_WIDTH = groupCols.reduce((s, c) => s + c.width, 0);
@@ -1765,6 +1766,7 @@ export default function DebtReport() {
                                   break;
                                 case "updatedBy":
                                 case "updatedAt":
+                                case "remark":
                                   v = "-";
                                   break;
                               }
@@ -1843,6 +1845,9 @@ export default function DebtReport() {
                                     break;
                                   case "updatedAt":
                                     v = pay.updatedAt ? fmtDateTime(pay.updatedAt) : "-";
+                                    break;
+                                  case "remark":
+                                    v = pay.remark ?? "-";
                                     break;
                                 }
                                 const isZeroish = v === fmtMoney(0) || v === "0" || v === "0.00";

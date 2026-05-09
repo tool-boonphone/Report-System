@@ -340,7 +340,8 @@ export async function* streamCollectedFromCache(params: {
         CAST(total_amount AS DECIMAL(18,4)) AS total_amount,
         updated_by,
         updated_at,
-        is_bad_debt_row
+        is_bad_debt_row,
+        remark
       FROM debt_collected_cache
       WHERE section = ${section}
         AND contract_external_id IN (${sql.raw(idList)})
@@ -458,7 +459,7 @@ export async function* streamCollectedFromCache(params: {
         badDebt: Number(p.bad_debt ?? 0),
         total: Number(p.total_amount ?? 0),
         receiptNo: null,
-        remark: null,
+        remark: p.remark ?? null,
         badDebtNote: null,
         updatedBy: p.updated_by ?? null,
         updatedAt: p.updated_at ?? null,
@@ -775,7 +776,8 @@ export async function getCollectedChunk(params: {
         CAST(total_amount AS DECIMAL(18,4)) AS total_amount,
         updated_by,
         updated_at,
-        is_bad_debt_row
+        is_bad_debt_row,
+        remark
       FROM debt_collected_cache
       WHERE section = ${section}
         AND contract_external_id IN (${sql.raw(idListSql)})
@@ -909,7 +911,7 @@ export async function getCollectedChunk(params: {
       badDebt: Number(p.bad_debt ?? 0),
       total: Number(p.total_amount ?? 0),
       receiptNo: null,
-      remark: null,
+      remark: p.remark ?? null,
       badDebtNote: null,
       updatedBy: p.updated_by ?? null,
       updatedAt: p.updated_at ?? null,

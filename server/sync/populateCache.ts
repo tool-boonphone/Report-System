@@ -233,6 +233,7 @@ export async function populateDebtCache(
           updatedAt: p.updatedAt ?? null,
           isBadDebtRow: !!p.isBadDebtRow,
           isCloseRow: !!p.isCloseRow,
+          remark: p.remark ?? null,
         });
       }
     }

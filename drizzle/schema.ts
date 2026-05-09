@@ -451,6 +451,8 @@ export const debtCollectedCache = mysqlTable(
     updatedAt: varchar("updated_at", { length: 32 }),
     isBadDebtRow: boolean("is_bad_debt_row").notNull().default(false),
     isCloseRow: boolean("is_close_row").notNull().default(false),
+    // Payment remark (from raw_json.remark)
+    remark: varchar("remark", { length: 512 }),
     // Bookkeeping
     populatedAt: timestamp("populated_at").defaultNow().notNull(),
   },
