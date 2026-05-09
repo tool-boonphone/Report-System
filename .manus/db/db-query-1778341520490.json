@@ -1,0 +1,55 @@
+{
+  "query": "SELECT id, external_id, contract_external_id, paid_at, amount, period_no, sub_no FROM payment_transactions WHERE section='Fastfone365' AND period_no IS NULL LIMIT 5;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT id, external_id, contract_external_id, paid_at, amount, period_no, sub_no FROM payment_transactions WHERE section='Fastfone365' AND period_no IS NULL LIMIT 5;",
+  "rows": [
+    {
+      "id": "1195310",
+      "external_id": "73185",
+      "contract_external_id": "10003",
+      "paid_at": "2025-10-01",
+      "amount": "3040.00",
+      "period_no": "NULL",
+      "sub_no": "NULL"
+    },
+    {
+      "id": "1200020",
+      "external_id": "68377",
+      "contract_external_id": "10003",
+      "paid_at": "2025-09-08",
+      "amount": "3040.00",
+      "period_no": "NULL",
+      "sub_no": "NULL"
+    },
+    {
+      "id": "1208187",
+      "external_id": "59621",
+      "contract_external_id": "10003",
+      "paid_at": "2025-08-02",
+      "amount": "3040.00",
+      "period_no": "NULL",
+      "sub_no": "NULL"
+    },
+    {
+      "id": "1216646",
+      "external_id": "50967",
+      "contract_external_id": "10003",
+      "paid_at": "2025-07-01",
+      "amount": "3040.00",
+      "period_no": "NULL",
+      "sub_no": "NULL"
+    },
+    {
+      "id": "1238915",
+      "external_id": "28269",
+      "contract_external_id": "10",
+      "paid_at": "2025-04-07",
+      "amount": "2935.00",
+      "period_no": "NULL",
+      "sub_no": "NULL"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\texternal_id\tcontract_external_id\tpaid_at\tamount\tperiod_no\tsub_no\n1195310\t73185\t10003\t2025-10-01\t3040.00\tNULL\tNULL\n1200020\t68377\t10003\t2025-09-08\t3040.00\tNULL\tNULL\n1208187\t59621\t10003\t2025-08-02\t3040.00\tNULL\tNULL\n1216646\t50967\t10003\t2025-07-01\t3040.00\tNULL\tNULL\n1238915\t28269\t10\t2025-04-07\t2935.00\tNULL\tNULL\n",
+  "stderr": "",
+  "execution_time_ms": 1795
+}

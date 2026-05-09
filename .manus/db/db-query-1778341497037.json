@@ -1,0 +1,22 @@
+{
+  "query": "SELECT section, COUNT(*) as total, SUM(CASE WHEN period_no IS NOT NULL THEN 1 ELSE 0 END) as filled, SUM(CASE WHEN period_no IS NULL THEN 1 ELSE 0 END) as unfilled FROM payment_transactions GROUP BY section;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT section, COUNT(*) as total, SUM(CASE WHEN period_no IS NOT NULL THEN 1 ELSE 0 END) as filled, SUM(CASE WHEN period_no IS NULL THEN 1 ELSE 0 END) as unfilled FROM payment_transactions GROUP BY section;",
+  "rows": [
+    {
+      "section": "Boonphone",
+      "total": "4348",
+      "filled": "4282",
+      "unfilled": "66"
+    },
+    {
+      "section": "Fastfone365",
+      "total": "122019",
+      "filled": "85694",
+      "unfilled": "36325"
+    }
+  ],
+  "messages": [],
+  "stdout": "section\ttotal\tfilled\tunfilled\nBoonphone\t4348\t4282\t66\nFastfone365\t122019\t85694\t36325\n",
+  "stderr": "",
+  "execution_time_ms": 1880
+}

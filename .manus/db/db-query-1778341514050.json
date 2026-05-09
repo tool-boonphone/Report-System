@@ -1,0 +1,9 @@
+{
+  "query": "SELECT pt.section, COUNT(*) as cnt FROM payment_transactions pt LEFT JOIN installments i ON pt.contract_external_id = i.contract_external_id AND pt.section = i.section WHERE pt.period_no IS NULL AND i.id IS NULL GROUP BY pt.section;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT pt.section, COUNT(*) as cnt FROM payment_transactions pt LEFT JOIN installments i ON pt.contract_external_id = i.contract_external_id AND pt.section = i.section WHERE pt.period_no IS NULL AND i.id IS NULL GROUP BY pt.section;",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 2250
+}

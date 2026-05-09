@@ -1,0 +1,30 @@
+{
+  "query": "SELECT period, amount FROM installments WHERE section='Fastfone365' AND contract_external_id='10003' ORDER BY period LIMIT 5;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT period, amount FROM installments WHERE section='Fastfone365' AND contract_external_id='10003' ORDER BY period LIMIT 5;",
+  "rows": [
+    {
+      "period": "1",
+      "amount": "0.00"
+    },
+    {
+      "period": "2",
+      "amount": "0.00"
+    },
+    {
+      "period": "3",
+      "amount": "0.00"
+    },
+    {
+      "period": "4",
+      "amount": "0.00"
+    },
+    {
+      "period": "5",
+      "amount": "0.00"
+    }
+  ],
+  "messages": [],
+  "stdout": "period\tamount\n1\t0.00\n2\t0.00\n3\t0.00\n4\t0.00\n5\t0.00\n",
+  "stderr": "",
+  "execution_time_ms": 1710
+}

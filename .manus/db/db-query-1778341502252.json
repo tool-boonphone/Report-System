@@ -1,0 +1,9 @@
+{
+  "query": "SELECT section, COUNT(*) as cnt FROM payment_transactions WHERE period_no IS NULL AND (contract_external_id IS NULL OR contract_external_id = '') GROUP BY section;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT section, COUNT(*) as cnt FROM payment_transactions WHERE period_no IS NULL AND (contract_external_id IS NULL OR contract_external_id = '') GROUP BY section;",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 1853
+}

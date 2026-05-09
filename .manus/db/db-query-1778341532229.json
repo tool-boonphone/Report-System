@@ -1,0 +1,30 @@
+{
+  "query": "SELECT pt.section, COUNT(DISTINCT pt.contract_external_id) as contracts_with_zero_installments FROM payment_transactions pt JOIN installments i ON pt.contract_external_id = i.contract_external_id AND pt.section = i.section WHERE pt.period_no IS NULL GROUP BY pt.section, pt.contract_external_id HAVING MAX(CAST(i.amount AS DECIMAL)) = 0 LIMIT 5;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT pt.section, COUNT(DISTINCT pt.contract_external_id) as contracts_with_zero_installments FROM payment_transactions pt JOIN installments i ON pt.contract_external_id = i.contract_external_id AND pt.section = i.section WHERE pt.period_no IS NULL GROUP BY pt.section, pt.contract_external_id HAVING MAX(CAST(i.amount AS DECIMAL)) = 0 LIMIT 5;",
+  "rows": [
+    {
+      "section": "Boonphone",
+      "contracts_with_zero_installments": "1"
+    },
+    {
+      "section": "Boonphone",
+      "contracts_with_zero_installments": "1"
+    },
+    {
+      "section": "Boonphone",
+      "contracts_with_zero_installments": "1"
+    },
+    {
+      "section": "Boonphone",
+      "contracts_with_zero_installments": "1"
+    },
+    {
+      "section": "Boonphone",
+      "contracts_with_zero_installments": "1"
+    }
+  ],
+  "messages": [],
+  "stdout": "section\tcontracts_with_zero_installments\nBoonphone\t1\nBoonphone\t1\nBoonphone\t1\nBoonphone\t1\nBoonphone\t1\n",
+  "stderr": "",
+  "execution_time_ms": 1948
+}
