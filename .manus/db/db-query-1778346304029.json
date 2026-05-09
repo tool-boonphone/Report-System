@@ -1,0 +1,94 @@
+{
+  "query": "\nSELECT pt.external_id, pt.paid_at, pt.amount, pt.receipt_no,\n  JSON_EXTRACT(pt.raw_json, '$.close_installment_amount') AS close_inst_amt\nFROM payment_transactions pt\nJOIN contracts c ON c.external_id = pt.contract_external_id AND c.section = pt.section\nWHERE c.contract_no = 'CT0225-KBI001-9274-01'\n  AND pt.external_id > '44713'\nORDER BY pt.paid_at, pt.external_id;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT pt.external_id, pt.paid_at, pt.amount, pt.receipt_no,\n  JSON_EXTRACT(pt.raw_json, '$.close_installment_amount') AS close_inst_amt\nFROM payment_transactions pt\nJOIN contracts c ON c.external_id = pt.contract_external_id AND c.section = pt.section\nWHERE c.contract_no = 'CT0225-KBI001-9274-01'\n  AND pt.external_id > '44713'\nORDER BY pt.paid_at, pt.external_id;\n",
+  "rows": [
+    {
+      "external_id": "48405",
+      "paid_at": "2025-06-21",
+      "amount": "200.00",
+      "receipt_no": "TXRT0225-KBI001-9274-01-12",
+      "close_inst_amt": "200"
+    },
+    {
+      "external_id": "50195",
+      "paid_at": "2025-06-28",
+      "amount": "300.00",
+      "receipt_no": "TXRT0225-KBI001-9274-01-13",
+      "close_inst_amt": "300"
+    },
+    {
+      "external_id": "53362",
+      "paid_at": "2025-07-07",
+      "amount": "400.00",
+      "receipt_no": "TXRT0225-KBI001-9274-01-14",
+      "close_inst_amt": "400"
+    },
+    {
+      "external_id": "54388",
+      "paid_at": "2025-07-11",
+      "amount": "350.00",
+      "receipt_no": "TXRT0225-KBI001-9274-01-15",
+      "close_inst_amt": "327.33"
+    },
+    {
+      "external_id": "60656",
+      "paid_at": "2025-08-05",
+      "amount": "300.00",
+      "receipt_no": "TXRT0225-KBI001-9274-01-16",
+      "close_inst_amt": "300"
+    },
+    {
+      "external_id": "61545",
+      "paid_at": "2025-08-09",
+      "amount": "500.00",
+      "receipt_no": "TXRT0225-KBI001-9274-01-17",
+      "close_inst_amt": "500"
+    },
+    {
+      "external_id": "61793",
+      "paid_at": "2025-08-10",
+      "amount": "1100.00",
+      "receipt_no": "TXRT0225-KBI001-9274-01-18",
+      "close_inst_amt": "1040.6599999999999"
+    },
+    {
+      "external_id": "69281",
+      "paid_at": "2025-09-12",
+      "amount": "1865.00",
+      "receipt_no": "TXRT0225-KBI001-9274-01-19",
+      "close_inst_amt": "1803.99"
+    },
+    {
+      "external_id": "76097",
+      "paid_at": "2025-10-14",
+      "amount": "1840.00",
+      "receipt_no": "TXRT0225-KBI001-9274-01-20",
+      "close_inst_amt": "1802.32"
+    },
+    {
+      "external_id": "82520",
+      "paid_at": "2025-11-13",
+      "amount": "1865.00",
+      "receipt_no": "TXRT0225-KBI001-9274-01-21",
+      "close_inst_amt": "1825.65"
+    },
+    {
+      "external_id": "89928",
+      "paid_at": "2025-12-13",
+      "amount": "1823.98",
+      "receipt_no": "TXRT0225-KBI001-9274-01-22",
+      "close_inst_amt": "1823.98"
+    },
+    {
+      "external_id": "97050",
+      "paid_at": "2026-01-13",
+      "amount": "1863.33",
+      "receipt_no": "TXRT0225-KBI001-9274-01-23",
+      "close_inst_amt": "1863.33"
+    }
+  ],
+  "messages": [],
+  "stdout": "external_id\tpaid_at\tamount\treceipt_no\tclose_inst_amt\n48405\t2025-06-21\t200.00\tTXRT0225-KBI001-9274-01-12\t200\n50195\t2025-06-28\t300.00\tTXRT0225-KBI001-9274-01-13\t300\n53362\t2025-07-07\t400.00\tTXRT0225-KBI001-9274-01-14\t400\n54388\t2025-07-11\t350.00\tTXRT0225-KBI001-9274-01-15\t327.33\n60656\t2025-08-05\t300.00\tTXRT0225-KBI001-9274-01-16\t300\n61545\t2025-08-09\t500.00\tTXRT0225-KBI001-9274-01-17\t500\n61793\t2025-08-10\t1100.00\tTXRT0225-KBI001-9274-01-18\t1040.6599999999999\n69281\t2025-09-12\t1865.00\tTXRT0225-KBI001-9274-01-19\t1803.99\n76097\t2025-10-14\t1840.00\tTXRT0225-KBI001-9274-01-20\t1802.32\n82520\t2025-11-13\t1865.00\tTXRT0225-KBI001-9274-01-21\t1825.65\n89928\t2025-12-13\t1823.98\tTXRT0225-KBI001-9274-01-22\t1823.98\n97050\t2026-01-13\t1863.33\tTXRT0225-KBI001-9274-01-23\t1863.33\n",
+  "stderr": "",
+  "execution_time_ms": 2147
+}

@@ -1,0 +1,70 @@
+{
+  "query": "\n-- installment schedule\nSELECT i.period, i.amount, i.due_date\nFROM installments i\nJOIN contracts c ON c.external_id = i.contract_external_id AND c.section = i.section\nWHERE c.contract_no = 'CT0225-KBI001-9274-01'\nORDER BY i.period;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \n-- installment schedule\nSELECT i.period, i.amount, i.due_date\nFROM installments i\nJOIN contracts c ON c.external_id = i.contract_external_id AND c.section = i.section\nWHERE c.contract_no = 'CT0225-KBI001-9274-01'\nORDER BY i.period;\n",
+  "rows": [
+    {
+      "period": "1",
+      "amount": "0.00",
+      "due_date": "2025-03-11"
+    },
+    {
+      "period": "2",
+      "amount": "0.00",
+      "due_date": "2025-04-11"
+    },
+    {
+      "period": "3",
+      "amount": "0.00",
+      "due_date": "2025-05-11"
+    },
+    {
+      "period": "4",
+      "amount": "0.00",
+      "due_date": "2025-06-11"
+    },
+    {
+      "period": "5",
+      "amount": "0.00",
+      "due_date": "2025-07-11"
+    },
+    {
+      "period": "6",
+      "amount": "0.00",
+      "due_date": "2025-08-11"
+    },
+    {
+      "period": "7",
+      "amount": "0.00",
+      "due_date": "2025-09-11"
+    },
+    {
+      "period": "8",
+      "amount": "0.00",
+      "due_date": "2025-10-11"
+    },
+    {
+      "period": "9",
+      "amount": "0.00",
+      "due_date": "2025-11-11"
+    },
+    {
+      "period": "10",
+      "amount": "0.00",
+      "due_date": "2025-12-11"
+    },
+    {
+      "period": "11",
+      "amount": "0.00",
+      "due_date": "2026-01-11"
+    },
+    {
+      "period": "12",
+      "amount": "0.00",
+      "due_date": "2026-02-11"
+    }
+  ],
+  "messages": [],
+  "stdout": "period\tamount\tdue_date\n1\t0.00\t2025-03-11\n2\t0.00\t2025-04-11\n3\t0.00\t2025-05-11\n4\t0.00\t2025-06-11\n5\t0.00\t2025-07-11\n6\t0.00\t2025-08-11\n7\t0.00\t2025-09-11\n8\t0.00\t2025-10-11\n9\t0.00\t2025-11-11\n10\t0.00\t2025-12-11\n11\t0.00\t2026-01-11\n12\t0.00\t2026-02-11\n",
+  "stderr": "",
+  "execution_time_ms": 1821
+}

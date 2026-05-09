@@ -1,0 +1,42 @@
+{
+  "query": "\nSELECT pt.external_id, pt.paid_at, pt.amount, pt.receipt_no, pt.period_no, pt.sub_no\nFROM payment_transactions pt\nWHERE pt.contract_external_id = '10007'\nORDER BY pt.paid_at, pt.external_id\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT pt.external_id, pt.paid_at, pt.amount, pt.receipt_no, pt.period_no, pt.sub_no\nFROM payment_transactions pt\nWHERE pt.contract_external_id = '10007'\nORDER BY pt.paid_at, pt.external_id\n",
+  "rows": [
+    {
+      "external_id": "20213",
+      "paid_at": "2025-03-11",
+      "amount": "3040.00",
+      "receipt_no": "TXRT0225-AYA001-9257-01-1-1",
+      "period_no": "1",
+      "sub_no": "1"
+    },
+    {
+      "external_id": "29644",
+      "paid_at": "2025-04-12",
+      "amount": "3040.00",
+      "receipt_no": "TXRT0225-AYA001-9257-01-2-1",
+      "period_no": "2",
+      "sub_no": "1"
+    },
+    {
+      "external_id": "38949",
+      "paid_at": "2025-05-16",
+      "amount": "3040.00",
+      "receipt_no": "TXRT0225-AYA001-9257-01-3",
+      "period_no": "4",
+      "sub_no": "1"
+    },
+    {
+      "external_id": "65064",
+      "paid_at": "2025-08-12",
+      "amount": "5000.00",
+      "receipt_no": "TXRT0225-AYA001-9257-01-4",
+      "period_no": "5",
+      "sub_no": "1"
+    }
+  ],
+  "messages": [],
+  "stdout": "external_id\tpaid_at\tamount\treceipt_no\tperiod_no\tsub_no\n20213\t2025-03-11\t3040.00\tTXRT0225-AYA001-9257-01-1-1\t1\t1\n29644\t2025-04-12\t3040.00\tTXRT0225-AYA001-9257-01-2-1\t2\t1\n38949\t2025-05-16\t3040.00\tTXRT0225-AYA001-9257-01-3\t4\t1\n65064\t2025-08-12\t5000.00\tTXRT0225-AYA001-9257-01-4\t5\t1\n",
+  "stderr": "",
+  "execution_time_ms": 2061
+}

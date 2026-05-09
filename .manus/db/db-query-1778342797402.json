@@ -1,0 +1,9 @@
+{
+  "query": "\nSELECT pt.external_id, pt.paid_at, pt.amount,\n  JSON_EXTRACT(pt.raw_json, '$.principal_paid') AS principal_paid,\n  JSON_EXTRACT(pt.raw_json, '$.interest_paid') AS interest_paid,\n  JSON_EXTRACT(pt.raw_json, '$.fee_paid') AS fee_paid,\n  JSON_EXTRACT(pt.raw_json, '$.discount_amount') AS discount_amount,\n  JSON_EXTRACT(pt.raw_json, '$.overpaid_amount') AS overpaid_amount,\n  JSON_EXTRACT(pt.raw_json, '$.bad_debt_amount') AS bad_debt_amount,\n  JSON_EXTRACT(pt.raw_json, '$.close_installment_amount') AS close_installment_amount,\n  pt.receipt_no, pt.status, pt.period_no, pt.sub_no\nFROM payment_transactions pt\nWHERE pt.contract_external_id = (\n  SELECT external_id FROM contracts WHERE contract_no = 'CT0225-AVA001-9257-01' LIMIT 1\n)\nORDER BY pt.paid_at, pt.external_id\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT pt.external_id, pt.paid_at, pt.amount,\n  JSON_EXTRACT(pt.raw_json, '$.principal_paid') AS principal_paid,\n  JSON_EXTRACT(pt.raw_json, '$.interest_paid') AS interest_paid,\n  JSON_EXTRACT(pt.raw_json, '$.fee_paid') AS fee_paid,\n  JSON_EXTRACT(pt.raw_json, '$.discount_amount') AS discount_amount,\n  JSON_EXTRACT(pt.raw_json, '$.overpaid_amount') AS overpaid_amount,\n  JSON_EXTRACT(pt.raw_json, '$.bad_debt_amount') AS bad_debt_amount,\n  JSON_EXTRACT(pt.raw_json, '$.close_installment_amount') AS close_installment_amount,\n  pt.receipt_no, pt.status, pt.period_no, pt.sub_no\nFROM payment_transactions pt\nWHERE pt.contract_external_id = (\n  SELECT external_id FROM contracts WHERE contract_no = 'CT0225-AVA001-9257-01' LIMIT 1\n)\nORDER BY pt.paid_at, pt.external_id\n",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 1815
+}

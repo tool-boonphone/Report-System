@@ -1,0 +1,70 @@
+{
+  "query": "\nSELECT pt.external_id, pt.paid_at, pt.amount, pt.receipt_no, pt.status, pt.period_no, pt.sub_no,\n  JSON_EXTRACT(pt.raw_json, '$.principal_paid') AS principal_paid,\n  JSON_EXTRACT(pt.raw_json, '$.interest_paid') AS interest_paid,\n  JSON_EXTRACT(pt.raw_json, '$.fee_paid') AS fee_paid,\n  JSON_EXTRACT(pt.raw_json, '$.discount_amount') AS discount_amount,\n  JSON_EXTRACT(pt.raw_json, '$.overpaid_amount') AS overpaid_amount,\n  JSON_EXTRACT(pt.raw_json, '$.close_installment_amount') AS close_installment_amount\nFROM payment_transactions pt\nWHERE pt.contract_external_id = '10007'\nORDER BY pt.paid_at, pt.external_id\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT pt.external_id, pt.paid_at, pt.amount, pt.receipt_no, pt.status, pt.period_no, pt.sub_no,\n  JSON_EXTRACT(pt.raw_json, '$.principal_paid') AS principal_paid,\n  JSON_EXTRACT(pt.raw_json, '$.interest_paid') AS interest_paid,\n  JSON_EXTRACT(pt.raw_json, '$.fee_paid') AS fee_paid,\n  JSON_EXTRACT(pt.raw_json, '$.discount_amount') AS discount_amount,\n  JSON_EXTRACT(pt.raw_json, '$.overpaid_amount') AS overpaid_amount,\n  JSON_EXTRACT(pt.raw_json, '$.close_installment_amount') AS close_installment_amount\nFROM payment_transactions pt\nWHERE pt.contract_external_id = '10007'\nORDER BY pt.paid_at, pt.external_id\n",
+  "rows": [
+    {
+      "external_id": "20213",
+      "paid_at": "2025-03-11",
+      "amount": "3040.00",
+      "receipt_no": "TXRT0225-AYA001-9257-01-1-1",
+      "status": "Active",
+      "period_no": "1",
+      "sub_no": "1",
+      "principal_paid": "1400",
+      "interest_paid": "1640",
+      "fee_paid": "0",
+      "discount_amount": "50",
+      "overpaid_amount": "0",
+      "close_installment_amount": "3040"
+    },
+    {
+      "external_id": "29644",
+      "paid_at": "2025-04-12",
+      "amount": "3040.00",
+      "receipt_no": "TXRT0225-AYA001-9257-01-2-1",
+      "status": "Active",
+      "period_no": "3",
+      "sub_no": "1",
+      "principal_paid": "1400",
+      "interest_paid": "1640",
+      "fee_paid": "0",
+      "discount_amount": "0",
+      "overpaid_amount": "0",
+      "close_installment_amount": "3040"
+    },
+    {
+      "external_id": "38949",
+      "paid_at": "2025-05-16",
+      "amount": "3040.00",
+      "receipt_no": "TXRT0225-AYA001-9257-01-3",
+      "status": "Active",
+      "period_no": "5",
+      "sub_no": "1",
+      "principal_paid": "1400",
+      "interest_paid": "1540",
+      "fee_paid": "100",
+      "discount_amount": "0",
+      "overpaid_amount": "0",
+      "close_installment_amount": "3040"
+    },
+    {
+      "external_id": "65064",
+      "paid_at": "2025-08-12",
+      "amount": "5000.00",
+      "receipt_no": "TXRT0225-AYA001-9257-01-4",
+      "status": "Active",
+      "period_no": "5",
+      "sub_no": "2",
+      "principal_paid": "1400",
+      "interest_paid": "1540",
+      "fee_paid": "100",
+      "discount_amount": "0",
+      "overpaid_amount": "1960",
+      "close_installment_amount": "3040"
+    }
+  ],
+  "messages": [],
+  "stdout": "external_id\tpaid_at\tamount\treceipt_no\tstatus\tperiod_no\tsub_no\tprincipal_paid\tinterest_paid\tfee_paid\tdiscount_amount\toverpaid_amount\tclose_installment_amount\n20213\t2025-03-11\t3040.00\tTXRT0225-AYA001-9257-01-1-1\tActive\t1\t1\t1400\t1640\t0\t50\t0\t3040\n29644\t2025-04-12\t3040.00\tTXRT0225-AYA001-9257-01-2-1\tActive\t3\t1\t1400\t1640\t0\t0\t0\t3040\n38949\t2025-05-16\t3040.00\tTXRT0225-AYA001-9257-01-3\tActive\t5\t1\t1400\t1540\t100\t0\t0\t3040\n65064\t2025-08-12\t5000.00\tTXRT0225-AYA001-9257-01-4\tActive\t5\t2\t1400\t1540\t100\t0\t1960\t3040\n",
+  "stderr": "",
+  "execution_time_ms": 2061
+}

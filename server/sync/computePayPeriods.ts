@@ -1,101 +1,78 @@
 /**
  * computePayPeriods.ts
  *
- * Pure accumulation-based period assignment for payment_transactions.
+ * Pure-accumulation algorithm for assigning period_no (N) and sub_no (M)
+ * to each payment transaction.
  *
- * ปัญหาของ assignPayPeriods เดิม:
- *   - พึ่ง receipt_no format (TXRT-N) ซึ่ง Fastfone365 ใช้ format ต่างกัน
- *   - ยอดงวดของ Fastfone365 ไม่คงที่ ทำให้ amount-based cursor stall
- *   - ผลคือทุก payment ถูก assign ให้งวดเดิมซ้ำๆ
+ * Algorithm:
+ *   - Sort payments by paid_at ASC, then external_id ASC
+ *   - Accumulate payment.amount against installmentAmount (threshold per period)
+ *   - When accumulated >= threshold → period N is complete, advance to N+1
+ *   - Carry over excess to the next period
+ *   - sub_no (M) = sequential count within the same period N
  *
- * วิธีใหม่ (pure accumulation):
- *   1. เรียง payments ตามวันที่ (paid_at ASC)
- *   2. สะสมยอด (accumulated) ทีละ payment
- *   3. เมื่อ accumulated >= installment[X].amount → ข้ามไปงวด X+1
- *   4. ถ้า payment เดียวครอบคลุมหลายงวด → split เป็นหลาย rows
- *
- * Output: array ของ { externalId, periodNo, subNo }
- * ใช้สำหรับ UPDATE payment_transactions ทีละ batch
+ * No dependency on receipt_no, close_installment_amount, or installment schedule.
+ * Uses only: payment.amount and contract.installment_amount
  */
 
-export type InstallmentScheduleItem = {
-  period: number;
-  amount: number; // ยอดงวดนั้น (principal + interest + fee)
-};
-
-export type PaymentInputRow = {
+export interface PaymentInput {
   id: number;
   externalId: string;
-  paidAt: string | null;
-  amount: number; // ยอดที่จ่ายจริง (จาก payment_transactions.amount)
-  rawJson?: Record<string, unknown> | null;
-};
+  paidAt: string; // ISO date string "YYYY-MM-DD"
+  amount: number;
+}
 
-export type PeriodAssignment = {
+export interface PeriodAssignment {
   id: number;
   externalId: string;
   periodNo: number;
   subNo: number;
-};
+}
 
 /**
- * computePayPeriods
+ * Compute period_no and sub_no for a list of payments belonging to one contract.
  *
- * Input:
- *   payments    — list ของ payment rows สำหรับสัญญาเดียว
- *   schedule    — installment schedule (period, amount) เรียงตาม period ASC
- *
- * Output:
- *   array ของ { id, externalId, periodNo, subNo }
- *   ถ้า payment ครอบคลุมหลายงวด จะมี entry เดียวต่อ payment
- *   (เราไม่ split rows ใน DB จริง — periodNo = งวดที่ payment นี้เริ่มต้น)
- *
- * หมายเหตุ: สำหรับ split ที่ payment ครอบคลุมหลายงวด เราเก็บ periodNo = งวดแรก
- * ที่ payment นี้ครอบคลุม และ subNo = ลำดับย่อยภายในงวดนั้น
- * การ display "งวด X/total" จะใช้ MAX(periodNo) ของ payments ที่ชำระแล้ว
+ * @param payments         - All payment_transactions for the contract
+ * @param installmentAmount - The per-period threshold (contract.installment_amount)
+ * @returns Array of { id, externalId, periodNo, subNo }
  */
 export function computePayPeriods(
-  payments: PaymentInputRow[],
-  schedule: InstallmentScheduleItem[],
+  payments: PaymentInput[],
+  installmentAmount: number,
 ): PeriodAssignment[] {
-  if (!payments.length || !schedule.length) return [];
+  if (!payments.length) return [];
 
-  // เรียง schedule ตาม period ASC
-  const sortedSchedule = [...schedule]
-    .filter((s) => s.period != null && s.amount > 0)
-    .sort((a, b) => a.period - b.period);
-
-  if (!sortedSchedule.length) return [];
-
-  // เรียง payments ตาม paid_at ASC, tie-break ด้วย id ASC
-  const sortedPayments = [...payments].sort((a, b) => {
-    const at = a.paidAt ?? "";
-    const bt = b.paidAt ?? "";
-    if (at !== bt) return at.localeCompare(bt);
-    return a.id - b.id;
+  // ── 1. Sort by paid_at ASC, then externalId ASC (numeric) ────────────────
+  const sorted = [...payments].sort((a, b) => {
+    const dateDiff = a.paidAt.localeCompare(b.paidAt);
+    if (dateDiff !== 0) return dateDiff;
+    return Number(a.externalId) - Number(b.externalId);
   });
 
-  // ตัวแปรสะสม
-  let cursorIdx = 0; // index ใน sortedSchedule (งวดปัจจุบัน)
-  let accumulated = 0; // ยอดสะสมที่ยังไม่ครบงวดปัจจุบัน
+  // ── 2. Guard: if installmentAmount is 0 or invalid, assign all to period 1 ─
+  const threshold = installmentAmount > 0 ? installmentAmount : 0;
 
-  // นับ subNo ต่อ periodNo
-  const subNoCounter = new Map<number, number>();
+  // ── 3. Accumulate ─────────────────────────────────────────────────────────
+  let currentPeriod = 1;
+  let accumulated = 0; // running total within current period
+  const subCounter = new Map<number, number>(); // period → sub count
 
   const result: PeriodAssignment[] = [];
 
-  for (const pay of sortedPayments) {
-    // ถ้า cursor เกิน schedule แล้ว → assign งวดสุดท้าย
-    if (cursorIdx >= sortedSchedule.length) {
-      cursorIdx = sortedSchedule.length - 1;
+  for (const pay of sorted) {
+    const amount = Number(pay.amount) || 0;
+
+    if (threshold <= 0) {
+      // No threshold available → all payments go to period 1
+      const sub = (subCounter.get(1) ?? 0) + 1;
+      subCounter.set(1, sub);
+      result.push({ id: pay.id, externalId: pay.externalId, periodNo: 1, subNo: sub });
+      continue;
     }
 
-    const currentPeriod = sortedSchedule[cursorIdx].period;
-
-    // นับ subNo สำหรับงวดนี้
-    const sub = (subNoCounter.get(currentPeriod) ?? 0) + 1;
-    subNoCounter.set(currentPeriod, sub);
-
+    // Assign this payment to currentPeriod
+    const sub = (subCounter.get(currentPeriod) ?? 0) + 1;
+    subCounter.set(currentPeriod, sub);
     result.push({
       id: pay.id,
       externalId: pay.externalId,
@@ -103,22 +80,12 @@ export function computePayPeriods(
       subNo: sub,
     });
 
-    // สะสมยอด
-    accumulated += pay.amount;
-
-    // เลื่อน cursor เมื่อสะสมครบงวดปัจจุบัน (tolerance 0.5 บาท)
-    while (
-      cursorIdx < sortedSchedule.length - 1 &&
-      sortedSchedule[cursorIdx].amount > 0 &&
-      accumulated >= sortedSchedule[cursorIdx].amount - 0.5
-    ) {
-      accumulated -= sortedSchedule[cursorIdx].amount;
-      cursorIdx += 1;
-      // reset subNo counter สำหรับงวดใหม่ (ยังไม่มีใครใช้)
+    // Accumulate and advance period cursor
+    accumulated += amount;
+    while (accumulated >= threshold) {
+      accumulated -= threshold;
+      currentPeriod += 1;
     }
-
-    // ป้องกัน accumulated ติดลบ (floating point)
-    if (accumulated < 0) accumulated = 0;
   }
 
   return result;

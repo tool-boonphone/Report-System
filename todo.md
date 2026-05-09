@@ -1389,3 +1389,8 @@ Task list:
 - [ ] อัพเดท queryCacheDb.ts ให้ใช้ period_no/sub_no จาก cache
 - [x] ตัด BG amber-100 ออกจาก isArrears ใน DebtSummary.tsx และ DebtReport.tsx (คงสีตัวอักษร orange ไว้)
 - [x] Push GitHub + checkpoint
+
+## Fix: ซ่อน rows ที่ไม่มียอดในยอดเก็บหนี้ (งวดที่ทุก amount = 0)
+- [ ] วิเคราะห์ว่า rows ที่ทุก amount = 0 ถูก generate จากที่ไหน (populateCache หรือ queryCacheDb)
+- [ ] แก้ไข logic ให้ไม่ insert/แสดง rows ที่ทุก amount = 0 ยกเว้น rows ที่มีความหมาย (เช่น ส่วนลด)
+- [ ] Push GitHub + checkpoint

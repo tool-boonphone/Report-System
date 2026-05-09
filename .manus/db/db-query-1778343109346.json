@@ -1,0 +1,74 @@
+{
+  "query": "\nSELECT period, amount, due_date, paid_amount, status, \n  JSON_EXTRACT(raw_json, '$.balance') AS balance\nFROM installments\nWHERE contract_external_id = '10007'\nORDER BY period\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT period, amount, due_date, paid_amount, status, \n  JSON_EXTRACT(raw_json, '$.balance') AS balance\nFROM installments\nWHERE contract_external_id = '10007'\nORDER BY period\n",
+  "rows": [
+    {
+      "period": "1",
+      "amount": "1000.00",
+      "due_date": "2025-03-10",
+      "paid_amount": "3040.00",
+      "status": "ยืนยันการชำระ",
+      "balance": "NULL"
+    },
+    {
+      "period": "2",
+      "amount": "1000.00",
+      "due_date": "2025-04-10",
+      "paid_amount": "3040.00",
+      "status": "ยืนยันการชำระ",
+      "balance": "NULL"
+    },
+    {
+      "period": "3",
+      "amount": "1350.00",
+      "due_date": "2025-05-10",
+      "paid_amount": "3040.00",
+      "status": "ยืนยันการชำระ",
+      "balance": "NULL"
+    },
+    {
+      "period": "4",
+      "amount": "2500.00",
+      "due_date": "2025-06-10",
+      "paid_amount": "3040.00",
+      "status": "ยืนยันการชำระ",
+      "balance": "NULL"
+    },
+    {
+      "period": "5",
+      "amount": "3480.00",
+      "due_date": "2025-07-10",
+      "paid_amount": "1960.00",
+      "status": "ยกเลิกสัญญา",
+      "balance": "NULL"
+    },
+    {
+      "period": "6",
+      "amount": "4690.00",
+      "due_date": "2025-08-10",
+      "paid_amount": "0.00",
+      "status": "ยกเลิกสัญญา",
+      "balance": "NULL"
+    },
+    {
+      "period": "7",
+      "amount": "4040.00",
+      "due_date": "2025-09-10",
+      "paid_amount": "0.00",
+      "status": "ยกเลิกสัญญา",
+      "balance": "NULL"
+    },
+    {
+      "period": "8",
+      "amount": "4040.00",
+      "due_date": "2025-10-10",
+      "paid_amount": "0.00",
+      "status": "ยกเลิกสัญญา",
+      "balance": "NULL"
+    }
+  ],
+  "messages": [],
+  "stdout": "period\tamount\tdue_date\tpaid_amount\tstatus\tbalance\n1\t1000.00\t2025-03-10\t3040.00\tยืนยันการชำระ\tNULL\n2\t1000.00\t2025-04-10\t3040.00\tยืนยันการชำระ\tNULL\n3\t1350.00\t2025-05-10\t3040.00\tยืนยันการชำระ\tNULL\n4\t2500.00\t2025-06-10\t3040.00\tยืนยันการชำระ\tNULL\n5\t3480.00\t2025-07-10\t1960.00\tยกเลิกสัญญา\tNULL\n6\t4690.00\t2025-08-10\t0.00\tยกเลิกสัญญา\tNULL\n7\t4040.00\t2025-09-10\t0.00\tยกเลิกสัญญา\tNULL\n8\t4040.00\t2025-10-10\t0.00\tยกเลิกสัญญา\tNULL\n",
+  "stderr": "",
+  "execution_time_ms": 2138
+}

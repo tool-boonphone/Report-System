@@ -1,0 +1,60 @@
+{
+  "query": "\nSELECT DISTINCT contract_no, customer_name, contract_external_id\nFROM debt_collected_cache\nWHERE customer_name LIKE '%สุภาพม%' OR customer_name LIKE '%สำราญ%'\nLIMIT 10\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT DISTINCT contract_no, customer_name, contract_external_id\nFROM debt_collected_cache\nWHERE customer_name LIKE '%สุภาพม%' OR customer_name LIKE '%สำราญ%'\nLIMIT 10\n",
+  "rows": [
+    {
+      "contract_no": "CT1025-CCO024-17397-01",
+      "customer_name": "ลัดดาวัลย์ สำราญสุข",
+      "contract_external_id": "18444"
+    },
+    {
+      "contract_no": "CT1225-AYA004-19969-01",
+      "customer_name": "สุพัตรา สุขสำราญ",
+      "contract_external_id": "21115"
+    },
+    {
+      "contract_no": "CT1224-SPK001-6339-01",
+      "customer_name": "ณัฏฐา อยู่สำราญ",
+      "contract_external_id": "6886"
+    },
+    {
+      "contract_no": "CT1125-CBI040-18243-01",
+      "customer_name": "พัชราภรณ์ ศรีสำราญ",
+      "contract_external_id": "19315"
+    },
+    {
+      "contract_no": "CT0825-SRI002-14385-01",
+      "customer_name": "ทศพล สุขสำราญ",
+      "contract_external_id": "15369"
+    },
+    {
+      "contract_no": "CT0326-PTE012-2323-01",
+      "customer_name": "รัตนา สุขสำราญ",
+      "contract_external_id": "2460"
+    },
+    {
+      "contract_no": "CT1125-PTE035-18566-01",
+      "customer_name": "ณิชารีย์ สำราญพานิช",
+      "contract_external_id": "19653"
+    },
+    {
+      "contract_no": "CT0525-KBI002-12604-01",
+      "customer_name": "จีรวรรณ สำราญ",
+      "contract_external_id": "13504"
+    },
+    {
+      "contract_no": "CT0925-CCO034-15942-01",
+      "customer_name": "วิรัตน์ อิ่มสำราญ",
+      "contract_external_id": "16956"
+    },
+    {
+      "contract_no": "CT1124-LRI001-1652-01",
+      "customer_name": "ณาตยา สำราญราษฎร์",
+      "contract_external_id": "1585"
+    }
+  ],
+  "messages": [],
+  "stdout": "contract_no\tcustomer_name\tcontract_external_id\nCT1025-CCO024-17397-01\tลัดดาวัลย์ สำราญสุข\t18444\nCT1225-AYA004-19969-01\tสุพัตรา สุขสำราญ\t21115\nCT1224-SPK001-6339-01\tณัฏฐา อยู่สำราญ\t6886\nCT1125-CBI040-18243-01\tพัชราภรณ์ ศรีสำราญ\t19315\nCT0825-SRI002-14385-01\tทศพล สุขสำราญ\t15369\nCT0326-PTE012-2323-01\tรัตนา สุขสำราญ\t2460\nCT1125-PTE035-18566-01\tณิชารีย์ สำราญพานิช\t19653\nCT0525-KBI002-12604-01\tจีรวรรณ สำราญ\t13504\nCT0925-CCO034-15942-01\tวิรัตน์ อิ่มสำราญ\t16956\nCT1124-LRI001-1652-01\tณาตยา สำราญราษฎร์\t1585\n",
+  "stderr": "",
+  "execution_time_ms": 2113
+}

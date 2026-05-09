@@ -1,0 +1,70 @@
+{
+  "query": "\nSELECT external_id, contract_no, customer_name, section\nFROM contracts\nWHERE customer_name LIKE '%สุภาพม%' OR customer_name LIKE '%สำราญ%' OR contract_no LIKE '%AVA001-9257%'\nLIMIT 10\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT external_id, contract_no, customer_name, section\nFROM contracts\nWHERE customer_name LIKE '%สุภาพม%' OR customer_name LIKE '%สำราญ%' OR contract_no LIKE '%AVA001-9257%'\nLIMIT 10\n",
+  "rows": [
+    {
+      "external_id": "23178",
+      "contract_no": "CT0126-AYA001-21921-01",
+      "customer_name": "อภิญญา พวงสำราญ",
+      "section": "Fastfone365"
+    },
+    {
+      "external_id": "22125",
+      "contract_no": "CT0126-KPT001-20923-01",
+      "customer_name": "สำราญ เดชคำภู",
+      "section": "Fastfone365"
+    },
+    {
+      "external_id": "21115",
+      "contract_no": "CT1225-AYA004-19969-01",
+      "customer_name": "สุพัตรา สุขสำราญ",
+      "section": "Fastfone365"
+    },
+    {
+      "external_id": "20441",
+      "contract_no": "CT1225-SRI002-19335-01",
+      "customer_name": "สำราญ คงคาลึก",
+      "section": "Fastfone365"
+    },
+    {
+      "external_id": "20155",
+      "contract_no": "CT1125-PTE010-19057-01",
+      "customer_name": "ธรรมนูญ ชาวสำราญ",
+      "section": "Fastfone365"
+    },
+    {
+      "external_id": "19653",
+      "contract_no": "CT1125-PTE035-18566-01",
+      "customer_name": "ณิชารีย์ สำราญพานิช",
+      "section": "Fastfone365"
+    },
+    {
+      "external_id": "19490",
+      "contract_no": "CT1125-PTE017-18414-01",
+      "customer_name": "ทวิช อีนสำราญ",
+      "section": "Fastfone365"
+    },
+    {
+      "external_id": "19315",
+      "contract_no": "CT1125-CBI040-18243-01",
+      "customer_name": "พัชราภรณ์ ศรีสำราญ",
+      "section": "Fastfone365"
+    },
+    {
+      "external_id": "18444",
+      "contract_no": "CT1025-CCO024-17397-01",
+      "customer_name": "ลัดดาวัลย์ สำราญสุข",
+      "section": "Fastfone365"
+    },
+    {
+      "external_id": "18144",
+      "contract_no": "CT1025-PTE012-17110-01",
+      "customer_name": "พัชรา สุขสำราญ",
+      "section": "Fastfone365"
+    }
+  ],
+  "messages": [],
+  "stdout": "external_id\tcontract_no\tcustomer_name\tsection\n23178\tCT0126-AYA001-21921-01\tอภิญญา พวงสำราญ\tFastfone365\n22125\tCT0126-KPT001-20923-01\tสำราญ เดชคำภู\tFastfone365\n21115\tCT1225-AYA004-19969-01\tสุพัตรา สุขสำราญ\tFastfone365\n20441\tCT1225-SRI002-19335-01\tสำราญ คงคาลึก\tFastfone365\n20155\tCT1125-PTE010-19057-01\tธรรมนูญ ชาวสำราญ\tFastfone365\n19653\tCT1125-PTE035-18566-01\tณิชารีย์ สำราญพานิช\tFastfone365\n19490\tCT1125-PTE017-18414-01\tทวิช อีนสำราญ\tFastfone365\n19315\tCT1125-CBI040-18243-01\tพัชราภรณ์ ศรีสำราญ\tFastfone365\n18444\tCT1025-CCO024-17397-01\tลัดดาวัลย์ สำราญสุข\tFastfone365\n18144\tCT1025-PTE012-17110-01\tพัชรา สุขสำราญ\tFastfone365\n",
+  "stderr": "",
+  "execution_time_ms": 1755
+}

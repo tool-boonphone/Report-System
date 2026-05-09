@@ -1,0 +1,178 @@
+{
+  "query": "\nSELECT \n  pt.external_id,\n  pt.paid_at,\n  pt.amount,\n  pt.period_no,\n  pt.sub_no\nFROM payment_transactions pt\nJOIN contracts c ON c.external_id = pt.contract_external_id AND c.section = pt.section\nWHERE c.contract_no = 'CT0225-KBI001-9274-01'\n  AND pt.section = 'Fastfone365'\nORDER BY pt.paid_at, pt.id;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT \n  pt.external_id,\n  pt.paid_at,\n  pt.amount,\n  pt.period_no,\n  pt.sub_no\nFROM payment_transactions pt\nJOIN contracts c ON c.external_id = pt.contract_external_id AND c.section = pt.section\nWHERE c.contract_no = 'CT0225-KBI001-9274-01'\n  AND pt.section = 'Fastfone365'\nORDER BY pt.paid_at, pt.id;\n",
+  "rows": [
+    {
+      "external_id": "13159",
+      "paid_at": "2025-02-12",
+      "amount": "1000.00",
+      "period_no": "1",
+      "sub_no": "1"
+    },
+    {
+      "external_id": "13283",
+      "paid_at": "2025-02-13",
+      "amount": "863.33",
+      "period_no": "1",
+      "sub_no": "2"
+    },
+    {
+      "external_id": "13284",
+      "paid_at": "2025-02-13",
+      "amount": "1136.00",
+      "period_no": "2",
+      "sub_no": "1"
+    },
+    {
+      "external_id": "13520",
+      "paid_at": "2025-02-14",
+      "amount": "0.33",
+      "period_no": "2",
+      "sub_no": "3"
+    },
+    {
+      "external_id": "13522",
+      "paid_at": "2025-02-14",
+      "amount": "272.00",
+      "period_no": "3",
+      "sub_no": "1"
+    },
+    {
+      "external_id": "13519",
+      "paid_at": "2025-02-14",
+      "amount": "727.00",
+      "period_no": "2",
+      "sub_no": "2"
+    },
+    {
+      "external_id": "14537",
+      "paid_at": "2025-02-18",
+      "amount": "1591.33",
+      "period_no": "3",
+      "sub_no": "2"
+    },
+    {
+      "external_id": "17644",
+      "paid_at": "2025-02-21",
+      "amount": "1000.00",
+      "period_no": "4",
+      "sub_no": "1"
+    },
+    {
+      "external_id": "17645",
+      "paid_at": "2025-02-28",
+      "amount": "863.33",
+      "period_no": "4",
+      "sub_no": "2"
+    },
+    {
+      "external_id": "17646",
+      "paid_at": "2025-02-28",
+      "amount": "136.00",
+      "period_no": "5",
+      "sub_no": "1"
+    },
+    {
+      "external_id": "44713",
+      "paid_at": "2025-06-07",
+      "amount": "500.00",
+      "period_no": "5",
+      "sub_no": "2"
+    },
+    {
+      "external_id": "48405",
+      "paid_at": "2025-06-21",
+      "amount": "200.00",
+      "period_no": "5",
+      "sub_no": "3"
+    },
+    {
+      "external_id": "50195",
+      "paid_at": "2025-06-28",
+      "amount": "300.00",
+      "period_no": "5",
+      "sub_no": "4"
+    },
+    {
+      "external_id": "53362",
+      "paid_at": "2025-07-07",
+      "amount": "400.00",
+      "period_no": "5",
+      "sub_no": "5"
+    },
+    {
+      "external_id": "54388",
+      "paid_at": "2025-07-11",
+      "amount": "350.00",
+      "period_no": "5",
+      "sub_no": "6"
+    },
+    {
+      "external_id": "60656",
+      "paid_at": "2025-08-05",
+      "amount": "300.00",
+      "period_no": "6",
+      "sub_no": "1"
+    },
+    {
+      "external_id": "61545",
+      "paid_at": "2025-08-09",
+      "amount": "500.00",
+      "period_no": "6",
+      "sub_no": "2"
+    },
+    {
+      "external_id": "61793",
+      "paid_at": "2025-08-10",
+      "amount": "1100.00",
+      "period_no": "6",
+      "sub_no": "3"
+    },
+    {
+      "external_id": "69281",
+      "paid_at": "2025-09-12",
+      "amount": "1865.00",
+      "period_no": "7",
+      "sub_no": "1"
+    },
+    {
+      "external_id": "76097",
+      "paid_at": "2025-10-14",
+      "amount": "1840.00",
+      "period_no": "8",
+      "sub_no": "1"
+    },
+    {
+      "external_id": "82520",
+      "paid_at": "2025-11-13",
+      "amount": "1865.00",
+      "period_no": "9",
+      "sub_no": "1"
+    },
+    {
+      "external_id": "89928",
+      "paid_at": "2025-12-13",
+      "amount": "1823.98",
+      "period_no": "10",
+      "sub_no": "1"
+    },
+    {
+      "external_id": "97050",
+      "paid_at": "2026-01-13",
+      "amount": "1863.33",
+      "period_no": "11",
+      "sub_no": "1"
+    },
+    {
+      "external_id": "104614",
+      "paid_at": "2026-02-13",
+      "amount": "1863.33",
+      "period_no": "12",
+      "sub_no": "1"
+    }
+  ],
+  "messages": [],
+  "stdout": "external_id\tpaid_at\tamount\tperiod_no\tsub_no\n13159\t2025-02-12\t1000.00\t1\t1\n13283\t2025-02-13\t863.33\t1\t2\n13284\t2025-02-13\t1136.00\t2\t1\n13520\t2025-02-14\t0.33\t2\t3\n13522\t2025-02-14\t272.00\t3\t1\n13519\t2025-02-14\t727.00\t2\t2\n14537\t2025-02-18\t1591.33\t3\t2\n17644\t2025-02-21\t1000.00\t4\t1\n17645\t2025-02-28\t863.33\t4\t2\n17646\t2025-02-28\t136.00\t5\t1\n44713\t2025-06-07\t500.00\t5\t2\n48405\t2025-06-21\t200.00\t5\t3\n50195\t2025-06-28\t300.00\t5\t4\n53362\t2025-07-07\t400.00\t5\t5\n54388\t2025-07-11\t350.00\t5\t6\n60656\t2025-08-05\t300.00\t6\t1\n61545\t2025-08-09\t500.00\t6\t2\n61793\t2025-08-10\t1100.00\t6\t3\n69281\t2025-09-12\t1865.00\t7\t1\n76097\t2025-10-14\t1840.00\t8\t1\n82520\t2025-11-13\t1865.00\t9\t1\n89928\t2025-12-13\t1823.98\t10\t1\n97050\t2026-01-13\t1863.33\t11\t1\n104614\t2026-02-13\t1863.33\t12\t1\n",
+  "stderr": "",
+  "execution_time_ms": 1779
+}
