@@ -213,30 +213,48 @@ async function doSync(
     );
     overallRows += contractRows;
 
-    // 4) Installments
+    // 4) Installments — best-effort: if this fails (e.g. Cloud Run timeout),
+    // we still proceed to populate cache from whatever data is already in DB.
     setStage(section, 3);
-    const instRows = await syncInstallments(client, section);
-    overallRows += instRows;
+    let instFailed = false;
+    try {
+      const instRows = await syncInstallments(client, section);
+      overallRows += instRows;
+    } catch (instErr: any) {
+      instFailed = true;
+      console.warn(`[runner] ${section}: installments sync failed (non-fatal for cache):`, instErr?.message ?? instErr);
+    }
 
-    // 5) Payment Transactions
+    // 5) Payment Transactions — best-effort similarly
     setStage(section, 4);
-    const payRows = await syncPayments(client, section);
-    overallRows += payRows;
+    let payFailed = false;
+    try {
+      const payRows = await syncPayments(client, section);
+      overallRows += payRows;
+    } catch (payErr: any) {
+      payFailed = true;
+      console.warn(`[runner] ${section}: payments sync failed (non-fatal for cache):`, payErr?.message ?? payErr);
+    }
 
     // 6) Compute & store bad-debt summary per contract
     setStage(section, 5);
     await computeAndStoreBadDebt(section);
 
+    const syncStatus = (instFailed || payFailed) ? "partial" : "success";
     await finishSyncLog({
       id: overall.id,
-      status: "success",
+      status: syncStatus === "partial" ? "error" : "success",
       rowCount: overallRows,
+      errorMessage: syncStatus === "partial"
+        ? `Partial sync: installments=${instFailed ? 'failed' : 'ok'}, payments=${payFailed ? 'failed' : 'ok'}`
+        : undefined,
     });
     // Invalidate debt report cache so next request gets fresh data after sync
     invalidateDebtCache(section);
 
     // Populate DB cache tables (debt_target_cache + debt_collected_cache)
-    // This runs after all sync stages so the cache reflects the latest data.
+    // Always runs — even if installments/payments failed — so cache stays fresh
+    // from whatever data is already in DB (previous successful sync).
     try {
       const cacheResult = await populateDebtCache(section);
       console.log(
@@ -257,6 +275,14 @@ async function doSync(
 
     return { ok: true, rowCount: overallRows };
   } catch (err: any) {
+    // Even on hard failure, try to populate cache from existing DB data
+    try {
+      console.log(`[runner] ${section}: attempting cache populate after sync failure...`);
+      const cacheResult = await populateDebtCache(section);
+      console.log(`[runner] ${section}: post-failure cache populated — target=${cacheResult.targetRows}, collected=${cacheResult.collectedRows}`);
+    } catch (cacheErr: any) {
+      console.error(`[runner] ${section}: post-failure cache populate failed:`, cacheErr?.message ?? cacheErr);
+    }
     await finishSyncLog({
       id: overall.id,
       status: "error",
