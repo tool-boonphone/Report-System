@@ -1,7 +1,7 @@
 import { desc, eq, and, gt, lt } from "drizzle-orm";
 import { syncLogs } from "../../drizzle/schema";
 import { getDb } from "../db";
-import type { SectionKey, SyncTrigger } from "../../shared/const";
+import { normalizeSectionKey, type SectionKey, type SyncTrigger } from "../../shared/const";
 
 export async function insertSyncLog(params: {
   section: SectionKey;
@@ -12,7 +12,7 @@ export async function insertSyncLog(params: {
   if (!db) throw new Error("DB not available for syncLog.insert");
   const now = new Date();
   const [res] = await db.insert(syncLogs).values({
-    section: params.section,
+    section: normalizeSectionKey(params.section),
     entity: params.entity,
     triggeredBy: params.triggeredBy,
     status: "in_progress",

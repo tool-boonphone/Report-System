@@ -20,6 +20,7 @@ import {
   installments,
   paymentTransactions,
 } from "../../drizzle/schema";
+import { normalizeSectionKey } from "../../shared/const";
 
 const BATCH_SIZE = 200;
 
@@ -58,12 +59,23 @@ function buildUpsertSet(
   return set;
 }
 
+/**
+ * Normalize section field in every row before inserting into DB.
+ * Ensures consistent SectionKey regardless of what the caller passes.
+ */
+function normalizeRows(rows: AnyRow[]): AnyRow[] {
+  return rows.map((r) => ({
+    ...r,
+    section: normalizeSectionKey(r.section as string),
+  }));
+}
+
 export async function upsertContracts(rows: AnyRow[]): Promise<number> {
   if (rows.length === 0) return 0;
   const db = await getDb();
   if (!db) throw new Error("DB not available for upsertContracts");
   let total = 0;
-  for (const batch of chunks(rows, BATCH_SIZE)) {
+  for (const batch of chunks(normalizeRows(rows), BATCH_SIZE)) {
     const merged = mergeBatch(batch);
     // Union of keys across the batch → ensures every column touched by any row
     // is in the SET clause (otherwise a row that is the first in a batch but
@@ -85,7 +97,7 @@ export async function upsertInstallments(rows: AnyRow[]): Promise<number> {
   const db = await getDb();
   if (!db) throw new Error("DB not available for upsertInstallments");
   let total = 0;
-  for (const batch of chunks(rows, BATCH_SIZE)) {
+  for (const batch of chunks(normalizeRows(rows), BATCH_SIZE)) {
     const merged = mergeBatch(batch);
     const sample = unionKeys(merged);
     const setObj = buildUpsertSet(sample, installments as any);
@@ -110,7 +122,7 @@ export async function upsertPayments(rows: AnyRow[]): Promise<number> {
   const db = await getDb();
   if (!db) throw new Error("DB not available for upsertPayments");
   let total = 0;
-  for (const batch of chunks(rows, BATCH_SIZE)) {
+  for (const batch of chunks(normalizeRows(rows), BATCH_SIZE)) {
     const merged = mergeBatch(batch);
     const sample = unionKeys(merged);
     const setObj = buildUpsertSet(sample, paymentTransactions as any);

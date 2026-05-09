@@ -16,6 +16,22 @@ export const APP_SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 7; // 7 days
 export const SECTIONS = ["Boonphone", "Fastfone365"] as const;
 export type SectionKey = (typeof SECTIONS)[number];
 
+/**
+ * Normalize any section string to the canonical SectionKey.
+ * Accepts all known aliases (case-insensitive) and maps them to the correct key.
+ *   "boonphone" | "bp"          → "Boonphone"
+ *   "fastfone365" | "ff365"     → "Fastfone365"
+ * Throws if the value cannot be resolved — prevents bad data from entering DB.
+ */
+export function normalizeSectionKey(raw: string): SectionKey {
+  const lower = raw.trim().toLowerCase();
+  if (lower === "boonphone" || lower === "bp") return "Boonphone";
+  if (lower === "fastfone365" || lower === "ff365" || lower === "fastfone") return "Fastfone365";
+  // Already a valid SectionKey (exact match)
+  if ((SECTIONS as readonly string[]).includes(raw.trim())) return raw.trim() as SectionKey;
+  throw new Error(`Unknown section key: "${raw}" — must be one of ${SECTIONS.join(", ")}`);
+}
+
 /** Menu codes used by group permissions. */
 export const MENU_CODES = [
   "section_switch", // การสลับ Section (ไว้บนสุด)
