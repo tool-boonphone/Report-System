@@ -387,9 +387,9 @@ async function queryPaid(
       SUM(CASE WHEN dcc.is_bad_debt_row = 0 THEN CAST(dcc.unlock_fee  AS DECIMAL(18,2)) ELSE 0 END) AS unlock_fee_paid,
       SUM(CASE WHEN dcc.is_bad_debt_row = 0 THEN CAST(dcc.discount    AS DECIMAL(18,2)) ELSE 0 END) AS discount_amount,
       SUM(CASE WHEN dcc.is_bad_debt_row = 0 THEN CAST(dcc.overpaid    AS DECIMAL(18,2)) ELSE 0 END) AS overpaid_amount,
-      COALESCE(pt_agg.installment_amt, 0)  AS installment_paid,
-      COALESCE(pt_agg.bad_debt_sum, 0)     AS device_sale_amount,
-      COALESCE(pt_agg.total_amt, 0)        AS total_paid
+      SUM(COALESCE(pt_agg.installment_amt, 0))  AS installment_paid,
+      SUM(COALESCE(pt_agg.bad_debt_sum, 0))     AS device_sale_amount,
+      SUM(COALESCE(pt_agg.total_amt, 0))        AS total_paid
     FROM debt_collected_cache dcc
     LEFT JOIN (
       SELECT dtc.section, dtc.contract_external_id, dtc.debt_range
