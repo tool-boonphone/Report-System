@@ -80,7 +80,7 @@ export interface ExpenseParams {
  * ขายเครื่อง = payment ในวันสุดท้ายของสัญญาหนี้เสีย
  *   - c.status = 'หนี้เสีย'
  *   - DATE(pt.paid_at) = วันสุดท้ายที่มีการชำระของสัญญานั้น (จาก subquery bad_debt_last_days)
- * ปิดยอด = มี close_installment_amount > 0 ใน raw_json
+ * ปิดยอด = มี close_installment_amount > 0 ใน raw_json AND c.status = 'สิ้นสุดสัญญา'
  * ค่างวด = อื่นๆ
  *
  * หมายเหตุ: ต้อง LEFT JOIN bad_debt_last_days bdl ก่อนใช้ expression นี้
@@ -91,7 +91,8 @@ const PT_INCOME_TYPE_CASE = `
       AND bdl.last_paid_date IS NOT NULL
       AND DATE(pt.paid_at) = bdl.last_paid_date
       THEN 'ขายเครื่อง'
-    WHEN CAST(COALESCE(JSON_EXTRACT(pt.raw_json, '$.close_installment_amount'), 0) AS DECIMAL(18,2)) > 0
+    WHEN c.status = 'สิ้นสุดสัญญา'
+      AND CAST(COALESCE(JSON_EXTRACT(pt.raw_json, '$.close_installment_amount'), 0) AS DECIMAL(18,2)) > 0
       THEN 'ปิดยอด'
     ELSE 'ค่างวด'
   END
