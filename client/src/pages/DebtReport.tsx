@@ -2053,9 +2053,8 @@ export default function DebtReport() {
                               baseStyle.background = "#f0f9ff"; // sky-50
                               baseStyle.color = "#15803d"; // green-700
                             } else if (isArrears) {
-                              // Arrears carry (ไม่ใช่ currentPeriod+partial/paid): สีส้ม orange เท่านั้น (ไม่มี BG)
+                              // Arrears carry (ไม่ใช่ currentPeriod+partial/paid): สีส้ม orange เท่านั้น (ไม่มี BG, ไม่หนา)
                               baseStyle.color = "#c2410c"; // orange-700
-                              baseStyle.fontWeight = "700";
                             } else if (isFuturePeriod && isPaid) {
                               // งวดอนาคตที่ชำระครบแล้ว: ฟ้าตัวตรง
                               baseStyle.color = "#0369a1"; // sky-700

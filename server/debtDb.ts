@@ -3509,6 +3509,8 @@ export async function* listDebtCollectedStream(params: {
     // updated_by/updated_at ดึงจาก payment_transactions column โดยตรง
     // API ใหม่ stamp ชื่อผู้ทำรายการไว้ที่ transaction โดยตรง ทั้ง Boonphone และ FF365
     // ไม่จำเป็นต้อง JOIN installments อีกต่อไป
+    // Phase 131: ดึง period_no/sub_no จาก payment_transactions โดยตรง
+    // แทนการใช้ assignPayPeriods() ซึ่งสร้าง carry rows ขยะ
     const payRaw = await db.execute(sql.raw(`
       SELECT pt.contract_external_id,
              pt.external_id AS payment_external_id,
@@ -3527,13 +3529,15 @@ export async function* listDebtCollectedStream(params: {
              pt.receipt_no AS receipt_no,
              JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.remark'))     AS remark,
              pt.status AS ff_status,
-             -- updated_at/updated_by: ดึงจาก column โดยตรง (บันทึกตอน sync จาก API)
              pt.updated_at,
-             pt.updated_by
+             pt.updated_by,
+             -- Phase 131: ใช้ period_no/sub_no ที่ backfill ไว้แล้วใน DB
+             pt.period_no,
+             pt.sub_no
         FROM payment_transactions pt
        WHERE pt.section = '${sectionLiteral}'
          AND pt.contract_external_id IN (${batchIdsLiteral})
-       ORDER BY pt.contract_external_id, pt.paid_at, CAST(JSON_EXTRACT(pt.raw_json, '$.payment_id') AS UNSIGNED)
+       ORDER BY pt.contract_external_id, pt.period_no, pt.sub_no
     `));
     const payRows: any[] = (payRaw as any)[0] ?? payRaw;
     const batchPayByContract = new Map<string, PayRawRow[]>();
@@ -3543,7 +3547,8 @@ export async function* listDebtCollectedStream(params: {
       if (!batchPayByContract.has(key)) batchPayByContract.set(key, []);
       batchPayByContract.get(key)!.push({
         contract_external_id: key,
-        period: null,
+        // Phase 131: ใช้ period_no จาก DB โดยตรง (ไม่ใช้ assignPayPeriods)
+        period: r.period_no != null ? Number(r.period_no) : null,
         payment_external_id: r.payment_external_id ?? null,
         paid_at: r.paid_at ?? null,
         total_paid_amount: r.total_paid_amount != null ? Number(r.total_paid_amount) : null,
@@ -3562,6 +3567,8 @@ export async function* listDebtCollectedStream(params: {
         ff_status: r.ff_status ?? null,
         updated_at: r.updated_at ?? null,
         updated_by: r.updated_by ?? null,
+        // Phase 131: เก็บ sub_no ไว้ใช้เป็น splitIndex
+        _sub_no: r.sub_no != null ? Number(r.sub_no) : null,
       } as any);
     }
 
@@ -3660,44 +3667,37 @@ export async function* listDebtCollectedStream(params: {
         contractBadDebtDate = latestDate || null;
       }
 
+      // Phase 131: ใช้ period_no/sub_no จาก DB โดยตรง (ไม่ใช้ assignPayPeriods)
+      // ไม่สร้าง carry rows อีกต่อไป — ใช้ sub_no เป็น splitIndex แทน
       let tagged: Array<PayRawRow & { splitIndex: number; isCloseRow: boolean; isBadDebtRow: boolean }>;
+
       if (contractBadDebtAmount != null && contractBadDebtAmount > 0 && contractBadDebtDate) {
+        // Bad-debt contract: ตัด payments วันที่ตรงกับ bad-debt date ออก แล้วสร้าง bad-debt row
         let badDebtNote: string | null = null;
         const d = new Date(`${contractBadDebtDate}T00:00:00`);
         const day = String(d.getDate()).padStart(2, "0");
         const month = String(d.getMonth() + 1).padStart(2, "0");
         const year = d.getFullYear() + 543;
         badDebtNote = `ยอดขายเครื่อง ${contractBadDebtAmount.toLocaleString("th-TH", { minimumFractionDigits: 0, maximumFractionDigits: 0 })} บาท (${day}/${month}/${year})`;
-        const realAssignedForBadDebt = assignPayPeriods(
-          realPaymentsRaw,
-          c.installments.map((i: { period: number | null; amount: number | string }) => ({ period: i.period, amount: Number(i.amount) || 0 })),
-          c.contractNo ?? null,
-        );
-        // Phase 107: ตัด payments ที่วันที่ตรงกับ latestDate (bad-debt date) ออกทั้งหมด
-        // เพราะยอดรวมของวันนั้นถูกรวมไว้ใน bad-debt row แล้ว ไม่ต้องแสดงซ้ำ
-        const normalPayments = realAssignedForBadDebt.filter((p) => {
-          const paidAt = ((p as any).paid_at ?? "").substring(0, 10);
-          return paidAt !== contractBadDebtDate;
-        });
-        // Phase 110 Iron Rule: badDebtPeriod calculation
-        // Rule 1: ถ้าไม่มี normal payments เลย → badDebtPeriod = 1 (งวดแรก)
-        // Rule 2: ถ้ามี normal payments → badDebtPeriod = lastNormalPeriod + 1
-        // (ไม่ใช้ firstSuspendedPeriod จาก installments เพราะอาจชี้งวดผิด เช่น งวด 3 ทั้งที่ลูกค้าไม่เคยจ่ายเลย)
-        let badDebtPeriod: number;
-        {
-          let lastNormalPeriod = 0;
-          for (const p of normalPayments) {
-            if (p.period != null && p.period > lastNormalPeriod) lastNormalPeriod = p.period;
-          }
-          if (lastNormalPeriod === 0) {
-            // ไม่มียอดชำระปกติเลย → bad-debt บันทึกที่งวด 1
-            badDebtPeriod = 1;
-          } else {
-            // มียอดชำระปกติ → bad-debt บันทึกที่งวดถัดไปต่อจากงวดสุดท้ายที่ชำระปกติ
-            badDebtPeriod = lastNormalPeriod + 1;
-          }
+
+        // Normal payments: ใช้ period_no/sub_no จาก DB โดยตรง (ไม่ใช้ assignPayPeriods)
+        const normalPayments = realPaymentsRaw
+          .filter((p) => ((p as any).paid_at ?? "").substring(0, 10) !== contractBadDebtDate)
+          .map((p) => ({
+            ...p,
+            period: (p as any).period != null ? Number((p as any).period) : null,
+            splitIndex: (p as any)._sub_no != null ? Number((p as any)._sub_no) - 1 : 0,
+            isCloseRow: String(p.receipt_no ?? "").startsWith("TXRTC"),
+            isBadDebtRow: false,
+          }));
+
+        // badDebtPeriod = lastNormalPeriod + 1 (หรือ 1 ถ้าไม่มี normal payments)
+        let lastNormalPeriod = 0;
+        for (const p of normalPayments) {
+          if (p.period != null && p.period > lastNormalPeriod) lastNormalPeriod = p.period;
         }
-        // updated_by/updated_at สำหรับ bad debt row: ดึงจาก contracts table ที่ sync ไว้แล้ว
+        const badDebtPeriod = lastNormalPeriod === 0 ? 1 : lastNormalPeriod + 1;
+
         const contractBadDebtUpdatedBy = (c as any).contractBadDebtUpdatedBy as string | null ?? null;
         const contractBadDebtUpdatedAt = (c as any).contractBadDebtUpdatedAt as string | null ?? null;
         const badDebtRow: any = {
@@ -3711,88 +3711,16 @@ export async function* listDebtCollectedStream(params: {
           updated_by: contractBadDebtUpdatedBy,
           updated_at: contractBadDebtUpdatedAt,
         };
-        tagged = [...normalPayments.map((p) => ({ ...p, isBadDebtRow: false })), badDebtRow];
+        tagged = [...normalPayments, badDebtRow];
       } else {
-        const realAssigned = assignPayPeriods(
-          realPaymentsRaw,
-          c.installments.map((i: { period: number | null; amount: number | string }) => ({ period: i.period, amount: Number(i.amount) || 0 })),
-          c.contractNo ?? null,
-        );
-        tagged = realAssigned.map((p) => ({ ...p, isBadDebtRow: false }));
-      }
-      // Phase 63: สร้าง carry rows สำหรับงวดที่ถูก skip เพราะ overpaidd
-      // ตรวจสอบ gaps ใน periods ของ tagged payments
-      // ถ้ามี gap (เช่น period 2 แล้วข้ามไป period 5) ให้สร้าง carry rows สำหรับงวด 3, 4
-      {
-        const baselineAmount = c.installmentAmount ?? 0;
-        if (baselineAmount > 0) {
-          // หา periods ที่มีอยู่ใน tagged (เฉพาะ non-close, non-badDebt)
-          const existingPeriods = new Set<number>();
-          for (const p of tagged) {
-            if (p.period != null && !p.isCloseRow && !p.isBadDebtRow) {
-              existingPeriods.add(p.period);
-            }
-          }
-          // หา maxNormalPeriod และ minClosePeriod
-          const normalPeriods = Array.from(existingPeriods).sort((a, b) => a - b);
-          const closePeriods = tagged
-            .filter((p) => p.isCloseRow && p.period != null)
-            .map((p) => p.period as number)
-            .sort((a, b) => a - b);
-          const maxNormal = normalPeriods.length > 0 ? normalPeriods[normalPeriods.length - 1] : 0;
-          // สร้าง carry rows สำหรับ gaps ระหว่าง 1 ถึง maxNormal
-          if (maxNormal > 1) {
-            const carryRows: Array<typeof tagged[0]> = [];
-            for (let pNo = 1; pNo <= maxNormal; pNo++) {
-              if (!existingPeriods.has(pNo)) {
-                // หา payment ก่อน gap นี้ (period < pNo) ที่มี overpaid
-                const prevPayments = tagged
-                  .filter((p) => p.period != null && p.period < pNo && !p.isCloseRow && !p.isBadDebtRow)
-                  .sort((a, b) => (b.period ?? 0) - (a.period ?? 0));
-                const sourcePayment = prevPayments[0];
-                const carryPaidAt = sourcePayment?.paid_at ?? null;
-                const carryRow: typeof tagged[0] = {
-                  contract_external_id: c.contractExternalId,
-                  period: pNo,
-                  splitIndex: 0,
-                  isCloseRow: false,
-                  isBadDebtRow: false,
-                  paid_at: carryPaidAt,
-                  total_paid_amount: 0,
-                  principal_paid: 0,
-                  interest_paid: 0,
-                  fee_paid: 0,
-                  penalty_paid: 0,
-                  unlock_fee_paid: 0,
-                  discount_amount: 0,
-                  overpaid_amount: 0,
-                  close_installment_amount: 0,
-                  bad_debt_amount: 0,
-                  payment_id: null,
-                  receipt_no: "(carry)",
-                  remark: `(-หักชำระเกิน: ${baselineAmount.toLocaleString("th-TH", { minimumFractionDigits: 0, maximumFractionDigits: 0 })})`,
-                  ff_status: null,
-                  payment_external_id: null,
-                } as any;
-                carryRows.push(carryRow);
-              }
-            }
-            if (carryRows.length > 0) {
-              // รวม carry rows เข้าไปใน tagged แล้ว sort ตาม period
-              tagged = [...tagged, ...carryRows].sort((a, b) => {
-                const pa = a.period ?? 9999;
-                const pb = b.period ?? 9999;
-                if (pa !== pb) return pa - pb;
-                // carry rows (receipt=(carry)) ให้อยู่หลัง normal rows ของ period เดียวกัน
-                const aIsCarry = (a as any).receipt_no === "(carry)";
-                const bIsCarry = (b as any).receipt_no === "(carry)";
-                if (aIsCarry && !bIsCarry) return 1;
-                if (!aIsCarry && bIsCarry) return -1;
-                return (a.splitIndex ?? 0) - (b.splitIndex ?? 0);
-              });
-            }
-          }
-        }
+        // Normal contract: ใช้ period_no/sub_no จาก DB โดยตรง
+        tagged = realPaymentsRaw.map((p) => ({
+          ...p,
+          period: (p as any).period != null ? Number((p as any).period) : null,
+          splitIndex: (p as any)._sub_no != null ? Number((p as any)._sub_no) - 1 : 0,
+          isCloseRow: String(p.receipt_no ?? "").startsWith("TXRTC"),
+          isBadDebtRow: false,
+        }));
       }
 
       const row = {

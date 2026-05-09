@@ -39,6 +39,23 @@ function bucketFromDays(days: number): string {
 }
 
 /**
+ * Compute splitIndex for each payment row based on period ordering within a contract.
+ * Phase 131: Replaces hardcoded splitIndex: 0 with actual sub-index per period.
+ * splitIndex = 0-based index within the same period (first row = 0, second = 1, ...)
+ */
+function computeSplitIndexes(payRows: any[]): number[] {
+  // Count occurrences of each period per contract
+  const periodCounter = new Map<number | null, number>();
+  return payRows.map((p) => {
+    const period = p.period != null ? Number(p.period) : null;
+    const key = period;
+    const idx = periodCounter.get(key) ?? 0;
+    periodCounter.set(key, idx + 1);
+    return idx;
+  });
+}
+
+/**
  * Re-derive daysOverdue from cached installment rows.
  * Mirrors the logic in deriveDebtStatus() in debtDb.ts.
  */
@@ -421,10 +438,13 @@ export async function* streamCollectedFromCache(params: {
         isPartialPaid: !!r.is_partial_paid,
       }));
 
-      const payments = payRows.map((p: any) => ({
+      // Phase 131: คำนวณ splitIndex จาก period ของ rows ใน cache (ไม่ hardcode 0)
+      const splitIndexes = computeSplitIndexes(payRows);
+      const payments = payRows.map((p: any, idx: number) => ({
         period: p.period != null ? Number(p.period) : null,
-        splitIndex: 0,
-        isCloseRow: false,
+        splitIndex: splitIndexes[idx],
+        // isCloseRow: ตรวจจาก payment_external_id pattern (close rows มี "-close-" ใน key)
+        isCloseRow: String(p.payment_external_id ?? "").includes("-close-"),
         isBadDebtRow: !!p.is_bad_debt_row,
         paidAt: p.paid_at ?? null,
         principal: Number(p.principal ?? 0),
@@ -869,10 +889,13 @@ export async function getCollectedChunk(params: {
       isPartialPaid: !!r.is_partial_paid,
     }));
 
-    const payments = payRows.map((p: any) => ({
+    // Phase 131: คำนวณ splitIndex จาก period ของ rows ใน cache (ไม่ hardcode 0)
+    const splitIndexesChunk = computeSplitIndexes(payRows);
+    const payments = payRows.map((p: any, idx: number) => ({
       period: p.period != null ? Number(p.period) : null,
-      splitIndex: 0,
-      isCloseRow: false,
+      splitIndex: splitIndexesChunk[idx],
+      // isCloseRow: ตรวจจาก payment_external_id pattern (close rows มี "-close-" ใน key)
+      isCloseRow: String(p.payment_external_id ?? "").includes("-close-"),
       isBadDebtRow: !!p.is_bad_debt_row,
       paidAt: p.paid_at ?? null,
       principal: Number(p.principal ?? 0),
