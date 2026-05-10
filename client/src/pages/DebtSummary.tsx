@@ -703,7 +703,8 @@ export default function DebtSummary() {
       }
     }
     // Phase 26: total = sum of visible badges only (discount always excluded)
-    // ยอดที่ชำระรวม = เงินต้น + ดอกเบี้ย + ค่าดำเนินการ + ค่าปรับ + ค่าปลดล็อก + ชำระเกิน + หนี้เสีย (ไม่รวมส่วนลด)
+    // ยอดที่ชำระรวม = เงินต้น + ดอกเบี้ย + ค่าดำเนินการ + ค่าปรับ + ค่าปลดล็อก + ชำระเกิน + หนี้เสีย
+    // ส่วนลดไม่ถูกนำมาคิด (ไม่บวก ไม่ลบ) เพราะส่วนลด = เงินที่ไม่ได้รับ
     const bv = badgeVisibility;
     const total =
       (bv.principal ? principal : 0) +
