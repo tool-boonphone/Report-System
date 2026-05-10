@@ -1417,10 +1417,10 @@ Task list:
 - [x] MonthlySummary.tsx: ตรวจสอบ computeMoneyTotal ว่าไม่รวม discount แล้ว (discount=false ใน paidVis)
 - [x] Commit, push GitHub และ save checkpoint
 
-## Fix: ยอดรวมทุกหน้าต้องหักส่วนลดออก และตรงกับหน้ารายรับ 308,797,982.57 (2026-05-10)
-- [ ] วิเคราะห์ formula ยอดรวม (badge "ยอดที่ชำระรวม" / "รายรับรวม" / "รวมยอดชำระ") ในทุกหน้า
-- [ ] DebtReport.tsx: แก้ formula ยอดรวมให้หักส่วนลด
-- [ ] DebtSummary.tsx: แก้ formula ยอดรวมให้หักส่วนลด
-- [ ] DebtOverview.tsx: แก้ formula ยอดรวมให้หักส่วนลด
-- [ ] MonthlySummary.tsx: แก้ formula ยอดรวมให้หักส่วนลด
-- [ ] Commit, push GitHub และ save checkpoint
+## Fix: ยอดรวมทุกหน้าต้องไม่รวมส่วนลด และตรงกับหน้ารายรับ 308,797,982.57 (2026-05-10)
+- [x] วิเคราะห์ formula ยอดรวม — สูตรที่ถูกต้อง: principal+interest+fee+penalty+unlockFee+overpaid+badDebt (ไม่รวมส่วนลด)
+- [x] DebtReport.tsx: เอา -discount ออกจาก formula total
+- [x] DebtSummary.tsx: เอา -discount ออกจาก formula total
+- [x] DebtOverview.tsx: ถูกต้องอยู่แล้ว (ไม่มี discount ใน formula)
+- [x] MonthlySummary.tsx: ถูกต้องอยู่แล้ว (paidVis.discount=false ใน computeMoneyTotal)
+- [x] Commit, push GitHub และ save checkpoint
