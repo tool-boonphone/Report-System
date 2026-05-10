@@ -1411,8 +1411,8 @@ Task list:
 - [ ] Commit, push GitHub และ save checkpoint
 
 ## Fix: badge "ยอดที่ชำระรวม" ต้องไม่รวมส่วนลด — ทุกหน้า (2026-05-10)
-- [ ] DebtReport.tsx: ตรวจสอบและแก้ collectedSummary.total ให้ไม่รวม discount
-- [ ] DebtSummary.tsx: ตรวจสอบและแก้ collectedSummary.total ให้ไม่รวม discount
-- [ ] DebtOverview.tsx: เพิ่ม canToggle:false ให้ badge "ส่วนลด" ใน grandCollected BadgeRow
-- [ ] MonthlySummary.tsx: ตรวจสอบ computeMoneyTotal ว่าไม่รวม discount แล้ว (discount=false ใน paidVis)
-- [ ] Commit, push GitHub และ save checkpoint
+- [x] DebtReport.tsx: ตรวจสอบและแก้ collectedSummary.total ให้ไม่รวม discount (ถูกต้องแล้ว — canToggle:false)
+- [x] DebtSummary.tsx: ตรวจสอบและแก้ collectedSummary.total ให้ไม่รวม discount (ถูกต้องแล้ว — canToggle:false)
+- [x] DebtOverview.tsx: เพิ่ม canToggle:false ให้ badge "ส่วนลด" ใน grandCollected BadgeRow + block toggleBadge("discount")
+- [x] MonthlySummary.tsx: ตรวจสอบ computeMoneyTotal ว่าไม่รวม discount แล้ว (discount=false ใน paidVis)
+- [x] Commit, push GitHub และ save checkpoint
