@@ -387,13 +387,9 @@ async function queryPaid(
       SUM(CASE WHEN dcc.is_bad_debt_row = 0 THEN CAST(dcc.unlock_fee  AS DECIMAL(18,2)) ELSE 0 END) AS unlock_fee_paid,
       SUM(CASE WHEN dcc.is_bad_debt_row = 0 THEN CAST(dcc.discount    AS DECIMAL(18,2)) ELSE 0 END) AS discount_amount,
       SUM(CASE WHEN dcc.is_bad_debt_row = 0 THEN CAST(dcc.overpaid    AS DECIMAL(18,2)) ELSE 0 END) AS overpaid_amount,
-      -- installment_paid = SUM(total_amount) ของ rows ปกติ (is_bad_debt_row=0)
-      -- device_sale_amount = SUM(bad_debt) ของ bad_debt rows (is_bad_debt_row=1)
-      -- total_paid = ยอดรวมทั้งหมด = installment_paid + device_sale_amount
-      -- ใช้ข้อมูลจาก debt_collected_cache โดยตรง เพื่อให้ตรงกับ payment_transactions
-      SUM(CASE WHEN dcc.is_bad_debt_row = 0 THEN CAST(dcc.total_amount AS DECIMAL(18,2)) ELSE 0 END) AS installment_paid,
-      SUM(CASE WHEN dcc.is_bad_debt_row = 1 THEN CAST(dcc.bad_debt     AS DECIMAL(18,2)) ELSE 0 END) AS device_sale_amount,
-      SUM(CASE WHEN dcc.is_bad_debt_row = 0 THEN CAST(dcc.total_amount AS DECIMAL(18,2)) ELSE CAST(dcc.bad_debt AS DECIMAL(18,2)) END) AS total_paid
+      SUM(COALESCE(pt_agg.installment_amt, 0))  AS installment_paid,
+      SUM(COALESCE(pt_agg.bad_debt_sum, 0))     AS device_sale_amount,
+      SUM(COALESCE(pt_agg.total_amt, 0))        AS total_paid
     FROM debt_collected_cache dcc
     LEFT JOIN (
       SELECT dtc.section, dtc.contract_external_id, dtc.debt_range
@@ -408,6 +404,65 @@ async function queryPaid(
            AND mx.max_period = dtc.period
     ) dtc_latest ON dtc_latest.section = dcc.section
                 AND dtc_latest.contract_external_id = dcc.contract_external_id
+    LEFT JOIN (
+      -- ดึง total_paid จาก payment_transactions โดยตรง (source IS NULL)
+      -- เพื่อให้ยอดตรงกับ Fastfone/Boonphone Report เป๊ะ
+      -- GROUP BY contract_no + paid_at_month
+      -- ขายเครื่อง = payment ในวันสุดท้ายของสัญญาหนี้เสีย
+      --   (c.status = 'หนี้เสีย' AND DATE(pt.paid_at) = last_paid_date ของสัญญานั้น)
+      SELECT
+        pt.section,
+        pt.contract_no,
+        DATE_FORMAT(pt.paid_at, '%Y-%m') AS paid_month,
+        SUM(CAST(COALESCE(pt.amount, 0) AS DECIMAL(18,2))) AS total_amt,
+        SUM(CASE
+          WHEN c2.status = 'หนี้เสีย'
+            AND bdl.last_paid_date IS NOT NULL
+            AND DATE(pt.paid_at) = bdl.last_paid_date
+            AND bdl.last_created_at IS NOT NULL
+            AND DATE(pt.created_at) = DATE(bdl.last_created_at)
+            AND (bdl.last_updated_by IS NULL OR pt.updated_by = bdl.last_updated_by)
+            THEN 0
+          ELSE CAST(COALESCE(pt.amount, 0) AS DECIMAL(18,2))
+        END) AS installment_amt,
+        SUM(CASE
+          WHEN c2.status = 'หนี้เสีย'
+            AND bdl.last_paid_date IS NOT NULL
+            AND DATE(pt.paid_at) = bdl.last_paid_date
+            AND bdl.last_created_at IS NOT NULL
+            AND DATE(pt.created_at) = DATE(bdl.last_created_at)
+            AND (bdl.last_updated_by IS NULL OR pt.updated_by = bdl.last_updated_by)
+            THEN CAST(COALESCE(pt.amount, 0) AS DECIMAL(18,2))
+          ELSE 0
+        END) AS bad_debt_sum
+      FROM payment_transactions pt
+      LEFT JOIN contracts c2 ON c2.contract_no = pt.contract_no AND c2.section = pt.section
+      LEFT JOIN (
+        -- ใช้ ROW_NUMBER เพื่อหา batch สุดท้าย (paid_at DESC, created_at DESC)
+        -- batch เดียวกัน = paid_at วันเดียวกัน + DATE(created_at) วันเดียวกัน + updated_by คนเดียวกัน
+        SELECT inner_q.contract_no, inner_q.section,
+               inner_q.last_paid_date, inner_q.last_created_at, inner_q.last_updated_by
+        FROM (
+          SELECT pt2.contract_no, pt2.section,
+                 DATE(pt2.paid_at) AS last_paid_date,
+                 pt2.created_at AS last_created_at,
+                 pt2.updated_by AS last_updated_by,
+                 ROW_NUMBER() OVER (
+                   PARTITION BY pt2.contract_no, pt2.section
+                   ORDER BY pt2.paid_at DESC, pt2.created_at DESC
+                 ) AS rn
+          FROM payment_transactions pt2
+          WHERE pt2.section = '${section}'
+            AND JSON_EXTRACT(pt2.raw_json, '$.source') IS NULL
+        ) AS inner_q
+        WHERE inner_q.rn = 1
+      ) AS bdl ON bdl.contract_no = pt.contract_no AND bdl.section = pt.section
+      WHERE pt.section = '${section}'
+        AND JSON_EXTRACT(pt.raw_json, '$.source') IS NULL
+      GROUP BY pt.section, pt.contract_no, paid_month
+    ) pt_agg ON pt_agg.section = dcc.section
+             AND pt_agg.contract_no = dcc.contract_no
+             AND pt_agg.paid_month = DATE_FORMAT(dcc.paid_at, '%Y-%m')
     WHERE ${dccWhere(section, { paidAtDate: opts.paidAtDate, paidAtMonths: opts.paidAtMonths, productType: opts.productType, deviceFamily: opts.deviceFamily, search: opts.search })}
     GROUP BY approve_month, bucket
     ORDER BY approve_month DESC
