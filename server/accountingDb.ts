@@ -87,19 +87,23 @@ export interface ExpenseParams {
  */
 const PT_INCOME_TYPE_CASE = `
   CASE
-    -- ขายเครื่อง: สัญญาหนี้เสีย + transaction อยู่ใน batch สุดท้าย (paid_at วันสุดท้าย + created_at ตรงกันเป๊ะ)
+    -- ขายเครื่อง: สัญญาหนี้เสีย + transaction อยู่ใน batch สุดท้าย
+    -- (paid_at วันสุดท้าย + DATE(created_at) วันเดียวกัน + updated_by คนเดียวกัน)
     WHEN c.status = 'หนี้เสีย'
       AND bdl.last_paid_date IS NOT NULL
       AND DATE(pt.paid_at) = bdl.last_paid_date
       AND bdl.last_created_at IS NOT NULL
-      AND pt.created_at = bdl.last_created_at
+      AND DATE(pt.created_at) = DATE(bdl.last_created_at)
+      AND (bdl.last_updated_by IS NULL OR pt.updated_by = bdl.last_updated_by)
       THEN 'ขายเครื่อง'
-    -- ปิดยอด: สัญญาสิ้นสุดสัญญา + transaction อยู่ใน batch สุดท้าย (paid_at วันสุดท้าย + created_at ตรงกันเป๊ะ)
+    -- ปิดยอด: สัญญาสิ้นสุดสัญญา + transaction อยู่ใน batch สุดท้าย
+    -- (paid_at วันสุดท้าย + DATE(created_at) วันเดียวกัน + updated_by คนเดียวกัน)
     WHEN c.status = 'สิ้นสุดสัญญา'
       AND bdl.last_paid_date IS NOT NULL
       AND DATE(pt.paid_at) = bdl.last_paid_date
       AND bdl.last_created_at IS NOT NULL
-      AND pt.created_at = bdl.last_created_at
+      AND DATE(pt.created_at) = DATE(bdl.last_created_at)
+      AND (bdl.last_updated_by IS NULL OR pt.updated_by = bdl.last_updated_by)
       THEN 'ปิดยอด'
     ELSE 'ค่างวด'
   END
@@ -123,20 +127,23 @@ const PT_INCOME_BASE_WHERE = `JSON_EXTRACT(pt.raw_json, '$.source') IS NULL`;
  * @param section - SectionKey ที่ต้องการ (ใส่ escaped string)
  */
 function buildBadDebtLastDaysSubquery(section: string): string {
-  // หา batch สุดท้ายของแต่ละสัญญา โดยใช้ MAX(created_at) เป็นตัวระบุ batch
-  // ทุก transaction ใน batch เดียวกันจะมี created_at ตรงกันเป๊ะ (same second)
+  // หา batch สุดท้ายของแต่ละสัญญา โดยใช้ ROW_NUMBER() เรียง paid_at DESC, created_at DESC
+  // batch เดียวกัน = paid_at วันเดียวกัน + DATE(created_at) วันเดียวกัน + updated_by คนเดียวกัน
+  // (admin อาจบันทึกหลาย payments ในช่วงเวลาสั้นๆ ทำให้ created_at ต่างกัน 1-2 นาที)
   return `
     SELECT
       inner_q.contract_no,
       inner_q.section,
       inner_q.last_paid_date,
-      inner_q.last_created_at
+      inner_q.last_created_at,
+      inner_q.last_updated_by
     FROM (
       SELECT
         pt2.contract_no,
         pt2.section,
         DATE(pt2.paid_at) AS last_paid_date,
         pt2.created_at AS last_created_at,
+        pt2.updated_by AS last_updated_by,
         ROW_NUMBER() OVER (
           PARTITION BY pt2.contract_no, pt2.section
           ORDER BY pt2.paid_at DESC, pt2.created_at DESC

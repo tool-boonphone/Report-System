@@ -419,6 +419,9 @@ async function queryPaid(
           WHEN c2.status = 'หนี้เสีย'
             AND bdl.last_paid_date IS NOT NULL
             AND DATE(pt.paid_at) = bdl.last_paid_date
+            AND bdl.last_created_at IS NOT NULL
+            AND DATE(pt.created_at) = DATE(bdl.last_created_at)
+            AND (bdl.last_updated_by IS NULL OR pt.updated_by = bdl.last_updated_by)
             THEN 0
           ELSE CAST(COALESCE(pt.amount, 0) AS DECIMAL(18,2))
         END) AS installment_amt,
@@ -426,17 +429,33 @@ async function queryPaid(
           WHEN c2.status = 'หนี้เสีย'
             AND bdl.last_paid_date IS NOT NULL
             AND DATE(pt.paid_at) = bdl.last_paid_date
+            AND bdl.last_created_at IS NOT NULL
+            AND DATE(pt.created_at) = DATE(bdl.last_created_at)
+            AND (bdl.last_updated_by IS NULL OR pt.updated_by = bdl.last_updated_by)
             THEN CAST(COALESCE(pt.amount, 0) AS DECIMAL(18,2))
           ELSE 0
         END) AS bad_debt_sum
       FROM payment_transactions pt
       LEFT JOIN contracts c2 ON c2.contract_no = pt.contract_no AND c2.section = pt.section
       LEFT JOIN (
-        SELECT pt2.contract_no, pt2.section, DATE(MAX(pt2.paid_at)) AS last_paid_date
-        FROM payment_transactions pt2
-        WHERE pt2.section = '${section}'
-          AND JSON_EXTRACT(pt2.raw_json, '$.source') IS NULL
-        GROUP BY pt2.contract_no, pt2.section
+        -- ใช้ ROW_NUMBER เพื่อหา batch สุดท้าย (paid_at DESC, created_at DESC)
+        -- batch เดียวกัน = paid_at วันเดียวกัน + DATE(created_at) วันเดียวกัน + updated_by คนเดียวกัน
+        SELECT inner_q.contract_no, inner_q.section,
+               inner_q.last_paid_date, inner_q.last_created_at, inner_q.last_updated_by
+        FROM (
+          SELECT pt2.contract_no, pt2.section,
+                 DATE(pt2.paid_at) AS last_paid_date,
+                 pt2.created_at AS last_created_at,
+                 pt2.updated_by AS last_updated_by,
+                 ROW_NUMBER() OVER (
+                   PARTITION BY pt2.contract_no, pt2.section
+                   ORDER BY pt2.paid_at DESC, pt2.created_at DESC
+                 ) AS rn
+          FROM payment_transactions pt2
+          WHERE pt2.section = '${section}'
+            AND JSON_EXTRACT(pt2.raw_json, '$.source') IS NULL
+        ) AS inner_q
+        WHERE inner_q.rn = 1
       ) AS bdl ON bdl.contract_no = pt.contract_no AND bdl.section = pt.section
       WHERE pt.section = '${section}'
         AND JSON_EXTRACT(pt.raw_json, '$.source') IS NULL

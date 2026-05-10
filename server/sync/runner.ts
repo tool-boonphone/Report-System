@@ -893,12 +893,12 @@ async function computeAndStoreBadDebt(section: SectionKey): Promise<void> {
   }
 
   // ---- 3) Fetch payments for these contracts ----
-  // Map: externalId → Array<{ payment_external_id, paid_at, total_paid_amount, ff_status, updated_by, updated_at }>
+  // Map: externalId → Array<{ payment_external_id, paid_at, created_at, total_paid_amount, ff_status, updated_by, updated_at }>
   // payment_external_id: numeric string = real payment from API; "pay-*" prefix = synthetic from installments
   // real payments have total_paid_amount from raw_json; synthetic payments have null
   // updated_by: FF365 ใช้ CTE + MIN(CONCAT) approach เพื่อหา installment ที่ใกล้ payment_date มากที่สุด
   //   Boonphone: updated_by ยังไม่มีใน installments DB (ยังไม่ได้ sync)
-  const payMap = new Map<string, Array<{ payment_external_id: string; paid_at: string | null; total_paid_amount: number; ff_status: string | null; updated_by: string | null; updated_at: string | null }>>();
+  const payMap = new Map<string, Array<{ payment_external_id: string; paid_at: string | null; created_at: string | null; total_paid_amount: number; ff_status: string | null; updated_by: string | null; updated_at: string | null }>>();
 
   for (let i = 0; i < extIds.length; i += CHUNK) {
     const slice = extIds.slice(i, i + CHUNK);
@@ -909,6 +909,7 @@ async function computeAndStoreBadDebt(section: SectionKey): Promise<void> {
         contractExternalId: paymentTransactions.contractExternalId,
         externalId: paymentTransactions.externalId,
         paidAt: paymentTransactions.paidAt,
+        createdAt: paymentTransactions.createdAt,
         amount: paymentTransactions.amount,
         status: paymentTransactions.status,
         updatedBy: paymentTransactions.updatedBy,
@@ -928,6 +929,7 @@ async function computeAndStoreBadDebt(section: SectionKey): Promise<void> {
       payMap.get(extId)!.push({
         payment_external_id: String(r.externalId ?? ""),
         paid_at: r.paidAt ?? null,
+        created_at: r.createdAt ? String(r.createdAt) : null,
         total_paid_amount: Number(raw.total_paid_amount ?? r.amount ?? 0),
         ff_status: r.status ?? null,
         updated_by: r.updatedBy ?? null,
@@ -981,19 +983,38 @@ async function computeAndStoreBadDebt(section: SectionKey): Promise<void> {
 
     if (realBadDebtPayments.length === 0) continue;
 
-    // Sort by paid_at DESC to find the latest date
-    const sortedReal = [...realBadDebtPayments].sort((a, b) =>
-      (b.paid_at ?? "").localeCompare(a.paid_at ?? "")
-    );
+    // Sort by paid_at DESC, created_at DESC เหมือน bad_debt_last_days subquery ใน accountingDb.ts
+    // เพื่อให้ logic ตรงกันกับหน้ารายรับ
+    const sortedReal = [...realBadDebtPayments].sort((a, b) => {
+      const paidCmp = (b.paid_at ?? "").localeCompare(a.paid_at ?? "");
+      if (paidCmp !== 0) return paidCmp;
+      return (b.created_at ?? "").localeCompare(a.created_at ?? "");
+    });
     // latestDate = วันที่ล่าสุด (YYYY-MM-DD)
     const latestDate = sortedReal[0].paid_at
       ? String(sortedReal[0].paid_at).substring(0, 10)
       : null;
-    // Rule 3: sum ของทุก real payment ที่วันที่ตรงกับ latestDate
+    // latestCreatedAt = created_at ของ row ที่ล่าสุด (ใช้ระบุ DATE เท่านั้น ไม่ใช้ timestamp เป๊ะ)
+    const latestCreatedAt = sortedReal[0].created_at ?? null;
+    // latestCreatedDate = DATE portion ของ created_at ของ row ล่าสุด (YYYY-MM-DD)
+    const latestCreatedDate = latestCreatedAt ? String(latestCreatedAt).substring(0, 10) : null;
+    // latestUpdatedBy = updated_by ของ row ล่าสุด
+    const latestUpdatedBy = sortedReal[0].updated_by ?? null;
+    // Rule 3: sum ของทุก real payment ที่อยู่ใน batch เดียวกัน
+    // batch เดียวกัน = paid_at วันเดียวกัน + DATE(created_at) วันเดียวกัน + updated_by คนเดียวกัน
+    // (admin อาจบันทึกหลาย payments ในช่วงเวลาสั้นๆ ทำให้ created_at ต่างกัน 1-2 นาที)
     const latestDatePayments = latestDate
-      ? realBadDebtPayments.filter((p) =>
-          p.paid_at ? String(p.paid_at).substring(0, 10) === latestDate : false
-        )
+      ? realBadDebtPayments.filter((p) => {
+          if (!p.paid_at) return false;
+          const sameDate = String(p.paid_at).substring(0, 10) === latestDate;
+          if (!sameDate) return false;
+          // DATE(created_at) ต้องตรงกัน
+          const pCreatedDate = p.created_at ? String(p.created_at).substring(0, 10) : null;
+          if (latestCreatedDate && pCreatedDate && pCreatedDate !== latestCreatedDate) return false;
+          // updated_by ต้องตรงกัน (ถ้า latestUpdatedBy มีค่า)
+          if (latestUpdatedBy && p.updated_by !== latestUpdatedBy) return false;
+          return true;
+        })
       : [sortedReal[0]];
     const totalBadDebt = latestDatePayments.reduce((sum, p) => sum + p.total_paid_amount, 0);
     // bad_debt_date = วันที่ล่าสุด (slip date for bank reconciliation)
