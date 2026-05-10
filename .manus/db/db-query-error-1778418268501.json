@@ -1,0 +1,8 @@
+{
+  "query": "\nSELECT \n  contract_no, paid_month, period_no, is_bad_debt_row,\n  CAST(principal AS DECIMAL(18,2)) AS principal,\n  CAST(interest AS DECIMAL(18,2)) AS interest,\n  CAST(fee AS DECIMAL(18,2)) AS fee,\n  CAST(discount AS DECIMAL(18,2)) AS discount,\n  CAST(total_amount AS DECIMAL(18,2)) AS total_amount,\n  payment_external_id\nFROM debt_collected_cache\nWHERE contract_no = 'CT1025-CCO026-17631-01'\nORDER BY period_no;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT \n  contract_no, paid_month, period_no, is_bad_debt_row,\n  CAST(principal AS DECIMAL(18,2)) AS principal,\n  CAST(interest AS DECIMAL(18,2)) AS interest,\n  CAST(fee AS DECIMAL(18,2)) AS fee,\n  CAST(discount AS DECIMAL(18,2)) AS discount,\n  CAST(total_amount AS DECIMAL(18,2)) AS total_amount,\n  payment_external_id\nFROM debt_collected_cache\nWHERE contract_no = 'CT1025-CCO026-17631-01'\nORDER BY period_no;\n",
+  "returncode": 1,
+  "logs": [
+    "ERROR 1054 (42S22) at line 2: Unknown column 'paid_month' in 'field list'"
+  ]
+}
