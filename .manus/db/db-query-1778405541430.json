@@ -1,0 +1,80 @@
+{
+  "query": "\nSELECT pt.contract_external_id, pt.period_no, pt.sub_no,\n       COUNT(*) as rows_in_pt,\n       SUM(CAST(pt.amount AS DECIMAL(18,2))) as total_amount\nFROM payment_transactions pt\nWHERE pt.section = 'Fastfone365'\n  AND NOT EXISTS (\n    SELECT 1 FROM debt_collected_cache dcc\n    WHERE dcc.section = 'Fastfone365'\n      AND dcc.contract_external_id = pt.contract_external_id\n      AND dcc.period = pt.period_no\n  )\nGROUP BY pt.contract_external_id, pt.period_no, pt.sub_no\nORDER BY pt.contract_external_id, pt.period_no\nLIMIT 10;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT pt.contract_external_id, pt.period_no, pt.sub_no,\n       COUNT(*) as rows_in_pt,\n       SUM(CAST(pt.amount AS DECIMAL(18,2))) as total_amount\nFROM payment_transactions pt\nWHERE pt.section = 'Fastfone365'\n  AND NOT EXISTS (\n    SELECT 1 FROM debt_collected_cache dcc\n    WHERE dcc.section = 'Fastfone365'\n      AND dcc.contract_external_id = pt.contract_external_id\n      AND dcc.period = pt.period_no\n  )\nGROUP BY pt.contract_external_id, pt.period_no, pt.sub_no\nORDER BY pt.contract_external_id, pt.period_no\nLIMIT 10;\n",
+  "rows": [
+    {
+      "contract_external_id": "10111",
+      "period_no": "1",
+      "sub_no": "1",
+      "rows_in_pt": "1",
+      "total_amount": "4508.75"
+    },
+    {
+      "contract_external_id": "10111",
+      "period_no": "2",
+      "sub_no": "1",
+      "rows_in_pt": "1",
+      "total_amount": "16312.00"
+    },
+    {
+      "contract_external_id": "10503",
+      "period_no": "8",
+      "sub_no": "1",
+      "rows_in_pt": "1",
+      "total_amount": "1500.00"
+    },
+    {
+      "contract_external_id": "11422",
+      "period_no": "3",
+      "sub_no": "1",
+      "rows_in_pt": "1",
+      "total_amount": "3500.00"
+    },
+    {
+      "contract_external_id": "11491",
+      "period_no": "3",
+      "sub_no": "1",
+      "rows_in_pt": "1",
+      "total_amount": "1830.00"
+    },
+    {
+      "contract_external_id": "11886",
+      "period_no": "3",
+      "sub_no": "1",
+      "rows_in_pt": "1",
+      "total_amount": "13500.00"
+    },
+    {
+      "contract_external_id": "12429",
+      "period_no": "3",
+      "sub_no": "1",
+      "rows_in_pt": "1",
+      "total_amount": "3500.00"
+    },
+    {
+      "contract_external_id": "12442",
+      "period_no": "3",
+      "sub_no": "1",
+      "rows_in_pt": "1",
+      "total_amount": "6000.00"
+    },
+    {
+      "contract_external_id": "12521",
+      "period_no": "6",
+      "sub_no": "1",
+      "rows_in_pt": "1",
+      "total_amount": "3000.00"
+    },
+    {
+      "contract_external_id": "12730",
+      "period_no": "3",
+      "sub_no": "1",
+      "rows_in_pt": "1",
+      "total_amount": "18000.00"
+    }
+  ],
+  "messages": [],
+  "stdout": "contract_external_id\tperiod_no\tsub_no\trows_in_pt\ttotal_amount\n10111\t1\t1\t1\t4508.75\n10111\t2\t1\t1\t16312.00\n10503\t8\t1\t1\t1500.00\n11422\t3\t1\t1\t3500.00\n11491\t3\t1\t1\t1830.00\n11886\t3\t1\t1\t13500.00\n12429\t3\t1\t1\t3500.00\n12442\t3\t1\t1\t6000.00\n12521\t6\t1\t1\t3000.00\n12730\t3\t1\t1\t18000.00\n",
+  "stderr": "",
+  "execution_time_ms": 2006
+}

@@ -1,0 +1,9 @@
+{
+  "query": "\nSELECT c.external_id, c.status, \n       SUM(CAST(pt.amount AS DECIMAL(18,2))) as pt_total,\n       COUNT(pt.id) as pt_count\nFROM contracts c\nJOIN payment_transactions pt ON pt.section = c.section AND pt.contract_external_id = c.external_id\nWHERE c.section = 'Fastfone365'\n  AND c.external_id IN ('19654','809','16402','17783','8612','22830','19913','9419')\n  AND NOT EXISTS (\n    SELECT 1 FROM debt_collected_cache dcc\n    WHERE dcc.section = 'Fastfone365' AND dcc.contract_external_id = c.external_id\n  )\nGROUP BY c.external_id, c.status\nORDER BY c.external_id;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT c.external_id, c.status, \n       SUM(CAST(pt.amount AS DECIMAL(18,2))) as pt_total,\n       COUNT(pt.id) as pt_count\nFROM contracts c\nJOIN payment_transactions pt ON pt.section = c.section AND pt.contract_external_id = c.external_id\nWHERE c.section = 'Fastfone365'\n  AND c.external_id IN ('19654','809','16402','17783','8612','22830','19913','9419')\n  AND NOT EXISTS (\n    SELECT 1 FROM debt_collected_cache dcc\n    WHERE dcc.section = 'Fastfone365' AND dcc.contract_external_id = c.external_id\n  )\nGROUP BY c.external_id, c.status\nORDER BY c.external_id;\n",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 1759
+}

@@ -1,0 +1,50 @@
+{
+  "query": "\nSELECT 'debt_target_cache' as tbl, section, COUNT(*) as cnt FROM debt_target_cache GROUP BY section\nUNION ALL\nSELECT 'debt_collected_cache', section, COUNT(*) FROM debt_collected_cache GROUP BY section\nUNION ALL\nSELECT 'contracts', section, COUNT(*) FROM contracts GROUP BY section\nUNION ALL\nSELECT 'payment_transactions', section, COUNT(*) FROM payment_transactions GROUP BY section;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT 'debt_target_cache' as tbl, section, COUNT(*) as cnt FROM debt_target_cache GROUP BY section\nUNION ALL\nSELECT 'debt_collected_cache', section, COUNT(*) FROM debt_collected_cache GROUP BY section\nUNION ALL\nSELECT 'contracts', section, COUNT(*) FROM contracts GROUP BY section\nUNION ALL\nSELECT 'payment_transactions', section, COUNT(*) FROM payment_transactions GROUP BY section;\n",
+  "rows": [
+    {
+      "tbl": "contracts",
+      "section": "Boonphone",
+      "cnt": "4231"
+    },
+    {
+      "tbl": "contracts",
+      "section": "Fastfone365",
+      "cnt": "17809"
+    },
+    {
+      "tbl": "debt_collected_cache",
+      "section": "Boonphone",
+      "cnt": "4348"
+    },
+    {
+      "tbl": "payment_transactions",
+      "section": "Fastfone365",
+      "cnt": "122019"
+    },
+    {
+      "tbl": "payment_transactions",
+      "section": "Boonphone",
+      "cnt": "4348"
+    },
+    {
+      "tbl": "debt_target_cache",
+      "section": "boonphone",
+      "cnt": "149115"
+    },
+    {
+      "tbl": "debt_target_cache",
+      "section": "Boonphone",
+      "cnt": "50214"
+    },
+    {
+      "tbl": "debt_target_cache",
+      "section": "Fastfone365",
+      "cnt": "17735"
+    }
+  ],
+  "messages": [],
+  "stdout": "tbl\tsection\tcnt\ncontracts\tBoonphone\t4231\ncontracts\tFastfone365\t17809\ndebt_collected_cache\tBoonphone\t4348\npayment_transactions\tFastfone365\t122019\npayment_transactions\tBoonphone\t4348\ndebt_target_cache\tboonphone\t149115\ndebt_target_cache\tBoonphone\t50214\ndebt_target_cache\tFastfone365\t17735\n",
+  "stderr": "",
+  "execution_time_ms": 2156
+}

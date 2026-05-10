@@ -1,0 +1,8 @@
+{
+  "query": "\nSELECT \n  SUM(CASE WHEN is_bad_debt_row = 0 THEN CAST(total_amount AS DECIMAL(18,2)) ELSE 0 END) as normal_total,\n  SUM(CASE WHEN is_bad_debt_row = 1 THEN CAST(total_amount AS DECIMAL(18,2)) ELSE 0 END) as bad_debt_total,\n  SUM(CAST(total_amount AS DECIMAL(18,2))) as grand_total,\n  SUM(CAST(bad_debt_amount AS DECIMAL(18,2))) as bad_debt_amount_col\nFROM debt_collected_cache\nWHERE section = 'Fastfone365';\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT \n  SUM(CASE WHEN is_bad_debt_row = 0 THEN CAST(total_amount AS DECIMAL(18,2)) ELSE 0 END) as normal_total,\n  SUM(CASE WHEN is_bad_debt_row = 1 THEN CAST(total_amount AS DECIMAL(18,2)) ELSE 0 END) as bad_debt_total,\n  SUM(CAST(total_amount AS DECIMAL(18,2))) as grand_total,\n  SUM(CAST(bad_debt_amount AS DECIMAL(18,2))) as bad_debt_amount_col\nFROM debt_collected_cache\nWHERE section = 'Fastfone365';\n",
+  "returncode": 1,
+  "logs": [
+    "ERROR 1054 (42S22) at line 2: Unknown column 'bad_debt_amount' in 'where clause'"
+  ]
+}

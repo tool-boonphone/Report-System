@@ -1,0 +1,22 @@
+{
+  "query": "\nSELECT c.status, COUNT(DISTINCT pt.contract_external_id) as contracts,\n       COUNT(*) as payment_rows,\n       SUM(CAST(pt.amount AS DECIMAL(18,2))) as total_amount\nFROM payment_transactions pt\nJOIN contracts c ON c.section = pt.section AND c.external_id = pt.contract_external_id\nWHERE pt.section = 'Fastfone365'\n  AND NOT EXISTS (\n    SELECT 1 FROM debt_collected_cache dcc\n    WHERE dcc.section = 'Fastfone365'\n      AND dcc.contract_external_id = pt.contract_external_id\n      AND dcc.period = pt.period_no\n  )\nGROUP BY c.status;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT c.status, COUNT(DISTINCT pt.contract_external_id) as contracts,\n       COUNT(*) as payment_rows,\n       SUM(CAST(pt.amount AS DECIMAL(18,2))) as total_amount\nFROM payment_transactions pt\nJOIN contracts c ON c.section = pt.section AND c.external_id = pt.contract_external_id\nWHERE pt.section = 'Fastfone365'\n  AND NOT EXISTS (\n    SELECT 1 FROM debt_collected_cache dcc\n    WHERE dcc.section = 'Fastfone365'\n      AND dcc.contract_external_id = pt.contract_external_id\n      AND dcc.period = pt.period_no\n  )\nGROUP BY c.status;\n",
+  "rows": [
+    {
+      "status": "หนี้เสีย",
+      "contracts": "121",
+      "payment_rows": "223",
+      "total_amount": "821478.09"
+    },
+    {
+      "status": "ยกเลิกสัญญา",
+      "contracts": "3",
+      "payment_rows": "7",
+      "total_amount": "31125.75"
+    }
+  ],
+  "messages": [],
+  "stdout": "status\tcontracts\tpayment_rows\ttotal_amount\nหนี้เสีย\t121\t223\t821478.09\nยกเลิกสัญญา\t3\t7\t31125.75\n",
+  "stderr": "",
+  "execution_time_ms": 2024
+}

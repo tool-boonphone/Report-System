@@ -1,0 +1,21 @@
+{
+  "query": "\nSELECT \n  SUM(CAST(total_amount AS DECIMAL(18,2))) as total_amount_sum,\n  SUM(CAST(bad_debt AS DECIMAL(18,2))) as bad_debt_col_sum,\n  SUM(CAST(principal AS DECIMAL(18,2))) as principal_sum,\n  SUM(CAST(interest AS DECIMAL(18,2))) as interest_sum,\n  SUM(CAST(fee AS DECIMAL(18,2))) as fee_sum,\n  SUM(CAST(penalty AS DECIMAL(18,2))) as penalty_sum,\n  SUM(CAST(unlock_fee AS DECIMAL(18,2))) as unlock_fee_sum,\n  SUM(CAST(overpaid AS DECIMAL(18,2))) as overpaid_sum,\n  SUM(CAST(discount AS DECIMAL(18,2))) as discount_sum\nFROM debt_collected_cache\nWHERE section = 'Fastfone365';\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT \n  SUM(CAST(total_amount AS DECIMAL(18,2))) as total_amount_sum,\n  SUM(CAST(bad_debt AS DECIMAL(18,2))) as bad_debt_col_sum,\n  SUM(CAST(principal AS DECIMAL(18,2))) as principal_sum,\n  SUM(CAST(interest AS DECIMAL(18,2))) as interest_sum,\n  SUM(CAST(fee AS DECIMAL(18,2))) as fee_sum,\n  SUM(CAST(penalty AS DECIMAL(18,2))) as penalty_sum,\n  SUM(CAST(unlock_fee AS DECIMAL(18,2))) as unlock_fee_sum,\n  SUM(CAST(overpaid AS DECIMAL(18,2))) as overpaid_sum,\n  SUM(CAST(discount AS DECIMAL(18,2))) as discount_sum\nFROM debt_collected_cache\nWHERE section = 'Fastfone365';\n",
+  "rows": [
+    {
+      "total_amount_sum": "286068445.24",
+      "bad_debt_col_sum": "22698411.58",
+      "principal_sum": "122111029.18",
+      "interest_sum": "146378396.53",
+      "fee_sum": "7219741.21",
+      "penalty_sum": "8227939.78",
+      "unlock_fee_sum": "2089444.53",
+      "overpaid_sum": "1947698.40",
+      "discount_sum": "1915379.46"
+    }
+  ],
+  "messages": [],
+  "stdout": "total_amount_sum\tbad_debt_col_sum\tprincipal_sum\tinterest_sum\tfee_sum\tpenalty_sum\tunlock_fee_sum\toverpaid_sum\tdiscount_sum\n286068445.24\t22698411.58\t122111029.18\t146378396.53\t7219741.21\t8227939.78\t2089444.53\t1947698.40\t1915379.46\n",
+  "stderr": "",
+  "execution_time_ms": 1950
+}

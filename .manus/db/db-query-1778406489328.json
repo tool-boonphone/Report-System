@@ -1,0 +1,100 @@
+{
+  "query": "\nSELECT pt_sum.contract_external_id,\n       pt_sum.pt_total,\n       COALESCE(cache_sum.cache_total, 0) as cache_total,\n       pt_sum.pt_total - COALESCE(cache_sum.cache_total, 0) as diff\nFROM (\n  SELECT contract_external_id, SUM(CAST(amount AS DECIMAL(18,2))) as pt_total\n  FROM payment_transactions\n  WHERE section = 'Fastfone365'\n  GROUP BY contract_external_id\n) pt_sum\nLEFT JOIN (\n  SELECT contract_external_id, SUM(CAST(total_amount AS DECIMAL(18,2))) as cache_total\n  FROM debt_collected_cache\n  WHERE section = 'Fastfone365'\n  GROUP BY contract_external_id\n) cache_sum ON cache_sum.contract_external_id = pt_sum.contract_external_id\nWHERE ABS(pt_sum.pt_total - COALESCE(cache_sum.cache_total, 0)) > 0.01\nORDER BY diff DESC\nLIMIT 15;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT pt_sum.contract_external_id,\n       pt_sum.pt_total,\n       COALESCE(cache_sum.cache_total, 0) as cache_total,\n       pt_sum.pt_total - COALESCE(cache_sum.cache_total, 0) as diff\nFROM (\n  SELECT contract_external_id, SUM(CAST(amount AS DECIMAL(18,2))) as pt_total\n  FROM payment_transactions\n  WHERE section = 'Fastfone365'\n  GROUP BY contract_external_id\n) pt_sum\nLEFT JOIN (\n  SELECT contract_external_id, SUM(CAST(total_amount AS DECIMAL(18,2))) as cache_total\n  FROM debt_collected_cache\n  WHERE section = 'Fastfone365'\n  GROUP BY contract_external_id\n) cache_sum ON cache_sum.contract_external_id = pt_sum.contract_external_id\nWHERE ABS(pt_sum.pt_total - COALESCE(cache_sum.cache_total, 0)) > 0.01\nORDER BY diff DESC\nLIMIT 15;\n",
+  "rows": [
+    {
+      "contract_external_id": "19654",
+      "pt_total": "46201.60",
+      "cache_total": "0.00",
+      "diff": "46201.60"
+    },
+    {
+      "contract_external_id": "809",
+      "pt_total": "36000.00",
+      "cache_total": "0.00",
+      "diff": "36000.00"
+    },
+    {
+      "contract_external_id": "16402",
+      "pt_total": "35547.96",
+      "cache_total": "0.00",
+      "diff": "35547.96"
+    },
+    {
+      "contract_external_id": "16682",
+      "pt_total": "44416.96",
+      "cache_total": "8869.00",
+      "diff": "35547.96"
+    },
+    {
+      "contract_external_id": "17783",
+      "pt_total": "35547.96",
+      "cache_total": "0.00",
+      "diff": "35547.96"
+    },
+    {
+      "contract_external_id": "11595",
+      "pt_total": "41700.00",
+      "cache_total": "6700.00",
+      "diff": "35000.00"
+    },
+    {
+      "contract_external_id": "8612",
+      "pt_total": "33000.00",
+      "cache_total": "0.00",
+      "diff": "33000.00"
+    },
+    {
+      "contract_external_id": "6879",
+      "pt_total": "55863.00",
+      "cache_total": "22863.00",
+      "diff": "33000.00"
+    },
+    {
+      "contract_external_id": "22830",
+      "pt_total": "32000.00",
+      "cache_total": "0.00",
+      "diff": "32000.00"
+    },
+    {
+      "contract_external_id": "19913",
+      "pt_total": "31601.71",
+      "cache_total": "0.00",
+      "diff": "31601.71"
+    },
+    {
+      "contract_external_id": "9419",
+      "pt_total": "31500.00",
+      "cache_total": "0.00",
+      "diff": "31500.00"
+    },
+    {
+      "contract_external_id": "10277",
+      "pt_total": "56300.00",
+      "cache_total": "24800.00",
+      "diff": "31500.00"
+    },
+    {
+      "contract_external_id": "7199",
+      "pt_total": "43100.00",
+      "cache_total": "11600.00",
+      "diff": "31500.00"
+    },
+    {
+      "contract_external_id": "7295",
+      "pt_total": "53887.00",
+      "cache_total": "22387.00",
+      "diff": "31500.00"
+    },
+    {
+      "contract_external_id": "10713",
+      "pt_total": "43585.92",
+      "cache_total": "12585.92",
+      "diff": "31000.00"
+    }
+  ],
+  "messages": [],
+  "stdout": "contract_external_id\tpt_total\tcache_total\tdiff\n19654\t46201.60\t0.00\t46201.60\n809\t36000.00\t0.00\t36000.00\n16402\t35547.96\t0.00\t35547.96\n16682\t44416.96\t8869.00\t35547.96\n17783\t35547.96\t0.00\t35547.96\n11595\t41700.00\t6700.00\t35000.00\n8612\t33000.00\t0.00\t33000.00\n6879\t55863.00\t22863.00\t33000.00\n22830\t32000.00\t0.00\t32000.00\n19913\t31601.71\t0.00\t31601.71\n9419\t31500.00\t0.00\t31500.00\n10277\t56300.00\t24800.00\t31500.00\n7199\t43100.00\t11600.00\t31500.00\n7295\t53887.00\t22387.00\t31500.00\n10713\t43585.92\t12585.92\t31000.00\n",
+  "stderr": "",
+  "execution_time_ms": 1948
+}

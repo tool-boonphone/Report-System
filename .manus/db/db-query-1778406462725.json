@@ -1,0 +1,52 @@
+{
+  "query": "\nSELECT period, payment_external_id, CAST(total_amount AS DECIMAL(18,2)) as total_amount, is_bad_debt_row, is_close_row\nFROM debt_collected_cache\nWHERE section = 'Fastfone365' AND contract_external_id = '10503'\nORDER BY period;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT period, payment_external_id, CAST(total_amount AS DECIMAL(18,2)) as total_amount, is_bad_debt_row, is_close_row\nFROM debt_collected_cache\nWHERE section = 'Fastfone365' AND contract_external_id = '10503'\nORDER BY period;\n",
+  "rows": [
+    {
+      "period": "1",
+      "payment_external_id": "10503-p1-s0",
+      "total_amount": "674.89",
+      "is_bad_debt_row": "0",
+      "is_close_row": "0"
+    },
+    {
+      "period": "2",
+      "payment_external_id": "10503-p2-s0",
+      "total_amount": "674.89",
+      "is_bad_debt_row": "0",
+      "is_close_row": "0"
+    },
+    {
+      "period": "3",
+      "payment_external_id": "10503-p3-s0",
+      "total_amount": "1175.00",
+      "is_bad_debt_row": "0",
+      "is_close_row": "0"
+    },
+    {
+      "period": "4",
+      "payment_external_id": "10503-p4-s0",
+      "total_amount": "775.00",
+      "is_bad_debt_row": "0",
+      "is_close_row": "0"
+    },
+    {
+      "period": "5",
+      "payment_external_id": "10503-p5-s0",
+      "total_amount": "1850.00",
+      "is_bad_debt_row": "0",
+      "is_close_row": "0"
+    },
+    {
+      "period": "6",
+      "payment_external_id": "10503-p6-s0",
+      "total_amount": "0.00",
+      "is_bad_debt_row": "1",
+      "is_close_row": "0"
+    }
+  ],
+  "messages": [],
+  "stdout": "period\tpayment_external_id\ttotal_amount\tis_bad_debt_row\tis_close_row\n1\t10503-p1-s0\t674.89\t0\t0\n2\t10503-p2-s0\t674.89\t0\t0\n3\t10503-p3-s0\t1175.00\t0\t0\n4\t10503-p4-s0\t775.00\t0\t0\n5\t10503-p5-s0\t1850.00\t0\t0\n6\t10503-p6-s0\t0.00\t1\t0\n",
+  "stderr": "",
+  "execution_time_ms": 1708
+}

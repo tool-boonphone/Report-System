@@ -1,0 +1,58 @@
+{
+  "query": "\nSELECT external_id, period_no, sub_no, CAST(amount AS DECIMAL(18,2)) as amount, receipt_no, paid_at\nFROM payment_transactions\nWHERE section = 'Fastfone365' AND contract_external_id = '10503'\nORDER BY period_no, sub_no;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT external_id, period_no, sub_no, CAST(amount AS DECIMAL(18,2)) as amount, receipt_no, paid_at\nFROM payment_transactions\nWHERE section = 'Fastfone365' AND contract_external_id = '10503'\nORDER BY period_no, sub_no;\n",
+  "rows": [
+    {
+      "external_id": "24674",
+      "period_no": "1",
+      "sub_no": "1",
+      "amount": "674.89",
+      "receipt_no": "TXRT0225-AYA001-9720-01-1-2",
+      "paid_at": "2025-03-19"
+    },
+    {
+      "external_id": "31273",
+      "period_no": "2",
+      "sub_no": "1",
+      "amount": "674.89",
+      "receipt_no": "TXRT0225-AYA001-9720-01-2-1",
+      "paid_at": "2025-04-18"
+    },
+    {
+      "external_id": "41672",
+      "period_no": "3",
+      "sub_no": "1",
+      "amount": "1175.00",
+      "receipt_no": "TXRT0225-AYA001-9720-01-3",
+      "paid_at": "2025-05-28"
+    },
+    {
+      "external_id": "48080",
+      "period_no": "4",
+      "sub_no": "1",
+      "amount": "775.00",
+      "receipt_no": "TXRT0225-AYA001-9720-01-4",
+      "paid_at": "2025-06-20"
+    },
+    {
+      "external_id": "63294",
+      "period_no": "5",
+      "sub_no": "1",
+      "amount": "1850.00",
+      "receipt_no": "TXRT0225-AYA001-9720-01-5",
+      "paid_at": "2025-08-18"
+    },
+    {
+      "external_id": "112372",
+      "period_no": "8",
+      "sub_no": "1",
+      "amount": "1500.00",
+      "receipt_no": "TXRT0225-AYA001-9720-01-6",
+      "paid_at": "2026-03-06"
+    }
+  ],
+  "messages": [],
+  "stdout": "external_id\tperiod_no\tsub_no\tamount\treceipt_no\tpaid_at\n24674\t1\t1\t674.89\tTXRT0225-AYA001-9720-01-1-2\t2025-03-19\n31273\t2\t1\t674.89\tTXRT0225-AYA001-9720-01-2-1\t2025-04-18\n41672\t3\t1\t1175.00\tTXRT0225-AYA001-9720-01-3\t2025-05-28\n48080\t4\t1\t775.00\tTXRT0225-AYA001-9720-01-4\t2025-06-20\n63294\t5\t1\t1850.00\tTXRT0225-AYA001-9720-01-5\t2025-08-18\n112372\t8\t1\t1500.00\tTXRT0225-AYA001-9720-01-6\t2026-03-06\n",
+  "stderr": "",
+  "execution_time_ms": 1757
+}

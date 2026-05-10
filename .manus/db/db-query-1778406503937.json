@@ -1,0 +1,16 @@
+{
+  "query": "\nSELECT c.external_id, c.status,\n       (SELECT COUNT(*) FROM debt_collected_cache dcc WHERE dcc.section='Fastfone365' AND dcc.contract_external_id=c.external_id) as cache_rows,\n       (SELECT SUM(CAST(total_amount AS DECIMAL(18,2))) FROM debt_collected_cache dcc WHERE dcc.section='Fastfone365' AND dcc.contract_external_id=c.external_id) as cache_total\nFROM contracts c\nWHERE c.section = 'Fastfone365' AND c.external_id = '19654';\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT c.external_id, c.status,\n       (SELECT COUNT(*) FROM debt_collected_cache dcc WHERE dcc.section='Fastfone365' AND dcc.contract_external_id=c.external_id) as cache_rows,\n       (SELECT SUM(CAST(total_amount AS DECIMAL(18,2))) FROM debt_collected_cache dcc WHERE dcc.section='Fastfone365' AND dcc.contract_external_id=c.external_id) as cache_total\nFROM contracts c\nWHERE c.section = 'Fastfone365' AND c.external_id = '19654';\n",
+  "rows": [
+    {
+      "external_id": "19654",
+      "status": "หนี้เสีย",
+      "cache_rows": "1",
+      "cache_total": "0.00"
+    }
+  ],
+  "messages": [],
+  "stdout": "external_id\tstatus\tcache_rows\tcache_total\n19654\tหนี้เสีย\t1\t0.00\n",
+  "stderr": "",
+  "execution_time_ms": 1782
+}

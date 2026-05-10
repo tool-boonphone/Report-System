@@ -2549,7 +2549,6 @@ export async function* listDebtTargetStream(params: {
            CAST(commission_net AS DECIMAL(18,2)) AS commission_net
       FROM ${contracts}
      WHERE ${contracts.section} = ${params.section}
-       AND (status IS NULL OR status != 'ยกเลิกสัญญา')
   `);
   const cRows: Array<any> = (contractRowsRaw as any)[0] ?? contractRowsRaw;
   if (!cRows.length) return;
@@ -3422,7 +3421,6 @@ export async function* listDebtCollectedStream(params: {
            bad_debt_updated_at
       FROM ${contracts}
      WHERE ${contracts.section} = ${params.section}
-       AND (status IS NULL OR status != 'ยกเลิกสัญญา')
      ORDER BY external_id
   `);
   const allContractHeaders: any[] = (contractHeadersRaw as any)[0] ?? contractHeadersRaw;

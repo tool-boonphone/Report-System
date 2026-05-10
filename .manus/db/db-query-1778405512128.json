@@ -1,0 +1,17 @@
+{
+  "query": "\nSELECT \n  COUNT(*) as total,\n  SUM(CASE WHEN period_no IS NULL THEN 1 ELSE 0 END) as period_null,\n  SUM(CASE WHEN period_no IS NULL THEN CAST(amount AS DECIMAL(18,2)) ELSE 0 END) as amount_period_null,\n  SUM(CASE WHEN period_no IS NOT NULL THEN 1 ELSE 0 END) as period_not_null,\n  SUM(CASE WHEN period_no IS NOT NULL THEN CAST(amount AS DECIMAL(18,2)) ELSE 0 END) as amount_period_not_null\nFROM payment_transactions\nWHERE section = 'Fastfone365';\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT \n  COUNT(*) as total,\n  SUM(CASE WHEN period_no IS NULL THEN 1 ELSE 0 END) as period_null,\n  SUM(CASE WHEN period_no IS NULL THEN CAST(amount AS DECIMAL(18,2)) ELSE 0 END) as amount_period_null,\n  SUM(CASE WHEN period_no IS NOT NULL THEN 1 ELSE 0 END) as period_not_null,\n  SUM(CASE WHEN period_no IS NOT NULL THEN CAST(amount AS DECIMAL(18,2)) ELSE 0 END) as amount_period_not_null\nFROM payment_transactions\nWHERE section = 'Fastfone365';\n",
+  "rows": [
+    {
+      "total": "122019",
+      "period_null": "0",
+      "amount_period_null": "0.00",
+      "period_not_null": "122019",
+      "amount_period_not_null": "308797982.57"
+    }
+  ],
+  "messages": [],
+  "stdout": "total\tperiod_null\tamount_period_null\tperiod_not_null\tamount_period_not_null\n122019\t0\t0.00\t122019\t308797982.57\n",
+  "stderr": "",
+  "execution_time_ms": 1949
+}

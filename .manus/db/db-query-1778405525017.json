@@ -1,0 +1,190 @@
+{
+  "query": "\nSELECT pt.contract_external_id, pt.external_id, pt.period_no, pt.sub_no,\n       CAST(pt.amount AS DECIMAL(18,2)) as amount,\n       pt.receipt_no,\n       JSON_EXTRACT(pt.raw_json, '$.source') as source_field\nFROM payment_transactions pt\nWHERE pt.section = 'Fastfone365'\n  AND NOT EXISTS (\n    SELECT 1 FROM debt_collected_cache dcc\n    WHERE dcc.section = 'Fastfone365'\n      AND dcc.contract_external_id = pt.contract_external_id\n      AND dcc.period = pt.period_no\n  )\nLIMIT 20;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT pt.contract_external_id, pt.external_id, pt.period_no, pt.sub_no,\n       CAST(pt.amount AS DECIMAL(18,2)) as amount,\n       pt.receipt_no,\n       JSON_EXTRACT(pt.raw_json, '$.source') as source_field\nFROM payment_transactions pt\nWHERE pt.section = 'Fastfone365'\n  AND NOT EXISTS (\n    SELECT 1 FROM debt_collected_cache dcc\n    WHERE dcc.section = 'Fastfone365'\n      AND dcc.contract_external_id = pt.contract_external_id\n      AND dcc.period = pt.period_no\n  )\nLIMIT 20;\n",
+  "rows": [
+    {
+      "contract_external_id": "16418",
+      "external_id": "120040",
+      "period_no": "5",
+      "sub_no": "1",
+      "amount": "1500.00",
+      "receipt_no": "TXRT0925-NWT001-15424-01-4",
+      "source_field": "NULL"
+    },
+    {
+      "contract_external_id": "1999",
+      "external_id": "120036",
+      "period_no": "9",
+      "sub_no": "1",
+      "amount": "1500.00",
+      "receipt_no": "TXRT1124-SKA002-2028-01-10",
+      "source_field": "NULL"
+    },
+    {
+      "contract_external_id": "10503",
+      "external_id": "112372",
+      "period_no": "8",
+      "sub_no": "1",
+      "amount": "1500.00",
+      "receipt_no": "TXRT0225-AYA001-9720-01-6",
+      "source_field": "NULL"
+    },
+    {
+      "contract_external_id": "18282",
+      "external_id": "112356",
+      "period_no": "4",
+      "sub_no": "1",
+      "amount": "5000.00",
+      "receipt_no": "TXRT1025-AYA001-17243-01-8",
+      "source_field": "NULL"
+    },
+    {
+      "contract_external_id": "11422",
+      "external_id": "111839",
+      "period_no": "3",
+      "sub_no": "1",
+      "amount": "3500.00",
+      "receipt_no": "TXRT0325-AYA001-10581-01-3",
+      "source_field": "NULL"
+    },
+    {
+      "contract_external_id": "3082",
+      "external_id": "110739",
+      "period_no": "7",
+      "sub_no": "1",
+      "amount": "2000.00",
+      "receipt_no": "TXRT1124-LRI001-3028-01-7",
+      "source_field": "NULL"
+    },
+    {
+      "contract_external_id": "3714",
+      "external_id": "111582",
+      "period_no": "8",
+      "sub_no": "1",
+      "amount": "2500.00",
+      "receipt_no": "TXRT1124-PTE001-3505-01-21",
+      "source_field": "NULL"
+    },
+    {
+      "contract_external_id": "8458",
+      "external_id": "101994",
+      "period_no": "5",
+      "sub_no": "1",
+      "amount": "5000.00",
+      "receipt_no": "TXRT0125-SNI002-7787-01-5",
+      "source_field": "NULL"
+    },
+    {
+      "contract_external_id": "8056",
+      "external_id": "101991",
+      "period_no": "6",
+      "sub_no": "1",
+      "amount": "7000.00",
+      "receipt_no": "TXRT0125-SNI003-7387-01-7",
+      "source_field": "NULL"
+    },
+    {
+      "contract_external_id": "12521",
+      "external_id": "98856",
+      "period_no": "6",
+      "sub_no": "1",
+      "amount": "3000.00",
+      "receipt_no": "TXRT0425-TXRTI001-11644-01-6",
+      "source_field": "NULL"
+    },
+    {
+      "contract_external_id": "3272",
+      "external_id": "98828",
+      "period_no": "4",
+      "sub_no": "1",
+      "amount": "3500.00",
+      "receipt_no": "TXRT1124-BKN003-3177-01-3",
+      "source_field": "NULL"
+    },
+    {
+      "contract_external_id": "6529",
+      "external_id": "92119",
+      "period_no": "11",
+      "sub_no": "1",
+      "amount": "6787.09",
+      "receipt_no": "TXRT1224-SRI001-6031-01-9",
+      "source_field": "NULL"
+    },
+    {
+      "contract_external_id": "17017",
+      "external_id": "90672",
+      "period_no": "3",
+      "sub_no": "1",
+      "amount": "4500.00",
+      "receipt_no": "TXRT0925-NWT001-16001-01-3",
+      "source_field": "NULL"
+    },
+    {
+      "contract_external_id": "12730",
+      "external_id": "90643",
+      "period_no": "3",
+      "sub_no": "1",
+      "amount": "18000.00",
+      "receipt_no": "TXRT0425-CCO011-11850-01-2",
+      "source_field": "NULL"
+    },
+    {
+      "contract_external_id": "16209",
+      "external_id": "81434",
+      "period_no": "2",
+      "sub_no": "1",
+      "amount": "2300.00",
+      "receipt_no": "TXRT0925-KPT001-15218-01-3",
+      "source_field": "NULL"
+    },
+    {
+      "contract_external_id": "8929",
+      "external_id": "80540",
+      "period_no": "4",
+      "sub_no": "1",
+      "amount": "10000.00",
+      "receipt_no": "TXRT0125-SRI001-8261-01-3",
+      "source_field": "NULL"
+    },
+    {
+      "contract_external_id": "6153",
+      "external_id": "80532",
+      "period_no": "9",
+      "sub_no": "1",
+      "amount": "7000.00",
+      "receipt_no": "TXRT1224-SPK002-5662-01-6",
+      "source_field": "NULL"
+    },
+    {
+      "contract_external_id": "2983",
+      "external_id": "80855",
+      "period_no": "8",
+      "sub_no": "1",
+      "amount": "7000.00",
+      "receipt_no": "TXRT1124-NPT002-2944-01-7",
+      "source_field": "NULL"
+    },
+    {
+      "contract_external_id": "5599",
+      "external_id": "80834",
+      "period_no": "4",
+      "sub_no": "1",
+      "amount": "2500.00",
+      "receipt_no": "TXRT1124-NYK003-4920-02-3",
+      "source_field": "NULL"
+    },
+    {
+      "contract_external_id": "2332",
+      "external_id": "80816",
+      "period_no": "6",
+      "sub_no": "1",
+      "amount": "4500.00",
+      "receipt_no": "TXRT1124-SKA002-2206-02-8",
+      "source_field": "NULL"
+    }
+  ],
+  "messages": [],
+  "stdout": "contract_external_id\texternal_id\tperiod_no\tsub_no\tamount\treceipt_no\tsource_field\n16418\t120040\t5\t1\t1500.00\tTXRT0925-NWT001-15424-01-4\tNULL\n1999\t120036\t9\t1\t1500.00\tTXRT1124-SKA002-2028-01-10\tNULL\n10503\t112372\t8\t1\t1500.00\tTXRT0225-AYA001-9720-01-6\tNULL\n18282\t112356\t4\t1\t5000.00\tTXRT1025-AYA001-17243-01-8\tNULL\n11422\t111839\t3\t1\t3500.00\tTXRT0325-AYA001-10581-01-3\tNULL\n3082\t110739\t7\t1\t2000.00\tTXRT1124-LRI001-3028-01-7\tNULL\n3714\t111582\t8\t1\t2500.00\tTXRT1124-PTE001-3505-01-21\tNULL\n8458\t101994\t5\t1\t5000.00\tTXRT0125-SNI002-7787-01-5\tNULL\n8056\t101991\t6\t1\t7000.00\tTXRT0125-SNI003-7387-01-7\tNULL\n12521\t98856\t6\t1\t3000.00\tTXRT0425-TXRTI001-11644-01-6\tNULL\n3272\t98828\t4\t1\t3500.00\tTXRT1124-BKN003-3177-01-3\tNULL\n6529\t92119\t11\t1\t6787.09\tTXRT1224-SRI001-6031-01-9\tNULL\n17017\t90672\t3\t1\t4500.00\tTXRT0925-NWT001-16001-01-3\tNULL\n12730\t90643\t3\t1\t18000.00\tTXRT0425-CCO011-11850-01-2\tNULL\n16209\t81434\t2\t1\t2300.00\tTXRT0925-KPT001-15218-01-3\tNULL\n8929\t80540\t4\t1\t10000.00\tTXRT0125-SRI001-8261-01-3\tNULL\n6153\t80532\t9\t1\t7000.00\tTXRT1224-SPK002-5662-01-6\tNULL\n2983\t80855\t8\t1\t7000.00\tTXRT1124-NPT002-2944-01-7\tNULL\n5599\t80834\t4\t1\t2500.00\tTXRT1124-NYK003-4920-02-3\tNULL\n2332\t80816\t6\t1\t4500.00\tTXRT1124-SKA002-2206-02-8\tNULL\n",
+  "stderr": "",
+  "execution_time_ms": 2690
+}

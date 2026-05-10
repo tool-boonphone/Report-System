@@ -1,0 +1,90 @@
+{
+  "query": "\nSELECT pt.contract_external_id, pt.period_no, pt.sub_no,\n       CAST(pt.amount AS DECIMAL(18,2)) as amount,\n       pt.receipt_no,\n       (SELECT COUNT(*) FROM debt_collected_cache dcc \n        WHERE dcc.section = 'Fastfone365' \n          AND dcc.contract_external_id = pt.contract_external_id) as cache_rows_for_contract\nFROM payment_transactions pt\nWHERE pt.section = 'Fastfone365'\n  AND NOT EXISTS (\n    SELECT 1 FROM debt_collected_cache dcc\n    WHERE dcc.section = 'Fastfone365'\n      AND dcc.contract_external_id = pt.contract_external_id\n      AND dcc.period = pt.period_no\n  )\n  AND EXISTS (\n    SELECT 1 FROM debt_collected_cache dcc2\n    WHERE dcc2.section = 'Fastfone365'\n      AND dcc2.contract_external_id = pt.contract_external_id\n  )\nORDER BY pt.contract_external_id, pt.period_no\nLIMIT 10;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT pt.contract_external_id, pt.period_no, pt.sub_no,\n       CAST(pt.amount AS DECIMAL(18,2)) as amount,\n       pt.receipt_no,\n       (SELECT COUNT(*) FROM debt_collected_cache dcc \n        WHERE dcc.section = 'Fastfone365' \n          AND dcc.contract_external_id = pt.contract_external_id) as cache_rows_for_contract\nFROM payment_transactions pt\nWHERE pt.section = 'Fastfone365'\n  AND NOT EXISTS (\n    SELECT 1 FROM debt_collected_cache dcc\n    WHERE dcc.section = 'Fastfone365'\n      AND dcc.contract_external_id = pt.contract_external_id\n      AND dcc.period = pt.period_no\n  )\n  AND EXISTS (\n    SELECT 1 FROM debt_collected_cache dcc2\n    WHERE dcc2.section = 'Fastfone365'\n      AND dcc2.contract_external_id = pt.contract_external_id\n  )\nORDER BY pt.contract_external_id, pt.period_no\nLIMIT 10;\n",
+  "rows": [
+    {
+      "contract_external_id": "10503",
+      "period_no": "8",
+      "sub_no": "1",
+      "amount": "1500.00",
+      "receipt_no": "TXRT0225-AYA001-9720-01-6",
+      "cache_rows_for_contract": "6"
+    },
+    {
+      "contract_external_id": "11422",
+      "period_no": "3",
+      "sub_no": "1",
+      "amount": "3500.00",
+      "receipt_no": "TXRT0325-AYA001-10581-01-3",
+      "cache_rows_for_contract": "3"
+    },
+    {
+      "contract_external_id": "11491",
+      "period_no": "3",
+      "sub_no": "1",
+      "amount": "1830.00",
+      "receipt_no": "TXRT0325-SNI001-10639-01-3",
+      "cache_rows_for_contract": "3"
+    },
+    {
+      "contract_external_id": "11886",
+      "period_no": "3",
+      "sub_no": "1",
+      "amount": "13500.00",
+      "receipt_no": "TXRT0325-NYK003-11024-01-3",
+      "cache_rows_for_contract": "3"
+    },
+    {
+      "contract_external_id": "12429",
+      "period_no": "3",
+      "sub_no": "1",
+      "amount": "3500.00",
+      "receipt_no": "TXRT0325-SRI001-11557-01-2",
+      "cache_rows_for_contract": "2"
+    },
+    {
+      "contract_external_id": "12442",
+      "period_no": "3",
+      "sub_no": "1",
+      "amount": "6000.00",
+      "receipt_no": "TXRT0325-SPK005-11568-01-2",
+      "cache_rows_for_contract": "2"
+    },
+    {
+      "contract_external_id": "12521",
+      "period_no": "6",
+      "sub_no": "1",
+      "amount": "3000.00",
+      "receipt_no": "TXRT0425-TXRTI001-11644-01-6",
+      "cache_rows_for_contract": "6"
+    },
+    {
+      "contract_external_id": "12730",
+      "period_no": "3",
+      "sub_no": "1",
+      "amount": "18000.00",
+      "receipt_no": "TXRT0425-CCO011-11850-01-2",
+      "cache_rows_for_contract": "2"
+    },
+    {
+      "contract_external_id": "128",
+      "period_no": "3",
+      "sub_no": "1",
+      "amount": "1958.00",
+      "receipt_no": "TXRT0924-SNI001-00013-02-3-2",
+      "cache_rows_for_contract": "2"
+    },
+    {
+      "contract_external_id": "128",
+      "period_no": "4",
+      "sub_no": "1",
+      "amount": "1958.00",
+      "receipt_no": "TXRT0924-SNI001-00013-02-4-1",
+      "cache_rows_for_contract": "2"
+    }
+  ],
+  "messages": [],
+  "stdout": "contract_external_id\tperiod_no\tsub_no\tamount\treceipt_no\tcache_rows_for_contract\n10503\t8\t1\t1500.00\tTXRT0225-AYA001-9720-01-6\t6\n11422\t3\t1\t3500.00\tTXRT0325-AYA001-10581-01-3\t3\n11491\t3\t1\t1830.00\tTXRT0325-SNI001-10639-01-3\t3\n11886\t3\t1\t13500.00\tTXRT0325-NYK003-11024-01-3\t3\n12429\t3\t1\t3500.00\tTXRT0325-SRI001-11557-01-2\t2\n12442\t3\t1\t6000.00\tTXRT0325-SPK005-11568-01-2\t2\n12521\t6\t1\t3000.00\tTXRT0425-TXRTI001-11644-01-6\t6\n12730\t3\t1\t18000.00\tTXRT0425-CCO011-11850-01-2\t2\n128\t3\t1\t1958.00\tTXRT0924-SNI001-00013-02-3-2\t2\n128\t4\t1\t1958.00\tTXRT0924-SNI001-00013-02-4-1\t2\n",
+  "stderr": "",
+  "execution_time_ms": 2002
+}

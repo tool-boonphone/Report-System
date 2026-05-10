@@ -1394,3 +1394,25 @@ Task list:
 - [ ] วิเคราะห์ว่า rows ที่ทุก amount = 0 ถูก generate จากที่ไหน (populateCache หรือ queryCacheDb)
 - [ ] แก้ไข logic ให้ไม่ insert/แสดง rows ที่ทุก amount = 0 ยกเว้น rows ที่มีความหมาย (เช่น ส่วนลด)
 - [ ] Push GitHub + checkpoint
+
+## Income-First Pipeline Fix (2026-05-10)
+- [ ] แก้ไข populateCache.ts: ดึง payment_tx_amount จาก payment_transactions.amount โดยตรง แทนการใช้ p.total จาก listDebtCollectedStream
+- [ ] แก้ไขหน้ายอดเก็บหนี้: ใช้ payment_tx_amount แทน total_amount ในการแสดง "ยอดที่ชำระรวม"
+- [ ] แก้ไขหน้าหนี้เสีย (badDebtDb.ts): ใช้ payment_tx_amount แทน total_amount
+- [ ] แก้ไขหน้าหนี้สงสัยจะเสีย (debtDb.ts listSuspectedBadDebt): ใช้ payment_tx_amount แทน total_amount
+- [ ] Re-populate cache ทั้ง BP และ FF365 หลังแก้ไข
+- [ ] Commit, push GitHub และ save checkpoint
+
+## Fix: ลบ filter ยกเลิกสัญญา + ตรวจสอบ badge formula overpaid (2026-05-10)
+- [ ] ลบ filter `status != 'ยกเลิกสัญญา'` ออกจาก listDebtCollectedStream ใน debtDb.ts
+- [ ] ตรวจสอบ badge formula ใน DebtReport.tsx ว่า overpaid ถูกนับซ้ำหรือไม่ และแก้ไขถ้าจำเป็น
+- [ ] Re-populate cache FF365 และ BP ใหม่
+- [ ] ตรวจสอบยอดรวมตรงกับหน้ารายรับ
+- [ ] Commit, push GitHub และ save checkpoint
+
+## Fix: badge "ยอดที่ชำระรวม" ต้องไม่รวมส่วนลด — ทุกหน้า (2026-05-10)
+- [ ] DebtReport.tsx: ตรวจสอบและแก้ collectedSummary.total ให้ไม่รวม discount
+- [ ] DebtSummary.tsx: ตรวจสอบและแก้ collectedSummary.total ให้ไม่รวม discount
+- [ ] DebtOverview.tsx: เพิ่ม canToggle:false ให้ badge "ส่วนลด" ใน grandCollected BadgeRow
+- [ ] MonthlySummary.tsx: ตรวจสอบ computeMoneyTotal ว่าไม่รวม discount แล้ว (discount=false ใน paidVis)
+- [ ] Commit, push GitHub และ save checkpoint

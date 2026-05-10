@@ -1,0 +1,46 @@
+{
+  "query": "\nSELECT 'payment_transactions' as src, section, COUNT(*) as cnt, SUM(CAST(amount AS DECIMAL(18,2))) as total\nFROM payment_transactions\nGROUP BY section\nUNION ALL\nSELECT 'debt_collected_cache total_amount' as src, section, COUNT(*) as cnt, SUM(CAST(total_amount AS DECIMAL(18,2))) as total\nFROM debt_collected_cache\nGROUP BY section\nUNION ALL\nSELECT 'debt_collected_cache payment_tx_amount' as src, section, COUNT(*) as cnt, SUM(CAST(payment_tx_amount AS DECIMAL(18,2))) as total\nFROM debt_collected_cache\nGROUP BY section\nORDER BY section, src;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT 'payment_transactions' as src, section, COUNT(*) as cnt, SUM(CAST(amount AS DECIMAL(18,2))) as total\nFROM payment_transactions\nGROUP BY section\nUNION ALL\nSELECT 'debt_collected_cache total_amount' as src, section, COUNT(*) as cnt, SUM(CAST(total_amount AS DECIMAL(18,2))) as total\nFROM debt_collected_cache\nGROUP BY section\nUNION ALL\nSELECT 'debt_collected_cache payment_tx_amount' as src, section, COUNT(*) as cnt, SUM(CAST(payment_tx_amount AS DECIMAL(18,2))) as total\nFROM debt_collected_cache\nGROUP BY section\nORDER BY section, src;\n",
+  "rows": [
+    {
+      "src": "debt_collected_cache payment_tx_amount",
+      "section": "Boonphone",
+      "cnt": "4348",
+      "total": "10903127.40"
+    },
+    {
+      "src": "debt_collected_cache total_amount",
+      "section": "Boonphone",
+      "cnt": "4348",
+      "total": "10903127.40"
+    },
+    {
+      "src": "payment_transactions",
+      "section": "Boonphone",
+      "cnt": "4348",
+      "total": "10903127.40"
+    },
+    {
+      "src": "debt_collected_cache payment_tx_amount",
+      "section": "Fastfone365",
+      "cnt": "121826",
+      "total": "286068445.24"
+    },
+    {
+      "src": "debt_collected_cache total_amount",
+      "section": "Fastfone365",
+      "cnt": "121826",
+      "total": "286068445.24"
+    },
+    {
+      "src": "payment_transactions",
+      "section": "Fastfone365",
+      "cnt": "122019",
+      "total": "308797982.57"
+    }
+  ],
+  "messages": [],
+  "stdout": "src\tsection\tcnt\ttotal\ndebt_collected_cache payment_tx_amount\tBoonphone\t4348\t10903127.40\ndebt_collected_cache total_amount\tBoonphone\t4348\t10903127.40\npayment_transactions\tBoonphone\t4348\t10903127.40\ndebt_collected_cache payment_tx_amount\tFastfone365\t121826\t286068445.24\ndebt_collected_cache total_amount\tFastfone365\t121826\t286068445.24\npayment_transactions\tFastfone365\t122019\t308797982.57\n",
+  "stderr": "",
+  "execution_time_ms": 1861
+}

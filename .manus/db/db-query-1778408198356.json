@@ -1,0 +1,22 @@
+{
+  "query": "\n-- 1. ยอดรวม total_amount ใน cache แยก bad_debt_row กับ normal row\nSELECT \n  is_bad_debt_row,\n  COUNT(*) as row_count,\n  SUM(total_amount) as sum_total_amount,\n  SUM(bad_debt) as sum_bad_debt_col\nFROM debt_collected_cache \nWHERE section = 'Fastfone365'\nGROUP BY is_bad_debt_row;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \n-- 1. ยอดรวม total_amount ใน cache แยก bad_debt_row กับ normal row\nSELECT \n  is_bad_debt_row,\n  COUNT(*) as row_count,\n  SUM(total_amount) as sum_total_amount,\n  SUM(bad_debt) as sum_bad_debt_col\nFROM debt_collected_cache \nWHERE section = 'Fastfone365'\nGROUP BY is_bad_debt_row;\n",
+  "rows": [
+    {
+      "is_bad_debt_row": "0",
+      "row_count": "118708",
+      "sum_total_amount": "286080927.99",
+      "sum_bad_debt_col": "0.00"
+    },
+    {
+      "is_bad_debt_row": "1",
+      "row_count": "3125",
+      "sum_total_amount": "0.00",
+      "sum_bad_debt_col": "22717054.58"
+    }
+  ],
+  "messages": [],
+  "stdout": "is_bad_debt_row\trow_count\tsum_total_amount\tsum_bad_debt_col\n0\t118708\t286080927.99\t0.00\n1\t3125\t0.00\t22717054.58\n",
+  "stderr": "",
+  "execution_time_ms": 2645
+}
