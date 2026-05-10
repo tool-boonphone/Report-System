@@ -832,6 +832,7 @@ export default function DebtOverview() {
       paidTotal: number; notYetDueTotal: number;
       principal: number; interest: number; fee: number;
       penalty: number; unlockFee: number; overpaid: number;
+      badDebt: number; // ยอดขายเครื่อง (bad_debt rows)
     }>();
     if (!cacheSummaryData?.rowsJson) return m;
     try {
@@ -846,6 +847,7 @@ export default function DebtOverview() {
         paidPenalty?: number;
         paidUnlockFee?: number;
         paidOverpaid?: number;
+        paidBadDebt?: number; // ยอดขายเครื่อง
       }>;
       for (const r of rows) {
         if (r.bucket !== "__total__") continue;
@@ -858,6 +860,7 @@ export default function DebtOverview() {
           penalty: r.paidPenalty ?? 0,
           unlockFee: r.paidUnlockFee ?? 0,
           overpaid: r.paidOverpaid ?? 0,
+          badDebt: r.paidBadDebt ?? 0,
         });
       }
     } catch { /* ignore */ }
@@ -988,15 +991,16 @@ export default function DebtOverview() {
         (bv.unlockFee ? row.debtTargetUnlockFee : 0);
 
       const cv = badgeVisibility;
-      // ยอดเก็บหนี้ = ค่างวดปกติที่ชำระแล้ว ไม่รวม badDebt (ยอดขายเครื่อง)
+      // ยอดเก็บหนี้รวม = ค่างวดปกติ + ยอดขายเครื่อง (badDebt)
+      // เพราะยอดเก็บหนี้ = รายรับทั้งหมดที่ลูกค้าชำระ ต้องตรงกับหน้ารายรับ
       row.collectedTotal =
         (cv.principal ? row.collectedPrincipal : 0) +
         (cv.interest ? row.collectedInterest : 0) +
         (cv.fee ? row.collectedFee : 0) +
         (cv.penalty ? row.collectedPenalty : 0) +
         (cv.unlockFee ? row.collectedUnlockFee : 0) +
-        (cv.overpaid ? row.collectedOverpaid : 0);
-      // หมายเหตุ: badDebt (ยอดขายเครื่อง) แยกไปอยู่ใน deviceSaleAmount แล้ว ไม่รวมใน collectedTotal
+        (cv.overpaid ? row.collectedOverpaid : 0) +
+        (cv.badDebt ? row.collectedBadDebt : 0);
 
       // Override ด้วยค่าจาก cache (DB) เหมือน MonthlySummary
       // ใช้ cache เฉพาะเมื่อไม่มีการ search/statusFilter ที่ทำให้สัญญาลดลงจากทั้งเดือน
@@ -1006,7 +1010,7 @@ export default function DebtOverview() {
         // ถ้า cache มี breakdown → sync breakdown ลง row และคำนวณ collectedTotal จาก breakdown × badge visibility
         // เพื่อให้ badge toggle มีผลต่อยอดในตารางด้วย
         const hasCacheBreakdown = cached.principal > 0 || cached.interest > 0 || cached.fee > 0 ||
-          cached.penalty > 0 || cached.unlockFee > 0 || cached.overpaid > 0;
+          cached.penalty > 0 || cached.unlockFee > 0 || cached.overpaid > 0 || cached.badDebt > 0;
         if (hasCacheBreakdown) {
           row.collectedPrincipal = cached.principal;
           row.collectedInterest = cached.interest;
@@ -1014,13 +1018,16 @@ export default function DebtOverview() {
           row.collectedPenalty = cached.penalty;
           row.collectedUnlockFee = cached.unlockFee;
           row.collectedOverpaid = cached.overpaid;
+          row.collectedBadDebt = cached.badDebt;
+          row.deviceSaleAmount = cached.badDebt; // sync deviceSaleAmount ด้วย
           row.collectedTotal =
             (cv.principal ? cached.principal : 0) +
             (cv.interest ? cached.interest : 0) +
             (cv.fee ? cached.fee : 0) +
             (cv.penalty ? cached.penalty : 0) +
             (cv.unlockFee ? cached.unlockFee : 0) +
-            (cv.overpaid ? cached.overpaid : 0);
+            (cv.overpaid ? cached.overpaid : 0) +
+            (cv.badDebt ? cached.badDebt : 0);
         } else {
           // fallback: ใช้ paidTotal จาก cache โดยตรง (กรณี breakdown ยังไม่มีใน cache เก่า)
           row.collectedTotal = cached.paidTotal;
