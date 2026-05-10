@@ -806,6 +806,9 @@ export default function DebtReport() {
     if (tab !== "collected") return null;
     let principal = 0, interest = 0, fee = 0, penalty = 0, unlockFee = 0;
     let discount = 0, overpaid = 0, badDebt = 0;
+    // Phase 91: ยอดรวมที่แท้จริง = SUM(total_amount) สำหรับ is_bad_debt_row=0 + SUM(bad_debt) สำหรับ is_bad_debt_row=1
+    // ตรงกับ payment_transactions.amount เสมอ ไม่ขึ้นกับ breakdown visibility
+    let totalPaid = 0;
     for (const r of filteredRows as CollectedRow[]) {
       for (const p of r.payments ?? []) {
         // Phase 23: dueDateExact cell-mask — only sum payments whose paidAt matches exact date
@@ -820,21 +823,13 @@ export default function DebtReport() {
         discount += p.discount ?? 0;
         overpaid += p.overpaid ?? 0;
         badDebt += p.badDebt ?? 0;
+        // ยอดรวมที่แท้จริง: ใช้ total (= total_amount จาก DB) สำหรับ rows ปกติ
+        // และ badDebt สำหรับ bad_debt_row (เพราะ total=0 แต่ badDebt=ยอดขายเครื่อง)
+        totalPaid += p.isBadDebtRow ? (p.badDebt ?? 0) : (p.total ?? 0);
       }
     }
-    // ยอดที่ชำระรวม = เงินต้น + ดอกเบี้ย + ค่าดำเนินการ + ค่าปรับ + ค่าปลดล็อก + ชำระเกิน + หนี้เสีย
-    // ส่วนลดไม่ถูกนำมาคิด (ไม่บวก ไม่ลบ) เพราะส่วนลด = เงินที่ไม่ได้รับ
-    const bv = badgeVisibility;
-    const total =
-      (bv.principal ? principal : 0) +
-      (bv.interest ? interest : 0) +
-      (bv.fee ? fee : 0) +
-      (bv.penalty ? penalty : 0) +
-      (bv.unlockFee ? unlockFee : 0) +
-      (bv.overpaid ? overpaid : 0) +
-      (bv.badDebt ? badDebt : 0);
-    return { principal, interest, fee, penalty, unlockFee, discount, overpaid, badDebt, total };
-  }, [filteredRows, tab, dueDateExact, dueDateFilter, badgeVisibility]);
+    return { principal, interest, fee, penalty, unlockFee, discount, overpaid, badDebt, total: totalPaid };
+  }, [filteredRows, tab, dueDateExact, dueDateFilter]);
 
   /* ---- TopNav actions (sync + export) ---- */
   // Export handler (used inline in toolbar)
