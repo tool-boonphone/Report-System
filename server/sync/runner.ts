@@ -194,6 +194,14 @@ async function doSync(
   // Store log ID so setStage() can write progress to DB (cross-instance visibility)
   _overallLogId[section] = overall.id;
 
+  // Global self-ping: Cloud Run kills idle instances after ~60s of no HTTP traffic.
+  // Keep a single interval alive for the ENTIRE sync (all stages) so Cloud Run
+  // never sees the process as idle — regardless of which stage is running.
+  const selfPingBaseUrl = process.env.SELF_PING_URL ?? `http://localhost:${process.env.PORT ?? 3000}`;
+  const globalSelfPing = setInterval(() => {
+    fetch(`${selfPingBaseUrl}/api/ping`).catch(() => {});
+  }, 8_000);
+
   let overallRows = 0;
   try {
     // 1) Partners — for province + status columns. Lightweight, sync in full.
@@ -293,8 +301,10 @@ async function doSync(
       console.warn(`[runner] ${section}: post-sync cleanup failed (non-fatal):`, cleanupErr?.message ?? cleanupErr);
     }
 
+    clearInterval(globalSelfPing);
     return { ok: true, rowCount: overallRows };
   } catch (err: any) {
+    clearInterval(globalSelfPing);
     // Even on hard failure, try to populate cache from existing DB data
     try {
       console.log(`[runner] ${section}: attempting cache populate after sync failure...`);
@@ -372,43 +382,31 @@ async function syncCustomers(
     const STAGE_END = 40;   // % when customers stage ends (contracts stage starts)
     const logId = _overallLogId[section];
 
-    // Server-side self-ping: Cloud Run kills idle instances after ~60s of no HTTP traffic.
-    // The frontend pings every 10s, but if the user closes the browser, pings stop.
-    // This server-side interval ensures the process itself generates HTTP traffic every 8s
-    // so Cloud Run never sees the instance as idle during the long customers fetch.
-    const selfPingBaseUrl = process.env.SELF_PING_URL ?? `http://localhost:${process.env.PORT ?? 3000}`;
-    const selfPingInterval = setInterval(() => {
-      fetch(`${selfPingBaseUrl}/api/ping`).catch(() => {});
-    }, 8_000);
-
-    try {
-      await client.forEachPage<CustomerListItem>(
-        "customer",
-        (d) => d?.customers,
-        { action: "all" },
-        async (items, page, totalPages) => {
-          for (const it of items) {
-            byId.set(String(it.customer_id), it);
+    // Note: self-ping is now handled globally in doSync() to cover ALL stages.
+    await client.forEachPage<CustomerListItem>(
+      "customer",
+      (d) => d?.customers,
+      { action: "all" },
+      async (items, page, totalPages) => {
+        for (const it of items) {
+          byId.set(String(it.customer_id), it);
+        }
+        // Update sub-progress in DB every page so UI doesn't freeze
+        if (logId && totalPages > 0) {
+          const subPct = Math.min(page / totalPages, 1);
+          const progress = Math.round(STAGE_START + subPct * (STAGE_END - STAGE_START));
+          const currentStage = `customers (${page}/${totalPages})`;
+          // Update in-memory lock too
+          const lock = _locks[section];
+          if (lock) {
+            _locks[section] = { ...lock, progress, currentStage };
           }
-          // Update sub-progress in DB every page so UI doesn't freeze
-          if (logId && totalPages > 0) {
-            const subPct = Math.min(page / totalPages, 1);
-            const progress = Math.round(STAGE_START + subPct * (STAGE_END - STAGE_START));
-            const currentStage = `customers (${page}/${totalPages})`;
-            // Update in-memory lock too
-            const lock = _locks[section];
-            if (lock) {
-              _locks[section] = { ...lock, progress, currentStage };
-            }
-            updateSyncLogStage({ id: logId, currentStage, progress }).catch(() => {});
-          }
-        },
-        500,
-        60_000, // 60s per-request timeout (customers endpoint is slower than others)
-      );
-    } finally {
-      clearInterval(selfPingInterval);
-    }
+          updateSyncLogStage({ id: logId, currentStage, progress }).catch(() => {});
+        }
+      },
+      500,
+      60_000, // 60s per-request timeout (customers endpoint is slower than others)
+    );
     await finishSyncLog({ id: log.id, status: "success", rowCount: byId.size });
     return byId;
   } catch (err: any) {
