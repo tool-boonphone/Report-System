@@ -471,8 +471,20 @@ async function syncCustomers(
     const logId = _overallLogId[section];
     let totalUpserted = 0;
 
-    // Note: self-ping is handled globally in doSync() to cover ALL stages.
-    await client.forEachPage<CustomerListItem>(
+    // Heartbeat: write "fetching page 1..." to DB immediately so UI doesn't
+    // freeze at 20% while waiting for the first API response.
+    if (logId) {
+      updateSyncLogStage({
+        id: logId,
+        currentStage: `customers (fetching page 1...)`,
+        progress: STAGE_START,
+      }).catch(() => {});
+    }
+
+    // Per-stage timeout: if customers stage takes > 15 min, throw so the
+    // overall sync can fall back to DB cache instead of hanging indefinitely.
+    const CUSTOMERS_STAGE_TIMEOUT_MS = 15 * 60 * 1000;
+    const customersWork = client.forEachPage<CustomerListItem>(
       "customer",
       (d) => d?.customers,
       { action: "all" },
@@ -524,6 +536,13 @@ async function syncCustomers(
       startPage, // resume from last saved page if previous run was killed
       true,     // skipOnError=true: skip pages that timeout instead of failing all
     );
+    const customersTimeout = new Promise<never>((_, rej) =>
+      setTimeout(
+        () => rej(new Error(`[${section}] customers stage exceeded ${CUSTOMERS_STAGE_TIMEOUT_MS / 60000} min`)),
+        CUSTOMERS_STAGE_TIMEOUT_MS,
+      ),
+    );
+    await Promise.race([customersWork, customersTimeout]);
     if (logId) {
       updateSyncLogStage({ id: logId, currentStage: "customers", progress: STAGE_END }).catch(() => {});
     }
