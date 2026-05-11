@@ -415,7 +415,7 @@ async function syncCustomers(
     const byId = new Map<string, CustomerListItem>();
     // Use limit=500 with 60s timeout -- same values that worked reliably before.
     // limit=500 means ~45 pages for FF365 (22k customers), 60s gives enough headroom.
-    // Sub-progress: customers stage spans 20%→40% of overall progress.
+    // Sub-progress: customers stage spans 20%->40% of overall progress.
     const STAGE_START = 20;
     const STAGE_END = 40;
     const logId = _overallLogId[section];
@@ -685,7 +685,7 @@ async function enrichInstallmentsWithUpdatedBy(
   const CONCURRENCY = 5;
   const FLUSH_EVERY = 200;
   type EnrichRow = { contractExternalId: string; period: number; updatedBy: string | null; updatedAt: string | null };
-  // Map: contractExternalId → Array<{ period, updatedBy, updatedAt }>
+  // Map: contractExternalId -> Array<{ period, updatedBy, updatedAt }>
   const updates: Array<EnrichRow> = [];
   let flushed = 0;
 
@@ -861,8 +861,8 @@ async function enrichContractsWithDeviceIds(
  * Compute and persist bad-debt summary columns on contracts table.
  *
  * Business rules (confirmed 2026-04-24):
- *   1. contract.status = "หนี้เสีย" → bad-debt confirmed (device sold, applies to both Boonphone & FF365)
- *   2. contract.status = "ระงับสัญญา" → device returned but NOT sold yet → no bad-debt amount
+ *   1. contract.status = "หนี้เสีย" -> bad-debt confirmed (device sold, applies to both Boonphone & FF365)
+ *   2. contract.status = "ระงับสัญญา" -> device returned but NOT sold yet -> no bad-debt amount
  *
  * Stores:
  *   bad_debt_amount       = SUM of all bad-debt payments (total_paid_amount where isBadDebt)
@@ -902,7 +902,7 @@ async function computeAndStoreBadDebt(section: SectionKey): Promise<void> {
   // installment_status_code values that indicate a suspended/bad-debt installment.
   const suspendCodes = ["ระงับสัญญา", "หนี้เสีย"];
 
-  // Map: externalId → { suspendedFromPeriod, suspendedAt }
+  // Map: externalId -> { suspendedFromPeriod, suspendedAt }
   const suspendMap = new Map<string, { period: number; date: string | null }>();
 
   for (let i = 0; i < extIds.length; i += CHUNK) {
@@ -931,7 +931,7 @@ async function computeAndStoreBadDebt(section: SectionKey): Promise<void> {
         });
       }
     }
-    // Fallback: contracts with no matching installment status → period 1
+    // Fallback: contracts with no matching installment status -> period 1
     for (const extId of slice) {
       if (!suspendMap.has(extId)) {
         // find period 1 due_date from rows
@@ -942,7 +942,7 @@ async function computeAndStoreBadDebt(section: SectionKey): Promise<void> {
   }
 
   // ---- 3) Fetch payments for these contracts ----
-  // Map: externalId → Array<{ payment_external_id, paid_at, created_at, total_paid_amount, ff_status, updated_by, updated_at }>
+  // Map: externalId -> Array<{ payment_external_id, paid_at, created_at, total_paid_amount, ff_status, updated_by, updated_at }>
   // payment_external_id: numeric string = real payment from API; "pay-*" prefix = synthetic from installments
   // real payments have total_paid_amount from raw_json; synthetic payments have null
   // updated_by: FF365 ใช้ CTE + MIN(CONCAT) approach เพื่อหา installment ที่ใกล้ payment_date มากที่สุด
@@ -1015,9 +1015,9 @@ async function computeAndStoreBadDebt(section: SectionKey): Promise<void> {
 
     // Determine bad-debt amount and date from real payments.
     // Phase 106/107 Iron Rules (confirmed 2026-04-29):
-    //   Rule 1: ถ้ามียอดชำระแค่ยอดเดียว → ยอดนั้นคือ bad_debt_amount
-    //   Rule 2: ยอดสุดท้ายที่ชำระเข้ามา (วันที่ล่าสุด) → คือ bad_debt_amount
-    //   Rule 3: ถ้าวันที่ล่าสุดมีหลาย payment → เอายอดรวมทั้งหมดของวันนั้น
+    //   Rule 1: ถ้ามียอดชำระแค่ยอดเดียว -> ยอดนั้นคือ bad_debt_amount
+    //   Rule 2: ยอดสุดท้ายที่ชำระเข้ามา (วันที่ล่าสุด) -> คือ bad_debt_amount
+    //   Rule 3: ถ้าวันที่ล่าสุดมีหลาย payment -> เอายอดรวมทั้งหมดของวันนั้น
     //
     // Example: CT1124-SKA002-3314-01
     //   real payments วันที่ 2025-04-04: 2436, 2436, 2436, 92 (รวม 7,400) ← bad_debt_amount

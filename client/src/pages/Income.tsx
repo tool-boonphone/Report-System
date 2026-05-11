@@ -92,6 +92,8 @@ type IncomeRow = {
   originalIncomeType?: string;
   /** receiptNo = รหัสรายการ เช่น TXRT1225-PTE010-19331-01-1 หรือ TXRTC1225-PTE010-19331-01 */
   receiptNo?: string | null;
+  /** contractStatus = สถานะสัญญา เช่น 'ปกติ', 'สิ้นสุดสัญญา', 'หนี้เสีย', 'ระงับสัญญา' */
+  contractStatus?: string | null;
   contractNo: string;
   customerName?: string | null;
   amount: number;
@@ -113,15 +115,18 @@ type IncomeRow = {
  * ยอดรวมทั้ง 2 mode เท่ากัน (group แค่รวม amount ไม่ได้ตัดรายการออก)
  */
 function groupRowsBySlip(rows: IncomeRow[]): IncomeRow[] {
-  // แยกรายการตาม incomeType (classified)
+  // แยกรายการตาม contractStatus + receiptNo prefix
+  // ปิดยอด = สิ้นสุดสัญญา + TXRTC prefix
+  // ขายเครื่อง = หนี้เสีย + TXRTC prefix
+  // ค่างวด = อื่นๆ ทั้งหมด (ไม่ group)
   const installmentRows: IncomeRow[] = []; // ค่างวด — ไม่ group
   const closingRows: IncomeRow[] = [];     // ปิดยอด — group ตาม consecutive batch
   const deviceRows: IncomeRow[] = [];      // ขายเครื่อง — group ตาม consecutive batch
 
   for (const row of rows) {
-    const type = row.incomeType as IncomeType;
-    if (type === "ปิดยอด") closingRows.push(row);
-    else if (type === "ขายเครื่อง") deviceRows.push(row);
+    const isTxrtc = (row.receiptNo ?? "").startsWith("TXRTC");
+    if (isTxrtc && row.contractStatus === "สิ้นสุดสัญญา") closingRows.push(row);
+    else if (isTxrtc && row.contractStatus === "หนี้เสีย") deviceRows.push(row);
     else installmentRows.push(row);
   }
 
@@ -130,8 +135,8 @@ function groupRowsBySlip(rows: IncomeRow[]): IncomeRow[] {
    *
    * Algorithm:
    * 1. จัดกลุ่มตามสัญญา
-   * 2. เรียง updatedAt DESC (ล่าสุดก่อน)
-   * 3. ดู batch key ของ row แรก (ล่าสุด): paidAt date + updatedBy + updatedAt date
+   * 2. เรียง id DESC (ล่าสุดก่อน)
+   * 3. batch key = paidAt date + updatedBy + updatedAt date + receiptNo
    * 4. ไล่ต่อเนื่องลงมา: ถ้า row ถัดไปตรง batch key เดียวกัน → รวมเข้า batch
    *    ถ้าไม่ตรง → หยุดทันที (consecutive: ไม่ข้ามรายการที่ไม่ตรง)
    * 5. batch rows → สร้าง 1 grouped row (amount = sum)
@@ -149,20 +154,15 @@ function groupRowsBySlip(rows: IncomeRow[]): IncomeRow[] {
     const grouped: IncomeRow[] = [];
 
     for (const [, contractRows] of Array.from(contractMap)) {
-      // เรียงตาม updatedAt DESC (ล่าสุดก่อน)
-      const sorted = [...contractRows].sort((a, b) => {
-        const av = a.updatedAt ?? "";
-        const bv = b.updatedAt ?? "";
-        if (av > bv) return -1;
-        if (av < bv) return 1;
-        return 0;
-      });
+      // เรียงตาม id DESC (ล่าสุดก่อน)
+      const sorted = [...contractRows].sort((a, b) => ((b as any).id ?? 0) - ((a as any).id ?? 0));
 
       // batch key จาก row แรก (ล่าสุด)
       const firstRow = sorted[0];
       const batchPaidAt = firstRow.paidAt ? firstRow.paidAt.slice(0, 10) : "";
       const batchUpdatedBy = firstRow.updatedBy ?? "";
       const batchUpdatedAtDate = firstRow.updatedAt ? firstRow.updatedAt.slice(0, 10) : "";
+      const batchReceiptNo = firstRow.receiptNo ?? "";
 
       let batchAmount = 0;
       const batchRows: IncomeRow[] = [];
@@ -179,11 +179,13 @@ function groupRowsBySlip(rows: IncomeRow[]): IncomeRow[] {
         const rowPaidAt = row.paidAt ? row.paidAt.slice(0, 10) : "";
         const rowUpdatedBy = row.updatedBy ?? "";
         const rowUpdatedAtDate = row.updatedAt ? row.updatedAt.slice(0, 10) : "";
+        const rowReceiptNo = row.receiptNo ?? "";
 
         if (
           rowPaidAt === batchPaidAt &&
           rowUpdatedBy === batchUpdatedBy &&
-          rowUpdatedAtDate === batchUpdatedAtDate
+          rowUpdatedAtDate === batchUpdatedAtDate &&
+          rowReceiptNo === batchReceiptNo
         ) {
           // ตรง batch key → รวมเข้า batch
           batchAmount += row.amount ?? 0;

@@ -44,6 +44,8 @@ export interface IncomeRow {
   originalIncomeType: "ค่างวด" | "ปิดยอด";
   /** receiptNo = รหัสรายการ เช่น TXRT1225-PTE010-19331-01-1 หรือ TXRTC1225-PTE010-19331-01 */
   receiptNo: string | null;
+  /** contractStatus = สถานะสัญญา เช่น 'ปกติ', 'สิ้นสุดสัญญา', 'หนี้เสีย', 'ระงับสัญญา' */
+  contractStatus: string | null;
   amount: number;
   updatedBy: string | null;
   updatedAt: string | null;
@@ -246,6 +248,7 @@ export async function listIncome(params: IncomeParams): Promise<{
         pt.updated_by,
         pt.updated_at,
         pt.receipt_no,
+        c.status AS contract_status,
         ${PT_INCOME_TYPE_CASE} AS income_type,
         ${PT_ORIGINAL_INCOME_TYPE_CASE} AS original_income_type,
         ${PT_AMOUNT_CASE} AS amount
@@ -275,6 +278,7 @@ export async function listIncome(params: IncomeParams): Promise<{
     incomeType: r.income_type as IncomeType,
     originalIncomeType: (r.original_income_type === 'ปิดยอด' ? 'ปิดยอด' : 'ค่างวด') as "ค่างวด" | "ปิดยอด",
     receiptNo: r.receipt_no ?? null,
+    contractStatus: r.contract_status ?? null,
     amount: Number(r.amount ?? 0),
     updatedBy: r.updated_by ?? null,
     updatedAt: r.updated_at ?? null,
