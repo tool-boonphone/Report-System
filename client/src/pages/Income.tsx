@@ -293,17 +293,26 @@ export default function Income() {
    */
   const incomeTypesParam = useMemo(() => {
     if (listMode === "detail") {
-      // detail mode: เอาเฉพาะ ค่างวด และ ปิดยอด เท่านั้น
-      // ถ้าผู้ใช้ปิด ค่างวด หรือ ปิดยอด ให้ส่ง filter ตามนั้น
-      // ถ้าเปิดทั้งหมด ให้ส่ง undefined (ดึงทั้งหมด)
-      const detailTypes: IncomeType[] = ["\u0e04\u0e48\u0e32\u0e07\u0e27\u0e14", "\u0e1b\u0e34\u0e14\u0e22\u0e2d\u0e14"];
-      const activeDetail = detailTypes.filter((t) => activeTypes.has(t));
-      // ถ้าเปิดทั้ง 2 ประเภท = undefined (ไม่ filter)
-      if (activeDetail.length === detailTypes.length) return undefined;
-      // ถ้าเปิดแค่ ค่างวด → ส่ง [ค่างวด, ขายเครื่อง] (เพราะ originalIncomeType ของขายเครื่อง = ค่างวด)
-      if (activeDetail.length === 1 && activeDetail[0] === "\u0e04\u0e48\u0e32\u0e07\u0e27\u0e14") return ["\u0e04\u0e48\u0e32\u0e07\u0e27\u0e14", "\u0e02\u0e32\u0e22\u0e40\u0e04\u0e23\u0e37\u0e48\u0e2d\u0e07"] as IncomeType[];
-      // ถ้าเปิดแค่ ปิดยอด → ส่ง [ปิดยอด]
-      return activeDetail as IncomeType[];
+      /**
+       * detail mode: API filter ใช้ classified incomeType ไม่ใช่ originalIncomeType
+       *
+       * Mapping classified → original:
+       *   ค่างวด (classified)    → ค่างวด (original)   — payment ปกติ
+       *   ขายเครื่อง (classified) → ค่างวด (original)   — payment สุดท้ายของสัญญาหนี้เสีย
+       *   ปิดยอด (classified)    → ปิดยอด (original)   — payment สุดท้ายของสัญญาสิ้นสุด
+       *
+       * ดังนั้น:
+       *   เปิดทั้ง ค่างวด+ปิดยอด → undefined (ดึงทั้งหมด)
+       *   เปิดแค่ ค่างวด          → ส่ง [ค่างวด, ขายเครื่อง] (ทั้งสองมี originalIncomeType=ค่างวด)
+       *   เปิดแค่ ปิดยอด          → ส่ง [ปิดยอด] (classified ปิดยอด = original ปิดยอด เสมอ)
+       *   ปิดทั้งหมด              → ส่ง [] (ไม่มีอะไรแสดง)
+       */
+      const wantInstallment = activeTypes.has("\u0e04\u0e48\u0e32\u0e07\u0e27\u0e14"); // ค่างวด
+      const wantClosing = activeTypes.has("\u0e1b\u0e34\u0e14\u0e22\u0e2d\u0e14");     // ปิดยอด
+      if (wantInstallment && wantClosing) return undefined; // ทั้งหมด
+      if (wantInstallment) return ["\u0e04\u0e48\u0e32\u0e07\u0e27\u0e14", "\u0e02\u0e32\u0e22\u0e40\u0e04\u0e23\u0e37\u0e48\u0e2d\u0e07"] as IncomeType[]; // ค่างวด + ขายเครื่อง
+      if (wantClosing) return ["\u0e1b\u0e34\u0e14\u0e22\u0e2d\u0e14"] as IncomeType[]; // ปิดยอด
+      return [] as IncomeType[]; // ปิดทั้งหมด
     }
     // slip mode: ส่งตามที่เลือก
     return (activeTypes.size === ALL_INCOME_TYPES.length ? undefined : Array.from(activeTypes) as IncomeType[]);
