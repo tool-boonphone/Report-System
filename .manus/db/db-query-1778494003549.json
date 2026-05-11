@@ -1,0 +1,18 @@
+{
+  "query": "\nSELECT \n  c.status AS contract_status,\n  COUNT(DISTINCT pt.contract_no) AS contract_count\nFROM payment_transactions pt\nLEFT JOIN contracts c ON c.contract_no = pt.contract_no AND c.section = pt.section\nWHERE pt.receipt_no LIKE 'TXRTC%'\n  AND JSON_EXTRACT(pt.raw_json, '$.source') IS NULL\nGROUP BY c.status\nORDER BY contract_count DESC;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT \n  c.status AS contract_status,\n  COUNT(DISTINCT pt.contract_no) AS contract_count\nFROM payment_transactions pt\nLEFT JOIN contracts c ON c.contract_no = pt.contract_no AND c.section = pt.section\nWHERE pt.receipt_no LIKE 'TXRTC%'\n  AND JSON_EXTRACT(pt.raw_json, '$.source') IS NULL\nGROUP BY c.status\nORDER BY contract_count DESC;\n",
+  "rows": [
+    {
+      "contract_status": "สิ้นสุดสัญญา",
+      "contract_count": "1047"
+    },
+    {
+      "contract_status": "สำเร็จ",
+      "contract_count": "2"
+    }
+  ],
+  "messages": [],
+  "stdout": "contract_status\tcontract_count\nสิ้นสุดสัญญา\t1047\nสำเร็จ\t2\n",
+  "stderr": "",
+  "execution_time_ms": 1888
+}

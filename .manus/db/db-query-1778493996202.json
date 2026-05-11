@@ -1,0 +1,22 @@
+{
+  "query": "\nSELECT DISTINCT\n  pt.contract_no,\n  c.status AS contract_status,\n  pt.receipt_no,\n  pt.section\nFROM payment_transactions pt\nLEFT JOIN contracts c ON c.contract_no = pt.contract_no AND c.section = pt.section\nWHERE pt.receipt_no LIKE 'TXRTC%'\n  AND c.status = 'สำเร็จ'\n  AND JSON_EXTRACT(pt.raw_json, '$.source') IS NULL\nLIMIT 5;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT DISTINCT\n  pt.contract_no,\n  c.status AS contract_status,\n  pt.receipt_no,\n  pt.section\nFROM payment_transactions pt\nLEFT JOIN contracts c ON c.contract_no = pt.contract_no AND c.section = pt.section\nWHERE pt.receipt_no LIKE 'TXRTC%'\n  AND c.status = 'สำเร็จ'\n  AND JSON_EXTRACT(pt.raw_json, '$.source') IS NULL\nLIMIT 5;\n",
+  "rows": [
+    {
+      "contract_no": "CT1225-PTE010-19331-01",
+      "contract_status": "สำเร็จ",
+      "receipt_no": "TXRTC1225-PTE010-19331-01",
+      "section": "Fastfone365"
+    },
+    {
+      "contract_no": "CT0625-KBI002-12941-01",
+      "contract_status": "สำเร็จ",
+      "receipt_no": "TXRTC0625-KBI002-12941-01",
+      "section": "Fastfone365"
+    }
+  ],
+  "messages": [],
+  "stdout": "contract_no\tcontract_status\treceipt_no\tsection\nCT1225-PTE010-19331-01\tสำเร็จ\tTXRTC1225-PTE010-19331-01\tFastfone365\nCT0625-KBI002-12941-01\tสำเร็จ\tTXRTC0625-KBI002-12941-01\tFastfone365\n",
+  "stderr": "",
+  "execution_time_ms": 1901
+}

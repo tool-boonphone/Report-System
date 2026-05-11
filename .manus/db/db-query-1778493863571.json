@@ -1,0 +1,142 @@
+{
+  "query": "\nSELECT \n  pt.id,\n  pt.receipt_no,\n  pt.paid_at,\n  pt.updated_by,\n  pt.updated_at,\n  pt.created_at,\n  pt.amount,\n  c.status AS contract_status,\n  c.section\nFROM payment_transactions pt\nLEFT JOIN contracts c ON c.contract_no = pt.contract_no AND c.section = pt.section\nWHERE pt.contract_no = 'CT1225-PTE010-19331-01'\n  AND JSON_EXTRACT(pt.raw_json, '$.source') IS NULL\nORDER BY pt.paid_at DESC, pt.created_at DESC\nLIMIT 20;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT \n  pt.id,\n  pt.receipt_no,\n  pt.paid_at,\n  pt.updated_by,\n  pt.updated_at,\n  pt.created_at,\n  pt.amount,\n  c.status AS contract_status,\n  c.section\nFROM payment_transactions pt\nLEFT JOIN contracts c ON c.contract_no = pt.contract_no AND c.section = pt.section\nWHERE pt.contract_no = 'CT1225-PTE010-19331-01'\n  AND JSON_EXTRACT(pt.raw_json, '$.source') IS NULL\nORDER BY pt.paid_at DESC, pt.created_at DESC\nLIMIT 20;\n",
+  "rows": [
+    {
+      "id": "1144359",
+      "receipt_no": "TXRTC1225-PTE010-19331-01",
+      "paid_at": "2026-05-09",
+      "updated_by": "ACC Ploy",
+      "updated_at": "2026-05-09 13:15:00",
+      "created_at": "2026-05-09 13:15:00",
+      "amount": "0.00",
+      "contract_status": "สำเร็จ",
+      "section": "Fastfone365"
+    },
+    {
+      "id": "1144356",
+      "receipt_no": "TXRTC1225-PTE010-19331-01",
+      "paid_at": "2026-05-09",
+      "updated_by": "ACC Ploy",
+      "updated_at": "2026-05-09 13:14:59",
+      "created_at": "2026-05-09 13:14:59",
+      "amount": "3105.00",
+      "contract_status": "สำเร็จ",
+      "section": "Fastfone365"
+    },
+    {
+      "id": "1144357",
+      "receipt_no": "TXRTC1225-PTE010-19331-01",
+      "paid_at": "2026-05-09",
+      "updated_by": "ACC Ploy",
+      "updated_at": "2026-05-09 13:14:59",
+      "created_at": "2026-05-09 13:14:59",
+      "amount": "3105.00",
+      "contract_status": "สำเร็จ",
+      "section": "Fastfone365"
+    },
+    {
+      "id": "1144358",
+      "receipt_no": "TXRTC1225-PTE010-19331-01",
+      "paid_at": "2026-05-09",
+      "updated_by": "ACC Ploy",
+      "updated_at": "2026-05-09 13:14:59",
+      "created_at": "2026-05-09 13:14:59",
+      "amount": "1863.00",
+      "contract_status": "สำเร็จ",
+      "section": "Fastfone365"
+    },
+    {
+      "id": "1144354",
+      "receipt_no": "TXRTC1225-PTE010-19331-01",
+      "paid_at": "2026-05-09",
+      "updated_by": "ACC Ploy",
+      "updated_at": "2026-05-09 13:14:58",
+      "created_at": "2026-05-09 13:14:58",
+      "amount": "3105.00",
+      "contract_status": "สำเร็จ",
+      "section": "Fastfone365"
+    },
+    {
+      "id": "1144355",
+      "receipt_no": "TXRTC1225-PTE010-19331-01",
+      "paid_at": "2026-05-09",
+      "updated_by": "ACC Ploy",
+      "updated_at": "2026-05-09 13:14:58",
+      "created_at": "2026-05-09 13:14:58",
+      "amount": "3105.00",
+      "contract_status": "สำเร็จ",
+      "section": "Fastfone365"
+    },
+    {
+      "id": "1144353",
+      "receipt_no": "TXRTC1225-PTE010-19331-01",
+      "paid_at": "2026-05-09",
+      "updated_by": "ACC Ploy",
+      "updated_at": "2026-05-09 13:14:58",
+      "created_at": "2026-05-09 13:14:58",
+      "amount": "3105.00",
+      "contract_status": "สำเร็จ",
+      "section": "Fastfone365"
+    },
+    {
+      "id": "1146684",
+      "receipt_no": "TXRT1225-PTE010-19331-01-5",
+      "paid_at": "2026-04-29",
+      "updated_by": "adminpahn",
+      "updated_at": "2026-05-05 11:33:22",
+      "created_at": "2026-05-05 11:33:22",
+      "amount": "3105.00",
+      "contract_status": "สำเร็จ",
+      "section": "Fastfone365"
+    },
+    {
+      "id": "1151166",
+      "receipt_no": "TXRT1225-PTE010-19331-01-4",
+      "paid_at": "2026-04-05",
+      "updated_by": "adminmint",
+      "updated_at": "2026-04-05 17:14:59",
+      "created_at": "2026-04-05 17:14:59",
+      "amount": "3105.00",
+      "contract_status": "สำเร็จ",
+      "section": "Fastfone365"
+    },
+    {
+      "id": "1159514",
+      "receipt_no": "TXRT1225-PTE010-19331-01-3",
+      "paid_at": "2026-03-03",
+      "updated_by": "adminfirst",
+      "updated_at": "2026-03-03 12:33:17",
+      "created_at": "2026-03-03 12:33:17",
+      "amount": "3105.00",
+      "contract_status": "สำเร็จ",
+      "section": "Fastfone365"
+    },
+    {
+      "id": "1166514",
+      "receipt_no": "TXRT1225-PTE010-19331-01-2",
+      "paid_at": "2026-02-05",
+      "updated_by": "adminfirst",
+      "updated_at": "2026-02-05 13:09:05",
+      "created_at": "2026-02-05 13:09:05",
+      "amount": "3105.00",
+      "contract_status": "สำเร็จ",
+      "section": "Fastfone365"
+    },
+    {
+      "id": "1173940",
+      "receipt_no": "TXRT1225-PTE010-19331-01-1",
+      "paid_at": "2026-01-05",
+      "updated_by": "adminpahn",
+      "updated_at": "2026-01-06 10:32:48",
+      "created_at": "2026-01-06 10:32:48",
+      "amount": "3105.00",
+      "contract_status": "สำเร็จ",
+      "section": "Fastfone365"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\treceipt_no\tpaid_at\tupdated_by\tupdated_at\tcreated_at\tamount\tcontract_status\tsection\n1144359\tTXRTC1225-PTE010-19331-01\t2026-05-09\tACC Ploy\t2026-05-09 13:15:00\t2026-05-09 13:15:00\t0.00\tสำเร็จ\tFastfone365\n1144356\tTXRTC1225-PTE010-19331-01\t2026-05-09\tACC Ploy\t2026-05-09 13:14:59\t2026-05-09 13:14:59\t3105.00\tสำเร็จ\tFastfone365\n1144357\tTXRTC1225-PTE010-19331-01\t2026-05-09\tACC Ploy\t2026-05-09 13:14:59\t2026-05-09 13:14:59\t3105.00\tสำเร็จ\tFastfone365\n1144358\tTXRTC1225-PTE010-19331-01\t2026-05-09\tACC Ploy\t2026-05-09 13:14:59\t2026-05-09 13:14:59\t1863.00\tสำเร็จ\tFastfone365\n1144354\tTXRTC1225-PTE010-19331-01\t2026-05-09\tACC Ploy\t2026-05-09 13:14:58\t2026-05-09 13:14:58\t3105.00\tสำเร็จ\tFastfone365\n1144355\tTXRTC1225-PTE010-19331-01\t2026-05-09\tACC Ploy\t2026-05-09 13:14:58\t2026-05-09 13:14:58\t3105.00\tสำเร็จ\tFastfone365\n1144353\tTXRTC1225-PTE010-19331-01\t2026-05-09\tACC Ploy\t2026-05-09 13:14:58\t2026-05-09 13:14:58\t3105.00\tสำเร็จ\tFastfone365\n1146684\tTXRT1225-PTE010-19331-01-5\t2026-04-29\tadminpahn\t2026-05-05 11:33:22\t2026-05-05 11:33:22\t3105.00\tสำเร็จ\tFastfone365\n1151166\tTXRT1225-PTE010-19331-01-4\t2026-04-05\tadminmint\t2026-04-05 17:14:59\t2026-04-05 17:14:59\t3105.00\tสำเร็จ\tFastfone365\n1159514\tTXRT1225-PTE010-19331-01-3\t2026-03-03\tadminfirst\t2026-03-03 12:33:17\t2026-03-03 12:33:17\t3105.00\tสำเร็จ\tFastfone365\n1166514\tTXRT1225-PTE010-19331-01-2\t2026-02-05\tadminfirst\t2026-02-05 13:09:05\t2026-02-05 13:09:05\t3105.00\tสำเร็จ\tFastfone365\n1173940\tTXRT1225-PTE010-19331-01-1\t2026-01-05\tadminpahn\t2026-01-06 10:32:48\t2026-01-06 10:32:48\t3105.00\tสำเร็จ\tFastfone365\n",
+  "stderr": "",
+  "execution_time_ms": 1851
+}
