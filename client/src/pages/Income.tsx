@@ -279,8 +279,12 @@ export default function Income() {
   }), [summaryData]);
 
   const totalVisible = useMemo(() => {
-    return ALL_INCOME_TYPES.filter((t) => activeTypes.has(t)).reduce((s, t) => s + (badgeSums[t] ?? 0), 0);
-  }, [badgeSums, activeTypes]);
+    // mode detail: ไม่รวม ขายเครื่อง (ไม่มีใน API)
+    const visibleTypes = listMode === "detail"
+      ? ALL_INCOME_TYPES.filter((t) => t !== "ขายเครื่อง")
+      : ALL_INCOME_TYPES;
+    return visibleTypes.filter((t) => activeTypes.has(t)).reduce((s, t) => s + (badgeSums[t] ?? 0), 0);
+  }, [badgeSums, activeTypes, listMode]);
 
   // ── Sort rows ──
   const sortedRows = useMemo(() => {
@@ -722,7 +726,10 @@ export default function Income() {
 
               <div className="flex-1" />
               <div className="flex flex-wrap items-center gap-2">
-                {ALL_INCOME_TYPES.map((t) => {
+                {ALL_INCOME_TYPES
+                  // ใน mode รายการตามการบันทึก ซ่อน badge ขายเครื่อง (ไม่มีใน API)
+                  .filter((t) => listMode === "slip" || t !== "ขายเครื่อง")
+                  .map((t) => {
                   const isOn = activeTypes.has(t);
                   return (
                     <button key={t} type="button" onClick={() => toggleType(t)}
