@@ -1457,3 +1457,10 @@ Task list:
 - [x] ตรวจสอบ DB: ไม่มี payment_transactions วันนี้ (sync วันนี้ error ก่อน insert)
 - [x] อัพเดต knowledge base เรื่อง sync time และ cleanup logic
 - [x] Push GitHub + save checkpoint
+
+## Phase 17 — Income.tsx Switch รายการตามการบันทึก/รายการตามสลิป
+
+- [x] Income.tsx: เพิ่ม Switch pill/tab "รายการตามการบันทึก | รายการตามสลิป" ที่หัวตารางด้านซ้าย (ก่อนตัวเลขจำนวนรายการ)
+- [x] Income.tsx: logic grouping รายการตามสลิป (group ปิดยอด+ขายเครื่อง ที่ชำระวันเดียวกัน + คนเดียวกัน)
+- [x] Income.tsx: ปรับ column header No. และ ยอดเงิน ให้ชิดขวาตามตัวเลข
+- [x] Income.tsx: Export Excel ตาม mode ที่เลือก (รายการตามการบันทึก/รายการตามสลิป) พร้อม suffix ชื่อไฟล์
