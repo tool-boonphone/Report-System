@@ -22,6 +22,8 @@ import {
   upsertContracts,
   upsertInstallments,
   upsertPayments,
+  upsertCachedCustomers,
+  loadCachedCustomersBySection,
 } from "./dbUpsert";
 import {
   insertSyncLog,
@@ -215,9 +217,11 @@ async function doSync(
   // Keep a single interval alive for the ENTIRE sync (all stages) so Cloud Run
   // never sees the process as idle -- regardless of which stage is running.
   const selfPingBaseUrl = process.env.SELF_PING_URL ?? `http://localhost:${process.env.PORT ?? 3000}`;
+  // Ping every 5s (was 8s) to prevent Cloud Run from killing idle instances.
+  // Also ping the public URL if available so the load balancer sees traffic.
   const globalSelfPing = setInterval(() => {
     fetch(`${selfPingBaseUrl}/api/ping`).catch(() => {});
-  }, 8_000);
+  }, 5_000);
 
   /** Helper: throw if user requested cancellation */
   const checkCancel = () => {
@@ -233,9 +237,9 @@ async function doSync(
     setStage(section, 0);
     const partnersById = await syncPartners(client, section);
 
-    // 2) Customers -- for "age". Cache map to enrich contract rows.
-    // Best-effort: Fastfone365 customers endpoint can be slow/hang on some pages.
-    // If it fails, we proceed with an empty map so contracts still sync.
+    // 2) Customers -- fetch from API and persist to DB.
+    // If API fetch fails (e.g. Cloud Run timeout), fall back to previously
+    // cached customers in DB so contracts still get enriched with customer data.
     checkCancel();
     setStage(section, 1);
     let customersById = new Map<string, CustomerListItem>();
@@ -243,7 +247,40 @@ async function doSync(
       customersById = await syncCustomers(client, section);
     } catch (custErr: any) {
       if (_cancelRequested[section]) throw custErr; // propagate cancel
-      console.warn(`[runner] ${section}: customers sync failed (non-fatal), proceeding with empty map:`, custErr?.message ?? custErr);
+      console.warn(`[runner] ${section}: customers API sync failed, falling back to DB cache:`, custErr?.message ?? custErr);
+      // Load previously-synced customers from DB so contracts still get enriched
+      try {
+        const dbMap = await loadCachedCustomersBySection(section);
+        if (dbMap.size > 0) {
+          console.log(`[runner] ${section}: loaded ${dbMap.size} customers from DB cache`);
+          // Convert DB rows to CustomerListItem shape
+          for (const [id, row] of Array.from(dbMap.entries())) {
+            customersById.set(id, {
+              customer_id: row.customerId,
+              customer_code: row.customerCode ?? undefined,
+              full_name: row.fullName ?? undefined,
+              nationality: row.nationality ?? undefined,
+              id_document_no: row.idDocumentNo ?? undefined,
+              gender: row.gender ?? undefined,
+              age_years: row.ageYears ?? undefined,
+              occupation_title: row.occupationTitle ?? undefined,
+              monthly_income: row.monthlyIncome ?? undefined,
+              workplace_name: row.workplaceName ?? undefined,
+              mobile_phone: row.mobilePhone ?? undefined,
+              idcard_district: row.idcardDistrict ?? undefined,
+              idcard_province: row.idcardProvince ?? undefined,
+              current_district: row.currentDistrict ?? undefined,
+              current_province: row.currentProvince ?? undefined,
+              work_district: row.workDistrict ?? undefined,
+              work_province: row.workProvince ?? undefined,
+            } as CustomerListItem);
+          }
+        } else {
+          console.warn(`[runner] ${section}: no customers in DB cache, contracts will have empty customer fields`);
+        }
+      } catch (dbErr: any) {
+        console.warn(`[runner] ${section}: DB cache load also failed:`, dbErr?.message ?? dbErr);
+      }
     }
 
     // 3) Contracts -- list + detail enrichment.
@@ -404,8 +441,11 @@ async function syncCustomers(
   client: PartnerClient,
   section: SectionKey,
 ): Promise<Map<string, CustomerListItem>> {
-  // Always start from page 1 -- resume logic was causing infinite loops
-  // (page N would timeout, next run would start from N+1, timeout again, etc.)
+  // Strategy: fetch all pages from API, upsert into `cached_customers` DB table.
+  // After sync, load from DB and return as map.
+  // This way, if Cloud Run kills the process mid-sync, the next run continues
+  // from page 1 but already-synced customers are preserved in DB.
+  // syncContracts reads from DB instead of this in-memory map.
   const log = await insertSyncLog({
     section,
     entity: "customers",
@@ -413,12 +453,10 @@ async function syncCustomers(
   });
   try {
     const byId = new Map<string, CustomerListItem>();
-    // Use limit=500 with 60s timeout -- same values that worked reliably before.
-    // limit=500 means ~45 pages for FF365 (22k customers), 60s gives enough headroom.
-    // Sub-progress: customers stage spans 20%->40% of overall progress.
     const STAGE_START = 20;
     const STAGE_END = 40;
     const logId = _overallLogId[section];
+    let totalUpserted = 0;
 
     // Note: self-ping is handled globally in doSync() to cover ALL stages.
     await client.forEachPage<CustomerListItem>(
@@ -426,6 +464,31 @@ async function syncCustomers(
       (d) => d?.customers,
       { action: "all" },
       async (items, page, totalPages) => {
+        // Build DB rows for this page
+        const dbRows = items.map((it) => ({
+          section,
+          customerId: String(it.customer_id),
+          customerCode: it.customer_code ?? null,
+          fullName: it.full_name ?? null,
+          nationality: it.nationality ?? null,
+          idDocumentNo: it.id_document_no ?? null,
+          gender: it.gender ?? null,
+          ageYears: it.age_years != null ? Number(it.age_years) : null,
+          occupationTitle: it.occupation_title ?? null,
+          monthlyIncome: it.monthly_income != null ? String(it.monthly_income) : null,
+          workplaceName: it.workplace_name ?? null,
+          mobilePhone: it.mobile_phone ?? null,
+          idcardDistrict: it.idcard_district ?? null,
+          idcardProvince: it.idcard_province ?? null,
+          currentDistrict: it.current_district ?? null,
+          currentProvince: it.current_province ?? null,
+          workDistrict: it.work_district ?? null,
+          workProvince: it.work_province ?? null,
+        }));
+        // Persist this page to DB immediately -- survives Cloud Run kills
+        await upsertCachedCustomers(dbRows);
+        totalUpserted += dbRows.length;
+        // Also keep in-memory map for immediate use by syncContracts
         for (const it of items) {
           byId.set(String(it.customer_id), it);
         }
@@ -434,7 +497,6 @@ async function syncCustomers(
           const subPct = Math.min(page / totalPages, 1);
           const progress = Math.round(STAGE_START + subPct * (STAGE_END - STAGE_START));
           const currentStage = `customers (${page}/${totalPages})`;
-
           const lock = _locks[section];
           if (lock) {
             _locks[section] = { ...lock, progress, currentStage };
@@ -442,17 +504,15 @@ async function syncCustomers(
           updateSyncLogStage({ id: logId, currentStage, progress }).catch(() => {});
         }
       },
-      500,      // limit=500 -- proven to work (45 pages for FF365 instead of 223)
-      60_000,   // 60s per-request timeout -- customers endpoint needs more time
+      500,      // limit=500 -- 45 pages for FF365 instead of 223
+      30_000,   // 30s per-request timeout -- fail fast instead of hanging
     );
     if (logId) {
       updateSyncLogStage({ id: logId, currentStage: "customers", progress: STAGE_END }).catch(() => {});
     }
-    await finishSyncLog({ id: log.id, status: "success", rowCount: byId.size });
+    await finishSyncLog({ id: log.id, status: "success", rowCount: totalUpserted });
     return byId;
   } catch (err: any) {
-    // resume_page is already saved in DB from the last successful page fetch above
-    // so next run will resume from there automatically
     await finishSyncLog({
       id: log.id,
       status: "error",

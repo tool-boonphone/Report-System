@@ -19,6 +19,7 @@ import {
   contracts,
   installments,
   paymentTransactions,
+  cachedCustomers,
 } from "../../drizzle/schema";
 import { normalizeSectionKey } from "../../shared/const";
 
@@ -171,4 +172,60 @@ function unionKeys(rows: AnyRow[]): AnyRow {
     }
   }
   return out;
+}
+
+/**
+ * Upsert customer rows into `cached_customers`.
+ * Unique key: (section, customer_id).
+ * Refreshes all columns on conflict so stale data is overwritten.
+ */
+export async function upsertCachedCustomers(rows: AnyRow[]): Promise<number> {
+  if (rows.length === 0) return 0;
+  const db = await getDb();
+  if (!db) throw new Error("DB not available for upsertCachedCustomers");
+  let total = 0;
+  for (const batch of chunks(normalizeRows(rows), BATCH_SIZE)) {
+    // Deduplicate by (section, customerId) -- keep last occurrence.
+    const map = new Map<string, AnyRow>();
+    for (const r of batch) {
+      map.set(`${r.section}::${r.customerId}`, r);
+    }
+    const deduped = Array.from(map.values());
+    const sample = unionKeys(deduped);
+    const setObj: Record<string, SQL> = {};
+    for (const key of Object.keys(sample)) {
+      if (key === "section" || key === "customerId") continue;
+      if (!(key in cachedCustomers)) continue;
+      const col = snake(key);
+      setObj[key] = sql.raw(`VALUES(\`${col}\`)`);
+    }
+    setObj.syncedAt = sql`CURRENT_TIMESTAMP`;
+    await db
+      .insert(cachedCustomers)
+      .values(deduped as any)
+      .onDuplicateKeyUpdate({ set: setObj as any });
+    total += deduped.length;
+  }
+  return total;
+}
+
+/**
+ * Load all cached customers for a section into a Map keyed by customer_id string.
+ * Used by syncContracts to enrich contract rows without calling the customers API.
+ */
+export async function loadCachedCustomersBySection(
+  section: string,
+): Promise<Map<string, AnyRow>> {
+  const db = await getDb();
+  if (!db) return new Map();
+  const { eq } = await import("drizzle-orm");
+  const rows = await db
+    .select()
+    .from(cachedCustomers)
+    .where(eq(cachedCustomers.section, normalizeSectionKey(section)));
+  const map = new Map<string, AnyRow>();
+  for (const r of rows) {
+    map.set(String(r.customerId), r);
+  }
+  return map;
 }

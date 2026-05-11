@@ -494,3 +494,39 @@ export const debtExportCache = mysqlTable(
   }),
 );
 export type DebtExportCache = typeof debtExportCache.$inferSelect;
+
+/* =============================================================================
+ * Customers Cache
+ * เก็บข้อมูลลูกค้าจาก customers endpoint แยกต่างหาก
+ * เพื่อให้ contracts sync ดึงจาก DB แทน API (แก้ปัญหา sync ค้าง)
+ * ============================================================================= */
+export const cachedCustomers = mysqlTable(
+  "cached_customers",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    section: varchar("section", { length: 32 }).notNull(), // Boonphone | Fastfone365
+    customerId: varchar("customer_id", { length: 64 }).notNull(),
+    customerCode: varchar("customer_code", { length: 64 }),
+    fullName: varchar("full_name", { length: 255 }),
+    nationality: varchar("nationality", { length: 64 }),
+    idDocumentNo: varchar("id_document_no", { length: 32 }),
+    gender: varchar("gender", { length: 16 }),
+    ageYears: int("age_years"),
+    occupationTitle: varchar("occupation_title", { length: 512 }),
+    monthlyIncome: decimal("monthly_income", { precision: 12, scale: 2 }),
+    workplaceName: varchar("workplace_name", { length: 1024 }),
+    mobilePhone: varchar("mobile_phone", { length: 32 }),
+    idcardDistrict: varchar("idcard_district", { length: 128 }),
+    idcardProvince: varchar("idcard_province", { length: 128 }),
+    currentDistrict: varchar("current_district", { length: 128 }),
+    currentProvince: varchar("current_province", { length: 128 }),
+    workDistrict: varchar("work_district", { length: 128 }),
+    workProvince: varchar("work_province", { length: 128 }),
+    syncedAt: timestamp("synced_at").defaultNow().notNull(),
+  },
+  (t) => ({
+    sectionCustomerIdx: uniqueIndex("cc_section_customer_idx").on(t.section, t.customerId),
+    sectionIdx: index("cc_section_idx").on(t.section),
+  }),
+);
+export type CachedCustomer = typeof cachedCustomers.$inferSelect;
