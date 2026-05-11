@@ -95,20 +95,23 @@ type IncomeRow = {
 };
 
 /**
- * groupRowsBySlip — group รายการที่ชำระวันเดียวกัน + คนเดียวกัน + ประเภทเดียวกัน
+ * groupRowsBySlip — group รายการที่เป็นสัญญาเดียวกัน + ชำระวันเดียวกัน +
+ * คนทำรายการคนเดียวกัน + วันที่ทำรายการวันเดียวกัน (ไม่เอาเวลา)
  * เฉพาะ ปิดยอด และ ขายเครื่อง ให้เป็น 1 row (รวม amount)
  * ค่างวด ไม่ group
  */
 function groupRowsBySlip(rows: IncomeRow[]): IncomeRow[] {
   const result: IncomeRow[] = [];
-  // Map key = paidAt|updatedBy|incomeType (เฉพาะ groupable types)
+  // Map key = contractNo|paidAt|updatedBy|dateOf(updatedAt)|incomeType
   const groupMap = new Map<string, IncomeRow>();
 
   for (const row of rows) {
     const type = row.incomeType as IncomeType;
     if (GROUPABLE_TYPES.has(type)) {
-      // group key: วันที่ชำระ + ผู้ทำรายการ + ประเภท
-      const key = `${row.paidAt ?? ""}|${row.updatedBy ?? ""}|${row.incomeType}`;
+      // ใช้เฉพาะวันที่ของ updatedAt (ตัดเวลาออก) เพื่อ group รายการวันเดียวกัน
+      const updatedAtDate = row.updatedAt ? row.updatedAt.slice(0, 10) : "";
+      // group key: สัญญาเดียวกัน + วันที่ชำระ + ผู้ทำรายการ + วันที่ทำรายการ + ประเภท
+      const key = `${row.contractNo}|${row.paidAt ?? ""}|${row.updatedBy ?? ""}|${updatedAtDate}|${row.incomeType}`;
       const existing = groupMap.get(key);
       if (existing) {
         // รวม amount
@@ -795,10 +798,7 @@ export default function Income() {
                               </span>
                             </td>
                             <td className="px-3 py-2 font-mono text-xs text-gray-700">
-                              {/* mode slip: ปิดยอด/ขายเครื่อง ที่ถูก group จะไม่มี contractNo เดียว */}
-                              {listMode === "slip" && GROUPABLE_TYPES.has(row.incomeType as IncomeType)
-                                ? <span className="text-gray-400 italic text-xs">รวมหลายสัญญา</span>
-                                : row.contractNo}
+                              {row.contractNo}
                             </td>
                             <td className="px-3 py-2 text-right font-semibold text-gray-800">{fmtMoney(row.amount)}</td>
                             <td className="px-3 py-2 text-gray-600 text-xs">{row.updatedBy ?? "-"}</td>
