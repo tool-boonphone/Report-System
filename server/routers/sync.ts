@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { router, appProcedure } from "../_core/trpc";
-import { runSectionSync, isSyncRunning, getSyncStatus } from "../sync/runner";
+import { runSectionSync, isSyncRunning, getSyncStatus, requestCancelSync } from "../sync/runner";
 import {
   getLastSyncedAt,
   listSyncLogs,
@@ -108,6 +108,30 @@ export const syncRouter = router({
       const section = input.section as SectionKey;
       const cleared = await clearStuckSyncLogs(section);
       return { section, cleared };
+    }),
+
+  /**
+   * Cancel a running sync for a section.
+   * Sets a cancellation flag that will be checked between stages.
+   * Note: if sync is stuck mid-request (e.g. API hang), it will cancel after the current request times out.
+   */
+  cancel: appProcedure
+    .input(z.object({ section: sectionSchema }))
+    .mutation(async ({ input, ctx }) => {
+      // Permission check
+      const { checkPermission } = await import("../authDb");
+      if (ctx.appUser) {
+        const allowed = checkPermission(ctx.appUser, "sync_api", "sync");
+        if (!allowed) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "ไม่มีสิทธิ์ยกเลิก Sync" });
+        }
+      }
+      const section = input.section as SectionKey;
+      const wasRunning = requestCancelSync(section);
+      // Also clear DB lock so UI stops showing running state
+      await clearStuckSyncLogs(section);
+      console.log(`[sync.cancel] ${section}: cancel requested (wasRunning=${wasRunning})`);
+      return { section, cancelled: true, wasRunning };
     }),
 
   /** Recent sync log entries. Default last 50. */
