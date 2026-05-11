@@ -1,9 +1,0 @@
-{
-  "query": "SELECT payment_external_id, period, paid_at, principal, interest, fee, penalty, unlock_fee, discount, overpaid, bad_debt, total_amount, payment_tx_amount, is_bad_debt_row FROM debt_collected_cache WHERE contract_no = 'CT0225-SRI001-9292' ORDER BY paid_at, period;",
-  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT payment_external_id, period, paid_at, principal, interest, fee, penalty, unlock_fee, discount, overpaid, bad_debt, total_amount, payment_tx_amount, is_bad_debt_row FROM debt_collected_cache WHERE contract_no = 'CT0225-SRI001-9292' ORDER BY paid_at, period;",
-  "rows": [],
-  "messages": [],
-  "stdout": "",
-  "stderr": "",
-  "execution_time_ms": 2674
-}

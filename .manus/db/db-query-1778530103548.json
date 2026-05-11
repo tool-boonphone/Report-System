@@ -1,9 +1,0 @@
-{
-  "query": "SELECT pt.external_id, pt.contract_external_id, pt.paid_at, pt.amount, pt.receipt_no, JSON_EXTRACT(pt.raw_json, '$.principal_paid') as principal, JSON_EXTRACT(pt.raw_json, '$.interest_paid') as interest, JSON_EXTRACT(pt.raw_json, '$.fee_paid') as fee, JSON_EXTRACT(pt.raw_json, '$.discount_amount') as discount, JSON_EXTRACT(pt.raw_json, '$.penalty_paid') as penalty FROM payment_transactions pt JOIN contracts c ON pt.contract_external_id = c.external_id WHERE c.contract_no = 'CT0225-SRI001-9292' ORDER BY pt.paid_at LIMIT 20;",
-  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT pt.external_id, pt.contract_external_id, pt.paid_at, pt.amount, pt.receipt_no, JSON_EXTRACT(pt.raw_json, '$.principal_paid') as principal, JSON_EXTRACT(pt.raw_json, '$.interest_paid') as interest, JSON_EXTRACT(pt.raw_json, '$.fee_paid') as fee, JSON_EXTRACT(pt.raw_json, '$.discount_amount') as discount, JSON_EXTRACT(pt.raw_json, '$.penalty_paid') as penalty FROM payment_transactions pt JOIN contracts c ON pt.contract_external_id = c.external_id WHERE c.contract_no = 'CT0225-SRI001-9292' ORDER BY pt.paid_at LIMIT 20;",
-  "rows": [],
-  "messages": [],
-  "stdout": "",
-  "stderr": "",
-  "execution_time_ms": 2015
-}
