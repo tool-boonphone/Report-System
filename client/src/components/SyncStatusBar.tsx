@@ -3,6 +3,8 @@ import { trpc } from "@/lib/trpc";
 import { Progress } from "@/components/ui/progress";
 import { clearIdbCache } from "@/lib/debtIdbCache";
 import { useDebtCache } from "@/contexts/DebtCacheContext";
+import { useIncomeCache } from "@/contexts/IncomeCacheContext";
+import type { SectionKey } from "@shared/const";
 import { useAppAuth } from "@/hooks/useAppAuth";
 import { RefreshCw, Trash2, XCircle } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -47,6 +49,7 @@ export function SyncStatusBar() {
   const { section } = useSection();
   const utils = trpc.useUtils();
   const debtCache = useDebtCache();
+  const incomeCache = useIncomeCache();
   const [, navigate] = useLocation();
   const [isClearing, setIsClearing] = useState(false);
   const { can } = useAppAuth();
@@ -125,6 +128,8 @@ export function SyncStatusBar() {
             toast.success(`Re-Sync ${sec} สำเร็จ (${msg.rowCount ?? 0} rows)`);
             utils.sync.status.invalidate();
             utils.sync.lastSyncedAt.invalidate();
+            // Invalidate income cache เพื่อ refetch ข้อมูลรายรับใหม่หลัง sync
+            if (section) incomeCache.invalidateIncomeCache(section as SectionKey);
             es.close();
             sseRef.current = null;
           } else if (msg.type === "error") {
@@ -188,6 +193,7 @@ export function SyncStatusBar() {
     try {
       await clearIdbCache();
       debtCache.clearAll();
+      incomeCache.clearAll();
       toast.info("ล้างแคชเรียบร้อย — กำลังโหลดข้อมูลใหม่...");
       navigate("/data-loading", { replace: true });
     } catch {

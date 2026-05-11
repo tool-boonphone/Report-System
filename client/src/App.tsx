@@ -7,6 +7,7 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import { SectionProvider } from "./contexts/SectionContext";
 import { NavActionsProvider } from "./contexts/NavActionsContext";
 import { DebtCacheProvider } from "./contexts/DebtCacheContext";
+import { IncomeCacheProvider } from "./contexts/IncomeCacheContext";
 import Login from "./pages/Login";
 import SelectSection from "./pages/SelectSection";
 import ChangePassword from "./pages/ChangePassword";
@@ -54,12 +55,14 @@ function App() {
       <ThemeProvider defaultTheme="light">
         <SectionProvider>
           <DebtCacheProvider>
+          <IncomeCacheProvider>
           <NavActionsProvider>
             <TooltipProvider>
               <Toaster richColors position="top-right" />
               <Router />
             </TooltipProvider>
           </NavActionsProvider>
+          </IncomeCacheProvider>
           </DebtCacheProvider>
         </SectionProvider>
       </ThemeProvider>

@@ -12,6 +12,8 @@
  *    เป็น 1 row (เฉพาะ ปิดยอด และ ขายเครื่อง)
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useIncomeCache } from "@/contexts/IncomeCacheContext";
+import type { SectionKey } from "@shared/const";
 import { AppShell } from "@/components/AppShell";
 import { SyncStatusBar } from "@/components/SyncStatusBar";
 import { useNavActions } from "@/contexts/NavActionsContext";
@@ -287,109 +289,51 @@ export default function Income() {
 
   // ── tRPC queries ──
   const utils = trpc.useUtils();
+  void utils; // ยังคงไว้สำหรับ export query
 
-  // ── Chunked loading state ──
-  const [allRows, setAllRows] = useState<IncomeRow[]>([]);
-  const [loadedCount, setLoadedCount] = useState(0);
-  const [totalFromApi, setTotalFromApi] = useState(0);
-  const [isLoadingChunks, setIsLoadingChunks] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const loadingRef = useRef(false); // guard ป้องกัน double-fetch
+  // ── Income Cache (global pre-warm) ──
+  const incomeCache = useIncomeCache();
+  const cache = section ? incomeCache.getCache(section as SectionKey) : null;
 
-  // ── Query key สำหรับ trigger reload เมื่อ filter เปลี่ยน ──
-  const queryKey = useMemo(() => JSON.stringify({
-    section, search, dateFrom, dateTo, dateField, updatedBy,
-  }), [section, search, dateFrom, dateTo, dateField, updatedBy]);
-
-  // ── Chunked loading effect ──
+  // Prefetch เมื่อ section พร้อม
   useEffect(() => {
-    if (!section || !canView || activeTab !== "all") return;
-    if (activeTypes.size === 0) {
-      setAllRows([]);
-      setLoadedCount(0);
-      setTotalFromApi(0);
-      return;
+    if (section && canView) {
+      incomeCache.prefetch(section as SectionKey);
     }
-    if (loadingRef.current) return;
-    loadingRef.current = true;
-    setIsLoadingChunks(true);
-    setLoadError(null);
-    setAllRows([]);
-    setLoadedCount(0);
-    setTotalFromApi(0);
-
-    const CHUNK_SIZE = 2000;
-    let cancelled = false;
-
-    async function fetchAll() {
-      try {
-        // chunk แรก: รู้ total
-        const first = await utils.accounting.listIncome.fetch({
-          section: section ?? "Boonphone",
-          search: search || undefined,
-          dateFrom: dateFrom || undefined,
-          dateTo: dateTo || undefined,
-          dateField,
-          updatedBy: updatedBy || undefined,
-          page: 1,
-          pageSize: CHUNK_SIZE,
-        });
-        if (cancelled) return;
-        const apiTotal = first.total ?? 0;
-        const firstRows = (first.rows ?? []) as IncomeRow[];
-        setTotalFromApi(apiTotal);
-        setAllRows(firstRows);
-        setLoadedCount(firstRows.length);
-
-        if (firstRows.length >= apiTotal) {
-          // โหลดครบแล้วใน chunk เดียว
-          setIsLoadingChunks(false);
-          loadingRef.current = false;
-          return;
-        }
-
-        // โหลด chunks ที่เหลือ
-        const totalPages = Math.ceil(apiTotal / CHUNK_SIZE);
-        const accumulated: IncomeRow[] = [...firstRows];
-        for (let p = 2; p <= totalPages; p++) {
-          if (cancelled) return;
-          const chunk = await utils.accounting.listIncome.fetch({
-            section: section ?? "Boonphone",
-            search: search || undefined,
-            dateFrom: dateFrom || undefined,
-            dateTo: dateTo || undefined,
-            dateField,
-            updatedBy: updatedBy || undefined,
-            page: p,
-            pageSize: CHUNK_SIZE,
-          });
-          if (cancelled) return;
-          const chunkRows = (chunk.rows ?? []) as IncomeRow[];
-          accumulated.push(...chunkRows);
-          setAllRows([...accumulated]);
-          setLoadedCount(accumulated.length);
-        }
-        setIsLoadingChunks(false);
-        loadingRef.current = false;
-      } catch (err) {
-        if (!cancelled) {
-          setLoadError((err as Error).message ?? "โหลดข้อมูลล้มเหลว");
-          setIsLoadingChunks(false);
-          loadingRef.current = false;
-        }
-      }
-    }
-
-    fetchAll();
-    return () => { cancelled = true; loadingRef.current = false; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [queryKey, activeTab, canView, activeTypes.size === 0]);
+  }, [section, canView, incomeCache]);
 
   // ── compat: rows / isLoading / error ──
-  const rows = allRows;
-  const isLoading = isLoadingChunks && allRows.length === 0;
-  const isPartialLoading = isLoadingChunks && allRows.length > 0;
-  const error = loadError ? { message: loadError } : null;
+  // Cache เก็บ raw rows ทั้งหมด (ไม่มี filter) — filter ที่ client ด้วย useMemo ด้านล่าง
+  const rawCacheRows = (cache?.rows ?? []) as IncomeRow[];
+  const isLoading = !cache || (cache.isLoading && rawCacheRows.length === 0);
+  const isPartialLoading = !!(cache?.isLoading && rawCacheRows.length > 0);
+  const loadedCount = cache?.loadedCount ?? 0;
+  const totalFromApi = cache?.totalCount ?? 0;
+  const error = cache?.error ? { message: cache.error } : null;
+
+  // ── Client-side filter ตาม search, dateFrom, dateTo, dateField, updatedBy ──
+  const rows = useMemo<IncomeRow[]>(() => {
+    if (!rawCacheRows.length) return [];
+    return rawCacheRows.filter((row) => {
+      // filter search: receiptNo หรือ contractNo
+      if (search) {
+        const q = search.toLowerCase();
+        const matchReceipt = (row.receiptNo ?? "").toLowerCase().includes(q);
+        const matchContract = (row.contractNo ?? "").toLowerCase().includes(q);
+        if (!matchReceipt && !matchContract) return false;
+      }
+      // filter updatedBy
+      if (updatedBy && (row.updatedBy ?? "") !== updatedBy) return false;
+      // filter dateFrom / dateTo
+      if (dateFrom || dateTo) {
+        const dateVal = dateField === "paidAt" ? row.paidAt : row.updatedAt;
+        const rowDate = dateVal ? (dateVal as string).slice(0, 10) : "";
+        if (dateFrom && rowDate < dateFrom) return false;
+        if (dateTo && rowDate > dateTo) return false;
+      }
+      return true;
+    });
+  }, [rawCacheRows, search, updatedBy, dateFrom, dateTo, dateField]);
 
   const { data: updatedByList } = trpc.accounting.listIncomeUpdatedBy.useQuery(
     {
@@ -403,19 +347,7 @@ export default function Income() {
     { enabled: !!section && canView },
   );
 
-  const { data: exportData, refetch: refetchExport } = trpc.accounting.listIncome.useQuery(
-    {
-      section: section ?? "Boonphone",
-      search: search || undefined,
-      dateFrom: dateFrom || undefined,
-      dateTo: dateTo || undefined,
-      dateField,
-      updatedBy: updatedBy || undefined,
-      page: 1,
-      pageSize: 10000,
-    },
-    { enabled: false },
-  );
+  // exportData ใช้ rows จาก cache แทน (cache เก็บ raw rows ทั้งหมดแล้ว)
 
   // ── Yearly summary ──
   const yearlyYearsParam = useMemo(
@@ -617,11 +549,11 @@ export default function Income() {
   const handleExport = useCallback(async () => {
     const toastId = toast.loading("กำลัง Export...");
     try {
-      const { data: exp } = await refetchExport();
-      if (!exp?.rows?.length) { toast.error("ไม่มีข้อมูล", { id: toastId }); return; }
+      // ใช้ rows จาก cache (ที่ filter แล้วตาม search/date/updatedBy)
+      if (!rows.length) { toast.error("ไม่มีข้อมูล", { id: toastId }); return; }
 
       // apply mode
-      let exportRows: IncomeRow[] = exp.rows as IncomeRow[];
+      let exportRows: IncomeRow[] = rows;
       if (listMode === "slip") {
         exportRows = groupRowsBySlip(exportRows);
       }
@@ -649,7 +581,7 @@ export default function Income() {
     } catch (err) {
       toast.error((err as Error).message ?? "Export failed", { id: toastId });
     }
-  }, [refetchExport, section, listMode]);
+  }, [rows, section, listMode]);
 
   const handleExportYearly = () => {
     const rows2 = yearlyData ?? [];
