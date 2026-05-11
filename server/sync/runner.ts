@@ -27,7 +27,6 @@ import {
   insertSyncLog,
   finishSyncLog,
   updateSyncLogStage,
-  getLastCustomersResumePage,
 } from "./syncLog";
 import type { SectionKey, SyncTrigger } from "../../shared/const";
 import { invalidateDebtCache } from "../debtCache";
@@ -404,17 +403,8 @@ async function syncCustomers(
   client: PartnerClient,
   section: SectionKey,
 ): Promise<Map<string, CustomerListItem>> {
-  // --- Resume support ---
-  // Check if a previous run was killed mid-way and we have a resume_page saved.
-  // If so, we start from that page instead of page 1 to avoid re-fetching
-  // pages we already have in DB. This prevents Cloud Run kills from causing
-  // full re-syncs every time.
-  const resumeFromPage = await getLastCustomersResumePage(section);
-  const startPage = resumeFromPage > 0 ? resumeFromPage + 1 : 1;
-  if (startPage > 1) {
-    console.log(`[syncCustomers] ${section}: Resuming from page ${startPage} (last completed: ${resumeFromPage})`);
-  }
-
+  // Always start from page 1 — resume logic was causing infinite loops
+  // (page N would timeout, next run would start from N+1, timeout again, etc.)
   const log = await insertSyncLog({
     section,
     entity: "customers",
@@ -422,15 +412,14 @@ async function syncCustomers(
   });
   try {
     const byId = new Map<string, CustomerListItem>();
-    // Use limit=500 with 30s timeout per request.
+    // Use limit=500 with 60s timeout — same values that worked reliably before.
+    // limit=500 means ~45 pages for FF365 (22k customers), 60s gives enough headroom.
     // Sub-progress: customers stage spans 20%→40% of overall progress.
-    // We update DB every page so the UI shows live progress instead of freezing at 20%.
-    // resume_page is saved every page so if Cloud Run is killed, next run resumes from here.
-    const STAGE_START = 20; // % when customers stage begins
-    const STAGE_END = 40;   // % when customers stage ends (contracts stage starts)
+    const STAGE_START = 20;
+    const STAGE_END = 40;
     const logId = _overallLogId[section];
 
-    // Note: self-ping is now handled globally in doSync() to cover ALL stages.
+    // Note: self-ping is handled globally in doSync() to cover ALL stages.
     await client.forEachPage<CustomerListItem>(
       "customer",
       (d) => d?.customers,
@@ -444,29 +433,22 @@ async function syncCustomers(
           const subPct = Math.min(page / totalPages, 1);
           const progress = Math.round(STAGE_START + subPct * (STAGE_END - STAGE_START));
           const currentStage = `customers (${page}/${totalPages})`;
-          // Update in-memory lock too
           const lock = _locks[section];
           if (lock) {
             _locks[section] = { ...lock, progress, currentStage };
           }
-          // Save resume_page to DB every page — if Cloud Run is killed, next run resumes from here
-          updateSyncLogStage({ id: logId, currentStage, progress, resumePage: page }).catch(() => {});
+          updateSyncLogStage({ id: logId, currentStage, progress }).catch(() => {});
         }
       },
-      100,  // limit=100 (ลดจาก 500) เพื่อให้แต่ละ page เบาลง API ตอบได้เร็วขึ้น ลด chance ที่จะ hang
-      10_000, // 10s per-request timeout — fail fast if API hangs
-      startPage, // Resume from last completed page if previous run was killed
-      true,   // skipOnError=true — skip pages that fail instead of stopping entire sync
+      500,      // limit=500 — proven to work (45 pages for FF365 instead of 223)
+      60_000,   // 60s per-request timeout — customers endpoint needs more time
     );
-    // Reset resume_page to 0 on success so next run starts fresh
     if (logId) {
-      updateSyncLogStage({ id: logId, currentStage: "customers", progress: STAGE_END, resumePage: 0 }).catch(() => {});
+      updateSyncLogStage({ id: logId, currentStage: "customers", progress: STAGE_END }).catch(() => {});
     }
     await finishSyncLog({ id: log.id, status: "success", rowCount: byId.size });
     return byId;
   } catch (err: any) {
-    // resume_page is already saved in DB from the last successful page fetch above
-    // so next run will resume from there automatically
     await finishSyncLog({
       id: log.id,
       status: "error",
