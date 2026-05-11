@@ -918,7 +918,7 @@ export default function Income() {
 
               {/* จำนวนรายการ */}
               <span className="text-sm text-gray-500">
-                {`${(listMode === "detail" ? total : displayRows.length).toLocaleString()} รายการ`}
+                {`${(listMode === "detail" ? total : displayRows.filter((r) => activeTypes.has(r.incomeType as IncomeType)).length).toLocaleString()} รายการ`}
               </span>
 
               <div className="flex-1" />
@@ -1032,7 +1032,7 @@ export default function Income() {
                       className="h-8 px-2 rounded border border-gray-200 text-sm">
                       {[50, 100, 500, 1000].map((n) => <option key={n} value={n}>{n}</option>)}
                     </select>
-                    <span>รายการ / หน้า &nbsp;|&nbsp; รวม {total.toLocaleString()} รายการ</span>
+                    <span>รายการ / หน้า &nbsp;|&nbsp; รวม {(listMode === "detail" ? total : displayRows.filter((r) => activeTypes.has(r.incomeType as IncomeType)).length).toLocaleString()} รายการ</span>
                   </div>
                   <Pagination className="w-auto mx-0">
                     <PaginationContent>

@@ -1478,3 +1478,8 @@ Task list:
 - [x] ย้ายคอลัมน์ "ประเภท" ไปข้างหน้า "รหัสรายการ" ทั้ง 2 mode
 - [x] แก้ bug ตัวเลือกผู้ทำรายการหายเมื่อปิด badge ใดๆ — ต้องยังคงแสดงตัวเลือกครบ
 - [x] Slip mode: แสดงจำนวนรายการเป็น "X รายการ" แทน "50 รายการ (จาก X)"
+
+## Bug Fix — Slip mode count แสดงจำนวน unique slips
+
+- [x] แก้ count ข้าง pill/tab ใน slip mode ให้แสดงจำนวน displayRows ที่ filter ตาม activeTypes (เหมือน Badge) แทนที่จะแสดง total จาก API
+- [x] แก้ footer pagination "รวม X รายการ" ใน slip mode ให้ใช้ displayRows count เช่นกัน
