@@ -100,18 +100,21 @@ type IncomeRow = {
 /**
  * groupRowsBySlip — mode รายการตามบิล (slip mode)
  *
- * ปิดยอด = รายการล่าสุดของสัญญาสิ้นสุดสัญญา ที่ paidAt วันเดียวกัน + updatedBy คนเดียวกัน + updatedAt วันเดียวกัน
- *   ไล่จากล่าสุดขึ้นไปจนอย่างใดอย่างหนึ่งไม่ตรงกัน
- * ขายเครื่อง = รายการล่าสุดของสัญญาหนี้เสีย เงื่อนไขเดียวกัน
- * ค่างวด = ไม่ group
+ * หลักการ:
+ * - ค่างวด: ไม่ group แสดงทุก row ตรงๆ
+ * - ปิดยอด: group รายการล่าสุดของสัญญาสิ้นสุดสัญญา
+ *   โดยไล่จากล่าสุดต่อเนื่อง (consecutive) ที่ paidAt วันเดียวกัน
+ *   + updatedBy คนเดียวกัน + updatedAt วันเดียวกัน
+ *   หยุดทันทีที่อย่างใดอย่างหนึ่งไม่ตรง
+ * - ขายเครื่อง: เงื่อนไขเดียวกับปิดยอด แต่สำหรับสัญญาหนี้เสีย
  *
- * ยอดรวมทั้ง 2 mode เท่ากัน (เพราะ group แค่รวม amount ไม่ได้ตัดออก)
+ * ยอดรวมทั้ง 2 mode เท่ากัน (group แค่รวม amount ไม่ได้ตัดรายการออก)
  */
 function groupRowsBySlip(rows: IncomeRow[]): IncomeRow[] {
   // แยกรายการตาม incomeType (classified)
   const installmentRows: IncomeRow[] = []; // ค่างวด — ไม่ group
-  const closingRows: IncomeRow[] = [];     // ปิดยอด — group ตาม batch
-  const deviceRows: IncomeRow[] = [];      // ขายเครื่อง — group ตาม batch
+  const closingRows: IncomeRow[] = [];     // ปิดยอด — group ตาม consecutive batch
+  const deviceRows: IncomeRow[] = [];      // ขายเครื่อง — group ตาม consecutive batch
 
   for (const row of rows) {
     const type = row.incomeType as IncomeType;
@@ -121,9 +124,16 @@ function groupRowsBySlip(rows: IncomeRow[]): IncomeRow[] {
   }
 
   /**
-   * groupByBatch — group rows ตาม batch สุดท้ายของแต่ละสัญญา
-   * batch = paidAt วันเดียวกัน + updatedBy คนเดียวกัน + updatedAt วันเดียวกัน
-   * ไล่จากล่าสุดขึ้นไปจนอย่างใดอย่างหนึ่งไม่ตรงกัน
+   * groupByBatch — group rows ตาม consecutive batch สุดท้ายของแต่ละสัญญา
+   *
+   * Algorithm:
+   * 1. จัดกลุ่มตามสัญญา
+   * 2. เรียง updatedAt DESC (ล่าสุดก่อน)
+   * 3. ดู batch key ของ row แรก (ล่าสุด): paidAt date + updatedBy + updatedAt date
+   * 4. ไล่ต่อเนื่องลงมา: ถ้า row ถัดไปตรง batch key เดียวกัน → รวมเข้า batch
+   *    ถ้าไม่ตรง → หยุดทันที (consecutive: ไม่ข้ามรายการที่ไม่ตรง)
+   * 5. batch rows → สร้าง 1 grouped row (amount = sum)
+   * 6. remaining rows → ใส่ตรงๆ ไม่ group
    */
   function groupByBatch(typeRows: IncomeRow[], targetType: IncomeType): IncomeRow[] {
     // จัดกลุ่มตามสัญญา
@@ -146,8 +156,7 @@ function groupRowsBySlip(rows: IncomeRow[]): IncomeRow[] {
         return 0;
       });
 
-      // ไล่จากล่าสุด: เอารายการที่ paidAt วันเดียวกัน + updatedBy คนเดียวกัน + updatedAt วันเดียวกัน
-      // จนอย่างใดอย่างหนึ่งไม่ตรงกัน
+      // batch key จาก row แรก (ล่าสุด)
       const firstRow = sorted[0];
       const batchPaidAt = firstRow.paidAt ? firstRow.paidAt.slice(0, 10) : "";
       const batchUpdatedBy = firstRow.updatedBy ?? "";
@@ -156,8 +165,15 @@ function groupRowsBySlip(rows: IncomeRow[]): IncomeRow[] {
       let batchAmount = 0;
       const batchRows: IncomeRow[] = [];
       const remainingRows: IncomeRow[] = [];
+      let batchEnded = false; // consecutive: หยุดทันทีที่ไม่ตรง
 
       for (const row of sorted) {
+        if (batchEnded) {
+          // หลัง batch สิ้นสุด → ใส่ตรงๆ ทั้งหมด
+          remainingRows.push(row);
+          continue;
+        }
+
         const rowPaidAt = row.paidAt ? row.paidAt.slice(0, 10) : "";
         const rowUpdatedBy = row.updatedBy ?? "";
         const rowUpdatedAtDate = row.updatedAt ? row.updatedAt.slice(0, 10) : "";
@@ -167,9 +183,12 @@ function groupRowsBySlip(rows: IncomeRow[]): IncomeRow[] {
           rowUpdatedBy === batchUpdatedBy &&
           rowUpdatedAtDate === batchUpdatedAtDate
         ) {
+          // ตรง batch key → รวมเข้า batch
           batchAmount += row.amount ?? 0;
           batchRows.push(row);
         } else {
+          // ไม่ตรง → หยุด batch ทันที (consecutive)
+          batchEnded = true;
           remainingRows.push(row);
         }
       }

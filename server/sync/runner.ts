@@ -1,5 +1,5 @@
 /**
- * Sync runner — pulls one section (Boonphone or Fastfone365) from the partner
+ * Sync runner -- pulls one section (Boonphone or Fastfone365) from the partner
  * API into our DB. Follows the `external-api-db-sync-patterns` skill:
  *  - per-section `_isSyncing` lock to avoid concurrent runs
  *  - overall timeout via Promise.race
@@ -39,7 +39,7 @@ const OVERALL_TIMEOUT_MS = 180 * 60 * 1000; // 180 minutes ceiling per section (
 // A sync row older than this with status=in_progress is treated as abandoned.
 const STALE_INPROGRESS_MS = OVERALL_TIMEOUT_MS + 5 * 60 * 1000;
 
-/** Stages in order — used to compute progress %. */
+/** Stages in order -- used to compute progress %. */
 export const SYNC_STAGES = [
   "partners",
   "customers",
@@ -67,7 +67,7 @@ type LockMap = Record<string, SyncLockInfo | null>;
 const _locks: LockMap = { Boonphone: null, Fastfone365: null };
 // Track the overall sync log ID per section for DB stage updates
 const _overallLogId: Record<string, number> = { Boonphone: 0, Fastfone365: 0 };
-// Cancellation flags — set to true to request cancellation of running sync
+// Cancellation flags -- set to true to request cancellation of running sync
 const _cancelRequested: Record<string, boolean> = { Boonphone: false, Fastfone365: false };
 
 /** Request cancellation of a running sync for a section. */
@@ -86,7 +86,7 @@ export function getSyncStatus(section: SectionKey): SyncLockInfo | null {
   return _locks[section];
 }
 
-/** Update progress for a running sync — writes to both in-memory lock and DB. */
+/** Update progress for a running sync -- writes to both in-memory lock and DB. */
 function setStage(section: SectionKey, stageIndex: number) {
   const lock = _locks[section];
   if (!lock) return;
@@ -142,7 +142,7 @@ async function isSectionLockedInDb(section: SectionKey): Promise<boolean> {
       .limit(1);
     return rows.length > 0;
   } catch {
-    // If the lock check itself fails, don't block the sync — fail open.
+    // If the lock check itself fails, don't block the sync -- fail open.
     return false;
   }
 }
@@ -213,7 +213,7 @@ async function doSync(
 
   // Global self-ping: Cloud Run kills idle instances after ~60s of no HTTP traffic.
   // Keep a single interval alive for the ENTIRE sync (all stages) so Cloud Run
-  // never sees the process as idle — regardless of which stage is running.
+  // never sees the process as idle -- regardless of which stage is running.
   const selfPingBaseUrl = process.env.SELF_PING_URL ?? `http://localhost:${process.env.PORT ?? 3000}`;
   const globalSelfPing = setInterval(() => {
     fetch(`${selfPingBaseUrl}/api/ping`).catch(() => {});
@@ -228,12 +228,12 @@ async function doSync(
 
   let overallRows = 0;
   try {
-    // 1) Partners — for province + status columns. Lightweight, sync in full.
+    // 1) Partners -- for province + status columns. Lightweight, sync in full.
     checkCancel();
     setStage(section, 0);
     const partnersById = await syncPartners(client, section);
 
-    // 2) Customers — for "age". Cache map to enrich contract rows.
+    // 2) Customers -- for "age". Cache map to enrich contract rows.
     // Best-effort: Fastfone365 customers endpoint can be slow/hang on some pages.
     // If it fails, we proceed with an empty map so contracts still sync.
     checkCancel();
@@ -246,7 +246,7 @@ async function doSync(
       console.warn(`[runner] ${section}: customers sync failed (non-fatal), proceeding with empty map:`, custErr?.message ?? custErr);
     }
 
-    // 3) Contracts — list + detail enrichment.
+    // 3) Contracts -- list + detail enrichment.
     checkCancel();
     setStage(section, 2);
     const contractRows = await syncContracts(
@@ -257,7 +257,7 @@ async function doSync(
     );
     overallRows += contractRows;
 
-    // 4) Installments — best-effort: if this fails (e.g. Cloud Run timeout),
+    // 4) Installments -- best-effort: if this fails (e.g. Cloud Run timeout),
     // we still proceed to populate cache from whatever data is already in DB.
     checkCancel();
     setStage(section, 3);
@@ -271,7 +271,7 @@ async function doSync(
       console.warn(`[runner] ${section}: installments sync failed (non-fatal for cache):`, instErr?.message ?? instErr);
     }
 
-    // 5) Payment Transactions — best-effort similarly
+    // 5) Payment Transactions -- best-effort similarly
     checkCancel();
     setStage(section, 4);
     let payFailed = false;
@@ -312,15 +312,15 @@ async function doSync(
     invalidateDebtCache(section);
 
     // Populate DB cache tables (debt_target_cache + debt_collected_cache)
-    // Always runs — even if installments/payments failed — so cache stays fresh
+    // Always runs -- even if installments/payments failed -- so cache stays fresh
     // from whatever data is already in DB (previous successful sync).
     try {
       const cacheResult = await populateDebtCache(section);
       console.log(
-        `[runner] ${section}: cache populated — target=${cacheResult.targetRows}, collected=${cacheResult.collectedRows}`,
+        `[runner] ${section}: cache populated -- target=${cacheResult.targetRows}, collected=${cacheResult.collectedRows}`,
       );
     } catch (cacheErr: any) {
-      // Cache population failure is non-fatal — log and continue
+      // Cache population failure is non-fatal -- log and continue
       console.error(`[runner] ${section}: cache population failed:`, cacheErr?.message ?? cacheErr);
     }
 
@@ -348,7 +348,7 @@ async function doSync(
     try {
       console.log(`[runner] ${section}: attempting cache populate after sync failure...`);
       const cacheResult = await populateDebtCache(section);
-      console.log(`[runner] ${section}: post-failure cache populated — target=${cacheResult.targetRows}, collected=${cacheResult.collectedRows}`);
+      console.log(`[runner] ${section}: post-failure cache populated -- target=${cacheResult.targetRows}, collected=${cacheResult.collectedRows}`);
     } catch (cacheErr: any) {
       console.error(`[runner] ${section}: post-failure cache populate failed:`, cacheErr?.message ?? cacheErr);
     }
@@ -404,7 +404,7 @@ async function syncCustomers(
   client: PartnerClient,
   section: SectionKey,
 ): Promise<Map<string, CustomerListItem>> {
-  // Always start from page 1 — resume logic was causing infinite loops
+  // Always start from page 1 -- resume logic was causing infinite loops
   // (page N would timeout, next run would start from N+1, timeout again, etc.)
   const log = await insertSyncLog({
     section,
@@ -413,7 +413,7 @@ async function syncCustomers(
   });
   try {
     const byId = new Map<string, CustomerListItem>();
-    // Use limit=500 with 60s timeout — same values that worked reliably before.
+    // Use limit=500 with 60s timeout -- same values that worked reliably before.
     // limit=500 means ~45 pages for FF365 (22k customers), 60s gives enough headroom.
     // Sub-progress: customers stage spans 20%→40% of overall progress.
     const STAGE_START = 20;
@@ -442,8 +442,8 @@ async function syncCustomers(
           updateSyncLogStage({ id: logId, currentStage, progress }).catch(() => {});
         }
       },
-      500,      // limit=500 — proven to work (45 pages for FF365 instead of 223)
-      60_000,   // 60s per-request timeout — customers endpoint needs more time
+      500,      // limit=500 -- proven to work (45 pages for FF365 instead of 223)
+      60_000,   // 60s per-request timeout -- customers endpoint needs more time
     );
     if (logId) {
       updateSyncLogStage({ id: logId, currentStage: "customers", progress: STAGE_END }).catch(() => {});
@@ -595,7 +595,7 @@ async function syncInstallments(
     // API ใหม่ stamp created_by/updated_by ไว้ที่ payment_transactions โดยตรง
     // ทั้ง Boonphone และ FF365 ใช้ API เดียวกัน ดังนั้น updated_by ใน report
     // จะดึงจาก payment_transactions.updated_by แทน (แม่นยำกว่า ไม่ต้องเดาจากวันที่)
-    // enrichInstallmentsWithUpdatedBy(client, section) — ไม่เรียกอีกต่อไป
+    // enrichInstallmentsWithUpdatedBy(client, section) -- ไม่เรียกอีกต่อไป
     await finishSyncLog({ id: log.id, status: "success", rowCount });
     return rowCount;
   } catch (err: any) {
@@ -831,7 +831,7 @@ async function enrichContractsWithDeviceIds(
         const product = data?.contract?.product ?? {};
         const imei = product.imei ? String(product.imei) : null;
         const serial = product.serial_no ? String(product.serial_no) : null;
-        // Skip if the API has no data either — avoids a pointless UPDATE.
+        // Skip if the API has no data either -- avoids a pointless UPDATE.
         if (imei || serial) {
           updates.push({ externalId: extId, imei, serialNo: serial });
         }
@@ -1125,7 +1125,7 @@ async function cleanupTodayPayments(section: SectionKey): Promise<void> {
     // Re-populate cache หลังลบเพื่อให้ยอดใน cache ตรงกับข้อมูลที่เหลือ
     try {
       const cacheResult = await populateDebtCache(section);
-      console.log(`[runner] ${section}: post-cleanup cache re-populated — target=${cacheResult.targetRows}, collected=${cacheResult.collectedRows}`);
+      console.log(`[runner] ${section}: post-cleanup cache re-populated -- target=${cacheResult.targetRows}, collected=${cacheResult.collectedRows}`);
     } catch (cacheErr: any) {
       console.warn(`[runner] ${section}: post-cleanup cache re-populate failed:`, cacheErr?.message ?? cacheErr);
     }
