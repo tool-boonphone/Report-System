@@ -333,26 +333,26 @@ export async function listIncomeUpdatedBy(
   if (dateFrom) conditions.push(`${dateCol} >= '${esc(dateFrom)}'`);
   if (dateTo) conditions.push(`${dateCol} <= '${esc(dateTo)} 23:59:59'`);
 
-  let incomeTypeFilter = "";
+  let incomeTypeCondition = "";
   if (incomeTypes && incomeTypes.length > 0) {
     const quoted = incomeTypes.map((t) => `'${esc(t)}'`).join(", ");
-    incomeTypeFilter = `WHERE income_type IN (${quoted})`;
+    incomeTypeCondition = `AND income_type IN (${quoted})`;
   }
 
   const whereStr = conditions.join(" AND ");
   const querySql = `
-    SELECT DISTINCT pt.updated_by
+    SELECT DISTINCT updated_by
     FROM (
       SELECT
-        pt.updated_by,
+        pt.updated_by AS updated_by,
         ${PT_INCOME_TYPE_CASE} AS income_type
       FROM payment_transactions pt
       LEFT JOIN contracts c ON c.contract_no = pt.contract_no AND c.section = pt.section
       LEFT JOIN (${bdlSubquery}) AS bdl ON bdl.contract_no = pt.contract_no AND bdl.section = pt.section
       WHERE ${whereStr}
+        AND pt.updated_by IS NOT NULL AND pt.updated_by != ''
     ) AS filtered
-    ${incomeTypeFilter}
-    WHERE updated_by IS NOT NULL AND updated_by != ''
+    WHERE 1=1 ${incomeTypeCondition}
     ORDER BY updated_by ASC
   `;
 
