@@ -1,0 +1,20 @@
+{
+  "query": "\nSELECT section, entity, status, triggered_by, \n       started_at, finished_at, row_count, error_message\nFROM sync_logs\nWHERE DATE(started_at) = '2026-05-11'\n  AND entity = 'all'\nORDER BY started_at DESC\nLIMIT 10;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT section, entity, status, triggered_by, \n       started_at, finished_at, row_count, error_message\nFROM sync_logs\nWHERE DATE(started_at) = '2026-05-11'\n  AND entity = 'all'\nORDER BY started_at DESC\nLIMIT 10;\n",
+  "rows": [
+    {
+      "section": "Fastfone365",
+      "entity": "all",
+      "status": "error",
+      "triggered_by": "startup",
+      "started_at": "2026-05-11 02:17:05",
+      "finished_at": "2026-05-11 04:06:18",
+      "row_count": "0",
+      "error_message": "Auto-cleared on startup: previous Cloud Run instance was killed during sync"
+    }
+  ],
+  "messages": [],
+  "stdout": "section\tentity\tstatus\ttriggered_by\tstarted_at\tfinished_at\trow_count\terror_message\nFastfone365\tall\terror\tstartup\t2026-05-11 02:17:05\t2026-05-11 04:06:18\t0\tAuto-cleared on startup: previous Cloud Run instance was killed during sync\n",
+  "stderr": "",
+  "execution_time_ms": 1946
+}
