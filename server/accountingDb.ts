@@ -211,7 +211,8 @@ export async function listIncome(params: IncomeParams): Promise<{
     `pt.section = '${secEsc}'`,
     PT_INCOME_BASE_WHERE,
   ];
-  if (search) conditions.push(`(pt.contract_no LIKE '%${esc(search)}%' OR c.customer_name LIKE '%${esc(search)}%')`);
+  // ค้นหาจาก รหัสรายการ (receipt_no) หรือ เลขที่สัญญา (contract_no) เท่านั้น
+  if (search) conditions.push(`(pt.receipt_no LIKE '%${esc(search)}%' OR pt.contract_no LIKE '%${esc(search)}%')`);
   if (dateFrom) conditions.push(`${dateCol} >= '${esc(dateFrom)}'`);
   if (dateTo) conditions.push(`${dateCol} <= '${esc(dateTo)} 23:59:59'`);
   if (updatedBy) conditions.push(`pt.updated_by = '${esc(updatedBy)}'`);
@@ -327,7 +328,8 @@ export async function listIncomeUpdatedBy(
     `pt.section = '${secEsc}'`,
     PT_INCOME_BASE_WHERE,
   ];
-  if (search) conditions.push(`(pt.contract_no LIKE '%${esc(search)}%' OR c.customer_name LIKE '%${esc(search)}%')`);
+  // ค้นหาจาก รหัสรายการ (receipt_no) หรือ เลขที่สัญญา (contract_no) เท่านั้น
+  if (search) conditions.push(`(pt.receipt_no LIKE '%${esc(search)}%' OR pt.contract_no LIKE '%${esc(search)}%')`);
   if (dateFrom) conditions.push(`${dateCol} >= '${esc(dateFrom)}'`);
   if (dateTo) conditions.push(`${dateCol} <= '${esc(dateTo)} 23:59:59'`);
 
@@ -474,7 +476,8 @@ export async function getIncomeSummary(
     `pt.section = '${secEsc}'`,
     PT_INCOME_BASE_WHERE,
   ];
-  if (search) conditions.push(`(pt.contract_no LIKE '%${esc(search)}%' OR c.customer_name LIKE '%${esc(search)}%')`);
+  // ค้นหาจาก รหัสรายการ (receipt_no) หรือ เลขที่สัญญา (contract_no) เท่านั้น
+  if (search) conditions.push(`(pt.receipt_no LIKE '%${esc(search)}%' OR pt.contract_no LIKE '%${esc(search)}%')`);
   if (dateFrom) conditions.push(`${dateCol} >= '${esc(dateFrom)}'`);
   if (dateTo) conditions.push(`${dateCol} <= '${esc(dateTo)} 23:59:59'`);
   if (updatedBy) conditions.push(`pt.updated_by = '${esc(updatedBy)}'`);

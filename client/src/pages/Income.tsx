@@ -331,7 +331,7 @@ export default function Income() {
       dateFrom: dateFrom || undefined,
       dateTo: dateTo || undefined,
       dateField,
-      incomeTypes: incomeTypesParam,
+      // ไม่ส่ง incomeTypes เพื่อให้ตัวเลือกผู้ทำรายการครบเสมอ ไม่หายเมื่อปิด badge
     },
     { enabled: !!section && canView },
   );
@@ -557,14 +557,14 @@ export default function Income() {
       }
 
       const wsData = [
-        ["No.", "วันที่ชำระ", "รหัสรายการ", "ประเภท", "เลขที่สัญญา", "ชื่อลูกค้า", "ยอดเงิน", "ทำรายการโดย", "ทำรายการเมื่อ"],
+        ["No.", "วันที่ชำระ", "ประเภท", "รหัสรายการ", "เลขที่สัญญา", "ชื่อลูกค้า", "ยอดเงิน", "ทำรายการโดย", "ทำรายการเมื่อ"],
         ...exportRows.map((r, i) => {
           // ใช้ getDisplayType เพื่อแสดงประเภทตาม mode
           const displayType = listMode === "detail"
             ? (r.originalIncomeType === "ปิดยอด" ? "ปิดยอด" : "ค่างวด")
             : r.incomeType;
           return [
-            i + 1, fmtDate(r.paidAt), r.receiptNo ?? "", displayType, r.contractNo,
+            i + 1, fmtDate(r.paidAt), displayType, r.receiptNo ?? "", r.contractNo,
             r.customerName ?? "", r.amount, r.updatedBy ?? "", fmtDateTime(r.updatedAt),
           ];
         }),
@@ -830,7 +830,7 @@ export default function Income() {
               <div className="relative flex items-center">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
                 <input type="text" value={searchInput} onChange={(e) => setSearchInput(e.target.value)}
-                  placeholder="ค้นหาสัญญา / ลูกค้า"
+                  placeholder="ค้นหารหัสรายการ / เลขที่สัญญา"
                   className="h-9 pl-8 pr-8 rounded-md border border-gray-200 bg-white text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 w-[200px]" />
                 {searchInput && (
                   <button type="button" onClick={() => setSearchInput("")}
@@ -918,9 +918,7 @@ export default function Income() {
 
               {/* จำนวนรายการ */}
               <span className="text-sm text-gray-500">
-                {listMode === "detail"
-                  ? `${total.toLocaleString()} รายการ`
-                  : `${displayRows.length.toLocaleString()} รายการ (จาก ${total.toLocaleString()})`}
+                {`${(listMode === "detail" ? total : displayRows.length).toLocaleString()} รายการ`}
               </span>
 
               <div className="flex-1" />
@@ -965,12 +963,12 @@ export default function Income() {
                         <th onClick={() => handleSort("paidAt")} className="px-3 py-2.5 font-medium whitespace-nowrap select-none cursor-pointer hover:bg-blue-600 text-left w-28">
                           <div className="flex items-center gap-1">วันที่ชำระ<SortIcon col="paidAt" /></div>
                         </th>
-                        {/* รหัสรายการ (not sortable) */}
-                        <th className="px-3 py-2.5 font-medium whitespace-nowrap select-none text-left w-44">รหัสรายการ</th>
-                        {/* ประเภท (sortable) */}
+                        {/* ประเภท (sortable) — ย้ายมาก่อนรหัสรายการ */}
                         <th onClick={() => handleSort("incomeType")} className="px-3 py-2.5 font-medium whitespace-nowrap select-none cursor-pointer hover:bg-blue-600 text-left w-28">
                           <div className="flex items-center gap-1">ประเภท<SortIcon col="incomeType" /></div>
                         </th>
+                        {/* รหัสรายการ (not sortable) */}
+                        <th className="px-3 py-2.5 font-medium whitespace-nowrap select-none text-left w-44">รหัสรายการ</th>
                         {/* เลขที่สัญญา (sortable) */}
                         <th onClick={() => handleSort("contractNo")} className="px-3 py-2.5 font-medium whitespace-nowrap select-none cursor-pointer hover:bg-blue-600 text-left w-36">
                           <div className="flex items-center gap-1">เลขที่สัญญา<SortIcon col="contractNo" /></div>
@@ -1001,13 +999,14 @@ export default function Income() {
                           <tr key={`${row.contractNo}-${idx}`} className="border-b border-gray-100 hover:bg-blue-50 transition-colors">
                             <td className="px-3 py-2 text-right text-gray-400 text-xs">{rowNo}</td>
                             <td className="px-3 py-2 whitespace-nowrap text-gray-700">{fmtDate(row.paidAt)}</td>
-                            <td className="px-3 py-2 font-mono text-xs text-gray-500 whitespace-nowrap">{row.receiptNo ?? "-"}</td>
+                            {/* ประเภท — ย้ายมาก่อนรหัสรายการ */}
                             <td className="px-3 py-2">
                               <span className={["inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium", typeColor.bg, typeColor.text].join(" ")}>
                                 <span className={["w-1.5 h-1.5 rounded-full", typeColor.dot].join(" ")} />
                                 {displayType}
                               </span>
                             </td>
+                            <td className="px-3 py-2 font-mono text-xs text-gray-500 whitespace-nowrap">{row.receiptNo ?? "-"}</td>
                             <td className="px-3 py-2 font-mono text-xs text-gray-700">
                               {row.contractNo}
                             </td>
