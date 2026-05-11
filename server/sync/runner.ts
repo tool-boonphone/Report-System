@@ -209,8 +209,15 @@ async function doSync(
     const partnersById = await syncPartners(client, section);
 
     // 2) Customers — for "age". Cache map to enrich contract rows.
+    // Best-effort: Fastfone365 customers endpoint can be slow/hang on some pages.
+    // If it fails, we proceed with an empty map so contracts still sync.
     setStage(section, 1);
-    const customersById = await syncCustomers(client, section);
+    let customersById = new Map<string, CustomerListItem>();
+    try {
+      customersById = await syncCustomers(client, section);
+    } catch (custErr: any) {
+      console.warn(`[runner] ${section}: customers sync failed (non-fatal), proceeding with empty map:`, custErr?.message ?? custErr);
+    }
 
     // 3) Contracts — list + detail enrichment.
     setStage(section, 2);
@@ -404,8 +411,8 @@ async function syncCustomers(
           updateSyncLogStage({ id: logId, currentStage, progress }).catch(() => {});
         }
       },
-      500,
-      60_000, // 60s per-request timeout (customers endpoint is slower than others)
+    500,
+    30_000, // 30s per-request timeout — fail fast if API hangs (was 60s but caused Cloud Run kills)
     );
     await finishSyncLog({ id: log.id, status: "success", rowCount: byId.size });
     return byId;
