@@ -67,6 +67,20 @@ type LockMap = Record<string, SyncLockInfo | null>;
 const _locks: LockMap = { Boonphone: null, Fastfone365: null };
 // Track the overall sync log ID per section for DB stage updates
 const _overallLogId: Record<string, number> = { Boonphone: 0, Fastfone365: 0 };
+// Cancellation flags — set to true to request cancellation of running sync
+const _cancelRequested: Record<string, boolean> = { Boonphone: false, Fastfone365: false };
+
+/** Request cancellation of a running sync for a section. */
+export function requestCancelSync(section: SectionKey): boolean {
+  if (!_locks[section]) return false; // not running
+  _cancelRequested[section] = true;
+  return true;
+}
+
+/** Check if cancellation has been requested for a section. */
+export function isCancelRequested(section: SectionKey): boolean {
+  return _cancelRequested[section] === true;
+}
 
 export function getSyncStatus(section: SectionKey): SyncLockInfo | null {
   return _locks[section];
@@ -168,6 +182,8 @@ export async function runSectionSync(
     stageIndex: -1,
     totalStages: SYNC_STAGES.length,
   };
+  // Reset cancel flag before starting
+  _cancelRequested[section] = false;
   try {
     const work = doSync(client, section, triggeredBy);
     const timeout = new Promise<never>((_, rej) =>
@@ -203,24 +219,35 @@ async function doSync(
     fetch(`${selfPingBaseUrl}/api/ping`).catch(() => {});
   }, 8_000);
 
+  /** Helper: throw if user requested cancellation */
+  const checkCancel = () => {
+    if (_cancelRequested[section]) {
+      throw new Error(`[${section}] sync cancelled by user`);
+    }
+  };
+
   let overallRows = 0;
   try {
     // 1) Partners — for province + status columns. Lightweight, sync in full.
+    checkCancel();
     setStage(section, 0);
     const partnersById = await syncPartners(client, section);
 
     // 2) Customers — for "age". Cache map to enrich contract rows.
     // Best-effort: Fastfone365 customers endpoint can be slow/hang on some pages.
     // If it fails, we proceed with an empty map so contracts still sync.
+    checkCancel();
     setStage(section, 1);
     let customersById = new Map<string, CustomerListItem>();
     try {
       customersById = await syncCustomers(client, section);
     } catch (custErr: any) {
+      if (_cancelRequested[section]) throw custErr; // propagate cancel
       console.warn(`[runner] ${section}: customers sync failed (non-fatal), proceeding with empty map:`, custErr?.message ?? custErr);
     }
 
     // 3) Contracts — list + detail enrichment.
+    checkCancel();
     setStage(section, 2);
     const contractRows = await syncContracts(
       client,
@@ -232,23 +259,27 @@ async function doSync(
 
     // 4) Installments — best-effort: if this fails (e.g. Cloud Run timeout),
     // we still proceed to populate cache from whatever data is already in DB.
+    checkCancel();
     setStage(section, 3);
     let instFailed = false;
     try {
       const instRows = await syncInstallments(client, section);
       overallRows += instRows;
     } catch (instErr: any) {
+      if (_cancelRequested[section]) throw instErr; // propagate cancel
       instFailed = true;
       console.warn(`[runner] ${section}: installments sync failed (non-fatal for cache):`, instErr?.message ?? instErr);
     }
 
     // 5) Payment Transactions — best-effort similarly
+    checkCancel();
     setStage(section, 4);
     let payFailed = false;
     try {
       const payRows = await syncPayments(client, section);
       overallRows += payRows;
     } catch (payErr: any) {
+      if (_cancelRequested[section]) throw payErr; // propagate cancel
       payFailed = true;
       console.warn(`[runner] ${section}: payments sync failed (non-fatal for cache):`, payErr?.message ?? payErr);
     }

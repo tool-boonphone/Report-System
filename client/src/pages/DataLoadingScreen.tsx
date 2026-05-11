@@ -68,6 +68,20 @@ function SyncWaitingScreen({
     refetchInterval: 3000, // poll ทุก 3 วินาที
   });
 
+  const cancelSync = trpc.sync.cancel.useMutation({
+    onSuccess: () => {
+      // หลัง cancel สำเร็จ รอ 1 วินาทีแล้ว trigger onSyncDone
+      setTimeout(() => onSyncDone(), 1000);
+    },
+  });
+
+  const [showConfirm, setShowConfirm] = useState(false);
+
+  const handleCancelConfirm = () => {
+    cancelSync.mutate({ section });
+    setShowConfirm(false);
+  };
+
   const info = syncStatus.data?.[section];
   const isRunning = info?.running ?? true;
   const progress = info?.progress ?? 0;
@@ -174,7 +188,39 @@ function SyncWaitingScreen({
         )}
       </div>
 
-      <p className="text-xs text-gray-400 text-center mt-4">
+      {/* Cancel button */}
+      <div className="text-center mt-4">
+        {!showConfirm ? (
+          <button
+            onClick={() => setShowConfirm(true)}
+            className="text-sm text-gray-400 hover:text-red-500 transition-colors underline underline-offset-2"
+          >
+            ยกเลิกการอัพเดท
+          </button>
+        ) : (
+          <div className="bg-white rounded-xl border border-red-100 p-4 shadow-sm">
+            <p className="text-sm font-medium text-gray-700 mb-3">ยืนยันการยกเลิก?</p>
+            <p className="text-xs text-gray-500 mb-4">ข้อมูลที่ sync ไปแล้วจะถูกเก็บไว้ แต่ข้อมูลที่ยังไม่ได้ sync จะไม่ครบถ้วน</p>
+            <div className="flex gap-2 justify-center">
+              <button
+                onClick={() => setShowConfirm(false)}
+                className="px-4 py-1.5 text-sm rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50"
+              >
+                ไม่ยกเลิก
+              </button>
+              <button
+                onClick={handleCancelConfirm}
+                disabled={cancelSync.isPending}
+                className="px-4 py-1.5 text-sm rounded-lg bg-red-500 text-white hover:bg-red-600 disabled:opacity-50"
+              >
+                {cancelSync.isPending ? "กำลังยกเลิก..." : "ยืนยันยกเลิก"}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <p className="text-xs text-gray-400 text-center mt-3">
         ระบบจะเข้าสู่หน้าโหลดข้อมูลอัตโนมัติเมื่ออัพเดทเสร็จสิ้น
       </p>
     </div>
