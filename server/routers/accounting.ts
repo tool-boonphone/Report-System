@@ -96,10 +96,25 @@ export const accountingRouter = router({
    * ดึง distinct updatedBy สำหรับ income filter dropdown
    */
   listIncomeUpdatedBy: appProcedure
-    .input(z.object({ section: z.string() }))
+    .input(
+      z.object({
+        section: z.string(),
+        search: z.string().optional(),
+        dateFrom: z.string().optional(),
+        dateTo: z.string().optional(),
+        dateField: z.enum(["paidAt", "updatedAt"]).optional().default("paidAt"),
+        incomeTypes: z.array(z.enum(["ค่างวด", "ขายเครื่อง", "ปิดยอด"])).optional(),
+      })
+    )
     .query(async ({ input }) => {
       if (input.section !== "Boonphone" && input.section !== "Fastfone365") return [];
-      return listIncomeUpdatedBy(input.section as "Boonphone" | "Fastfone365");
+      return listIncomeUpdatedBy(input.section as "Boonphone" | "Fastfone365", {
+        search: input.search,
+        dateFrom: input.dateFrom,
+        dateTo: input.dateTo,
+        dateField: input.dateField,
+        incomeTypes: input.incomeTypes as IncomeType[] | undefined,
+      });
     }),
 
   /**

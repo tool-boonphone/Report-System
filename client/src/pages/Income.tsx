@@ -325,7 +325,14 @@ export default function Income() {
   );
 
   const { data: updatedByList } = trpc.accounting.listIncomeUpdatedBy.useQuery(
-    { section: section ?? "Boonphone" },
+    {
+      section: section ?? "Boonphone",
+      search: search || undefined,
+      dateFrom: dateFrom || undefined,
+      dateTo: dateTo || undefined,
+      dateField,
+      incomeTypes: incomeTypesParam,
+    },
     { enabled: !!section && canView },
   );
 

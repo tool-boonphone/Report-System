@@ -287,20 +287,74 @@ export async function listIncome(params: IncomeParams): Promise<{
   return { rows, total };
 }
 
-export async function listIncomeUpdatedBy(section: SectionKey): Promise<string[]> {
+export async function listIncomeUpdatedBy(
+  section: SectionKey,
+  opts?: {
+    search?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    dateField?: "paidAt" | "updatedAt";
+    incomeTypes?: IncomeType[];
+  }
+): Promise<string[]> {
   const db = await getDb();
   if (!db) return [];
   const esc = (v: string) => v.replace(/'/g, "''");
-  const result = await db.execute(
-    sql.raw(`
-      SELECT DISTINCT updated_by
-      FROM payment_transactions
-      WHERE section = '${esc(section)}'
-        AND JSON_EXTRACT(raw_json, '$.source') IS NULL
-        AND updated_by IS NOT NULL AND updated_by != ''
-      ORDER BY updated_by ASC
-    `),
-  );
+  const secEsc = esc(section);
+
+  // ถ้าไม่มี filter เพิ่มเติม ใช้ query เร็ว (ไม่ต้อง JOIN)
+  if (!opts?.search && !opts?.dateFrom && !opts?.dateTo && (!opts?.incomeTypes || opts.incomeTypes.length === 0)) {
+    const result = await db.execute(
+      sql.raw(`
+        SELECT DISTINCT updated_by
+        FROM payment_transactions
+        WHERE section = '${secEsc}'
+          AND JSON_EXTRACT(raw_json, '$.source') IS NULL
+          AND updated_by IS NOT NULL AND updated_by != ''
+        ORDER BY updated_by ASC
+      `),
+    );
+    const arr: any[] = (result as any)[0] ?? result;
+    return (arr ?? []).map((r: any) => r.updated_by).filter(Boolean);
+  }
+
+  // มี filter เพิ่มเติม — ต้อง JOIN contracts + bad_debt_last_days เพื่อ filter income_type
+  const { search, dateFrom, dateTo, dateField = "paidAt", incomeTypes } = opts ?? {};
+  const dateCol = dateField === "paidAt" ? "pt.paid_at" : "pt.updated_at";
+  const bdlSubquery = buildBadDebtLastDaysSubquery(secEsc);
+
+  const conditions: string[] = [
+    `pt.section = '${secEsc}'`,
+    PT_INCOME_BASE_WHERE,
+  ];
+  if (search) conditions.push(`(pt.contract_no LIKE '%${esc(search)}%' OR c.customer_name LIKE '%${esc(search)}%')`);
+  if (dateFrom) conditions.push(`${dateCol} >= '${esc(dateFrom)}'`);
+  if (dateTo) conditions.push(`${dateCol} <= '${esc(dateTo)} 23:59:59'`);
+
+  let incomeTypeFilter = "";
+  if (incomeTypes && incomeTypes.length > 0) {
+    const quoted = incomeTypes.map((t) => `'${esc(t)}'`).join(", ");
+    incomeTypeFilter = `WHERE income_type IN (${quoted})`;
+  }
+
+  const whereStr = conditions.join(" AND ");
+  const querySql = `
+    SELECT DISTINCT pt.updated_by
+    FROM (
+      SELECT
+        pt.updated_by,
+        ${PT_INCOME_TYPE_CASE} AS income_type
+      FROM payment_transactions pt
+      LEFT JOIN contracts c ON c.contract_no = pt.contract_no AND c.section = pt.section
+      LEFT JOIN (${bdlSubquery}) AS bdl ON bdl.contract_no = pt.contract_no AND bdl.section = pt.section
+      WHERE ${whereStr}
+    ) AS filtered
+    ${incomeTypeFilter}
+    WHERE updated_by IS NOT NULL AND updated_by != ''
+    ORDER BY updated_by ASC
+  `;
+
+  const result = await db.execute(sql.raw(querySql));
   const arr: any[] = (result as any)[0] ?? result;
   return (arr ?? []).map((r: any) => r.updated_by).filter(Boolean);
 }
