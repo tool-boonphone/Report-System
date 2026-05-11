@@ -115,35 +115,60 @@ type IncomeRow = {
  * ยอดรวมทั้ง 2 mode เท่ากัน (group แค่รวม amount ไม่ได้ตัดรายการออก)
  */
 function groupRowsBySlip(rows: IncomeRow[]): IncomeRow[] {
-  // แยกรายการตาม contractStatus + receiptNo prefix
-  // ปิดยอด = สิ้นสุดสัญญา + TXRTC prefix
-  // ขายเครื่อง = หนี้เสีย + TXRTC prefix
-  // ค่างวด = อื่นๆ ทั้งหมด (ไม่ group)
+  /**
+   * แยกรายการตาม contractStatus
+   *
+   * ปิดยอด = contractStatus 'สิ้นสุดสัญญา' + receiptNo ขึ้นต้น TXRTC
+   *   → group ตาม batch key: paidAt + updatedBy + updatedAt + receiptNo
+   *
+   * ขายเครื่อง = contractStatus 'หนี้เสีย' (ไม่สนใจ receiptNo)
+   *   → แสดงเฉพาะ รายการสุดท้าย (ล่าสุด) ของแต่ละสัญญา เป็น 1 row
+   *   → รายการเก่ากว่า — ใส่ตรงๆ เป็น ค่างวด
+   *
+   * ค่างวด = อื่นๆ ทั้งหมด (ไม่ group)
+   */
   const installmentRows: IncomeRow[] = []; // ค่างวด — ไม่ group
   const closingRows: IncomeRow[] = [];     // ปิดยอด — group ตาม consecutive batch
-  const deviceRows: IncomeRow[] = [];      // ขายเครื่อง — group ตาม consecutive batch
+
+  // สัญญาหนี้เสีย: จัดกลุ่มตามสัญญา เอาเฉพาะรายการสุดท้าย
+  const badDebtContractMap = new Map<string, IncomeRow[]>();
 
   for (const row of rows) {
-    const isTxrtc = (row.receiptNo ?? "").startsWith("TXRTC");
-    if (isTxrtc && row.contractStatus === "สิ้นสุดสัญญา") closingRows.push(row);
-    else if (isTxrtc && row.contractStatus === "หนี้เสีย") deviceRows.push(row);
-    else installmentRows.push(row);
+    if (row.contractStatus === "หนี้เสีย") {
+      // สัญญาหนี้เสีย: เก็บทุก row ไว้ก่อน เพื่อหา row สุดท้าย
+      if (!badDebtContractMap.has(row.contractNo)) badDebtContractMap.set(row.contractNo, []);
+      badDebtContractMap.get(row.contractNo)!.push(row);
+    } else if (
+      row.contractStatus === "สิ้นสุดสัญญา" &&
+      (row.receiptNo ?? "").startsWith("TXRTC")
+    ) {
+      closingRows.push(row);
+    } else {
+      installmentRows.push(row);
+    }
+  }
+
+  // สร้าง deviceRows: เอาเฉพาะ row สุดท้าย (id สูงสุด) ของแต่ละสัญญา
+  // รายการเก่ากว่า — ใส่เป็น installmentRows (ค่างวด)
+  const deviceRows: IncomeRow[] = [];
+  for (const [, contractRows] of Array.from(badDebtContractMap)) {
+    // เรียง id DESC เอา row สุดท้าย
+    const sortedBad = [...contractRows].sort((a, b) => ((b as any).id ?? 0) - ((a as any).id ?? 0));
+    const lastRow = sortedBad[0]; // row สุดท้าย
+    deviceRows.push({ ...lastRow, incomeType: "ขายเครื่อง" });
+    // รายการเก่ากว่า — ใส่เป็น installmentRows
+    for (const row of sortedBad.slice(1)) {
+      installmentRows.push({ ...row, incomeType: "ค่างวด" });
+    }
   }
 
   /**
    * groupByBatch — group rows ตาม consecutive batch สุดท้ายของแต่ละสัญญา
    *
-   * Algorithm:
-   * 1. จัดกลุ่มตามสัญญา
-   * 2. เรียง id DESC (ล่าสุดก่อน)
-   * 3. batch key = paidAt date + updatedBy + updatedAt date + receiptNo
-   * 4. ไล่ต่อเนื่องลงมา: ถ้า row ถัดไปตรง batch key เดียวกัน → รวมเข้า batch
-   *    ถ้าไม่ตรง → หยุดทันที (consecutive: ไม่ข้ามรายการที่ไม่ตรง)
-   * 5. batch rows → สร้าง 1 grouped row (amount = sum)
-   * 6. remaining rows → ใส่ตรงๆ ไม่ group
+   * batch key = paidAt date + updatedBy + updatedAt date + receiptNo
+   * เรียง id DESC, ไล่ต่อเนื่อง (consecutive) หยุดทันทีที่ไม่ตรง
    */
   function groupByBatch(typeRows: IncomeRow[], targetType: IncomeType): IncomeRow[] {
-    // จัดกลุ่มตามสัญญา
     const contractMap = new Map<string, IncomeRow[]>();
     for (const row of typeRows) {
       const key = row.contractNo;
@@ -167,14 +192,10 @@ function groupRowsBySlip(rows: IncomeRow[]): IncomeRow[] {
       let batchAmount = 0;
       const batchRows: IncomeRow[] = [];
       const remainingRows: IncomeRow[] = [];
-      let batchEnded = false; // consecutive: หยุดทันทีที่ไม่ตรง
+      let batchEnded = false;
 
       for (const row of sorted) {
-        if (batchEnded) {
-          // หลัง batch สิ้นสุด → ใส่ตรงๆ ทั้งหมด
-          remainingRows.push(row);
-          continue;
-        }
+        if (batchEnded) { remainingRows.push(row); continue; }
 
         const rowPaidAt = row.paidAt ? row.paidAt.slice(0, 10) : "";
         const rowUpdatedBy = row.updatedBy ?? "";
@@ -187,26 +208,17 @@ function groupRowsBySlip(rows: IncomeRow[]): IncomeRow[] {
           rowUpdatedAtDate === batchUpdatedAtDate &&
           rowReceiptNo === batchReceiptNo
         ) {
-          // ตรง batch key → รวมเข้า batch
           batchAmount += row.amount ?? 0;
           batchRows.push(row);
         } else {
-          // ไม่ตรง → หยุด batch ทันที (consecutive)
           batchEnded = true;
           remainingRows.push(row);
         }
       }
 
-      // สร้าง grouped row จาก batch ล่าสุด
       if (batchRows.length > 0) {
-        grouped.push({
-          ...firstRow,
-          incomeType: targetType,
-          amount: batchAmount,
-        });
+        grouped.push({ ...firstRow, incomeType: targetType, amount: batchAmount });
       }
-
-      // รายการที่เหลือ (batch เก่ากว่า) — ใส่ตรงๆ ไม่ group
       for (const row of remainingRows) {
         grouped.push({ ...row, incomeType: targetType });
       }
@@ -216,10 +228,9 @@ function groupRowsBySlip(rows: IncomeRow[]): IncomeRow[] {
   }
 
   const groupedClosing = groupByBatch(closingRows, "ปิดยอด");
-  const groupedDevice = groupByBatch(deviceRows, "ขายเครื่อง");
 
   // ผสมทุกประเภทแล้ว sort ตาม paidAt DESC
-  const combined = [...installmentRows, ...groupedClosing, ...groupedDevice];
+  const combined = [...installmentRows, ...groupedClosing, ...deviceRows];
   combined.sort((a, b) => {
     const av = a.paidAt ?? "";
     const bv = b.paidAt ?? "";
