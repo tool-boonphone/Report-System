@@ -454,8 +454,9 @@ async function syncCustomers(
         }
       },
       100,  // limit=100 (ลดจาก 500) เพื่อให้แต่ละ page เบาลง API ตอบได้เร็วขึ้น ลด chance ที่จะ hang
-      30_000, // 30s per-request timeout — fail fast if API hangs
+      10_000, // 10s per-request timeout — fail fast if API hangs
       startPage, // Resume from last completed page if previous run was killed
+      true,   // skipOnError=true — skip pages that fail instead of stopping entire sync
     );
     // Reset resume_page to 0 on success so next run starts fresh
     if (logId) {
