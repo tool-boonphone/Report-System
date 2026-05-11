@@ -806,12 +806,18 @@ export default function DebtReport() {
     if (tab !== "collected") return null;
     let principal = 0, interest = 0, fee = 0, penalty = 0, unlockFee = 0;
     let discount = 0, overpaid = 0, badDebt = 0;
+    // totalFromAmount = sum(p.total) + sum(p.badDebt)
+    // ใช้ p.total (= pt.amount จาก API) เป็นฐานคำนวณ ซึ่งตรงกับ Income (รายรับ) 100%
+    // bad debt row มี total=0 แต่ badDebt=contractBadDebtAmount ดังนั้นต้องบวก badDebt แยก
+    let totalFromAmount = 0;
     for (const r of filteredRows as CollectedRow[]) {
       for (const p of r.payments ?? []) {
         // Phase 23: dueDateExact cell-mask — only sum payments whose paidAt matches exact date
         if (dueDateExact && (p.paidAt?.slice(0, 10) ?? null) !== dueDateExact) continue;
         // Phase 28: dueDateFilter cell-mask — only sum payments whose paidAt month is in filter
         if (dueDateFilter.size > 0 && !(p.paidAt && dueDateFilter.has(p.paidAt.slice(0, 7)))) continue;
+        // บันทึกโดย: ซ่อน payment ที่ไม่ใช่ของคนที่เลือก
+        if (updatedByFilter && p.updatedBy !== updatedByFilter) continue;
         principal += p.principal ?? 0;
         interest += p.interest ?? 0;
         fee += p.fee ?? 0;
@@ -820,21 +826,27 @@ export default function DebtReport() {
         discount += p.discount ?? 0;
         overpaid += p.overpaid ?? 0;
         badDebt += p.badDebt ?? 0;
+        // ยอดรวมที่แท้จริง = p.total (pt.amount) + p.badDebt (bad debt row มี total=0)
+        totalFromAmount += (p.total ?? 0) + (p.badDebt ?? 0);
       }
     }
-    // ยอดที่ชำระรวม = เงินต้น + ดอกเบี้ย + ค่าดำเนินการ + ค่าปรับ + ค่าปลดล็อก + ชำระเกิน + หนี้เสีย
-    // ส่วนลดไม่ถูกนำมาคิด (ไม่บวก ไม่ลบ) เพราะส่วนลด = เงินที่ไม่ได้รับ
+    // ยอดที่ชำระรวม = sum(p.total) + sum(p.badDebt) = ตรงกับ Income (รายรับ) 100%
+    // badge visibility ยังคงมีผลต่อ total เพื่อให้ user สามารถ toggle ดูได้
     const bv = badgeVisibility;
-    const total =
-      (bv.principal ? principal : 0) +
-      (bv.interest ? interest : 0) +
-      (bv.fee ? fee : 0) +
-      (bv.penalty ? penalty : 0) +
-      (bv.unlockFee ? unlockFee : 0) +
-      (bv.overpaid ? overpaid : 0) +
-      (bv.badDebt ? badDebt : 0);
+    const allBvOn = bv.principal && bv.interest && bv.fee && bv.penalty && bv.unlockFee && bv.overpaid && bv.badDebt;
+    // เมื่อ badge ทุกตัวเปิด ใช้ totalFromAmount (= pt.amount) เพื่อให้ตรงกับ Income
+    // เมื่อ badge บางตัวปิด ให้คำนวณจาก fields ที่เปิดอยู่ (เพื่อ UX การ toggle)
+    const total = allBvOn
+      ? totalFromAmount
+      : (bv.principal ? principal : 0) +
+        (bv.interest ? interest : 0) +
+        (bv.fee ? fee : 0) +
+        (bv.penalty ? penalty : 0) +
+        (bv.unlockFee ? unlockFee : 0) +
+        (bv.overpaid ? overpaid : 0) +
+        (bv.badDebt ? badDebt : 0);
     return { principal, interest, fee, penalty, unlockFee, discount, overpaid, badDebt, total };
-  }, [filteredRows, tab, dueDateExact, dueDateFilter, badgeVisibility]);
+  }, [filteredRows, tab, dueDateExact, dueDateFilter, badgeVisibility, updatedByFilter]);
 
   /* ---- TopNav actions (sync + export) ---- */
   // Export handler (used inline in toolbar)
