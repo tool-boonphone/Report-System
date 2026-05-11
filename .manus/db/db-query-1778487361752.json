@@ -1,0 +1,142 @@
+{
+  "query": "\nSELECT \n  id,\n  receipt_no,\n  contract_no,\n  amount,\n  paid_at,\n  updated_by,\n  updated_at,\n  JSON_EXTRACT(raw_json, '$.close_installment_amount') as close_installment_amount,\n  JSON_EXTRACT(raw_json, '$.receipt_no') as raw_receipt_no\nFROM payment_transactions\nWHERE contract_no = 'CT1225-PTE010-19331-01'\n  AND section = 'Fastfone365'\nORDER BY paid_at ASC, updated_at ASC;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT \n  id,\n  receipt_no,\n  contract_no,\n  amount,\n  paid_at,\n  updated_by,\n  updated_at,\n  JSON_EXTRACT(raw_json, '$.close_installment_amount') as close_installment_amount,\n  JSON_EXTRACT(raw_json, '$.receipt_no') as raw_receipt_no\nFROM payment_transactions\nWHERE contract_no = 'CT1225-PTE010-19331-01'\n  AND section = 'Fastfone365'\nORDER BY paid_at ASC, updated_at ASC;\n",
+  "rows": [
+    {
+      "id": "1173940",
+      "receipt_no": "TXRT1225-PTE010-19331-01-1",
+      "contract_no": "CT1225-PTE010-19331-01",
+      "amount": "3105.00",
+      "paid_at": "2026-01-05",
+      "updated_by": "adminpahn",
+      "updated_at": "2026-01-06 10:32:48",
+      "close_installment_amount": "3105",
+      "raw_receipt_no": "\"TXRT1225-PTE010-19331-01-1\""
+    },
+    {
+      "id": "1166514",
+      "receipt_no": "TXRT1225-PTE010-19331-01-2",
+      "contract_no": "CT1225-PTE010-19331-01",
+      "amount": "3105.00",
+      "paid_at": "2026-02-05",
+      "updated_by": "adminfirst",
+      "updated_at": "2026-02-05 13:09:05",
+      "close_installment_amount": "3105",
+      "raw_receipt_no": "\"TXRT1225-PTE010-19331-01-2\""
+    },
+    {
+      "id": "1159514",
+      "receipt_no": "TXRT1225-PTE010-19331-01-3",
+      "contract_no": "CT1225-PTE010-19331-01",
+      "amount": "3105.00",
+      "paid_at": "2026-03-03",
+      "updated_by": "adminfirst",
+      "updated_at": "2026-03-03 12:33:17",
+      "close_installment_amount": "3105",
+      "raw_receipt_no": "\"TXRT1225-PTE010-19331-01-3\""
+    },
+    {
+      "id": "1151166",
+      "receipt_no": "TXRT1225-PTE010-19331-01-4",
+      "contract_no": "CT1225-PTE010-19331-01",
+      "amount": "3105.00",
+      "paid_at": "2026-04-05",
+      "updated_by": "adminmint",
+      "updated_at": "2026-04-05 17:14:59",
+      "close_installment_amount": "3105",
+      "raw_receipt_no": "\"TXRT1225-PTE010-19331-01-4\""
+    },
+    {
+      "id": "1146684",
+      "receipt_no": "TXRT1225-PTE010-19331-01-5",
+      "contract_no": "CT1225-PTE010-19331-01",
+      "amount": "3105.00",
+      "paid_at": "2026-04-29",
+      "updated_by": "adminpahn",
+      "updated_at": "2026-05-05 11:33:22",
+      "close_installment_amount": "3105",
+      "raw_receipt_no": "\"TXRT1225-PTE010-19331-01-5\""
+    },
+    {
+      "id": "1144353",
+      "receipt_no": "TXRTC1225-PTE010-19331-01",
+      "contract_no": "CT1225-PTE010-19331-01",
+      "amount": "3105.00",
+      "paid_at": "2026-05-09",
+      "updated_by": "ACC Ploy",
+      "updated_at": "2026-05-09 13:14:58",
+      "close_installment_amount": "3105",
+      "raw_receipt_no": "\"TXRTC1225-PTE010-19331-01\""
+    },
+    {
+      "id": "1144354",
+      "receipt_no": "TXRTC1225-PTE010-19331-01",
+      "contract_no": "CT1225-PTE010-19331-01",
+      "amount": "3105.00",
+      "paid_at": "2026-05-09",
+      "updated_by": "ACC Ploy",
+      "updated_at": "2026-05-09 13:14:58",
+      "close_installment_amount": "3105",
+      "raw_receipt_no": "\"TXRTC1225-PTE010-19331-01\""
+    },
+    {
+      "id": "1144355",
+      "receipt_no": "TXRTC1225-PTE010-19331-01",
+      "contract_no": "CT1225-PTE010-19331-01",
+      "amount": "3105.00",
+      "paid_at": "2026-05-09",
+      "updated_by": "ACC Ploy",
+      "updated_at": "2026-05-09 13:14:58",
+      "close_installment_amount": "3105",
+      "raw_receipt_no": "\"TXRTC1225-PTE010-19331-01\""
+    },
+    {
+      "id": "1144356",
+      "receipt_no": "TXRTC1225-PTE010-19331-01",
+      "contract_no": "CT1225-PTE010-19331-01",
+      "amount": "3105.00",
+      "paid_at": "2026-05-09",
+      "updated_by": "ACC Ploy",
+      "updated_at": "2026-05-09 13:14:59",
+      "close_installment_amount": "3105",
+      "raw_receipt_no": "\"TXRTC1225-PTE010-19331-01\""
+    },
+    {
+      "id": "1144357",
+      "receipt_no": "TXRTC1225-PTE010-19331-01",
+      "contract_no": "CT1225-PTE010-19331-01",
+      "amount": "3105.00",
+      "paid_at": "2026-05-09",
+      "updated_by": "ACC Ploy",
+      "updated_at": "2026-05-09 13:14:59",
+      "close_installment_amount": "3105",
+      "raw_receipt_no": "\"TXRTC1225-PTE010-19331-01\""
+    },
+    {
+      "id": "1144358",
+      "receipt_no": "TXRTC1225-PTE010-19331-01",
+      "contract_no": "CT1225-PTE010-19331-01",
+      "amount": "1863.00",
+      "paid_at": "2026-05-09",
+      "updated_by": "ACC Ploy",
+      "updated_at": "2026-05-09 13:14:59",
+      "close_installment_amount": "1863",
+      "raw_receipt_no": "\"TXRTC1225-PTE010-19331-01\""
+    },
+    {
+      "id": "1144359",
+      "receipt_no": "TXRTC1225-PTE010-19331-01",
+      "contract_no": "CT1225-PTE010-19331-01",
+      "amount": "0.00",
+      "paid_at": "2026-05-09",
+      "updated_by": "ACC Ploy",
+      "updated_at": "2026-05-09 13:15:00",
+      "close_installment_amount": "0",
+      "raw_receipt_no": "\"TXRTC1225-PTE010-19331-01\""
+    }
+  ],
+  "messages": [],
+  "stdout": "id\treceipt_no\tcontract_no\tamount\tpaid_at\tupdated_by\tupdated_at\tclose_installment_amount\traw_receipt_no\n1173940\tTXRT1225-PTE010-19331-01-1\tCT1225-PTE010-19331-01\t3105.00\t2026-01-05\tadminpahn\t2026-01-06 10:32:48\t3105\t\"TXRT1225-PTE010-19331-01-1\"\n1166514\tTXRT1225-PTE010-19331-01-2\tCT1225-PTE010-19331-01\t3105.00\t2026-02-05\tadminfirst\t2026-02-05 13:09:05\t3105\t\"TXRT1225-PTE010-19331-01-2\"\n1159514\tTXRT1225-PTE010-19331-01-3\tCT1225-PTE010-19331-01\t3105.00\t2026-03-03\tadminfirst\t2026-03-03 12:33:17\t3105\t\"TXRT1225-PTE010-19331-01-3\"\n1151166\tTXRT1225-PTE010-19331-01-4\tCT1225-PTE010-19331-01\t3105.00\t2026-04-05\tadminmint\t2026-04-05 17:14:59\t3105\t\"TXRT1225-PTE010-19331-01-4\"\n1146684\tTXRT1225-PTE010-19331-01-5\tCT1225-PTE010-19331-01\t3105.00\t2026-04-29\tadminpahn\t2026-05-05 11:33:22\t3105\t\"TXRT1225-PTE010-19331-01-5\"\n1144353\tTXRTC1225-PTE010-19331-01\tCT1225-PTE010-19331-01\t3105.00\t2026-05-09\tACC Ploy\t2026-05-09 13:14:58\t3105\t\"TXRTC1225-PTE010-19331-01\"\n1144354\tTXRTC1225-PTE010-19331-01\tCT1225-PTE010-19331-01\t3105.00\t2026-05-09\tACC Ploy\t2026-05-09 13:14:58\t3105\t\"TXRTC1225-PTE010-19331-01\"\n1144355\tTXRTC1225-PTE010-19331-01\tCT1225-PTE010-19331-01\t3105.00\t2026-05-09\tACC Ploy\t2026-05-09 13:14:58\t3105\t\"TXRTC1225-PTE010-19331-01\"\n1144356\tTXRTC1225-PTE010-19331-01\tCT1225-PTE010-19331-01\t3105.00\t2026-05-09\tACC Ploy\t2026-05-09 13:14:59\t3105\t\"TXRTC1225-PTE010-19331-01\"\n1144357\tTXRTC1225-PTE010-19331-01\tCT1225-PTE010-19331-01\t3105.00\t2026-05-09\tACC Ploy\t2026-05-09 13:14:59\t3105\t\"TXRTC1225-PTE010-19331-01\"\n1144358\tTXRTC1225-PTE010-19331-01\tCT1225-PTE010-19331-01\t1863.00\t2026-05-09\tACC Ploy\t2026-05-09 13:14:59\t1863\t\"TXRTC1225-PTE010-19331-01\"\n1144359\tTXRTC1225-PTE010-19331-01\tCT1225-PTE010-19331-01\t0.00\t2026-05-09\tACC Ploy\t2026-05-09 13:15:00\t0\t\"TXRTC1225-PTE010-19331-01\"\n",
+  "stderr": "",
+  "execution_time_ms": 1846
+}

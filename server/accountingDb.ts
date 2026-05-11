@@ -42,6 +42,8 @@ export interface IncomeRow {
    * ใช้สำหรับ mode รายการตามการบันทึก (detail mode)
    */
   originalIncomeType: "ค่างวด" | "ปิดยอด";
+  /** receiptNo = รหัสรายการ เช่น TXRT1225-PTE010-19331-01-1 หรือ TXRTC1225-PTE010-19331-01 */
+  receiptNo: string | null;
   amount: number;
   updatedBy: string | null;
   updatedAt: string | null;
@@ -102,12 +104,12 @@ export interface ExpenseParams {
  * ขายเครื่อง (classified) → ค่างวด (original)
  * ใช้สำหรับ mode รายการตามการบันทึก (detail mode)
  *
- * ปิดยอด = มี close_installment_amount > 0 ใน raw_json
- * ค่างวด = อื่นๆ (รวมถึงรายการที่ classify เป็น ขายเครื่อง)
+ * ปิดยอด = receipt_no ขึ้นต้นด้วย 'TXRTC' (ไม่มีเลขต่อท้าย เช่น TXRTC1225-PTE010-19331-01)
+ * ค่างวด = receipt_no ขึ้นต้นด้วย 'TXRT' แต่ไม่ใช่ 'TXRTC' (เช่น TXRT1225-PTE010-19331-01-1)
  */
 const PT_ORIGINAL_INCOME_TYPE_CASE = `
   CASE
-    WHEN JSON_EXTRACT(pt.raw_json, '$.close_installment_amount') > 0
+    WHEN pt.receipt_no LIKE 'TXRTC%'
       THEN 'ปิดยอด'
     ELSE 'ค่างวด'
   END
@@ -243,6 +245,7 @@ export async function listIncome(params: IncomeParams): Promise<{
         pt.paid_at,
         pt.updated_by,
         pt.updated_at,
+        pt.receipt_no,
         ${PT_INCOME_TYPE_CASE} AS income_type,
         ${PT_ORIGINAL_INCOME_TYPE_CASE} AS original_income_type,
         ${PT_AMOUNT_CASE} AS amount
@@ -271,6 +274,7 @@ export async function listIncome(params: IncomeParams): Promise<{
     paidAt: r.paid_at ?? null,
     incomeType: r.income_type as IncomeType,
     originalIncomeType: (r.original_income_type === 'ปิดยอด' ? 'ปิดยอด' : 'ค่างวด') as "ค่างวด" | "ปิดยอด",
+    receiptNo: r.receipt_no ?? null,
     amount: Number(r.amount ?? 0),
     updatedBy: r.updated_by ?? null,
     updatedAt: r.updated_at ?? null,

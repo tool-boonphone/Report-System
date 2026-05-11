@@ -90,6 +90,8 @@ type IncomeRow = {
   incomeType: string;
   /** originalIncomeType = ตาม API จริง (ค่างวด / ปิดยอด เท่านั้น) ใช้ใน detail mode */
   originalIncomeType?: string;
+  /** receiptNo = รหัสรายการ เช่น TXRT1225-PTE010-19331-01-1 หรือ TXRTC1225-PTE010-19331-01 */
+  receiptNo?: string | null;
   contractNo: string;
   customerName?: string | null;
   amount: number;
@@ -500,20 +502,20 @@ export default function Income() {
       }
 
       const wsData = [
-        ["No.", "วันที่ชำระ", "ประเภท", "เลขที่สัญญา", "ชื่อลูกค้า", "ยอดเงิน", "ทำรายการโดย", "ทำรายการเมื่อ"],
+        ["No.", "วันที่ชำระ", "รหัสรายการ", "ประเภท", "เลขที่สัญญา", "ชื่อลูกค้า", "ยอดเงิน", "ทำรายการโดย", "ทำรายการเมื่อ"],
         ...exportRows.map((r, i) => {
           // ใช้ getDisplayType เพื่อแสดงประเภทตาม mode
           const displayType = listMode === "detail"
             ? (r.originalIncomeType === "ปิดยอด" ? "ปิดยอด" : "ค่างวด")
             : r.incomeType;
           return [
-            i + 1, fmtDate(r.paidAt), displayType, r.contractNo,
+            i + 1, fmtDate(r.paidAt), r.receiptNo ?? "", displayType, r.contractNo,
             r.customerName ?? "", r.amount, r.updatedBy ?? "", fmtDateTime(r.updatedAt),
           ];
         }),
       ];
       const ws = XLSX.utils.aoa_to_sheet(wsData);
-      ws["!cols"] = [{ wch: 6 }, { wch: 14 }, { wch: 14 }, { wch: 24 }, { wch: 24 }, { wch: 14 }, { wch: 18 }, { wch: 20 }];
+      ws["!cols"] = [{ wch: 6 }, { wch: 14 }, { wch: 28 }, { wch: 14 }, { wch: 24 }, { wch: 24 }, { wch: 14 }, { wch: 18 }, { wch: 20 }];
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "รายรับ");
       const modeSuffix = listMode === "slip" ? "_ตามสลิป" : "_ตามการบันทึก";
@@ -902,31 +904,34 @@ export default function Income() {
                   <table className="w-full text-sm border-collapse">
                     <thead>
                       <tr className="bg-blue-700 text-white text-xs sticky top-0 z-10">
-                        {([
-                          { key: "no" as SortKey, label: "No.", cls: "w-10 text-right" },
-                          { key: "paidAt" as SortKey, label: "วันที่ชำระ", cls: "w-28" },
-                          { key: "incomeType" as SortKey, label: "ประเภท", cls: "w-28" },
-                          { key: "contractNo" as SortKey, label: "เลขที่สัญญา", cls: "w-36" },
-                          { key: "amount" as SortKey, label: "ยอดเงิน", cls: "w-28 text-right" },
-                          { key: "updatedBy" as SortKey, label: "ทำรายการโดย", cls: "w-32" },
-                          { key: "updatedAt" as SortKey, label: "ทำรายการเมื่อ", cls: "w-36" },
-                        ] as { key: SortKey; label: string; cls: string }[]).map(({ key, label, cls }) => (
-                          <th key={key} onClick={() => key !== "no" && handleSort(key)}
-                            className={["px-3 py-2.5 font-medium whitespace-nowrap select-none",
-                              key !== "no" ? "cursor-pointer hover:bg-blue-600 text-left" : "text-right", cls].join(" ")}>
-                            {key === "no" ? (
-                              <span>{label}</span>
-                            ) : key === "amount" ? (
-                              <div className="flex items-center justify-end gap-1">
-                                {label}<SortIcon col={key} />
-                              </div>
-                            ) : (
-                              <div className="flex items-center gap-1">
-                                {label}<SortIcon col={key} />
-                              </div>
-                            )}
-                          </th>
-                        ))}
+                        {/* No. */}
+                        <th className="px-3 py-2.5 font-medium whitespace-nowrap select-none text-right w-10">No.</th>
+                        {/* วันที่ชำระ (sortable) */}
+                        <th onClick={() => handleSort("paidAt")} className="px-3 py-2.5 font-medium whitespace-nowrap select-none cursor-pointer hover:bg-blue-600 text-left w-28">
+                          <div className="flex items-center gap-1">วันที่ชำระ<SortIcon col="paidAt" /></div>
+                        </th>
+                        {/* รหัสรายการ (not sortable) */}
+                        <th className="px-3 py-2.5 font-medium whitespace-nowrap select-none text-left w-44">รหัสรายการ</th>
+                        {/* ประเภท (sortable) */}
+                        <th onClick={() => handleSort("incomeType")} className="px-3 py-2.5 font-medium whitespace-nowrap select-none cursor-pointer hover:bg-blue-600 text-left w-28">
+                          <div className="flex items-center gap-1">ประเภท<SortIcon col="incomeType" /></div>
+                        </th>
+                        {/* เลขที่สัญญา (sortable) */}
+                        <th onClick={() => handleSort("contractNo")} className="px-3 py-2.5 font-medium whitespace-nowrap select-none cursor-pointer hover:bg-blue-600 text-left w-36">
+                          <div className="flex items-center gap-1">เลขที่สัญญา<SortIcon col="contractNo" /></div>
+                        </th>
+                        {/* ยอดเงิน (sortable) */}
+                        <th onClick={() => handleSort("amount")} className="px-3 py-2.5 font-medium whitespace-nowrap select-none cursor-pointer hover:bg-blue-600 text-right w-28">
+                          <div className="flex items-center justify-end gap-1">ยอดเงิน<SortIcon col="amount" /></div>
+                        </th>
+                        {/* ทำรายการโดย (sortable) */}
+                        <th onClick={() => handleSort("updatedBy")} className="px-3 py-2.5 font-medium whitespace-nowrap select-none cursor-pointer hover:bg-blue-600 text-left w-32">
+                          <div className="flex items-center gap-1">ทำรายการโดย<SortIcon col="updatedBy" /></div>
+                        </th>
+                        {/* ทำรายการเมื่อ (sortable) */}
+                        <th onClick={() => handleSort("updatedAt")} className="px-3 py-2.5 font-medium whitespace-nowrap select-none cursor-pointer hover:bg-blue-600 text-left w-36">
+                          <div className="flex items-center gap-1">ทำรายการเมื่อ<SortIcon col="updatedAt" /></div>
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
@@ -941,6 +946,7 @@ export default function Income() {
                           <tr key={`${row.contractNo}-${idx}`} className="border-b border-gray-100 hover:bg-blue-50 transition-colors">
                             <td className="px-3 py-2 text-right text-gray-400 text-xs">{rowNo}</td>
                             <td className="px-3 py-2 whitespace-nowrap text-gray-700">{fmtDate(row.paidAt)}</td>
+                            <td className="px-3 py-2 font-mono text-xs text-gray-500 whitespace-nowrap">{row.receiptNo ?? "-"}</td>
                             <td className="px-3 py-2">
                               <span className={["inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium", typeColor.bg, typeColor.text].join(" ")}>
                                 <span className={["w-1.5 h-1.5 rounded-full", typeColor.dot].join(" ")} />
