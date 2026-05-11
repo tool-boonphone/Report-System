@@ -1,0 +1,40 @@
+{
+  "query": "\nSELECT s.id, s.user_id, u.username, s.expires_at\nFROM app_sessions s\nJOIN app_users u ON s.user_id = u.id\nWHERE s.expires_at > NOW()\nORDER BY s.expires_at DESC\nLIMIT 5;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT s.id, s.user_id, u.username, s.expires_at\nFROM app_sessions s\nJOIN app_users u ON s.user_id = u.id\nWHERE s.expires_at > NOW()\nORDER BY s.expires_at DESC\nLIMIT 5;\n",
+  "rows": [
+    {
+      "id": "I21yXUpqzaQZoWO_2A5pFc1KD1NtqI5bcMRp_W1fAdhPf_lE",
+      "user_id": "1",
+      "username": "Sadmin",
+      "expires_at": "2026-05-18 11:37:43"
+    },
+    {
+      "id": "MdI98QLKE8TSAfcI_2_RtyCQW7BP3vRMyZRb8JG8ee3CYwF_",
+      "user_id": "1",
+      "username": "Sadmin",
+      "expires_at": "2026-05-18 11:34:07"
+    },
+    {
+      "id": "cv6HS8NeJNIWFAy9KLs64llPsISLgtuq7totkYA3SUluFcar",
+      "user_id": "1",
+      "username": "Sadmin",
+      "expires_at": "2026-05-18 05:12:35"
+    },
+    {
+      "id": "_OzOxEptQ8q7PaGWWDGoV8Mj3ZturMCFVpUa-_jkH_cwBuow",
+      "user_id": "210001",
+      "username": "yong",
+      "expires_at": "2026-05-18 04:45:09"
+    },
+    {
+      "id": "F6I9VGTO0JW-F_FqWh7zlze291IG-fRmaBddEsgh-T-Ri7l8",
+      "user_id": "1",
+      "username": "Sadmin",
+      "expires_at": "2026-05-17 22:24:55"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tuser_id\tusername\texpires_at\nI21yXUpqzaQZoWO_2A5pFc1KD1NtqI5bcMRp_W1fAdhPf_lE\t1\tSadmin\t2026-05-18 11:37:43\nMdI98QLKE8TSAfcI_2_RtyCQW7BP3vRMyZRb8JG8ee3CYwF_\t1\tSadmin\t2026-05-18 11:34:07\ncv6HS8NeJNIWFAy9KLs64llPsISLgtuq7totkYA3SUluFcar\t1\tSadmin\t2026-05-18 05:12:35\n_OzOxEptQ8q7PaGWWDGoV8Mj3ZturMCFVpUa-_jkH_cwBuow\t210001\tyong\t2026-05-18 04:45:09\nF6I9VGTO0JW-F_FqWh7zlze291IG-fRmaBddEsgh-T-Ri7l8\t1\tSadmin\t2026-05-17 22:24:55\n",
+  "stderr": "",
+  "execution_time_ms": 1799
+}

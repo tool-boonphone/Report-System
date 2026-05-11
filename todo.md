@@ -1464,3 +1464,10 @@ Task list:
 - [x] Income.tsx: logic grouping รายการตามสลิป (group ปิดยอด+ขายเครื่อง ที่ชำระวันเดียวกัน + คนเดียวกัน)
 - [x] Income.tsx: ปรับ column header No. และ ยอดเงิน ให้ชิดขวาตามตัวเลข
 - [x] Income.tsx: Export Excel ตาม mode ที่เลือก (รายการตามการบันทึก/รายการตามสลิป) พร้อม suffix ชื่อไฟล์
+
+## Bug Fix — Contracts Chunked Loading Progress
+
+- [x] เพิ่ม `listContractChunk` function ใน server/contractsDb.ts (รับ offset/limit/section)
+- [x] เพิ่ม `listChunk` procedure ใน server/routers/contracts.ts
+- [x] แก้ไข `fetchContracts` ใน DataLoadingScreen.tsx ให้โหลดทีละ chunk พร้อมอัพเดต loaded/total
+- [x] แสดง "X / Y สัญญา (Z%)" ใน DataLoadingScreen progress bar สำหรับ contracts
