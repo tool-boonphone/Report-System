@@ -618,19 +618,21 @@ export async function getIncomeSummaryByPeriod(
         SUBSTRING(pt.paid_at, 1, ${periodLen}) AS period,
         CAST(COALESCE(pt.amount, 0) AS DECIMAL(18,2)) AS amt,
         CASE
-          -- ขายเครื่อง: สัญญาหนี้เสีย + batch สุดท้าย (paid_at วันสุดท้าย + created_at ตรงกันเป๊ะ)
+          -- ขายเครื่อง: สัญญาหนี้เสีย + batch สุดท้าย (ใช้ logic เดียวกับ PT_INCOME_TYPE_CASE)
           WHEN c.status = 'หนี้เสีย'
             AND bdl.last_paid_date IS NOT NULL
             AND DATE(pt.paid_at) = bdl.last_paid_date
             AND bdl.last_created_at IS NOT NULL
-            AND pt.created_at = bdl.last_created_at
+            AND DATE(pt.created_at) = DATE(bdl.last_created_at)
+            AND (bdl.last_updated_by IS NULL OR pt.updated_by = bdl.last_updated_by)
             THEN 'ขายเครื่อง'
-          -- ปิดยอด: สัญญาสิ้นสุดสัญญา + batch สุดท้าย (paid_at วันสุดท้าย + created_at ตรงกันเป๊ะ)
-          WHEN c.status = 'สิ้นสุดสัญญา'
+          -- ปิดยอด: สัญญาสิ้นสุดสัญญา/สำเร็จ + batch สุดท้าย (ใช้ logic เดียวกับ PT_INCOME_TYPE_CASE)
+          WHEN c.status IN ('สิ้นสุดสัญญา', 'สำเร็จ')
             AND bdl.last_paid_date IS NOT NULL
             AND DATE(pt.paid_at) = bdl.last_paid_date
             AND bdl.last_created_at IS NOT NULL
-            AND pt.created_at = bdl.last_created_at
+            AND DATE(pt.created_at) = DATE(bdl.last_created_at)
+            AND (bdl.last_updated_by IS NULL OR pt.updated_by = bdl.last_updated_by)
             THEN 'ปิดยอด'
           ELSE 'ค่างวด'
         END AS income_type

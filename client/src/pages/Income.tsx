@@ -314,10 +314,14 @@ export default function Income() {
       if (wantClosing) return ["\u0e1b\u0e34\u0e14\u0e22\u0e2d\u0e14"] as IncomeType[]; // ปิดยอด
       return [] as IncomeType[]; // ปิดทั้งหมด
     }
-    // slip mode: ส่งตามที่เลือก
-    return (activeTypes.size === ALL_INCOME_TYPES.length ? undefined : Array.from(activeTypes) as IncomeType[]);
+    // slip mode: ส่ง undefined เสมอ (ดึงทั้งหมด) เพราะ groupRowsBySlip อาจ reclassify rows
+    // การ filter ตาม activeTypes ทำที่ client ใน displayRows.filter(activeTypes.has)
+    return undefined;
   }, [activeTypes, listMode]);
 
+  // slip mode: ดึงข้อมูลทั้งหมดมา client เพื่อ group+filter+paginate ที่ client
+  // detail mode: ใช้ server-side pagination (เร็วกว่า)
+  const slipPageSize = 10000; // ดึงทั้งหมดสำหรับ slip mode
   const { data, isLoading, error } = trpc.accounting.listIncome.useQuery(
     {
       section: section ?? "Boonphone",
@@ -327,8 +331,8 @@ export default function Income() {
       dateField,
       incomeTypes: incomeTypesParam,
       updatedBy: updatedBy || undefined,
-      page,
-      pageSize,
+      page: listMode === "slip" ? 1 : page,
+      pageSize: listMode === "slip" ? slipPageSize : pageSize,
     },
     { enabled: !!section && canView && activeTab === "all" },
   );
@@ -474,9 +478,11 @@ export default function Income() {
         return detailActiveTypes.has(displayType);
       });
     }
-    // slip mode: group ก่อน แล้ว sort ตาม sortKey + sortDir ที่ผู้ใช้เลือก
+    // slip mode: group ก่อน แล้ว filter ตาม activeTypes แล้ว sort
     const grouped = groupRowsBySlip(rows); // group จาก rows ดิบ (ไม่ผ่าน sortedRows)
-    const slipSorted = [...grouped];
+    // filter ตาม activeTypes (classified incomeType)
+    const filteredGrouped = grouped.filter((r) => activeTypes.has(r.incomeType as IncomeType));
+    const slipSorted = [...filteredGrouped];
     if (sortKey !== "no") {
       slipSorted.sort((a, b) => {
         let av: string | number = 0;
@@ -518,7 +524,20 @@ export default function Income() {
   };
 
 
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  // slip mode: totalCount = displayRows.length (client-side filtered)
+  // detail mode: totalCount = total จาก API (server-side paginated)
+  const totalCount = listMode === "detail" ? total : displayRows.length;
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+
+  // pagedRows: slip mode ใช้ client-side pagination (slice displayRows)
+  //            detail mode ใช้ displayRows ตรงๆ (เพราะ server แบ่หน้ามาแล้ว)
+  const pagedRows = useMemo(() => {
+    if (listMode === "slip") {
+      const start = (page - 1) * pageSize;
+      return displayRows.slice(start, start + pageSize);
+    }
+    return displayRows;
+  }, [listMode, displayRows, page, pageSize]);
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -901,7 +920,7 @@ export default function Income() {
               <div className="flex items-center rounded-full border border-gray-200 bg-white p-0.5 shadow-sm shrink-0">
                 <button
                   type="button"
-                  onClick={() => setListMode("detail")}
+                  onClick={() => { setListMode("detail"); setPage(1); }}
                   className={[
                     "px-3 py-1 rounded-full text-xs font-medium transition-all whitespace-nowrap",
                     listMode === "detail"
@@ -913,7 +932,7 @@ export default function Income() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setListMode("slip")}
+                  onClick={() => { setListMode("slip"); setPage(1); }}
                   className={[
                     "px-3 py-1 rounded-full text-xs font-medium transition-all whitespace-nowrap",
                     listMode === "slip"
@@ -927,7 +946,7 @@ export default function Income() {
 
               {/* จำนวนรายการ */}
               <span className="text-sm text-gray-500">
-                {`${(listMode === "detail" ? total : displayRows.filter((r) => activeTypes.has(r.incomeType as IncomeType)).length).toLocaleString()} รายการ`}
+                {`${(listMode === "detail" ? total : displayRows.length).toLocaleString()} รายการ`}
               </span>
 
               <div className="flex-1" />
@@ -997,13 +1016,11 @@ export default function Income() {
                       </tr>
                     </thead>
                     <tbody>
-                      {displayRows.map((row, idx) => {
+                      {pagedRows.map((row, idx) => {
                         const displayType = getDisplayType(row);
                         const typeColor = TYPE_COLORS[displayType] ?? { bg: "bg-gray-50", text: "text-gray-700", dot: "bg-gray-400" };
-                        // ใน mode detail ใช้ global index, ใน mode slip ใช้ index ของ displayRows
-                        const rowNo = listMode === "detail"
-                          ? (page - 1) * pageSize + idx + 1
-                          : idx + 1;
+                        // rowNo: ทั้ง 2 mode ใช้ global index ตาม page
+                        const rowNo = (page - 1) * pageSize + idx + 1;
                         return (
                           <tr key={`${row.contractNo}-${idx}`} className="border-b border-gray-100 hover:bg-blue-50 transition-colors">
                             <td className="px-3 py-2 text-right text-gray-400 text-xs">{rowNo}</td>
@@ -1032,7 +1049,7 @@ export default function Income() {
             </div>
 
             {/* Pagination */}
-            {total > 0 && (
+            {totalCount > 0 && (
               <div className="border-t border-gray-200 bg-white">
                 <div className="max-w-screen-2xl mx-auto w-full px-3 sm:px-4 py-3 flex flex-wrap items-center gap-2">
                   <div className="flex items-center gap-2 text-sm text-gray-500 mr-auto">
@@ -1041,7 +1058,7 @@ export default function Income() {
                       className="h-8 px-2 rounded border border-gray-200 text-sm">
                       {[50, 100, 500, 1000].map((n) => <option key={n} value={n}>{n}</option>)}
                     </select>
-                    <span>รายการ / หน้า &nbsp;|&nbsp; รวม {(listMode === "detail" ? total : displayRows.filter((r) => activeTypes.has(r.incomeType as IncomeType)).length).toLocaleString()} รายการ</span>
+                    <span>รายการ / หน้า &nbsp;|&nbsp; รวม {totalCount.toLocaleString()} รายการ</span>
                   </div>
                   <Pagination className="w-auto mx-0">
                     <PaginationContent>
