@@ -229,16 +229,9 @@ function groupRowsBySlip(rows: IncomeRow[]): IncomeRow[] {
 
   const groupedClosing = groupByBatch(closingRows, "ปิดยอด");
 
-  // ผสมทุกประเภทแล้ว sort ตาม paidAt ASC (เก่าไปใหม่ เหมือน detail mode)
-  const combined = [...installmentRows, ...groupedClosing, ...deviceRows];
-  combined.sort((a, b) => {
-    const av = a.paidAt ?? "";
-    const bv = b.paidAt ?? "";
-    if (av < bv) return -1;
-    if (av > bv) return 1;
-    return 0;
-  });
-  return combined;
+  // ผสมทุกประเภทแล้ว return โดยไม่ sort ในนี้
+  // (sort จะถูกทำใน displayRows ตาม sortKey + sortDir ที่ผู้ใช้เลือก)
+  return [...installmentRows, ...groupedClosing, ...deviceRows];
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -465,8 +458,35 @@ export default function Income() {
         return detailActiveTypes.has(displayType);
       });
     }
-    return groupRowsBySlip(sortedRows);
-  }, [sortedRows, listMode, activeTypes]);
+    // slip mode: group ก่อน แล้ว sort ตาม sortKey + sortDir ที่ผู้ใช้เลือก
+    const grouped = groupRowsBySlip(rows); // group จาก rows ดิบ (ไม่ผ่าน sortedRows)
+    const slipSorted = [...grouped];
+    if (sortKey !== "no") {
+      slipSorted.sort((a, b) => {
+        let av: string | number = 0;
+        let bv: string | number = 0;
+        if (sortKey === "paidAt") { av = a.paidAt ?? ""; bv = b.paidAt ?? ""; }
+        else if (sortKey === "incomeType") { av = a.incomeType; bv = b.incomeType; }
+        else if (sortKey === "contractNo") { av = a.contractNo; bv = b.contractNo; }
+        else if (sortKey === "amount") { av = a.amount; bv = b.amount; }
+        else if (sortKey === "updatedBy") { av = a.updatedBy ?? ""; bv = b.updatedBy ?? ""; }
+        else if (sortKey === "updatedAt") { av = a.updatedAt ?? ""; bv = b.updatedAt ?? ""; }
+        if (av < bv) return sortDir === "asc" ? -1 : 1;
+        if (av > bv) return sortDir === "asc" ? 1 : -1;
+        return 0;
+      });
+    } else {
+      // sortKey === "no": sort ตาม paidAt ASC (default)
+      slipSorted.sort((a, b) => {
+        const av = a.paidAt ?? "";
+        const bv = b.paidAt ?? "";
+        if (av < bv) return -1;
+        if (av > bv) return 1;
+        return 0;
+      });
+    }
+    return slipSorted;
+  }, [rows, sortedRows, listMode, activeTypes, sortKey, sortDir]);
 
   /**
    * getDisplayType — ดึง type ที่จะแสดงใน badge ตาม mode
