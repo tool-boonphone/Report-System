@@ -841,19 +841,32 @@ export default function DebtReport() {
       }
     }
     // ยอดที่ชำระรวม:
-    // สูตร: principal + interest + fee + penalty + unlockFee + overpaid + badDebt = pt.amount
-    // fields จาก API เป็นยอดหลังหัก discount แล้ว (ยืนยันจากข้อมูลจริง) — ไม่ต้องหัก discount อีก
+    // sum จาก payment.total (= pt.amount) ของแต่ละแถว payment โดยตรง
+    // เพราะ pt.amount คือยอดที่ลูกค้าจ่ายจริงหลังหักส่วนลดแล้ว
+    // ไม่ sum จาก fields แยก (principal+interest+fee+...) เพราะ fields อาจมี Pattern C cap
+    // Pattern B (extraPenalty): pt.amount = 0 → ไม่นับใน total
     // badge visibility มีผลต่อ total เพื่อให้ user toggle ดูได้
-    // Pattern B (extraPenalty) ไม่นับใน total เพราะ pt.amount = 0 จึงไม่มีใน Income
-    const bv = badgeVisibility;
-    const total =
-      (bv.principal ? principal : 0) +
-      (bv.interest ? interest : 0) +
-      (bv.fee ? fee : 0) +
-      (bv.penalty ? penalty : 0) +
-      (bv.unlockFee ? unlockFee : 0) +
-      (bv.overpaid ? overpaid : 0) +
-      (bv.badDebt ? badDebt : 0);
+    let totalFromPayments = 0;
+    for (const r of filteredRows as CollectedRow[]) {
+      for (const p of r.payments ?? []) {
+        if (dueDateExact && (p.paidAt?.slice(0, 10) ?? null) !== dueDateExact) continue;
+        if (dueDateFilter.size > 0 && !(p.paidAt && dueDateFilter.has(p.paidAt.slice(0, 7)))) continue;
+        if (updatedByFilter && p.updatedBy !== updatedByFilter) continue;
+        if (p.isExtraPenalty) continue; // Pattern B: pt.amount = 0 ไม่นับ
+        // คำนวณ total จาก fields ที่ toggle เปิดอยู่เท่านั้น
+        const bv = badgeVisibility;
+        const rowTotal =
+          (bv.principal ? p.principal : 0) +
+          (bv.interest ? p.interest : 0) +
+          (bv.fee ? p.fee : 0) +
+          (bv.penalty ? p.penalty : 0) +
+          (bv.unlockFee ? p.unlockFee : 0) +
+          (bv.overpaid ? p.overpaid : 0) +
+          (bv.badDebt ? p.badDebt : 0);
+        totalFromPayments += rowTotal;
+      }
+    }
+    const total = totalFromPayments;
     return { principal, interest, fee, penalty, unlockFee, discount, overpaid, badDebt, total, extraPenalty };
   }, [filteredRows, tab, dueDateExact, dueDateFilter, badgeVisibility, updatedByFilter]);
 
@@ -1553,7 +1566,9 @@ export default function DebtReport() {
                   const summaryOverpaid = filteredPayments.reduce((s, p) => s + (p.overpaid ?? 0), 0);
                   const summaryBadDebt = filteredPayments.reduce((s, p) => s + (p.badDebt ?? 0), 0);
                   // Phase 89: summaryTotal must include badDebt because badDebtRow has total=0 but badDebt=contractBadDebtAmount
-                  const summaryTotal = filteredPayments.reduce((s, p) => s + (p.total ?? 0), 0) + summaryBadDebt;
+                  // Phase 132: บวก discount กลับเข้าไปเพราะ pt.amount = ยอดหลังหักส่วนลดแล้ว
+                  // ยอดที่ชำระรวมในตารางควรแสดงยอดก่อนหักส่วนลด (= pt.amount + discount)
+                  const summaryTotal = filteredPayments.reduce((s, p) => s + (p.total ?? 0) + (p.discount ?? 0), 0) + summaryBadDebt;
                   // Latest period = max period with paidAt
                   const latestPay = filteredPayments.filter(p => p.paidAt).sort((a, b) => {
                     if ((a.paidAt ?? "") > (b.paidAt ?? "")) return -1;
