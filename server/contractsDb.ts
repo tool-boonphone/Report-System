@@ -149,6 +149,87 @@ export async function listAllContracts(params: {
   return rows as Array<Omit<Contract, "rawJson">>;
 }
 
+/**
+ * Return a chunk of contracts for chunked loading with progress tracking.
+ * Used by DataLoadingScreen to show "X / Y สัญญา (Z%)" progress.
+ * First call (offset=0) also returns the total count; subsequent calls reuse
+ * the total returned by the first call to avoid repeated COUNT queries.
+ */
+export async function listContractChunk(params: {
+  section: SectionKey;
+  offset: number;
+  limit: number;
+}): Promise<{ rows: Array<Omit<Contract, "rawJson">>; total: number; hasMore: boolean }> {
+  const db = await getDb();
+  if (!db) return { rows: [], total: 0, hasMore: false };
+  const where = eq(contracts.section, params.section);
+  // Count total rows (cheap — indexed on section)
+  const [countRow] = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(contracts)
+    .where(where);
+  const total = Number(countRow?.count ?? 0);
+  // Fetch chunk
+  const rows = await db
+    .select({
+      id: contracts.id,
+      section: contracts.section,
+      externalId: contracts.externalId,
+      contractNo: contracts.contractNo,
+      submitDate: contracts.submitDate,
+      approveDate: contracts.approveDate,
+      partnerCode: contracts.partnerCode,
+      partnerName: contracts.partnerName,
+      partnerProvince: contracts.partnerProvince,
+      partnerStatus: contracts.partnerStatus,
+      channel: contracts.channel,
+      status: contracts.status,
+      debtType: contracts.debtType,
+      promotionName: contracts.promotionName,
+      device: contracts.device,
+      productType: contracts.productType,
+      model: contracts.model,
+      imei: contracts.imei,
+      serialNo: contracts.serialNo,
+      sellPrice: contracts.sellPrice,
+      deviceStatus: contracts.deviceStatus,
+      downPayment: contracts.downPayment,
+      financeAmount: contracts.financeAmount,
+      commissionNet: contracts.commissionNet,
+      installmentCount: contracts.installmentCount,
+      multiplier: contracts.multiplier,
+      installmentAmount: contracts.installmentAmount,
+      paymentDay: contracts.paymentDay,
+      paidInstallments: contracts.paidInstallments,
+      customerName: contracts.customerName,
+      nationality: contracts.nationality,
+      citizenId: contracts.citizenId,
+      gender: contracts.gender,
+      age: contracts.age,
+      occupation: contracts.occupation,
+      salary: contracts.salary,
+      workplace: contracts.workplace,
+      phone: contracts.phone,
+      idDistrict: contracts.idDistrict,
+      idProvince: contracts.idProvince,
+      addrDistrict: contracts.addrDistrict,
+      addrProvince: contracts.addrProvince,
+      workDistrict: contracts.workDistrict,
+      workProvince: contracts.workProvince,
+      syncedAt: contracts.syncedAt,
+    })
+    .from(contracts)
+    .where(where)
+    .orderBy(desc(contracts.approveDate))
+    .limit(params.limit)
+    .offset(params.offset);
+  return {
+    rows: rows as Array<Omit<Contract, "rawJson">>,
+    total,
+    hasMore: params.offset + rows.length < total,
+  };
+}
+
 export async function listContracts(params: {
   section: SectionKey;
   filters?: ContractFilters;

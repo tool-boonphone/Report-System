@@ -3,6 +3,7 @@ import { requirePermission, router } from "../_core/trpc";
 import {
   listContracts,
   listAllContracts,
+  listContractChunk,
   listContractFilterOptions,
   type ContractFilters,
   type ContractSort,
@@ -67,6 +68,26 @@ export const contractsRouter = router({
   listAll: requirePermission("contract", "view")
     .input(z.object({ section: sectionInput }))
     .query(({ input }) => listAllContracts({ section: input.section })),
+
+  /**
+   * Return a chunk of contracts for chunked loading with progress tracking.
+   * Used by DataLoadingScreen to show "X / Y สัญญา (Z%)" progress while loading.
+   */
+  listChunk: requirePermission("contract", "view")
+    .input(
+      z.object({
+        section: sectionInput,
+        offset: z.number().int().min(0).default(0),
+        limit: z.number().int().min(1).max(5000).default(2000),
+      }),
+    )
+    .query(({ input }) =>
+      listContractChunk({
+        section: input.section,
+        offset: input.offset,
+        limit: input.limit,
+      }),
+    ),
 
   filterOptions: requirePermission("contract", "view")
     .input(z.object({ section: sectionInput }))

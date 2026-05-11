@@ -305,16 +305,29 @@ export default function DataLoadingScreen() {
     setErrors((prev) => ({ ...prev, [key]: msg }));
   }, []);
 
-  // ─── Fetch contracts ──────────────────────────────────────────────────────
+  // ─── Fetch contracts (chunked with progress) ────────────────────────────
 
   const fetchContracts = useCallback(async (sec: SectionKey) => {
     setStatus("contracts", "loading");
     setItemLoaded("contracts", 0);
     setItemTotal("contracts", 0);
     try {
-      const data = await utils.contracts.listAll.fetch({ section: sec });
-      setItemTotal("contracts", data.length);
-      setItemLoaded("contracts", data.length);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const allRows: any[] = [];
+      let offset = 0;
+      const CONTRACTS_CHUNK = 2000;
+      while (true) {
+        const result = await utils.contracts.listChunk.fetch({
+          section: sec,
+          offset,
+          limit: CONTRACTS_CHUNK,
+        });
+        allRows.push(...result.rows);
+        setItemTotal("contracts", result.total);
+        setItemLoaded("contracts", allRows.length);
+        if (!result.hasMore) break;
+        offset += CONTRACTS_CHUNK;
+      }
       setStatus("contracts", "done");
     } catch (err: unknown) {
       const msg = (err as Error)?.message ?? "เกิดข้อผิดพลาด";
