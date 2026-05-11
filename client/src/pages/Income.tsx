@@ -139,7 +139,7 @@ function groupRowsBySlip(rows: IncomeRow[]): IncomeRow[] {
       if (!badDebtContractMap.has(row.contractNo)) badDebtContractMap.set(row.contractNo, []);
       badDebtContractMap.get(row.contractNo)!.push(row);
     } else if (
-      row.contractStatus === "สิ้นสุดสัญญา" &&
+      (row.contractStatus === "สิ้นสุดสัญญา" || row.contractStatus === "สำเร็จ") &&
       (row.receiptNo ?? "").startsWith("TXRTC")
     ) {
       closingRows.push(row);
@@ -229,13 +229,13 @@ function groupRowsBySlip(rows: IncomeRow[]): IncomeRow[] {
 
   const groupedClosing = groupByBatch(closingRows, "ปิดยอด");
 
-  // ผสมทุกประเภทแล้ว sort ตาม paidAt DESC
+  // ผสมทุกประเภทแล้ว sort ตาม paidAt ASC (เก่าไปใหม่ เหมือน detail mode)
   const combined = [...installmentRows, ...groupedClosing, ...deviceRows];
   combined.sort((a, b) => {
     const av = a.paidAt ?? "";
     const bv = b.paidAt ?? "";
-    if (av > bv) return -1;
-    if (av < bv) return 1;
+    if (av < bv) return -1;
+    if (av > bv) return 1;
     return 0;
   });
   return combined;

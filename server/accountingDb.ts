@@ -127,9 +127,9 @@ const PT_INCOME_TYPE_CASE = `
       AND DATE(pt.created_at) = DATE(bdl.last_created_at)
       AND (bdl.last_updated_by IS NULL OR pt.updated_by = bdl.last_updated_by)
       THEN 'ขายเครื่อง'
-    -- ปิดยอด: สัญญาสิ้นสุดสัญญา + transaction อยู่ใน batch สุดท้าย
+    -- ปิดยอด: สัญญาสิ้นสุดสัญญา/สำเร็จ + transaction อยู่ใน batch สุดท้าย
     -- (paid_at วันสุดท้าย + DATE(created_at) วันเดียวกัน + updated_by คนเดียวกัน)
-    WHEN c.status = 'สิ้นสุดสัญญา'
+    WHEN c.status IN ('สิ้นสุดสัญญา', 'สำเร็จ')
       AND bdl.last_paid_date IS NOT NULL
       AND DATE(pt.paid_at) = bdl.last_paid_date
       AND bdl.last_created_at IS NOT NULL
