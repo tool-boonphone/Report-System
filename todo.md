@@ -1424,3 +1424,12 @@ Task list:
 - [x] DebtOverview.tsx: ถูกต้องอยู่แล้ว (ไม่มี discount ใน formula)
 - [x] MonthlySummary.tsx: ถูกต้องอยู่แล้ว (paidVis.discount=false ใน computeMoneyTotal)
 - [x] Commit, push GitHub และ save checkpoint
+
+## Fix: Income-First Pipeline + ซ่อน rows ว่าง + ลบ filter ยกเลิกสัญญา + case sensitivity (2026-05-11)
+- [x] ตรวจสอบ populateCache.ts: p.total มาจาก pt.amount (payment_transactions.amount) โดยตรงอยู่แล้ว — ไม่ต้องแก้
+- [x] ตรวจสอบ DB: ไม่มี rows ที่ทุก amount = 0 ใน debt_collected_cache — ไม่ต้องแก้
+- [x] ตรวจสอบ listDebtCollectedStream: ไม่มี filter status != 'ยกเลิกสัญญา' — ดึงทุกสถานะอยู่แล้ว
+- [x] ตรวจสอบ case sensitivity (f/F, b/B): ระบบใช้ SectionKey PascalCase ถูกต้องทั้งหมด มี normalizeSectionKey() เป็น safety net
+- [x] DB section values: เก็บเป็น 'Boonphone' และ 'Fastfone365' ถูกต้อง (พบ 'section' header row ปน แต่ไม่กระทบการทำงาน)
+- [x] Push GitHub + save checkpoint
+- [x] บันทึกความรู้เรื่อง case sensitivity และ cache clearing ใน project knowledge
