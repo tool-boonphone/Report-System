@@ -50,7 +50,7 @@ export const accountingRouter = router({
     .input(
       incomeFilterInput.extend({
         page: z.number().int().min(1).optional().default(1),
-        pageSize: z.number().int().min(1).max(1000).optional().default(50),
+        pageSize: z.number().int().min(1).max(20000).optional().default(50),
       }),
     )
     .query(async ({ input }) => {
