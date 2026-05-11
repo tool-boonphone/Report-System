@@ -86,7 +86,10 @@ const MONTH_NAMES = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.
 // ─── Type สำหรับ row ที่ดึงมาจาก API ──────────────────────────────────────────
 type IncomeRow = {
   paidAt: string | null;
+  /** incomeType = classified (ค่างวด / ปิดยอด / ขายเครื่อง) ใช้ใน slip mode */
   incomeType: string;
+  /** originalIncomeType = ตาม API จริง (ค่างวด / ปิดยอด เท่านั้น) ใช้ใน detail mode */
+  originalIncomeType?: string;
   contractNo: string;
   customerName?: string | null;
   amount: number;
@@ -95,47 +98,110 @@ type IncomeRow = {
 };
 
 /**
- * groupRowsBySlip — group รายการที่เป็นสัญญาเดียวกัน + ชำระวันเดียวกัน +
- * คนทำรายการคนเดียวกัน + วันที่ทำรายการวันเดียวกัน (ไม่เอาเวลา)
- * เฉพาะ ปิดยอด และ ขายเครื่อง ให้เป็น 1 row (รวม amount)
- * ค่างวด ไม่ group
+ * groupRowsBySlip — mode รายการตามบิล (slip mode)
+ *
+ * ปิดยอด = รายการล่าสุดของสัญญาสิ้นสุดสัญญา ที่ paidAt วันเดียวกัน + updatedBy คนเดียวกัน + updatedAt วันเดียวกัน
+ *   ไล่จากล่าสุดขึ้นไปจนอย่างใดอย่างหนึ่งไม่ตรงกัน
+ * ขายเครื่อง = รายการล่าสุดของสัญญาหนี้เสีย เงื่อนไขเดียวกัน
+ * ค่างวด = ไม่ group
+ *
+ * ยอดรวมทั้ง 2 mode เท่ากัน (เพราะ group แค่รวม amount ไม่ได้ตัดออก)
  */
 function groupRowsBySlip(rows: IncomeRow[]): IncomeRow[] {
-  const result: IncomeRow[] = [];
-  // Map key = contractNo|paidAt|updatedBy|dateOf(updatedAt)|incomeType
-  const groupMap = new Map<string, IncomeRow>();
+  // แยกรายการตาม incomeType (classified)
+  const installmentRows: IncomeRow[] = []; // ค่างวด — ไม่ group
+  const closingRows: IncomeRow[] = [];     // ปิดยอด — group ตาม batch
+  const deviceRows: IncomeRow[] = [];      // ขายเครื่อง — group ตาม batch
 
   for (const row of rows) {
     const type = row.incomeType as IncomeType;
-    if (GROUPABLE_TYPES.has(type)) {
-      // ใช้เฉพาะวันที่ของ updatedAt (ตัดเวลาออก) เพื่อ group รายการวันเดียวกัน
-      const updatedAtDate = row.updatedAt ? row.updatedAt.slice(0, 10) : "";
-      // group key: สัญญาเดียวกัน + วันที่ชำระ + ผู้ทำรายการ + วันที่ทำรายการ + ประเภท
-      const key = `${row.contractNo}|${row.paidAt ?? ""}|${row.updatedBy ?? ""}|${updatedAtDate}|${row.incomeType}`;
-      const existing = groupMap.get(key);
-      if (existing) {
-        // รวม amount
-        existing.amount = (existing.amount ?? 0) + (row.amount ?? 0);
-      } else {
-        // สร้าง row ใหม่ (clone) เพื่อไม่ mutate ต้นฉบับ
-        groupMap.set(key, { ...row });
-      }
-    } else {
-      // ค่างวด — ไม่ group, ใส่ตรงๆ
-      result.push(row);
-    }
+    if (type === "ปิดยอด") closingRows.push(row);
+    else if (type === "ขายเครื่อง") deviceRows.push(row);
+    else installmentRows.push(row);
   }
 
-  // รวม grouped rows เข้า result โดยรักษาลำดับตาม insertion order ของ Map
-  const grouped = Array.from(groupMap.values());
+  /**
+   * groupByBatch — group rows ตาม batch สุดท้ายของแต่ละสัญญา
+   * batch = paidAt วันเดียวกัน + updatedBy คนเดียวกัน + updatedAt วันเดียวกัน
+   * ไล่จากล่าสุดขึ้นไปจนอย่างใดอย่างหนึ่งไม่ตรงกัน
+   */
+  function groupByBatch(typeRows: IncomeRow[], targetType: IncomeType): IncomeRow[] {
+    // จัดกลุ่มตามสัญญา
+    const contractMap = new Map<string, IncomeRow[]>();
+    for (const row of typeRows) {
+      const key = row.contractNo;
+      if (!contractMap.has(key)) contractMap.set(key, []);
+      contractMap.get(key)!.push(row);
+    }
 
-  // ผสม result (ค่างวด) + grouped (ปิดยอด/ขายเครื่อง) แล้ว sort ตาม paidAt desc
-  const combined = [...result, ...grouped];
+    const grouped: IncomeRow[] = [];
+
+    for (const [, contractRows] of Array.from(contractMap)) {
+      // เรียงตาม updatedAt DESC (ล่าสุดก่อน)
+      const sorted = [...contractRows].sort((a, b) => {
+        const av = a.updatedAt ?? "";
+        const bv = b.updatedAt ?? "";
+        if (av > bv) return -1;
+        if (av < bv) return 1;
+        return 0;
+      });
+
+      // ไล่จากล่าสุด: เอารายการที่ paidAt วันเดียวกัน + updatedBy คนเดียวกัน + updatedAt วันเดียวกัน
+      // จนอย่างใดอย่างหนึ่งไม่ตรงกัน
+      const firstRow = sorted[0];
+      const batchPaidAt = firstRow.paidAt ? firstRow.paidAt.slice(0, 10) : "";
+      const batchUpdatedBy = firstRow.updatedBy ?? "";
+      const batchUpdatedAtDate = firstRow.updatedAt ? firstRow.updatedAt.slice(0, 10) : "";
+
+      let batchAmount = 0;
+      const batchRows: IncomeRow[] = [];
+      const remainingRows: IncomeRow[] = [];
+
+      for (const row of sorted) {
+        const rowPaidAt = row.paidAt ? row.paidAt.slice(0, 10) : "";
+        const rowUpdatedBy = row.updatedBy ?? "";
+        const rowUpdatedAtDate = row.updatedAt ? row.updatedAt.slice(0, 10) : "";
+
+        if (
+          rowPaidAt === batchPaidAt &&
+          rowUpdatedBy === batchUpdatedBy &&
+          rowUpdatedAtDate === batchUpdatedAtDate
+        ) {
+          batchAmount += row.amount ?? 0;
+          batchRows.push(row);
+        } else {
+          remainingRows.push(row);
+        }
+      }
+
+      // สร้าง grouped row จาก batch ล่าสุด
+      if (batchRows.length > 0) {
+        grouped.push({
+          ...firstRow,
+          incomeType: targetType,
+          amount: batchAmount,
+        });
+      }
+
+      // รายการที่เหลือ (batch เก่ากว่า) — ใส่ตรงๆ ไม่ group
+      for (const row of remainingRows) {
+        grouped.push({ ...row, incomeType: targetType });
+      }
+    }
+
+    return grouped;
+  }
+
+  const groupedClosing = groupByBatch(closingRows, "ปิดยอด");
+  const groupedDevice = groupByBatch(deviceRows, "ขายเครื่อง");
+
+  // ผสมทุกประเภทแล้ว sort ตาม paidAt DESC
+  const combined = [...installmentRows, ...groupedClosing, ...groupedDevice];
   combined.sort((a, b) => {
     const av = a.paidAt ?? "";
     const bv = b.paidAt ?? "";
-    if (av < bv) return 1;
     if (av > bv) return -1;
+    if (av < bv) return 1;
     return 0;
   });
   return combined;
@@ -193,10 +259,28 @@ export default function Income() {
   }, [setActions]);
 
   // ── tRPC queries ──
-  const incomeTypesParam = useMemo(
-    () => (activeTypes.size === ALL_INCOME_TYPES.length ? undefined : Array.from(activeTypes) as IncomeType[]),
-    [activeTypes],
-  );
+  /**
+   * incomeTypesParam — filter ที่ส่งไป API
+   * detail mode: ไม่ส่ง ขายเครื่อง (ไม่มีใน detail mode)
+   * slip mode: ส่งตามที่เลือก
+   */
+  const incomeTypesParam = useMemo(() => {
+    if (listMode === "detail") {
+      // detail mode: เอาเฉพาะ ค่างวด และ ปิดยอด เท่านั้น
+      // ถ้าผู้ใช้ปิด ค่างวด หรือ ปิดยอด ให้ส่ง filter ตามนั้น
+      // ถ้าเปิดทั้งหมด ให้ส่ง undefined (ดึงทั้งหมด)
+      const detailTypes: IncomeType[] = ["\u0e04\u0e48\u0e32\u0e07\u0e27\u0e14", "\u0e1b\u0e34\u0e14\u0e22\u0e2d\u0e14"];
+      const activeDetail = detailTypes.filter((t) => activeTypes.has(t));
+      // ถ้าเปิดทั้ง 2 ประเภท = undefined (ไม่ filter)
+      if (activeDetail.length === detailTypes.length) return undefined;
+      // ถ้าเปิดแค่ ค่างวด → ส่ง [ค่างวด, ขายเครื่อง] (เพราะ originalIncomeType ของขายเครื่อง = ค่างวด)
+      if (activeDetail.length === 1 && activeDetail[0] === "\u0e04\u0e48\u0e32\u0e07\u0e27\u0e14") return ["\u0e04\u0e48\u0e32\u0e07\u0e27\u0e14", "\u0e02\u0e32\u0e22\u0e40\u0e04\u0e23\u0e37\u0e48\u0e2d\u0e07"] as IncomeType[];
+      // ถ้าเปิดแค่ ปิดยอด → ส่ง [ปิดยอด]
+      return activeDetail as IncomeType[];
+    }
+    // slip mode: ส่งตามที่เลือก
+    return (activeTypes.size === ALL_INCOME_TYPES.length ? undefined : Array.from(activeTypes) as IncomeType[]);
+  }, [activeTypes, listMode]);
 
   const { data, isLoading, error } = trpc.accounting.listIncome.useQuery(
     {
@@ -272,14 +356,33 @@ export default function Income() {
     { enabled: !!section && canView && activeTab === "all" },
   );
 
-  const badgeSums = useMemo<Record<IncomeType, number>>(() => ({
-    "ค่างวด": summaryData?.["ค่างวด"] ?? 0,
-    "ขายเครื่อง": summaryData?.["ขายเครื่อง"] ?? 0,
-    "ปิดยอด": summaryData?.["ปิดยอด"] ?? 0,
-  }), [summaryData]);
+  /**
+   * badgeSums — ยอดสรุปตาม mode
+   * detail mode: ค่างวด = ค่างวด + ขายเครื่อง (เพราะ originalIncomeType ของขายเครื่อง = ค่างวด)
+   * slip mode: ค่างวด / ปิดยอด / ขายเครื่อง แยกกัน
+   */
+  const badgeSums = useMemo<Record<IncomeType, number>>(() => {
+    const rawInstallment = summaryData?.["ค่างวด"] ?? 0;
+    const rawDevice = summaryData?.["ขายเครื่อง"] ?? 0;
+    const rawClosing = summaryData?.["ปิดยอด"] ?? 0;
+    if (listMode === "detail") {
+      // detail mode: ขายเครื่อง รวมเข้าค่างวด (เพราะ originalIncomeType = ค่างวด)
+      return {
+        "ค่างวด": rawInstallment + rawDevice,
+        "ปิดยอด": rawClosing,
+        "ขายเครื่อง": 0, // ไม่แสดงใน detail mode
+      };
+    }
+    // slip mode: แยกตาม classified type
+    return {
+      "ค่างวด": rawInstallment,
+      "ขายเครื่อง": rawDevice,
+      "ปิดยอด": rawClosing,
+    };
+  }, [summaryData, listMode]);
 
   const totalVisible = useMemo(() => {
-    // mode detail: ไม่รวม ขายเครื่อง (ไม่มีใน API)
+    // detail mode: ไม่นับ ขายเครื่อง (= 0 อยู่แล้ว)
     const visibleTypes = listMode === "detail"
       ? ALL_INCOME_TYPES.filter((t) => t !== "ขายเครื่อง")
       : ALL_INCOME_TYPES;
@@ -308,13 +411,26 @@ export default function Income() {
 
   /**
    * displayRows — rows ที่จะแสดงในตาราง
-   * mode = detail: ใช้ sortedRows ตรงๆ (ไม่ group)
-   * mode = slip: group ปิดยอด/ขายเครื่อง ที่ชำระวันเดียวกัน + คนเดียวกัน
+   * mode = detail: ใช้ sortedRows ตรงๆ (ไม่ group) แสดง originalIncomeType
+   * mode = slip: group ปิดยอด/ขายเครื่อง ที่ชำระวันเดียวกัน + คนเดียวกัน แสดง incomeType (classified)
    */
   const displayRows = useMemo(() => {
     if (listMode === "detail") return sortedRows;
     return groupRowsBySlip(sortedRows);
   }, [sortedRows, listMode]);
+
+  /**
+   * getDisplayType — ดึง type ที่จะแสดงใน badge ตาม mode
+   * detail mode: ใช้ originalIncomeType (ค่างวด / ปิดยอด เท่านั้น)
+   * slip mode: ใช้ incomeType (classified: ค่างวด / ปิดยอด / ขายเครื่อง)
+   */
+  const getDisplayType = (row: IncomeRow): IncomeType => {
+    if (listMode === "detail") {
+      const orig = row.originalIncomeType as IncomeType | undefined;
+      return (orig === "ปิดยอด" ? "ปิดยอด" : "ค่างวด") as IncomeType;
+    }
+    return (row.incomeType as IncomeType) ?? "ค่างวด";
+  };
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
@@ -365,10 +481,16 @@ export default function Income() {
 
       const wsData = [
         ["No.", "วันที่ชำระ", "ประเภท", "เลขที่สัญญา", "ชื่อลูกค้า", "ยอดเงิน", "ทำรายการโดย", "ทำรายการเมื่อ"],
-        ...exportRows.map((r, i) => [
-          i + 1, fmtDate(r.paidAt), r.incomeType, r.contractNo,
-          r.customerName ?? "", r.amount, r.updatedBy ?? "", fmtDateTime(r.updatedAt),
-        ]),
+        ...exportRows.map((r, i) => {
+          // ใช้ getDisplayType เพื่อแสดงประเภทตาม mode
+          const displayType = listMode === "detail"
+            ? (r.originalIncomeType === "ปิดยอด" ? "ปิดยอด" : "ค่างวด")
+            : r.incomeType;
+          return [
+            i + 1, fmtDate(r.paidAt), displayType, r.contractNo,
+            r.customerName ?? "", r.amount, r.updatedBy ?? "", fmtDateTime(r.updatedAt),
+          ];
+        }),
       ];
       const ws = XLSX.utils.aoa_to_sheet(wsData);
       ws["!cols"] = [{ wch: 6 }, { wch: 14 }, { wch: 14 }, { wch: 24 }, { wch: 24 }, { wch: 14 }, { wch: 18 }, { wch: 20 }];
@@ -789,7 +911,8 @@ export default function Income() {
                     </thead>
                     <tbody>
                       {displayRows.map((row, idx) => {
-                        const typeColor = TYPE_COLORS[row.incomeType as IncomeType] ?? { bg: "bg-gray-50", text: "text-gray-700", dot: "bg-gray-400" };
+                        const displayType = getDisplayType(row);
+                        const typeColor = TYPE_COLORS[displayType] ?? { bg: "bg-gray-50", text: "text-gray-700", dot: "bg-gray-400" };
                         // ใน mode detail ใช้ global index, ใน mode slip ใช้ index ของ displayRows
                         const rowNo = listMode === "detail"
                           ? (page - 1) * pageSize + idx + 1
@@ -801,7 +924,7 @@ export default function Income() {
                             <td className="px-3 py-2">
                               <span className={["inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium", typeColor.bg, typeColor.text].join(" ")}>
                                 <span className={["w-1.5 h-1.5 rounded-full", typeColor.dot].join(" ")} />
-                                {row.incomeType}
+                                {displayType}
                               </span>
                             </td>
                             <td className="px-3 py-2 font-mono text-xs text-gray-700">

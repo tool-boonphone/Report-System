@@ -31,7 +31,17 @@ export interface IncomeRow {
   contractNo: string;
   customerName: string | null;
   paidAt: string | null;
+  /**
+   * incomeType = classified type (ค่างวด / ปิดยอด / ขายเครื่อง)
+   * ใช้สำหรับ mode รายการตามบิล (slip mode)
+   */
   incomeType: IncomeType;
+  /**
+   * originalIncomeType = type ตาม API จริงๆ (ค่างวด / ปิดยอด เท่านั้น ไม่มีขายเครื่อง)
+   * ขายเครื่อง → ค่างวด (API ส่งมาเป็น ค่างวด แต่ระบบ classify เป็น ขายเครื่อง)
+   * ใช้สำหรับ mode รายการตามการบันทึก (detail mode)
+   */
+  originalIncomeType: "ค่างวด" | "ปิดยอด";
   amount: number;
   updatedBy: string | null;
   updatedAt: string | null;
@@ -85,6 +95,23 @@ export interface ExpenseParams {
  *
  * หมายเหตุ: ต้อง LEFT JOIN bad_debt_last_days bdl ก่อนใช้ expression นี้
  */
+
+/**
+ * Original income type CASE expression — type ตาม API จริงๆ
+ * ไม่มี ขายเครื่อง เพราะ API ส่งมาแค่ ค่างวด และ ปิดยอด
+ * ขายเครื่อง (classified) → ค่างวด (original)
+ * ใช้สำหรับ mode รายการตามการบันทึก (detail mode)
+ *
+ * ปิดยอด = มี close_installment_amount > 0 ใน raw_json
+ * ค่างวด = อื่นๆ (รวมถึงรายการที่ classify เป็น ขายเครื่อง)
+ */
+const PT_ORIGINAL_INCOME_TYPE_CASE = `
+  CASE
+    WHEN JSON_EXTRACT(pt.raw_json, '$.close_installment_amount') > 0
+      THEN 'ปิดยอด'
+    ELSE 'ค่างวด'
+  END
+`;
 const PT_INCOME_TYPE_CASE = `
   CASE
     -- ขายเครื่อง: สัญญาหนี้เสีย + transaction อยู่ใน batch สุดท้าย
@@ -217,6 +244,7 @@ export async function listIncome(params: IncomeParams): Promise<{
         pt.updated_by,
         pt.updated_at,
         ${PT_INCOME_TYPE_CASE} AS income_type,
+        ${PT_ORIGINAL_INCOME_TYPE_CASE} AS original_income_type,
         ${PT_AMOUNT_CASE} AS amount
       FROM payment_transactions pt
       LEFT JOIN contracts c ON c.contract_no = pt.contract_no AND c.section = pt.section
@@ -242,6 +270,7 @@ export async function listIncome(params: IncomeParams): Promise<{
     customerName: r.customer_name ?? null,
     paidAt: r.paid_at ?? null,
     incomeType: r.income_type as IncomeType,
+    originalIncomeType: (r.original_income_type === 'ปิดยอด' ? 'ปิดยอด' : 'ค่างวด') as "ค่างวด" | "ปิดยอด",
     amount: Number(r.amount ?? 0),
     updatedBy: r.updated_by ?? null,
     updatedAt: r.updated_at ?? null,
