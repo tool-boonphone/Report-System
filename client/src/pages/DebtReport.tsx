@@ -841,9 +841,11 @@ export default function DebtReport() {
       }
     }
     // ยอดที่ชำระรวม:
-    // สูตร: principal + interest + fee + penalty + unlockFee + overpaid + badDebt = pt.amount
-    // fields จาก API เป็นยอดหลังหัก discount แล้ว (ยืนยันจากข้อมูลจริง) — ไม่ต้องหัก discount อีก
-    // badge visibility มีผลต่อ total เพื่อให้ user toggle ดูได้
+    // Phase 133: total = sum(fields toggle) - discount
+    // เหตุผล: fields จาก API = pt.amount + discount (discount ถูกรวมไว้ใน fields แล้ว)
+    // ดังนั้นต้องหัก discount ออกเพื่อให้ได้ยอดที่ลูกค้าจ่ายจริง (= pt.amount)
+    // toggle ยังทำงานปกติ — ปิด field ใด ก็ไม่นับ field นั้น
+    // discount toggle ปิดเสมอ จึงไม่มีผลต่อ total
     // Pattern B (extraPenalty) ไม่นับใน total เพราะ pt.amount = 0 จึงไม่มีใน Income
     const bv = badgeVisibility;
     const total =
@@ -853,7 +855,8 @@ export default function DebtReport() {
       (bv.penalty ? penalty : 0) +
       (bv.unlockFee ? unlockFee : 0) +
       (bv.overpaid ? overpaid : 0) +
-      (bv.badDebt ? badDebt : 0);
+      (bv.badDebt ? badDebt : 0)
+      - discount; // หัก discount ออกเพราะ fields จาก API รวม discount ไว้แล้ว
     return { principal, interest, fee, penalty, unlockFee, discount, overpaid, badDebt, total, extraPenalty };
   }, [filteredRows, tab, dueDateExact, dueDateFilter, badgeVisibility, updatedByFilter]);
 
