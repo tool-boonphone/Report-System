@@ -133,6 +133,9 @@ export const syncLogs = mysqlTable(
     // Stage tracking for cross-instance progress reporting (Cloud Run multi-instance)
     currentStage: varchar("current_stage", { length: 32 }),
     progress: int("progress").default(0),
+    // Resume support: last page successfully fetched (for customers stage)
+    // Allows resuming from where we left off if Cloud Run is killed mid-sync
+    resumePage: int("resume_page").default(0),
     startedAt: timestamp("started_at").defaultNow().notNull(),
     finishedAt: timestamp("finished_at"),
   },

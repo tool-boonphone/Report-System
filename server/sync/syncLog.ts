@@ -50,6 +50,7 @@ export async function updateSyncLogStage(params: {
   id: number;
   currentStage: string;
   progress: number;
+  resumePage?: number;
 }) {
   const db = await getDb();
   if (!db || !params.id) return;
@@ -58,8 +59,32 @@ export async function updateSyncLogStage(params: {
     .set({
       currentStage: params.currentStage,
       progress: params.progress,
+      ...(params.resumePage !== undefined ? { resumePage: params.resumePage } : {}),
     })
     .where(eq(syncLogs.id, params.id));
+}
+
+/**
+ * Get the last successfully fetched customers page for a section.
+ * Used to resume customers sync from where it left off after a Cloud Run kill.
+ * Returns 0 if no previous run found (start from page 1).
+ */
+export async function getLastCustomersResumePage(section: SectionKey): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  // Find the most recent in_progress or error customers sync log with resume_page > 0
+  const rows = await db
+    .select({ resumePage: syncLogs.resumePage })
+    .from(syncLogs)
+    .where(
+      and(
+        eq(syncLogs.section, section),
+        eq(syncLogs.entity, "customers"),
+      ),
+    )
+    .orderBy(desc(syncLogs.startedAt))
+    .limit(1);
+  return rows[0]?.resumePage ?? 0;
 }
 
 /**
