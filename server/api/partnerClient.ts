@@ -176,20 +176,42 @@ export class PartnerClient {
      * Defaults to 1 (start from the beginning).
      */
     startPage = 1,
+    /**
+     * If true, skip pages that fail (timeout/network error) instead of throwing.
+     * Useful for best-effort syncs where partial data is acceptable.
+     * Defaults to false.
+     */
+    skipOnError = false,
   ): Promise<number> {
     let page = Math.max(1, startPage);
     let totalPages = page; // will be updated on first fetch
     let totalRows = 0;
+    let skippedPages = 0;
     // Protect against accidental infinite loops.
     const MAX_PAGES = 10_000;
     while (page <= totalPages && page <= MAX_PAGES) {
-      const data: any = await this.get<any>(path, { ...params, page, limit }, timeoutMs);
-      const items = pickItems(data) ?? [];
-      totalPages = Number(data?.pagination?.total_pages ?? 1);
-      totalRows += items.length;
-      await onPage(items, page, totalPages);
-      if (items.length === 0) break;
+      try {
+        const data: any = await this.get<any>(path, { ...params, page, limit }, timeoutMs);
+        const items = pickItems(data) ?? [];
+        totalPages = Number(data?.pagination?.total_pages ?? 1);
+        totalRows += items.length;
+        await onPage(items, page, totalPages);
+        if (items.length === 0) break;
+      } catch (err: any) {
+        if (!skipOnError) throw err;
+        // skipOnError=true: log and continue to next page
+        skippedPages += 1;
+        console.warn(`[${this.cfg.section}] forEachPage: skipping page ${page} due to error: ${err?.message ?? err}`);
+        // If we don't know totalPages yet (first page failed), we can't continue
+        if (page === Math.max(1, startPage) && totalPages === page) {
+          console.warn(`[${this.cfg.section}] forEachPage: first page failed, cannot determine totalPages — stopping`);
+          break;
+        }
+      }
       page += 1;
+    }
+    if (skippedPages > 0) {
+      console.warn(`[${this.cfg.section}] forEachPage: completed with ${skippedPages} skipped pages out of ${totalPages}`);
     }
     return totalRows;
   }
