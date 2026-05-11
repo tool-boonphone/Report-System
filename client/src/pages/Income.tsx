@@ -432,6 +432,7 @@ export default function Income() {
     return (row.incomeType as IncomeType) ?? "ค่างวด";
   };
 
+
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   const handleSort = (key: SortKey) => {

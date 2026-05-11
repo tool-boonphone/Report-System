@@ -27,6 +27,7 @@ import {
   insertSyncLog,
   finishSyncLog,
   updateSyncLogStage,
+  getLastCustomersResumePage,
 } from "./syncLog";
 import type { SectionKey, SyncTrigger } from "../../shared/const";
 import { invalidateDebtCache } from "../debtCache";
@@ -433,6 +434,7 @@ async function syncCustomers(
           const subPct = Math.min(page / totalPages, 1);
           const progress = Math.round(STAGE_START + subPct * (STAGE_END - STAGE_START));
           const currentStage = `customers (${page}/${totalPages})`;
+
           const lock = _locks[section];
           if (lock) {
             _locks[section] = { ...lock, progress, currentStage };
@@ -449,6 +451,8 @@ async function syncCustomers(
     await finishSyncLog({ id: log.id, status: "success", rowCount: byId.size });
     return byId;
   } catch (err: any) {
+    // resume_page is already saved in DB from the last successful page fetch above
+    // so next run will resume from there automatically
     await finishSyncLog({
       id: log.id,
       status: "error",
