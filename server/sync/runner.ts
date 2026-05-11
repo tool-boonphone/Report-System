@@ -422,7 +422,7 @@ async function syncCustomers(
           updateSyncLogStage({ id: logId, currentStage, progress, resumePage: page }).catch(() => {});
         }
       },
-      500,
+      100,  // limit=100 (ลดจาก 500) เพื่อให้แต่ละ page เบาลง API ตอบได้เร็วขึ้น ลด chance ที่จะ hang
       30_000, // 30s per-request timeout — fail fast if API hangs
       startPage, // Resume from last completed page if previous run was killed
     );
