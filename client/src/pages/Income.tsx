@@ -286,37 +286,110 @@ export default function Income() {
   }, [setActions]);
 
   // ── tRPC queries ──
-  /**
-   * incomeTypesParam — filter ที่ส่งไป API
-   * detail mode: ไม่ส่ง ขายเครื่อง (ไม่มีใน detail mode)
-   * slip mode: ส่งตามที่เลือก
-   */
-  const incomeTypesParam = useMemo(() => {
-    // ทั้ง detail และ slip mode: ส่ง undefined เสมอ (ดึงทั้งหมด)
-    // เพราะ API filter ด้วย classified type ซึ่งไม่ตรงกับ originalIncomeType ที่ detail mode ใช้
-    // การ filter ตาม activeTypes ทำที่ client ใน displayRows
-    // ยกเว้นกรณีเดียว: ปิดทั้งหมด → ส่ง [] เพื่อไม่ดึงอะไร
-    if (activeTypes.size === 0) return [] as IncomeType[];
-    return undefined;
-  }, [activeTypes]);
+  const utils = trpc.useUtils();
 
-  // ทั้ง detail และ slip mode: ดึงทั้งหมดมา client เพื่อ filter+paginate ที่ client
-  // เพราะ API filter ด้วย classified type ซึ่งไม่ตรงกับ originalIncomeType ที่ detail mode ใช้
-  const bulkPageSize = 20000; // ดึงทั้งหมดสำหรับทั้ง 2 mode
-  const { data, isLoading, error } = trpc.accounting.listIncome.useQuery(
-    {
-      section: section ?? "Boonphone",
-      search: search || undefined,
-      dateFrom: dateFrom || undefined,
-      dateTo: dateTo || undefined,
-      dateField,
-      incomeTypes: incomeTypesParam,
-      updatedBy: updatedBy || undefined,
-      page: 1,
-      pageSize: bulkPageSize,
-    },
-    { enabled: !!section && canView && activeTab === "all" },
-  );
+  // ── Chunked loading state ──
+  const [allRows, setAllRows] = useState<IncomeRow[]>([]);
+  const [loadedCount, setLoadedCount] = useState(0);
+  const [totalFromApi, setTotalFromApi] = useState(0);
+  const [isLoadingChunks, setIsLoadingChunks] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const loadingRef = useRef(false); // guard ป้องกัน double-fetch
+
+  // ── Query key สำหรับ trigger reload เมื่อ filter เปลี่ยน ──
+  const queryKey = useMemo(() => JSON.stringify({
+    section, search, dateFrom, dateTo, dateField, updatedBy,
+  }), [section, search, dateFrom, dateTo, dateField, updatedBy]);
+
+  // ── Chunked loading effect ──
+  useEffect(() => {
+    if (!section || !canView || activeTab !== "all") return;
+    if (activeTypes.size === 0) {
+      setAllRows([]);
+      setLoadedCount(0);
+      setTotalFromApi(0);
+      return;
+    }
+    if (loadingRef.current) return;
+    loadingRef.current = true;
+    setIsLoadingChunks(true);
+    setLoadError(null);
+    setAllRows([]);
+    setLoadedCount(0);
+    setTotalFromApi(0);
+
+    const CHUNK_SIZE = 2000;
+    let cancelled = false;
+
+    async function fetchAll() {
+      try {
+        // chunk แรก: รู้ total
+        const first = await utils.accounting.listIncome.fetch({
+          section: section ?? "Boonphone",
+          search: search || undefined,
+          dateFrom: dateFrom || undefined,
+          dateTo: dateTo || undefined,
+          dateField,
+          updatedBy: updatedBy || undefined,
+          page: 1,
+          pageSize: CHUNK_SIZE,
+        });
+        if (cancelled) return;
+        const apiTotal = first.total ?? 0;
+        const firstRows = (first.rows ?? []) as IncomeRow[];
+        setTotalFromApi(apiTotal);
+        setAllRows(firstRows);
+        setLoadedCount(firstRows.length);
+
+        if (firstRows.length >= apiTotal) {
+          // โหลดครบแล้วใน chunk เดียว
+          setIsLoadingChunks(false);
+          loadingRef.current = false;
+          return;
+        }
+
+        // โหลด chunks ที่เหลือ
+        const totalPages = Math.ceil(apiTotal / CHUNK_SIZE);
+        const accumulated: IncomeRow[] = [...firstRows];
+        for (let p = 2; p <= totalPages; p++) {
+          if (cancelled) return;
+          const chunk = await utils.accounting.listIncome.fetch({
+            section: section ?? "Boonphone",
+            search: search || undefined,
+            dateFrom: dateFrom || undefined,
+            dateTo: dateTo || undefined,
+            dateField,
+            updatedBy: updatedBy || undefined,
+            page: p,
+            pageSize: CHUNK_SIZE,
+          });
+          if (cancelled) return;
+          const chunkRows = (chunk.rows ?? []) as IncomeRow[];
+          accumulated.push(...chunkRows);
+          setAllRows([...accumulated]);
+          setLoadedCount(accumulated.length);
+        }
+        setIsLoadingChunks(false);
+        loadingRef.current = false;
+      } catch (err) {
+        if (!cancelled) {
+          setLoadError((err as Error).message ?? "โหลดข้อมูลล้มเหลว");
+          setIsLoadingChunks(false);
+          loadingRef.current = false;
+        }
+      }
+    }
+
+    fetchAll();
+    return () => { cancelled = true; loadingRef.current = false; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queryKey, activeTab, canView, activeTypes.size === 0]);
+
+  // ── compat: rows / isLoading / error ──
+  const rows = allRows;
+  const isLoading = isLoadingChunks && allRows.length === 0;
+  const isPartialLoading = isLoadingChunks && allRows.length > 0;
+  const error = loadError ? { message: loadError } : null;
 
   const { data: updatedByList } = trpc.accounting.listIncomeUpdatedBy.useQuery(
     {
@@ -337,7 +410,6 @@ export default function Income() {
       dateFrom: dateFrom || undefined,
       dateTo: dateTo || undefined,
       dateField,
-      incomeTypes: incomeTypesParam,
       updatedBy: updatedBy || undefined,
       page: 1,
       pageSize: 10000,
@@ -368,9 +440,6 @@ export default function Income() {
     { section: section ?? "Boonphone", groupBy: "month", years: monthlyYearsParam, months: monthlyMonthsParam },
     { enabled: !!section && canView && activeTab === "monthly" },
   );
-
-  const rows = (data?.rows ?? []) as IncomeRow[];
-  const total = data?.total ?? 0;
 
   const { data: summaryData } = trpc.accounting.getIncomeSummary.useQuery(
     {
@@ -949,12 +1018,37 @@ export default function Income() {
             <div className="flex-1 overflow-auto">
               <div className="max-w-screen-2xl mx-auto w-full px-3 sm:px-4 py-2">
                 {isLoading ? (
-                  <div className="flex items-center justify-center py-20"><Spinner className="w-6 h-6 text-blue-500" /></div>
+                  <div className="flex flex-col items-center justify-center py-20 gap-3">
+                    <Spinner className="w-6 h-6 text-blue-500" />
+                    {totalFromApi > 0 && (
+                      <div className="w-64 text-center">
+                        <div className="text-xs text-gray-500 mb-1">
+                          โหลด {loadedCount.toLocaleString()} / {totalFromApi.toLocaleString()} รายการ
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-1.5">
+                          <div
+                            className="bg-blue-500 h-1.5 rounded-full transition-all"
+                            style={{ width: `${Math.round((loadedCount / totalFromApi) * 100)}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 ) : error ? (
                   <div className="flex items-center justify-center py-20 text-red-500 text-sm">เกิดข้อผิดพลาด: {error.message}</div>
                 ) : displayRows.length === 0 ? (
                   <div className="flex items-center justify-center py-20 text-gray-400 text-sm">ไม่พบข้อมูล</div>
                 ) : (
+                  <>
+                    {isPartialLoading && (
+                      <div className="flex items-center gap-2 py-1 px-2 mb-2 bg-blue-50 rounded text-xs text-blue-600">
+                        <Spinner className="w-3.5 h-3.5" />
+                        กำลังโหลดข้อมูลเพิ่มเติม... {loadedCount.toLocaleString()} / {totalFromApi.toLocaleString()} รายการ
+                        <div className="flex-1 bg-gray-200 rounded-full h-1">
+                          <div className="bg-blue-500 h-1 rounded-full transition-all" style={{ width: `${Math.round((loadedCount / totalFromApi) * 100)}%` }} />
+                        </div>
+                      </div>
+                    )}
                   <table className="w-full text-sm border-collapse">
                     <thead>
                       <tr className="bg-blue-700 text-white text-xs sticky top-0 z-10">
@@ -1017,6 +1111,7 @@ export default function Income() {
                       })}
                     </tbody>
                   </table>
+                  </>
                 )}
               </div>
             </div>
