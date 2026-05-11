@@ -201,6 +201,11 @@ type PaymentCell = {
   updatedBy?: string | null;
   /** วันที่บันทึก (updated_at จาก API) */
   updatedAt?: string | null;
+  /**
+   * Pattern B: pt.amount = 0 แต่ penalty_paid > 0
+   * รายการทวงค่าปรับเพิ่มเติม — ไม่นับในยอดรวม, แสดงสีแถวต่างจากปกติ
+   */
+  isExtraPenalty?: boolean;
 };
 
 type TargetRow = {
@@ -418,9 +423,11 @@ export default function DebtReport() {
     overpaid: true,
     badDebt: true,
     discount: false, // always off — not collected money
+    extraPenalty: true, // Pattern B: ค่าปรับเพิ่มเติม — ไม่นับในยอดรวม (badge แสดงเพื่อข้อมูลเท่านั้น)
   });
   const toggleBadge = (key: string) => {
     if (key === "discount") return; // cannot toggle discount
+    if (key === "extraPenalty") return; // extraPenalty badge is display-only
     setBadgeVisibility((prev) => ({ ...prev, [key]: !prev[key] }));
   };
   // Switch: true = เฉพาะเงินต้น (แสดง penalty/unlockFee = 0 ทุกงวด), false = รวมค่าปรับ+ค่าปลดล็อก
@@ -806,6 +813,9 @@ export default function DebtReport() {
     if (tab !== "collected") return null;
     let principal = 0, interest = 0, fee = 0, penalty = 0, unlockFee = 0;
     let discount = 0, overpaid = 0, badDebt = 0;
+    // Pattern B: extraPenalty = ยอด penalty ของรายการที่ pt.amount = 0 แต่ penalty_paid > 0
+    // ไม่นับในยอดรวม เพราะ pt.amount = 0 จึงไม่มีใน Income
+    let extraPenalty = 0;
     for (const r of filteredRows as CollectedRow[]) {
       for (const p of r.payments ?? []) {
         // Phase 23: dueDateExact cell-mask — only sum payments whose paidAt matches exact date
@@ -814,6 +824,12 @@ export default function DebtReport() {
         if (dueDateFilter.size > 0 && !(p.paidAt && dueDateFilter.has(p.paidAt.slice(0, 7)))) continue;
         // บันทึกโดย: ซ่อน payment ที่ไม่ใช่ของคนที่เลือก
         if (updatedByFilter && p.updatedBy !== updatedByFilter) continue;
+        // Pattern B: รายการค่าปรับเพิ่มเติม — total = 0 แต่ penalty > 0
+        // เก็บยอด extraPenalty แยกต่างหาก ไม่นับใน penalty ปกติ
+        if (p.isExtraPenalty) {
+          extraPenalty += p.penalty ?? 0;
+          continue; // ข้ามไป ไม่นับในยอดรวม
+        }
         principal += p.principal ?? 0;
         interest += p.interest ?? 0;
         fee += p.fee ?? 0;
@@ -825,10 +841,10 @@ export default function DebtReport() {
       }
     }
     // ยอดที่ชำระรวม:
-    // สูตร: principal + interest + fee + penalty + unlockFee + overpaid + badDebt - discount = pt.amount
-    // เพราะ fields แยกย่อยจาก API เป็นยอดก่อนหัก discount และ pt.amount คือยอดหลังหัก discount แล้ว
+    // สูตร: principal + interest + fee + penalty + unlockFee + overpaid + badDebt = pt.amount
+    // fields จาก API เป็นยอดหลังหัก discount แล้ว (ยืนยันจากข้อมูลจริง) — ไม่ต้องหัก discount อีก
     // badge visibility มีผลต่อ total เพื่อให้ user toggle ดูได้
-    // แต่ discount ต้องหักออกเสมอ (badge discount ปิดตลอด ไม่ toggle)
+    // Pattern B (extraPenalty) ไม่นับใน total เพราะ pt.amount = 0 จึงไม่มีใน Income
     const bv = badgeVisibility;
     const total =
       (bv.principal ? principal : 0) +
@@ -837,9 +853,8 @@ export default function DebtReport() {
       (bv.penalty ? penalty : 0) +
       (bv.unlockFee ? unlockFee : 0) +
       (bv.overpaid ? overpaid : 0) +
-      (bv.badDebt ? badDebt : 0) -
-      discount; // หัก discount เสมอ เพราะ pt.amount คือยอดหลังหัก discount แล้ว
-    return { principal, interest, fee, penalty, unlockFee, discount, overpaid, badDebt, total };
+      (bv.badDebt ? badDebt : 0);
+    return { principal, interest, fee, penalty, unlockFee, discount, overpaid, badDebt, total, extraPenalty };
   }, [filteredRows, tab, dueDateExact, dueDateFilter, badgeVisibility, updatedByFilter]);
 
   /* ---- TopNav actions (sync + export) ---- */
@@ -1286,6 +1301,7 @@ export default function DebtReport() {
                 { key: "discount", label: "ส่วนลด", value: collectedSummary.discount, icon: <Tag className="w-3 h-3" />, colors: "bg-teal-50 text-teal-700 border-teal-200", canToggle: false },
                 { key: "overpaid", label: "ชำระเกิน", value: collectedSummary.overpaid, icon: <TrendingUp className="w-3 h-3" />, colors: "bg-emerald-50 text-emerald-700 border-emerald-200", canToggle: true },
                 { key: "badDebt", label: "หนี้เสีย", value: collectedSummary.badDebt, icon: <TrendingDown className="w-3 h-3" />, colors: "bg-red-50 text-red-700 border-red-200", canToggle: true },
+                collectedSummary.extraPenalty > 0 && { key: "extraPenalty", label: "ค่าปรับเพิ่มเติม", value: collectedSummary.extraPenalty, icon: <Gavel className="w-3 h-3" />, colors: "bg-amber-50 text-amber-700 border-amber-200", canToggle: false },
               ] as const).filter(Boolean).map((b) => {
                 if (!b) return null;
                 const isOn = badgeVisibility[b.key] ?? false;
@@ -1302,7 +1318,7 @@ export default function DebtReport() {
                       onClick={() => toggleBadge(b.key)}
                       disabled={!b.canToggle}
                       className={`ml-0.5 rounded-full p-0.5 transition-opacity ${b.canToggle ? "hover:opacity-70 cursor-pointer" : "cursor-not-allowed opacity-30"}`}
-                      title={!b.canToggle ? "ส่วนลดไม่นำมาคำนวณยอดรวม" : isOn ? "คลิกเพื่อไม่นำมารวมในยอดรวม" : "คลิกเพื่อนำมารวมในยอดรวม"}
+                      title={!b.canToggle ? (b.key === "extraPenalty" ? "ค่าปรับเพิ่มเติม (pt.amount=0) ไม่นับในยอดรวม" : "ส่วนลดไม่นำมาคำนวณยอดรวม") : isOn ? "คลิกเพื่อไม่นำมารวมในยอดรวม" : "คลิกเพื่อนำมารวมในยอดรวม"}
                       aria-label={isOn ? `ปิด ${b.label}` : `เปิด ${b.label}`}
                     >
                       {isOn ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
@@ -1864,6 +1880,11 @@ export default function DebtReport() {
                                   textClass = "text-emerald-700 italic";
                                   cellBg = "#ecfdf5";
                                   cellBorderLeft = gcIdx === 0 ? "4px solid #34d399" : undefined;
+                                } else if (pay.isExtraPenalty) {
+                                  // Pattern B: รายการค่าปรับเพิ่มเติม (pt.amount=0 แต่มี penalty)
+                                  textClass = isZeroish ? "text-amber-300 italic" : "text-amber-700";
+                                  cellBg = "#fffbeb";
+                                  cellBorderLeft = gcIdx === 0 ? "4px solid #f59e0b" : undefined;
                                 } else if (isCloseCell) {
                                   textClass = isZeroish ? "text-rose-300 italic" : "text-rose-700";
                                   cellBg = "#fff1f2";

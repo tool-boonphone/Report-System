@@ -441,29 +441,57 @@ export async function* streamCollectedFromCache(params: {
 
       // Phase 131: คำนวณ splitIndex จาก period ของ rows ใน cache (ไม่ hardcode 0)
       const splitIndexes = computeSplitIndexes(payRows);
-      const payments = payRows.map((p: any, idx: number) => ({
-        period: p.period != null ? Number(p.period) : null,
-        splitIndex: splitIndexes[idx],
-        // isCloseRow: ตรวจจาก payment_external_id pattern (close rows มี "-close-" ใน key)
-        isCloseRow: String(p.payment_external_id ?? "").includes("-close-"),
-        isBadDebtRow: !!p.is_bad_debt_row,
-        paidAt: p.paid_at ?? null,
-        principal: Number(p.principal ?? 0),
-        interest: Number(p.interest ?? 0),
-        fee: Number(p.fee ?? 0),
-        penalty: Number(p.penalty ?? 0),
-        unlockFee: Number(p.unlock_fee ?? 0),
-        discount: Number(p.discount ?? 0),
-        overpaid: Number(p.overpaid ?? 0),
-        closeInstallmentAmount: 0,
-        badDebt: Number(p.bad_debt ?? 0),
-        total: Number(p.total_amount ?? 0),
-        receiptNo: null,
-        remark: p.remark ?? null,
-        badDebtNote: null,
-        updatedBy: p.updated_by ?? null,
-        updatedAt: p.updated_at ?? null,
-      }));
+      const payments = payRows.map((p: any, idx: number) => {
+        const ptAmount = Number(p.total_amount ?? 0);
+        const penalty = Number(p.penalty ?? 0);
+        const isBadDebtRow = !!p.is_bad_debt_row;
+        // Pattern B: derive isExtraPenalty from cached fields (pt.amount=0 but penalty>0)
+        const isExtraPenalty = ptAmount === 0 && penalty > 0 && !isBadDebtRow;
+        // Pattern C: cap sum(fields) ไว้ที่ pt.amount
+        let unlockFee = Number(p.unlock_fee ?? 0);
+        let cappedPenalty = penalty;
+        if (!isExtraPenalty && !isBadDebtRow) {
+          const principal = Number(p.principal ?? 0);
+          const interest = Number(p.interest ?? 0);
+          const fee = Number(p.fee ?? 0);
+          const overpaid = Number(p.overpaid ?? 0);
+          const sumFields = principal + interest + fee + cappedPenalty + unlockFee + overpaid;
+          if (sumFields > ptAmount + 0.005) {
+            const excess = sumFields - ptAmount;
+            if (unlockFee >= excess) {
+              unlockFee = Math.max(0, unlockFee - excess);
+            } else {
+              const remaining = excess - unlockFee;
+              unlockFee = 0;
+              cappedPenalty = Math.max(0, cappedPenalty - remaining);
+            }
+          }
+        }
+        return {
+          period: p.period != null ? Number(p.period) : null,
+          splitIndex: splitIndexes[idx],
+          // isCloseRow: ตรวจจาก payment_external_id pattern (close rows มี "-close-" ใน key)
+          isCloseRow: String(p.payment_external_id ?? "").includes("-close-"),
+          isBadDebtRow,
+          isExtraPenalty,
+          paidAt: p.paid_at ?? null,
+          principal: Number(p.principal ?? 0),
+          interest: Number(p.interest ?? 0),
+          fee: Number(p.fee ?? 0),
+          penalty: cappedPenalty,
+          unlockFee,
+          discount: Number(p.discount ?? 0),
+          overpaid: Number(p.overpaid ?? 0),
+          closeInstallmentAmount: 0,
+          badDebt: Number(p.bad_debt ?? 0),
+          total: ptAmount,
+          receiptNo: null,
+          remark: p.remark ?? null,
+          badDebtNote: null,
+          updatedBy: p.updated_by ?? null,
+          updatedAt: p.updated_at ?? null,
+        };
+      });
       yieldBatch.push({
         contractExternalId: extId,
         contractNo: first.contract_no ?? null,
@@ -893,29 +921,57 @@ export async function getCollectedChunk(params: {
 
     // Phase 131: คำนวณ splitIndex จาก period ของ rows ใน cache (ไม่ hardcode 0)
     const splitIndexesChunk = computeSplitIndexes(payRows);
-    const payments = payRows.map((p: any, idx: number) => ({
-      period: p.period != null ? Number(p.period) : null,
-      splitIndex: splitIndexesChunk[idx],
-      // isCloseRow: ตรวจจาก payment_external_id pattern (close rows มี "-close-" ใน key)
-      isCloseRow: String(p.payment_external_id ?? "").includes("-close-"),
-      isBadDebtRow: !!p.is_bad_debt_row,
-      paidAt: p.paid_at ?? null,
-      principal: Number(p.principal ?? 0),
-      interest: Number(p.interest ?? 0),
-      fee: Number(p.fee ?? 0),
-      penalty: Number(p.penalty ?? 0),
-      unlockFee: Number(p.unlock_fee ?? 0),
-      discount: Number(p.discount ?? 0),
-      overpaid: Number(p.overpaid ?? 0),
-      closeInstallmentAmount: 0,
-      badDebt: Number(p.bad_debt ?? 0),
-      total: Number(p.total_amount ?? 0),
-      receiptNo: null,
-      remark: p.remark ?? null,
-      badDebtNote: null,
-      updatedBy: p.updated_by ?? null,
-      updatedAt: p.updated_at ?? null,
-    }));
+    const payments = payRows.map((p: any, idx: number) => {
+      const ptAmount = Number(p.total_amount ?? 0);
+      const penalty = Number(p.penalty ?? 0);
+      const isBadDebtRow = !!p.is_bad_debt_row;
+      // Pattern B: derive isExtraPenalty from cached fields (pt.amount=0 but penalty>0)
+      const isExtraPenalty = ptAmount === 0 && penalty > 0 && !isBadDebtRow;
+      // Pattern C: cap sum(fields) ไว้ที่ pt.amount
+      let unlockFee = Number(p.unlock_fee ?? 0);
+      let cappedPenalty = penalty;
+      if (!isExtraPenalty && !isBadDebtRow) {
+        const principal = Number(p.principal ?? 0);
+        const interest = Number(p.interest ?? 0);
+        const fee = Number(p.fee ?? 0);
+        const overpaid = Number(p.overpaid ?? 0);
+        const sumFields = principal + interest + fee + cappedPenalty + unlockFee + overpaid;
+        if (sumFields > ptAmount + 0.005) {
+          const excess = sumFields - ptAmount;
+          if (unlockFee >= excess) {
+            unlockFee = Math.max(0, unlockFee - excess);
+          } else {
+            const remaining = excess - unlockFee;
+            unlockFee = 0;
+            cappedPenalty = Math.max(0, cappedPenalty - remaining);
+          }
+        }
+      }
+      return {
+        period: p.period != null ? Number(p.period) : null,
+        splitIndex: splitIndexesChunk[idx],
+        // isCloseRow: ตรวจจาก payment_external_id pattern (close rows มี "-close-" ใน key)
+        isCloseRow: String(p.payment_external_id ?? "").includes("-close-"),
+        isBadDebtRow,
+        isExtraPenalty,
+        paidAt: p.paid_at ?? null,
+        principal: Number(p.principal ?? 0),
+        interest: Number(p.interest ?? 0),
+        fee: Number(p.fee ?? 0),
+        penalty: cappedPenalty,
+        unlockFee,
+        discount: Number(p.discount ?? 0),
+        overpaid: Number(p.overpaid ?? 0),
+        closeInstallmentAmount: 0,
+        badDebt: Number(p.bad_debt ?? 0),
+        total: ptAmount,
+        receiptNo: null,
+        remark: p.remark ?? null,
+        badDebtNote: null,
+        updatedBy: p.updated_by ?? null,
+        updatedAt: p.updated_at ?? null,
+      };
+    });
     result.push({
       contractExternalId: extId,
       contractNo: first.contract_no ?? null,

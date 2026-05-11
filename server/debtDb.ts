@@ -2502,30 +2502,65 @@ export async function listDebtCollected(params: { section: SectionKey }) {
     }
     return {
       ...c,
-      payments: tagged.map((p) => ({
-        period: p.period ?? null,
-        splitIndex: p.splitIndex,
-        isCloseRow: p.isCloseRow,
-        isBadDebtRow: p.isBadDebtRow,
-        paidAt: p.paid_at,
-        principal: p.principal_paid ?? 0,
-        interest: p.interest_paid ?? 0,
-        fee: p.fee_paid ?? 0,
-        penalty: p.penalty_paid ?? 0,
-        unlockFee: p.unlock_fee_paid ?? 0,
-        discount: p.discount_amount ?? 0,
-        overpaid: p.overpaid_amount ?? 0,
-        closeInstallmentAmount: p.close_installment_amount ?? 0,
-        badDebt: p.bad_debt_amount ?? 0,
-        total: p.total_paid_amount ?? 0,
-        receiptNo: p.receipt_no ?? null,
-        remark: p.remark ?? null,
-        // tooltip สำหรับ bad debt rows: "ยอดขายเครื่อง X บาท (DD/MM/YYYY)"
-        badDebtNote: (p as any).badDebtNote ?? null,
-        // ผู้บันทึก / วันที่บันทึก
-        updatedBy: (p as any).updated_by ?? null,
-        updatedAt: (p as any).updated_at ?? null,
-      })),
+      payments: tagged.map((p) => {
+        const ptAmount = p.total_paid_amount ?? 0;
+        const principal = p.principal_paid ?? 0;
+        const interest = p.interest_paid ?? 0;
+        const fee = p.fee_paid ?? 0;
+        let penalty = p.penalty_paid ?? 0;
+        let unlockFee = p.unlock_fee_paid ?? 0;
+        const discount = p.discount_amount ?? 0;
+        const overpaid = p.overpaid_amount ?? 0;
+        const badDebt = p.bad_debt_amount ?? 0;
+
+        // Pattern B: pt.amount = 0 แต่ penalty_paid > 0
+        // รายการทวงค่าปรับเพิ่มเติม — Fastfone บันทึก pt.amount=0 แต่ลูกค้าจ่ายจริง
+        const isExtraPenalty = ptAmount === 0 && penalty > 0 && !p.isBadDebtRow;
+
+        // Pattern C: sum(fields) > pt.amount เพราะ unlock_fee ซ้ำกับ principal
+        // cap โดยลด unlockFee ก่อน แล้วค่อย penalty เพื่อไม่ให้ยอดรวมเกิน pt.amount
+        if (!isExtraPenalty && !p.isBadDebtRow) {
+          const sumFields = principal + interest + fee + penalty + unlockFee + overpaid;
+          if (sumFields > ptAmount + 0.005) {
+            // ลด unlockFee ก่อน
+            const excess = sumFields - ptAmount;
+            if (unlockFee >= excess) {
+              unlockFee = Math.max(0, unlockFee - excess);
+            } else {
+              // ถ้า unlockFee ไม่พอ ลด penalty ด้วย
+              const remaining = excess - unlockFee;
+              unlockFee = 0;
+              penalty = Math.max(0, penalty - remaining);
+            }
+          }
+        }
+
+        return {
+          period: p.period ?? null,
+          splitIndex: p.splitIndex,
+          isCloseRow: p.isCloseRow,
+          isBadDebtRow: p.isBadDebtRow,
+          isExtraPenalty,
+          paidAt: p.paid_at,
+          principal,
+          interest,
+          fee,
+          penalty,
+          unlockFee,
+          discount,
+          overpaid,
+          closeInstallmentAmount: p.close_installment_amount ?? 0,
+          badDebt,
+          total: ptAmount,
+          receiptNo: p.receipt_no ?? null,
+          remark: p.remark ?? null,
+          // tooltip สำหรับ bad debt rows: "ยอดขายเครื่อง X บาท (DD/MM/YYYY)"
+          badDebtNote: (p as any).badDebtNote ?? null,
+          // ผู้บันทึก / วันที่บันทึก
+          updatedBy: (p as any).updated_by ?? null,
+          updatedAt: (p as any).updated_at ?? null,
+        };
+      }),
     };
   });
 
@@ -3752,17 +3787,45 @@ export async function* listDebtCollectedStream(params: {
 
       const row = {
         ...c,
-        payments: tagged.map((p) => ({
-          period: p.period ?? null, splitIndex: p.splitIndex, isCloseRow: p.isCloseRow, isBadDebtRow: p.isBadDebtRow,
-          paidAt: p.paid_at, principal: p.principal_paid ?? 0, interest: p.interest_paid ?? 0,
-          fee: p.fee_paid ?? 0, penalty: p.penalty_paid ?? 0, unlockFee: p.unlock_fee_paid ?? 0,
-          discount: p.discount_amount ?? 0, overpaid: p.overpaid_amount ?? 0,
-          closeInstallmentAmount: p.close_installment_amount ?? 0, badDebt: p.bad_debt_amount ?? 0,
-          total: p.total_paid_amount ?? 0, receiptNo: p.receipt_no ?? null, remark: p.remark ?? null,
-          badDebtNote: (p as any).badDebtNote ?? null,
-          updatedBy: (p as any).updated_by ?? null,
-          updatedAt: (p as any).updated_at ?? null,
-        })),
+        payments: tagged.map((p) => {
+          const ptAmount = p.total_paid_amount ?? 0;
+          const principal = p.principal_paid ?? 0;
+          const interest = p.interest_paid ?? 0;
+          const fee = p.fee_paid ?? 0;
+          let penalty = p.penalty_paid ?? 0;
+          let unlockFee = p.unlock_fee_paid ?? 0;
+          const discount = p.discount_amount ?? 0;
+          const overpaid = p.overpaid_amount ?? 0;
+          const badDebt = p.bad_debt_amount ?? 0;
+          // Pattern B: pt.amount = 0 แต่ penalty_paid > 0 — รายการทวงค่าปรับเพิ่มเติม
+          const isExtraPenalty = ptAmount === 0 && penalty > 0 && !p.isBadDebtRow;
+          // Pattern C: cap sum(fields) ไว้ที่ pt.amount
+          if (!isExtraPenalty && !p.isBadDebtRow) {
+            const sumFields = principal + interest + fee + penalty + unlockFee + overpaid;
+            if (sumFields > ptAmount + 0.005) {
+              const excess = sumFields - ptAmount;
+              if (unlockFee >= excess) {
+                unlockFee = Math.max(0, unlockFee - excess);
+              } else {
+                const remaining = excess - unlockFee;
+                unlockFee = 0;
+                penalty = Math.max(0, penalty - remaining);
+              }
+            }
+          }
+          return {
+            period: p.period ?? null, splitIndex: p.splitIndex, isCloseRow: p.isCloseRow, isBadDebtRow: p.isBadDebtRow,
+            isExtraPenalty,
+            paidAt: p.paid_at, principal, interest,
+            fee, penalty, unlockFee,
+            discount, overpaid,
+            closeInstallmentAmount: p.close_installment_amount ?? 0, badDebt,
+            total: ptAmount, receiptNo: p.receipt_no ?? null, remark: p.remark ?? null,
+            badDebtNote: (p as any).badDebtNote ?? null,
+            updatedBy: (p as any).updated_by ?? null,
+            updatedAt: (p as any).updated_at ?? null,
+          };
+        }),
       };
       yieldBatch.push(row);
       if (yieldBatch.length >= YIELD_BATCH) {
