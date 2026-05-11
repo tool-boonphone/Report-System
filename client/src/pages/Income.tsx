@@ -445,13 +445,28 @@ export default function Income() {
 
   /**
    * displayRows — rows ที่จะแสดงในตาราง
-   * mode = detail: ใช้ sortedRows ตรงๆ (ไม่ group) แสดง originalIncomeType
+   * mode = detail: filter ตาม originalIncomeType + activeTypes
+   *   (เพราะ API filter ใช้ income_type (classified) ซึ่งอาจ mismatch กับ originalIncomeType)
    * mode = slip: group ปิดยอด/ขายเครื่อง ที่ชำระวันเดียวกัน + คนเดียวกัน แสดง incomeType (classified)
    */
   const displayRows = useMemo(() => {
-    if (listMode === "detail") return sortedRows;
+    if (listMode === "detail") {
+      // ใน detail mode ต้อง filter ที่ client ด้วย originalIncomeType
+      // เพราะ API filter ใช้ income_type (classified) ซึ่งอาจ mismatch กับ originalIncomeType
+      // เช่น: incomeType=ปิดยอด แต่ originalIncomeType=ค่างวด (เพราะ receipt_no ไม่ขึ้นต้นด้วย TXRTC)
+      const detailActiveTypes = new Set(
+        Array.from(activeTypes).filter((t) => t !== "ขายเครื่อง") // detail mode ไม่มี ขายเครื่อง
+      );
+      // ถ้าเปิดทั้ง ค่างวด และ ปิดยอด ไม่ต้อง filter
+      if (detailActiveTypes.has("ค่างวด") && detailActiveTypes.has("ปิดยอด")) return sortedRows;
+      return sortedRows.filter((row) => {
+        const orig = (row.originalIncomeType as string) ?? "ค่างวด";
+        const displayType: IncomeType = orig === "ปิดยอด" ? "ปิดยอด" : "ค่างวด";
+        return detailActiveTypes.has(displayType);
+      });
+    }
     return groupRowsBySlip(sortedRows);
-  }, [sortedRows, listMode]);
+  }, [sortedRows, listMode, activeTypes]);
 
   /**
    * getDisplayType — ดึง type ที่จะแสดงใน badge ตาม mode
