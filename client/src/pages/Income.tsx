@@ -292,36 +292,17 @@ export default function Income() {
    * slip mode: ส่งตามที่เลือก
    */
   const incomeTypesParam = useMemo(() => {
-    if (listMode === "detail") {
-      /**
-       * detail mode: API filter ใช้ classified incomeType ไม่ใช่ originalIncomeType
-       *
-       * Mapping classified → original:
-       *   ค่างวด (classified)    → ค่างวด (original)   — payment ปกติ
-       *   ขายเครื่อง (classified) → ค่างวด (original)   — payment สุดท้ายของสัญญาหนี้เสีย
-       *   ปิดยอด (classified)    → ปิดยอด (original)   — payment สุดท้ายของสัญญาสิ้นสุด
-       *
-       * ดังนั้น:
-       *   เปิดทั้ง ค่างวด+ปิดยอด → undefined (ดึงทั้งหมด)
-       *   เปิดแค่ ค่างวด          → ส่ง [ค่างวด, ขายเครื่อง] (ทั้งสองมี originalIncomeType=ค่างวด)
-       *   เปิดแค่ ปิดยอด          → ส่ง [ปิดยอด] (classified ปิดยอด = original ปิดยอด เสมอ)
-       *   ปิดทั้งหมด              → ส่ง [] (ไม่มีอะไรแสดง)
-       */
-      const wantInstallment = activeTypes.has("\u0e04\u0e48\u0e32\u0e07\u0e27\u0e14"); // ค่างวด
-      const wantClosing = activeTypes.has("\u0e1b\u0e34\u0e14\u0e22\u0e2d\u0e14");     // ปิดยอด
-      if (wantInstallment && wantClosing) return undefined; // ทั้งหมด
-      if (wantInstallment) return ["\u0e04\u0e48\u0e32\u0e07\u0e27\u0e14", "\u0e02\u0e32\u0e22\u0e40\u0e04\u0e23\u0e37\u0e48\u0e2d\u0e07"] as IncomeType[]; // ค่างวด + ขายเครื่อง
-      if (wantClosing) return ["\u0e1b\u0e34\u0e14\u0e22\u0e2d\u0e14"] as IncomeType[]; // ปิดยอด
-      return [] as IncomeType[]; // ปิดทั้งหมด
-    }
-    // slip mode: ส่ง undefined เสมอ (ดึงทั้งหมด) เพราะ groupRowsBySlip อาจ reclassify rows
-    // การ filter ตาม activeTypes ทำที่ client ใน displayRows.filter(activeTypes.has)
+    // ทั้ง detail และ slip mode: ส่ง undefined เสมอ (ดึงทั้งหมด)
+    // เพราะ API filter ด้วย classified type ซึ่งไม่ตรงกับ originalIncomeType ที่ detail mode ใช้
+    // การ filter ตาม activeTypes ทำที่ client ใน displayRows
+    // ยกเว้นกรณีเดียว: ปิดทั้งหมด → ส่ง [] เพื่อไม่ดึงอะไร
+    if (activeTypes.size === 0) return [] as IncomeType[];
     return undefined;
-  }, [activeTypes, listMode]);
+  }, [activeTypes]);
 
-  // slip mode: ดึงข้อมูลทั้งหมดมา client เพื่อ group+filter+paginate ที่ client
-  // detail mode: ใช้ server-side pagination (เร็วกว่า)
-  const slipPageSize = 10000; // ดึงทั้งหมดสำหรับ slip mode
+  // ทั้ง detail และ slip mode: ดึงทั้งหมดมา client เพื่อ filter+paginate ที่ client
+  // เพราะ API filter ด้วย classified type ซึ่งไม่ตรงกับ originalIncomeType ที่ detail mode ใช้
+  const bulkPageSize = 20000; // ดึงทั้งหมดสำหรับทั้ง 2 mode
   const { data, isLoading, error } = trpc.accounting.listIncome.useQuery(
     {
       section: section ?? "Boonphone",
@@ -331,8 +312,8 @@ export default function Income() {
       dateField,
       incomeTypes: incomeTypesParam,
       updatedBy: updatedBy || undefined,
-      page: listMode === "slip" ? 1 : page,
-      pageSize: listMode === "slip" ? slipPageSize : pageSize,
+      page: 1,
+      pageSize: bulkPageSize,
     },
     { enabled: !!section && canView && activeTab === "all" },
   );
@@ -524,20 +505,15 @@ export default function Income() {
   };
 
 
-  // slip mode: totalCount = displayRows.length (client-side filtered)
-  // detail mode: totalCount = total จาก API (server-side paginated)
-  const totalCount = listMode === "detail" ? total : displayRows.length;
+  // ทั้ง 2 mode: client-side pagination (displayRows.length เป็น source of truth)
+  const totalCount = displayRows.length;
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
 
-  // pagedRows: slip mode ใช้ client-side pagination (slice displayRows)
-  //            detail mode ใช้ displayRows ตรงๆ (เพราะ server แบ่หน้ามาแล้ว)
+  // pagedRows: slice displayRows ตาม page (ทั้ง detail และ slip mode)
   const pagedRows = useMemo(() => {
-    if (listMode === "slip") {
-      const start = (page - 1) * pageSize;
-      return displayRows.slice(start, start + pageSize);
-    }
-    return displayRows;
-  }, [listMode, displayRows, page, pageSize]);
+    const start = (page - 1) * pageSize;
+    return displayRows.slice(start, start + pageSize);
+  }, [displayRows, page, pageSize]);
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
