@@ -170,9 +170,15 @@ export class PartnerClient {
     limit = 100,
     /** Override per-request timeout (ms). Defaults to this.cfg.timeoutMs. */
     timeoutMs?: number,
+    /**
+     * Resume from this page number (1-based). Useful when a previous run was
+     * killed mid-way and we want to continue from where we left off.
+     * Defaults to 1 (start from the beginning).
+     */
+    startPage = 1,
   ): Promise<number> {
-    let page = 1;
-    let totalPages = 1;
+    let page = Math.max(1, startPage);
+    let totalPages = page; // will be updated on first fetch
     let totalRows = 0;
     // Protect against accidental infinite loops.
     const MAX_PAGES = 10_000;

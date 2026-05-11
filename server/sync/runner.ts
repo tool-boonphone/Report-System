@@ -27,6 +27,7 @@ import {
   insertSyncLog,
   finishSyncLog,
   updateSyncLogStage,
+  getLastCustomersResumePage,
 } from "./syncLog";
 import type { SectionKey, SyncTrigger } from "../../shared/const";
 import { invalidateDebtCache } from "../debtCache";
@@ -372,6 +373,17 @@ async function syncCustomers(
   client: PartnerClient,
   section: SectionKey,
 ): Promise<Map<string, CustomerListItem>> {
+  // --- Resume support ---
+  // Check if a previous run was killed mid-way and we have a resume_page saved.
+  // If so, we start from that page instead of page 1 to avoid re-fetching
+  // pages we already have in DB. This prevents Cloud Run kills from causing
+  // full re-syncs every time.
+  const resumeFromPage = await getLastCustomersResumePage(section);
+  const startPage = resumeFromPage > 0 ? resumeFromPage + 1 : 1;
+  if (startPage > 1) {
+    console.log(`[syncCustomers] ${section}: Resuming from page ${startPage} (last completed: ${resumeFromPage})`);
+  }
+
   const log = await insertSyncLog({
     section,
     entity: "customers",
@@ -379,12 +391,10 @@ async function syncCustomers(
   });
   try {
     const byId = new Map<string, CustomerListItem>();
-    // Use limit=500 with 60s timeout per request.
-    // Tested: limit=500 responds in ~5.5s/page (Boonphone & Fastfone365), well within 60s.
-    // Previously limit=200 (~3s/page) but limit=500 reduces pages by 60% (Boonphone 24→10, FF365 112→45).
-    //
+    // Use limit=500 with 30s timeout per request.
     // Sub-progress: customers stage spans 20%→40% of overall progress.
     // We update DB every page so the UI shows live progress instead of freezing at 20%.
+    // resume_page is saved every page so if Cloud Run is killed, next run resumes from here.
     const STAGE_START = 20; // % when customers stage begins
     const STAGE_END = 40;   // % when customers stage ends (contracts stage starts)
     const logId = _overallLogId[section];
@@ -408,15 +418,23 @@ async function syncCustomers(
           if (lock) {
             _locks[section] = { ...lock, progress, currentStage };
           }
-          updateSyncLogStage({ id: logId, currentStage, progress }).catch(() => {});
+          // Save resume_page to DB every page — if Cloud Run is killed, next run resumes from here
+          updateSyncLogStage({ id: logId, currentStage, progress, resumePage: page }).catch(() => {});
         }
       },
-    500,
-    30_000, // 30s per-request timeout — fail fast if API hangs (was 60s but caused Cloud Run kills)
+      500,
+      30_000, // 30s per-request timeout — fail fast if API hangs
+      startPage, // Resume from last completed page if previous run was killed
     );
+    // Reset resume_page to 0 on success so next run starts fresh
+    if (logId) {
+      updateSyncLogStage({ id: logId, currentStage: "customers", progress: STAGE_END, resumePage: 0 }).catch(() => {});
+    }
     await finishSyncLog({ id: log.id, status: "success", rowCount: byId.size });
     return byId;
   } catch (err: any) {
+    // resume_page is already saved in DB from the last successful page fetch above
+    // so next run will resume from there automatically
     await finishSyncLog({
       id: log.id,
       status: "error",
