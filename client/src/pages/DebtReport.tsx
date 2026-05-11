@@ -841,11 +841,11 @@ export default function DebtReport() {
       }
     }
     // ยอดที่ชำระรวม:
-    // sum จาก payment.total (= pt.amount) ของแต่ละแถว payment โดยตรง
-    // เพราะ pt.amount คือยอดที่ลูกค้าจ่ายจริงหลังหักส่วนลดแล้ว
-    // ไม่ sum จาก fields แยก (principal+interest+fee+...) เพราะ fields อาจมี Pattern C cap
-    // Pattern B (extraPenalty): pt.amount = 0 → ไม่นับใน total
-    // badge visibility มีผลต่อ total เพื่อให้ user toggle ดูได้
+    // Phase 133: total = sum(pt.amount + discount) + badDebt
+    // - pt.amount = ยอดที่ลูกค้าจ่ายจริงหลังหักส่วนลดแล้ว → บวก discount กลับเพื่อให้ได้ยอดก่อนหัก
+    // - บวก badDebt เพราะ badDebtRow มี total=0 แต่มี badDebt=contractBadDebtAmount
+    // - ไม่ขึ้นกับ badge visibility toggle เพราะ "รวม" ในรายรับรวมทุก field เสมอ
+    // - Pattern B (extraPenalty): pt.amount = 0 → ไม่นับใน total
     let totalFromPayments = 0;
     for (const r of filteredRows as CollectedRow[]) {
       for (const p of r.payments ?? []) {
@@ -853,17 +853,8 @@ export default function DebtReport() {
         if (dueDateFilter.size > 0 && !(p.paidAt && dueDateFilter.has(p.paidAt.slice(0, 7)))) continue;
         if (updatedByFilter && p.updatedBy !== updatedByFilter) continue;
         if (p.isExtraPenalty) continue; // Pattern B: pt.amount = 0 ไม่นับ
-        // คำนวณ total จาก fields ที่ toggle เปิดอยู่เท่านั้น
-        const bv = badgeVisibility;
-        const rowTotal =
-          (bv.principal ? p.principal : 0) +
-          (bv.interest ? p.interest : 0) +
-          (bv.fee ? p.fee : 0) +
-          (bv.penalty ? p.penalty : 0) +
-          (bv.unlockFee ? p.unlockFee : 0) +
-          (bv.overpaid ? p.overpaid : 0) +
-          (bv.badDebt ? p.badDebt : 0);
-        totalFromPayments += rowTotal;
+        // total = pt.amount + badDebt (ไม่รวม discount เพราะ badge ยอดที่ชำระรวมคือยอดที่ลูกค้าจ่ายจริงหลังหักส่วนลดแล้ว)
+        totalFromPayments += (p.total ?? 0) + (p.badDebt ?? 0);
       }
     }
     const total = totalFromPayments;
