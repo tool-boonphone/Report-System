@@ -89,7 +89,8 @@ export async function getLastCustomersResumePage(section: SectionKey): Promise<n
 
 /**
  * Get running sync status from DB for a section.
- * Returns null if no sync is in_progress (or if it's stale > 95 minutes).
+ * Returns null if no sync is in_progress (or if it's stale > 185 minutes).
+ * 185 min = OVERALL_TIMEOUT_MS (180 min) + 5 min buffer.
  * Used by sync.status tRPC procedure so ALL instances see the same state.
  */
 export async function getDbSyncStatus(section: SectionKey): Promise<{
@@ -100,8 +101,9 @@ export async function getDbSyncStatus(section: SectionKey): Promise<{
 } | null> {
   const db = await getDb();
   if (!db) return null;
-  // Treat in_progress rows older than 95 minutes as abandoned
-  const staleThreshold = new Date(Date.now() - 95 * 60 * 1000);
+  // Treat in_progress rows older than 185 minutes as abandoned
+  // (matches OVERALL_TIMEOUT_MS=180min + 5min buffer in runner.ts)
+  const staleThreshold = new Date(Date.now() - 185 * 60 * 1000);
   const rows = await db
     .select({
       id: syncLogs.id,
@@ -167,10 +169,11 @@ export async function clearStuckSyncLogs(section: SectionKey): Promise<number> {
 export async function clearAllStuckSyncLogs(): Promise<number> {
   const db = await getDb();
   if (!db) return 0;
-  // Only clear rows that have been in_progress for more than 95 minutes.
-  // This prevents clearing sync_logs from run-manual-sync processes that are
-  // still actively running when the dev server restarts.
-  const cutoff = new Date(Date.now() - 95 * 60 * 1000);
+  // Only clear rows that have been in_progress for more than 15 minutes.
+  // 15 min is enough to avoid clearing a sync that just started on the same instance,
+  // while still catching syncs killed by Cloud Run restarts (which happen within seconds).
+  // Previously 95 min caused stuck locks when server restarted mid-sync.
+  const cutoff = new Date(Date.now() - 15 * 60 * 1000);
   const result = await db
     .update(syncLogs)
     .set({
@@ -186,7 +189,7 @@ export async function clearAllStuckSyncLogs(): Promise<number> {
     );
   const affectedRows = (result[0] as any)?.affectedRows ?? 0;
   if (affectedRows > 0) {
-    console.log(`[syncLog] startup cleanup: cleared ${affectedRows} stuck in_progress row(s) older than 95 min`);
+    console.log(`[syncLog] startup cleanup: cleared ${affectedRows} stuck in_progress row(s) older than 15 min`);
   }
   return affectedRows;
 }

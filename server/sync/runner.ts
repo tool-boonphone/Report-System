@@ -444,8 +444,21 @@ async function syncCustomers(
   // Strategy: fetch all pages from API, upsert into `cached_customers` DB table.
   // After sync, load from DB and return as map.
   // This way, if Cloud Run kills the process mid-sync, the next run continues
-  // from page 1 but already-synced customers are preserved in DB.
+  // from the last saved resume_page instead of page 1.
   // syncContracts reads from DB instead of this in-memory map.
+  //
+  // Resilience features (per external-api-db-sync-patterns §12 Common Pitfalls):
+  //  - skipOnError=true: skip individual pages that timeout instead of failing all
+  //  - resumePage: save last fetched page so restart continues from where it left off
+  //  - startPage: resume from last saved page on retry
+
+  // Check if there's a previous run to resume from
+  const resumeFromPage = await getLastCustomersResumePage(section);
+  const startPage = resumeFromPage > 0 ? resumeFromPage : 1;
+  if (startPage > 1) {
+    console.log(`[runner] ${section}: resuming customers sync from page ${startPage}`);
+  }
+
   const log = await insertSyncLog({
     section,
     entity: "customers",
@@ -493,6 +506,7 @@ async function syncCustomers(
           byId.set(String(it.customer_id), it);
         }
         // Update sub-progress in DB every page so UI doesn't freeze
+        // Also save resumePage so a restart can continue from here
         if (logId && totalPages > 0) {
           const subPct = Math.min(page / totalPages, 1);
           const progress = Math.round(STAGE_START + subPct * (STAGE_END - STAGE_START));
@@ -501,11 +515,14 @@ async function syncCustomers(
           if (lock) {
             _locks[section] = { ...lock, progress, currentStage };
           }
-          updateSyncLogStage({ id: logId, currentStage, progress }).catch(() => {});
+          // Save resumePage = next page to fetch (so restart skips already-done pages)
+          updateSyncLogStage({ id: logId, currentStage, progress, resumePage: page + 1 }).catch(() => {});
         }
       },
       500,      // limit=500 -- 45 pages for FF365 instead of 223
       30_000,   // 30s per-request timeout -- fail fast instead of hanging
+      startPage, // resume from last saved page if previous run was killed
+      true,     // skipOnError=true: skip pages that timeout instead of failing all
     );
     if (logId) {
       updateSyncLogStage({ id: logId, currentStage: "customers", progress: STAGE_END }).catch(() => {});
