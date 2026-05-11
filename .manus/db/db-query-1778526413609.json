@@ -1,0 +1,130 @@
+{
+  "query": "\nSELECT \n  pt.receipt_no,\n  pt.paid_at,\n  pt.amount AS pt_amount,\n  CAST(JSON_EXTRACT(pt.raw_json, '$.principal_paid') AS DECIMAL(15,2)) AS principal_paid,\n  CAST(JSON_EXTRACT(pt.raw_json, '$.interest_paid') AS DECIMAL(15,2)) AS interest_paid,\n  CAST(JSON_EXTRACT(pt.raw_json, '$.fee_paid') AS DECIMAL(15,2)) AS fee_paid,\n  CAST(JSON_EXTRACT(pt.raw_json, '$.penalty_paid') AS DECIMAL(15,2)) AS penalty_paid,\n  CAST(JSON_EXTRACT(pt.raw_json, '$.unlock_fee_paid') AS DECIMAL(15,2)) AS unlock_fee_paid,\n  CAST(JSON_EXTRACT(pt.raw_json, '$.discount_amount') AS DECIMAL(15,2)) AS discount_amount,\n  (pt.amount - (\n    COALESCE(CAST(JSON_EXTRACT(pt.raw_json, '$.principal_paid') AS DECIMAL(15,2)), 0) +\n    COALESCE(CAST(JSON_EXTRACT(pt.raw_json, '$.interest_paid') AS DECIMAL(15,2)), 0) +\n    COALESCE(CAST(JSON_EXTRACT(pt.raw_json, '$.fee_paid') AS DECIMAL(15,2)), 0) +\n    COALESCE(CAST(JSON_EXTRACT(pt.raw_json, '$.penalty_paid') AS DECIMAL(15,2)), 0) +\n    COALESCE(CAST(JSON_EXTRACT(pt.raw_json, '$.unlock_fee_paid') AS DECIMAL(15,2)), 0) +\n    COALESCE(CAST(JSON_EXTRACT(pt.raw_json, '$.overpaid_amount') AS DECIMAL(15,2)), 0) -\n    COALESCE(CAST(JSON_EXTRACT(pt.raw_json, '$.discount_amount') AS DECIMAL(15,2)), 0)\n  )) AS diff\nFROM payment_transactions pt\nWHERE ABS(pt.amount - (\n    COALESCE(CAST(JSON_EXTRACT(pt.raw_json, '$.principal_paid') AS DECIMAL(15,2)), 0) +\n    COALESCE(CAST(JSON_EXTRACT(pt.raw_json, '$.interest_paid') AS DECIMAL(15,2)), 0) +\n    COALESCE(CAST(JSON_EXTRACT(pt.raw_json, '$.fee_paid') AS DECIMAL(15,2)), 0) +\n    COALESCE(CAST(JSON_EXTRACT(pt.raw_json, '$.penalty_paid') AS DECIMAL(15,2)), 0) +\n    COALESCE(CAST(JSON_EXTRACT(pt.raw_json, '$.unlock_fee_paid') AS DECIMAL(15,2)), 0) +\n    COALESCE(CAST(JSON_EXTRACT(pt.raw_json, '$.overpaid_amount') AS DECIMAL(15,2)), 0) -\n    COALESCE(CAST(JSON_EXTRACT(pt.raw_json, '$.discount_amount') AS DECIMAL(15,2)), 0)\n)) > 0.01\nORDER BY ABS(pt.amount - (\n    COALESCE(CAST(JSON_EXTRACT(pt.raw_json, '$.principal_paid') AS DECIMAL(15,2)), 0) +\n    COALESCE(CAST(JSON_EXTRACT(pt.raw_json, '$.interest_paid') AS DECIMAL(15,2)), 0) +\n    COALESCE(CAST(JSON_EXTRACT(pt.raw_json, '$.fee_paid') AS DECIMAL(15,2)), 0) +\n    COALESCE(CAST(JSON_EXTRACT(pt.raw_json, '$.penalty_paid') AS DECIMAL(15,2)), 0) +\n    COALESCE(CAST(JSON_EXTRACT(pt.raw_json, '$.unlock_fee_paid') AS DECIMAL(15,2)), 0) +\n    COALESCE(CAST(JSON_EXTRACT(pt.raw_json, '$.overpaid_amount') AS DECIMAL(15,2)), 0) -\n    COALESCE(CAST(JSON_EXTRACT(pt.raw_json, '$.discount_amount') AS DECIMAL(15,2)), 0)\n)) DESC\nLIMIT 10;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT \n  pt.receipt_no,\n  pt.paid_at,\n  pt.amount AS pt_amount,\n  CAST(JSON_EXTRACT(pt.raw_json, '$.principal_paid') AS DECIMAL(15,2)) AS principal_paid,\n  CAST(JSON_EXTRACT(pt.raw_json, '$.interest_paid') AS DECIMAL(15,2)) AS interest_paid,\n  CAST(JSON_EXTRACT(pt.raw_json, '$.fee_paid') AS DECIMAL(15,2)) AS fee_paid,\n  CAST(JSON_EXTRACT(pt.raw_json, '$.penalty_paid') AS DECIMAL(15,2)) AS penalty_paid,\n  CAST(JSON_EXTRACT(pt.raw_json, '$.unlock_fee_paid') AS DECIMAL(15,2)) AS unlock_fee_paid,\n  CAST(JSON_EXTRACT(pt.raw_json, '$.discount_amount') AS DECIMAL(15,2)) AS discount_amount,\n  (pt.amount - (\n    COALESCE(CAST(JSON_EXTRACT(pt.raw_json, '$.principal_paid') AS DECIMAL(15,2)), 0) +\n    COALESCE(CAST(JSON_EXTRACT(pt.raw_json, '$.interest_paid') AS DECIMAL(15,2)), 0) +\n    COALESCE(CAST(JSON_EXTRACT(pt.raw_json, '$.fee_paid') AS DECIMAL(15,2)), 0) +\n    COALESCE(CAST(JSON_EXTRACT(pt.raw_json, '$.penalty_paid') AS DECIMAL(15,2)), 0) +\n    COALESCE(CAST(JSON_EXTRACT(pt.raw_json, '$.unlock_fee_paid') AS DECIMAL(15,2)), 0) +\n    COALESCE(CAST(JSON_EXTRACT(pt.raw_json, '$.overpaid_amount') AS DECIMAL(15,2)), 0) -\n    COALESCE(CAST(JSON_EXTRACT(pt.raw_json, '$.discount_amount') AS DECIMAL(15,2)), 0)\n  )) AS diff\nFROM payment_transactions pt\nWHERE ABS(pt.amount - (\n    COALESCE(CAST(JSON_EXTRACT(pt.raw_json, '$.principal_paid') AS DECIMAL(15,2)), 0) +\n    COALESCE(CAST(JSON_EXTRACT(pt.raw_json, '$.interest_paid') AS DECIMAL(15,2)), 0) +\n    COALESCE(CAST(JSON_EXTRACT(pt.raw_json, '$.fee_paid') AS DECIMAL(15,2)), 0) +\n    COALESCE(CAST(JSON_EXTRACT(pt.raw_json, '$.penalty_paid') AS DECIMAL(15,2)), 0) +\n    COALESCE(CAST(JSON_EXTRACT(pt.raw_json, '$.unlock_fee_paid') AS DECIMAL(15,2)), 0) +\n    COALESCE(CAST(JSON_EXTRACT(pt.raw_json, '$.overpaid_amount') AS DECIMAL(15,2)), 0) -\n    COALESCE(CAST(JSON_EXTRACT(pt.raw_json, '$.discount_amount') AS DECIMAL(15,2)), 0)\n)) > 0.01\nORDER BY ABS(pt.amount - (\n    COALESCE(CAST(JSON_EXTRACT(pt.raw_json, '$.principal_paid') AS DECIMAL(15,2)), 0) +\n    COALESCE(CAST(JSON_EXTRACT(pt.raw_json, '$.interest_paid') AS DECIMAL(15,2)), 0) +\n    COALESCE(CAST(JSON_EXTRACT(pt.raw_json, '$.fee_paid') AS DECIMAL(15,2)), 0) +\n    COALESCE(CAST(JSON_EXTRACT(pt.raw_json, '$.penalty_paid') AS DECIMAL(15,2)), 0) +\n    COALESCE(CAST(JSON_EXTRACT(pt.raw_json, '$.unlock_fee_paid') AS DECIMAL(15,2)), 0) +\n    COALESCE(CAST(JSON_EXTRACT(pt.raw_json, '$.overpaid_amount') AS DECIMAL(15,2)), 0) -\n    COALESCE(CAST(JSON_EXTRACT(pt.raw_json, '$.discount_amount') AS DECIMAL(15,2)), 0)\n)) DESC\nLIMIT 10;\n",
+  "rows": [
+    {
+      "receipt_no": "TXRTC1224-LRI001-5419-01",
+      "paid_at": "2025-06-10",
+      "pt_amount": "3084.00",
+      "principal_paid": "344.00",
+      "interest_paid": "2640.00",
+      "fee_paid": "100.00",
+      "penalty_paid": "0.00",
+      "unlock_fee_paid": "0.00",
+      "discount_amount": "2056.00",
+      "diff": "2056.00"
+    },
+    {
+      "receipt_no": "TXRTC1224-PLK001-6097-01",
+      "paid_at": "2025-07-18",
+      "pt_amount": "6694.40",
+      "principal_paid": "2263.40",
+      "interest_paid": "4331.00",
+      "fee_paid": "100.00",
+      "penalty_paid": "0.00",
+      "unlock_fee_paid": "0.00",
+      "discount_amount": "1673.60",
+      "diff": "1673.60"
+    },
+    {
+      "receipt_no": "TXRT0125-LRI001-7988-01-20",
+      "paid_at": "2026-03-02",
+      "pt_amount": "0.00",
+      "principal_paid": "0.00",
+      "interest_paid": "0.00",
+      "fee_paid": "0.00",
+      "penalty_paid": "1225.00",
+      "unlock_fee_paid": "0.00",
+      "discount_amount": "0.00",
+      "diff": "-1225.00"
+    },
+    {
+      "receipt_no": "TXRTC1124-NPT002-1737-01",
+      "paid_at": "2025-06-23",
+      "pt_amount": "4742.00",
+      "principal_paid": "1590.00",
+      "interest_paid": "3052.00",
+      "fee_paid": "100.00",
+      "penalty_paid": "0.00",
+      "unlock_fee_paid": "0.00",
+      "discount_amount": "1185.00",
+      "diff": "1185.00"
+    },
+    {
+      "receipt_no": "TXRTC0525-PNB001-12509-01",
+      "paid_at": "2025-07-26",
+      "pt_amount": "4410.04",
+      "principal_paid": "2280.04",
+      "interest_paid": "2030.00",
+      "fee_paid": "100.00",
+      "penalty_paid": "0.00",
+      "unlock_fee_paid": "0.00",
+      "discount_amount": "1102.96",
+      "diff": "1102.96"
+    },
+    {
+      "receipt_no": "TXRT1124-NRT001-4419-01-6",
+      "paid_at": "2025-04-28",
+      "pt_amount": "1000.00",
+      "principal_paid": "1000.00",
+      "interest_paid": "0.00",
+      "fee_paid": "0.00",
+      "penalty_paid": "0.00",
+      "unlock_fee_paid": "1000.00",
+      "discount_amount": "0.00",
+      "diff": "-1000.00"
+    },
+    {
+      "receipt_no": "TXRTC1224-LRI001-5311-01",
+      "paid_at": "2025-07-10",
+      "pt_amount": "3581.60",
+      "principal_paid": "1254.60",
+      "interest_paid": "2227.00",
+      "fee_paid": "100.00",
+      "penalty_paid": "0.00",
+      "unlock_fee_paid": "0.00",
+      "discount_amount": "770.40",
+      "diff": "770.40"
+    },
+    {
+      "receipt_no": "TXRT1224-NYK003-6655-01-9",
+      "paid_at": "2025-09-22",
+      "pt_amount": "0.00",
+      "principal_paid": "0.00",
+      "interest_paid": "0.00",
+      "fee_paid": "0.00",
+      "penalty_paid": "750.00",
+      "unlock_fee_paid": "0.00",
+      "discount_amount": "0.00",
+      "diff": "-750.00"
+    },
+    {
+      "receipt_no": "TXRTC1224-PLK001-5587-01",
+      "paid_at": "2025-07-15",
+      "pt_amount": "2914.40",
+      "principal_paid": "958.40",
+      "interest_paid": "1856.00",
+      "fee_paid": "100.00",
+      "penalty_paid": "0.00",
+      "unlock_fee_paid": "0.00",
+      "discount_amount": "728.60",
+      "diff": "728.60"
+    },
+    {
+      "receipt_no": "TXRTC1224-SNI001-5720-01",
+      "paid_at": "2025-07-25",
+      "pt_amount": "2756.80",
+      "principal_paid": "903.80",
+      "interest_paid": "1753.00",
+      "fee_paid": "100.00",
+      "penalty_paid": "0.00",
+      "unlock_fee_paid": "0.00",
+      "discount_amount": "689.20",
+      "diff": "689.20"
+    }
+  ],
+  "messages": [],
+  "stdout": "receipt_no\tpaid_at\tpt_amount\tprincipal_paid\tinterest_paid\tfee_paid\tpenalty_paid\tunlock_fee_paid\tdiscount_amount\tdiff\nTXRTC1224-LRI001-5419-01\t2025-06-10\t3084.00\t344.00\t2640.00\t100.00\t0.00\t0.00\t2056.00\t2056.00\nTXRTC1224-PLK001-6097-01\t2025-07-18\t6694.40\t2263.40\t4331.00\t100.00\t0.00\t0.00\t1673.60\t1673.60\nTXRT0125-LRI001-7988-01-20\t2026-03-02\t0.00\t0.00\t0.00\t0.00\t1225.00\t0.00\t0.00\t-1225.00\nTXRTC1124-NPT002-1737-01\t2025-06-23\t4742.00\t1590.00\t3052.00\t100.00\t0.00\t0.00\t1185.00\t1185.00\nTXRTC0525-PNB001-12509-01\t2025-07-26\t4410.04\t2280.04\t2030.00\t100.00\t0.00\t0.00\t1102.96\t1102.96\nTXRT1124-NRT001-4419-01-6\t2025-04-28\t1000.00\t1000.00\t0.00\t0.00\t0.00\t1000.00\t0.00\t-1000.00\nTXRTC1224-LRI001-5311-01\t2025-07-10\t3581.60\t1254.60\t2227.00\t100.00\t0.00\t0.00\t770.40\t770.40\nTXRT1224-NYK003-6655-01-9\t2025-09-22\t0.00\t0.00\t0.00\t0.00\t750.00\t0.00\t0.00\t-750.00\nTXRTC1224-PLK001-5587-01\t2025-07-15\t2914.40\t958.40\t1856.00\t100.00\t0.00\t0.00\t728.60\t728.60\nTXRTC1224-SNI001-5720-01\t2025-07-25\t2756.80\t903.80\t1753.00\t100.00\t0.00\t0.00\t689.20\t689.20\n",
+  "stderr": "",
+  "execution_time_ms": 2578
+}
