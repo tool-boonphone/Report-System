@@ -5,6 +5,11 @@
  *  1. สรุปรายปี   — ตารางสรุปยอดแยกตามปี
  *  2. สรุปรายเดือน — ตารางสรุปยอดแยกตามเดือน-ปี
  *  3. รายการทั้งหมด — รายการรับชำระทั้งหมด (หน้าเดิม)
+ *
+ * Switch mode (รายการทั้งหมด):
+ *  - รายการตามการบันทึก (default): แสดงทุก payment row ตามที่ดึงมา ไม่ group
+ *  - รายการตามสลิป: group รายการที่ชำระวันเดียวกัน + คนเดียวกัน + ประเภทเดียวกัน
+ *    เป็น 1 row (เฉพาะ ปิดยอด และ ขายเครื่อง)
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppShell } from "@/components/AppShell";
@@ -31,8 +36,13 @@ type DateField = "paidAt" | "updatedAt";
 type SortKey = "no" | "paidAt" | "incomeType" | "contractNo" | "amount" | "updatedBy" | "updatedAt";
 type SortDir = "asc" | "desc";
 type ActiveTab = "yearly" | "monthly" | "all";
+/** mode สำหรับแถบรายการทั้งหมด */
+type ListMode = "detail" | "slip";
 
 const ALL_INCOME_TYPES: IncomeType[] = ["ค่างวด", "ปิดยอด", "ขายเครื่อง"];
+/** ประเภทที่ต้อง group เมื่อ mode = slip */
+const GROUPABLE_TYPES: Set<IncomeType> = new Set<IncomeType>(["ปิดยอด", "ขายเครื่อง"]);
+
 const TYPE_COLORS: Record<IncomeType, { bg: string; text: string; dot: string }> = {
   "ค่างวด":    { bg: "bg-blue-50",   text: "text-blue-700",   dot: "bg-blue-500" },
   "ขายเครื่อง": { bg: "bg-orange-50", text: "text-orange-700", dot: "bg-orange-500" },
@@ -73,6 +83,61 @@ function fmtMonthYear(period: string): string {
 
 const MONTH_NAMES = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
 
+// ─── Type สำหรับ row ที่ดึงมาจาก API ──────────────────────────────────────────
+type IncomeRow = {
+  paidAt: string | null;
+  incomeType: string;
+  contractNo: string;
+  customerName?: string | null;
+  amount: number;
+  updatedBy?: string | null;
+  updatedAt?: string | null;
+};
+
+/**
+ * groupRowsBySlip — group รายการที่ชำระวันเดียวกัน + คนเดียวกัน + ประเภทเดียวกัน
+ * เฉพาะ ปิดยอด และ ขายเครื่อง ให้เป็น 1 row (รวม amount)
+ * ค่างวด ไม่ group
+ */
+function groupRowsBySlip(rows: IncomeRow[]): IncomeRow[] {
+  const result: IncomeRow[] = [];
+  // Map key = paidAt|updatedBy|incomeType (เฉพาะ groupable types)
+  const groupMap = new Map<string, IncomeRow>();
+
+  for (const row of rows) {
+    const type = row.incomeType as IncomeType;
+    if (GROUPABLE_TYPES.has(type)) {
+      // group key: วันที่ชำระ + ผู้ทำรายการ + ประเภท
+      const key = `${row.paidAt ?? ""}|${row.updatedBy ?? ""}|${row.incomeType}`;
+      const existing = groupMap.get(key);
+      if (existing) {
+        // รวม amount
+        existing.amount = (existing.amount ?? 0) + (row.amount ?? 0);
+      } else {
+        // สร้าง row ใหม่ (clone) เพื่อไม่ mutate ต้นฉบับ
+        groupMap.set(key, { ...row });
+      }
+    } else {
+      // ค่างวด — ไม่ group, ใส่ตรงๆ
+      result.push(row);
+    }
+  }
+
+  // รวม grouped rows เข้า result โดยรักษาลำดับตาม insertion order ของ Map
+  const grouped = Array.from(groupMap.values());
+
+  // ผสม result (ค่างวด) + grouped (ปิดยอด/ขายเครื่อง) แล้ว sort ตาม paidAt desc
+  const combined = [...result, ...grouped];
+  combined.sort((a, b) => {
+    const av = a.paidAt ?? "";
+    const bv = b.paidAt ?? "";
+    if (av < bv) return 1;
+    if (av > bv) return -1;
+    return 0;
+  });
+  return combined;
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function Income() {
   const { section } = useSection();
@@ -84,6 +149,9 @@ export default function Income() {
 
   // ── Active Tab ──
   const [activeTab, setActiveTab] = useState<ActiveTab>("yearly");
+
+  // ── List mode switch ──
+  const [listMode, setListMode] = useState<ListMode>("detail");
 
   // ── Filter state (all tab) ──
   const [search, setSearch] = useState("");
@@ -186,9 +254,8 @@ export default function Income() {
     { enabled: !!section && canView && activeTab === "monthly" },
   );
 
-  const rows = data?.rows ?? [];
+  const rows = (data?.rows ?? []) as IncomeRow[];
   const total = data?.total ?? 0;
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   const { data: summaryData } = trpc.accounting.getIncomeSummary.useQuery(
     {
@@ -212,6 +279,7 @@ export default function Income() {
     return ALL_INCOME_TYPES.filter((t) => activeTypes.has(t)).reduce((s, t) => s + (badgeSums[t] ?? 0), 0);
   }, [badgeSums, activeTypes]);
 
+  // ── Sort rows ──
   const sortedRows = useMemo(() => {
     const sorted = [...rows];
     sorted.sort((a, b) => {
@@ -230,6 +298,18 @@ export default function Income() {
     });
     return sorted;
   }, [rows, sortKey, sortDir]);
+
+  /**
+   * displayRows — rows ที่จะแสดงในตาราง
+   * mode = detail: ใช้ sortedRows ตรงๆ (ไม่ group)
+   * mode = slip: group ปิดยอด/ขายเครื่อง ที่ชำระวันเดียวกัน + คนเดียวกัน
+   */
+  const displayRows = useMemo(() => {
+    if (listMode === "detail") return sortedRows;
+    return groupRowsBySlip(sortedRows);
+  }, [sortedRows, listMode]);
+
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -263,11 +343,19 @@ export default function Income() {
     activeTypes.size < ALL_INCOME_TYPES.length ? "type" : "",
   ].filter(Boolean).length;
 
+  // ── Export Excel (ตาม mode ที่เลือก) ──
   const handleExport = useCallback(async () => {
     const toastId = toast.loading("กำลัง Export...");
     try {
       const { data: exp } = await refetchExport();
-      const exportRows = exp?.rows ?? [];
+      if (!exp?.rows?.length) { toast.error("ไม่มีข้อมูล", { id: toastId }); return; }
+
+      // apply mode
+      let exportRows: IncomeRow[] = exp.rows as IncomeRow[];
+      if (listMode === "slip") {
+        exportRows = groupRowsBySlip(exportRows);
+      }
+
       const wsData = [
         ["No.", "วันที่ชำระ", "ประเภท", "เลขที่สัญญา", "ชื่อลูกค้า", "ยอดเงิน", "ทำรายการโดย", "ทำรายการเมื่อ"],
         ...exportRows.map((r, i) => [
@@ -279,12 +367,13 @@ export default function Income() {
       ws["!cols"] = [{ wch: 6 }, { wch: 14 }, { wch: 14 }, { wch: 24 }, { wch: 24 }, { wch: 14 }, { wch: 18 }, { wch: 20 }];
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "รายรับ");
-      XLSX.writeFile(wb, `รายรับ_${section}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+      const modeSuffix = listMode === "slip" ? "_ตามสลิป" : "_ตามการบันทึก";
+      XLSX.writeFile(wb, `รายรับ_${section}${modeSuffix}_${new Date().toISOString().slice(0, 10)}.xlsx`);
       toast.success("Export สำเร็จ", { id: toastId });
     } catch (err) {
       toast.error((err as Error).message ?? "Export failed", { id: toastId });
     }
-  }, [refetchExport, section]);
+  }, [refetchExport, section, listMode]);
 
   const handleExportYearly = () => {
     const rows2 = yearlyData ?? [];
@@ -473,8 +562,8 @@ export default function Income() {
                 })}
                 {monthlyMonths.size > 0 && (
                   <button type="button" onClick={() => setMonthlyMonths(new Set())}
-                    className="flex items-center gap-0.5 px-2 py-1 rounded text-xs text-red-500 border border-red-200 hover:bg-red-50">
-                    <X className="w-3 h-3" /> ล้าง
+                    className="flex items-center justify-center w-6 h-6 rounded-full bg-gray-100 hover:bg-red-100 text-gray-400 hover:text-red-500 self-center">
+                    <X className="w-3 h-3" />
                   </button>
                 )}
               </div>
@@ -590,9 +679,44 @@ export default function Income() {
                 </button>
               )}
             </div>
-            {/* Badges */}
+
+            {/* Badges + Switch mode */}
             <div className="max-w-screen-2xl mx-auto w-full px-3 sm:px-4 py-2 flex flex-wrap items-center gap-2 bg-gray-50 border-b border-gray-100">
-              <span className="text-sm text-gray-500">{total.toLocaleString()} รายการ</span>
+              {/* ── Switch: รายการตามการบันทึก | รายการตามสลิป ── */}
+              <div className="flex items-center rounded-full border border-gray-200 bg-white p-0.5 shadow-sm shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setListMode("detail")}
+                  className={[
+                    "px-3 py-1 rounded-full text-xs font-medium transition-all whitespace-nowrap",
+                    listMode === "detail"
+                      ? "bg-blue-600 text-white shadow-sm"
+                      : "text-gray-500 hover:text-gray-700",
+                  ].join(" ")}
+                >
+                  รายการตามการบันทึก
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setListMode("slip")}
+                  className={[
+                    "px-3 py-1 rounded-full text-xs font-medium transition-all whitespace-nowrap",
+                    listMode === "slip"
+                      ? "bg-blue-600 text-white shadow-sm"
+                      : "text-gray-500 hover:text-gray-700",
+                  ].join(" ")}
+                >
+                  รายการตามสลิป
+                </button>
+              </div>
+
+              {/* จำนวนรายการ */}
+              <span className="text-sm text-gray-500">
+                {listMode === "detail"
+                  ? `${total.toLocaleString()} รายการ`
+                  : `${displayRows.length.toLocaleString()} รายการ (จาก ${total.toLocaleString()})`}
+              </span>
+
               <div className="flex-1" />
               <div className="flex flex-wrap items-center gap-2">
                 {ALL_INCOME_TYPES.map((t) => {
@@ -612,6 +736,7 @@ export default function Income() {
                 </div>
               </div>
             </div>
+
             {/* Table */}
             <div className="flex-1 overflow-auto">
               <div className="max-w-screen-2xl mx-auto w-full px-3 sm:px-4 py-2">
@@ -619,14 +744,14 @@ export default function Income() {
                   <div className="flex items-center justify-center py-20"><Spinner className="w-6 h-6 text-blue-500" /></div>
                 ) : error ? (
                   <div className="flex items-center justify-center py-20 text-red-500 text-sm">เกิดข้อผิดพลาด: {error.message}</div>
-                ) : sortedRows.length === 0 ? (
+                ) : displayRows.length === 0 ? (
                   <div className="flex items-center justify-center py-20 text-gray-400 text-sm">ไม่พบข้อมูล</div>
                 ) : (
                   <table className="w-full text-sm border-collapse">
                     <thead>
                       <tr className="bg-blue-700 text-white text-xs sticky top-0 z-10">
                         {([
-                          { key: "no" as SortKey, label: "No.", cls: "w-10 text-center" },
+                          { key: "no" as SortKey, label: "No.", cls: "w-10 text-right" },
                           { key: "paidAt" as SortKey, label: "วันที่ชำระ", cls: "w-28" },
                           { key: "incomeType" as SortKey, label: "ประเภท", cls: "w-28" },
                           { key: "contractNo" as SortKey, label: "เลขที่สัญญา", cls: "w-36" },
@@ -635,22 +760,33 @@ export default function Income() {
                           { key: "updatedAt" as SortKey, label: "ทำรายการเมื่อ", cls: "w-36" },
                         ] as { key: SortKey; label: string; cls: string }[]).map(({ key, label, cls }) => (
                           <th key={key} onClick={() => key !== "no" && handleSort(key)}
-                            className={["px-3 py-2.5 font-medium text-left whitespace-nowrap select-none",
-                              key !== "no" ? "cursor-pointer hover:bg-blue-600" : "", cls].join(" ")}>
-                            <div className="flex items-center gap-1">
-                              {label}{key !== "no" && <SortIcon col={key} />}
-                            </div>
+                            className={["px-3 py-2.5 font-medium whitespace-nowrap select-none",
+                              key !== "no" ? "cursor-pointer hover:bg-blue-600 text-left" : "text-right", cls].join(" ")}>
+                            {key === "no" ? (
+                              <span>{label}</span>
+                            ) : key === "amount" ? (
+                              <div className="flex items-center justify-end gap-1">
+                                {label}<SortIcon col={key} />
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-1">
+                                {label}<SortIcon col={key} />
+                              </div>
+                            )}
                           </th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
-                      {sortedRows.map((row, idx) => {
+                      {displayRows.map((row, idx) => {
                         const typeColor = TYPE_COLORS[row.incomeType as IncomeType] ?? { bg: "bg-gray-50", text: "text-gray-700", dot: "bg-gray-400" };
-                        const globalIdx = (page - 1) * pageSize + idx + 1;
+                        // ใน mode detail ใช้ global index, ใน mode slip ใช้ index ของ displayRows
+                        const rowNo = listMode === "detail"
+                          ? (page - 1) * pageSize + idx + 1
+                          : idx + 1;
                         return (
                           <tr key={`${row.contractNo}-${idx}`} className="border-b border-gray-100 hover:bg-blue-50 transition-colors">
-                            <td className="px-3 py-2 text-center text-gray-400 text-xs">{globalIdx}</td>
+                            <td className="px-3 py-2 text-right text-gray-400 text-xs">{rowNo}</td>
                             <td className="px-3 py-2 whitespace-nowrap text-gray-700">{fmtDate(row.paidAt)}</td>
                             <td className="px-3 py-2">
                               <span className={["inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium", typeColor.bg, typeColor.text].join(" ")}>
@@ -658,7 +794,12 @@ export default function Income() {
                                 {row.incomeType}
                               </span>
                             </td>
-                            <td className="px-3 py-2 font-mono text-xs text-gray-700">{row.contractNo}</td>
+                            <td className="px-3 py-2 font-mono text-xs text-gray-700">
+                              {/* mode slip: ปิดยอด/ขายเครื่อง ที่ถูก group จะไม่มี contractNo เดียว */}
+                              {listMode === "slip" && GROUPABLE_TYPES.has(row.incomeType as IncomeType)
+                                ? <span className="text-gray-400 italic text-xs">รวมหลายสัญญา</span>
+                                : row.contractNo}
+                            </td>
                             <td className="px-3 py-2 text-right font-semibold text-gray-800">{fmtMoney(row.amount)}</td>
                             <td className="px-3 py-2 text-gray-600 text-xs">{row.updatedBy ?? "-"}</td>
                             <td className="px-3 py-2 text-gray-500 text-xs whitespace-nowrap">{fmtDateTime(row.updatedAt)}</td>
@@ -670,6 +811,7 @@ export default function Income() {
                 )}
               </div>
             </div>
+
             {/* Pagination */}
             {total > 0 && (
               <div className="border-t border-gray-200 bg-white">
