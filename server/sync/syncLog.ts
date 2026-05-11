@@ -1,4 +1,4 @@
-import { desc, eq, and, gt, lt } from "drizzle-orm";
+import { desc, eq, and, gt, lt, or, ne } from "drizzle-orm";
 import { syncLogs } from "../../drizzle/schema";
 import { getDb } from "../db";
 import { normalizeSectionKey, type SectionKey, type SyncTrigger } from "../../shared/const";
@@ -92,6 +92,10 @@ export async function getLastCustomersResumePage(section: SectionKey): Promise<n
  * Returns null if no sync is in_progress (or if it's stale > 185 minutes).
  * 185 min = OVERALL_TIMEOUT_MS (180 min) + 5 min buffer.
  * Used by sync.status tRPC procedure so ALL instances see the same state.
+ *
+ * Fix (2026-05-11): ตรวจสอบทั้ง entity='all' และ entity-level rows
+ * เพื่อป้องกันกรณีที่ entity='all' log ถูก clear แต่ entity-level logs
+ * ยังอยู่ใน in_progress (เช่น หลัง clearAllStuckSyncLogs ทำงานไม่ครบ)
  */
 export async function getDbSyncStatus(section: SectionKey): Promise<{
   running: boolean;
@@ -104,7 +108,9 @@ export async function getDbSyncStatus(section: SectionKey): Promise<{
   // Treat in_progress rows older than 185 minutes as abandoned
   // (matches OVERALL_TIMEOUT_MS=180min + 5min buffer in runner.ts)
   const staleThreshold = new Date(Date.now() - 185 * 60 * 1000);
-  const rows = await db
+
+  // 1) ลองหา entity='all' row ก่อน (มี currentStage + progress ที่อัพเดตต่อเนื่อง)
+  const allRows = await db
     .select({
       id: syncLogs.id,
       startedAt: syncLogs.startedAt,
@@ -123,14 +129,47 @@ export async function getDbSyncStatus(section: SectionKey): Promise<{
     .orderBy(desc(syncLogs.startedAt))
     .limit(1);
 
-  if (rows.length === 0) return { running: false, startedAt: null, currentStage: null, progress: null };
-  const row = rows[0];
-  return {
-    running: true,
-    startedAt: row.startedAt,
-    currentStage: row.currentStage ?? null,
-    progress: row.progress ?? 0,
-  };
+  if (allRows.length > 0) {
+    const row = allRows[0];
+    return {
+      running: true,
+      startedAt: row.startedAt,
+      currentStage: row.currentStage ?? null,
+      progress: row.progress ?? 0,
+    };
+  }
+
+  // 2) Fallback: ตรวจสอบ entity-level rows (partners/customers/contracts/installments/payments)
+  // กรณีที่ entity='all' log ถูก clear ไปแล้ว แต่ entity-level logs ยังอยู่ใน in_progress
+  const entityRows = await db
+    .select({
+      id: syncLogs.id,
+      startedAt: syncLogs.startedAt,
+      entity: syncLogs.entity,
+    })
+    .from(syncLogs)
+    .where(
+      and(
+        eq(syncLogs.section, section),
+        ne(syncLogs.entity, "all"),
+        eq(syncLogs.status, "in_progress"),
+        gt(syncLogs.startedAt, staleThreshold),
+      ),
+    )
+    .orderBy(desc(syncLogs.startedAt))
+    .limit(1);
+
+  if (entityRows.length > 0) {
+    const row = entityRows[0];
+    return {
+      running: true,
+      startedAt: row.startedAt,
+      currentStage: row.entity ?? null, // ใช้ entity name เป็น stage name
+      progress: null, // ไม่มีข้อมูล progress ที่ละเอียด
+    };
+  }
+
+  return { running: false, startedAt: null, currentStage: null, progress: null };
 }
 
 /**
