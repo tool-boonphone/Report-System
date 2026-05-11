@@ -285,6 +285,14 @@ async function doSync(
       console.error(`[runner] ${section}: pre-build export failed:`, exportErr?.message ?? exportErr);
     }
 
+    // Post-sync cleanup: ลบ payment_transactions ที่ created_at = วันที่ sync รัน
+    // เพื่อให้ข้อมูลในระบบมีเฉพาะถึงเมื่อวาน (วันที่ sync รันถือว่ายังไม่ครบวัน)
+    try {
+      await cleanupTodayPayments(section);
+    } catch (cleanupErr: any) {
+      console.warn(`[runner] ${section}: post-sync cleanup failed (non-fatal):`, cleanupErr?.message ?? cleanupErr);
+    }
+
     return { ok: true, rowCount: overallRows };
   } catch (err: any) {
     // Even on hard failure, try to populate cache from existing DB data
@@ -1040,6 +1048,47 @@ async function computeAndStoreBadDebt(section: SectionKey): Promise<void> {
   await flushBatch();
 
   console.log(`[computeAndStoreBadDebt] ${section}: updated ${targetContracts.length} bad-debt contracts`);
+}
+
+/**
+ * Post-sync cleanup: ลบ payment_transactions ที่ DATE(created_at) = วันที่ sync รัน (Asia/Bangkok)
+ * เพื่อให้ระบบแสดงข้อมูลถึงแค่เมื่อวาน (วันที่ sync ยังไม่ครบวัน จึงตัดออก)
+ * หลังลบแล้วจะ re-populate cache ใหม่เพื่อให้ยอดใน cache ตรงกับข้อมูลที่เหลือ
+ */
+async function cleanupTodayPayments(section: SectionKey): Promise<void> {
+  const { getDb } = await import("../db");
+  const db = await getDb();
+  if (!db) return;
+
+  // คำนวณวันที่ปัจจุบันใน Asia/Bangkok (YYYY-MM-DD)
+  const bangkokFmt = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Bangkok",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  const todayBangkok = bangkokFmt.format(new Date()); // e.g. "2026-05-11"
+
+  // ลบ payment_transactions ที่ DATE(created_at) = วันนี้ (Bangkok)
+  // created_at เก็บเป็น varchar(32) ใน DB เช่น "2026-05-11 10:30:00"
+  const { sql } = await import("drizzle-orm");
+  const result = await db.execute(
+    sql`DELETE FROM payment_transactions
+        WHERE section = ${section}
+          AND LEFT(created_at, 10) = ${todayBangkok}`
+  );
+  const deleted = (result as any)?.[0]?.affectedRows ?? 0;
+  console.log(`[runner] ${section}: post-sync cleanup deleted ${deleted} payment_transactions with created_at = ${todayBangkok}`);
+
+  if (deleted > 0) {
+    // Re-populate cache หลังลบเพื่อให้ยอดใน cache ตรงกับข้อมูลที่เหลือ
+    try {
+      const cacheResult = await populateDebtCache(section);
+      console.log(`[runner] ${section}: post-cleanup cache re-populated — target=${cacheResult.targetRows}, collected=${cacheResult.collectedRows}`);
+    } catch (cacheErr: any) {
+      console.warn(`[runner] ${section}: post-cleanup cache re-populate failed:`, cacheErr?.message ?? cacheErr);
+    }
+  }
 }
 
 // Re-export mapper for tests

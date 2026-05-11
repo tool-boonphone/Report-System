@@ -1,0 +1,34 @@
+{
+  "query": "SELECT section, entity, status, started_at, finished_at, row_count FROM sync_logs WHERE DATE(started_at) = '2026-05-11' ORDER BY started_at DESC LIMIT 20",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT section, entity, status, started_at, finished_at, row_count FROM sync_logs WHERE DATE(started_at) = '2026-05-11' ORDER BY started_at DESC LIMIT 20",
+  "rows": [
+    {
+      "section": "Fastfone365",
+      "entity": "customers",
+      "status": "error",
+      "started_at": "2026-05-11 02:17:09",
+      "finished_at": "2026-05-11 04:06:18",
+      "row_count": "0"
+    },
+    {
+      "section": "Fastfone365",
+      "entity": "partners",
+      "status": "success",
+      "started_at": "2026-05-11 02:17:05",
+      "finished_at": "2026-05-11 02:17:09",
+      "row_count": "693"
+    },
+    {
+      "section": "Fastfone365",
+      "entity": "all",
+      "status": "error",
+      "started_at": "2026-05-11 02:17:05",
+      "finished_at": "2026-05-11 04:06:18",
+      "row_count": "0"
+    }
+  ],
+  "messages": [],
+  "stdout": "section\tentity\tstatus\tstarted_at\tfinished_at\trow_count\nFastfone365\tcustomers\terror\t2026-05-11 02:17:09\t2026-05-11 04:06:18\t0\nFastfone365\tpartners\tsuccess\t2026-05-11 02:17:05\t2026-05-11 02:17:09\t693\nFastfone365\tall\terror\t2026-05-11 02:17:05\t2026-05-11 04:06:18\t0\n",
+  "stderr": "",
+  "execution_time_ms": 1788
+}

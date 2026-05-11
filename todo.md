@@ -1433,3 +1433,27 @@ Task list:
 - [x] DB section values: เก็บเป็น 'Boonphone' และ 'Fastfone365' ถูกต้อง (พบ 'section' header row ปน แต่ไม่กระทบการทำงาน)
 - [x] Push GitHub + save checkpoint
 - [x] บันทึกความรู้เรื่อง case sensitivity และ cache clearing ใน project knowledge
+
+## Task: ลบข้อมูลวันนี้ + ตั้ง cron sync ใหม่ (2026-05-11)
+- [ ] รอให้ sync วันนี้เสร็จสมบูรณ์ก่อน
+- [ ] ลบ records ที่ created_at = วันนี้ (2026-05-11) ออกจาก contracts (ทั้ง Boonphone และ Fastfone365)
+- [ ] ลบ records ที่ paid_at = วันนี้ (2026-05-11) ออกจาก payment_transactions
+- [ ] ลบ records ที่ created_at = วันนี้ (2026-05-11) ออกจาก debt_collected_cache
+- [ ] ลบ records ที่ created_at = วันนี้ (2026-05-11) ออกจาก debt_target_cache
+- [ ] ตรวจสอบว่า tables อื่นๆ มีข้อมูลวันนี้ที่ต้องลบหรือไม่ (installments, customers ฯลฯ)
+- [ ] ตั้ง cron sync ใหม่ทุกวัน 04:00 (แทนที่ schedule เดิม 06:00)
+- [ ] ตรวจสอบว่า cron ตั้งค่าถูกต้องและจะ run ครั้งแรกเมื่อไร
+- [ ] Push GitHub + save checkpoint
+
+## Task: แก้ logic sync ให้ดึงข้อมูลถึงแค่เมื่อวาน (2026-05-11)
+- [ ] ตรวจสอบว่า sync API (Boonphone/Fastfone365) ใช้ date range parameter อย่างไร
+- [ ] แก้ sync runner ให้ส่ง end_date = วันก่อนหน้า (yesterday) เสมอ ไม่รวมวันที่รัน sync
+- [ ] ตรวจสอบว่า payment_transactions และ contracts ใช้ date filter ตรงไหน
+- [ ] ทดสอบว่าหลังแก้แล้ว sync ไม่ดึงข้อมูลวันปัจจุบันมา
+
+## Task: Post-sync cleanup + cron 04:00 (2026-05-11)
+- [x] เพิ่ม post-sync cleanup ใน runner.ts: ลบ payment_transactions ที่ DATE(created_at) = วันที่ sync รัน หลัง sync เสร็จทุกครั้ง (พร้อม re-populate cache หากมีการลบ)
+- [x] เปลี่ยน SYNC_HOUR จาก 9 เป็น 4 ใน scheduler.ts (04:00 Asia/Bangkok)
+- [x] ตรวจสอบ DB: ไม่มี payment_transactions วันนี้ (sync วันนี้ error ก่อน insert)
+- [x] อัพเดต knowledge base เรื่อง sync time และ cleanup logic
+- [x] Push GitHub + save checkpoint
