@@ -1,0 +1,109 @@
+{
+  "query": "SELECT pt.external_id, pt.paid_at, pt.amount, pt.receipt_no, JSON_EXTRACT(pt.raw_json, '$.principal_paid') as principal, JSON_EXTRACT(pt.raw_json, '$.interest_paid') as interest, JSON_EXTRACT(pt.raw_json, '$.fee_paid') as fee, JSON_EXTRACT(pt.raw_json, '$.discount_amount') as discount, JSON_EXTRACT(pt.raw_json, '$.penalty_paid') as penalty FROM payment_transactions pt WHERE pt.contract_external_id = '10043' ORDER BY pt.paid_at LIMIT 20;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT pt.external_id, pt.paid_at, pt.amount, pt.receipt_no, JSON_EXTRACT(pt.raw_json, '$.principal_paid') as principal, JSON_EXTRACT(pt.raw_json, '$.interest_paid') as interest, JSON_EXTRACT(pt.raw_json, '$.fee_paid') as fee, JSON_EXTRACT(pt.raw_json, '$.discount_amount') as discount, JSON_EXTRACT(pt.raw_json, '$.penalty_paid') as penalty FROM payment_transactions pt WHERE pt.contract_external_id = '10043' ORDER BY pt.paid_at LIMIT 20;",
+  "rows": [
+    {
+      "external_id": "20245",
+      "paid_at": "2025-03-11",
+      "amount": "1937.50",
+      "receipt_no": "TXRT0225-SRI001-9292-01-1-1",
+      "principal": "875",
+      "interest": "1062.5",
+      "fee": "0",
+      "discount": "0",
+      "penalty": "0"
+    },
+    {
+      "external_id": "29309",
+      "paid_at": "2025-04-11",
+      "amount": "1937.50",
+      "receipt_no": "TXRT0225-SRI001-9292-01-2-1",
+      "principal": "875",
+      "interest": "1062.5",
+      "fee": "0",
+      "discount": "0",
+      "penalty": "0"
+    },
+    {
+      "external_id": "29310",
+      "paid_at": "2025-04-11",
+      "amount": "2.50",
+      "receipt_no": "TXRT0225-SRI001-9292-01-3-1",
+      "principal": "0",
+      "interest": "2.5",
+      "fee": "0",
+      "discount": "0",
+      "penalty": "0"
+    },
+    {
+      "external_id": "36229",
+      "paid_at": "2025-05-06",
+      "amount": "1940.00",
+      "receipt_no": "TXRT0225-SRI001-9292-01-4",
+      "principal": "875",
+      "interest": "960",
+      "fee": "100",
+      "discount": "0",
+      "penalty": "0"
+    },
+    {
+      "external_id": "45201",
+      "paid_at": "2025-06-09",
+      "amount": "1940.00",
+      "receipt_no": "TXRT0225-SRI001-9292-01-5",
+      "principal": "875",
+      "interest": "957.5",
+      "fee": "100",
+      "discount": "0",
+      "penalty": "0"
+    },
+    {
+      "external_id": "54579",
+      "paid_at": "2025-07-12",
+      "amount": "1990.00",
+      "receipt_no": "TXRT0225-SRI001-9292-01-6",
+      "principal": "875",
+      "interest": "955",
+      "fee": "100",
+      "discount": "0",
+      "penalty": "0"
+    },
+    {
+      "external_id": "61684",
+      "paid_at": "2025-08-10",
+      "amount": "1878.00",
+      "receipt_no": "TXRT0225-SRI001-9292-01-7",
+      "principal": "875",
+      "interest": "902.5",
+      "fee": "100",
+      "discount": "0",
+      "penalty": "0"
+    },
+    {
+      "external_id": "66916",
+      "paid_at": "2025-09-02",
+      "amount": "1550.00",
+      "receipt_no": "TXRTC0225-SRI001-9292-01",
+      "principal": "875",
+      "interest": "962.5",
+      "fee": "100",
+      "discount": "387.5",
+      "penalty": "0"
+    },
+    {
+      "external_id": "66915",
+      "paid_at": "2025-09-02",
+      "amount": "1937.00",
+      "receipt_no": "TXRTC0225-SRI001-9292-01",
+      "principal": "875",
+      "interest": "962",
+      "fee": "100",
+      "discount": "0",
+      "penalty": "0"
+    }
+  ],
+  "messages": [],
+  "stdout": "external_id\tpaid_at\tamount\treceipt_no\tprincipal\tinterest\tfee\tdiscount\tpenalty\n20245\t2025-03-11\t1937.50\tTXRT0225-SRI001-9292-01-1-1\t875\t1062.5\t0\t0\t0\n29309\t2025-04-11\t1937.50\tTXRT0225-SRI001-9292-01-2-1\t875\t1062.5\t0\t0\t0\n29310\t2025-04-11\t2.50\tTXRT0225-SRI001-9292-01-3-1\t0\t2.5\t0\t0\t0\n36229\t2025-05-06\t1940.00\tTXRT0225-SRI001-9292-01-4\t875\t960\t100\t0\t0\n45201\t2025-06-09\t1940.00\tTXRT0225-SRI001-9292-01-5\t875\t957.5\t100\t0\t0\n54579\t2025-07-12\t1990.00\tTXRT0225-SRI001-9292-01-6\t875\t955\t100\t0\t0\n61684\t2025-08-10\t1878.00\tTXRT0225-SRI001-9292-01-7\t875\t902.5\t100\t0\t0\n66916\t2025-09-02\t1550.00\tTXRTC0225-SRI001-9292-01\t875\t962.5\t100\t387.5\t0\n66915\t2025-09-02\t1937.00\tTXRTC0225-SRI001-9292-01\t875\t962\t100\t0\t0\n",
+  "stderr": "",
+  "execution_time_ms": 1926
+}

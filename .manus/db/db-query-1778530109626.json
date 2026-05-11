@@ -1,0 +1,9 @@
+{
+  "query": "SELECT external_id, contract_no, section FROM contracts WHERE contract_no = 'CT0225-SRI001-9292' LIMIT 5;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT external_id, contract_no, section FROM contracts WHERE contract_no = 'CT0225-SRI001-9292' LIMIT 5;",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 1748
+}
