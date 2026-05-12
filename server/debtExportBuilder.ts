@@ -234,9 +234,6 @@ export async function buildAndUploadDebtExcel(
     }
   }
 
-  // Phase: ตัดสถานะ ยกเลิกสัญญา ออกก่อนสร้าง Excel เพื่อให้ rowCount สอดคล้องกับหน้าจอ
-  rows = rows.filter((r: any) => r.debtStatus !== "ยกเลิกสัญญา");
-
   const buffer = await buildExcelBuffer(rows, variant);
 
   const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");

@@ -643,19 +643,12 @@ export default function DebtReport() {
     return Array.from(s).sort();
   }, [activeRows]);
 
-  /* ---- Base rows: ตัดยกเลิกสัญญาออกเสมอ (ใช้เป็น "ทั้งหมด" ที่แท้จริง) ---- */
-  const baseRows = useMemo(
-    () => activeRows.filter((r) => r.debtStatus !== "ยกเลิกสัญญา"),
-    [activeRows],
-  );
-
   /* ---- Filter (client-side) ---- */
   // Priority: approveDateFilter > dueDateExact > dueDateFilter > statusFilter > productTypeFilter
   const filteredRows = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return baseRows.filter((r) => {
-      // 0. ตัดสถานะ ยกเลิกสัญญา ออกเสมอ — handled by baseRows already
-      // (kept as guard in case baseRows is bypassed)
+    return activeRows.filter((r) => {
+      // 0. ตัดสถานะ ยกเลิกสัญญา ออกเสมอ
       if (r.debtStatus === "ยกเลิกสัญญา") return false;
       // 1. เดือน-ปีที่อนุมัติ
       if (approveDateFilter.size > 0) {
@@ -724,7 +717,7 @@ export default function DebtReport() {
         (r.phone ?? "").toLowerCase().includes(q)
       );
     });
-  }, [baseRows, search, statusFilter, approveDateFilter, dueDateFilter, productTypeFilter, dueDateExact, tab, updatedByFilter, debtSetMode]);
+  }, [activeRows, search, statusFilter, approveDateFilter, dueDateFilter, productTypeFilter, dueDateExact, tab, updatedByFilter, debtSetMode]);
 
   /* ---- Max periods for the repeating group block ---- */
   // Phase 125: ใช้ filteredRows ทั้งหมดแทน pagedRows (ไม่มี pagination แล้ว)
@@ -1269,7 +1262,7 @@ export default function DebtReport() {
         {/* Summary line + Summary Badges */}
         <div className="flex flex-wrap items-start justify-between gap-2 mb-2">
           <div className="text-xs text-gray-500 self-center">
-            ทั้งหมด {baseRows.length.toLocaleString("th-TH")} สัญญา · กรอง{" "}
+            ทั้งหมด {activeRows.length.toLocaleString("th-TH")} สัญญา · กรอง{" "}
             {filteredRows.length.toLocaleString("th-TH")} รายการ ·{" "}
             {tab === "target" ? "ข้อมูลเป้าเก็บหนี้" : "ข้อมูลยอดเก็บหนี้"} ของงวดที่{" "}
             1–{maxPeriods || "-"}
