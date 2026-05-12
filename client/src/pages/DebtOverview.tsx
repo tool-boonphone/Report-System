@@ -58,7 +58,7 @@ import { toast } from "sonner";
 const DEBT_STATUSES = [
   "ปกติ", "เกิน 1-7", "เกิน 8-14", "เกิน 15-30",
   "เกิน 31-60", "เกิน 61-90", "เกิน >90",
-  "ระงับสัญญา", "สิ้นสุดสัญญา", "หนี้เสีย",
+  "ระงับสัญญา", "สิ้นสุดสัญญา", "หนี้เสีย", "ยกเลิกสัญญา",
 ] as const;
 type DebtStatus = (typeof DEBT_STATUSES)[number];
 
@@ -750,8 +750,6 @@ export default function DebtOverview() {
   const filteredTargetRows = useMemo(() => {
     const q = search.trim().toLowerCase();
     return targetRows.filter((r) => {
-      // ตัดยกเลิกสัญญาออกเหมือน DebtReport
-      if (r.debtStatus === "ยกเลิกสัญญา") return false;
       if (approveYearFilter.size > 0 && !(r.approveDate && approveYearFilter.has(r.approveDate.slice(0, 4)))) return false;
       if (approveDateFilter.size > 0 && !(r.approveDate && approveDateFilter.has(r.approveDate.slice(0, 7)))) return false;
       if (dueDateExact) {
