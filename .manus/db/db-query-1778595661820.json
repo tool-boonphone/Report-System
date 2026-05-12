@@ -1,0 +1,64 @@
+{
+  "query": "\n-- จำลอง debtDb.ts: หา latestCreatedDate + latestUpdatedBy จาก row ที่ created_at สูงสุด\n-- แล้ว SUM ทุก real payment ที่ created_date + updated_by เดียวกัน (ระดับ 2)\n-- เปรียบเทียบกับ contracts.bad_debt_amount\n\nWITH latest_row AS (\n  SELECT \n    pt.contract_external_id,\n    DATE(MAX(pt.created_at)) as latest_created_date,\n    SUBSTRING_INDEX(GROUP_CONCAT(pt.updated_by ORDER BY pt.created_at DESC), ',', 1) as latest_updated_by\n  FROM payment_transactions pt\n  WHERE pt.section = 'Fastfone365'\n    AND (pt.external_id REGEXP '^[0-9]+$' OR pt.receipt_no REGEXP '^TXRT.*-[0-9]+$')\n  GROUP BY pt.contract_external_id\n),\ndebtdb_sum AS (\n  SELECT \n    pt.contract_external_id,\n    SUM(CAST(pt.amount AS DECIMAL(18,2))) as debtdb_bad_debt\n  FROM payment_transactions pt\n  INNER JOIN latest_row lr ON lr.contract_external_id = pt.contract_external_id\n    AND DATE(pt.created_at) = lr.latest_created_date\n    AND pt.updated_by = lr.latest_updated_by\n  WHERE pt.section = 'Fastfone365'\n    AND (pt.external_id REGEXP '^[0-9]+$' OR pt.receipt_no REGEXP '^TXRT.*-[0-9]+$')\n  GROUP BY pt.contract_external_id\n)\nSELECT \n  c.contract_no,\n  CAST(c.bad_debt_amount AS DECIMAL(18,2)) as contracts_bad_debt,\n  CAST(ds.debtdb_bad_debt AS DECIMAL(18,2)) as debtdb_bad_debt,\n  CAST(c.bad_debt_amount - COALESCE(ds.debtdb_bad_debt, 0) AS DECIMAL(18,2)) as diff\nFROM contracts c\nLEFT JOIN debtdb_sum ds ON ds.contract_external_id = c.external_id\nWHERE c.section = 'Fastfone365'\n  AND c.status = 'หนี้เสีย'\n  AND c.bad_debt_amount > 0\n  AND ABS(COALESCE(ds.debtdb_bad_debt, 0) - c.bad_debt_amount) > 1\nORDER BY ABS(COALESCE(ds.debtdb_bad_debt, 0) - c.bad_debt_amount) DESC\nLIMIT 15;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \n-- จำลอง debtDb.ts: หา latestCreatedDate + latestUpdatedBy จาก row ที่ created_at สูงสุด\n-- แล้ว SUM ทุก real payment ที่ created_date + updated_by เดียวกัน (ระดับ 2)\n-- เปรียบเทียบกับ contracts.bad_debt_amount\n\nWITH latest_row AS (\n  SELECT \n    pt.contract_external_id,\n    DATE(MAX(pt.created_at)) as latest_created_date,\n    SUBSTRING_INDEX(GROUP_CONCAT(pt.updated_by ORDER BY pt.created_at DESC), ',', 1) as latest_updated_by\n  FROM payment_transactions pt\n  WHERE pt.section = 'Fastfone365'\n    AND (pt.external_id REGEXP '^[0-9]+$' OR pt.receipt_no REGEXP '^TXRT.*-[0-9]+$')\n  GROUP BY pt.contract_external_id\n),\ndebtdb_sum AS (\n  SELECT \n    pt.contract_external_id,\n    SUM(CAST(pt.amount AS DECIMAL(18,2))) as debtdb_bad_debt\n  FROM payment_transactions pt\n  INNER JOIN latest_row lr ON lr.contract_external_id = pt.contract_external_id\n    AND DATE(pt.created_at) = lr.latest_created_date\n    AND pt.updated_by = lr.latest_updated_by\n  WHERE pt.section = 'Fastfone365'\n    AND (pt.external_id REGEXP '^[0-9]+$' OR pt.receipt_no REGEXP '^TXRT.*-[0-9]+$')\n  GROUP BY pt.contract_external_id\n)\nSELECT \n  c.contract_no,\n  CAST(c.bad_debt_amount AS DECIMAL(18,2)) as contracts_bad_debt,\n  CAST(ds.debtdb_bad_debt AS DECIMAL(18,2)) as debtdb_bad_debt,\n  CAST(c.bad_debt_amount - COALESCE(ds.debtdb_bad_debt, 0) AS DECIMAL(18,2)) as diff\nFROM contracts c\nLEFT JOIN debtdb_sum ds ON ds.contract_external_id = c.external_id\nWHERE c.section = 'Fastfone365'\n  AND c.status = 'หนี้เสีย'\n  AND c.bad_debt_amount > 0\n  AND ABS(COALESCE(ds.debtdb_bad_debt, 0) - c.bad_debt_amount) > 1\nORDER BY ABS(COALESCE(ds.debtdb_bad_debt, 0) - c.bad_debt_amount) DESC\nLIMIT 15;\n",
+  "rows": [
+    {
+      "contract_no": "CT1024-SNI001-00237-01",
+      "contracts_bad_debt": "1123.00",
+      "debtdb_bad_debt": "28000.00",
+      "diff": "-26877.00"
+    },
+    {
+      "contract_no": "CT1224-SRI001-6031-01",
+      "contracts_bad_debt": "6787.09",
+      "debtdb_bad_debt": "23010.46",
+      "diff": "-16223.37"
+    },
+    {
+      "contract_no": "CT1024-NRT001-00264-01",
+      "contracts_bad_debt": "2350.00",
+      "debtdb_bad_debt": "12000.00",
+      "diff": "-9650.00"
+    },
+    {
+      "contract_no": "CT1024-PLK001-00104-01",
+      "contracts_bad_debt": "2296.00",
+      "debtdb_bad_debt": "11000.00",
+      "diff": "-8704.00"
+    },
+    {
+      "contract_no": "CT1124-SRI001-4538-01",
+      "contracts_bad_debt": "7000.00",
+      "debtdb_bad_debt": "13710.00",
+      "diff": "-6710.00"
+    },
+    {
+      "contract_no": "CT0824-NRT001-00019-02",
+      "contracts_bad_debt": "10500.00",
+      "debtdb_bad_debt": "16984.00",
+      "diff": "-6484.00"
+    },
+    {
+      "contract_no": "CT1124-SKA002-2022-01",
+      "contracts_bad_debt": "1366.00",
+      "debtdb_bad_debt": "7400.00",
+      "diff": "-6034.00"
+    },
+    {
+      "contract_no": "CT1024-NRT001-00255-02",
+      "contracts_bad_debt": "3357.00",
+      "debtdb_bad_debt": "7000.00",
+      "diff": "-3643.00"
+    },
+    {
+      "contract_no": "CT1124-LRI001-3615-01",
+      "contracts_bad_debt": "2000.00",
+      "debtdb_bad_debt": "5500.00",
+      "diff": "-3500.00"
+    }
+  ],
+  "messages": [],
+  "stdout": "contract_no\tcontracts_bad_debt\tdebtdb_bad_debt\tdiff\nCT1024-SNI001-00237-01\t1123.00\t28000.00\t-26877.00\nCT1224-SRI001-6031-01\t6787.09\t23010.46\t-16223.37\nCT1024-NRT001-00264-01\t2350.00\t12000.00\t-9650.00\nCT1024-PLK001-00104-01\t2296.00\t11000.00\t-8704.00\nCT1124-SRI001-4538-01\t7000.00\t13710.00\t-6710.00\nCT0824-NRT001-00019-02\t10500.00\t16984.00\t-6484.00\nCT1124-SKA002-2022-01\t1366.00\t7400.00\t-6034.00\nCT1024-NRT001-00255-02\t3357.00\t7000.00\t-3643.00\nCT1124-LRI001-3615-01\t2000.00\t5500.00\t-3500.00\n",
+  "stderr": "",
+  "execution_time_ms": 2619
+}

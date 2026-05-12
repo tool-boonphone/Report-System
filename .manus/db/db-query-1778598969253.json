@@ -1,0 +1,30 @@
+{
+  "query": "SELECT section, COUNT(*) as cnt FROM debt_target_cache GROUP BY section;\nSELECT section, COUNT(*) as cnt FROM contracts GROUP BY section;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT section, COUNT(*) as cnt FROM debt_target_cache GROUP BY section;\nSELECT section, COUNT(*) as cnt FROM contracts GROUP BY section;",
+  "rows": [
+    {
+      "section": "Boonphone",
+      "cnt": "51290"
+    },
+    {
+      "section": "Fastfone365",
+      "cnt": "171363"
+    },
+    {
+      "section": "section",
+      "cnt": "cnt"
+    },
+    {
+      "section": "Boonphone",
+      "cnt": "4308"
+    },
+    {
+      "section": "Fastfone365",
+      "cnt": "17809"
+    }
+  ],
+  "messages": [],
+  "stdout": "section\tcnt\nBoonphone\t51290\nFastfone365\t171363\nsection\tcnt\nBoonphone\t4308\nFastfone365\t17809\n",
+  "stderr": "",
+  "execution_time_ms": 2250
+}

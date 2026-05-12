@@ -300,12 +300,12 @@ export async function* streamCollectedFromCache(params: {
     });
   }
 
-  // ── 2. Paginate through distinct contract IDs ─────────────────────────────────────────
+  // ── 2. Paginate through distinct contract IDs (ดึงจาก debt_target_cache เพื่อครอบคลุมสัญญาที่ไม่มียอดชำระ) ─────────────────────────────────────────────────
   let offset = 0;
   while (true) {
     const idResult = await db.execute(sql`
       SELECT DISTINCT contract_external_id
-      FROM debt_collected_cache
+      FROM debt_target_cache
       WHERE section = ${section}
       ORDER BY contract_external_id
       LIMIT ${batchSize} OFFSET ${offset}
@@ -391,11 +391,12 @@ export async function* streamCollectedFromCache(params: {
     // Build CollectedRow objects for this batch
     const yieldBatch: any[] = [];
     for (const extId of contractIds) {
-      const payRows = contractMap.get(extId);
-      if (!payRows || payRows.length === 0) continue;
-      const first = payRows[0];
+      const payRows = contractMap.get(extId) ?? [];
+      // ไม่ skip สัญญาที่ไม่มี payment — ใช้ข้อมูลจาก instRows แทน
       const instRows = targetByContract.get(extId) ?? [];
-      const contractStatus = first?.contract_status ?? null;
+      const first = payRows[0] ?? instRows[0] ?? null;
+      if (!first) continue; // ไม่มีข้อมูลเลย ข้ามไป
+      const contractStatus = (payRows[0]?.contract_status ?? instRows[0]?.contract_status) ?? null;
       const suspendLabel = contractStatus === "หนี้เสีย" ? "หนี้เสีย"
         : contractStatus === "ระงับสัญญา" ? "ระงับสัญญา"
         : null;
@@ -546,9 +547,10 @@ export async function getTargetContractCount(section: SectionKey): Promise<numbe
 export async function getCollectedContractCount(section: SectionKey): Promise<number> {
   const db = await getDb();
   if (!db) return 0;
+  // ใช้ debt_target_cache เพื่อให้ครอบคลุมสัญญาที่ไม่มียอดชำระด้วย
   const result = await db.execute(sql`
     SELECT COUNT(DISTINCT contract_external_id) AS cnt
-    FROM debt_collected_cache
+    FROM debt_target_cache
     WHERE section = ${section}
   `);
   const rows: any[] = (result as any)[0] ?? result;
@@ -762,10 +764,10 @@ export async function getCollectedChunk(params: {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  // ── 1. Get paginated contract IDs ─────────────────────────────────────────
+  // ── 1. Get paginated contract IDs (ดึงจาก debt_target_cache เพื่อครอบคลุมสัญญาที่ไม่มียอดชำระ) ─────────────────────────────────────────
   const idResult = await db.execute(sql`
     SELECT DISTINCT contract_external_id
-    FROM debt_collected_cache
+    FROM debt_target_cache
     WHERE section = ${section}
     ORDER BY contract_external_id
     LIMIT ${limit} OFFSET ${offset}
@@ -871,11 +873,12 @@ export async function getCollectedChunk(params: {
   const result: any[] = [];
   for (const extId of contractIds) {
     const payRows = contractMap.get(extId) ?? [];
-    if (payRows.length === 0) continue;
-    const first = payRows[0];
-
+    // ไม่ skip สัญญาที่ไม่มี payment — ใช้ข้อมูลจาก instRows แทน
     const instRows = targetByContract.get(extId) ?? [];
-    const contractStatus = first.contract_status ?? null;
+    // ดึง metadata จาก payRows[0] ถ้ามี หรือจาก instRows[0] ถ้าไม่มี payment
+    const first = payRows[0] ?? instRows[0] ?? null;
+    if (!first) continue; // ไม่มีข้อมูลเลย ข้ามไป
+    const contractStatus = (payRows[0]?.contract_status ?? instRows[0]?.contract_status) ?? null;
     const suspendLabel = contractStatus === "หนี้เสีย" ? "หนี้เสีย"
       : contractStatus === "ระงับสัญญา" ? "ระงับสัญญา"
       : null;

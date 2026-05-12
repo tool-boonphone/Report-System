@@ -1,0 +1,17 @@
+{
+  "query": "\n-- ตรวจสอบว่าสัญญา CT1125-PTE012-18568-01 (external_id=19654) มี payment_transactions ใน DB ไหม\nSELECT \n  COUNT(*) as total_payments,\n  SUM(CASE WHEN receipt_no IS NOT NULL THEN 1 ELSE 0 END) as with_receipt,\n  SUM(CASE WHEN receipt_no IS NULL THEN 1 ELSE 0 END) as without_receipt,\n  SUM(CAST(amount AS DECIMAL(18,2))) as total_amount,\n  MAX(paid_at) as latest_paid_at\nFROM payment_transactions\nWHERE contract_external_id = '19654' AND section = 'Fastfone365';\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \n-- ตรวจสอบว่าสัญญา CT1125-PTE012-18568-01 (external_id=19654) มี payment_transactions ใน DB ไหม\nSELECT \n  COUNT(*) as total_payments,\n  SUM(CASE WHEN receipt_no IS NOT NULL THEN 1 ELSE 0 END) as with_receipt,\n  SUM(CASE WHEN receipt_no IS NULL THEN 1 ELSE 0 END) as without_receipt,\n  SUM(CAST(amount AS DECIMAL(18,2))) as total_amount,\n  MAX(paid_at) as latest_paid_at\nFROM payment_transactions\nWHERE contract_external_id = '19654' AND section = 'Fastfone365';\n",
+  "rows": [
+    {
+      "total_payments": "1",
+      "with_receipt": "1",
+      "without_receipt": "0",
+      "total_amount": "46201.60",
+      "latest_paid_at": "2026-01-08"
+    }
+  ],
+  "messages": [],
+  "stdout": "total_payments\twith_receipt\twithout_receipt\ttotal_amount\tlatest_paid_at\n1\t1\t0\t46201.60\t2026-01-08\n",
+  "stderr": "",
+  "execution_time_ms": 1756
+}

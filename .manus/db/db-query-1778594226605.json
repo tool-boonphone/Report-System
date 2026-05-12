@@ -1,0 +1,19 @@
+{
+  "query": "\nSELECT \n  id,\n  receipt_no,\n  amount,\n  paid_at,\n  created_at,\n  updated_by,\n  CAST(JSON_EXTRACT(raw_json, '$.bad_debt_amount') AS DECIMAL(18,2)) AS raw_bad_debt_amount\nFROM payment_transactions\nWHERE contract_external_id = '19654' AND section = 'Fastfone365';\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT \n  id,\n  receipt_no,\n  amount,\n  paid_at,\n  created_at,\n  updated_by,\n  CAST(JSON_EXTRACT(raw_json, '$.bad_debt_amount') AS DECIMAL(18,2)) AS raw_bad_debt_amount\nFROM payment_transactions\nWHERE contract_external_id = '19654' AND section = 'Fastfone365';\n",
+  "rows": [
+    {
+      "id": "1173212",
+      "receipt_no": "TXRT1125-PTE012-18568-01-1",
+      "amount": "46201.60",
+      "paid_at": "2026-01-08",
+      "created_at": "2026-01-21 13:07:00",
+      "updated_by": "ACC Ploy",
+      "raw_bad_debt_amount": "0.00"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\treceipt_no\tamount\tpaid_at\tcreated_at\tupdated_by\traw_bad_debt_amount\n1173212\tTXRT1125-PTE012-18568-01-1\t46201.60\t2026-01-08\t2026-01-21 13:07:00\tACC Ploy\t0.00\n",
+  "stderr": "",
+  "execution_time_ms": 1928
+}

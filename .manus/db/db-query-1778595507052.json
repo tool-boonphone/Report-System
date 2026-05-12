@@ -1,0 +1,16 @@
+{
+  "query": "\n-- runner.ts filter: payment_external_id ไม่ขึ้นต้น \"pay-\" และ total_paid_amount > 0\n-- debtDb.ts filter: external_id REGEXP '^[0-9]+$' OR receipt_no REGEXP '^TXRT.*-[0-9]+$'\n-- ดูว่า 2 filter นี้ให้ผลต่างกันไหม\n\nSELECT \n  -- runner.ts style: ไม่ขึ้นต้น pay- และ amount > 0\n  SUM(CASE WHEN external_id NOT LIKE 'pay-%' AND CAST(amount AS DECIMAL(18,2)) > 0 THEN 1 ELSE 0 END) as runner_count,\n  -- debtDb.ts style: numeric external_id หรือ TXRT receipt\n  SUM(CASE WHEN (external_id REGEXP '^[0-9]+$' OR receipt_no REGEXP '^TXRT.*-[0-9]+$') THEN 1 ELSE 0 END) as debtdb_count,\n  -- ต่างกัน\n  SUM(CASE WHEN (external_id NOT LIKE 'pay-%' AND CAST(amount AS DECIMAL(18,2)) > 0) \n              AND NOT (external_id REGEXP '^[0-9]+$' OR receipt_no REGEXP '^TXRT.*-[0-9]+$') THEN 1 ELSE 0 END) as in_runner_not_debtdb,\n  SUM(CASE WHEN NOT (external_id NOT LIKE 'pay-%' AND CAST(amount AS DECIMAL(18,2)) > 0) \n              AND (external_id REGEXP '^[0-9]+$' OR receipt_no REGEXP '^TXRT.*-[0-9]+$') THEN 1 ELSE 0 END) as in_debtdb_not_runner\nFROM payment_transactions\nWHERE section = 'Fastfone365';\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \n-- runner.ts filter: payment_external_id ไม่ขึ้นต้น \"pay-\" และ total_paid_amount > 0\n-- debtDb.ts filter: external_id REGEXP '^[0-9]+$' OR receipt_no REGEXP '^TXRT.*-[0-9]+$'\n-- ดูว่า 2 filter นี้ให้ผลต่างกันไหม\n\nSELECT \n  -- runner.ts style: ไม่ขึ้นต้น pay- และ amount > 0\n  SUM(CASE WHEN external_id NOT LIKE 'pay-%' AND CAST(amount AS DECIMAL(18,2)) > 0 THEN 1 ELSE 0 END) as runner_count,\n  -- debtDb.ts style: numeric external_id หรือ TXRT receipt\n  SUM(CASE WHEN (external_id REGEXP '^[0-9]+$' OR receipt_no REGEXP '^TXRT.*-[0-9]+$') THEN 1 ELSE 0 END) as debtdb_count,\n  -- ต่างกัน\n  SUM(CASE WHEN (external_id NOT LIKE 'pay-%' AND CAST(amount AS DECIMAL(18,2)) > 0) \n              AND NOT (external_id REGEXP '^[0-9]+$' OR receipt_no REGEXP '^TXRT.*-[0-9]+$') THEN 1 ELSE 0 END) as in_runner_not_debtdb,\n  SUM(CASE WHEN NOT (external_id NOT LIKE 'pay-%' AND CAST(amount AS DECIMAL(18,2)) > 0) \n              AND (external_id REGEXP '^[0-9]+$' OR receipt_no REGEXP '^TXRT.*-[0-9]+$') THEN 1 ELSE 0 END) as in_debtdb_not_runner\nFROM payment_transactions\nWHERE section = 'Fastfone365';\n",
+  "rows": [
+    {
+      "runner_count": "122298",
+      "debtdb_count": "122550",
+      "in_runner_not_debtdb": "0",
+      "in_debtdb_not_runner": "252"
+    }
+  ],
+  "messages": [],
+  "stdout": "runner_count\tdebtdb_count\tin_runner_not_debtdb\tin_debtdb_not_runner\n122298\t122550\t0\t252\n",
+  "stderr": "",
+  "execution_time_ms": 2023
+}

@@ -1,0 +1,14 @@
+{
+  "query": "\nSELECT \n  COUNT(*) as mismatch_count,\n  SUM(ABS(CAST(JSON_EXTRACT(raw_json, '$.total_paid_amount') AS DECIMAL(18,2)) - CAST(amount AS DECIMAL(18,2)))) as total_diff\nFROM payment_transactions\nWHERE section = 'Fastfone365'\n  AND JSON_EXTRACT(raw_json, '$.total_paid_amount') IS NOT NULL\n  AND ABS(CAST(JSON_EXTRACT(raw_json, '$.total_paid_amount') AS DECIMAL(18,2)) - CAST(amount AS DECIMAL(18,2))) > 0.01;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT \n  COUNT(*) as mismatch_count,\n  SUM(ABS(CAST(JSON_EXTRACT(raw_json, '$.total_paid_amount') AS DECIMAL(18,2)) - CAST(amount AS DECIMAL(18,2)))) as total_diff\nFROM payment_transactions\nWHERE section = 'Fastfone365'\n  AND JSON_EXTRACT(raw_json, '$.total_paid_amount') IS NOT NULL\n  AND ABS(CAST(JSON_EXTRACT(raw_json, '$.total_paid_amount') AS DECIMAL(18,2)) - CAST(amount AS DECIMAL(18,2))) > 0.01;\n",
+  "rows": [
+    {
+      "mismatch_count": "0",
+      "total_diff": "NULL"
+    }
+  ],
+  "messages": [],
+  "stdout": "mismatch_count\ttotal_diff\n0\tNULL\n",
+  "stderr": "",
+  "execution_time_ms": 2040
+}

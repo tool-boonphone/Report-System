@@ -1,0 +1,190 @@
+{
+  "query": "\n-- เปรียบเทียบ contracts.bad_debt_amount กับ SUM จาก payment_transactions (receipt_no IS NOT NULL)\n-- เพื่อหาสัญญาที่ต่างกัน\nSELECT \n  c.external_id,\n  c.contract_no,\n  c.bad_debt_amount AS contracts_bad_debt,\n  COALESCE(pt_sum.sum_with_receipt, 0) AS sum_with_receipt,\n  COALESCE(pt_sum_all.sum_all, 0) AS sum_all_rows,\n  ROUND(c.bad_debt_amount - COALESCE(pt_sum.sum_with_receipt, 0), 2) AS diff_vs_receipt,\n  ROUND(c.bad_debt_amount - COALESCE(pt_sum_all.sum_all, 0), 2) AS diff_vs_all\nFROM contracts c\n-- SUM เฉพาะ rows ที่มี receipt_no (เหมือน debtDb.ts)\nLEFT JOIN (\n  SELECT \n    contract_external_id,\n    SUM(CAST(amount AS DECIMAL(18,2))) AS sum_with_receipt\n  FROM payment_transactions\n  WHERE section = 'Fastfone365'\n    AND receipt_no IS NOT NULL\n    AND CAST(JSON_EXTRACT(raw_json, '$.bad_debt_amount') AS DECIMAL(18,2)) > 0\n  GROUP BY contract_external_id\n) pt_sum ON pt_sum.contract_external_id = c.external_id\n-- SUM ทุก rows (รวม receipt_no IS NULL)\nLEFT JOIN (\n  SELECT \n    contract_external_id,\n    SUM(CAST(amount AS DECIMAL(18,2))) AS sum_all\n  FROM payment_transactions\n  WHERE section = 'Fastfone365'\n    AND CAST(JSON_EXTRACT(raw_json, '$.bad_debt_amount') AS DECIMAL(18,2)) > 0\n  GROUP BY contract_external_id\n) pt_sum_all ON pt_sum_all.contract_external_id = c.external_id\nWHERE c.section = 'Fastfone365'\n  AND c.bad_debt_amount > 0\n  AND ABS(c.bad_debt_amount - COALESCE(pt_sum.sum_with_receipt, 0)) > 1\nORDER BY ABS(c.bad_debt_amount - COALESCE(pt_sum.sum_with_receipt, 0)) DESC\nLIMIT 20;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \n-- เปรียบเทียบ contracts.bad_debt_amount กับ SUM จาก payment_transactions (receipt_no IS NOT NULL)\n-- เพื่อหาสัญญาที่ต่างกัน\nSELECT \n  c.external_id,\n  c.contract_no,\n  c.bad_debt_amount AS contracts_bad_debt,\n  COALESCE(pt_sum.sum_with_receipt, 0) AS sum_with_receipt,\n  COALESCE(pt_sum_all.sum_all, 0) AS sum_all_rows,\n  ROUND(c.bad_debt_amount - COALESCE(pt_sum.sum_with_receipt, 0), 2) AS diff_vs_receipt,\n  ROUND(c.bad_debt_amount - COALESCE(pt_sum_all.sum_all, 0), 2) AS diff_vs_all\nFROM contracts c\n-- SUM เฉพาะ rows ที่มี receipt_no (เหมือน debtDb.ts)\nLEFT JOIN (\n  SELECT \n    contract_external_id,\n    SUM(CAST(amount AS DECIMAL(18,2))) AS sum_with_receipt\n  FROM payment_transactions\n  WHERE section = 'Fastfone365'\n    AND receipt_no IS NOT NULL\n    AND CAST(JSON_EXTRACT(raw_json, '$.bad_debt_amount') AS DECIMAL(18,2)) > 0\n  GROUP BY contract_external_id\n) pt_sum ON pt_sum.contract_external_id = c.external_id\n-- SUM ทุก rows (รวม receipt_no IS NULL)\nLEFT JOIN (\n  SELECT \n    contract_external_id,\n    SUM(CAST(amount AS DECIMAL(18,2))) AS sum_all\n  FROM payment_transactions\n  WHERE section = 'Fastfone365'\n    AND CAST(JSON_EXTRACT(raw_json, '$.bad_debt_amount') AS DECIMAL(18,2)) > 0\n  GROUP BY contract_external_id\n) pt_sum_all ON pt_sum_all.contract_external_id = c.external_id\nWHERE c.section = 'Fastfone365'\n  AND c.bad_debt_amount > 0\n  AND ABS(c.bad_debt_amount - COALESCE(pt_sum.sum_with_receipt, 0)) > 1\nORDER BY ABS(c.bad_debt_amount - COALESCE(pt_sum.sum_with_receipt, 0)) DESC\nLIMIT 20;\n",
+  "rows": [
+    {
+      "external_id": "19654",
+      "contract_no": "CT1125-PTE012-18568-01",
+      "contracts_bad_debt": "46201.60",
+      "sum_with_receipt": "0",
+      "sum_all_rows": "0",
+      "diff_vs_receipt": "46201.60",
+      "diff_vs_all": "46201.60"
+    },
+    {
+      "external_id": "809",
+      "contract_no": "CT1024-SNK004-00004-01",
+      "contracts_bad_debt": "36000.00",
+      "sum_with_receipt": "0",
+      "sum_all_rows": "0",
+      "diff_vs_receipt": "36000.00",
+      "diff_vs_all": "36000.00"
+    },
+    {
+      "external_id": "16682",
+      "contract_no": "CT0925-AYA001-15676-01",
+      "contracts_bad_debt": "35547.96",
+      "sum_with_receipt": "0",
+      "sum_all_rows": "0",
+      "diff_vs_receipt": "35547.96",
+      "diff_vs_all": "35547.96"
+    },
+    {
+      "external_id": "16402",
+      "contract_no": "CT0925-NRT001-15406-01",
+      "contracts_bad_debt": "35547.96",
+      "sum_with_receipt": "0",
+      "sum_all_rows": "0",
+      "diff_vs_receipt": "35547.96",
+      "diff_vs_all": "35547.96"
+    },
+    {
+      "external_id": "17783",
+      "contract_no": "CT1025-AYA001-16748-01",
+      "contracts_bad_debt": "35547.96",
+      "sum_with_receipt": "0",
+      "sum_all_rows": "0",
+      "diff_vs_receipt": "35547.96",
+      "diff_vs_all": "35547.96"
+    },
+    {
+      "external_id": "11595",
+      "contract_no": "CT0325-PTE006-10746-01",
+      "contracts_bad_debt": "35000.00",
+      "sum_with_receipt": "0",
+      "sum_all_rows": "0",
+      "diff_vs_receipt": "35000.00",
+      "diff_vs_all": "35000.00"
+    },
+    {
+      "external_id": "8612",
+      "contract_no": "CT0125-LRI001-7939-01",
+      "contracts_bad_debt": "33000.00",
+      "sum_with_receipt": "0",
+      "sum_all_rows": "0",
+      "diff_vs_receipt": "33000.00",
+      "diff_vs_all": "33000.00"
+    },
+    {
+      "external_id": "6879",
+      "contract_no": "CT1224-KKN001-6331-01",
+      "contracts_bad_debt": "33000.00",
+      "sum_with_receipt": "0",
+      "sum_all_rows": "0",
+      "diff_vs_receipt": "33000.00",
+      "diff_vs_all": "33000.00"
+    },
+    {
+      "external_id": "22830",
+      "contract_no": "CT0126-PKN001-21576-01",
+      "contracts_bad_debt": "32000.00",
+      "sum_with_receipt": "0",
+      "sum_all_rows": "0",
+      "diff_vs_receipt": "32000.00",
+      "diff_vs_all": "32000.00"
+    },
+    {
+      "external_id": "19913",
+      "contract_no": "CT1125-AYA001-18817-01",
+      "contracts_bad_debt": "31601.71",
+      "sum_with_receipt": "0",
+      "sum_all_rows": "0",
+      "diff_vs_receipt": "31601.71",
+      "diff_vs_all": "31601.71"
+    },
+    {
+      "external_id": "9419",
+      "contract_no": "CT0225-SNI001-8715-01",
+      "contracts_bad_debt": "31500.00",
+      "sum_with_receipt": "0",
+      "sum_all_rows": "0",
+      "diff_vs_receipt": "31500.00",
+      "diff_vs_all": "31500.00"
+    },
+    {
+      "external_id": "7199",
+      "contract_no": "CT1224-LRI001-6600-01",
+      "contracts_bad_debt": "31500.00",
+      "sum_with_receipt": "0",
+      "sum_all_rows": "0",
+      "diff_vs_receipt": "31500.00",
+      "diff_vs_all": "31500.00"
+    },
+    {
+      "external_id": "10277",
+      "contract_no": "CT0225-PTE002-9508-01",
+      "contracts_bad_debt": "31500.00",
+      "sum_with_receipt": "0",
+      "sum_all_rows": "0",
+      "diff_vs_receipt": "31500.00",
+      "diff_vs_all": "31500.00"
+    },
+    {
+      "external_id": "7295",
+      "contract_no": "CT1224-SKA002-6552-03",
+      "contracts_bad_debt": "31500.00",
+      "sum_with_receipt": "0",
+      "sum_all_rows": "0",
+      "diff_vs_receipt": "31500.00",
+      "diff_vs_all": "31500.00"
+    },
+    {
+      "external_id": "10713",
+      "contract_no": "CT0225-NPT003-9914-01",
+      "contracts_bad_debt": "31000.00",
+      "sum_with_receipt": "0",
+      "sum_all_rows": "0",
+      "diff_vs_receipt": "31000.00",
+      "diff_vs_all": "31000.00"
+    },
+    {
+      "external_id": "16387",
+      "contract_no": "CT0925-AYA001-15390-01",
+      "contracts_bad_debt": "30416.12",
+      "sum_with_receipt": "0",
+      "sum_all_rows": "0",
+      "diff_vs_receipt": "30416.12",
+      "diff_vs_all": "30416.12"
+    },
+    {
+      "external_id": "9388",
+      "contract_no": "CT0225-PTE006-8690-01",
+      "contracts_bad_debt": "30000.00",
+      "sum_with_receipt": "0",
+      "sum_all_rows": "0",
+      "diff_vs_receipt": "30000.00",
+      "diff_vs_all": "30000.00"
+    },
+    {
+      "external_id": "722",
+      "contract_no": "CT1024-SNI001-00192-01",
+      "contracts_bad_debt": "30000.00",
+      "sum_with_receipt": "0",
+      "sum_all_rows": "0",
+      "diff_vs_receipt": "30000.00",
+      "diff_vs_all": "30000.00"
+    },
+    {
+      "external_id": "10876",
+      "contract_no": "CT0225-BKK015-10067-01",
+      "contracts_bad_debt": "30000.00",
+      "sum_with_receipt": "0",
+      "sum_all_rows": "0",
+      "diff_vs_receipt": "30000.00",
+      "diff_vs_all": "30000.00"
+    },
+    {
+      "external_id": "9201",
+      "contract_no": "CT0225-NRT001-8518-01",
+      "contracts_bad_debt": "30000.00",
+      "sum_with_receipt": "0",
+      "sum_all_rows": "0",
+      "diff_vs_receipt": "30000.00",
+      "diff_vs_all": "30000.00"
+    }
+  ],
+  "messages": [],
+  "stdout": "external_id\tcontract_no\tcontracts_bad_debt\tsum_with_receipt\tsum_all_rows\tdiff_vs_receipt\tdiff_vs_all\n19654\tCT1125-PTE012-18568-01\t46201.60\t0\t0\t46201.60\t46201.60\n809\tCT1024-SNK004-00004-01\t36000.00\t0\t0\t36000.00\t36000.00\n16682\tCT0925-AYA001-15676-01\t35547.96\t0\t0\t35547.96\t35547.96\n16402\tCT0925-NRT001-15406-01\t35547.96\t0\t0\t35547.96\t35547.96\n17783\tCT1025-AYA001-16748-01\t35547.96\t0\t0\t35547.96\t35547.96\n11595\tCT0325-PTE006-10746-01\t35000.00\t0\t0\t35000.00\t35000.00\n8612\tCT0125-LRI001-7939-01\t33000.00\t0\t0\t33000.00\t33000.00\n6879\tCT1224-KKN001-6331-01\t33000.00\t0\t0\t33000.00\t33000.00\n22830\tCT0126-PKN001-21576-01\t32000.00\t0\t0\t32000.00\t32000.00\n19913\tCT1125-AYA001-18817-01\t31601.71\t0\t0\t31601.71\t31601.71\n9419\tCT0225-SNI001-8715-01\t31500.00\t0\t0\t31500.00\t31500.00\n7199\tCT1224-LRI001-6600-01\t31500.00\t0\t0\t31500.00\t31500.00\n10277\tCT0225-PTE002-9508-01\t31500.00\t0\t0\t31500.00\t31500.00\n7295\tCT1224-SKA002-6552-03\t31500.00\t0\t0\t31500.00\t31500.00\n10713\tCT0225-NPT003-9914-01\t31000.00\t0\t0\t31000.00\t31000.00\n16387\tCT0925-AYA001-15390-01\t30416.12\t0\t0\t30416.12\t30416.12\n9388\tCT0225-PTE006-8690-01\t30000.00\t0\t0\t30000.00\t30000.00\n722\tCT1024-SNI001-00192-01\t30000.00\t0\t0\t30000.00\t30000.00\n10876\tCT0225-BKK015-10067-01\t30000.00\t0\t0\t30000.00\t30000.00\n9201\tCT0225-NRT001-8518-01\t30000.00\t0\t0\t30000.00\t30000.00\n",
+  "stderr": "",
+  "execution_time_ms": 2624
+}

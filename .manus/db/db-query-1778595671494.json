@@ -1,0 +1,46 @@
+{
+  "query": "\nSELECT \n  pt.external_id,\n  pt.receipt_no,\n  CAST(pt.amount AS DECIMAL(18,2)) as amount,\n  pt.paid_at,\n  DATE(pt.created_at) as created_date,\n  pt.updated_by,\n  pt.created_at\nFROM payment_transactions pt\nWHERE pt.section = 'Fastfone365'\n  AND pt.contract_external_id = (\n    SELECT external_id FROM contracts WHERE contract_no = 'CT1024-SNI001-00237-01' AND section = 'Fastfone365' LIMIT 1\n  )\nORDER BY pt.created_at DESC;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT \n  pt.external_id,\n  pt.receipt_no,\n  CAST(pt.amount AS DECIMAL(18,2)) as amount,\n  pt.paid_at,\n  DATE(pt.created_at) as created_date,\n  pt.updated_by,\n  pt.created_at\nFROM payment_transactions pt\nWHERE pt.section = 'Fastfone365'\n  AND pt.contract_external_id = (\n    SELECT external_id FROM contracts WHERE contract_no = 'CT1024-SNI001-00237-01' AND section = 'Fastfone365' LIMIT 1\n  )\nORDER BY pt.created_at DESC;\n",
+  "rows": [
+    {
+      "external_id": "24181",
+      "receipt_no": "TXRT1024-SNI001-00237-01-4-1",
+      "amount": "1123.00",
+      "paid_at": "2025-03-25",
+      "created_date": "2025-03-25",
+      "updated_by": "nannan",
+      "created_at": "2025-03-25 14:45:06"
+    },
+    {
+      "external_id": "24180",
+      "receipt_no": "TXRT1024-SNI001-00237-01-3-1",
+      "amount": "8959.00",
+      "paid_at": "2025-03-05",
+      "created_date": "2025-03-25",
+      "updated_by": "nannan",
+      "created_at": "2025-03-25 14:44:41"
+    },
+    {
+      "external_id": "24179",
+      "receipt_no": "TXRT1024-SNI001-00237-01-2-1",
+      "amount": "8959.00",
+      "paid_at": "2025-03-05",
+      "created_date": "2025-03-25",
+      "updated_by": "nannan",
+      "created_at": "2025-03-25 14:44:27"
+    },
+    {
+      "external_id": "24178",
+      "receipt_no": "TXRT1024-SNI001-00237-01-1-1",
+      "amount": "8959.00",
+      "paid_at": "2025-03-05",
+      "created_date": "2025-03-25",
+      "updated_by": "nannan",
+      "created_at": "2025-03-25 14:44:11"
+    }
+  ],
+  "messages": [],
+  "stdout": "external_id\treceipt_no\tamount\tpaid_at\tcreated_date\tupdated_by\tcreated_at\n24181\tTXRT1024-SNI001-00237-01-4-1\t1123.00\t2025-03-25\t2025-03-25\tnannan\t2025-03-25 14:45:06\n24180\tTXRT1024-SNI001-00237-01-3-1\t8959.00\t2025-03-05\t2025-03-25\tnannan\t2025-03-25 14:44:41\n24179\tTXRT1024-SNI001-00237-01-2-1\t8959.00\t2025-03-05\t2025-03-25\tnannan\t2025-03-25 14:44:27\n24178\tTXRT1024-SNI001-00237-01-1-1\t8959.00\t2025-03-05\t2025-03-25\tnannan\t2025-03-25 14:44:11\n",
+  "stderr": "",
+  "execution_time_ms": 1774
+}

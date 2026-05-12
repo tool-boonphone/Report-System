@@ -1685,7 +1685,9 @@ export default function DebtReport() {
                             // X = งวดสูงสุดที่มีการชำระเข้ามาแล้ว (max payment.period)
                             // X = 0 เมื่อไม่มีการชำระเลย
                             const collectedR = r as CollectedRow;
+                            // นับเฉพาะ payment ที่ไม่ใช่ isBadDebtRow (หนี้เสีย/ขายเครื่อง)
                             const maxPaidPeriod = collectedR.payments?.reduce((max, p) => {
+                              if (p.isBadDebtRow) return max; // ข้ามรายการหนี้เสีย
                               if (p.period != null && p.period > max) return p.period;
                               return max;
                             }, 0) ?? 0;
@@ -1699,6 +1701,10 @@ export default function DebtReport() {
                             const latestOverdue = currentInst?.period ?? null;
                             if (latestOverdue != null && r.installmentCount != null) {
                               return `${latestOverdue}/${r.installmentCount}`;
+                            }
+                            // ถ้าไม่มีงวดปัจจุบัน (ยังไม่มียอดผ่อนเลย) → แสดง 1/N
+                            if (r.installmentCount != null) {
+                              return `1/${r.installmentCount}`;
                             }
                             return r.installmentCount ?? "-";
                           }
@@ -2059,6 +2065,7 @@ export default function DebtReport() {
                             }
                             const isArrears = !dimmed && !!inst?.isArrears;
                             // Phase 53/66: ซ่อน BG สีฟ้าสำหรับสัญญาสถานะ ระงับสัญญา / สิ้นสุดสัญญา / ขายเครื่อง / หนี้เสีย
+                            // หมายเหตุ: หนี้เสีย ต้องไม่มี BG สีฟ้าที่งวดปัจจุบัน (รูปที่ 2)
                             const isSpecialContractStatus = r.debtStatus === 'ระงับสัญญา' || r.debtStatus === 'สิ้นสุดสัญญา' || r.debtStatus === 'ขายเครื่อง' || r.debtStatus === 'หนี้เสีย';
                             const isCurrentPeriod = !dimmed && !isSpecialContractStatus && !!inst?.isCurrentPeriod;
                             // Phase 9AI: future period = dueDate > today (not closed/suspended)
@@ -2083,14 +2090,15 @@ export default function DebtReport() {
                             // 2. isSpecialContractStatus + isPartialPaid → ส้มเสมอ (ไม่สนใจ dueDate)
                             // 3. isCurrentPeriod + isPartialPaid → BG ฟ้า (sky-50) + ส้ม (เสมอ แม้ isArrears=true)
                             // 4. isCurrentPeriod + isPaid → BG ฟ้า (sky-50) + เขียว
-                            // 5. isArrears (ไม่ใช่ isCurrentPeriod+partial/paid) → amber bg + amber bold
-                            // 6. isFuturePeriod + isPaid → ฟ้าตัวตรง
-                            // 7. isFuturePeriod + isPartialPaid → ฟ้าตัวเอียง (สัญญาปกติเท่านั้น)
-                            // 8. isFuturePeriod (paid=0) → เทา
-                            // 9. isPaid (งวดก่อนหน้า ชำระครบ) → เขียว
-                            // 10. isPartialPaid (งวดก่อนหน้า บางส่วน) → ส้ม
-                            // 11. isCurrentPeriod (paid=0) → sky-50 bg + ดำ
-                            // 12. งวดก่อนหน้า (paid=0, overdue) → ส้ม
+                            // 5. isCurrentPeriod + isArrears (ค้างชำระ ยังไม่จ่าย) → BG ฟ้า (sky-50) + ส้ม
+                            // 6. isArrears (ไม่ใช่ isCurrentPeriod) → ส้มเท่านั้น (ไม่มี BG)
+                            // 7. isFuturePeriod + isPaid → ฟ้าตัวตรง
+                            // 8. isFuturePeriod + isPartialPaid → ฟ้าตัวเอียง (สัญญาปกติเท่านั้น)
+                            // 9. isFuturePeriod (paid=0) → เทา
+                            // 10. isPaid (งวดก่อนหน้า ชำระครบ) → เขียว
+                            // 11. isPartialPaid (งวดก่อนหน้า บางส่วน) → ส้ม
+                            // 12. isCurrentPeriod (paid=0) → sky-50 bg + ดำ
+                            // 13. งวดก่อนหน้า (paid=0, overdue) → ส้ม
                             if (dimmed) {
                               baseStyle.background = "#f3f4f6"; // gray-100
                               baseStyle.color = "#9ca3af"; // gray-400
@@ -2108,8 +2116,12 @@ export default function DebtReport() {
                               // งวดปัจจุบัน + ชำระครบ: BG ฟ้า + เขียว
                               baseStyle.background = "#f0f9ff"; // sky-50
                               baseStyle.color = "#15803d"; // green-700
+                            } else if (isCurrentPeriod && isArrears) {
+                              // งวดปัจจุบัน + ค้างชำระ (ยังไม่จ่าย): BG ฟ้า + ส้ม (รูปที่ 1)
+                              baseStyle.background = "#f0f9ff"; // sky-50
+                              baseStyle.color = "#c2410c"; // orange-700
                             } else if (isArrears) {
-                              // Arrears carry (ไม่ใช่ currentPeriod+partial/paid): สีส้ม orange เท่านั้น (ไม่มี BG, ไม่หนา)
+                              // Arrears carry (ไม่ใช่ currentPeriod): สีส้ม orange เท่านั้น (ไม่มี BG, ไม่หนา)
                               baseStyle.color = "#c2410c"; // orange-700
                             } else if (isFuturePeriod && isPaid) {
                               // งวดอนาคตที่ชำระครบแล้ว: ฟ้าตัวตรง

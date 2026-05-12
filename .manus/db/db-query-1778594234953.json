@@ -1,0 +1,14 @@
+{
+  "query": "\n-- หาสัญญาที่ contracts.bad_debt_amount > 0 แต่ payment_transactions ทุก row มี raw_json.bad_debt_amount = 0\n-- นี่คือสาเหตุที่ debtDb.ts ไม่เห็น bad_debt rows\nSELECT \n  COUNT(DISTINCT c.external_id) as contract_count,\n  SUM(c.bad_debt_amount) as total_missing_bad_debt\nFROM contracts c\nWHERE c.section = 'Fastfone365'\n  AND c.bad_debt_amount > 0\n  AND NOT EXISTS (\n    SELECT 1 FROM payment_transactions pt\n    WHERE pt.contract_external_id = c.external_id\n      AND pt.section = 'Fastfone365'\n      AND CAST(JSON_EXTRACT(pt.raw_json, '$.bad_debt_amount') AS DECIMAL(18,2)) > 0\n  );\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \n-- หาสัญญาที่ contracts.bad_debt_amount > 0 แต่ payment_transactions ทุก row มี raw_json.bad_debt_amount = 0\n-- นี่คือสาเหตุที่ debtDb.ts ไม่เห็น bad_debt rows\nSELECT \n  COUNT(DISTINCT c.external_id) as contract_count,\n  SUM(c.bad_debt_amount) as total_missing_bad_debt\nFROM contracts c\nWHERE c.section = 'Fastfone365'\n  AND c.bad_debt_amount > 0\n  AND NOT EXISTS (\n    SELECT 1 FROM payment_transactions pt\n    WHERE pt.contract_external_id = c.external_id\n      AND pt.section = 'Fastfone365'\n      AND CAST(JSON_EXTRACT(pt.raw_json, '$.bad_debt_amount') AS DECIMAL(18,2)) > 0\n  );\n",
+  "rows": [
+    {
+      "contract_count": "3122",
+      "total_missing_bad_debt": "22720169.58"
+    }
+  ],
+  "messages": [],
+  "stdout": "contract_count\ttotal_missing_bad_debt\n3122\t22720169.58\n",
+  "stderr": "",
+  "execution_time_ms": 1915
+}

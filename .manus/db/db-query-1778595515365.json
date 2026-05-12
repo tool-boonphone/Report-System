@@ -1,0 +1,190 @@
+{
+  "query": "\n-- 252 rows ที่ debtDb.ts เห็น (TXRT receipt) แต่ runner.ts ไม่เห็น (amount = 0 หรือ external_id ขึ้นต้น pay-)\nSELECT \n  external_id,\n  receipt_no,\n  CAST(amount AS DECIMAL(18,2)) as amount,\n  contract_external_id,\n  paid_at,\n  updated_by,\n  created_at\nFROM payment_transactions\nWHERE section = 'Fastfone365'\n  AND NOT (external_id NOT LIKE 'pay-%' AND CAST(amount AS DECIMAL(18,2)) > 0)\n  AND (external_id REGEXP '^[0-9]+$' OR receipt_no REGEXP '^TXRT.*-[0-9]+$')\nLIMIT 20;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \n-- 252 rows ที่ debtDb.ts เห็น (TXRT receipt) แต่ runner.ts ไม่เห็น (amount = 0 หรือ external_id ขึ้นต้น pay-)\nSELECT \n  external_id,\n  receipt_no,\n  CAST(amount AS DECIMAL(18,2)) as amount,\n  contract_external_id,\n  paid_at,\n  updated_by,\n  created_at\nFROM payment_transactions\nWHERE section = 'Fastfone365'\n  AND NOT (external_id NOT LIKE 'pay-%' AND CAST(amount AS DECIMAL(18,2)) > 0)\n  AND (external_id REGEXP '^[0-9]+$' OR receipt_no REGEXP '^TXRT.*-[0-9]+$')\nLIMIT 20;\n",
+  "rows": [
+    {
+      "external_id": "44021",
+      "receipt_no": "TXRTC1024-SNI001-1069-01",
+      "amount": "0.00",
+      "contract_external_id": "1025",
+      "paid_at": "2025-06-05",
+      "updated_by": "nannan",
+      "created_at": "2025-06-05 16:06:04"
+    },
+    {
+      "external_id": "71186",
+      "receipt_no": "TXRTC0225-SKN001-9962-01",
+      "amount": "0.00",
+      "contract_external_id": "10763",
+      "paid_at": "2025-09-23",
+      "updated_by": "ACC Ploy",
+      "created_at": "2025-09-23 14:21:06"
+    },
+    {
+      "external_id": "15510",
+      "receipt_no": "TXRTC1024-SNI001-1170-01",
+      "amount": "0.00",
+      "contract_external_id": "1119",
+      "paid_at": "2025-01-12",
+      "updated_by": "adminmint",
+      "created_at": "2025-01-12 14:30:03"
+    },
+    {
+      "external_id": "93021",
+      "receipt_no": "TXRTC0225-KKN011-9905-02",
+      "amount": "0.00",
+      "contract_external_id": "10829",
+      "paid_at": "2025-12-29",
+      "updated_by": "ACC Ploy",
+      "created_at": "2025-12-29 08:58:23"
+    },
+    {
+      "external_id": "92773",
+      "receipt_no": "TXRTC0325-AYA001-10422-01",
+      "amount": "0.00",
+      "contract_external_id": "11254",
+      "paid_at": "2025-12-26",
+      "updated_by": "ACC Ploy",
+      "created_at": "2025-12-26 14:32:23"
+    },
+    {
+      "external_id": "91793",
+      "receipt_no": "TXRTC0225-AYA001-10020-01",
+      "amount": "0.00",
+      "contract_external_id": "10825",
+      "paid_at": "2025-12-22",
+      "updated_by": "ACC Ploy",
+      "created_at": "2025-12-22 11:18:25"
+    },
+    {
+      "external_id": "91794",
+      "receipt_no": "TXRTC0225-AYA001-10020-01",
+      "amount": "0.00",
+      "contract_external_id": "10825",
+      "paid_at": "2025-12-22",
+      "updated_by": "ACC Ploy",
+      "created_at": "2025-12-22 11:18:25"
+    },
+    {
+      "external_id": "88365",
+      "receipt_no": "TXRTC0325-AYA001-10544-01",
+      "amount": "0.00",
+      "contract_external_id": "11384",
+      "paid_at": "2025-12-08",
+      "updated_by": "ACC Ploy",
+      "created_at": "2025-12-08 08:37:17"
+    },
+    {
+      "external_id": "86877",
+      "receipt_no": "TXRT0225-AYA001-9978-01-23",
+      "amount": "0.00",
+      "contract_external_id": "10779",
+      "paid_at": "2025-12-02",
+      "updated_by": "adminkaew",
+      "created_at": "2025-12-02 10:49:04"
+    },
+    {
+      "external_id": "79842",
+      "receipt_no": "TXRT0225-AYA001-10104-01-9",
+      "amount": "0.00",
+      "contract_external_id": "10912",
+      "paid_at": "2025-11-01",
+      "updated_by": "admindol",
+      "created_at": "2025-11-01 15:02:47"
+    },
+    {
+      "external_id": "70678",
+      "receipt_no": "TXRTC0225-BKK003-10064-01",
+      "amount": "0.00",
+      "contract_external_id": "10868",
+      "paid_at": "2025-09-20",
+      "updated_by": "ACC Ploy",
+      "created_at": "2025-09-20 14:04:45"
+    },
+    {
+      "external_id": "57070",
+      "receipt_no": "TXRTC0225-NPT003-10016-01",
+      "amount": "0.00",
+      "contract_external_id": "10819",
+      "paid_at": "2025-07-23",
+      "updated_by": "ACC Ploy",
+      "created_at": "2025-07-23 11:10:08"
+    },
+    {
+      "external_id": "31119",
+      "receipt_no": "TXRTC1024-BKK003-1158-02",
+      "amount": "0.00",
+      "contract_external_id": "1106",
+      "paid_at": "2025-04-18",
+      "updated_by": "adminmint",
+      "created_at": "2025-04-18 17:28:32"
+    },
+    {
+      "external_id": "28716",
+      "receipt_no": "TXRTC0225-NYK003-10393-01",
+      "amount": "0.00",
+      "contract_external_id": "11218",
+      "paid_at": "2025-04-09",
+      "updated_by": "adminmint",
+      "created_at": "2025-04-09 15:21:04"
+    },
+    {
+      "external_id": "28477",
+      "receipt_no": "TXRTC0225-CCO001-10371-01",
+      "amount": "0.00",
+      "contract_external_id": "11201",
+      "paid_at": "2025-04-08",
+      "updated_by": "adminmint",
+      "created_at": "2025-04-08 17:05:44"
+    },
+    {
+      "external_id": "27316",
+      "receipt_no": "TXRTC0325-KKN011-10588-01",
+      "amount": "0.00",
+      "contract_external_id": "11430",
+      "paid_at": "2025-04-04",
+      "updated_by": "adminmint",
+      "created_at": "2025-04-04 14:34:24"
+    },
+    {
+      "external_id": "22877",
+      "receipt_no": "TXRTC0225-KKN011-10350-01",
+      "amount": "0.00",
+      "contract_external_id": "11178",
+      "paid_at": "2025-03-20",
+      "updated_by": "adminjubjib",
+      "created_at": "2025-03-20 14:34:54"
+    },
+    {
+      "external_id": "93070",
+      "receipt_no": "TXRTC0325-KBI002-11251-02",
+      "amount": "0.00",
+      "contract_external_id": "12134",
+      "paid_at": "2025-12-29",
+      "updated_by": "ACC Ploy",
+      "created_at": "2025-12-29 09:56:48"
+    },
+    {
+      "external_id": "93452",
+      "receipt_no": "TXRTC0425-SNI002-11765-01",
+      "amount": "0.00",
+      "contract_external_id": "12643",
+      "paid_at": "2025-12-29",
+      "updated_by": "ACC Ploy",
+      "created_at": "2025-12-29 19:51:16"
+    },
+    {
+      "external_id": "92377",
+      "receipt_no": "TXRTC0425-SNI009-1131-02",
+      "amount": "0.00",
+      "contract_external_id": "13021",
+      "paid_at": "2025-12-25",
+      "updated_by": "ACC Ploy",
+      "created_at": "2025-12-25 12:35:54"
+    }
+  ],
+  "messages": [],
+  "stdout": "external_id\treceipt_no\tamount\tcontract_external_id\tpaid_at\tupdated_by\tcreated_at\n44021\tTXRTC1024-SNI001-1069-01\t0.00\t1025\t2025-06-05\tnannan\t2025-06-05 16:06:04\n71186\tTXRTC0225-SKN001-9962-01\t0.00\t10763\t2025-09-23\tACC Ploy\t2025-09-23 14:21:06\n15510\tTXRTC1024-SNI001-1170-01\t0.00\t1119\t2025-01-12\tadminmint\t2025-01-12 14:30:03\n93021\tTXRTC0225-KKN011-9905-02\t0.00\t10829\t2025-12-29\tACC Ploy\t2025-12-29 08:58:23\n92773\tTXRTC0325-AYA001-10422-01\t0.00\t11254\t2025-12-26\tACC Ploy\t2025-12-26 14:32:23\n91793\tTXRTC0225-AYA001-10020-01\t0.00\t10825\t2025-12-22\tACC Ploy\t2025-12-22 11:18:25\n91794\tTXRTC0225-AYA001-10020-01\t0.00\t10825\t2025-12-22\tACC Ploy\t2025-12-22 11:18:25\n88365\tTXRTC0325-AYA001-10544-01\t0.00\t11384\t2025-12-08\tACC Ploy\t2025-12-08 08:37:17\n86877\tTXRT0225-AYA001-9978-01-23\t0.00\t10779\t2025-12-02\tadminkaew\t2025-12-02 10:49:04\n79842\tTXRT0225-AYA001-10104-01-9\t0.00\t10912\t2025-11-01\tadmindol\t2025-11-01 15:02:47\n70678\tTXRTC0225-BKK003-10064-01\t0.00\t10868\t2025-09-20\tACC Ploy\t2025-09-20 14:04:45\n57070\tTXRTC0225-NPT003-10016-01\t0.00\t10819\t2025-07-23\tACC Ploy\t2025-07-23 11:10:08\n31119\tTXRTC1024-BKK003-1158-02\t0.00\t1106\t2025-04-18\tadminmint\t2025-04-18 17:28:32\n28716\tTXRTC0225-NYK003-10393-01\t0.00\t11218\t2025-04-09\tadminmint\t2025-04-09 15:21:04\n28477\tTXRTC0225-CCO001-10371-01\t0.00\t11201\t2025-04-08\tadminmint\t2025-04-08 17:05:44\n27316\tTXRTC0325-KKN011-10588-01\t0.00\t11430\t2025-04-04\tadminmint\t2025-04-04 14:34:24\n22877\tTXRTC0225-KKN011-10350-01\t0.00\t11178\t2025-03-20\tadminjubjib\t2025-03-20 14:34:54\n93070\tTXRTC0325-KBI002-11251-02\t0.00\t12134\t2025-12-29\tACC Ploy\t2025-12-29 09:56:48\n93452\tTXRTC0425-SNI002-11765-01\t0.00\t12643\t2025-12-29\tACC Ploy\t2025-12-29 19:51:16\n92377\tTXRTC0425-SNI009-1131-02\t0.00\t13021\t2025-12-25\tACC Ploy\t2025-12-25 12:35:54\n",
+  "stderr": "",
+  "execution_time_ms": 1926
+}
