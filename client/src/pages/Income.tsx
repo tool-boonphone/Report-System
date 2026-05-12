@@ -118,49 +118,31 @@ type IncomeRow = {
  */
 function groupRowsBySlip(rows: IncomeRow[]): IncomeRow[] {
   /**
-   * แยกรายการตาม receiptNo prefix:
+   * แยกรายการตาม receiptNo prefix และ incomeType จาก server:
    *
    * ปิดยอด = receiptNo ขึ้นต้นด้วย 'TXRTC'
    *   → group ตาม batch key: paidAt + updatedBy + updatedAt
    *   (ไม่รวม receiptNo ใน batch key เพราะ 1 สัญญาอาจมีหลาย row ที่ receiptNo ต่างกัน)
    *
-   * ขายเครื่อง = row.incomeType === 'ขายเครื่อง' (classify โดย server)
-   *   → แสดงเฉพาะ รายการสุดท้าย (ล่าสุด) ของแต่ละสัญญา เป็น 1 row
-   *   → รายการเก่ากว่า — ใส่ตรงๆ เป็น ค่างวด
+   * ขายเครื่อง = row.incomeType === 'ขายเครื่อง' (classify โดย server ด้วย logic 2 ระดับ)
+   *   → server classify ถูกต้องแล้ว — แสดงตรงๆ เป็น ขายเครื่อง ไม่ต้องแยก row เก่า/ใหม่เอง
    *
    * ค่างวด = receiptNo ขึ้นต้นด้วย 'TXRT' (แต่ไม่ใช่ TXRTC) หรืออื่นๆ → ไม่ group
    */
   const installmentRows: IncomeRow[] = []; // ค่างวด — ไม่ group
   const closingRows: IncomeRow[] = [];     // ปิดยอด — group ตาม consecutive batch
-
-  // ขายเครื่อง: จัดกลุ่มตามสัญญา เอาเฉพาะรายการสุดท้าย
-  const badDebtContractMap = new Map<string, IncomeRow[]>();
+  const deviceRows: IncomeRow[] = [];      // ขายเครื่อง — server classify ถูกต้องแล้ว แสดงตรงๆ
 
   for (const row of rows) {
     if (row.incomeType === "ขายเครื่อง") {
-      // ขายเครื่อง: เก็บทุก row ไว้ก่อน เพื่อหา row สุดท้าย (ใช้ incomeType จาก server)
-      if (!badDebtContractMap.has(row.contractNo)) badDebtContractMap.set(row.contractNo, []);
-      badDebtContractMap.get(row.contractNo)!.push(row);
+      // ขายเครื่อง: server classify ด้วย logic 2 ระดับ ถูกต้องแล้ว — แสดงตรงๆ
+      deviceRows.push(row);
     } else if ((row.receiptNo ?? "").startsWith("TXRTC")) {
       // ปิดยอด: receiptNo ขึ้นต้นด้วย TXRTC → group
       closingRows.push(row);
     } else {
       // ค่างวด: TXRT (ไม่ใช่ TXRTC) หรืออื่นๆ → ไม่ group
       installmentRows.push(row);
-    }
-  }
-
-  // สร้าง deviceRows: เอาเฉพาะ row สุดท้าย (id สูงสุด) ของแต่ละสัญญา
-  // รายการเก่ากว่า — ใส่เป็น installmentRows (ค่างวด)
-  const deviceRows: IncomeRow[] = [];
-  for (const [, contractRows] of Array.from(badDebtContractMap)) {
-    // เรียง id DESC เอา row สุดท้าย
-    const sortedBad = [...contractRows].sort((a, b) => ((b as any).id ?? 0) - ((a as any).id ?? 0));
-    const lastRow = sortedBad[0]; // row สุดท้าย
-    deviceRows.push({ ...lastRow, incomeType: "ขายเครื่อง" });
-    // รายการเก่ากว่า — ใส่เป็น installmentRows
-    for (const row of sortedBad.slice(1)) {
-      installmentRows.push({ ...row, incomeType: "ค่างวด" });
     }
   }
 
