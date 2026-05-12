@@ -212,6 +212,7 @@ export async function* streamTargetFromCache(params: {
       const contractStatus = first?.contract_status ?? null;
       const suspendLabel = contractStatus === "หนี้เสีย" ? "หนี้เสีย"
         : contractStatus === "ระงับสัญญา" ? "ระงับสัญญา"
+        : contractStatus === "ยกเลิกสัญญา" ? "ยกเลิกสัญญา"
         : null;
 
       const installments = instRows.map((r: any) => ({
@@ -399,6 +400,7 @@ export async function* streamCollectedFromCache(params: {
       const contractStatus = (payRows[0]?.contract_status ?? instRows[0]?.contract_status) ?? null;
       const suspendLabel = contractStatus === "หนี้เสีย" ? "หนี้เสีย"
         : contractStatus === "ระงับสัญญา" ? "ระงับสัญญา"
+        : contractStatus === "ยกเลิกสัญญา" ? "ยกเลิกสัญญา"
         : null;
 
       const { debtStatus, daysOverdue } = rederiveDaysOverdue(
@@ -693,6 +695,7 @@ export async function getTargetChunk(params: {
     const contractStatus = first.contract_status ?? null;
     const suspendLabel = contractStatus === "หนี้เสีย" ? "หนี้เสีย"
       : contractStatus === "ระงับสัญญา" ? "ระงับสัญญา"
+      : contractStatus === "ยกเลิกสัญญา" ? "ยกเลิกสัญญา"
       : null;
 
     const installments = instRows.map((r: any) => ({
@@ -881,6 +884,7 @@ export async function getCollectedChunk(params: {
     const contractStatus = (payRows[0]?.contract_status ?? instRows[0]?.contract_status) ?? null;
     const suspendLabel = contractStatus === "หนี้เสีย" ? "หนี้เสีย"
       : contractStatus === "ระงับสัญญา" ? "ระงับสัญญา"
+      : contractStatus === "ยกเลิกสัญญา" ? "ยกเลิกสัญญา"
       : null;
 
     const { debtStatus, daysOverdue } = rederiveDaysOverdue(

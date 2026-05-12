@@ -1640,12 +1640,13 @@ export async function listDebtTarget(params: { section: SectionKey }) {
     const contractStatus = c.status ?? null;
     const isContractSuspended = contractStatus === "ระงับสัญญา";
     const isContractBadDebt = contractStatus === "หนี้เสีย";
+    const isContractCancelled = contractStatus === "ยกเลิกสัญญา";
     // Phase 69: declare suspendCodes outside if-block so it's accessible in baseInstallments.map
     // Same codes for both sections: "ระงับสัญญา" | "ยกเลิกสัญญา"
     const suspendCodes = ["ระงับสัญญา", "ยกเลิกสัญญา"];
     let suspendedFromPeriod = 0; // > 0 → periods >= this render as suspended
     let suspendedAt: string | null = null;
-    if (isContractSuspended || isContractBadDebt) {
+    if (isContractSuspended || isContractBadDebt || isContractCancelled) {
       // FF365 stores status in i.status (inst_status), Boonphone stores in raw_json.installment_status_code
       // Check both fields to handle both providers
       const firstSuspended = list
@@ -1709,6 +1710,24 @@ export async function listDebtTarget(params: { section: SectionKey }) {
             const firstPeriod = list.sort((a, b) => (a.period ?? 0) - (b.period ?? 0))[0];
             suspendedAt = firstPeriod?.due_date ?? null;
           }
+        }
+      } else if (isContractCancelled) {
+        // ยกเลิกสัญญา: หา suspendedFromPeriod จาก lastNormalPeriod (N+1 rule)
+        // งวด N+1 เป็นต้นไปจะแสดงป้ายกำกับ "ยกเลิกสัญญา"
+        const lastNormalPeriod = lastNormalPeriodByContract.get(extId) ?? 0;
+        suspendedFromPeriod = lastNormalPeriod + 1;
+        const suspendedPeriodRow = list
+          .filter((r) => Number(r.period ?? 0) === suspendedFromPeriod)
+          .sort((a, b) => (a.period ?? 0) - (b.period ?? 0))[0];
+        suspendedAt = suspendedPeriodRow?.due_date ?? null;
+        if (!suspendedAt && lastNormalPeriod > 0) {
+          const lastNormalRow = list
+            .filter((r) => Number(r.period ?? 0) === lastNormalPeriod)
+            .sort((a, b) => (a.period ?? 0) - (b.period ?? 0))[0];
+          suspendedAt = lastNormalRow?.due_date ?? null;
+        } else if (!suspendedAt) {
+          const firstPeriod = list.sort((a, b) => (a.period ?? 0) - (b.period ?? 0))[0];
+          suspendedAt = firstPeriod?.due_date ?? null;
         }
       } else if (firstSuspended?.period) {
         // ระงับสัญญา: ใช้ firstSuspended ตามปกติ
@@ -1799,6 +1818,11 @@ export async function listDebtTarget(params: { section: SectionKey }) {
           isSuspended = suspendedFromPeriod > 0 && periodNo >= suspendedFromPeriod &&
             (instStatusIsSuspend || paid <= 0);
           suspendLabel = "ระงับสัญญา";
+        } else if (isContractCancelled) {
+          // สถานะยกเลิกสัญญา: งวด >= suspendedFromPeriod (N+1) → ยกเลิกสัญญา
+          // งวดที่ผ่อนมาแล้ว (< suspendedFromPeriod) แสดงยอดปกติ
+          isSuspended = suspendedFromPeriod > 0 && periodNo >= suspendedFromPeriod;
+          suspendLabel = "ยกเลิกสัญญา";
         } else {
           // สถานะสิ้นสุดสัญญา / ปกติ: ใช้ TXRTC logic
           // Phase 62: 3-pattern isClosed
@@ -3164,12 +3188,13 @@ export async function* listDebtTargetStream(params: {
     const contractStatus = c.status ?? null;
     const isContractSuspended = contractStatus === "ระงับสัญญา";
     const isContractBadDebt = contractStatus === "หนี้เสีย";
+    const isContractCancelledStream = contractStatus === "ยกเลิกสัญญา";
     // Phase 69: declare suspendCodes outside if-block so it's accessible in baseInstallments.map
     // Same codes for both sections: "ระงับสัญญา" | "ยกเลิกสัญญา" (verified from DB — no "หนี้เสีย" in installments)
     const suspendCodes = ["ระงับสัญญา", "ยกเลิกสัญญา"];
     let suspendedFromPeriod = 0;
     let suspendedAt: string | null = null;
-    if (isContractSuspended || isContractBadDebt) {
+    if (isContractSuspended || isContractBadDebt || isContractCancelledStream) {
       // FF365 stores status in i.status (inst_status), Boonphone stores in raw_json.installment_status_code
       // Check both fields to handle both providers (suspendCodes declared above)
       const firstSuspended = list
@@ -3231,6 +3256,23 @@ export async function* listDebtTargetStream(params: {
             const firstPeriod = list.sort((a, b) => (a.period ?? 0) - (b.period ?? 0))[0];
             suspendedAt = firstPeriod?.due_date ?? null;
           }
+        }
+      } else if (isContractCancelledStream) {
+        // ยกเลิกสัญญา (stream): หา suspendedFromPeriod จาก lastNormalPeriod (N+1 rule)
+        const lastNormalPeriod = lastNormalPeriodByContractStream.get(extId) ?? 0;
+        suspendedFromPeriod = lastNormalPeriod + 1;
+        const suspendedPeriodRow = list
+          .filter((r) => Number(r.period ?? 0) === suspendedFromPeriod)
+          .sort((a, b) => (a.period ?? 0) - (b.period ?? 0))[0];
+        suspendedAt = suspendedPeriodRow?.due_date ?? null;
+        if (!suspendedAt && lastNormalPeriod > 0) {
+          const lastNormalRow = list
+            .filter((r) => Number(r.period ?? 0) === lastNormalPeriod)
+            .sort((a, b) => (a.period ?? 0) - (b.period ?? 0))[0];
+          suspendedAt = lastNormalRow?.due_date ?? null;
+        } else if (!suspendedAt) {
+          const firstPeriod = list.sort((a, b) => (a.period ?? 0) - (b.period ?? 0))[0];
+          suspendedAt = firstPeriod?.due_date ?? null;
         }
       } else if (firstSuspended?.period) {
         // ระงับสัญญา: ใช้ firstSuspended ตามปกติ
@@ -3294,6 +3336,10 @@ export async function* listDebtTargetStream(params: {
           isSuspended = suspendedFromPeriod > 0 && periodNo >= suspendedFromPeriod &&
             (instStatusIsSuspendStream || paid <= 0);
           suspendLabel = "ระงับสัญญา";
+        } else if (isContractCancelledStream) {
+          // สถานะยกเลิกสัญญา (stream): งวด >= suspendedFromPeriod (N+1) → ยกเลิกสัญญา
+          isSuspended = suspendedFromPeriod > 0 && periodNo >= suspendedFromPeriod;
+          suspendLabel = "ยกเลิกสัญญา";
         } else {
           // สถานะสิ้นสุดสัญญา / ปกติ: ใช้ TXRTC logic
           // Phase 62: 3-pattern isClosed
