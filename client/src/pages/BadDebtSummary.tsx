@@ -868,7 +868,7 @@ export default function BadDebtSummary() {
                 )}
               </tbody>
               {filteredRows.length > 0 && (
-                <tfoot className="bg-red-50 border-t-2 border-red-200 font-semibold text-xs">
+                <tfoot className="bg-red-50 border-t-2 border-red-200 font-semibold text-xs sticky bottom-0 z-10">
                   <tr>
                     <td colSpan={7} className="px-2 py-2 text-right text-gray-600">รวม {filteredRows.length} รายการ</td>
                     <td className="px-2 py-2 text-right">{fmtMoney(filteredRows.reduce((s, r) => s + r.financeAmount, 0))}</td>
@@ -932,10 +932,9 @@ export default function BadDebtSummary() {
                       ))
                     )}
                   </tbody>
-                  {monthlyBySaleRows.length > 0 && (
-                    <tfoot className="bg-blue-50 border-t-2 border-blue-200 font-semibold text-xs">
-                      <tr>
-                        <td className="px-3 py-2 text-gray-600">รวม {monthlyBySaleRows.length} เดือน</td>
+                  {monthlyBySaleRows.length > 0 && (                    <tfoot className="bg-blue-50 border-t-2 border-blue-200 font-semibold text-xs sticky bottom-0 z-10">
+                  <tr>
+                    <td className="px-3 py-2 text-left text-gray-600">รวม{monthlyBySaleRows.length} เดือน</td>
                         <td className="px-2 py-2 text-center">{monthlyBySaleRows.reduce((s, r) => s + r.count, 0).toLocaleString("th-TH")}</td>
                         <td className="px-2 py-2 text-right">{fmtMoney(monthlyBySaleRows.reduce((s, r) => s + r.financeAmount, 0))}</td>
                         <td className="px-2 py-2 text-right">{fmtMoney(monthlyBySaleRows.reduce((s, r) => s + r.commissionNet, 0))}</td>
@@ -999,10 +998,9 @@ export default function BadDebtSummary() {
                       ))
                     )}
                   </tbody>
-                      {monthlyByApproveRows.length > 0 && (
-                    <tfoot className="bg-blue-50 border-t-2 border-blue-200 font-semibold text-xs">
-                      <tr>
-                        <td className="px-3 py-2 text-gray-600">รวม {monthlyByApproveRows.length} เดือน</td>
+                      {monthlyByApproveRows.length > 0 && (                    <tfoot className="bg-blue-50 border-t-2 border-blue-200 font-semibold text-xs sticky bottom-0 z-10">
+                  <tr>
+                    <td className="px-3 py-2 text-left text-gray-500">รวม{monthlyByApproveRows.length} เดือน</td>
                         <td className="px-2 py-2 text-center text-gray-500">{monthlyByApproveRows.reduce((s, r) => s + r.totalAll, 0).toLocaleString("th-TH")}</td>
                         <td className="px-2 py-2 text-center">{monthlyByApproveRows.reduce((s, r) => s + r.count, 0).toLocaleString("th-TH")}</td>
                         <td className="px-2 py-2 text-right">{fmtMoney(monthlyByApproveRows.reduce((s, r) => s + r.financeAmount, 0))}</td>
@@ -1067,10 +1065,9 @@ export default function BadDebtSummary() {
                       ))
                     )}
                   </tbody>
-                  {yearlyBySaleRows.length > 0 && (
-                    <tfoot className="bg-purple-50 border-t-2 border-purple-200 font-semibold text-xs">
-                      <tr>
-                        <td className="px-3 py-2 text-gray-600">รวม {yearlyBySaleRows.length} ปี</td>
+                  {yearlyBySaleRows.length > 0 && (                    <tfoot className="bg-purple-50 border-t-2 border-purple-200 font-semibold text-xs sticky bottom-0 z-10">
+                  <tr>
+                    <td className="px-3 py-2 text-left text-gray-500">รวม{yearlyBySaleRows.length} ปี</td>
                         <td className="px-2 py-2 text-center">{yearlyBySaleRows.reduce((s, r) => s + r.count, 0).toLocaleString("th-TH")}</td>
                         <td className="px-2 py-2 text-right">{fmtMoney(yearlyBySaleRows.reduce((s, r) => s + r.financeAmount, 0))}</td>
                         <td className="px-2 py-2 text-right">{fmtMoney(yearlyBySaleRows.reduce((s, r) => s + r.commissionNet, 0))}</td>
@@ -1135,9 +1132,9 @@ export default function BadDebtSummary() {
                     )}
                   </tbody>
                   {yearlyByApproveRows.length > 0 && (
-                    <tfoot className="bg-purple-50 border-t-2 border-purple-200 font-semibold text-xs">
-                      <tr>
-                        <td className="px-3 py-2 text-gray-600">รวม {yearlyByApproveRows.length} ปี</td>
+                    <tfoot className="bg-purple-50 border-t-2 border-purple-200 font-semibold text-xs sticky bottom-0 z-10">
+                  <tr>
+                     <td className="px-3 py-2 text-left text-gray-600">รวม{yearlyByApproveRows.length} ปี</td>
                         <td className="px-2 py-2 text-center text-gray-500">{yearlyByApproveRows.reduce((s, r) => s + r.totalAll, 0).toLocaleString("th-TH")}</td>
                         <td className="px-2 py-2 text-center">{yearlyByApproveRows.reduce((s, r) => s + r.count, 0).toLocaleString("th-TH")}</td>
                         <td className="px-2 py-2 text-right">{fmtMoney(yearlyByApproveRows.reduce((s, r) => s + r.financeAmount, 0))}</td>
