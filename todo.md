@@ -1513,3 +1513,7 @@ Task list:
 - [x] หา logic ที่คำนวณ "งวดผ่อน" (paidPeriods/installmentCount) ใน DebtReport.tsx หรือ backend
 - [x] แก้ไข bug ให้แสดงงวดที่ผ่อนมาแล้วจริง
 - [x] commit + push GitHub + checkpoint
+
+## Bug — เป้าเก็บหนี้กำหนดงวดผ่อนไม่ถูกต้อง (2026-05-13)
+- [ ] แก้ไข logic งวดผ่อน fallback ให้รวม isClosed ด้วย (งวดที่ชำระครบแล้ว) — ปัจจุบัน filter !isSuspended && !isClosed ทำให้ได้ 0 งวด แล้ว fallback เป็น 1/N
+- [ ] commit + push GitHub + checkpoint

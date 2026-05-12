@@ -1706,12 +1706,13 @@ export default function DebtReport() {
                               return `${latestOverdue}/${r.installmentCount}`;
                             }
                             // ถ้าไม่มีงวดปัจจุบัน (เช่น ยกเลิกสัญญา / ระงับสัญญา ทำให้ทุกงวด isSuspended)
-                            // ให้หางวดสูงสุดที่ไม่ใช่ isSuspended (งวดที่ผ่อนมาแล้วจริง)
-                            const lastNormalPeriod = r.installments
-                              .filter((inst) => !inst.isSuspended && !inst.isClosed)
+                            // ให้หางวดสูงสุดที่ไม่ใช่ isSuspended — รวมทั้งงวดที่ isClosed (ชำระครบแล้ว)
+                            // เพราะงวดที่ผ่อนมาแล้ว N งวด จะเป็น isClosed=true ทั้งหมด ไม่มีงวดที่ไม่ใช่ isSuspended/isClosed เลย
+                            const lastPaidPeriod = r.installments
+                              .filter((inst) => !inst.isSuspended)
                               .reduce((max, inst) => Math.max(max, inst.period ?? 0), 0);
-                            if (lastNormalPeriod > 0 && r.installmentCount != null) {
-                              return `${lastNormalPeriod}/${r.installmentCount}`;
+                            if (lastPaidPeriod > 0 && r.installmentCount != null) {
+                              return `${lastPaidPeriod}/${r.installmentCount}`;
                             }
                             // ถ้าไม่มีงวดปกติเลย (ยังไม่มียอดผ่อนเลย) → แสดง 1/N
                             if (r.installmentCount != null) {
