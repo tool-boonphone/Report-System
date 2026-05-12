@@ -1,0 +1,82 @@
+{
+  "query": "\nSELECT \n  external_id,\n  bad_debt_amount,\n  bad_debt_date,\n  bad_debt_updated_by\nFROM contracts\nWHERE bad_debt_amount > 0 AND bad_debt_amount < 1000 AND section = 'Fastfone365'\nORDER BY bad_debt_amount ASC\nLIMIT 12;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT \n  external_id,\n  bad_debt_amount,\n  bad_debt_date,\n  bad_debt_updated_by\nFROM contracts\nWHERE bad_debt_amount > 0 AND bad_debt_amount < 1000 AND section = 'Fastfone365'\nORDER BY bad_debt_amount ASC\nLIMIT 12;\n",
+  "rows": [
+    {
+      "external_id": "2994",
+      "bad_debt_amount": "500.00",
+      "bad_debt_date": "2026-02-02",
+      "bad_debt_updated_by": "ACC Ploy"
+    },
+    {
+      "external_id": "5944",
+      "bad_debt_amount": "500.00",
+      "bad_debt_date": "2026-02-12",
+      "bad_debt_updated_by": "ACC Ploy"
+    },
+    {
+      "external_id": "11365",
+      "bad_debt_amount": "500.00",
+      "bad_debt_date": "2026-03-17",
+      "bad_debt_updated_by": "ACC Ploy"
+    },
+    {
+      "external_id": "7902",
+      "bad_debt_amount": "600.00",
+      "bad_debt_date": "2026-03-03",
+      "bad_debt_updated_by": "nannan"
+    },
+    {
+      "external_id": "8595",
+      "bad_debt_amount": "600.00",
+      "bad_debt_date": "2026-02-19",
+      "bad_debt_updated_by": "ACC Ploy"
+    },
+    {
+      "external_id": "5897",
+      "bad_debt_amount": "700.00",
+      "bad_debt_date": "2026-03-03",
+      "bad_debt_updated_by": "nannan"
+    },
+    {
+      "external_id": "7266",
+      "bad_debt_amount": "700.00",
+      "bad_debt_date": "2026-03-03",
+      "bad_debt_updated_by": "nannan"
+    },
+    {
+      "external_id": "5780",
+      "bad_debt_amount": "700.00",
+      "bad_debt_date": "2026-03-03",
+      "bad_debt_updated_by": "nannan"
+    },
+    {
+      "external_id": "5904",
+      "bad_debt_amount": "800.00",
+      "bad_debt_date": "2026-02-02",
+      "bad_debt_updated_by": "ACC Ploy"
+    },
+    {
+      "external_id": "385",
+      "bad_debt_amount": "800.00",
+      "bad_debt_date": "2026-02-02",
+      "bad_debt_updated_by": "ACC Ploy"
+    },
+    {
+      "external_id": "15321",
+      "bad_debt_amount": "800.00",
+      "bad_debt_date": "2026-04-03",
+      "bad_debt_updated_by": "ACC Ploy"
+    },
+    {
+      "external_id": "6394",
+      "bad_debt_amount": "800.00",
+      "bad_debt_date": "2026-02-02",
+      "bad_debt_updated_by": "ACC Ploy"
+    }
+  ],
+  "messages": [],
+  "stdout": "external_id\tbad_debt_amount\tbad_debt_date\tbad_debt_updated_by\n2994\t500.00\t2026-02-02\tACC Ploy\n5944\t500.00\t2026-02-12\tACC Ploy\n11365\t500.00\t2026-03-17\tACC Ploy\n7902\t600.00\t2026-03-03\tnannan\n8595\t600.00\t2026-02-19\tACC Ploy\n5897\t700.00\t2026-03-03\tnannan\n7266\t700.00\t2026-03-03\tnannan\n5780\t700.00\t2026-03-03\tnannan\n5904\t800.00\t2026-02-02\tACC Ploy\n385\t800.00\t2026-02-02\tACC Ploy\n15321\t800.00\t2026-04-03\tACC Ploy\n6394\t800.00\t2026-02-02\tACC Ploy\n",
+  "stderr": "",
+  "execution_time_ms": 1818
+}

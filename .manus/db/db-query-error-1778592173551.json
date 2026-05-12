@@ -1,0 +1,8 @@
+{
+  "query": "\n-- ยอดรวม bad_debt_amount ทั้ง 2 sections\nSELECT \n  section,\n  COUNT(*) as contract_count,\n  SUM(bad_debt_amount) as total_bad_debt,\n  AVG(bad_debt_amount) as avg_bad_debt,\n  MIN(bad_debt_amount) as min_bad_debt,\n  MAX(bad_debt_amount) as max_bad_debt\nFROM contracts\nWHERE debt_status = 'bad_debt' AND bad_debt_amount > 0\nGROUP BY section;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \n-- ยอดรวม bad_debt_amount ทั้ง 2 sections\nSELECT \n  section,\n  COUNT(*) as contract_count,\n  SUM(bad_debt_amount) as total_bad_debt,\n  AVG(bad_debt_amount) as avg_bad_debt,\n  MIN(bad_debt_amount) as min_bad_debt,\n  MAX(bad_debt_amount) as max_bad_debt\nFROM contracts\nWHERE debt_status = 'bad_debt' AND bad_debt_amount > 0\nGROUP BY section;\n",
+  "returncode": 1,
+  "logs": [
+    "ERROR 1054 (42S22) at line 3: Unknown column 'debt_status' in 'where clause'"
+  ]
+}

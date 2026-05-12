@@ -1,0 +1,14 @@
+{
+  "query": "\n-- ดูสัญญาที่ bad_debt_amount < 1000 (อาจเป็น fallback ระดับ 2)\nSELECT \n  COUNT(*) as count_under_1000,\n  SUM(bad_debt_amount) as sum_under_1000\nFROM contracts\nWHERE bad_debt_amount > 0 AND bad_debt_amount < 1000 AND section = 'Fastfone365';\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \n-- ดูสัญญาที่ bad_debt_amount < 1000 (อาจเป็น fallback ระดับ 2)\nSELECT \n  COUNT(*) as count_under_1000,\n  SUM(bad_debt_amount) as sum_under_1000\nFROM contracts\nWHERE bad_debt_amount > 0 AND bad_debt_amount < 1000 AND section = 'Fastfone365';\n",
+  "rows": [
+    {
+      "count_under_1000": "12",
+      "sum_under_1000": "8000.00"
+    }
+  ],
+  "messages": [],
+  "stdout": "count_under_1000\tsum_under_1000\n12\t8000.00\n",
+  "stderr": "",
+  "execution_time_ms": 1860
+}

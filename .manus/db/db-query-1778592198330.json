@@ -1,0 +1,9 @@
+{
+  "query": "\nSELECT \n  external_id,\n  section,\n  bad_debt_amount,\n  bad_debt_date,\n  bad_debt_updated_by\nFROM contracts\nWHERE external_id LIKE '%CT0924-NRT001-00138-01%'\n   OR external_id LIKE '%NRT001-00138%'\nLIMIT 5;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT \n  external_id,\n  section,\n  bad_debt_amount,\n  bad_debt_date,\n  bad_debt_updated_by\nFROM contracts\nWHERE external_id LIKE '%CT0924-NRT001-00138-01%'\n   OR external_id LIKE '%NRT001-00138%'\nLIMIT 5;\n",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 1812
+}

@@ -1,0 +1,15 @@
+{
+  "query": "\nSELECT \n  section,\n  COUNT(*) as contract_count,\n  SUM(bad_debt_amount) as total_bad_debt\nFROM contracts\nWHERE bad_debt_amount > 0\nGROUP BY section;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT \n  section,\n  COUNT(*) as contract_count,\n  SUM(bad_debt_amount) as total_bad_debt\nFROM contracts\nWHERE bad_debt_amount > 0\nGROUP BY section;\n",
+  "rows": [
+    {
+      "section": "Fastfone365",
+      "contract_count": "3122",
+      "total_bad_debt": "22720169.58"
+    }
+  ],
+  "messages": [],
+  "stdout": "section\tcontract_count\ttotal_bad_debt\nFastfone365\t3122\t22720169.58\n",
+  "stderr": "",
+  "execution_time_ms": 1831
+}

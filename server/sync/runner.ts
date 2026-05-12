@@ -1192,9 +1192,10 @@ async function computeAndStoreBadDebt(section: SectionKey): Promise<void> {
     // latestUpdatedBy = updated_by ของ row ล่าสุด
     const latestUpdatedBy = sortedReal[0].updated_by ?? null;
     // Rule 3: sum ของทุก real payment ที่อยู่ใน batch เดียวกัน
-    // batch เดียวกัน = paid_at วันเดียวกัน + DATE(created_at) วันเดียวกัน + updated_by คนเดียวกัน
-    // (admin อาจบันทึกหลาย payments ในช่วงเวลาสั้นๆ ทำให้ created_at ต่างกัน 1-2 นาที)
-    const latestDatePayments = latestDate
+    // ระดับ 1 (Primary): paid_at วันเดียวกัน + DATE(created_at) วันเดียวกัน + updated_by คนเดียวกัน
+    // ระดับ 2 (Fallback): ถ้า primary_sum < 1000 → ขยาย batch ด้วย created_date + updated_by เท่านั้น
+    //   (ไม่สนใจ paid_at) — ตรงกับ buildBadDebtLastDaysSubquery ใน accountingDb.ts
+    const primaryBatchPayments = latestDate
       ? realBadDebtPayments.filter((p) => {
           if (!p.paid_at) return false;
           const sameDate = String(p.paid_at).substring(0, 10) === latestDate;
@@ -1207,6 +1208,22 @@ async function computeAndStoreBadDebt(section: SectionKey): Promise<void> {
           return true;
         })
       : [sortedReal[0]];
+    const primarySum = primaryBatchPayments.reduce((sum, p) => sum + p.total_paid_amount, 0);
+
+    // ระดับ 2 (Fallback): ถ้า primary_sum < 1000 → group ด้วย created_date + updated_by เท่านั้น
+    // เหมือนกับ is_fallback = 1 ใน buildBadDebtLastDaysSubquery
+    let latestDatePayments: typeof primaryBatchPayments;
+    if (primarySum < 1000 && latestCreatedDate) {
+      latestDatePayments = realBadDebtPayments.filter((p) => {
+        const pCreatedDate = p.created_at ? String(p.created_at).substring(0, 10) : null;
+        if (latestCreatedDate && pCreatedDate !== latestCreatedDate) return false;
+        if (latestUpdatedBy && p.updated_by !== latestUpdatedBy) return false;
+        return true;
+      });
+    } else {
+      latestDatePayments = primaryBatchPayments;
+    }
+
     const totalBadDebt = latestDatePayments.reduce((sum, p) => sum + p.total_paid_amount, 0);
     // bad_debt_date = วันที่ล่าสุด (slip date for bank reconciliation)
     const badDebtDate = latestDate ?? suspend.date;
