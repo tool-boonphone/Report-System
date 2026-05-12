@@ -648,6 +648,8 @@ export default function DebtReport() {
   const filteredRows = useMemo(() => {
     const q = search.trim().toLowerCase();
     return activeRows.filter((r) => {
+      // 0. ตัดสถานะ ยกเลิกสัญญา ออกเสมอ
+      if (r.debtStatus === "ยกเลิกสัญญา") return false;
       // 1. เดือน-ปีที่อนุมัติ
       if (approveDateFilter.size > 0) {
         const ym = r.approveDate ? r.approveDate.slice(0, 7) : "";
@@ -697,7 +699,7 @@ export default function DebtReport() {
         // Row ผ่านถ้ามี installment อย่างน้อย 1 งวดที่ต้องเก็บ (ส้มหรือดำ)
         // = ไม่ใช่ closed, ไม่ใช่ suspended, ไม่ใช่ paid, ไม่ใช่ future (dueDate > today)
         // และ contract status ไม่ใช่ ระงับสัญญา / สิ้นสุดสัญญา / หนี้เสีย
-        const specialStatus = r.debtStatus === "ระงับสัญญา" || r.debtStatus === "สิ้นสุดสัญญา" || r.debtStatus === "หนี้เสีย";
+        const specialStatus = r.debtStatus === "ระงับสัญญา" || r.debtStatus === "สิ้นสุดสัญญา" || r.debtStatus === "หนี้เสีย" || r.debtStatus === "ยกเลิกสัญญา";
         if (specialStatus) return false;
         const hasCollectableInst = r.installments.some((inst) => {
           if (inst.isClosed || inst.isSuspended) return false;

@@ -26,7 +26,7 @@ import { getDb } from "../db";
 import type { SectionKey } from "../../shared/const";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const TERMINAL_STATUSES = new Set(["ระงับสัญญา", "สิ้นสุดสัญญา", "หนี้เสีย"]);
+const TERMINAL_STATUSES = new Set(["ระงับสัญญา", "สิ้นสุดสัญญา", "หนี้เสีย", "ยกเลิกสัญญา"]);
 
 function bucketFromDays(days: number): string {
   if (days <= 0) return "ปกติ";
