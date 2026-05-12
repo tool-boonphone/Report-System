@@ -1517,3 +1517,8 @@ Task list:
 ## Bug — เป้าเก็บหนี้กำหนดงวดผ่อนไม่ถูกต้อง (2026-05-13)
 - [x] แก้ไข logic งวดผ่อน fallback ให้รวม isClosed ด้วย (งวดที่ชำระครบแล้ว) — ปัจจุบัน filter !isSuspended && !isClosed ทำให้ได้ 0 งวด แล้ว fallback เป็น 1/N
 - [x] commit + push GitHub + checkpoint
+
+## Bug — suspendedFromPeriod ของ ยกเลิกสัญญา ผิด ทำให้ทุกงวดเป็น isSuspended=true (2026-05-13)
+- [x] ตรวจสอบ logic suspendedFromPeriod ใน debtDb.ts สำหรับ ยกเลิกสัญญา
+- [x] แก้ไขให้ suspendedFromPeriod = N+1 (งวดที่ผ่อนมาแล้ว N งวด) — ใช้ paid_amount > 0 จาก installments เป็น fallback เมื่อไม่มี receipt_no
+- [x] commit + push GitHub + checkpoint
