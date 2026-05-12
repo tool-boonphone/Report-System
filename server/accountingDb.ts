@@ -618,17 +618,15 @@ export async function getIncomeSummaryByPeriod(
           WHEN c.status = 'หนี้เสีย'
             AND bdl.last_paid_date IS NOT NULL
             AND DATE(pt.paid_at) = bdl.last_paid_date
-            AND bdl.last_created_at IS NOT NULL
-            AND DATE(pt.created_at) = DATE(bdl.last_created_at)
-            AND (bdl.last_updated_by IS NULL OR pt.updated_by = bdl.last_updated_by)
+            AND bdl.last_created_date IS NOT NULL
+            AND DATE(pt.created_at) = bdl.last_created_date
             THEN 'ขายเครื่อง'
           -- ปิดยอด: สัญญาสิ้นสุดสัญญา/สำเร็จ + batch สุดท้าย (ใช้ logic เดียวกับ PT_INCOME_TYPE_CASE)
           WHEN c.status IN ('สิ้นสุดสัญญา', 'สำเร็จ')
             AND bdl.last_paid_date IS NOT NULL
             AND DATE(pt.paid_at) = bdl.last_paid_date
-            AND bdl.last_created_at IS NOT NULL
-            AND DATE(pt.created_at) = DATE(bdl.last_created_at)
-            AND (bdl.last_updated_by IS NULL OR pt.updated_by = bdl.last_updated_by)
+            AND bdl.last_created_date IS NOT NULL
+            AND DATE(pt.created_at) = bdl.last_created_date
             THEN 'ปิดยอด'
           ELSE 'ค่างวด'
         END AS income_type
