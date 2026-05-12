@@ -749,6 +749,8 @@ export default function DebtOverview() {
   const filteredTargetRows = useMemo(() => {
     const q = search.trim().toLowerCase();
     return targetRows.filter((r) => {
+      // ตัดยกเลิกสัญญาออกเหมือน DebtReport
+      if (r.debtStatus === "ยกเลิกสัญญา") return false;
       if (approveYearFilter.size > 0 && !(r.approveDate && approveYearFilter.has(r.approveDate.slice(0, 4)))) return false;
       if (approveDateFilter.size > 0 && !(r.approveDate && approveDateFilter.has(r.approveDate.slice(0, 7)))) return false;
       if (dueDateExact) {
@@ -792,77 +794,8 @@ export default function DebtOverview() {
   /* ---- Today for "ยังไม่ถึงกำหนด" ---- */
   const todayStr = useMemo(() => new Date().toISOString().slice(0, 10), []);
 
-  /* ---- Cache-based summary (ยอดเก็บหนี้ + ยังไม่ถึงกำหนด จาก DB cache เหมือน MonthlySummary) ---- */
-  const approveMonthsForCache = useMemo(() => {
-    const months = new Set<string>(approveDateFilter);
-    if (approveYearFilter.size > 0) {
-      Array.from(approveYearFilter).forEach((yr) => {
-        for (let m = 1; m <= 12; m++) {
-          months.add(`${yr}-${String(m).padStart(2, "0")}`);
-        }
-      });
-    }
-    return months.size > 0 ? Array.from(months).sort() : undefined;
-  }, [approveDateFilter, approveYearFilter]);
-
-  const productTypeForCache = useMemo(() => {
-    if (productTypeFilter.size === 1) return Array.from(productTypeFilter)[0];
-    return undefined;
-  }, [productTypeFilter]);
-
-  const cacheSummaryInput = useMemo(() => {
-    if (!section) return null;
-    return {
-      section: section as "Boonphone" | "Fastfone365",
-      paidApproveMonths: approveMonthsForCache,
-      paidProductType: productTypeForCache,
-      notYetDueApproveMonths: approveMonthsForCache,
-      notYetDueProductType: productTypeForCache,
-    };
-  }, [section, approveMonthsForCache, productTypeForCache]);
-
-  const { data: cacheSummaryData } = trpc.monthlySummary.get.useQuery(
-    cacheSummaryInput ?? { section: "Boonphone" as const },
-    { enabled: !!cacheSummaryInput, staleTime: 5 * 60 * 1000 },
-  );
-
-  // Map: approveMonth → { paidTotal, notYetDueTotal, breakdown }
-  const cacheByMonth = useMemo(() => {
-    const m = new Map<string, {
-      paidTotal: number; notYetDueTotal: number;
-      principal: number; interest: number; fee: number;
-      penalty: number; unlockFee: number; overpaid: number;
-    }>();
-    if (!cacheSummaryData?.rowsJson) return m;
-    try {
-      const rows = JSON.parse(cacheSummaryData.rowsJson) as Array<{
-        approveMonth: string;
-        bucket: string;
-        paidTotal: number;
-        notYetDueTotal: number;
-        paidPrincipal?: number;
-        paidInterest?: number;
-        paidFee?: number;
-        paidPenalty?: number;
-        paidUnlockFee?: number;
-        paidOverpaid?: number;
-      }>;
-      for (const r of rows) {
-        if (r.bucket !== "__total__") continue;
-        m.set(r.approveMonth, {
-          paidTotal: r.paidTotal ?? 0,
-          notYetDueTotal: r.notYetDueTotal ?? 0,
-          principal: r.paidPrincipal ?? 0,
-          interest: r.paidInterest ?? 0,
-          fee: r.paidFee ?? 0,
-          penalty: r.paidPenalty ?? 0,
-          unlockFee: r.paidUnlockFee ?? 0,
-          overpaid: r.paidOverpaid ?? 0,
-        });
-      }
-    } catch { /* ignore */ }
-    return m;
-  }, [cacheSummaryData]);
+  /* ---- Cache-based summary ถูกลบออกแล้ว ---- */
+  // ยอดเก็บหนี้คำนวณจาก in-memory rows โดยตรง เหมือน DebtReport
 
   /* ---- Aggregate by month ---- */
   const monthRows = useMemo(() => {
@@ -998,35 +931,8 @@ export default function DebtOverview() {
         (cv.overpaid ? row.collectedOverpaid : 0);
       // หมายเหตุ: badDebt (ยอดขายเครื่อง) แยกไปอยู่ใน deviceSaleAmount แล้ว ไม่รวมใน collectedTotal
 
-      // Override ด้วยค่าจาก cache (DB) เหมือน MonthlySummary
-      // ใช้ cache เฉพาะเมื่อไม่มีการ search/statusFilter ที่ทำให้สัญญาลดลงจากทั้งเดือน
-      const isFullMonth = !search.trim() && statusFilter.size === 0;
-      const cached = isFullMonth ? cacheByMonth.get(row.monthKey) : undefined;
-      if (cached) {
-        // ถ้า cache มี breakdown → sync breakdown ลง row และคำนวณ collectedTotal จาก breakdown × badge visibility
-        // เพื่อให้ badge toggle มีผลต่อยอดในตารางด้วย
-        const hasCacheBreakdown = cached.principal > 0 || cached.interest > 0 || cached.fee > 0 ||
-          cached.penalty > 0 || cached.unlockFee > 0 || cached.overpaid > 0;
-        if (hasCacheBreakdown) {
-          row.collectedPrincipal = cached.principal;
-          row.collectedInterest = cached.interest;
-          row.collectedFee = cached.fee;
-          row.collectedPenalty = cached.penalty;
-          row.collectedUnlockFee = cached.unlockFee;
-          row.collectedOverpaid = cached.overpaid;
-          row.collectedTotal =
-            (cv.principal ? cached.principal : 0) +
-            (cv.interest ? cached.interest : 0) +
-            (cv.fee ? cached.fee : 0) +
-            (cv.penalty ? cached.penalty : 0) +
-            (cv.unlockFee ? cached.unlockFee : 0) +
-            (cv.overpaid ? cached.overpaid : 0);
-        } else {
-          // fallback: ใช้ paidTotal จาก cache โดยตรง (กรณี breakdown ยังไม่มีใน cache เก่า)
-          row.collectedTotal = cached.paidTotal;
-        }
-        row.notYetDue = cached.notYetDueTotal;
-      }
+      // ยอดเก็บหนี้คำนวณจาก in-memory rows โดยตรง (ไม่ใช้ cache override)
+      // เพื่อให้ตรงกับหน้ายอดเก็บหนี้ใน DebtReport
     });
 
     // Sort by monthKey (default asc = เก่าสุดบนสุด)
@@ -1037,7 +943,7 @@ export default function DebtOverview() {
         ? a.monthKey.localeCompare(b.monthKey)
         : b.monthKey.localeCompare(a.monthKey)
     );
-  }, [filteredTargetRows, filteredCollectedRows, principalOnly, dueDateFilter, dueDateExact, badgeVisibility, targetBadgeVisibility, todayStr, monthSortDir, cacheByMonth, search, statusFilter]);
+  }, [filteredTargetRows, filteredCollectedRows, principalOnly, dueDateFilter, dueDateExact, badgeVisibility, targetBadgeVisibility, todayStr, monthSortDir]);
 
   /* ---- Grand totals (for badge display) ---- */
   const grandInstall = useMemo(() => {
