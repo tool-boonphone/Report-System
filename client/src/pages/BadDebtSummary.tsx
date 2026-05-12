@@ -20,7 +20,23 @@ import {
   CalendarDays,
   CalendarRange,
   List,
+  Check,
+  X,
 } from "lucide-react";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import { cn } from "@/lib/utils";
 import { AppShell } from "@/components/AppShell";
 import { SyncStatusBar } from "@/components/SyncStatusBar";
 import { useNavActions } from "@/contexts/NavActionsContext";
@@ -36,6 +52,28 @@ import {
 } from "@/components/ui/tooltip";
 
 /* ─── helpers ─────────────────────────────────────────────────────────────── */
+
+/** Derive iOS/Android from model string */
+const deriveOS = (model: string | null): "iOS" | "Android" | null => {
+  if (!model) return null;
+  const m = model.toLowerCase();
+  if (
+    m.startsWith("iphone") ||
+    m.startsWith("ipad") ||
+    m.startsWith("ไอโฟน") ||
+    m.startsWith("ไอแพด")
+  )
+    return "iOS";
+  return "Android";
+};
+
+/** Parse model name: extract base model (ตัด capacity ออก) */
+const parseModelBase = (model: string | null): string | null => {
+  if (!model) return null;
+  const capMatch = model.match(/(\d+)\s*[Gg][Bb]/);
+  if (capMatch) return model.replace(/\s*\d+\s*[Gg][Bb].*$/, "").trim();
+  return model.trim();
+};
 const fmtMoney = (v: number | null | undefined) =>
   v == null
     ? "-"
@@ -138,6 +176,97 @@ function SummaryCard({ icon, label, value, color }: {
   );
 }
 
+/* ─── MultiSelectFilter ─────────────────────────────────────────────────────── */
+function MultiSelectFilter({
+  label,
+  selected,
+  onChange,
+  options,
+  placeholder = "ทั้งหมด",
+  formatOption,
+}: {
+  label: string;
+  selected: Set<string>;
+  onChange: (v: Set<string>) => void;
+  options: string[];
+  placeholder?: string;
+  formatOption?: (v: string) => string;
+}) {
+  const [open, setOpen] = useState(false);
+  const toggle = (s: string) => {
+    const next = new Set(selected);
+    if (next.has(s)) next.delete(s);
+    else next.add(s);
+    onChange(next);
+  };
+  const labelText =
+    selected.size === 0
+      ? placeholder
+      : selected.size === 1
+        ? (formatOption ? formatOption(Array.from(selected)[0]) : Array.from(selected)[0])
+        : `${selected.size} รายการ`;
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className={cn(
+            "flex items-center gap-1.5 h-9 px-3 py-2 rounded-md border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[140px] justify-between",
+            selected.size > 0
+              ? "border-indigo-400 bg-indigo-50 text-indigo-800 font-medium"
+              : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50",
+          )}
+        >
+          <span className="truncate text-xs">{labelText}</span>
+          <ChevronsUpDown className="w-3.5 h-3.5 flex-shrink-0 text-gray-400" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-64 p-0" align="start">
+        <Command>
+          <CommandInput placeholder={`ค้นหา ${label}...`} className="h-8 text-xs" />
+          <CommandList>
+            <CommandEmpty>ไม่พบตัวเลือก</CommandEmpty>
+            <CommandGroup>
+              <CommandItem
+                value="__all__"
+                onSelect={() => { onChange(new Set()); setOpen(false); }}
+              >
+                <Check
+                  className={cn(
+                    "mr-2 h-3.5 w-3.5",
+                    selected.size === 0 ? "opacity-100 text-indigo-600" : "opacity-0",
+                  )}
+                />
+                <span className={selected.size === 0 ? "text-indigo-600 font-medium text-xs" : "text-gray-500 text-xs"}>
+                  {placeholder}
+                </span>
+              </CommandItem>
+              {options.map((opt) => (
+                <CommandItem
+                  key={opt}
+                  value={opt}
+                  onSelect={(v) => {
+                    const original = options.find((o) => o.toLowerCase() === v) ?? v;
+                    toggle(original);
+                  }}
+                >
+                  <Check
+                    className={cn(
+                      "mr-2 h-3.5 w-3.5",
+                      selected.has(opt) ? "opacity-100 text-indigo-600" : "opacity-0",
+                    )}
+                  />
+                  <span className="text-xs">{formatOption ? formatOption(opt) : opt}</span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 /* ─── main component ────────────────────────────────────────────────────────── */
 export default function BadDebtSummary() {
   const { section } = useSection();
@@ -149,6 +278,8 @@ export default function BadDebtSummary() {
   const [approveMonth, setApproveMonth] = useState("");
   const [saleMonth, setSaleMonth] = useState("");
   const [filterYear, setFilterYear] = useState("");
+  const [osFilter, setOsFilter] = useState<Set<string>>(new Set());
+  const [modelFilter, setModelFilter] = useState<Set<string>>(new Set());
   const [activeTab, setActiveTab] = useState<ActiveTab>("yearly");
   // sub-tabs
   const [monthlySubTab, setMonthlySubTab] = useState<MonthlySubTab>("bySale");
@@ -207,9 +338,60 @@ export default function BadDebtSummary() {
     return Array.from(set).sort().reverse();
   }, [rows]);
 
+  /* ── model canonical map (lowercase key → canonical display) ── */
+  const modelCanonicalMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const r of rows) {
+      if (!r.model) continue;
+      const base = parseModelBase(r.model);
+      if (!base) continue;
+      const key = base.toLowerCase();
+      if (!map.has(key)) map.set(key, base);
+    }
+    return map;
+  }, [rows]);
+
+  /* ── model options (ยุบรวม base model แล้ว, กรองตาม osFilter) ── */
+  const modelOptions = useMemo(() => {
+    const keySet = new Set<string>();
+    for (const r of rows) {
+      if (!r.model) continue;
+      if (osFilter.size > 0) {
+        const os = deriveOS(r.model);
+        if (!os || !osFilter.has(os)) continue;
+      }
+      const base = parseModelBase(r.model);
+      if (!base) continue;
+      keySet.add(base.toLowerCase());
+    }
+    return Array.from(keySet).sort((a, b) => a.localeCompare(b, "th"));
+  }, [rows, osFilter]);
+
+  /* ── reset modelFilter เมื่อ osFilter เปลี่ยน ── */
+  React.useEffect(() => {
+    setModelFilter((prev) => {
+      const filtered = Array.from(prev).filter((m) => modelOptions.includes(m));
+      if (filtered.length === prev.size) return prev;
+      return new Set(filtered);
+    });
+  }, [modelOptions]);
+
   /* ── filtered rows (list tab) ── */
   const filteredRows = useMemo(() => {
-    const r = [...rows];
+    let r = [...rows];
+    if (osFilter.size > 0) {
+      r = r.filter((row) => {
+        const os = deriveOS(row.model ?? null);
+        return os && osFilter.has(os);
+      });
+    }
+    if (modelFilter.size > 0) {
+      r = r.filter((row) => {
+        if (!row.model) return false;
+        const base = parseModelBase(row.model);
+        return base != null && modelFilter.has(base.toLowerCase());
+      });
+    }
     r.sort((a, b) => {
       const av: any = a[sortKey as keyof typeof a] ?? "";
       const bv: any = b[sortKey as keyof typeof b] ?? "";
@@ -218,7 +400,7 @@ export default function BadDebtSummary() {
       return 0;
     });
     return r;
-  }, [rows, sortKey, sortDir]);
+  }, [rows, osFilter, modelFilter, sortKey, sortDir]);
 
   /* ── monthly bySale summary (ไม่มี % หนี้เสีย) ── */
   const monthlyBySaleRows = useMemo(() => {
@@ -564,7 +746,28 @@ export default function BadDebtSummary() {
               </select>
             </div>
           )}
-          <button onClick={() => { setApproveMonth(""); setSaleMonth(""); setFilterYear(""); }} className="h-9 px-3 text-sm border rounded hover:bg-gray-50 text-gray-600">
+          {/* ประเภทเครื่อง iOS/Android */}
+          <MultiSelectFilter
+            label="ประเภทเครื่อง"
+            selected={osFilter}
+            onChange={setOsFilter}
+            options={["iOS", "Android"]}
+            placeholder="ทุกประเภท"
+          />
+          {/* รุ่นเครื่อง */}
+          <MultiSelectFilter
+            label="รุ่นเครื่อง"
+            selected={modelFilter}
+            onChange={setModelFilter}
+            options={modelOptions}
+            placeholder="ทุกรุ่น"
+            formatOption={(k) => modelCanonicalMap.get(k) ?? k}
+          />
+          <button
+            onClick={() => { setApproveMonth(""); setSaleMonth(""); setFilterYear(""); setOsFilter(new Set()); setModelFilter(new Set()); }}
+            className="flex items-center gap-1 h-9 px-3 text-sm border rounded hover:bg-gray-50 text-gray-600"
+          >
+            <X className="w-3.5 h-3.5" />
             ล้างตัวกรอง
           </button>
           {/* Sub-tab แสดงเมื่ออยู่ใน tab yearly หรือ monthly */}
