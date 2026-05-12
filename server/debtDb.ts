@@ -3629,6 +3629,7 @@ export async function* listDebtCollectedStream(params: {
              pt.status AS ff_status,
              pt.updated_at,
              pt.updated_by,
+             pt.created_at,
              -- Phase 131: ใช้ period_no/sub_no ที่ backfill ไว้แล้วใน DB
              pt.period_no,
              pt.sub_no
@@ -3665,6 +3666,7 @@ export async function* listDebtCollectedStream(params: {
         ff_status: r.ff_status ?? null,
         updated_at: r.updated_at ?? null,
         updated_by: r.updated_by ?? null,
+        created_at: r.created_at ? String(r.created_at) : null,
         // Phase 131: เก็บ sub_no ไว้ใช้เป็น splitIndex
         _sub_no: r.sub_no != null ? Number(r.sub_no) : null,
       } as any);
@@ -3731,37 +3733,66 @@ export async function* listDebtCollectedStream(params: {
         return isNumericPayExt || isTxrtReceipt;
       });
 
-      // Phase 106 (Stream): Universal bad-debt rule — same as listDebtCollected.
-      // For ALL contracts that are bad-debt AND real payments exist:
-      //   - Find the LATEST paid_at date across all real payments.
-      //   - SUM all real payments on that latest date → bad_debt_amount.
-      //   - All other payments (earlier dates) → normal installment columns.
-      // This overrides the DB bad_debt_amount (which may be null or wrong).
-      //
-      // A contract is considered bad-debt if:
-      //   1. contract.status = "หนี้เสีย" (direct), OR
-      //   2. Any installment has status = "ยกเลิกสัญญา" | "หนี้เสีย" | "ระงับสัญญา"
-      //      (some contracts have status="สำเร็จ" but installments are cancelled)
-      // Phase 126 fix: "ระงับสัญญา" ≠ หนี้เสีย — สัญญาระงับมีรายการชำระปกติ ไม่ใช่ bad_debt
+      // Phase 106 (Stream): Universal bad-debt rule — same as listDebtCollected + accountingDb.
+      // Batch logic 2 ระดับ (เหมือน non-stream และ PT_INCOME_TYPE_CASE):
+      //   ระดับ 1 (Primary): paid_at + updated_by + DATE(created_at) เหมือนกัน → ยอดรวม >= 1000
+      //   ระดับ 2 (Fallback): updated_by + DATE(created_at) เท่านั้น (ไม่สนใจ paid_at)
+      // Phase 126 fix: "ระงับสัญญา" ≠ หนี้เสีย
       // Phase 131 fix: bad_debt ต้องมาจาก contract.status = "หนี้เสีย" เท่านั้น
-      // ไม่ใช้ installment status เป็นเงื่อนไข เพราะ "ยกเลิกสัญญา" ไม่ใช่ bad_debt
       const isBadDebtContract = c.status === "หนี้เสีย";
       if (isBadDebtContract && realPaymentsRaw.length > 0) {
-        const sortedReal = [...realPaymentsRaw].sort((a, b) => {
-          const da = ((a as any).paid_at ?? "").substring(0, 10);
-          const db2 = ((b as any).paid_at ?? "").substring(0, 10);
-          return da < db2 ? 1 : da > db2 ? -1 : 0;
+        // Sort by created_at DESC (row ล่าสุดขึ้นก่อน) เหมือน accountingDb.ts
+        const sortedReal = [...realPaymentsRaw].sort((a, b) =>
+          ((b as any).created_at ?? "").localeCompare((a as any).created_at ?? "")
+        );
+        const latestRow = sortedReal[0] as any;
+        const latestPaidDate    = (latestRow.paid_at    ?? "").substring(0, 10);
+        const latestCreatedDate = (latestRow.created_at ?? "").substring(0, 10);
+        const latestUpdatedBy   = latestRow.updated_by ?? null;
+        // ---- ระดับ 1 (Primary): paid_at + updated_by + DATE(created_at) เหมือนกัน ----
+        const primaryBatch = sortedReal.filter((p) => {
+          const pPaidDate    = ((p as any).paid_at    ?? "").substring(0, 10);
+          const pCreatedDate = ((p as any).created_at ?? "").substring(0, 10);
+          const pUpdatedBy   = (p as any).updated_by ?? null;
+          return pPaidDate === latestPaidDate
+            && pCreatedDate === latestCreatedDate
+            && pUpdatedBy === latestUpdatedBy;
         });
-        const latestDate = ((sortedReal[0] as any).paid_at ?? "").substring(0, 10);
-        const latestDatePayments = sortedReal.filter(
-          (p) => ((p as any).paid_at ?? "").substring(0, 10) === latestDate,
+        const primaryTotal = primaryBatch.reduce(
+          (sum, p) => sum + Number((p as any).total_paid_amount ?? 0), 0
         );
-        const latestDateTotal = latestDatePayments.reduce(
-          (sum, p) => sum + Number((p as any).total_paid_amount ?? 0),
-          0,
+        let finalBatch: typeof sortedReal;
+        let finalTotal: number;
+        let isFallback = false;
+        if (primaryTotal >= 1000) {
+          finalBatch = primaryBatch;
+          finalTotal = primaryTotal;
+        } else {
+          // ---- ระดับ 2 (Fallback): updated_by + DATE(created_at) เท่านั้น ----
+          const fallbackBatch = sortedReal.filter((p) => {
+            const pCreatedDate = ((p as any).created_at ?? "").substring(0, 10);
+            const pUpdatedBy   = (p as any).updated_by ?? null;
+            return pCreatedDate === latestCreatedDate && pUpdatedBy === latestUpdatedBy;
+          });
+          finalBatch = fallbackBatch;
+          finalTotal = fallbackBatch.reduce(
+            (sum, p) => sum + Number((p as any).total_paid_amount ?? 0), 0
+          );
+          isFallback = true;
+        }
+        contractBadDebtAmount = finalTotal;
+        // bad_debt_date = paid_at ของ row ล่าสุดใน batch
+        const finalSortedByPaid = [...finalBatch].sort((a, b) =>
+          ((b as any).paid_at ?? "").localeCompare((a as any).paid_at ?? "")
         );
-        contractBadDebtAmount = latestDateTotal;
-        contractBadDebtDate = latestDate || null;
+        contractBadDebtDate = finalSortedByPaid.length > 0
+          ? ((finalSortedByPaid[0] as any).paid_at ?? "").substring(0, 10)
+          : latestPaidDate;
+        // เก็บ finalBatch สำหรับ filter normalPayments
+        (realPaymentsRaw as any).__finalBatch = finalBatch;
+        (realPaymentsRaw as any).__isFallback = isFallback;
+        (realPaymentsRaw as any).__latestCreatedDate = latestCreatedDate;
+        (realPaymentsRaw as any).__latestUpdatedBy = latestUpdatedBy;
       }
 
       // Phase 131: ใช้ period_no/sub_no จาก DB โดยตรง (ไม่ใช้ assignPayPeriods)
@@ -3778,8 +3809,23 @@ export async function* listDebtCollectedStream(params: {
         badDebtNote = `ยอดขายเครื่อง ${contractBadDebtAmount.toLocaleString("th-TH", { minimumFractionDigits: 0, maximumFractionDigits: 0 })} บาท (${day}/${month}/${year})`;
 
         // Normal payments: ใช้ period_no/sub_no จาก DB โดยตรง (ไม่ใช้ assignPayPeriods)
+        // กรองด้วย finalBatch (batch logic 2 ระดับ) เหมือน non-stream version
+        const _finalBatch: Set<unknown> = new Set(
+          ((realPaymentsRaw as any).__finalBatch ?? []) as unknown[]
+        );
+        const _isFallback: boolean = (realPaymentsRaw as any).__isFallback ?? false;
+        const _bdCreatedDate: string | null = (realPaymentsRaw as any).__latestCreatedDate ?? null;
+        const _bdUpdatedBy: string | null = (realPaymentsRaw as any).__latestUpdatedBy ?? null;
         const normalPayments = realPaymentsRaw
-          .filter((p) => ((p as any).paid_at ?? "").substring(0, 10) !== contractBadDebtDate)
+          .filter((p) => {
+            if (_finalBatch.has(p)) return false;
+            if (_isFallback && _bdCreatedDate) {
+              const pCreatedDate = ((p as any).created_at ?? "").substring(0, 10);
+              const pUpdatedBy   = (p as any).updated_by ?? null;
+              if (pCreatedDate === _bdCreatedDate && pUpdatedBy === _bdUpdatedBy) return false;
+            }
+            return true;
+          })
           .map((p) => ({
             ...p,
             period: (p as any).period != null ? Number((p as any).period) : null,
