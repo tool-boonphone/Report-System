@@ -719,13 +719,22 @@ async function syncPayments(
     // Both Boonphone and Fastfone365 use the same payment transactions endpoint.
     // GET /api/v1/payment?action=transactions
     // Response fields are identical: principal_paid, interest_paid, fee_paid, etc.
+    //
+    // Delete detection: collect ALL external_ids returned by API, then delete
+    // any payment_transactions rows in DB that are NOT in the API response.
+    // This handles cases where admin deletes a payment from the real system.
+    const apiExternalIds = new Set<string>();
     const buffer: any[] = [];
     await client.forEachPage<any>(
       "payment",
       (d) => d?.transactions,
       { action: "transactions" },
       async (items) => {
-        for (const it of items) buffer.push(mapPayment(section, it));
+        for (const it of items) {
+          const mapped = mapPayment(section, it);
+          buffer.push(mapped);
+          apiExternalIds.add(String(it.payment_id));
+        }
         if (buffer.length >= 1000) {
           rowCount += await upsertPayments(buffer.splice(0, buffer.length));
         }
@@ -733,6 +742,43 @@ async function syncPayments(
       500,
     );
     if (buffer.length) rowCount += await upsertPayments(buffer);
+
+    // ── Delete detection ────────────────────────────────────────────────────
+    // Only run if we got a non-trivial number of rows from API (safety guard
+    // against accidental mass-delete when API returns empty due to network error).
+    if (apiExternalIds.size > 0) {
+      const { getDb } = await import("../db");
+      const { sql } = await import("drizzle-orm");
+      const db = await getDb();
+      if (db) {
+        // Fetch all external_ids currently in DB for this section
+        const dbRows: { external_id: string }[] = (await db.execute(
+          sql`SELECT external_id FROM payment_transactions WHERE section = ${section}`
+        ) as any)[0] ?? [];
+        const toDelete = dbRows
+          .map((r) => r.external_id)
+          .filter((eid) => !apiExternalIds.has(eid));
+        if (toDelete.length > 0) {
+          console.log(`[runner] ${section}: delete detection — removing ${toDelete.length} payment(s) not in API: [${toDelete.slice(0, 10).join(", ")}${toDelete.length > 10 ? "..." : ""}]`);
+          // Delete in batches of 500 to avoid oversized IN clauses
+          const BATCH = 500;
+          for (let i = 0; i < toDelete.length; i += BATCH) {
+            const chunk = toDelete.slice(i, i + BATCH);
+            const placeholders = chunk.map(() => "?").join(",");
+            await db.execute(
+              sql.raw(`DELETE FROM payment_transactions WHERE section = '${section}' AND external_id IN (${chunk.map((id) => `'${id.replace(/'/g, "''")}'`).join(",")})`)
+            );
+          }
+          console.log(`[runner] ${section}: delete detection — deleted ${toDelete.length} stale payment row(s)`);
+        } else {
+          console.log(`[runner] ${section}: delete detection — no stale payments found`);
+        }
+      }
+    } else {
+      console.warn(`[runner] ${section}: delete detection skipped — API returned 0 payments (possible network issue)`);
+    }
+    // ────────────────────────────────────────────────────────────────────────
+
     await finishSyncLog({ id: log.id, status: "success", rowCount });
     return rowCount;
   } catch (err: any) {
