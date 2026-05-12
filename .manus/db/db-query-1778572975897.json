@@ -1,0 +1,9 @@
+{
+  "query": "DELETE FROM payment_transactions WHERE id = 1220425 AND external_id = '52682' AND contract_external_id = '7414' AND section = 'Fastfone365';",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute DELETE FROM payment_transactions WHERE id = 1220425 AND external_id = '52682' AND contract_external_id = '7414' AND section = 'Fastfone365';",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 1761
+}

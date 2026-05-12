@@ -906,6 +906,7 @@ const TERMINAL_STATUSES = new Set([
   "ระงับสัญญา",
   "สิ้นสุดสัญญา",
   "หนี้เสีย",
+  "ยกเลิกสัญญา", // Phase 107: ยกเลิกสัญญา ต้องไม่ถูก derive เป็นหนี้เสีย
 ]);
 
 function deriveDebtStatus(
@@ -2296,18 +2297,14 @@ export async function listDebtCollected(params: { section: SectionKey }) {
       const latestDate = ((sortedReal[0] as any).paid_at ?? "").substring(0, 10);
       // latestCreatedDate = DATE portion ของ created_at ของ row ล่าสุด
       const latestCreatedDate = ((sortedReal[0] as any).created_at ?? "").substring(0, 10);
-      // latestUpdatedBy = updated_by ของ row ล่าสุด
-      const latestUpdatedBy = (sortedReal[0] as any).updated_by ?? null;
-      // batch เดียวกัน = paid_at วันเดียวกัน + DATE(created_at) วันเดียวกัน + updated_by คนเดียวกัน
-      // (admin อาจบันทึกหลาย payments ในช่วงเวลาสั้นๆ ทำให้ created_at ต่างกัน 1-2 นาที)
+      // batch เดียวกัน = paid_at วันเดียวกัน + DATE(created_at) วันเดียวกัน (ไม่เช็ค updated_by)
+      // Phase 106 alignment กับ accountingDb.ts: ใช้แค่ paid_at + DATE(created_at)
       const latestDatePayments = sortedReal.filter((p) => {
         const paidDate = ((p as any).paid_at ?? "").substring(0, 10);
         if (paidDate !== latestDate) return false;
         // DATE(created_at) ต้องตรงกัน
         const pCreatedDate = ((p as any).created_at ?? "").substring(0, 10);
         if (latestCreatedDate && pCreatedDate && pCreatedDate !== latestCreatedDate) return false;
-        // updated_by ต้องตรงกัน (ถ้า latestUpdatedBy มีค่า)
-        if (latestUpdatedBy && (p as any).updated_by !== latestUpdatedBy) return false;
         return true;
       });
       const latestDateTotal = latestDatePayments.reduce(
@@ -2334,21 +2331,18 @@ export async function listDebtCollected(params: { section: SectionKey }) {
       // Phase 63 fix: ใช้ installmentAmount เป็น fallback เมื่อ amount=0
       const baselineAmt = c.installmentAmount ?? 0;
       // Filter out bad-debt batch payments before assigning periods
-      // batch เดียวกัน = paid_at วันเดียวกัน + DATE(created_at) วันเดียวกัน + updated_by คนเดียวกัน
+      // batch เดียวกัน = paid_at วันเดียวกัน + DATE(created_at) วันเดียวกัน (ไม่เช็ค updated_by)
       const bdBatchDate = contractBadDebtDate;
       const bdCreatedDate = sortedRealForBadDebt[0] ? ((sortedRealForBadDebt[0] as any).created_at ?? "").substring(0, 10) : null;
-      const bdUpdatedBy = sortedRealForBadDebt[0] ? ((sortedRealForBadDebt[0] as any).updated_by ?? null) : null;
       const normalPaymentsRaw = realPaymentsRaw.filter((p) => {
         const paidDate = ((p as any).paid_at ?? "").substring(0, 10);
         if (paidDate !== bdBatchDate) return true; // วันอื่น = normal
-        // วันเดียวกันกับ bad-debt date: ตรวจสอบ DATE(created_at) + updated_by
+        // วันเดียวกันกับ bad-debt date: ตรวจสอบ DATE(created_at)
         const pCreatedDate = ((p as any).created_at ?? "").substring(0, 10);
-        const pUpdatedBy = (p as any).updated_by ?? null;
-        // ถ้าตรงกันทั้ง DATE(created_at) และ updated_by = อยู่ใน batch หนี้เสีย (filter ออก)
+        // ถ้า DATE(created_at) ตรงกัน = อยู่ใน batch หนี้เสีย (filter ออก)
         const sameCreated = !bdCreatedDate || !pCreatedDate || pCreatedDate === bdCreatedDate;
-        const sameUpdatedBy = !bdUpdatedBy || pUpdatedBy === bdUpdatedBy;
-        if (sameCreated && sameUpdatedBy) return false; // bad-debt batch
-        return true; // วันเดียวกันแต่ updated_by/created_at ต่างกัน = normal
+        if (sameCreated) return false; // bad-debt batch
+        return true; // วันเดียวกันแต่ DATE(created_at) ต่างกัน = normal
       });
       const realAssignedForBadDebt = assignPayPeriods(
         normalPaymentsRaw,
@@ -3707,10 +3701,9 @@ export async function* listDebtCollectedStream(params: {
       //   2. Any installment has status = "ยกเลิกสัญญา" | "หนี้เสีย" | "ระงับสัญญา"
       //      (some contracts have status="สำเร็จ" but installments are cancelled)
       // Phase 126 fix: "ระงับสัญญา" ≠ หนี้เสีย — สัญญาระงับมีรายการชำระปกติ ไม่ใช่ bad_debt
-      // เฉพาะ "หนี้เสีย" และ "ยกเลิกสัญญา" (FF365) เท่านั้นที่ถือเป็น bad_debt contract
-      const SUSPEND_CODES_STREAM = new Set(["ยกเลิกสัญญา", "หนี้เสีย"]);
-      const hasSuspendedInstallment = c.installments.some((inst: any) => SUSPEND_CODES_STREAM.has(inst.status ?? ""));
-      const isBadDebtContract = c.status === "หนี้เสีย" || hasSuspendedInstallment;
+      // Phase 131 fix: bad_debt ต้องมาจาก contract.status = "หนี้เสีย" เท่านั้น
+      // ไม่ใช้ installment status เป็นเงื่อนไข เพราะ "ยกเลิกสัญญา" ไม่ใช่ bad_debt
+      const isBadDebtContract = c.status === "หนี้เสีย";
       if (isBadDebtContract && realPaymentsRaw.length > 0) {
         const sortedReal = [...realPaymentsRaw].sort((a, b) => {
           const da = ((a as any).paid_at ?? "").substring(0, 10);
