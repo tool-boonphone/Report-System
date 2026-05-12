@@ -1722,31 +1722,17 @@ export default function DebtReport() {
                             }
                             return r.installmentCount ?? "-";
                           } else {
-                            // เป้าเก็บหนี้: แสดงงวดปัจจุบันที่ถึงกำหนดชำระ
-                            const currentInst = r.installments.find((inst) => inst.isCurrentPeriod);
-                            const latestOverdue = currentInst?.period ?? null;
-                            if (latestOverdue != null && r.installmentCount != null) {
-                              return `${latestOverdue}/${r.installmentCount}`;
-                            }
-                            // ถ้าไม่มีงวดปัจจุบัน (เช่น ยกเลิกสัญญา / ระงับสัญญา ทำให้ทุกงวด isSuspended)
-                            // Phase: ดึงค่า N จากยอดเก็บหนี้ (collectedPaidPeriodMap) โดยตรง
-                            // เพราะยอดเก็บหนี้แสดง N ถูกต้องอยู่แล้ว ไม่ต้องคำนวณใหม่
+                            // เป้าเก็บหนี้: ใช้ค่า N/M จากยอดเก็บหนี้โดยตรง (collectedPaidPeriodMap)
+                            // ไม่คำนวณเองจาก installments เพราะยอดเก็บหนี้มีค่าที่ถูกต้องอยู่แล้ว
                             const collectedN = collectedPaidPeriodMap.get(r.contractExternalId);
                             if (collectedN != null && r.installmentCount != null) {
                               return `${collectedN}/${r.installmentCount}`;
                             }
-                            // fallback: หางวดสูงสุดที่ไม่ใช่ isSuspended (กรณี collected data ยังไม่โหลด)
-                            const lastPaidPeriod = r.installments
-                              .filter((inst) => !inst.isSuspended)
-                              .reduce((max, inst) => Math.max(max, inst.period ?? 0), 0);
-                            if (lastPaidPeriod > 0 && r.installmentCount != null) {
-                              return `${lastPaidPeriod}/${r.installmentCount}`;
-                            }
-                            // ถ้าไม่มีงวดปกติเลย (ยังไม่มียอดผ่อนเลย) → แสดง 0/N
+                            // fallback เมื่อ collected data ยังไม่โหลด
                             if (r.installmentCount != null) {
-                              return `0/${r.installmentCount}`;
+                              return `-/${r.installmentCount}`;
                             }
-                            return r.installmentCount ?? "-";
+                            return "-";
                           }
                         })()}
                       </div>
