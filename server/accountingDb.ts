@@ -177,9 +177,9 @@ const PT_INCOME_BASE_WHERE = `JSON_EXTRACT(pt.raw_json, '$.source') IS NULL`;
 function buildBadDebtLastDaysSubquery(section: string): string {
   // หา row ล่าสุดของแต่ละสัญญา (เรียงตาม created_at DESC)
   // แล้วคำนวณ primary batch sum (paid_at + created_date + updated_by เหมือนกัน)
-  // ถ้า primary batch sum < 1000 → ตรวจ fallback_sum (created_date+updated_by ไม่สนใจ paid_date)
-  // is_fallback = 1 เฉพาะเมื่อ primary_sum < 1000 AND fallback_sum >= 1000
-  // ถ้า fallback_sum < 1000 ด้วย → ไม่ใช่ขายเครื่อง (is_fallback = 0)
+  // ระดับ 1: primary_sum (paid_date+created_date+updated_by) >= 1000 → ขายเครื่อง
+  // ระดับ 2 (fallback): primary_sum < 1000 → group ใหม่ด้วย created_date+updated_by (ไม่สนใจ paid_date)
+  //   ยอดรวมเท่าไหร่ก็ถือว่าเป็นขายเครื่อง (is_fallback = 1 เสมอเมื่อ primary_sum < 1000)
   return `
     SELECT
       base.contract_no,
@@ -188,9 +188,7 @@ function buildBadDebtLastDaysSubquery(section: string): string {
       base.last_created_date,
       base.last_updated_by,
       CASE
-        WHEN COALESCE(agg.batch_sum, 0) < 1000
-          AND COALESCE(fb.fallback_sum, 0) >= 1000
-          THEN 1
+        WHEN COALESCE(agg.batch_sum, 0) < 1000 THEN 1
         ELSE 0
       END AS is_fallback
     FROM (
