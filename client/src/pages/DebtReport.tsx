@@ -1705,7 +1705,15 @@ export default function DebtReport() {
                             if (latestOverdue != null && r.installmentCount != null) {
                               return `${latestOverdue}/${r.installmentCount}`;
                             }
-                            // ถ้าไม่มีงวดปัจจุบัน (ยังไม่มียอดผ่อนเลย) → แสดง 1/N
+                            // ถ้าไม่มีงวดปัจจุบัน (เช่น ยกเลิกสัญญา / ระงับสัญญา ทำให้ทุกงวด isSuspended)
+                            // ให้หางวดสูงสุดที่ไม่ใช่ isSuspended (งวดที่ผ่อนมาแล้วจริง)
+                            const lastNormalPeriod = r.installments
+                              .filter((inst) => !inst.isSuspended && !inst.isClosed)
+                              .reduce((max, inst) => Math.max(max, inst.period ?? 0), 0);
+                            if (lastNormalPeriod > 0 && r.installmentCount != null) {
+                              return `${lastNormalPeriod}/${r.installmentCount}`;
+                            }
+                            // ถ้าไม่มีงวดปกติเลย (ยังไม่มียอดผ่อนเลย) → แสดง 1/N
                             if (r.installmentCount != null) {
                               return `1/${r.installmentCount}`;
                             }
