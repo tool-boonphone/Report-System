@@ -1508,3 +1508,8 @@ Task list:
 - [x] debtDb.ts stream section: เพิ่ม isContractCancelled logic เช่นกัน
 - [x] queryCacheDb.ts: เพิ่ม ยกเลิกสัญญา ใน suspendLabel reconstruction (4 จุด)
 - [x] TypeScript check ผ่าน + commit + push GitHub + checkpoint
+
+## Bug — งวดผ่อนในเป้าเก็บหนี้แสดงเป็น 1/งวด ทุกแถว (2026-05-13)
+- [x] หา logic ที่คำนวณ "งวดผ่อน" (paidPeriods/installmentCount) ใน DebtReport.tsx หรือ backend
+- [x] แก้ไข bug ให้แสดงงวดที่ผ่อนมาแล้วจริง
+- [x] commit + push GitHub + checkpoint
