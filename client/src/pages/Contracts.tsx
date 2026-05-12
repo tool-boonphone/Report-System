@@ -35,26 +35,27 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 // ─── Filter state ─────────────────────────────────────────────────────────────
+// categorical filters now hold Set<string> for multi-select
 type Filters = {
   search: string;
-  // categorical
-  status: string;
-  debtType: string;
-  partnerCode: string;
-  partnerProvince: string;
-  partnerStatus: string;
-  channel: string;
-  nationality: string;
-  gender: string;
-  occupation: string;
-  idProvince: string;
-  addrProvince: string;
-  workProvince: string;
-  promotionName: string;
-  device: string;
-  productType: string;
-  model: string;
-  deviceStatus: string;
+  // categorical (multi-select)
+  status: Set<string>;
+  debtType: Set<string>;
+  partnerCode: Set<string>;
+  partnerProvince: Set<string>;
+  partnerStatus: Set<string>;
+  channel: Set<string>;
+  nationality: Set<string>;
+  gender: Set<string>;
+  occupation: Set<string>;
+  idProvince: Set<string>;
+  addrProvince: Set<string>;
+  workProvince: Set<string>;
+  promotionName: Set<string>;
+  device: Set<string>;
+  productType: Set<string>;
+  model: Set<string>;
+  deviceStatus: Set<string>;
   // date range
   dateField: "submitDate" | "approveDate";
   dateFrom: string;
@@ -63,29 +64,29 @@ type Filters = {
 
 const EMPTY_FILTERS: Filters = {
   search: "",
-  status: "",
-  debtType: "",
-  partnerCode: "",
-  partnerProvince: "",
-  partnerStatus: "",
-  channel: "",
-  nationality: "",
-  gender: "",
-  occupation: "",
-  idProvince: "",
-  addrProvince: "",
-  workProvince: "",
-  promotionName: "",
-  device: "",
-  productType: "",
-  model: "",
-  deviceStatus: "",
+  status: new Set(),
+  debtType: new Set(),
+  partnerCode: new Set(),
+  partnerProvince: new Set(),
+  partnerStatus: new Set(),
+  channel: new Set(),
+  nationality: new Set(),
+  gender: new Set(),
+  occupation: new Set(),
+  idProvince: new Set(),
+  addrProvince: new Set(),
+  workProvince: new Set(),
+  promotionName: new Set(),
+  device: new Set(),
+  productType: new Set(),
+  model: new Set(),
+  deviceStatus: new Set(),
   dateField: "approveDate",
   dateFrom: "",
   dateTo: "",
 };
 
-// Categorical filter keys (used for cascading logic)
+// Categorical filter keys
 const CAT_KEYS: Array<keyof Omit<Filters, "search" | "dateField" | "dateFrom" | "dateTo">> = [
   "status",
   "debtType",
@@ -172,21 +173,34 @@ function includes(haystack: unknown, needle: string) {
   return String(haystack).toLowerCase().includes(needle);
 }
 
-/** ComboboxFilter: searchable dropdown with active state styling */
-function ComboboxFilter({
+// ─── Multi-select ComboboxFilter ─────────────────────────────────────────────
+function MultiComboboxFilter({
   label,
-  value,
+  selected,
   onChange,
   options,
   placeholder = "ทั้งหมด",
 }: {
   label: string;
-  value: string;
-  onChange: (v: string) => void;
+  selected: Set<string>;
+  onChange: (v: Set<string>) => void;
   options: string[];
   placeholder?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const toggle = (s: string) => {
+    const n = new Set(selected);
+    if (n.has(s)) n.delete(s);
+    else n.add(s);
+    onChange(n);
+  };
+  const labelText =
+    selected.size === 0
+      ? placeholder
+      : selected.size === 1
+        ? Array.from(selected)[0]
+        : `${selected.size} รายการ`;
+
   return (
     <div className="flex flex-col gap-1 min-w-0">
       <label className="text-xs font-medium text-gray-500 truncate">
@@ -195,37 +209,43 @@ function ComboboxFilter({
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <button
+            type="button"
             className={`w-full px-2.5 py-1.5 text-sm border rounded-lg text-left flex items-center justify-between gap-1 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-400 ${
-              value
+              selected.size > 0
                 ? "border-indigo-400 bg-indigo-50 text-indigo-800 font-medium"
                 : "border-gray-200 bg-white text-gray-500 hover:border-gray-300"
             }`}
           >
-            <span className="truncate">{value || placeholder}</span>
+            <span className="truncate">{labelText}</span>
             <ChevronsUpDown className="w-3.5 h-3.5 flex-shrink-0 text-gray-400" />
           </button>
         </PopoverTrigger>
-        <PopoverContent className="w-56 p-0" align="start">
+        <PopoverContent className="w-60 p-0" align="start">
           <Command>
             <CommandInput
-              placeholder="พิมพ์ค้นหา..."
+              placeholder={`ค้นหา ${label}...`}
               className="h-8 text-sm"
             />
             <CommandList>
               <CommandEmpty>ไม่พบตัวเลือก</CommandEmpty>
               <CommandGroup>
+                {/* Clear all */}
                 <CommandItem
                   value="__all__"
                   onSelect={() => {
-                    onChange("");
+                    onChange(new Set());
                     setOpen(false);
                   }}
                 >
                   <Check
-                    className={`mr-2 h-3.5 w-3.5 ${!value ? "opacity-100 text-indigo-600" : "opacity-0"}`}
+                    className={`mr-2 h-3.5 w-3.5 ${selected.size === 0 ? "opacity-100 text-indigo-600" : "opacity-0"}`}
                   />
                   <span
-                    className={!value ? "text-indigo-600 font-medium" : "text-gray-500"}
+                    className={
+                      selected.size === 0
+                        ? "text-indigo-600 font-medium"
+                        : "text-gray-500"
+                    }
                   >
                     {placeholder}
                   </span>
@@ -237,12 +257,12 @@ function ComboboxFilter({
                     onSelect={(v) => {
                       const original =
                         options.find((o) => o.toLowerCase() === v) ?? v;
-                      onChange(value === original ? "" : original);
-                      setOpen(false);
+                      toggle(original);
+                      // keep popover open for multi-select
                     }}
                   >
                     <Check
-                      className={`mr-2 h-3.5 w-3.5 ${value === opt ? "opacity-100 text-indigo-600" : "opacity-0"}`}
+                      className={`mr-2 h-3.5 w-3.5 ${selected.has(opt) ? "opacity-100 text-indigo-600" : "opacity-0"}`}
                     />
                     {opt}
                   </CommandItem>
@@ -278,10 +298,8 @@ export default function Contracts() {
   const listQuery = trpc.contracts.listAll.useQuery(
     { section: section! },
     {
-      // ข้อมูลสัญญาไม่ต้องการ real-time — staleTime: Infinity ป้องกัน
-      // background refetch ที่ทำให้ batch กับ auth.me แล้ว timeout (150s)
       staleTime: Infinity,
-      gcTime: 10 * 60 * 1000, // keep in cache 10 minutes
+      gcTime: 10 * 60 * 1000,
       enabled: Boolean(section),
       refetchOnWindowFocus: false,
       refetchOnReconnect: false,
@@ -291,10 +309,7 @@ export default function Contracts() {
   const allRows = listQuery.data ?? [];
 
   // ─── Cascading dynamic options ────────────────────────────────────────────
-  // For each categorical key, compute available options by applying ALL OTHER
-  // active filters (+ date range + search) — so options shrink as user selects.
   const dynamicOptions = useMemo(() => {
-    // Helper: does a row pass all filters EXCEPT the one we're computing options for?
     const rowPassesExcept = (r: any, excludeKey: string) => {
       // search
       const q = filters.search.trim().toLowerCase();
@@ -312,11 +327,11 @@ export default function Contracts() {
         )
           return false;
       }
-      // categorical filters
+      // categorical multi-select filters
       for (const key of CAT_KEYS) {
         if (key === excludeKey) continue;
-        const fv = filters[key as keyof Filters] as string;
-        if (fv && r[key] !== fv) return false;
+        const fv = filters[key as keyof Filters] as Set<string>;
+        if (fv.size > 0 && !fv.has(r[key])) return false;
       }
       // date range
       const dateFrom = filters.dateFrom || "";
@@ -349,10 +364,10 @@ export default function Contracts() {
     const dateTo = f.dateTo || "";
 
     let rows = allRows.filter((r: any) => {
-      // categorical
+      // categorical multi-select
       for (const key of CAT_KEYS) {
-        const fv = f[key as keyof Filters] as string;
-        if (fv && r[key] !== fv) return false;
+        const fv = f[key as keyof Filters] as Set<string>;
+        if (fv.size > 0 && !fv.has(r[key])) return false;
       }
       // date range
       if (dateFrom || dateTo) {
@@ -405,13 +420,18 @@ export default function Contracts() {
     let downPayment = 0;
     let financeAmount = 0;
     let commission = 0;
+    let totalInstallment = 0;
     for (const r of filteredRows) {
       sellPrice += Number(r.sellPrice ?? 0);
       downPayment += Number(r.downPayment ?? 0);
       financeAmount += Number(r.financeAmount ?? 0);
       commission += Number(r.commissionNet ?? 0);
+      // ยอดผ่อนรวม = installmentAmount × installmentCount
+      const instAmt = Number(r.installmentAmount ?? 0);
+      const instCnt = Number(r.installmentCount ?? 0);
+      totalInstallment += instAmt * instCnt;
     }
-    return { sellPrice, downPayment, financeAmount, commission };
+    return { sellPrice, downPayment, financeAmount, commission, totalInstallment };
   }, [filteredRows]);
 
   const fmtMoney = (n: number) =>
@@ -422,7 +442,7 @@ export default function Contracts() {
     let n = 0;
     if (filters.search) n++;
     for (const key of CAT_KEYS) {
-      if (filters[key as keyof Filters]) n++;
+      if ((filters[key as keyof Filters] as Set<string>).size > 0) n++;
     }
     if (filters.dateFrom || filters.dateTo) n++;
     return n;
@@ -434,8 +454,8 @@ export default function Contracts() {
     const params = new URLSearchParams({ section });
     if (filters.search) params.set("search", filters.search);
     for (const key of CAT_KEYS) {
-      const fv = filters[key as keyof Filters] as string;
-      if (fv) params.set(key, fv);
+      const fv = filters[key as keyof Filters] as Set<string>;
+      if (fv.size > 0) params.set(key, Array.from(fv).join(","));
     }
     if (filters.dateField) params.set("dateField", filters.dateField);
     if (filters.dateFrom) params.set("dateFrom", filters.dateFrom);
@@ -496,7 +516,7 @@ export default function Contracts() {
     }
   };
 
-  const setFilter = <K extends keyof Filters>(key: K, value: Filters[K]) => {
+  const setCatFilter = (key: keyof Filters, value: Set<string>) => {
     setFilters((f) => ({ ...f, [key]: value }));
   };
 
@@ -524,7 +544,7 @@ export default function Contracts() {
   return (
     <AppShell>
       <div className="w-full px-3 md:px-5 py-3">
-        {/* Toolbar: search + refresh + export */}
+        {/* Toolbar: search + export */}
         <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-3 mb-3">
           <div className="relative flex-1 min-w-0">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -532,7 +552,9 @@ export default function Contracts() {
               placeholder="ค้นหา: เลขสัญญา / ชื่อลูกค้า / พาร์ทเนอร์ / โทร / IMEI / Serial / เลขบัตร"
               className="pl-9 bg-white"
               value={filters.search}
-              onChange={(e) => setFilter("search", e.target.value)}
+              onChange={(e) =>
+                setFilters((f) => ({ ...f, search: e.target.value }))
+              }
             />
           </div>
 
@@ -549,7 +571,7 @@ export default function Contracts() {
           </div>
         </div>
 
-        {/* Collapsible filter panel — entire header row is clickable */}
+        {/* Collapsible filter panel */}
         <div className="bg-white border border-gray-200 rounded-xl mb-3">
           <button
             type="button"
@@ -570,8 +592,16 @@ export default function Contracts() {
                 <span
                   role="button"
                   tabIndex={0}
-                  onClick={(e) => { e.stopPropagation(); setFilters(EMPTY_FILTERS); }}
-                  onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); setFilters(EMPTY_FILTERS); } }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setFilters(EMPTY_FILTERS);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.stopPropagation();
+                      setFilters(EMPTY_FILTERS);
+                    }
+                  }}
                   className="inline-flex items-center gap-1 text-xs text-red-500 hover:text-red-700 font-medium"
                 >
                   <X className="w-3 h-3" />
@@ -587,49 +617,54 @@ export default function Contracts() {
           {/* Body: filter controls */}
           {filterOpen && (
             <div className="border-t border-gray-100 p-4">
-              {/* Row 1: core categorical filters */}
+              {/* Categorical multi-select filters */}
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
                 {CAT_KEYS.map((key) => (
-                  <ComboboxFilter
+                  <MultiComboboxFilter
                     key={key}
                     label={CAT_LABELS[key] ?? key}
-                    value={filters[key as keyof Filters] as string}
-                    onChange={(v) => setFilter(key as keyof Filters, v as any)}
+                    selected={filters[key as keyof Filters] as Set<string>}
+                    onChange={(v) => setCatFilter(key as keyof Filters, v)}
                     options={dynamicOptions[key] ?? []}
                   />
                 ))}
-                {/* Date field selector */}
-                <div className="flex flex-col gap-1 min-w-0">
-                  <label className="text-xs font-medium text-gray-500">
-                    ช่วงวันที่
-                  </label>
-                  <select
-                    value={filters.dateField}
-                    onChange={(e) =>
-                      setFilter(
-                        "dateField",
-                        e.target.value as Filters["dateField"],
-                      )
-                    }
-                    className="h-[34px] rounded-lg border border-gray-200 bg-white px-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                  >
-                    <option value="approveDate">วันอนุมัติสัญญา</option>
-                    <option value="submitDate">วันยื่นสินเชื่อ</option>
-                  </select>
-                </div>
               </div>
-              {/* Date range row */}
+
+              {/* Date field: pill/tab selector + date range inputs */}
               <div className="mt-3 pt-3 border-t border-dashed border-gray-200">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-xs font-semibold text-indigo-600 tracking-wide uppercase whitespace-nowrap">
-                    {filters.dateField === "approveDate"
-                      ? "วันอนุมัติ"
-                      : "วันยื่น"}
-                  </span>
+                  {/* Pill/tab selector for date field */}
+                  <div className="flex items-center rounded-lg border border-gray-200 bg-gray-50 p-0.5 gap-0.5">
+                    {(
+                      [
+                        { value: "approveDate", label: "วันอนุมัติ" },
+                        { value: "submitDate", label: "วันยื่น" },
+                      ] as { value: Filters["dateField"]; label: string }[]
+                    ).map((opt) => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() =>
+                          setFilters((f) => ({ ...f, dateField: opt.value }))
+                        }
+                        className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${
+                          filters.dateField === opt.value
+                            ? "bg-indigo-600 text-white shadow-sm"
+                            : "text-gray-500 hover:text-gray-700 hover:bg-white"
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Date range inputs */}
                   <Input
                     type="date"
                     value={filters.dateFrom}
-                    onChange={(e) => setFilter("dateFrom", e.target.value)}
+                    onChange={(e) =>
+                      setFilters((f) => ({ ...f, dateFrom: e.target.value }))
+                    }
                     className={`h-8 text-sm w-auto ${
                       filters.dateFrom
                         ? "border-indigo-400 bg-indigo-50 text-indigo-800"
@@ -640,7 +675,9 @@ export default function Contracts() {
                   <Input
                     type="date"
                     value={filters.dateTo}
-                    onChange={(e) => setFilter("dateTo", e.target.value)}
+                    onChange={(e) =>
+                      setFilters((f) => ({ ...f, dateTo: e.target.value }))
+                    }
                     className={`h-8 text-sm w-auto ${
                       filters.dateTo
                         ? "border-indigo-400 bg-indigo-50 text-indigo-800"
@@ -700,19 +737,34 @@ export default function Contracts() {
             <div className="flex flex-wrap items-center gap-2">
               <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 border border-blue-200">
                 <span className="text-xs font-medium text-blue-600">ราคาขาย</span>
-                <span className="text-xs font-bold text-blue-800">{fmtMoney(badgeSums.sellPrice)}</span>
+                <span className="text-xs font-bold text-blue-800">
+                  {fmtMoney(badgeSums.sellPrice)}
+                </span>
               </div>
               <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200">
                 <span className="text-xs font-medium text-emerald-600">ยอดดาวน์</span>
-                <span className="text-xs font-bold text-emerald-800">{fmtMoney(badgeSums.downPayment)}</span>
+                <span className="text-xs font-bold text-emerald-800">
+                  {fmtMoney(badgeSums.downPayment)}
+                </span>
               </div>
               <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-violet-50 border border-violet-200">
                 <span className="text-xs font-medium text-violet-600">ยอดจัดไฟแนนซ์</span>
-                <span className="text-xs font-bold text-violet-800">{fmtMoney(badgeSums.financeAmount)}</span>
+                <span className="text-xs font-bold text-violet-800">
+                  {fmtMoney(badgeSums.financeAmount)}
+                </span>
+              </div>
+              {/* Badge ยอดผ่อนรวม (ใหม่) */}
+              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-50 border border-purple-200">
+                <span className="text-xs font-medium text-purple-600">ยอดผ่อนรวม</span>
+                <span className="text-xs font-bold text-purple-800">
+                  {fmtMoney(badgeSums.totalInstallment)}
+                </span>
               </div>
               <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 border border-amber-200">
                 <span className="text-xs font-medium text-amber-600">ค่าคอมมิชชั่น</span>
-                <span className="text-xs font-bold text-amber-800">{fmtMoney(badgeSums.commission)}</span>
+                <span className="text-xs font-bold text-amber-800">
+                  {fmtMoney(badgeSums.commission)}
+                </span>
               </div>
             </div>
           )}
@@ -727,25 +779,18 @@ export default function Contracts() {
           >
             <table className="min-w-full text-[13px]">
               <thead className="sticky top-0 z-10">
-                {/* Group header row — 6+4+15+8+7+1 = 41 cols */}
+                {/* Group header row */}
                 <tr className="text-xs font-semibold text-center">
-                  {/* สินเชื่อ: idx 0-5 */}
                   <th colSpan={6} className="px-3 py-1.5 bg-slate-600 text-white border-b border-slate-500 whitespace-nowrap">สินเชื่อ</th>
-                  {/* พาร์ทเนอร์: idx 6-9 */}
                   <th colSpan={4} className="px-3 py-1.5 bg-indigo-600 text-white border-b border-indigo-500 whitespace-nowrap">พาร์ทเนอร์</th>
-                  {/* ลูกค้า: idx 10-24 */}
                   <th colSpan={15} className="px-3 py-1.5 bg-teal-600 text-white border-b border-teal-500 whitespace-nowrap">ลูกค้า</th>
-                  {/* สินค้า: idx 25-32 */}
                   <th colSpan={8} className="px-3 py-1.5 bg-amber-600 text-white border-b border-amber-500 whitespace-nowrap">สินค้า</th>
-                  {/* ไฟแนนซ์: idx 33-39 */}
                   <th colSpan={7} className="px-3 py-1.5 bg-rose-600 text-white border-b border-rose-500 whitespace-nowrap">ไฟแนนซ์</th>
-                  {/* หนี้: idx 40 */}
                   <th colSpan={1} className="px-3 py-1.5 bg-purple-600 text-white border-b border-purple-500 whitespace-nowrap">หนี้</th>
                 </tr>
                 {/* Column header row */}
                 <tr className="text-gray-700">
                   {CONTRACT_COLUMNS.map((col, idx) => {
-                    // Assign bg color based on group (idx 0-5 / 6-9 / 10-24 / 25-32 / 33-39 / 40)
                     const groupBg =
                       idx < 6 ? "bg-slate-50" :
                       idx < 10 ? "bg-indigo-50" :
@@ -753,26 +798,17 @@ export default function Contracts() {
                       idx < 33 ? "bg-amber-50" :
                       idx < 40 ? "bg-rose-50" :
                       "bg-purple-50";
-                    // Sticky left: เฉพาะ contractNo (idx 1)
                     const isSticky = idx === 1;
-                    const sortable = SORTABLE_FIELDS.includes(
-                      col.key as SortField,
-                    );
+                    const sortable = SORTABLE_FIELDS.includes(col.key as SortField);
                     const isActive = sortField === (col.key as SortField);
                     return (
                       <th
                         key={col.key}
                         className={`px-3 py-2 text-left whitespace-nowrap font-medium border-b border-gray-200 ${groupBg} ${
                           isSticky ? "sticky z-20 after:absolute after:inset-y-0 after:right-0 after:w-px after:bg-slate-200" : ""
-                        } ${
-                          sortable ? "cursor-pointer hover:brightness-95" : ""
-                        }`}
+                        } ${sortable ? "cursor-pointer hover:brightness-95" : ""}`}
                         style={isSticky ? { left: 0 } : undefined}
-                        onClick={
-                          sortable
-                            ? () => toggleSort(col.key as SortField)
-                            : undefined
-                        }
+                        onClick={sortable ? () => toggleSort(col.key as SortField) : undefined}
                       >
                         <span>{col.label}</span>
                         {sortable && isActive && (
@@ -788,20 +824,14 @@ export default function Contracts() {
               <tbody>
                 {listQuery.isLoading && (
                   <tr>
-                    <td
-                      colSpan={CONTRACT_COLUMNS.length}
-                      className="text-center py-10 text-gray-500"
-                    >
+                    <td colSpan={CONTRACT_COLUMNS.length} className="text-center py-10 text-gray-500">
                       <Spinner className="inline-block mr-2" /> กำลังโหลด…
                     </td>
                   </tr>
                 )}
                 {!listQuery.isLoading && filteredRows.length === 0 && (
                   <tr>
-                    <td
-                      colSpan={CONTRACT_COLUMNS.length}
-                      className="text-center py-10 text-gray-500"
-                    >
+                    <td colSpan={CONTRACT_COLUMNS.length} className="text-center py-10 text-gray-500">
                       ไม่พบข้อมูลที่ตรงเงื่อนไข
                     </td>
                   </tr>
@@ -830,7 +860,6 @@ export default function Contracts() {
                       onMouseLeave={() => setHoveredRow(null)}
                     >
                       {CONTRACT_COLUMNS.map((col, idx) => {
-                        // Sticky left: เฉพาะ contractNo (idx 1)
                         const isSticky = idx === 1;
                         const stickyBg = isHovered ? "bg-blue-50" : "bg-white";
                         return (
@@ -841,7 +870,9 @@ export default function Contracts() {
                                 ? "text-right tabular-nums"
                                 : ""
                             } ${
-                              isSticky ? `sticky z-10 ${stickyBg} after:absolute after:inset-y-0 after:right-0 after:w-px after:bg-slate-100` : ""
+                              isSticky
+                                ? `sticky z-10 ${stickyBg} after:absolute after:inset-y-0 after:right-0 after:w-px after:bg-slate-100`
+                                : ""
                             }`}
                             style={isSticky ? { left: 0 } : undefined}
                           >

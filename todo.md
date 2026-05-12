@@ -1497,3 +1497,8 @@ Task list:
 - [x] DebtReport.tsx specialStatus (debtSetMode): เพิ่ม ยกเลิกสัญญา ใน specialStatus check
 - [x] queryCacheDb.ts TERMINAL_STATUSES: มี ยกเลิกสัญญา แล้ว (ยืนยัน)
 - [x] debtDb.ts TERMINAL_STATUSES: มี ยกเลิกสัญญา แล้ว (ยืนยัน)
+
+## Feature — เมนูสัญญา (2026-05-13)
+- [x] เพิ่ม Badge ยอดผ่อนรวม (installmentAmount × installmentCount) ต่อจาก Badge ยอดจัดไฟแนนซ์
+- [x] เปลี่ยนฟิลเตอร์ทั้งหมดให้เลือกได้มากกว่า 1 ตัวเลือก (multi-select ComboboxFilter)
+- [x] เปลี่ยนฟิลเตอร์ช่วงวันที่จาก select box เป็น pill/tab (วันอนุมัติ / วันยื่น)
