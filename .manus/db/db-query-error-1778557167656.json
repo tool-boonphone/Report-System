@@ -1,0 +1,8 @@
+{
+  "query": "\nSELECT \n  SUM(principal_amount) as principal,\n  SUM(interest_amount) as interest,\n  SUM(fee_amount) as fee,\n  SUM(penalty_amount) as penalty,\n  SUM(unlock_fee_amount) as unlock_fee,\n  SUM(overpaid_amount) as overpaid,\n  SUM(bad_debt_amount) as bad_debt,\n  SUM(discount_amount) as discount,\n  SUM(total_amount) as total_amount,\n  COUNT(*) as row_count\nFROM debt_collected_cache;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT \n  SUM(principal_amount) as principal,\n  SUM(interest_amount) as interest,\n  SUM(fee_amount) as fee,\n  SUM(penalty_amount) as penalty,\n  SUM(unlock_fee_amount) as unlock_fee,\n  SUM(overpaid_amount) as overpaid,\n  SUM(bad_debt_amount) as bad_debt,\n  SUM(discount_amount) as discount,\n  SUM(total_amount) as total_amount,\n  COUNT(*) as row_count\nFROM debt_collected_cache;\n",
+  "returncode": 1,
+  "logs": [
+    "ERROR 1054 (42S22) at line 2: Unknown column 'principal_amount' in ''"
+  ]
+}

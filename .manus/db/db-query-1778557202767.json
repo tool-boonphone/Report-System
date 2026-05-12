@@ -1,0 +1,26 @@
+{
+  "query": "\nSELECT \n  SUM(principal) as principal,\n  SUM(interest) as interest,\n  SUM(fee) as fee,\n  SUM(penalty) as penalty,\n  SUM(unlock_fee) as unlock_fee,\n  SUM(overpaid) as overpaid,\n  SUM(bad_debt) as bad_debt,\n  SUM(discount) as discount,\n  SUM(total_amount) as total_amount,\n  SUM(payment_tx_amount) as payment_tx_amount,\n  COUNT(*) as row_count,\n  SUM(principal + interest + fee + penalty + unlock_fee + overpaid) as sum_fields_no_bad_debt,\n  SUM(principal + interest + fee + penalty + unlock_fee + overpaid + bad_debt) as sum_fields_with_bad_debt,\n  SUM(principal + interest + fee + penalty + unlock_fee + overpaid + bad_debt - discount) as sum_fields_minus_discount\nFROM debt_collected_cache\nWHERE section = 'Boonphone';\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT \n  SUM(principal) as principal,\n  SUM(interest) as interest,\n  SUM(fee) as fee,\n  SUM(penalty) as penalty,\n  SUM(unlock_fee) as unlock_fee,\n  SUM(overpaid) as overpaid,\n  SUM(bad_debt) as bad_debt,\n  SUM(discount) as discount,\n  SUM(total_amount) as total_amount,\n  SUM(payment_tx_amount) as payment_tx_amount,\n  COUNT(*) as row_count,\n  SUM(principal + interest + fee + penalty + unlock_fee + overpaid) as sum_fields_no_bad_debt,\n  SUM(principal + interest + fee + penalty + unlock_fee + overpaid + bad_debt) as sum_fields_with_bad_debt,\n  SUM(principal + interest + fee + penalty + unlock_fee + overpaid + bad_debt - discount) as sum_fields_minus_discount\nFROM debt_collected_cache\nWHERE section = 'Boonphone';\n",
+  "rows": [
+    {
+      "principal": "4759042.00",
+      "interest": "6290371.00",
+      "fee": "396463.00",
+      "penalty": "86281.00",
+      "unlock_fee": "12100.00",
+      "overpaid": "37816.00",
+      "bad_debt": "0.00",
+      "discount": "51427.60",
+      "total_amount": "11530645.40",
+      "payment_tx_amount": "11530645.40",
+      "row_count": "4625",
+      "sum_fields_no_bad_debt": "11582073.00",
+      "sum_fields_with_bad_debt": "11582073.00",
+      "sum_fields_minus_discount": "11530645.40"
+    }
+  ],
+  "messages": [],
+  "stdout": "principal\tinterest\tfee\tpenalty\tunlock_fee\toverpaid\tbad_debt\tdiscount\ttotal_amount\tpayment_tx_amount\trow_count\tsum_fields_no_bad_debt\tsum_fields_with_bad_debt\tsum_fields_minus_discount\n4759042.00\t6290371.00\t396463.00\t86281.00\t12100.00\t37816.00\t0.00\t51427.60\t11530645.40\t11530645.40\t4625\t11582073.00\t11582073.00\t11530645.40\n",
+  "stderr": "",
+  "execution_time_ms": 1738
+}

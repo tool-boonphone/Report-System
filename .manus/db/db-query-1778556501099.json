@@ -1,0 +1,26 @@
+{
+  "query": "\nSELECT \n  SUM(principal) as total_principal,\n  SUM(interest) as total_interest,\n  SUM(fee) as total_fee,\n  SUM(penalty) as total_penalty,\n  SUM(unlock_fee) as total_unlock_fee,\n  SUM(overpaid) as total_overpaid,\n  SUM(bad_debt) as total_bad_debt,\n  SUM(discount) as total_discount,\n  SUM(total_amount) as total_pt_amount,\n  SUM(payment_tx_amount) as total_tx_amount,\n  -- sum fields (รวม discount ด้วย)\n  SUM(principal + interest + fee + penalty + unlock_fee + overpaid) as sum_fields_no_bad_debt,\n  -- sum fields - discount\n  SUM(principal + interest + fee + penalty + unlock_fee + overpaid - discount) as sum_fields_minus_discount,\n  -- sum pt.amount + bad_debt\n  SUM(total_amount) + SUM(bad_debt) as total_with_bad_debt,\n  -- sum payment_tx_amount + bad_debt\n  SUM(payment_tx_amount) + SUM(bad_debt) as tx_with_bad_debt\nFROM debt_collected_cache\nWHERE section = 'Fastfone365'\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT \n  SUM(principal) as total_principal,\n  SUM(interest) as total_interest,\n  SUM(fee) as total_fee,\n  SUM(penalty) as total_penalty,\n  SUM(unlock_fee) as total_unlock_fee,\n  SUM(overpaid) as total_overpaid,\n  SUM(bad_debt) as total_bad_debt,\n  SUM(discount) as total_discount,\n  SUM(total_amount) as total_pt_amount,\n  SUM(payment_tx_amount) as total_tx_amount,\n  -- sum fields (รวม discount ด้วย)\n  SUM(principal + interest + fee + penalty + unlock_fee + overpaid) as sum_fields_no_bad_debt,\n  -- sum fields - discount\n  SUM(principal + interest + fee + penalty + unlock_fee + overpaid - discount) as sum_fields_minus_discount,\n  -- sum pt.amount + bad_debt\n  SUM(total_amount) + SUM(bad_debt) as total_with_bad_debt,\n  -- sum payment_tx_amount + bad_debt\n  SUM(payment_tx_amount) + SUM(bad_debt) as tx_with_bad_debt\nFROM debt_collected_cache\nWHERE section = 'Fastfone365'\n",
+  "rows": [
+    {
+      "total_principal": "NULL",
+      "total_interest": "NULL",
+      "total_fee": "NULL",
+      "total_penalty": "NULL",
+      "total_unlock_fee": "NULL",
+      "total_overpaid": "NULL",
+      "total_bad_debt": "NULL",
+      "total_discount": "NULL",
+      "total_pt_amount": "NULL",
+      "total_tx_amount": "NULL",
+      "sum_fields_no_bad_debt": "NULL",
+      "sum_fields_minus_discount": "NULL",
+      "total_with_bad_debt": "NULL",
+      "tx_with_bad_debt": "NULL"
+    }
+  ],
+  "messages": [],
+  "stdout": "total_principal\ttotal_interest\ttotal_fee\ttotal_penalty\ttotal_unlock_fee\ttotal_overpaid\ttotal_bad_debt\ttotal_discount\ttotal_pt_amount\ttotal_tx_amount\tsum_fields_no_bad_debt\tsum_fields_minus_discount\ttotal_with_bad_debt\ttx_with_bad_debt\nNULL\tNULL\tNULL\tNULL\tNULL\tNULL\tNULL\tNULL\tNULL\tNULL\tNULL\tNULL\tNULL\tNULL\n",
+  "stderr": "",
+  "execution_time_ms": 1806
+}

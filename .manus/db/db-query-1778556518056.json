@@ -1,0 +1,24 @@
+{
+  "query": "\nSELECT \n  SUM(CAST(principal AS DECIMAL(15,2))) as total_principal,\n  SUM(CAST(interest AS DECIMAL(15,2))) as total_interest,\n  SUM(CAST(fee AS DECIMAL(15,2))) as total_fee,\n  SUM(CAST(penalty AS DECIMAL(15,2))) as total_penalty,\n  SUM(CAST(unlock_fee AS DECIMAL(15,2))) as total_unlock_fee,\n  SUM(CAST(overpaid AS DECIMAL(15,2))) as total_overpaid,\n  SUM(CAST(bad_debt AS DECIMAL(15,2))) as total_bad_debt,\n  SUM(CAST(discount AS DECIMAL(15,2))) as total_discount,\n  SUM(CAST(total_amount AS DECIMAL(15,2))) as total_pt_amount,\n  SUM(CAST(payment_tx_amount AS DECIMAL(15,2))) as total_tx_amount,\n  COUNT(*) as row_count,\n  SUM(CASE WHEN is_bad_debt_row = 1 THEN 1 ELSE 0 END) as bad_debt_rows\nFROM debt_collected_cache\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT \n  SUM(CAST(principal AS DECIMAL(15,2))) as total_principal,\n  SUM(CAST(interest AS DECIMAL(15,2))) as total_interest,\n  SUM(CAST(fee AS DECIMAL(15,2))) as total_fee,\n  SUM(CAST(penalty AS DECIMAL(15,2))) as total_penalty,\n  SUM(CAST(unlock_fee AS DECIMAL(15,2))) as total_unlock_fee,\n  SUM(CAST(overpaid AS DECIMAL(15,2))) as total_overpaid,\n  SUM(CAST(bad_debt AS DECIMAL(15,2))) as total_bad_debt,\n  SUM(CAST(discount AS DECIMAL(15,2))) as total_discount,\n  SUM(CAST(total_amount AS DECIMAL(15,2))) as total_pt_amount,\n  SUM(CAST(payment_tx_amount AS DECIMAL(15,2))) as total_tx_amount,\n  COUNT(*) as row_count,\n  SUM(CASE WHEN is_bad_debt_row = 1 THEN 1 ELSE 0 END) as bad_debt_rows\nFROM debt_collected_cache\n",
+  "rows": [
+    {
+      "total_principal": "4759042.00",
+      "total_interest": "6290371.00",
+      "total_fee": "396463.00",
+      "total_penalty": "86281.00",
+      "total_unlock_fee": "12100.00",
+      "total_overpaid": "37816.00",
+      "total_bad_debt": "0.00",
+      "total_discount": "51427.60",
+      "total_pt_amount": "11530645.40",
+      "total_tx_amount": "11530645.40",
+      "row_count": "4625",
+      "bad_debt_rows": "0"
+    }
+  ],
+  "messages": [],
+  "stdout": "total_principal\ttotal_interest\ttotal_fee\ttotal_penalty\ttotal_unlock_fee\ttotal_overpaid\ttotal_bad_debt\ttotal_discount\ttotal_pt_amount\ttotal_tx_amount\trow_count\tbad_debt_rows\n4759042.00\t6290371.00\t396463.00\t86281.00\t12100.00\t37816.00\t0.00\t51427.60\t11530645.40\t11530645.40\t4625\t0\n",
+  "stderr": "",
+  "execution_time_ms": 1803
+}
