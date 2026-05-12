@@ -598,6 +598,29 @@ export default function DebtReport() {
   //                         false = Fastfone365 (แสดง "-" แทน 0.00)
   const hasPrincipalBreakdown = streamData.collected?.hasPrincipalBreakdown !== false;
 
+  /**
+   * collectedPaidPeriodMap — lookup map: contractExternalId → maxPaidPeriod
+   * สร้างจาก streamData.collected?.rows เพื่อให้ target tab ดึงค่า N (งวดที่ผ่อนมาแล้ว)
+   * โดยตรงจากยอดเก็บหนี้ แทนการคำนวณใหม่จาก installments ของ target row
+   *
+   * maxPaidPeriod = max(payment.period) ที่ไม่ใช่ isBadDebtRow
+   * ใช้เมื่อ target tab ไม่พบ isCurrentPeriod (เช่น สัญญายกเลิก/ระงับ)
+   */
+  const collectedPaidPeriodMap = useMemo(() => {
+    const m = new Map<string, number>();
+    const collectedRows = streamData.collected?.rows as CollectedRow[] | undefined;
+    if (!collectedRows) return m;
+    for (const cr of collectedRows) {
+      const maxPaid = (cr.payments ?? []).reduce((max, p) => {
+        if (p.isBadDebtRow) return max; // ข้ามรายการหนี้เสีย
+        if (p.period != null && p.period > max) return p.period;
+        return max;
+      }, 0);
+      m.set(cr.contractExternalId, maxPaid);
+    }
+    return m;
+  }, [streamData.collected]);
+
   /* ---- updatedBy options (collected tab only) ---- */
   const updatedByOptions = useMemo(() => {
     if (tab !== "collected") return [];
@@ -1706,17 +1729,22 @@ export default function DebtReport() {
                               return `${latestOverdue}/${r.installmentCount}`;
                             }
                             // ถ้าไม่มีงวดปัจจุบัน (เช่น ยกเลิกสัญญา / ระงับสัญญา ทำให้ทุกงวด isSuspended)
-                            // ให้หางวดสูงสุดที่ไม่ใช่ isSuspended — รวมทั้งงวดที่ isClosed (ชำระครบแล้ว)
-                            // เพราะงวดที่ผ่อนมาแล้ว N งวด จะเป็น isClosed=true ทั้งหมด ไม่มีงวดที่ไม่ใช่ isSuspended/isClosed เลย
+                            // Phase: ดึงค่า N จากยอดเก็บหนี้ (collectedPaidPeriodMap) โดยตรง
+                            // เพราะยอดเก็บหนี้แสดง N ถูกต้องอยู่แล้ว ไม่ต้องคำนวณใหม่
+                            const collectedN = collectedPaidPeriodMap.get(r.contractExternalId);
+                            if (collectedN != null && r.installmentCount != null) {
+                              return `${collectedN}/${r.installmentCount}`;
+                            }
+                            // fallback: หางวดสูงสุดที่ไม่ใช่ isSuspended (กรณี collected data ยังไม่โหลด)
                             const lastPaidPeriod = r.installments
                               .filter((inst) => !inst.isSuspended)
                               .reduce((max, inst) => Math.max(max, inst.period ?? 0), 0);
                             if (lastPaidPeriod > 0 && r.installmentCount != null) {
                               return `${lastPaidPeriod}/${r.installmentCount}`;
                             }
-                            // ถ้าไม่มีงวดปกติเลย (ยังไม่มียอดผ่อนเลย) → แสดง 1/N
+                            // ถ้าไม่มีงวดปกติเลย (ยังไม่มียอดผ่อนเลย) → แสดง 0/N
                             if (r.installmentCount != null) {
-                              return `1/${r.installmentCount}`;
+                              return `0/${r.installmentCount}`;
                             }
                             return r.installmentCount ?? "-";
                           }
