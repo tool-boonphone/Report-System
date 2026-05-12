@@ -250,15 +250,13 @@ function MultiComboboxFilter({
                     {placeholder}
                   </span>
                 </CommandItem>
-                {options.map((opt) => (
+                {options.map((opt, i) => (
                   <CommandItem
-                    key={opt}
-                    value={opt}
-                    onSelect={(v) => {
-                      const original =
-                        options.find((o) => o.toLowerCase() === v) ?? v;
-                      toggle(original);
-                      // keep popover open for multi-select
+                    key={`${i}-${opt}`}
+                    value={`__opt_${i}__${opt}`}
+                    onSelect={() => {
+                      // use opt directly from closure — avoids lowercase normalization issues
+                      toggle(opt);
                     }}
                   >
                     <Check
