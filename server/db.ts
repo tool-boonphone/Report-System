@@ -1,15 +1,28 @@
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
+import mysql from "mysql2/promise";
 import { InsertUser, users } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
-let _db: ReturnType<typeof drizzle> | null = null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let _db: any = null;
 
-// Lazily create the drizzle instance so local tooling can run without a DB.
+// ใช้ createPool แทน single connection string
+// เพื่อป้องกัน PROTOCOL_CONNECTION_LOST เมื่อ connection idle นาน
+// TiDB จะตัด connection → pool จะสร้าง connection ใหม่อัตโนมัติ
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
-      _db = drizzle(process.env.DATABASE_URL);
+      const pool = mysql.createPool({
+        uri: process.env.DATABASE_URL,
+        waitForConnections: true,
+        connectionLimit: 10,
+        queueLimit: 0,
+        enableKeepAlive: true,
+        keepAliveInitialDelay: 30000, // ping ทุก 30s เพื่อป้องกัน idle timeout
+        connectTimeout: 30000,
+      });
+      _db = drizzle(pool);
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
       _db = null;
