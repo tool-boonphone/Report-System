@@ -177,7 +177,9 @@ const PT_INCOME_BASE_WHERE = `JSON_EXTRACT(pt.raw_json, '$.source') IS NULL`;
 function buildBadDebtLastDaysSubquery(section: string): string {
   // หา row ล่าสุดของแต่ละสัญญา (เรียงตาม created_at DESC)
   // แล้วคำนวณ primary batch sum (paid_at + created_date + updated_by เหมือนกัน)
-  // ถ้า primary batch sum < 1000 → is_fallback = 1 → ใช้ updated_by + created_date เท่านั้น (ไม่สนใจ paid_at)
+  // ถ้า primary batch sum < 1000 → ตรวจ fallback_sum (created_date+updated_by ไม่สนใจ paid_date)
+  // is_fallback = 1 เฉพาะเมื่อ primary_sum < 1000 AND fallback_sum >= 1000
+  // ถ้า fallback_sum < 1000 ด้วย → ไม่ใช่ขายเครื่อง (is_fallback = 0)
   return `
     SELECT
       base.contract_no,
@@ -186,7 +188,9 @@ function buildBadDebtLastDaysSubquery(section: string): string {
       base.last_created_date,
       base.last_updated_by,
       CASE
-        WHEN COALESCE(agg.batch_sum, 0) < 1000 THEN 1
+        WHEN COALESCE(agg.batch_sum, 0) < 1000
+          AND COALESCE(fb.fallback_sum, 0) >= 1000
+          THEN 1
         ELSE 0
       END AS is_fallback
     FROM (
@@ -214,8 +218,7 @@ function buildBadDebtLastDaysSubquery(section: string): string {
       ) AS inner_q
       WHERE inner_q.rn = 1
     ) AS base
-    -- คำนวณ primary batch sum: GROUP BY contract+section+paid_date+created_date+updated_by
-    -- แล้ว JOIN ด้วย 4 key (contract_no, section, paid_date, created_date, updated_by)
+    -- ระดับ 1: primary batch sum (paid_date + created_date + updated_by)
     LEFT JOIN (
       SELECT
         pt3.contract_no,
@@ -234,6 +237,23 @@ function buildBadDebtLastDaysSubquery(section: string): string {
       AND agg.paid_date = base.last_paid_date
       AND agg.created_date = base.last_created_date
       AND agg.updated_by = base.last_updated_by
+    -- ระดับ 2: fallback batch sum (created_date + updated_by เท่านั้น ไม่สนใจ paid_date)
+    LEFT JOIN (
+      SELECT
+        pt4.contract_no,
+        pt4.section,
+        DATE(pt4.created_at) AS created_date,
+        pt4.updated_by,
+        SUM(CAST(COALESCE(pt4.amount, 0) AS DECIMAL(18,2))) AS fallback_sum
+      FROM payment_transactions pt4
+      WHERE pt4.section = '${section}'
+        AND JSON_EXTRACT(pt4.raw_json, '$.source') IS NULL
+      GROUP BY pt4.contract_no, pt4.section, DATE(pt4.created_at), pt4.updated_by
+    ) AS fb
+      ON fb.contract_no = base.contract_no
+      AND fb.section = base.section
+      AND fb.created_date = base.last_created_date
+      AND fb.updated_by = base.last_updated_by
   `;
 }
 
