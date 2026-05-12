@@ -813,6 +813,9 @@ export default function DebtReport() {
     if (tab !== "collected") return null;
     let principal = 0, interest = 0, fee = 0, penalty = 0, unlockFee = 0;
     let discount = 0, overpaid = 0, badDebt = 0;
+    // ptTotal = sum(p.total) = sum(pt.amount) = ยอดที่ลูกค้าจ่ายจริง (หลังหักส่วนลดแล้ว)
+    // ใช้เป็นฐานคำนวณ total badge เพื่อให้ตรงกับ Income Report เมื่อ toggle ทุกตัวเปิดหมด
+    let ptTotal = 0;
     // Pattern B: extraPenalty = ยอด penalty ของรายการที่ pt.amount = 0 แต่ penalty_paid > 0
     // ไม่นับในยอดรวม เพราะ pt.amount = 0 จึงไม่มีใน Income
     let extraPenalty = 0;
@@ -838,25 +841,28 @@ export default function DebtReport() {
         discount += p.discount ?? 0;
         overpaid += p.overpaid ?? 0;
         badDebt += p.badDebt ?? 0;
+        // p.total = pt.amount = ยอดที่ลูกค้าจ่ายจริง (หลังหักส่วนลด)
+        // badDebtRow: p.total = 0 แต่ badDebt > 0 → นับ badDebt แทน
+        ptTotal += (p.total ?? 0) + (p.badDebt ?? 0);
       }
     }
-    // ยอดที่ชำระรวม:
-    // Phase 133: total = sum(fields toggle) - discount
-    // เหตุผล: fields จาก API = pt.amount + discount (discount ถูกรวมไว้ใน fields แล้ว)
-    // ดังนั้นต้องหัก discount ออกเพื่อให้ได้ยอดที่ลูกค้าจ่ายจริง (= pt.amount)
-    // toggle ยังทำงานปกติ — ปิด field ใด ก็ไม่นับ field นั้น
+    // ยอดที่ชำระรวม (Phase 134):
+    // ใช้ ptTotal = sum(p.total + p.badDebt) เป็นฐาน เพราะ:
+    //   - sum(p.total) = sum(pt.amount) = sum(Income) เมื่อ toggle ทุกตัวเปิดหมด
+    //   - badDebtRow มี p.total=0 แต่ badDebt=ยอดขายเครื่อง ต้องนับด้วย
+    // เมื่อปิด toggle ใด → หักยอดของ field นั้นออกจาก ptTotal
+    // เหตุผล: ปิด toggle = ไม่นับ field นั้น → ยอดรวมลดลงตาม field ที่ปิด
     // discount toggle ปิดเสมอ จึงไม่มีผลต่อ total
     // Pattern B (extraPenalty) ไม่นับใน total เพราะ pt.amount = 0 จึงไม่มีใน Income
     const bv = badgeVisibility;
-    const total =
-      (bv.principal ? principal : 0) +
-      (bv.interest ? interest : 0) +
-      (bv.fee ? fee : 0) +
-      (bv.penalty ? penalty : 0) +
-      (bv.unlockFee ? unlockFee : 0) +
-      (bv.overpaid ? overpaid : 0) +
-      (bv.badDebt ? badDebt : 0)
-      - discount; // หัก discount ออกเพราะ fields จาก API รวม discount ไว้แล้ว
+    const total = ptTotal
+      - (!bv.principal ? principal : 0)
+      - (!bv.interest ? interest : 0)
+      - (!bv.fee ? fee : 0)
+      - (!bv.penalty ? penalty : 0)
+      - (!bv.unlockFee ? unlockFee : 0)
+      - (!bv.overpaid ? overpaid : 0)
+      - (!bv.badDebt ? badDebt : 0);
     return { principal, interest, fee, penalty, unlockFee, discount, overpaid, badDebt, total, extraPenalty };
   }, [filteredRows, tab, dueDateExact, dueDateFilter, badgeVisibility, updatedByFilter]);
 
