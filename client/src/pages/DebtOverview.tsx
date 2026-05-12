@@ -117,6 +117,7 @@ type PaymentCell = {
   closeInstallmentAmount: number;
   badDebt: number;
   total: number;
+  isExtraPenalty?: boolean; // Pattern B: รายการค่าปรับเพิ่มเติม (total=0 แต่ penalty>0)
 };
 type TargetRow = {
   contractExternalId: string;
@@ -891,6 +892,8 @@ export default function DebtOverview() {
       for (const p of r.payments ?? []) {
         if (dueDateExact && (p.paidAt?.slice(0, 10) ?? null) !== dueDateExact) continue;
         if (dueDateFilter.size > 0 && !(p.paidAt && dueDateFilter.has(p.paidAt.slice(0, 7)))) continue;
+        // Pattern B: ข้าม extraPenalty เหมือน DebtReport — ไม่นับใน collectedPenalty ปกติ
+        if (p.isExtraPenalty) continue;
         row.collectedPrincipal += p.principal ?? 0;
         row.collectedInterest += p.interest ?? 0;
         row.collectedFee += p.fee ?? 0;
@@ -898,6 +901,7 @@ export default function DebtOverview() {
         row.collectedUnlockFee += p.unlockFee ?? 0;
         row.collectedDiscount += p.discount ?? 0;
         row.collectedOverpaid += p.overpaid ?? 0;
+        // ptTotal = (p.total ?? 0) + (p.badDebt ?? 0) เหมือน DebtReport
         row.collectedBadDebt += p.badDebt ?? 0;
         row.deviceSaleAmount += p.badDebt ?? 0;
       }
