@@ -118,33 +118,34 @@ type IncomeRow = {
  */
 function groupRowsBySlip(rows: IncomeRow[]): IncomeRow[] {
   /**
-   * แยกรายการตาม incomeType ที่ server classify มาแล้ว (ถูกต้องกว่าการตรวจ contractStatus เอง)
+   * แยกรายการตาม receiptNo prefix:
    *
-   * ปิดยอด = row.incomeType === 'ปิดยอด'
-   *   → group ตาม batch key: paidAt + updatedBy + updatedAt (ไม่รวม receiptNo เพราะแต่ละ row อาจมี receiptNo ต่างกัน)
+   * ปิดยอด = receiptNo ขึ้นต้นด้วย 'TXRTC'
+   *   → group ตาม batch key: paidAt + updatedBy + updatedAt
+   *   (ไม่รวม receiptNo ใน batch key เพราะ 1 สัญญาอาจมีหลาย row ที่ receiptNo ต่างกัน)
    *
-   * ขายเครื่อง = row.incomeType === 'ขายเครื่อง'
+   * ขายเครื่อง = row.incomeType === 'ขายเครื่อง' (classify โดย server)
    *   → แสดงเฉพาะ รายการสุดท้าย (ล่าสุด) ของแต่ละสัญญา เป็น 1 row
    *   → รายการเก่ากว่า — ใส่ตรงๆ เป็น ค่างวด
    *
-   * ค่างวด = row.incomeType === 'ค่างวด' (ไม่ group)
+   * ค่างวด = receiptNo ขึ้นต้นด้วย 'TXRT' (แต่ไม่ใช่ TXRTC) หรืออื่นๆ → ไม่ group
    */
   const installmentRows: IncomeRow[] = []; // ค่างวด — ไม่ group
   const closingRows: IncomeRow[] = [];     // ปิดยอด — group ตาม consecutive batch
 
-  // สัญญาหนี้เสีย: จัดกลุ่มตามสัญญา เอาเฉพาะรายการสุดท้าย
+  // ขายเครื่อง: จัดกลุ่มตามสัญญา เอาเฉพาะรายการสุดท้าย
   const badDebtContractMap = new Map<string, IncomeRow[]>();
 
   for (const row of rows) {
     if (row.incomeType === "ขายเครื่อง") {
-      // ขายเครื่อง: เก็บทุก row ไว้ก่อน เพื่อหา row สุดท้าย
+      // ขายเครื่อง: เก็บทุก row ไว้ก่อน เพื่อหา row สุดท้าย (ใช้ incomeType จาก server)
       if (!badDebtContractMap.has(row.contractNo)) badDebtContractMap.set(row.contractNo, []);
       badDebtContractMap.get(row.contractNo)!.push(row);
-    } else if (row.incomeType === "ปิดยอด") {
-      // ปิดยอด: group ตาม batch key
+    } else if ((row.receiptNo ?? "").startsWith("TXRTC")) {
+      // ปิดยอด: receiptNo ขึ้นต้นด้วย TXRTC → group
       closingRows.push(row);
     } else {
-      // ค่างวด: ไม่ group
+      // ค่างวด: TXRT (ไม่ใช่ TXRTC) หรืออื่นๆ → ไม่ group
       installmentRows.push(row);
     }
   }
