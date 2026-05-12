@@ -142,7 +142,8 @@ function groupRowsBySlip(rows: IncomeRow[]): IncomeRow[] {
       closingRows.push(row);
     } else {
       // ค่างวด: TXRT (ไม่ใช่ TXRTC) หรืออื่นๆ → ไม่ group
-      installmentRows.push(row);
+      // override incomeType เป็น ค่างวด เสมอ (แม้ server อาจส่ง ปิดยอด มา)
+      installmentRows.push({ ...row, incomeType: "ค่างวด" });
     }
   }
 
