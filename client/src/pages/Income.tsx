@@ -101,6 +101,8 @@ type IncomeRow = {
   amount: number;
   updatedBy?: string | null;
   updatedAt?: string | null;
+  /** createdAt = วันที่บันทึกรายการ (DATE ใช้เป็น batch key ระดับ 2 สำหรับขายเครื่อง) */
+  createdAt?: string | null;
 };
 
 /**
@@ -125,17 +127,18 @@ function groupRowsBySlip(rows: IncomeRow[]): IncomeRow[] {
    *   (ไม่รวม receiptNo ใน batch key เพราะ 1 สัญญาอาจมีหลาย row ที่ receiptNo ต่างกัน)
    *
    * ขายเครื่อง = row.incomeType === 'ขายเครื่อง' (classify โดย server ด้วย logic 2 ระดับ)
-   *   → server classify ถูกต้องแล้ว — แสดงตรงๆ เป็น ขายเครื่อง ไม่ต้องแยก row เก่า/ใหม่เอง
+   *   → group ตาม batch key ระดับ 2: contractNo + DATE(createdAt) + updatedBy
+   *   (เงื่อนไขเดียวกับ server: ผู้ทำรายการคนเดียวกัน + วันบันทึกวันเดียวกัน)
    *
    * ค่างวด = receiptNo ขึ้นต้นด้วย 'TXRT' (แต่ไม่ใช่ TXRTC) หรืออื่นๆ → ไม่ group
    */
   const installmentRows: IncomeRow[] = []; // ค่างวด — ไม่ group
   const closingRows: IncomeRow[] = [];     // ปิดยอด — group ตาม consecutive batch
-  const deviceRows: IncomeRow[] = [];      // ขายเครื่อง — server classify ถูกต้องแล้ว แสดงตรงๆ
+  const deviceRows: IncomeRow[] = [];      // ขายเครื่อง — รวบรวมก่อน group ทีหลัง
 
   for (const row of rows) {
     if (row.incomeType === "ขายเครื่อง") {
-      // ขายเครื่อง: server classify ด้วย logic 2 ระดับ ถูกต้องแล้ว — แสดงตรงๆ
+      // ขายเครื่อง: รวบรวมไว้ก่อน จะ group ด้วย contractNo + DATE(createdAt) + updatedBy
       deviceRows.push(row);
     } else if ((row.receiptNo ?? "").startsWith("TXRTC")) {
       // ปิดยอด: receiptNo ขึ้นต้นด้วย TXRTC → group
@@ -212,9 +215,48 @@ function groupRowsBySlip(rows: IncomeRow[]): IncomeRow[] {
 
   const groupedClosing = groupByBatch(closingRows, "ปิดยอด");
 
+  /**
+   * groupByDevice — group ขายเครื่อง ตาม batch key ระดับ 2:
+   * key = contractNo + DATE(createdAt) + updatedBy
+   * (เงื่อนไขเดียวกับ server: ผู้ทำรายการคนเดียวกัน + วันบันทึกวันเดียวกัน)
+   * sum amount ทุก row ใน group เดียวกัน
+   * representative row = row ล่าสุด (id สูงสุด) ของแต่ละ group
+   */
+  function groupByDevice(typeRows: IncomeRow[]): IncomeRow[] {
+    // Map: batchKey → { rows, totalAmount }
+    const batchMap = new Map<string, { rows: IncomeRow[]; totalAmount: number }>();
+
+    for (const row of typeRows) {
+      const createdDate = row.createdAt ? row.createdAt.slice(0, 10) : "";
+      const updBy = row.updatedBy ?? "";
+      // batch key: contractNo + DATE(createdAt) + updatedBy
+      const batchKey = `${row.contractNo}||${createdDate}||${updBy}`;
+
+      if (!batchMap.has(batchKey)) {
+        batchMap.set(batchKey, { rows: [], totalAmount: 0 });
+      }
+      const entry = batchMap.get(batchKey)!;
+      entry.rows.push(row);
+      entry.totalAmount += row.amount ?? 0;
+    }
+
+    const grouped: IncomeRow[] = [];
+    for (const [, entry] of Array.from(batchMap)) {
+      // representative row = row ล่าสุด (id สูงสุด)
+      const repRow = entry.rows.reduce(
+        (best, r) => ((r as any).id ?? 0) > ((best as any).id ?? 0) ? r : best,
+        entry.rows[0],
+      );
+      grouped.push({ ...repRow, incomeType: "ขายเครื่อง", amount: entry.totalAmount });
+    }
+    return grouped;
+  }
+
+  const groupedDevice = groupByDevice(deviceRows);
+
   // ผสมทุกประเภทแล้ว return โดยไม่ sort ในนี้
   // (sort จะถูกทำใน displayRows ตาม sortKey + sortDir ที่ผู้ใช้เลือก)
-  return [...installmentRows, ...groupedClosing, ...deviceRows];
+  return [...installmentRows, ...groupedClosing, ...groupedDevice];
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────

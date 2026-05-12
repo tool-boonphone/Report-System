@@ -49,6 +49,8 @@ export interface IncomeRow {
   amount: number;
   updatedBy: string | null;
   updatedAt: string | null;
+  /** createdAt = วันที่บันทึกรายการ (DATE ใช้เป็น batch key ระดับ 2 สำหรับขายเครื่อง) */
+  createdAt: string | null;
 }
 
 export interface IncomeParams {
@@ -351,6 +353,7 @@ export async function listIncome(params: IncomeParams): Promise<{
     amount: Number(r.amount ?? 0),
     updatedBy: r.updated_by ?? null,
     updatedAt: r.updated_at ?? null,
+    createdAt: r.created_at ?? null,
   }));
 
   return { rows, total };

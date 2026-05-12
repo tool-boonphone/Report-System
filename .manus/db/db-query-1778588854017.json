@@ -1,0 +1,65 @@
+{
+  "query": "\nSELECT \n  pt.contract_no,\n  pt.section,\n  pt.receipt_no,\n  CAST(COALESCE(pt.amount, 0) AS DECIMAL(18,2)) AS amount,\n  DATE(pt.paid_at) AS paid_date,\n  DATE(pt.created_at) AS created_date,\n  pt.updated_by,\n  pt.created_at,\n  c.status AS contract_status\nFROM payment_transactions pt\nINNER JOIN contracts c ON c.contract_no = pt.contract_no AND c.section = pt.section\nWHERE pt.contract_no = 'CT0924-NRT001-00138-01'\n  AND pt.section = 'Fastfone365'\n  AND JSON_EXTRACT(pt.raw_json, '$.source') IS NULL\nORDER BY pt.created_at DESC;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT \n  pt.contract_no,\n  pt.section,\n  pt.receipt_no,\n  CAST(COALESCE(pt.amount, 0) AS DECIMAL(18,2)) AS amount,\n  DATE(pt.paid_at) AS paid_date,\n  DATE(pt.created_at) AS created_date,\n  pt.updated_by,\n  pt.created_at,\n  c.status AS contract_status\nFROM payment_transactions pt\nINNER JOIN contracts c ON c.contract_no = pt.contract_no AND c.section = pt.section\nWHERE pt.contract_no = 'CT0924-NRT001-00138-01'\n  AND pt.section = 'Fastfone365'\n  AND JSON_EXTRACT(pt.raw_json, '$.source') IS NULL\nORDER BY pt.created_at DESC;\n",
+  "rows": [
+    {
+      "contract_no": "CT0924-NRT001-00138-01",
+      "section": "Fastfone365",
+      "receipt_no": "TXRT0924-NRT001-00138-01-5-1",
+      "amount": "44.00",
+      "paid_date": "2025-03-24",
+      "created_date": "2025-03-24",
+      "updated_by": "nannan",
+      "created_at": "2025-03-24 20:11:00",
+      "contract_status": "หนี้เสีย"
+    },
+    {
+      "contract_no": "CT0924-NRT001-00138-01",
+      "section": "Fastfone365",
+      "receipt_no": "TXRT0924-NRT001-00138-01-4-1",
+      "amount": "1552.00",
+      "paid_date": "2025-03-05",
+      "created_date": "2025-03-24",
+      "updated_by": "nannan",
+      "created_at": "2025-03-24 20:10:29",
+      "contract_status": "หนี้เสีย"
+    },
+    {
+      "contract_no": "CT0924-NRT001-00138-01",
+      "section": "Fastfone365",
+      "receipt_no": "TXRT0924-NRT001-00138-01-3-1",
+      "amount": "1552.00",
+      "paid_date": "2025-03-05",
+      "created_date": "2025-03-24",
+      "updated_by": "nannan",
+      "created_at": "2025-03-24 20:10:05",
+      "contract_status": "หนี้เสีย"
+    },
+    {
+      "contract_no": "CT0924-NRT001-00138-01",
+      "section": "Fastfone365",
+      "receipt_no": "TXRT0924-NRT001-00138-01-2-1",
+      "amount": "1552.00",
+      "paid_date": "2025-03-05",
+      "created_date": "2025-03-24",
+      "updated_by": "nannan",
+      "created_at": "2025-03-24 20:09:38",
+      "contract_status": "หนี้เสีย"
+    },
+    {
+      "contract_no": "CT0924-NRT001-00138-01",
+      "section": "Fastfone365",
+      "receipt_no": "TXRT0924-NRT001-00138-01-1-1",
+      "amount": "1552.00",
+      "paid_date": "2024-10-25",
+      "created_date": "2024-10-25",
+      "updated_by": "adminmint",
+      "created_at": "2024-10-25 15:12:44",
+      "contract_status": "หนี้เสีย"
+    }
+  ],
+  "messages": [],
+  "stdout": "contract_no\tsection\treceipt_no\tamount\tpaid_date\tcreated_date\tupdated_by\tcreated_at\tcontract_status\nCT0924-NRT001-00138-01\tFastfone365\tTXRT0924-NRT001-00138-01-5-1\t44.00\t2025-03-24\t2025-03-24\tnannan\t2025-03-24 20:11:00\tหนี้เสีย\nCT0924-NRT001-00138-01\tFastfone365\tTXRT0924-NRT001-00138-01-4-1\t1552.00\t2025-03-05\t2025-03-24\tnannan\t2025-03-24 20:10:29\tหนี้เสีย\nCT0924-NRT001-00138-01\tFastfone365\tTXRT0924-NRT001-00138-01-3-1\t1552.00\t2025-03-05\t2025-03-24\tnannan\t2025-03-24 20:10:05\tหนี้เสีย\nCT0924-NRT001-00138-01\tFastfone365\tTXRT0924-NRT001-00138-01-2-1\t1552.00\t2025-03-05\t2025-03-24\tnannan\t2025-03-24 20:09:38\tหนี้เสีย\nCT0924-NRT001-00138-01\tFastfone365\tTXRT0924-NRT001-00138-01-1-1\t1552.00\t2024-10-25\t2024-10-25\tadminmint\t2024-10-25 15:12:44\tหนี้เสีย\n",
+  "stderr": "",
+  "execution_time_ms": 1868
+}
