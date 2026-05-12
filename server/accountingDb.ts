@@ -119,20 +119,26 @@ const PT_ORIGINAL_INCOME_TYPE_CASE = `
 const PT_INCOME_TYPE_CASE = `
   CASE
     -- ขายเครื่อง: สัญญาหนี้เสีย + transaction อยู่ใน batch สุดท้าย
-    -- Phase 106 alignment: paid_at = latestDate AND DATE(created_at) = DATE(latestCreatedAt)
-    -- (นับทุก payments ที่ paid_at + DATE(created_at) ตรงกับ batch สุดท้าย)
+    -- batch = ทำโดยคนเดียวกัน (updated_by) + บันทึกวันเดียวกัน (DATE(created_at))
+    -- Primary: paid_at วันเดียวกัน + updated_by + DATE(created_at)
+    -- Fallback (ยอดรวม batch < 1000): ใช้แค่ updated_by + DATE(created_at) ไม่สนใจ paid_at
     WHEN c.status = 'หนี้เสีย'
-      AND bdl.last_paid_date IS NOT NULL
-      AND DATE(pt.paid_at) = bdl.last_paid_date
       AND bdl.last_created_date IS NOT NULL
       AND DATE(pt.created_at) = bdl.last_created_date
+      AND pt.updated_by = bdl.last_updated_by
+      AND (
+        -- Primary: paid_at ตรงกับ batch หลัก
+        DATE(pt.paid_at) = bdl.last_paid_date
+        -- Fallback: ยอดรวม batch < 1000 → ขยาย batch ด้วย created_date + updated_by เท่านั้น
+        OR bdl.is_fallback = 1
+      )
       THEN 'ขายเครื่อง'
     -- ปิดยอด: สัญญาสิ้นสุดสัญญา/สำเร็จ + transaction อยู่ใน batch สุดท้าย
     WHEN c.status IN ('สิ้นสุดสัญญา', 'สำเร็จ')
-      AND bdl.last_paid_date IS NOT NULL
-      AND DATE(pt.paid_at) = bdl.last_paid_date
       AND bdl.last_created_date IS NOT NULL
       AND DATE(pt.created_at) = bdl.last_created_date
+      AND pt.updated_by = bdl.last_updated_by
+      AND DATE(pt.paid_at) = bdl.last_paid_date
       THEN 'ปิดยอด'
     ELSE 'ค่างวด'
   END
@@ -150,36 +156,84 @@ const PT_INCOME_BASE_WHERE = `JSON_EXTRACT(pt.raw_json, '$.source') IS NULL`;
 
 
 /**
- * Subquery สำหรับหาวันสุดท้ายที่ชำระของแต่ละสัญญาหนี้เสีย
+ * Subquery สำหรับหา batch สุดท้ายของแต่ละสัญญา
  * ใช้ LEFT JOIN กับ payment_transactions pt ด้วย contract_no + section
+ *
+ * Logic 2 ระดับ:
+ *   ระดับ 1 (Primary):
+ *     ไล่จาก row ล่าสุด (created_at DESC) ขึ้นมา
+ *     นับ rows ที่ paid_at วันเดียวกัน + updated_by คนเดียวกัน + DATE(created_at) วันเดียวกัน
+ *     หยุดเมื่ออย่างใดอย่างหนึ่งเปลี่ยน
+ *     ถ้ายอดรวม >= 1000 → ใช้ batch นี้เลย (is_fallback = 0)
+ *
+ *   ระดับ 2 (Fallback):
+ *     ถ้ายอดรวมระดับ 1 < 1000 → is_fallback = 1
+ *     ไล่จาก row ล่าสุดขึ้นมาใหม่
+ *     นับ rows ที่ updated_by คนเดียวกัน + DATE(created_at) วันเดียวกัน (ไม่สนใจ paid_at)
+ *     หยุดเมื่ออย่างใดอย่างหนึ่งเปลี่ยน
  *
  * @param section - SectionKey ที่ต้องการ (ใส่ escaped string)
  */
 function buildBadDebtLastDaysSubquery(section: string): string {
-  // หา batch สุดท้ายของแต่ละสัญญา โดยใช้ ROW_NUMBER() เรียง paid_at DESC, created_at DESC
-  // batch เดียวกัน = paid_at วันเดียวกัน + DATE(created_at) วันเดียวกัน
-  // Phase 106 alignment: นับทุก payments ที่ paid_at = latestDate AND DATE(created_at) = latestCreatedDate
+  // หา row ล่าสุดของแต่ละสัญญา (เรียงตาม created_at DESC)
+  // แล้วคำนวณ primary batch sum (paid_at + created_date + updated_by เหมือนกัน)
+  // ถ้า primary batch sum < 1000 → is_fallback = 1 → ใช้ updated_by + created_date เท่านั้น (ไม่สนใจ paid_at)
   return `
     SELECT
-      inner_q.contract_no,
-      inner_q.section,
-      inner_q.last_paid_date,
-      inner_q.last_created_date
+      base.contract_no,
+      base.section,
+      base.last_paid_date,
+      base.last_created_date,
+      base.last_updated_by,
+      CASE
+        WHEN COALESCE(agg.batch_sum, 0) < 1000 THEN 1
+        ELSE 0
+      END AS is_fallback
     FROM (
+      -- หา row ล่าสุดของแต่ละสัญญา
       SELECT
-        pt2.contract_no,
-        pt2.section,
-        DATE(pt2.paid_at) AS last_paid_date,
-        DATE(pt2.created_at) AS last_created_date,
-        ROW_NUMBER() OVER (
-          PARTITION BY pt2.contract_no, pt2.section
-          ORDER BY pt2.paid_at DESC, pt2.created_at DESC
-        ) AS rn
-      FROM payment_transactions pt2
-      WHERE pt2.section = '${section}'
-        AND JSON_EXTRACT(pt2.raw_json, '$.source') IS NULL
-    ) AS inner_q
-    WHERE inner_q.rn = 1
+        inner_q.contract_no,
+        inner_q.section,
+        inner_q.last_paid_date,
+        inner_q.last_created_date,
+        inner_q.last_updated_by
+      FROM (
+        SELECT
+          pt2.contract_no,
+          pt2.section,
+          DATE(pt2.paid_at) AS last_paid_date,
+          DATE(pt2.created_at) AS last_created_date,
+          pt2.updated_by AS last_updated_by,
+          ROW_NUMBER() OVER (
+            PARTITION BY pt2.contract_no, pt2.section
+            ORDER BY pt2.created_at DESC
+          ) AS rn
+        FROM payment_transactions pt2
+        WHERE pt2.section = '${section}'
+          AND JSON_EXTRACT(pt2.raw_json, '$.source') IS NULL
+      ) AS inner_q
+      WHERE inner_q.rn = 1
+    ) AS base
+    -- คำนวณ primary batch sum: GROUP BY contract+section+paid_date+created_date+updated_by
+    -- แล้ว JOIN ด้วย 4 key (contract_no, section, paid_date, created_date, updated_by)
+    LEFT JOIN (
+      SELECT
+        pt3.contract_no,
+        pt3.section,
+        DATE(pt3.paid_at) AS paid_date,
+        DATE(pt3.created_at) AS created_date,
+        pt3.updated_by,
+        SUM(CAST(COALESCE(pt3.amount, 0) AS DECIMAL(18,2))) AS batch_sum
+      FROM payment_transactions pt3
+      WHERE pt3.section = '${section}'
+        AND JSON_EXTRACT(pt3.raw_json, '$.source') IS NULL
+      GROUP BY pt3.contract_no, pt3.section, DATE(pt3.paid_at), DATE(pt3.created_at), pt3.updated_by
+    ) AS agg
+      ON agg.contract_no = base.contract_no
+      AND agg.section = base.section
+      AND agg.paid_date = base.last_paid_date
+      AND agg.created_date = base.last_created_date
+      AND agg.updated_by = base.last_updated_by
   `;
 }
 
@@ -614,19 +668,22 @@ export async function getIncomeSummaryByPeriod(
         SUBSTRING(pt.paid_at, 1, ${periodLen}) AS period,
         CAST(COALESCE(pt.amount, 0) AS DECIMAL(18,2)) AS amt,
         CASE
-          -- ขายเครื่อง: สัญญาหนี้เสีย + batch สุดท้าย (ใช้ logic เดียวกับ PT_INCOME_TYPE_CASE)
+          -- ขายเครื่อง: สัญญาหนี้เสีย + batch สุดท้าย (logic เดียวกับ PT_INCOME_TYPE_CASE)
           WHEN c.status = 'หนี้เสีย'
-            AND bdl.last_paid_date IS NOT NULL
-            AND DATE(pt.paid_at) = bdl.last_paid_date
             AND bdl.last_created_date IS NOT NULL
             AND DATE(pt.created_at) = bdl.last_created_date
+            AND pt.updated_by = bdl.last_updated_by
+            AND (
+              DATE(pt.paid_at) = bdl.last_paid_date
+              OR bdl.is_fallback = 1
+            )
             THEN 'ขายเครื่อง'
-          -- ปิดยอด: สัญญาสิ้นสุดสัญญา/สำเร็จ + batch สุดท้าย (ใช้ logic เดียวกับ PT_INCOME_TYPE_CASE)
+          -- ปิดยอด: สัญญาสิ้นสุดสัญญา/สำเร็จ + batch สุดท้าย (logic เดียวกับ PT_INCOME_TYPE_CASE)
           WHEN c.status IN ('สิ้นสุดสัญญา', 'สำเร็จ')
-            AND bdl.last_paid_date IS NOT NULL
-            AND DATE(pt.paid_at) = bdl.last_paid_date
             AND bdl.last_created_date IS NOT NULL
             AND DATE(pt.created_at) = bdl.last_created_date
+            AND pt.updated_by = bdl.last_updated_by
+            AND DATE(pt.paid_at) = bdl.last_paid_date
             THEN 'ปิดยอด'
           ELSE 'ค่างวด'
         END AS income_type
