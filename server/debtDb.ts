@@ -1714,7 +1714,26 @@ export async function listDebtTarget(params: { section: SectionKey }) {
       } else if (isContractCancelled) {
         // ยกเลิกสัญญา: หา suspendedFromPeriod จาก lastNormalPeriod (N+1 rule)
         // งวด N+1 เป็นต้นไปจะแสดงป้ายกำกับ "ยกเลิกสัญญา"
-        const lastNormalPeriod = lastNormalPeriodByContract.get(extId) ?? 0;
+        //
+        // Primary: ใช้ lastNormalPeriodByContract (populated จาก rawPaysByContract ที่มี receipt_no)
+        // Fallback: ถ้าไม่มีข้อมูล (receipt_no=null, FF365 style) → ใช้ installment paid_amount
+        //   นับ max period ที่ paid_amount > 0 และ status ไม่ใช่ ยกเลิกสัญญา
+        let lastNormalPeriod = lastNormalPeriodByContract.get(extId) ?? -1;
+        if (lastNormalPeriod === -1) {
+          // Fallback: หา max period ที่มี paid_amount > 0 จาก installments
+          // (สำหรับ FF365 ที่ไม่มี receipt_no ใน payment_transactions)
+          let maxPaidPeriod = 0;
+          for (const inst of list) {
+            const paidAmt = Number(inst.paid_amount ?? 0);
+            const periodNo = Number(inst.period ?? 0);
+            const instCode = inst.installment_status_code ?? inst.inst_status ?? "";
+            // นับงวดที่มี paid_amount > 0 และ status ไม่ใช่ ยกเลิกสัญญา
+            if (paidAmt > 0 && instCode !== "ยกเลิกสัญญา" && periodNo > maxPaidPeriod) {
+              maxPaidPeriod = periodNo;
+            }
+          }
+          lastNormalPeriod = maxPaidPeriod;
+        }
         suspendedFromPeriod = lastNormalPeriod + 1;
         const suspendedPeriodRow = list
           .filter((r) => Number(r.period ?? 0) === suspendedFromPeriod)
@@ -3259,7 +3278,26 @@ export async function* listDebtTargetStream(params: {
         }
       } else if (isContractCancelledStream) {
         // ยกเลิกสัญญา (stream): หา suspendedFromPeriod จาก lastNormalPeriod (N+1 rule)
-        const lastNormalPeriod = lastNormalPeriodByContractStream.get(extId) ?? 0;
+        //
+        // Primary: ใช้ lastNormalPeriodByContractStream (populated จาก rawPaysByContract ที่มี receipt_no)
+        // Fallback: ถ้าไม่มีข้อมูล (receipt_no=null, FF365 style) → ใช้ installment paid_amount
+        //   นับ max period ที่ paid_amount > 0 และ status ไม่ใช่ ยกเลิกสัญญา
+        let lastNormalPeriod = lastNormalPeriodByContractStream.get(extId) ?? -1;
+        if (lastNormalPeriod === -1) {
+          // Fallback: หา max period ที่มี paid_amount > 0 จาก installments
+          // (สำหรับ FF365 ที่ไม่มี receipt_no ใน payment_transactions)
+          let maxPaidPeriod = 0;
+          for (const inst of list) {
+            const paidAmt = Number(inst.paid_amount ?? 0);
+            const periodNo = Number(inst.period ?? 0);
+            const instCode = inst.installment_status_code ?? inst.inst_status ?? "";
+            // นับงวดที่มี paid_amount > 0 และ status ไม่ใช่ ยกเลิกสัญญา
+            if (paidAmt > 0 && instCode !== "ยกเลิกสัญญา" && periodNo > maxPaidPeriod) {
+              maxPaidPeriod = periodNo;
+            }
+          }
+          lastNormalPeriod = maxPaidPeriod;
+        }
         suspendedFromPeriod = lastNormalPeriod + 1;
         const suspendedPeriodRow = list
           .filter((r) => Number(r.period ?? 0) === suspendedFromPeriod)
