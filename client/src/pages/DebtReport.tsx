@@ -1270,7 +1270,7 @@ export default function DebtReport() {
         <div className="flex flex-wrap items-start justify-between gap-2 mb-2">
           <div className="text-xs text-gray-500 self-center">
             ทั้งหมด {baseRows.length.toLocaleString("th-TH")} สัญญา · กรอง{" "}
-            {(baseRows.length - filteredRows.length).toLocaleString("th-TH")} รายการ ·{" "}
+            {filteredRows.length.toLocaleString("th-TH")} รายการ ·{" "}
             {tab === "target" ? "ข้อมูลเป้าเก็บหนี้" : "ข้อมูลยอดเก็บหนี้"} ของงวดที่{" "}
             1–{maxPeriods || "-"}
           </div>
