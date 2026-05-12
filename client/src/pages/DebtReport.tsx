@@ -1683,12 +1683,13 @@ export default function DebtReport() {
                           if (tab === "collected") {
                             // ยอดเก็บหนี้: แสดง "ผ่อนถึงงวดที่ X/N"
                             // X = งวดสูงสุดที่มีการชำระเข้ามาแล้ว (max payment.period)
+                            // X = 0 เมื่อไม่มีการชำระเลย
                             const collectedR = r as CollectedRow;
                             const maxPaidPeriod = collectedR.payments?.reduce((max, p) => {
                               if (p.period != null && p.period > max) return p.period;
                               return max;
                             }, 0) ?? 0;
-                            if (maxPaidPeriod > 0 && r.installmentCount != null) {
+                            if (r.installmentCount != null) {
                               return `${maxPaidPeriod}/${r.installmentCount}`;
                             }
                             return r.installmentCount ?? "-";
