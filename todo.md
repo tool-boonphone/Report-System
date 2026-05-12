@@ -1491,3 +1491,9 @@ Task list:
 - [x] เป้าเก็บหนี้: BG สีฟ้าที่งวดปัจจุบัน — ต้องแสดงแม้ว่าข้อความจะเป็นสีส้ม (ค้างชำระ)
 - [x] เป้าเก็บหนี้: งวดปัจจุบัน (isCurrentPeriod) ต้องมี BG สีฟ้าเสมอ แม้ว่าจะเป็น isArrears (ค้างชำระ/สีส้ม)
 - [x] เป้าเก็บหนี้: สถานะหนี้เสีย ไม่ต้องมี BG สีฟ้าที่งวดปัจจุบัน (เพิ่ม หนี้เสีย กลับเข้า isSpecialContractStatus)
+
+## Fix — ตัดสถานะ ยกเลิกสัญญา ออกจากเป้าเก็บหนี้และยอดเก็บหนี้ (2026-05-13)
+- [x] DebtReport.tsx filteredRows: เพิ่ม filter r.debtStatus === "ยกเลิกสัญญา" return false (step 0)
+- [x] DebtReport.tsx specialStatus (debtSetMode): เพิ่ม ยกเลิกสัญญา ใน specialStatus check
+- [x] queryCacheDb.ts TERMINAL_STATUSES: มี ยกเลิกสัญญา แล้ว (ยืนยัน)
+- [x] debtDb.ts TERMINAL_STATUSES: มี ยกเลิกสัญญา แล้ว (ยืนยัน)
