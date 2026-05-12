@@ -145,18 +145,15 @@ export async function getBadDebtSummary(params: {
   );
   const collectedArr: Array<any> = (collectedRaw as any)[0] ?? collectedRaw;
 
-  // ─── Step 2b: Count paid installments from debt_target_cache ─────────────
-  // นับงวดที่เงินต้นถูกตัดครบ (paid_amount >= total_amount) ตรงกับ logic แถบเป้าเก็บหนี้
-  // ไม่ใช่นับ payment rows ใน debt_collected_cache ซึ่งอาจมีหลาย rows ต่อ 1 งวด
+  // ─── Step 2b: หางวดสูงสุดที่มีการชำระเข้ามา (ไม่นับ bad_debt row) ─────────────
+  // ใช้ MAX(period) จาก debt_collected_cache ที่ is_bad_debt_row = 0
+  // ตรงกับ logic ของ DebtReport.tsx (maxPaidPeriod = max payment.period ที่ไม่ใช่ isBadDebtRow)
   const targetCountRaw = await db.execute(
     sql.raw(`
       SELECT
         contract_external_id,
-        COUNT(CASE WHEN CAST(paid_amount AS DECIMAL(18,4)) >= CAST(total_amount AS DECIMAL(18,4))
-                        AND CAST(total_amount AS DECIMAL(18,4)) > 0
-                        AND is_bad_debt = 0
-                   THEN 1 END) AS paid_installments
-      FROM debt_target_cache
+        MAX(CASE WHEN is_bad_debt_row = 0 THEN period ELSE NULL END) AS paid_installments
+      FROM debt_collected_cache
       WHERE section = '${params.section}'
         AND contract_external_id IN (${idsLiteral})
       GROUP BY contract_external_id
@@ -165,6 +162,7 @@ export async function getBadDebtSummary(params: {
   const targetCountArr: Array<any> = (targetCountRaw as any)[0] ?? targetCountRaw;
   const targetCountMap = new Map<string, number>();
   for (const r of targetCountArr) {
+    // MAX(period) อาจเป็น NULL ถ้าไม่มีการชำระปกติเลย (มีแค่ bad_debt row) → ใช้ 0
     targetCountMap.set(r.contract_external_id, Number(r.paid_installments ?? 0));
   }
 
