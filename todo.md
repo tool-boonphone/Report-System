@@ -1502,3 +1502,9 @@ Task list:
 - [x] เพิ่ม Badge ยอดผ่อนรวม (installmentAmount × installmentCount) ต่อจาก Badge ยอดจัดไฟแนนซ์
 - [x] เปลี่ยนฟิลเตอร์ทั้งหมดให้เลือกได้มากกว่า 1 ตัวเลือก (multi-select ComboboxFilter)
 - [x] เปลี่ยนฟิลเตอร์ช่วงวันที่จาก select box เป็น pill/tab (วันอนุมัติ / วันยื่น)
+
+## Feature — ป้ายกำกับ "ยกเลิกสัญญา" ในเป้าเก็บหนี้ (2026-05-13)
+- [x] debtDb.ts non-stream: เพิ่ม isContractCancelled logic — งวด N+1 เป็นต้นไปมี isSuspended=true, suspendLabel="ยกเลิกสัญญา" (ใช้ pattern เดียวกับ ระงับสัญญา)
+- [x] debtDb.ts stream section: เพิ่ม isContractCancelled logic เช่นกัน
+- [x] queryCacheDb.ts: เพิ่ม ยกเลิกสัญญา ใน suspendLabel reconstruction (4 จุด)
+- [x] TypeScript check ผ่าน + commit + push GitHub + checkpoint
