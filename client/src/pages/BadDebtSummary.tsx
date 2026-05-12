@@ -1009,13 +1009,14 @@ export default function BadDebtSummary() {
                         <td className="px-2 py-2 text-right">{fmtMoney(monthlyByApproveRows.reduce((s, r) => s + r.installmentPaid, 0))}</td>
                         <td className="px-2 py-2 text-right text-blue-700">{fmtMoney(monthlyByApproveRows.reduce((s, r) => s + r.deviceSaleAmount, 0))}</td>
                         <td className="px-2 py-2 text-right">{fmtMoney(monthlyByApproveRows.reduce((s, r) => s + r.totalRevenue, 0))}</td>
-                        <td className="px-2 py-2 text-center">
+                        <td className="px-2 py-2 text-right">
                           {(() => {
-                            const validRows = monthlyByApproveRows.filter(r => r.badDebtRate != null);
-                            if (validRows.length === 0) return <span className="text-gray-400">-</span>;
-                            const avg = validRows.reduce((s, r) => s + (r.badDebtRate ?? 0), 0) / validRows.length;
+                            const totalBadDebt = monthlyByApproveRows.reduce((s, r) => s + r.totalBadDebt, 0);
+                            const totalAll = monthlyByApproveRows.reduce((s, r) => s + r.totalAll, 0);
+                            if (totalAll === 0) return <span className="text-gray-400">-</span>;
+                            const avg = (totalBadDebt / totalAll) * 100;
                             return (
-                              <span className="inline-flex items-center gap-1 font-semibold text-orange-700">
+                              <span className="inline-flex items-center justify-end gap-1 font-semibold text-orange-700">
                                 <span className="text-[10px] font-bold bg-orange-100 text-orange-600 rounded px-1 py-0.5">ø</span>
                                 {avg.toFixed(2)}%
                               </span>
@@ -1155,13 +1156,14 @@ export default function BadDebtSummary() {
                         <td className="px-2 py-2 text-right">{fmtMoney(yearlyByApproveRows.reduce((s, r) => s + r.installmentPaid, 0))}</td>
                         <td className="px-2 py-2 text-right text-blue-700">{fmtMoney(yearlyByApproveRows.reduce((s, r) => s + r.deviceSaleAmount, 0))}</td>
                         <td className="px-2 py-2 text-right">{fmtMoney(yearlyByApproveRows.reduce((s, r) => s + r.totalRevenue, 0))}</td>
-                        <td className="px-2 py-2 text-center">
+                        <td className="px-2 py-2 text-right">
                           {(() => {
-                            const validRows = yearlyByApproveRows.filter(r => r.badDebtRate != null);
-                            if (validRows.length === 0) return <span className="text-gray-400">-</span>;
-                            const avg = validRows.reduce((s, r) => s + (r.badDebtRate ?? 0), 0) / validRows.length;
+                            const totalBadDebt = yearlyByApproveRows.reduce((s, r) => s + r.totalBadDebt, 0);
+                            const totalAll = yearlyByApproveRows.reduce((s, r) => s + r.totalAll, 0);
+                            if (totalAll === 0) return <span className="text-gray-400">-</span>;
+                            const avg = (totalBadDebt / totalAll) * 100;
                             return (
-                              <span className="inline-flex items-center gap-1 font-semibold text-orange-700">
+                              <span className="inline-flex items-center justify-end gap-1 font-semibold text-orange-700">
                                 <span className="text-[10px] font-bold bg-orange-100 text-orange-600 rounded px-1 py-0.5">ø</span>
                                 {avg.toFixed(2)}%
                               </span>
