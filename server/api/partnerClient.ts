@@ -216,6 +216,90 @@ export class PartnerClient {
     return totalRows;
   }
 
+  /**
+   * Parallel-batch version of forEachPage.
+   * Fetches `batchSize` pages concurrently, waits `delayMs` ms between batches.
+   * Useful for APIs that are slow per-request but support concurrent calls.
+   *
+   * Strategy:
+   *  1. Fetch page `startPage` first to learn totalPages.
+   *  2. Fetch remaining pages in parallel batches of `batchSize`.
+   *  3. Call `onPage` for each page in ascending order.
+   */
+  async forEachPageParallel<TItem>(
+    path: string,
+    pickItems: (data: any) => TItem[] | undefined,
+    params: Record<string, string | number | undefined> = {},
+    onPage: (items: TItem[], page: number, totalPages: number) => Promise<void> | void,
+    limit = 100,
+    timeoutMs?: number,
+    startPage = 1,
+    batchSize = 5,
+    delayMs = 100,
+    skipOnError = false,
+    onProgress?: (page: number, totalPages: number) => void,
+  ): Promise<number> {
+    let totalPages = startPage;
+    let totalRows = 0;
+    let skippedPages = 0;
+
+    // Step 1: fetch first page to learn totalPages
+    try {
+      const data: any = await this.get<any>(path, { ...params, page: startPage, limit }, timeoutMs);
+      const items = pickItems(data) ?? [];
+      totalPages = Number(data?.pagination?.total_pages ?? 1);
+      totalRows += items.length;
+      await onPage(items, startPage, totalPages);
+      onProgress?.(startPage, totalPages);
+    } catch (err: any) {
+      if (!skipOnError) throw err;
+      skippedPages += 1;
+      console.warn(`[${this.cfg.section}] forEachPageParallel: skipping page ${startPage} (first page) — cannot determine totalPages: ${err?.message ?? err}`);
+      return 0;
+    }
+
+    if (totalPages <= startPage) return totalRows;
+
+    // Step 2: fetch remaining pages in parallel batches
+    for (let batchStart = startPage + 1; batchStart <= totalPages; batchStart += batchSize) {
+      const batchEnd = Math.min(batchStart + batchSize - 1, totalPages);
+      const pageNums = Array.from({ length: batchEnd - batchStart + 1 }, (_, i) => batchStart + i);
+
+      const batchResults = await Promise.allSettled(
+        pageNums.map(async (page) => {
+          const data: any = await this.get<any>(path, { ...params, page, limit }, timeoutMs);
+          const items = pickItems(data) ?? [];
+          return { page, items };
+        }),
+      );
+
+      // Process results in page order
+      for (let i = 0; i < pageNums.length; i++) {
+        const result = batchResults[i];
+        const page = pageNums[i];
+        if (result.status === "fulfilled") {
+          totalRows += result.value.items.length;
+          await onPage(result.value.items, page, totalPages);
+          onProgress?.(page, totalPages);
+        } else {
+          skippedPages += 1;
+          console.warn(`[${this.cfg.section}] forEachPageParallel: skipping page ${page}: ${result.reason?.message ?? result.reason}`);
+          if (!skipOnError) throw result.reason;
+        }
+      }
+
+      // Delay between batches to avoid overwhelming the API
+      if (batchEnd < totalPages) {
+        await new Promise((r) => setTimeout(r, delayMs));
+      }
+    }
+
+    if (skippedPages > 0) {
+      console.warn(`[${this.cfg.section}] forEachPageParallel: completed with ${skippedPages} skipped pages out of ${totalPages}`);
+    }
+    return totalRows;
+  }
+
   /** Raw fetch with timeout via AbortController. */
   private async rawFetch(url: string, init: RequestInit, timeoutMs?: number): Promise<Response> {
     const ctl = new AbortController();

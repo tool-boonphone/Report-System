@@ -484,7 +484,7 @@ async function syncCustomers(
     // Per-stage timeout: if customers stage takes > 15 min, throw so the
     // overall sync can fall back to DB cache instead of hanging indefinitely.
     const CUSTOMERS_STAGE_TIMEOUT_MS = 15 * 60 * 1000;
-    const customersWork = client.forEachPage<CustomerListItem>(
+    const customersWork = client.forEachPageParallel<CustomerListItem>(
       "customer",
       (d) => d?.customers,
       { action: "all" },
@@ -534,7 +534,22 @@ async function syncCustomers(
       500,      // limit=500 -- 45 pages for FF365 instead of 223
       30_000,   // 30s per-request timeout -- fail fast instead of hanging
       startPage, // resume from last saved page if previous run was killed
+      5,        // batchSize=5 -- fetch 5 pages in parallel
+      200,      // delayMs=200 -- 200ms between batches to avoid rate limiting
       true,     // skipOnError=true: skip pages that timeout instead of failing all
+      (page, totalPages) => {
+        // Update progress from parallel batch
+        if (logId && totalPages > 0) {
+          const subPct = Math.min(page / totalPages, 1);
+          const progress = Math.round(STAGE_START + subPct * (STAGE_END - STAGE_START));
+          const currentStage = `customers (${page}/${totalPages})`;
+          const lock = _locks[section];
+          if (lock) {
+            _locks[section] = { ...lock, progress, currentStage };
+          }
+          updateSyncLogStage({ id: logId, currentStage, progress, resumePage: page + 1 }).catch(() => {});
+        }
+      },
     );
     const customersTimeout = new Promise<never>((_, rej) =>
       setTimeout(
