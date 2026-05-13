@@ -355,7 +355,6 @@ async function queryPaid(
   },
 ): Promise<Array<{
   approve_month: string;
-  bucket: string;
   contract_count: number;
   principal_paid: number;
   interest_paid: number;
@@ -371,25 +370,20 @@ async function queryPaid(
   const db = await getDb();
   if (!db) return [];
 
-  // Phase 141: ใช้ payment_tx_amount เป็น total base เหมือน DebtReport.tsx (source of truth)
+  // Phase 141+: ใช้ payment_tx_amount เป็น total base เหมือน DebtReport.tsx (source of truth)
+  // Phase 141+ fix: ลบ LEFT JOIN debt_target_cache ออก เพราะ debt_collected_cache ไม่มี debt_range
+  //   และ debt_target_cache อาจไม่มีข้อมูลครบทุกสัญญา ทำให้ตัวเลขต่างจากหน้ายอดเก็บหนี้
+  //   → derive bucket จาก dcc.contract_status โดยตรง (เหมือน DebtOverview.tsx)
+  //   → bucket = contract_status ถ้าเป็นสถานะพิเศษ, ไม่งั้น = 'ปกติ'
   // - payment_tx_amount = p.total = pt.amount จาก stream (ตรงกับ ptTotal ของหน้ายอดเก็บหนี้)
   // - isExtraPenalty = payment_tx_amount=0 AND penalty>0 AND is_bad_debt_row=0
   //   → ข้ามออกจาก penalty_paid และ total_paid เหมือน DebtReport.tsx
   // - total_paid = SUM(payment_tx_amount + bad_debt) ทุก row ยกเว้น isExtraPenalty
-  //   = ptTotal ของหน้ายอดเก็บหนี้
   // - installment_paid = SUM(payment_tx_amount) WHERE is_bad_debt_row=0 AND NOT isExtraPenalty
   // - device_sale_amount = SUM(bad_debt) WHERE is_bad_debt_row=1
-  // - breakdown fields: ข้าม isExtraPenalty rows ออกจาก penalty_paid เหมือน DebtReport.tsx
   const q = `
     SELECT
       DATE_FORMAT(dcc.approve_date, '%Y-%m') AS approve_month,
-      CASE
-        WHEN dcc.contract_status = 'หนี้เสีย'      THEN 'หนี้เสีย'
-        WHEN dcc.contract_status = 'ระงับสัญญา'   THEN 'ระงับสัญญา'
-        WHEN dcc.contract_status = 'สิ้นสุดสัญญา' THEN 'สิ้นสุดสัญญา'
-        WHEN dcc.contract_status = 'ยกเลิกสัญญา' THEN 'ยกเลิกสัญญา'
-        ELSE COALESCE(dtc_latest.debt_range, 'ปกติ')
-      END AS bucket,
       COUNT(DISTINCT dcc.contract_external_id) AS contract_count,
       -- breakdown fields: ข้าม isExtraPenalty rows (payment_tx_amount=0 AND penalty>0 AND is_bad_debt_row=0)
       -- เหมือน DebtReport.tsx บรรทัด 858-861
@@ -435,21 +429,8 @@ async function queryPaid(
                ELSE CAST(dcc.payment_tx_amount AS DECIMAL(18,2))
           END) AS total_paid
     FROM debt_collected_cache dcc
-    LEFT JOIN (
-      SELECT dtc.section, dtc.contract_external_id, dtc.debt_range
-      FROM debt_target_cache dtc
-      INNER JOIN (
-        SELECT section, contract_external_id, MAX(period) AS max_period
-        FROM debt_target_cache
-        WHERE section = '${section}'
-        GROUP BY section, contract_external_id
-      ) mx ON mx.section = dtc.section
-           AND mx.contract_external_id = dtc.contract_external_id
-           AND mx.max_period = dtc.period
-    ) dtc_latest ON dtc_latest.section = dcc.section
-                AND dtc_latest.contract_external_id = dcc.contract_external_id
     WHERE ${dccWhere(section, { paidAtDate: opts.paidAtDate, paidAtMonths: opts.paidAtMonths, productType: opts.productType, deviceFamily: opts.deviceFamily, search: opts.search })}
-    GROUP BY approve_month, bucket
+    GROUP BY approve_month
     ORDER BY approve_month DESC
   `;
   const rows = await db.execute(sql.raw(q));
@@ -833,9 +814,11 @@ export async function getMonthlySummary(
     });
   }
 
+  // Phase 141+ fix2: queryPaid ไม่มี bucket แล้ว (GROUP BY approve_month เพียงอย่างเดียว)
+  // ใช้ key ${month}|__paid__ สำหรับ paidMap
   const paidMap = new Map<CellKey, MoneyBreakdown>();
   for (const r of paidRows) {
-    paidMap.set(`${r.approve_month}|${r.bucket}`, {
+    paidMap.set(`${r.approve_month}|__paid__`, {
       principal:          n(r.principal_paid),
       interest:           n(r.interest_paid),
       fee:                n(r.fee_paid),
@@ -907,10 +890,19 @@ export async function getMonthlySummary(
     const totalNotYetDue    = emptyMoney();
     const totalInstallTotal = emptyMoney();
 
+    // Phase 141+ fix2: totalPaid ดึงจาก paidMap โดยตรง (ไม่ accumulate จาก DEBT_BUCKETS)
+    // เพราะ queryPaid ไม่แยก bucket แล้ว
+    const totalPaidDirect = paidMap.get(`${month}|__paid__`) ?? emptyMoney();
+    for (const k of Object.keys(totalPaid) as (keyof MoneyBreakdown)[]) {
+      (totalPaid as any)[k] = (totalPaidDirect as any)[k];
+    }
+
     for (const bucket of DEBT_BUCKETS) {
       const key = `${month}|${bucket}`;
       const contractCount = countMap.get(key)      ?? 0;
-      const paid          = paidMap.get(key)        ?? emptyMoney();
+      // paid ไม่มีแยก bucket แล้ว → ใช้ emptyMoney() สำหรับ per-bucket paid cell
+      // (badge summary ใช้ totalPaid ซึ่งดึงจาก paidMap โดยตรงแล้ว)
+      const paid          = emptyMoney();
       const due           = dueMap.get(key)         ?? emptyMoney();
       const target        = targetMap.get(key)      ?? emptyMoney();
       const notYetDue     = notYetDueMap.get(key)    ?? emptyMoney();
@@ -920,7 +912,6 @@ export async function getMonthlySummary(
       totalCount += contractCount;
 
       for (const k of Object.keys(totalPaid) as (keyof MoneyBreakdown)[]) {
-        (totalPaid         as any)[k] += paid[k];
         (totalDue          as any)[k] += due[k];
         (totalTarget       as any)[k] += target[k];
         (totalNotYetDue    as any)[k] += notYetDue[k];

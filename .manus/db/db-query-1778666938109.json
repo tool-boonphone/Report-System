@@ -1,0 +1,9 @@
+{
+  "query": "\nUPDATE sync_logs \nSET status = 'error', finished_at = NOW(), current_stage = 'cancelled - stuck'\nWHERE section = 'Fastfone365' \n  AND status = 'in_progress'\n  AND finished_at IS NULL;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nUPDATE sync_logs \nSET status = 'error', finished_at = NOW(), current_stage = 'cancelled - stuck'\nWHERE section = 'Fastfone365' \n  AND status = 'in_progress'\n  AND finished_at IS NULL;\n",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 1701
+}

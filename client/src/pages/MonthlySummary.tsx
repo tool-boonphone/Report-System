@@ -728,41 +728,31 @@ export default function MonthlySummary() {
   },[combinedRows,hiddenRows]);
 
   const grandBadgePaid=useMemo(()=>{
-    // คำนวณเหมือน gtPaidTotal ใน SummaryTable: skip hiddenBuckets + จัดการ หนี้เสีย แบบพิเศษ
-    let r=emptyMoney();
-    for(const b of DEBT_BUCKETS){
-      if(hiddenBuckets.has(b))continue;
-      const bt=grandTotal.bucketTotals[b];
-      if(!bt)continue;
-      if(b==="หนี้เสีย"){
-        // badDebtInstallment รวมอยู่ใน computeMoneyTotal แล้ว (ผ่าน paidVis.badDebtInstallment)
-        // badDebt (ขายเครื่อง) toggle แยกผ่าน showBadDebtSale
-        const installAmt=computeMoneyTotal(bt.paid,paidVis);
-        const saleAmt=showBadDebtSale?(bt.paid.badDebt??0):0;
-        r={...r,principal:r.principal+installAmt+saleAmt};
-      }else{
-        r=addMoney(r,{
-          principal:bt.paid.principal??0,interest:bt.paid.interest??0,fee:bt.paid.fee??0,
-          penalty:bt.paid.penalty??0,unlockFee:bt.paid.unlockFee??0,
-          discount:bt.paid.discount??0,overpaid:bt.paid.overpaid??0,
-          badDebt:0,badDebtInstallment:0,total:0,
-        });
-      }
-    }
-    return r;
-  },[grandTotal,hiddenBuckets,paidVis,showBadDebtSale]);
+    // Phase 141+ fix3: ใช้ grandTotal.totalPaid โดยตรง (queryPaid ไม่แยก bucket แล้ว)
+    // totalPaid มาจาก __total__ row ที่ server ส่งมา ซึ่งถูกต้องแล้ว
+    const tp=grandTotal.totalPaid;
+    return{
+      principal:paidVis.principal?(tp.principal??0):0,
+      interest:paidVis.interest?(tp.interest??0):0,
+      fee:paidVis.fee?(tp.fee??0):0,
+      penalty:paidVis.penalty?(tp.penalty??0):0,
+      unlockFee:paidVis.unlockFee?(tp.unlockFee??0):0,
+      discount:paidVis.discount?(tp.discount??0):0,
+      overpaid:paidVis.overpaid?(tp.overpaid??0):0,
+      badDebt:showBadDebtSale?(tp.badDebt??0):0,
+      badDebtInstallment:paidVis.badDebtInstallment?(tp.badDebtInstallment??0):0,
+      total:tp.total??0,
+    };
+  },[grandTotal,paidVis,showBadDebtSale]);
   const grandBadgeDue=useMemo(()=>{let r=emptyMoney();for(const b of DEBT_BUCKETS){const bt=grandTotal.bucketTotals[b];if(bt)r=addMoney(r,bt.due);}return r;},[grandTotal]);
   const grandBadgeTarget=useMemo(()=>{let r=emptyMoney();for(const b of DEBT_BUCKETS){const bt=grandTotal.bucketTotals[b];if(bt)r=addMoney(r,bt.target);}return r;},[grandTotal]);
   const grandBadgeNotYetDue=useMemo(()=>{let r=emptyMoney();for(const b of DEBT_BUCKETS){const bt=grandTotal.bucketTotals[b];if(bt)r=addMoney(r,bt.notYetDue);}return r;},[grandTotal]);
   const grandBadgeInstallTotal=useMemo(()=>{let r=emptyMoney();for(const b of DEBT_BUCKETS){const bt=grandTotal.bucketTotals[b];if(bt)r=addMoney(r,bt.installTotal);}return r;},[grandTotal]);
-  // คำนวณยอดรวมชำระ Badge ให้ตรงกับ gtPaidTotal ใน SummaryTable
-  const grandBadgePaidTotal=useMemo(()=>DEBT_BUCKETS.reduce((s,b)=>{
-    if(hiddenBuckets.has(b))return s;
-    const bt=grandTotal.bucketTotals[b];
-    if(!bt)return s;
-    if(b==="หนี้เสีย"){return s+computeMoneyTotal(bt.paid,paidVis)+(showBadDebtSale?(bt.paid.badDebt??0):0);}
-    return s+computeMoneyTotal(bt.paid,paidVis);
-  },0),[grandTotal,hiddenBuckets,showBadDebtSale,paidVis]);
+  // Phase 141+ fix3: ใช้ grandTotal.totalPaid โดยตรง (queryPaid ไม่แยก bucket แล้ว)
+  const grandBadgePaidTotal=useMemo(()=>{
+    const tp=grandTotal.totalPaid;
+    return computeMoneyTotal(tp,paidVis)+(showBadDebtSale?(tp.badDebt??0):0);
+  },[grandTotal,showBadDebtSale,paidVis]);
 
   // filter counts
   const countFilterCount=[search,countApproveDate,countApproveMonths.size>0,countApproveYears.size>0,countProductType.size>0,countDeviceFamily].filter(Boolean).length;
@@ -1278,7 +1268,7 @@ export default function MonthlySummary() {
                 {canToggle&&(isOn?<Eye className="w-3 h-3 ml-0.5 opacity-60"/>:<EyeOff className="w-3 h-3 ml-0.5 opacity-50"/>)}
               </button>
             );})}            {/* Badge ขายเครื่อง(หนี้เสีย) ยังคงแยกออกมา */}
-            {(()=>{const saleAmt=grandTotal.bucketTotals["หนี้เสีย"]?.paid.badDebt??0;return(
+            {(()=>{const saleAmt=grandTotal.totalPaid.badDebt??0;return(
               <button type="button" onClick={()=>setShowBadDebtSale(v=>!v)}
                 title={showBadDebtSale?"ซ่อนยอดขายเครื่อง":"แสดงยอดขายเครื่อง"}
                 className={["flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border transition-colors",showBadDebtSale?"bg-red-100 border-red-300 text-red-800 hover:bg-red-200":"bg-gray-100 border-gray-200 text-gray-400 hover:bg-gray-200"].join(" ")}>

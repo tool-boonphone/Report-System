@@ -1,0 +1,16 @@
+{
+  "query": "\nSELECT \n  COUNT(*) as total_contracts,\n  SUM(CASE WHEN status = 'หนี้เสีย' THEN 1 ELSE 0 END) as bad_debt_contracts,\n  SUM(CASE WHEN bad_debt_amount > 0 THEN 1 ELSE 0 END) as contracts_with_bad_debt_amount,\n  ROUND(SUM(bad_debt_amount), 2) as total_bad_debt_amount\nFROM contracts\nWHERE section = 'Fastfone365';\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT \n  COUNT(*) as total_contracts,\n  SUM(CASE WHEN status = 'หนี้เสีย' THEN 1 ELSE 0 END) as bad_debt_contracts,\n  SUM(CASE WHEN bad_debt_amount > 0 THEN 1 ELSE 0 END) as contracts_with_bad_debt_amount,\n  ROUND(SUM(bad_debt_amount), 2) as total_bad_debt_amount\nFROM contracts\nWHERE section = 'Fastfone365';\n",
+  "rows": [
+    {
+      "total_contracts": "17809",
+      "bad_debt_contracts": "3122",
+      "contracts_with_bad_debt_amount": "3122",
+      "total_bad_debt_amount": "22720169.58"
+    }
+  ],
+  "messages": [],
+  "stdout": "total_contracts\tbad_debt_contracts\tcontracts_with_bad_debt_amount\ttotal_bad_debt_amount\n17809\t3122\t3122\t22720169.58\n",
+  "stderr": "",
+  "execution_time_ms": 1963
+}

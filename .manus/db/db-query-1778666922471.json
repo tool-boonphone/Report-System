@@ -1,0 +1,60 @@
+{
+  "query": "\nSELECT id, section, entity, status, current_stage, progress, started_at, finished_at\nFROM sync_logs\nWHERE section = 'Fastfone365'\nORDER BY started_at DESC\nLIMIT 5;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT id, section, entity, status, current_stage, progress, started_at, finished_at\nFROM sync_logs\nWHERE section = 'Fastfone365'\nORDER BY started_at DESC\nLIMIT 5;\n",
+  "rows": [
+    {
+      "id": "1560006",
+      "section": "Fastfone365",
+      "entity": "customers",
+      "status": "in_progress",
+      "current_stage": "NULL",
+      "progress": "0",
+      "started_at": "2026-05-13 09:48:20",
+      "finished_at": "NULL"
+    },
+    {
+      "id": "1560004",
+      "section": "Fastfone365",
+      "entity": "all",
+      "status": "in_progress",
+      "current_stage": "customers (1/45)",
+      "progress": "20",
+      "started_at": "2026-05-13 09:48:15",
+      "finished_at": "NULL"
+    },
+    {
+      "id": "1560005",
+      "section": "Fastfone365",
+      "entity": "partners",
+      "status": "success",
+      "current_stage": "NULL",
+      "progress": "0",
+      "started_at": "2026-05-13 09:48:15",
+      "finished_at": "2026-05-13 09:48:20"
+    },
+    {
+      "id": "1560003",
+      "section": "Fastfone365",
+      "entity": "customers",
+      "status": "error",
+      "current_stage": "NULL",
+      "progress": "0",
+      "started_at": "2026-05-13 05:10:21",
+      "finished_at": "2026-05-13 05:18:29"
+    },
+    {
+      "id": "1560002",
+      "section": "Fastfone365",
+      "entity": "partners",
+      "status": "success",
+      "current_stage": "NULL",
+      "progress": "0",
+      "started_at": "2026-05-13 05:10:14",
+      "finished_at": "2026-05-13 05:10:20"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tsection\tentity\tstatus\tcurrent_stage\tprogress\tstarted_at\tfinished_at\n1560006\tFastfone365\tcustomers\tin_progress\tNULL\t0\t2026-05-13 09:48:20\tNULL\n1560004\tFastfone365\tall\tin_progress\tcustomers (1/45)\t20\t2026-05-13 09:48:15\tNULL\n1560005\tFastfone365\tpartners\tsuccess\tNULL\t0\t2026-05-13 09:48:15\t2026-05-13 09:48:20\n1560003\tFastfone365\tcustomers\terror\tNULL\t0\t2026-05-13 05:10:21\t2026-05-13 05:18:29\n1560002\tFastfone365\tpartners\tsuccess\tNULL\t0\t2026-05-13 05:10:14\t2026-05-13 05:10:20\n",
+  "stderr": "",
+  "execution_time_ms": 1758
+}

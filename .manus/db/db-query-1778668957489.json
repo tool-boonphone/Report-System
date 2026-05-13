@@ -1,0 +1,17 @@
+{
+  "query": "\nSELECT \n  SUM(bad_debt) as total_bad_debt,\n  SUM(payment_tx_amount) as total_payment_tx,\n  COUNT(*) as total_rows,\n  SUM(CASE WHEN is_bad_debt_row = 1 THEN 1 ELSE 0 END) as bad_debt_rows,\n  SUM(CASE WHEN is_bad_debt_row = 1 THEN bad_debt ELSE 0 END) as bad_debt_sum_from_rows\nFROM debt_collected_cache\nWHERE section = 'Fastfone365'\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT \n  SUM(bad_debt) as total_bad_debt,\n  SUM(payment_tx_amount) as total_payment_tx,\n  COUNT(*) as total_rows,\n  SUM(CASE WHEN is_bad_debt_row = 1 THEN 1 ELSE 0 END) as bad_debt_rows,\n  SUM(CASE WHEN is_bad_debt_row = 1 THEN bad_debt ELSE 0 END) as bad_debt_sum_from_rows\nFROM debt_collected_cache\nWHERE section = 'Fastfone365'\n",
+  "rows": [
+    {
+      "total_bad_debt": "22720169.58",
+      "total_payment_tx": "287364745.43",
+      "total_rows": "122356",
+      "bad_debt_rows": "3122",
+      "bad_debt_sum_from_rows": "22720169.58"
+    }
+  ],
+  "messages": [],
+  "stdout": "total_bad_debt\ttotal_payment_tx\ttotal_rows\tbad_debt_rows\tbad_debt_sum_from_rows\n22720169.58\t287364745.43\t122356\t3122\t22720169.58\n",
+  "stderr": "",
+  "execution_time_ms": 2000
+}

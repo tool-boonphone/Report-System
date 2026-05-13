@@ -1,0 +1,26 @@
+{
+  "query": "\nSELECT status, COUNT(*) as count\nFROM contracts\nWHERE section = 'Boonphone'\nGROUP BY status\nORDER BY count DESC;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT status, COUNT(*) as count\nFROM contracts\nWHERE section = 'Boonphone'\nGROUP BY status\nORDER BY count DESC;\n",
+  "rows": [
+    {
+      "status": "สำเร็จ",
+      "count": "4214"
+    },
+    {
+      "status": "ระงับสัญญา",
+      "count": "100"
+    },
+    {
+      "status": "ยกเลิกสัญญา",
+      "count": "17"
+    },
+    {
+      "status": "สิ้นสุดสัญญา",
+      "count": "7"
+    }
+  ],
+  "messages": [],
+  "stdout": "status\tcount\nสำเร็จ\t4214\nระงับสัญญา\t100\nยกเลิกสัญญา\t17\nสิ้นสุดสัญญา\t7\n",
+  "stderr": "",
+  "execution_time_ms": 1728
+}
