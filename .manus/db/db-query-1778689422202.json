@@ -1,0 +1,74 @@
+{
+  "query": "\nSELECT COLUMN_NAME, DATA_TYPE \nFROM INFORMATION_SCHEMA.COLUMNS \nWHERE TABLE_NAME = 'debt_target_cache' \nAND ORDINAL_POSITION > 20\nORDER BY ORDINAL_POSITION;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT COLUMN_NAME, DATA_TYPE \nFROM INFORMATION_SCHEMA.COLUMNS \nWHERE TABLE_NAME = 'debt_target_cache' \nAND ORDINAL_POSITION > 20\nORDER BY ORDINAL_POSITION;\n",
+  "rows": [
+    {
+      "COLUMN_NAME": "unlock_fee",
+      "DATA_TYPE": "decimal"
+    },
+    {
+      "COLUMN_NAME": "net_amount",
+      "DATA_TYPE": "decimal"
+    },
+    {
+      "COLUMN_NAME": "total_amount",
+      "DATA_TYPE": "decimal"
+    },
+    {
+      "COLUMN_NAME": "paid_amount",
+      "DATA_TYPE": "decimal"
+    },
+    {
+      "COLUMN_NAME": "overpaid_applied",
+      "DATA_TYPE": "decimal"
+    },
+    {
+      "COLUMN_NAME": "baseline_amount",
+      "DATA_TYPE": "decimal"
+    },
+    {
+      "COLUMN_NAME": "is_paid",
+      "DATA_TYPE": "tinyint"
+    },
+    {
+      "COLUMN_NAME": "is_partial_paid",
+      "DATA_TYPE": "tinyint"
+    },
+    {
+      "COLUMN_NAME": "is_closed",
+      "DATA_TYPE": "tinyint"
+    },
+    {
+      "COLUMN_NAME": "is_suspended",
+      "DATA_TYPE": "tinyint"
+    },
+    {
+      "COLUMN_NAME": "is_current_period",
+      "DATA_TYPE": "tinyint"
+    },
+    {
+      "COLUMN_NAME": "is_future_period",
+      "DATA_TYPE": "tinyint"
+    },
+    {
+      "COLUMN_NAME": "is_arrears",
+      "DATA_TYPE": "tinyint"
+    },
+    {
+      "COLUMN_NAME": "is_bad_debt",
+      "DATA_TYPE": "tinyint"
+    },
+    {
+      "COLUMN_NAME": "debt_range",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "populated_at",
+      "DATA_TYPE": "timestamp"
+    }
+  ],
+  "messages": [],
+  "stdout": "COLUMN_NAME\tDATA_TYPE\nunlock_fee\tdecimal\nnet_amount\tdecimal\ntotal_amount\tdecimal\npaid_amount\tdecimal\noverpaid_applied\tdecimal\nbaseline_amount\tdecimal\nis_paid\ttinyint\nis_partial_paid\ttinyint\nis_closed\ttinyint\nis_suspended\ttinyint\nis_current_period\ttinyint\nis_future_period\ttinyint\nis_arrears\ttinyint\nis_bad_debt\ttinyint\ndebt_range\tvarchar\npopulated_at\ttimestamp\n",
+  "stderr": "",
+  "execution_time_ms": 1752
+}

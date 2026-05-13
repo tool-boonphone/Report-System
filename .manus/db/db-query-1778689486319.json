@@ -1,0 +1,80 @@
+{
+  "query": "\nSELECT \n  dc.contract_external_id,\n  dc.period,\n  dc.section AS collected_section,\n  MAX(dt.period) AS max_target_period,\n  dt.section AS target_section\nFROM debt_collected_cache dc\nLEFT JOIN debt_target_cache dt \n  ON dc.contract_external_id = dt.contract_external_id\nWHERE dc.debt_range IS NULL\n  AND dc.is_bad_debt_row = 0\n  AND dc.is_close_row = 0\nGROUP BY dc.contract_external_id, dc.period, dc.section, dt.section\nHAVING MAX(dt.period) IS NULL OR dc.period > MAX(dt.period)\nLIMIT 10;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT \n  dc.contract_external_id,\n  dc.period,\n  dc.section AS collected_section,\n  MAX(dt.period) AS max_target_period,\n  dt.section AS target_section\nFROM debt_collected_cache dc\nLEFT JOIN debt_target_cache dt \n  ON dc.contract_external_id = dt.contract_external_id\nWHERE dc.debt_range IS NULL\n  AND dc.is_bad_debt_row = 0\n  AND dc.is_close_row = 0\nGROUP BY dc.contract_external_id, dc.period, dc.section, dt.section\nHAVING MAX(dt.period) IS NULL OR dc.period > MAX(dt.period)\nLIMIT 10;\n",
+  "rows": [
+    {
+      "contract_external_id": "8059",
+      "period": "9",
+      "collected_section": "Fastfone365",
+      "max_target_period": "8",
+      "target_section": "Fastfone365"
+    },
+    {
+      "contract_external_id": "6310",
+      "period": "9",
+      "collected_section": "Fastfone365",
+      "max_target_period": "8",
+      "target_section": "Fastfone365"
+    },
+    {
+      "contract_external_id": "11169",
+      "period": "15",
+      "collected_section": "Fastfone365",
+      "max_target_period": "12",
+      "target_section": "Fastfone365"
+    },
+    {
+      "contract_external_id": "7711",
+      "period": "13",
+      "collected_section": "Fastfone365",
+      "max_target_period": "12",
+      "target_section": "Fastfone365"
+    },
+    {
+      "contract_external_id": "8407",
+      "period": "9",
+      "collected_section": "Fastfone365",
+      "max_target_period": "8",
+      "target_section": "Fastfone365"
+    },
+    {
+      "contract_external_id": "6062",
+      "period": "9",
+      "collected_section": "Fastfone365",
+      "max_target_period": "8",
+      "target_section": "Fastfone365"
+    },
+    {
+      "contract_external_id": "5268",
+      "period": "9",
+      "collected_section": "Fastfone365",
+      "max_target_period": "8",
+      "target_section": "Fastfone365"
+    },
+    {
+      "contract_external_id": "9803",
+      "period": "9",
+      "collected_section": "Fastfone365",
+      "max_target_period": "8",
+      "target_section": "Fastfone365"
+    },
+    {
+      "contract_external_id": "1575",
+      "period": "13",
+      "collected_section": "Fastfone365",
+      "max_target_period": "12",
+      "target_section": "Fastfone365"
+    },
+    {
+      "contract_external_id": "4075",
+      "period": "13",
+      "collected_section": "Fastfone365",
+      "max_target_period": "12",
+      "target_section": "Fastfone365"
+    }
+  ],
+  "messages": [],
+  "stdout": "contract_external_id\tperiod\tcollected_section\tmax_target_period\ttarget_section\n8059\t9\tFastfone365\t8\tFastfone365\n6310\t9\tFastfone365\t8\tFastfone365\n11169\t15\tFastfone365\t12\tFastfone365\n7711\t13\tFastfone365\t12\tFastfone365\n8407\t9\tFastfone365\t8\tFastfone365\n6062\t9\tFastfone365\t8\tFastfone365\n5268\t9\tFastfone365\t8\tFastfone365\n9803\t9\tFastfone365\t8\tFastfone365\n1575\t13\tFastfone365\t12\tFastfone365\n4075\t13\tFastfone365\t12\tFastfone365\n",
+  "stderr": "",
+  "execution_time_ms": 2161
+}

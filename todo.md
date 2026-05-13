@@ -1567,3 +1567,8 @@ Task list:
 
 ## Fix: Login timeout ใน partnerClient.ts (2026-05-13)
 - [x] เพิ่ม timeout 15s สำหรับ login() เพื่อป้องกัน sync ค้างเมื่อ auth server ตอบช้า
+
+## Fix: debt_range ใน debt_collected_cache เป็น NULL (2026-05-13)
+- [x] UPDATE debt_range ใน debt_collected_cache จาก debt_target_cache ด้วย contract_external_id + period (127,050 rows ครบ, null_count=0)
+- [x] ตรวจสอบ populateCache.ts — logic ถูกต้องแล้ว (section 2.5 โหลด debt_range จาก target cache ก่อน insert collected)
+- [x] แก้ TypeScript errors ใน debtDb.ts (lines 187, 188, 202, 212) — ลดจาก 12 เหลือ 8 errors (8 ที่เหลือเป็น pre-existing ใน Groups.tsx/Users.tsx/authDb.ts)

@@ -1,0 +1,15 @@
+{
+  "query": "\nSELECT \n  COUNT(*) AS total_rows,\n  SUM(CASE WHEN debt_range IS NULL THEN 1 ELSE 0 END) AS null_count,\n  SUM(CASE WHEN debt_range IS NOT NULL THEN 1 ELSE 0 END) AS non_null_count\nFROM debt_collected_cache;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT \n  COUNT(*) AS total_rows,\n  SUM(CASE WHEN debt_range IS NULL THEN 1 ELSE 0 END) AS null_count,\n  SUM(CASE WHEN debt_range IS NOT NULL THEN 1 ELSE 0 END) AS non_null_count\nFROM debt_collected_cache;\n",
+  "rows": [
+    {
+      "total_rows": "127050",
+      "null_count": "0",
+      "non_null_count": "127050"
+    }
+  ],
+  "messages": [],
+  "stdout": "total_rows\tnull_count\tnon_null_count\n127050\t0\t127050\n",
+  "stderr": "",
+  "execution_time_ms": 1980
+}

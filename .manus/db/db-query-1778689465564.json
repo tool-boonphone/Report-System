@@ -1,0 +1,80 @@
+{
+  "query": "\nSELECT \n  dc.contract_external_id,\n  dc.period,\n  dc.is_bad_debt_row,\n  dc.is_close_row,\n  dt.debt_range AS target_debt_range\nFROM debt_collected_cache dc\nLEFT JOIN debt_target_cache dt \n  ON dc.contract_external_id = dt.contract_external_id \n  AND dc.period = dt.period\nWHERE dc.debt_range IS NULL\n  AND dc.is_bad_debt_row = 0\n  AND dc.is_close_row = 0\nLIMIT 10;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT \n  dc.contract_external_id,\n  dc.period,\n  dc.is_bad_debt_row,\n  dc.is_close_row,\n  dt.debt_range AS target_debt_range\nFROM debt_collected_cache dc\nLEFT JOIN debt_target_cache dt \n  ON dc.contract_external_id = dt.contract_external_id \n  AND dc.period = dt.period\nWHERE dc.debt_range IS NULL\n  AND dc.is_bad_debt_row = 0\n  AND dc.is_close_row = 0\nLIMIT 10;\n",
+  "rows": [
+    {
+      "contract_external_id": "10002",
+      "period": "9",
+      "is_bad_debt_row": "0",
+      "is_close_row": "0",
+      "target_debt_range": "NULL"
+    },
+    {
+      "contract_external_id": "10002",
+      "period": "9",
+      "is_bad_debt_row": "0",
+      "is_close_row": "0",
+      "target_debt_range": "NULL"
+    },
+    {
+      "contract_external_id": "10008",
+      "period": "9",
+      "is_bad_debt_row": "0",
+      "is_close_row": "0",
+      "target_debt_range": "NULL"
+    },
+    {
+      "contract_external_id": "10058",
+      "period": "13",
+      "is_bad_debt_row": "0",
+      "is_close_row": "0",
+      "target_debt_range": "NULL"
+    },
+    {
+      "contract_external_id": "10058",
+      "period": "13",
+      "is_bad_debt_row": "0",
+      "is_close_row": "0",
+      "target_debt_range": "NULL"
+    },
+    {
+      "contract_external_id": "10062",
+      "period": "13",
+      "is_bad_debt_row": "0",
+      "is_close_row": "0",
+      "target_debt_range": "NULL"
+    },
+    {
+      "contract_external_id": "10074",
+      "period": "9",
+      "is_bad_debt_row": "0",
+      "is_close_row": "0",
+      "target_debt_range": "NULL"
+    },
+    {
+      "contract_external_id": "10094",
+      "period": "9",
+      "is_bad_debt_row": "0",
+      "is_close_row": "0",
+      "target_debt_range": "NULL"
+    },
+    {
+      "contract_external_id": "10100",
+      "period": "9",
+      "is_bad_debt_row": "0",
+      "is_close_row": "0",
+      "target_debt_range": "NULL"
+    },
+    {
+      "contract_external_id": "10100",
+      "period": "9",
+      "is_bad_debt_row": "0",
+      "is_close_row": "0",
+      "target_debt_range": "NULL"
+    }
+  ],
+  "messages": [],
+  "stdout": "contract_external_id\tperiod\tis_bad_debt_row\tis_close_row\ttarget_debt_range\n10002\t9\t0\t0\tNULL\n10002\t9\t0\t0\tNULL\n10008\t9\t0\t0\tNULL\n10058\t13\t0\t0\tNULL\n10058\t13\t0\t0\tNULL\n10062\t13\t0\t0\tNULL\n10074\t9\t0\t0\tNULL\n10094\t9\t0\t0\tNULL\n10100\t9\t0\t0\tNULL\n10100\t9\t0\t0\tNULL\n",
+  "stderr": "",
+  "execution_time_ms": 2124
+}

@@ -1,0 +1,154 @@
+{
+  "query": "\nSELECT COLUMN_NAME, DATA_TYPE \nFROM INFORMATION_SCHEMA.COLUMNS \nWHERE TABLE_NAME = 'debt_target_cache' \nORDER BY ORDINAL_POSITION;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT COLUMN_NAME, DATA_TYPE \nFROM INFORMATION_SCHEMA.COLUMNS \nWHERE TABLE_NAME = 'debt_target_cache' \nORDER BY ORDINAL_POSITION;\n",
+  "rows": [
+    {
+      "COLUMN_NAME": "id",
+      "DATA_TYPE": "int"
+    },
+    {
+      "COLUMN_NAME": "section",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "contract_external_id",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "contract_no",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "customer_name",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "approve_date",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "contract_status",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "partner_code",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "partner_name",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "product_type",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "device",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "model",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "finance_amount",
+      "DATA_TYPE": "decimal"
+    },
+    {
+      "COLUMN_NAME": "installment_count",
+      "DATA_TYPE": "int"
+    },
+    {
+      "COLUMN_NAME": "period",
+      "DATA_TYPE": "int"
+    },
+    {
+      "COLUMN_NAME": "due_date",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "principal",
+      "DATA_TYPE": "decimal"
+    },
+    {
+      "COLUMN_NAME": "interest",
+      "DATA_TYPE": "decimal"
+    },
+    {
+      "COLUMN_NAME": "fee",
+      "DATA_TYPE": "decimal"
+    },
+    {
+      "COLUMN_NAME": "penalty",
+      "DATA_TYPE": "decimal"
+    },
+    {
+      "COLUMN_NAME": "unlock_fee",
+      "DATA_TYPE": "decimal"
+    },
+    {
+      "COLUMN_NAME": "net_amount",
+      "DATA_TYPE": "decimal"
+    },
+    {
+      "COLUMN_NAME": "total_amount",
+      "DATA_TYPE": "decimal"
+    },
+    {
+      "COLUMN_NAME": "paid_amount",
+      "DATA_TYPE": "decimal"
+    },
+    {
+      "COLUMN_NAME": "overpaid_applied",
+      "DATA_TYPE": "decimal"
+    },
+    {
+      "COLUMN_NAME": "baseline_amount",
+      "DATA_TYPE": "decimal"
+    },
+    {
+      "COLUMN_NAME": "is_paid",
+      "DATA_TYPE": "tinyint"
+    },
+    {
+      "COLUMN_NAME": "is_partial_paid",
+      "DATA_TYPE": "tinyint"
+    },
+    {
+      "COLUMN_NAME": "is_closed",
+      "DATA_TYPE": "tinyint"
+    },
+    {
+      "COLUMN_NAME": "is_suspended",
+      "DATA_TYPE": "tinyint"
+    },
+    {
+      "COLUMN_NAME": "is_current_period",
+      "DATA_TYPE": "tinyint"
+    },
+    {
+      "COLUMN_NAME": "is_future_period",
+      "DATA_TYPE": "tinyint"
+    },
+    {
+      "COLUMN_NAME": "is_arrears",
+      "DATA_TYPE": "tinyint"
+    },
+    {
+      "COLUMN_NAME": "is_bad_debt",
+      "DATA_TYPE": "tinyint"
+    },
+    {
+      "COLUMN_NAME": "debt_range",
+      "DATA_TYPE": "varchar"
+    },
+    {
+      "COLUMN_NAME": "populated_at",
+      "DATA_TYPE": "timestamp"
+    }
+  ],
+  "messages": [],
+  "stdout": "COLUMN_NAME\tDATA_TYPE\nid\tint\nsection\tvarchar\ncontract_external_id\tvarchar\ncontract_no\tvarchar\ncustomer_name\tvarchar\napprove_date\tvarchar\ncontract_status\tvarchar\npartner_code\tvarchar\npartner_name\tvarchar\nproduct_type\tvarchar\ndevice\tvarchar\nmodel\tvarchar\nfinance_amount\tdecimal\ninstallment_count\tint\nperiod\tint\ndue_date\tvarchar\nprincipal\tdecimal\ninterest\tdecimal\nfee\tdecimal\npenalty\tdecimal\nunlock_fee\tdecimal\nnet_amount\tdecimal\ntotal_amount\tdecimal\npaid_amount\tdecimal\noverpaid_applied\tdecimal\nbaseline_amount\tdecimal\nis_paid\ttinyint\nis_partial_paid\ttinyint\nis_closed\ttinyint\nis_suspended\ttinyint\nis_current_period\ttinyint\nis_future_period\ttinyint\nis_arrears\ttinyint\nis_bad_debt\ttinyint\ndebt_range\tvarchar\npopulated_at\ttimestamp\n",
+  "stderr": "",
+  "execution_time_ms": 1753
+}

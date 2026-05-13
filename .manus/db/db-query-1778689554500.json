@@ -1,0 +1,130 @@
+{
+  "query": "\nSELECT section, contract_external_id, period, debt_range\nFROM debt_target_cache\nWHERE contract_external_id = '5093'\nORDER BY section, period\nLIMIT 20;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT section, contract_external_id, period, debt_range\nFROM debt_target_cache\nWHERE contract_external_id = '5093'\nORDER BY section, period\nLIMIT 20;\n",
+  "rows": [
+    {
+      "section": "Boonphone",
+      "contract_external_id": "5093",
+      "period": "1",
+      "debt_range": "ปกติ"
+    },
+    {
+      "section": "Boonphone",
+      "contract_external_id": "5093",
+      "period": "2",
+      "debt_range": "ปกติ"
+    },
+    {
+      "section": "Boonphone",
+      "contract_external_id": "5093",
+      "period": "3",
+      "debt_range": "ปกติ"
+    },
+    {
+      "section": "Boonphone",
+      "contract_external_id": "5093",
+      "period": "4",
+      "debt_range": "ปกติ"
+    },
+    {
+      "section": "Boonphone",
+      "contract_external_id": "5093",
+      "period": "5",
+      "debt_range": "ปกติ"
+    },
+    {
+      "section": "Boonphone",
+      "contract_external_id": "5093",
+      "period": "6",
+      "debt_range": "ปกติ"
+    },
+    {
+      "section": "Boonphone",
+      "contract_external_id": "5093",
+      "period": "7",
+      "debt_range": "ปกติ"
+    },
+    {
+      "section": "Boonphone",
+      "contract_external_id": "5093",
+      "period": "8",
+      "debt_range": "ปกติ"
+    },
+    {
+      "section": "Boonphone",
+      "contract_external_id": "5093",
+      "period": "9",
+      "debt_range": "ปกติ"
+    },
+    {
+      "section": "Boonphone",
+      "contract_external_id": "5093",
+      "period": "10",
+      "debt_range": "ปกติ"
+    },
+    {
+      "section": "Boonphone",
+      "contract_external_id": "5093",
+      "period": "11",
+      "debt_range": "ปกติ"
+    },
+    {
+      "section": "Boonphone",
+      "contract_external_id": "5093",
+      "period": "12",
+      "debt_range": "ปกติ"
+    },
+    {
+      "section": "Fastfone365",
+      "contract_external_id": "5093",
+      "period": "1",
+      "debt_range": "เกิน >90"
+    },
+    {
+      "section": "Fastfone365",
+      "contract_external_id": "5093",
+      "period": "2",
+      "debt_range": "เกิน >90"
+    },
+    {
+      "section": "Fastfone365",
+      "contract_external_id": "5093",
+      "period": "3",
+      "debt_range": "เกิน >90"
+    },
+    {
+      "section": "Fastfone365",
+      "contract_external_id": "5093",
+      "period": "4",
+      "debt_range": "เกิน >90"
+    },
+    {
+      "section": "Fastfone365",
+      "contract_external_id": "5093",
+      "period": "5",
+      "debt_range": "เกิน >90"
+    },
+    {
+      "section": "Fastfone365",
+      "contract_external_id": "5093",
+      "period": "6",
+      "debt_range": "เกิน >90"
+    },
+    {
+      "section": "Fastfone365",
+      "contract_external_id": "5093",
+      "period": "7",
+      "debt_range": "เกิน >90"
+    },
+    {
+      "section": "Fastfone365",
+      "contract_external_id": "5093",
+      "period": "8",
+      "debt_range": "เกิน >90"
+    }
+  ],
+  "messages": [],
+  "stdout": "section\tcontract_external_id\tperiod\tdebt_range\nBoonphone\t5093\t1\tปกติ\nBoonphone\t5093\t2\tปกติ\nBoonphone\t5093\t3\tปกติ\nBoonphone\t5093\t4\tปกติ\nBoonphone\t5093\t5\tปกติ\nBoonphone\t5093\t6\tปกติ\nBoonphone\t5093\t7\tปกติ\nBoonphone\t5093\t8\tปกติ\nBoonphone\t5093\t9\tปกติ\nBoonphone\t5093\t10\tปกติ\nBoonphone\t5093\t11\tปกติ\nBoonphone\t5093\t12\tปกติ\nFastfone365\t5093\t1\tเกิน >90\nFastfone365\t5093\t2\tเกิน >90\nFastfone365\t5093\t3\tเกิน >90\nFastfone365\t5093\t4\tเกิน >90\nFastfone365\t5093\t5\tเกิน >90\nFastfone365\t5093\t6\tเกิน >90\nFastfone365\t5093\t7\tเกิน >90\nFastfone365\t5093\t8\tเกิน >90\n",
+  "stderr": "",
+  "execution_time_ms": 1788
+}

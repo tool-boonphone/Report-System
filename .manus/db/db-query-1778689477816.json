@@ -1,0 +1,50 @@
+{
+  "query": "\nSELECT period, debt_range, section\nFROM debt_target_cache\nWHERE contract_external_id = '10002'\nORDER BY period;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT period, debt_range, section\nFROM debt_target_cache\nWHERE contract_external_id = '10002'\nORDER BY period;\n",
+  "rows": [
+    {
+      "period": "1",
+      "debt_range": "ปกติ",
+      "section": "Fastfone365"
+    },
+    {
+      "period": "2",
+      "debt_range": "ปกติ",
+      "section": "Fastfone365"
+    },
+    {
+      "period": "3",
+      "debt_range": "ปกติ",
+      "section": "Fastfone365"
+    },
+    {
+      "period": "4",
+      "debt_range": "ปกติ",
+      "section": "Fastfone365"
+    },
+    {
+      "period": "5",
+      "debt_range": "ปกติ",
+      "section": "Fastfone365"
+    },
+    {
+      "period": "6",
+      "debt_range": "ปกติ",
+      "section": "Fastfone365"
+    },
+    {
+      "period": "7",
+      "debt_range": "ปกติ",
+      "section": "Fastfone365"
+    },
+    {
+      "period": "8",
+      "debt_range": "ปกติ",
+      "section": "Fastfone365"
+    }
+  ],
+  "messages": [],
+  "stdout": "period\tdebt_range\tsection\n1\tปกติ\tFastfone365\n2\tปกติ\tFastfone365\n3\tปกติ\tFastfone365\n4\tปกติ\tFastfone365\n5\tปกติ\tFastfone365\n6\tปกติ\tFastfone365\n7\tปกติ\tFastfone365\n8\tปกติ\tFastfone365\n",
+  "stderr": "",
+  "execution_time_ms": 1991
+}

@@ -1,0 +1,160 @@
+{
+  "query": "\nSELECT contract_external_id, period, debt_range\nFROM debt_target_cache\nWHERE contract_external_id IN (\n  SELECT contract_external_id \n  FROM debt_target_cache \n  GROUP BY contract_external_id \n  HAVING COUNT(DISTINCT debt_range) > 1\n  LIMIT 3\n)\nORDER BY contract_external_id, period\nLIMIT 30;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT contract_external_id, period, debt_range\nFROM debt_target_cache\nWHERE contract_external_id IN (\n  SELECT contract_external_id \n  FROM debt_target_cache \n  GROUP BY contract_external_id \n  HAVING COUNT(DISTINCT debt_range) > 1\n  LIMIT 3\n)\nORDER BY contract_external_id, period\nLIMIT 30;\n",
+  "rows": [
+    {
+      "contract_external_id": "5093",
+      "period": "1",
+      "debt_range": "ปกติ"
+    },
+    {
+      "contract_external_id": "5093",
+      "period": "1",
+      "debt_range": "เกิน >90"
+    },
+    {
+      "contract_external_id": "5093",
+      "period": "2",
+      "debt_range": "เกิน >90"
+    },
+    {
+      "contract_external_id": "5093",
+      "period": "2",
+      "debt_range": "ปกติ"
+    },
+    {
+      "contract_external_id": "5093",
+      "period": "3",
+      "debt_range": "ปกติ"
+    },
+    {
+      "contract_external_id": "5093",
+      "period": "3",
+      "debt_range": "เกิน >90"
+    },
+    {
+      "contract_external_id": "5093",
+      "period": "4",
+      "debt_range": "ปกติ"
+    },
+    {
+      "contract_external_id": "5093",
+      "period": "4",
+      "debt_range": "เกิน >90"
+    },
+    {
+      "contract_external_id": "5093",
+      "period": "5",
+      "debt_range": "ปกติ"
+    },
+    {
+      "contract_external_id": "5093",
+      "period": "5",
+      "debt_range": "เกิน >90"
+    },
+    {
+      "contract_external_id": "5093",
+      "period": "6",
+      "debt_range": "ปกติ"
+    },
+    {
+      "contract_external_id": "5093",
+      "period": "6",
+      "debt_range": "เกิน >90"
+    },
+    {
+      "contract_external_id": "5093",
+      "period": "7",
+      "debt_range": "เกิน >90"
+    },
+    {
+      "contract_external_id": "5093",
+      "period": "7",
+      "debt_range": "ปกติ"
+    },
+    {
+      "contract_external_id": "5093",
+      "period": "8",
+      "debt_range": "ปกติ"
+    },
+    {
+      "contract_external_id": "5093",
+      "period": "8",
+      "debt_range": "เกิน >90"
+    },
+    {
+      "contract_external_id": "5093",
+      "period": "9",
+      "debt_range": "ปกติ"
+    },
+    {
+      "contract_external_id": "5093",
+      "period": "10",
+      "debt_range": "ปกติ"
+    },
+    {
+      "contract_external_id": "5093",
+      "period": "11",
+      "debt_range": "ปกติ"
+    },
+    {
+      "contract_external_id": "5093",
+      "period": "12",
+      "debt_range": "ปกติ"
+    },
+    {
+      "contract_external_id": "5101",
+      "period": "1",
+      "debt_range": "เกิน >90"
+    },
+    {
+      "contract_external_id": "5101",
+      "period": "1",
+      "debt_range": "ปกติ"
+    },
+    {
+      "contract_external_id": "5101",
+      "period": "2",
+      "debt_range": "ปกติ"
+    },
+    {
+      "contract_external_id": "5101",
+      "period": "2",
+      "debt_range": "เกิน >90"
+    },
+    {
+      "contract_external_id": "5101",
+      "period": "3",
+      "debt_range": "เกิน >90"
+    },
+    {
+      "contract_external_id": "5101",
+      "period": "3",
+      "debt_range": "ปกติ"
+    },
+    {
+      "contract_external_id": "5101",
+      "period": "4",
+      "debt_range": "เกิน >90"
+    },
+    {
+      "contract_external_id": "5101",
+      "period": "4",
+      "debt_range": "ปกติ"
+    },
+    {
+      "contract_external_id": "5101",
+      "period": "5",
+      "debt_range": "เกิน >90"
+    },
+    {
+      "contract_external_id": "5101",
+      "period": "5",
+      "debt_range": "ปกติ"
+    }
+  ],
+  "messages": [],
+  "stdout": "contract_external_id\tperiod\tdebt_range\n5093\t1\tปกติ\n5093\t1\tเกิน >90\n5093\t2\tเกิน >90\n5093\t2\tปกติ\n5093\t3\tปกติ\n5093\t3\tเกิน >90\n5093\t4\tปกติ\n5093\t4\tเกิน >90\n5093\t5\tปกติ\n5093\t5\tเกิน >90\n5093\t6\tปกติ\n5093\t6\tเกิน >90\n5093\t7\tเกิน >90\n5093\t7\tปกติ\n5093\t8\tปกติ\n5093\t8\tเกิน >90\n5093\t9\tปกติ\n5093\t10\tปกติ\n5093\t11\tปกติ\n5093\t12\tปกติ\n5101\t1\tเกิน >90\n5101\t1\tปกติ\n5101\t2\tปกติ\n5101\t2\tเกิน >90\n5101\t3\tเกิน >90\n5101\t3\tปกติ\n5101\t4\tเกิน >90\n5101\t4\tปกติ\n5101\t5\tเกิน >90\n5101\t5\tปกติ\n",
+  "stderr": "",
+  "execution_time_ms": 2187
+}

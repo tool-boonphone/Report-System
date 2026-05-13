@@ -1,0 +1,50 @@
+{
+  "query": "\nSELECT \n  CASE\n    WHEN dcc.contract_status = 'หนี้เสีย'      THEN 'หนี้เสีย'\n    WHEN dcc.contract_status = 'ระงับสัญญา'   THEN 'ระงับสัญญา'\n    WHEN dcc.contract_status = 'สิ้นสุดสัญญา' THEN 'สิ้นสุดสัญญา'\n    WHEN dcc.contract_status = 'ยกเลิกสัญญา' THEN 'ยกเลิกสัญญา'\n    ELSE COALESCE(dcc.debt_range, 'ปกติ')\n  END AS bucket,\n  COUNT(*) AS cnt,\n  SUM(CAST(dcc.payment_tx_amount AS DECIMAL(18,2))) AS total_paid\nFROM debt_collected_cache dcc\nWHERE dcc.section = 'Boonphone'\n  AND dcc.approve_date IS NOT NULL\nGROUP BY bucket\nORDER BY cnt DESC;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT \n  CASE\n    WHEN dcc.contract_status = 'หนี้เสีย'      THEN 'หนี้เสีย'\n    WHEN dcc.contract_status = 'ระงับสัญญา'   THEN 'ระงับสัญญา'\n    WHEN dcc.contract_status = 'สิ้นสุดสัญญา' THEN 'สิ้นสุดสัญญา'\n    WHEN dcc.contract_status = 'ยกเลิกสัญญา' THEN 'ยกเลิกสัญญา'\n    ELSE COALESCE(dcc.debt_range, 'ปกติ')\n  END AS bucket,\n  COUNT(*) AS cnt,\n  SUM(CAST(dcc.payment_tx_amount AS DECIMAL(18,2))) AS total_paid\nFROM debt_collected_cache dcc\nWHERE dcc.section = 'Boonphone'\n  AND dcc.approve_date IS NOT NULL\nGROUP BY bucket\nORDER BY cnt DESC;\n",
+  "rows": [
+    {
+      "bucket": "ปกติ",
+      "cnt": "3930",
+      "total_paid": "10010458.00"
+    },
+    {
+      "bucket": "เกิน 1-7",
+      "cnt": "416",
+      "total_paid": "880255.00"
+    },
+    {
+      "bucket": "เกิน 8-14",
+      "cnt": "95",
+      "total_paid": "184995.00"
+    },
+    {
+      "bucket": "เกิน 15-30",
+      "cnt": "86",
+      "total_paid": "155604.00"
+    },
+    {
+      "bucket": "สิ้นสุดสัญญา",
+      "cnt": "78",
+      "total_paid": "247438.40"
+    },
+    {
+      "bucket": "เกิน 31-60",
+      "cnt": "55",
+      "total_paid": "102543.00"
+    },
+    {
+      "bucket": "ระงับสัญญา",
+      "cnt": "31",
+      "total_paid": "76006.00"
+    },
+    {
+      "bucket": "เกิน 61-90",
+      "cnt": "3",
+      "total_paid": "4350.00"
+    }
+  ],
+  "messages": [],
+  "stdout": "bucket\tcnt\ttotal_paid\nปกติ\t3930\t10010458.00\nเกิน 1-7\t416\t880255.00\nเกิน 8-14\t95\t184995.00\nเกิน 15-30\t86\t155604.00\nสิ้นสุดสัญญา\t78\t247438.40\nเกิน 31-60\t55\t102543.00\nระงับสัญญา\t31\t76006.00\nเกิน 61-90\t3\t4350.00\n",
+  "stderr": "",
+  "execution_time_ms": 1898
+}

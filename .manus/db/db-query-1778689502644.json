@@ -1,0 +1,9 @@
+{
+  "query": "\nUPDATE debt_collected_cache dc\nJOIN (\n  SELECT contract_external_id, MAX(period) AS max_period\n  FROM debt_target_cache\n  GROUP BY contract_external_id\n) AS max_dt ON dc.contract_external_id = max_dt.contract_external_id\nJOIN debt_target_cache dt2 \n  ON dt2.contract_external_id = max_dt.contract_external_id \n  AND dt2.period = max_dt.max_period\nSET dc.debt_range = dt2.debt_range\nWHERE dc.debt_range IS NULL\n  AND dc.period > max_dt.max_period;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nUPDATE debt_collected_cache dc\nJOIN (\n  SELECT contract_external_id, MAX(period) AS max_period\n  FROM debt_target_cache\n  GROUP BY contract_external_id\n) AS max_dt ON dc.contract_external_id = max_dt.contract_external_id\nJOIN debt_target_cache dt2 \n  ON dt2.contract_external_id = max_dt.contract_external_id \n  AND dt2.period = max_dt.max_period\nSET dc.debt_range = dt2.debt_range\nWHERE dc.debt_range IS NULL\n  AND dc.period > max_dt.max_period;\n",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 3807
+}

@@ -1,0 +1,38 @@
+{
+  "query": "\nSELECT debt_range, COUNT(*) AS cnt\nFROM debt_collected_cache\nGROUP BY debt_range\nORDER BY cnt DESC;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT debt_range, COUNT(*) AS cnt\nFROM debt_collected_cache\nGROUP BY debt_range\nORDER BY cnt DESC;\n",
+  "rows": [
+    {
+      "debt_range": "ปกติ",
+      "cnt": "110256"
+    },
+    {
+      "debt_range": "เกิน 1-7",
+      "cnt": "6259"
+    },
+    {
+      "debt_range": "เกิน >90",
+      "cnt": "4141"
+    },
+    {
+      "debt_range": "เกิน 8-14",
+      "cnt": "2223"
+    },
+    {
+      "debt_range": "เกิน 31-60",
+      "cnt": "1830"
+    },
+    {
+      "debt_range": "เกิน 15-30",
+      "cnt": "1569"
+    },
+    {
+      "debt_range": "เกิน 61-90",
+      "cnt": "772"
+    }
+  ],
+  "messages": [],
+  "stdout": "debt_range\tcnt\nปกติ\t110256\nเกิน 1-7\t6259\nเกิน >90\t4141\nเกิน 8-14\t2223\nเกิน 31-60\t1830\nเกิน 15-30\t1569\nเกิน 61-90\t772\n",
+  "stderr": "",
+  "execution_time_ms": 1859
+}

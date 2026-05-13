@@ -184,8 +184,8 @@ export async function getOverdueTopList(params: {
 
   // Enrich with customer info for display.
   const externalIds = rows
-    .map((r) => r.contractExternalId)
-    .filter((x): x is string => !!x);
+    .map((r: { contractExternalId: string | null | undefined }) => r.contractExternalId)
+    .filter((x: string | null | undefined): x is string => !!x);
   const customerByExt = new Map<string, { name: string | null; phone: string | null }>();
   if (externalIds.length) {
     const cRows = await db
@@ -199,7 +199,7 @@ export async function getOverdueTopList(params: {
         and(
           eq(contracts.section, params.section),
           sql`${contracts.externalId} IN (${sql.join(
-            externalIds.map((v) => sql`${v}`),
+            externalIds.map((v: string) => sql`${v}`),
             sql`, `,
           )})`,
         ),
@@ -209,7 +209,7 @@ export async function getOverdueTopList(params: {
     }
   }
 
-  return rows.map((r) => {
+  return rows.map((r: { contractExternalId: string | null | undefined; contractNo: string | null | undefined; dueAmount: number; paidAmount: number; overdueCount: number }) => {
     const c = r.contractExternalId
       ? customerByExt.get(r.contractExternalId)
       : null;

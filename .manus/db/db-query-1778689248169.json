@@ -1,0 +1,38 @@
+{
+  "query": "SELECT \n  debt_range,\n  COUNT(*) as row_count\nFROM debt_target_cache\nWHERE section = 'Fastfone365'\nGROUP BY debt_range\nORDER BY row_count DESC\nLIMIT 20;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT \n  debt_range,\n  COUNT(*) as row_count\nFROM debt_target_cache\nWHERE section = 'Fastfone365'\nGROUP BY debt_range\nORDER BY row_count DESC\nLIMIT 20;",
+  "rows": [
+    {
+      "debt_range": "ปกติ",
+      "row_count": "137234"
+    },
+    {
+      "debt_range": "เกิน >90",
+      "row_count": "19227"
+    },
+    {
+      "debt_range": "เกิน 1-7",
+      "row_count": "5904"
+    },
+    {
+      "debt_range": "เกิน 61-90",
+      "row_count": "2560"
+    },
+    {
+      "debt_range": "เกิน 31-60",
+      "row_count": "2426"
+    },
+    {
+      "debt_range": "เกิน 8-14",
+      "row_count": "2240"
+    },
+    {
+      "debt_range": "เกิน 15-30",
+      "row_count": "1772"
+    }
+  ],
+  "messages": [],
+  "stdout": "debt_range\trow_count\nปกติ\t137234\nเกิน >90\t19227\nเกิน 1-7\t5904\nเกิน 61-90\t2560\nเกิน 31-60\t2426\nเกิน 8-14\t2240\nเกิน 15-30\t1772\n",
+  "stderr": "",
+  "execution_time_ms": 2246
+}

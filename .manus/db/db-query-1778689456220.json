@@ -1,0 +1,25 @@
+{
+  "query": "\nSELECT \n  is_bad_debt_row,\n  is_close_row,\n  COUNT(*) AS cnt\nFROM debt_collected_cache\nWHERE debt_range IS NULL\nGROUP BY is_bad_debt_row, is_close_row;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT \n  is_bad_debt_row,\n  is_close_row,\n  COUNT(*) AS cnt\nFROM debt_collected_cache\nWHERE debt_range IS NULL\nGROUP BY is_bad_debt_row, is_close_row;\n",
+  "rows": [
+    {
+      "is_bad_debt_row": "1",
+      "is_close_row": "0",
+      "cnt": "2"
+    },
+    {
+      "is_bad_debt_row": "0",
+      "is_close_row": "0",
+      "cnt": "1591"
+    },
+    {
+      "is_bad_debt_row": "0",
+      "is_close_row": "1",
+      "cnt": "119"
+    }
+  ],
+  "messages": [],
+  "stdout": "is_bad_debt_row\tis_close_row\tcnt\n1\t0\t2\n0\t0\t1591\n0\t1\t119\n",
+  "stderr": "",
+  "execution_time_ms": 2099
+}
