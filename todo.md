@@ -1559,3 +1559,8 @@ Task list:
 ## Fix: Customers Sync ค้างที่ page 2/45 (2026-05-13 รอบ 2)
 - [x] ลด retry delays จาก [1000, 3000, 9000] → [500, 1500] (fail fast เมื่อ API timeout บ่อย)
 - [x] แก้ forEachPageParallel Step 1 — probe pages ถัดไปเพื่อหา totalPages เมื่อ startPage fail (ป้องกัน skip ทุก page)
+
+## Fix: Sync ตาม external-api-db-sync-patterns skill (2026-05-13)
+- [x] Revert partnerClient.ts — timeout 30s, retry exponential backoff 1s→2s, ลบ probe logic
+- [x] แก้ startup cleanup — update in_progress → error ตอน server start (skill §12)
+- [x] ตรวจสอบ overall sync timeout Promise.race 10 นาที (skill §13)
