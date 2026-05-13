@@ -1,0 +1,16 @@
+{
+  "query": "\nSELECT \n  SUM(CASE WHEN is_bad_debt_row = 0 THEN CAST(total_amount AS DECIMAL(18,2)) ELSE CAST(bad_debt AS DECIMAL(18,2)) END) AS total_paid_new,\n  SUM(CASE WHEN is_bad_debt_row = 0 THEN \n    CAST(principal AS DECIMAL(18,2)) + CAST(interest AS DECIMAL(18,2)) + CAST(fee AS DECIMAL(18,2)) + \n    CAST(penalty AS DECIMAL(18,2)) + CAST(unlock_fee AS DECIMAL(18,2)) + CAST(overpaid AS DECIMAL(18,2))\n    - CAST(discount AS DECIMAL(18,2))\n  ELSE 0 END) AS sum_breakdown_minus_discount,\n  SUM(CASE WHEN is_bad_debt_row = 1 THEN CAST(bad_debt AS DECIMAL(18,2)) ELSE 0 END) AS device_sale,\n  SUM(CASE WHEN is_bad_debt_row = 0 THEN \n    CAST(principal AS DECIMAL(18,2)) + CAST(interest AS DECIMAL(18,2)) + CAST(fee AS DECIMAL(18,2)) + \n    CAST(penalty AS DECIMAL(18,2)) + CAST(unlock_fee AS DECIMAL(18,2)) + CAST(overpaid AS DECIMAL(18,2))\n    - CAST(discount AS DECIMAL(18,2))\n  ELSE 0 END) + SUM(CASE WHEN is_bad_debt_row = 1 THEN CAST(bad_debt AS DECIMAL(18,2)) ELSE 0 END) AS ui_total\nFROM debt_collected_cache\nWHERE section = 'Fastfone365'\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT \n  SUM(CASE WHEN is_bad_debt_row = 0 THEN CAST(total_amount AS DECIMAL(18,2)) ELSE CAST(bad_debt AS DECIMAL(18,2)) END) AS total_paid_new,\n  SUM(CASE WHEN is_bad_debt_row = 0 THEN \n    CAST(principal AS DECIMAL(18,2)) + CAST(interest AS DECIMAL(18,2)) + CAST(fee AS DECIMAL(18,2)) + \n    CAST(penalty AS DECIMAL(18,2)) + CAST(unlock_fee AS DECIMAL(18,2)) + CAST(overpaid AS DECIMAL(18,2))\n    - CAST(discount AS DECIMAL(18,2))\n  ELSE 0 END) AS sum_breakdown_minus_discount,\n  SUM(CASE WHEN is_bad_debt_row = 1 THEN CAST(bad_debt AS DECIMAL(18,2)) ELSE 0 END) AS device_sale,\n  SUM(CASE WHEN is_bad_debt_row = 0 THEN \n    CAST(principal AS DECIMAL(18,2)) + CAST(interest AS DECIMAL(18,2)) + CAST(fee AS DECIMAL(18,2)) + \n    CAST(penalty AS DECIMAL(18,2)) + CAST(unlock_fee AS DECIMAL(18,2)) + CAST(overpaid AS DECIMAL(18,2))\n    - CAST(discount AS DECIMAL(18,2))\n  ELSE 0 END) + SUM(CASE WHEN is_bad_debt_row = 1 THEN CAST(bad_debt AS DECIMAL(18,2)) ELSE 0 END) AS ui_total\nFROM debt_collected_cache\nWHERE section = 'Fastfone365'\n",
+  "rows": [
+    {
+      "total_paid_new": "310084915.01",
+      "sum_breakdown_minus_discount": "287351095.87",
+      "device_sale": "22720169.58",
+      "ui_total": "310071265.45"
+    }
+  ],
+  "messages": [],
+  "stdout": "total_paid_new\tsum_breakdown_minus_discount\tdevice_sale\tui_total\n310084915.01\t287351095.87\t22720169.58\t310071265.45\n",
+  "stderr": "",
+  "execution_time_ms": 2052
+}

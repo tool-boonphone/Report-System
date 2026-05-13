@@ -158,9 +158,22 @@ const NOT_YET_DUE_BADGE_ITEMS: Array<{key:NotYetDueBadgeKey;label:string;icon:Re
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function computeMoneyTotal(m:MoneyBreakdown, v:Record<MoneyBadgeKey,boolean>):number {
-  // หมายเหตุ: badDebtInstallment ไม่ถูกรวมที่นี่ เพราะยอดนั้นอยู่ใน principal/interest/fee/penalty/unlockFee/overpaid อยู่แล้ว
-  // badDebtInstallment ใช้เฉพาะ toggle คอลัมน์ "ค่างวด" ใน SummaryTable เท่านั้น
-  return (v.principal?m.principal:0)+(v.interest?m.interest:0)+(v.fee?m.fee:0)+(v.penalty?m.penalty:0)+(v.unlockFee?m.unlockFee:0)+(v.overpaid?m.overpaid:0);
+  // Phase 140 Fix v2: ใช้ m.total เป็นฐาน (= total_paid จาก DB = sum(p.total + p.badDebt))
+  // แล้วหัก field ที่ปิด toggle ออก — เหมือน DebtReport.tsx บรรทัด 884-891
+  // m.total = installment_paid + device_sale_amount (รวม badDebt แล้ว)
+  // แต่ badDebt จัดการแยกใน caller (bucket หนี้เสีย) ดังนั้น m.total ที่ใช้ที่นี่
+  // คือ installment_paid (= m.badDebtInstallment) เพราะ badDebt row ถูกแยกออกแล้ว
+  // อย่างไรก็ตาม m.total = total_paid ซึ่งรวม badDebt แล้ว ดังนั้นต้องหัก m.badDebt ออกก่อน
+  // แล้วค่อยบวก badDebt กลับถ้า toggle เปิด (จัดการโดย caller)
+  // สรุป: ใช้ (m.total - m.badDebt) เป็น installment base แล้วหัก field ที่ปิด toggle
+  const installmentBase = m.total - m.badDebt;
+  return installmentBase
+    - (!v.principal ? m.principal : 0)
+    - (!v.interest  ? m.interest  : 0)
+    - (!v.fee       ? m.fee       : 0)
+    - (!v.penalty   ? m.penalty   : 0)
+    - (!v.unlockFee ? m.unlockFee : 0)
+    - (!v.overpaid  ? m.overpaid  : 0);
 }
 function computeDueTotal(m:MoneyBreakdown, v:Record<DueBadgeKey,boolean>):number {
   return (v.principal?m.principal:0)+(v.interest?m.interest:0)+(v.fee?m.fee:0)+(v.penalty?m.penalty:0)+(v.unlockFee?m.unlockFee:0);

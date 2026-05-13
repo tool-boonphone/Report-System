@@ -1,0 +1,18 @@
+{
+  "query": "\nSELECT \n  COUNT(*) as total_rows,\n  SUM(CAST(total_amount AS DECIMAL(18,2))) as sum_total_amount,\n  SUM(CASE WHEN is_bad_debt_row = 0 THEN CAST(total_amount AS DECIMAL(18,2)) ELSE 0 END) as installment_paid,\n  SUM(CASE WHEN is_bad_debt_row = 1 THEN CAST(bad_debt AS DECIMAL(18,2)) ELSE 0 END) as device_sale,\n  SUM(CASE WHEN is_bad_debt_row = 0 THEN CAST(total_amount AS DECIMAL(18,2)) ELSE CAST(bad_debt AS DECIMAL(18,2)) END) as total_paid_new,\n  SUM(CAST(overpaid AS DECIMAL(18,2))) as sum_overpaid\nFROM debt_collected_cache\nWHERE section = 'Fastfone365'\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT \n  COUNT(*) as total_rows,\n  SUM(CAST(total_amount AS DECIMAL(18,2))) as sum_total_amount,\n  SUM(CASE WHEN is_bad_debt_row = 0 THEN CAST(total_amount AS DECIMAL(18,2)) ELSE 0 END) as installment_paid,\n  SUM(CASE WHEN is_bad_debt_row = 1 THEN CAST(bad_debt AS DECIMAL(18,2)) ELSE 0 END) as device_sale,\n  SUM(CASE WHEN is_bad_debt_row = 0 THEN CAST(total_amount AS DECIMAL(18,2)) ELSE CAST(bad_debt AS DECIMAL(18,2)) END) as total_paid_new,\n  SUM(CAST(overpaid AS DECIMAL(18,2))) as sum_overpaid\nFROM debt_collected_cache\nWHERE section = 'Fastfone365'\n",
+  "rows": [
+    {
+      "total_rows": "122356",
+      "sum_total_amount": "287364745.43",
+      "installment_paid": "287364745.43",
+      "device_sale": "22720169.58",
+      "total_paid_new": "310084915.01",
+      "sum_overpaid": "1964493.65"
+    }
+  ],
+  "messages": [],
+  "stdout": "total_rows\tsum_total_amount\tinstallment_paid\tdevice_sale\ttotal_paid_new\tsum_overpaid\n122356\t287364745.43\t287364745.43\t22720169.58\t310084915.01\t1964493.65\n",
+  "stderr": "",
+  "execution_time_ms": 2012
+}

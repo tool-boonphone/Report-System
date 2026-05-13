@@ -1,0 +1,16 @@
+{
+  "query": "SELECT DISTINCT section FROM debt_collected_cache LIMIT 20",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT DISTINCT section FROM debt_collected_cache LIMIT 20",
+  "rows": [
+    {
+      "section": "Boonphone"
+    },
+    {
+      "section": "Fastfone365"
+    }
+  ],
+  "messages": [],
+  "stdout": "section\nBoonphone\nFastfone365\n",
+  "stderr": "",
+  "execution_time_ms": 1888
+}

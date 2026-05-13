@@ -1,0 +1,15 @@
+{
+  "query": "\nSELECT \n  SUM(CAST(discount AS DECIMAL(18,2))) as total_discount,\n  SUM(CASE WHEN is_bad_debt_row = 0 THEN CAST(discount AS DECIMAL(18,2)) ELSE 0 END) as installment_discount,\n  SUM(CASE WHEN is_bad_debt_row = 0 THEN \n    CAST(principal AS DECIMAL(18,2)) + CAST(interest AS DECIMAL(18,2)) + CAST(fee AS DECIMAL(18,2)) + \n    CAST(penalty AS DECIMAL(18,2)) + CAST(unlock_fee AS DECIMAL(18,2)) + CAST(overpaid AS DECIMAL(18,2))\n    - CAST(discount AS DECIMAL(18,2))\n  ELSE 0 END) AS sum_breakdown_minus_discount\nFROM debt_collected_cache\nWHERE section = 'Fastfone365'\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT \n  SUM(CAST(discount AS DECIMAL(18,2))) as total_discount,\n  SUM(CASE WHEN is_bad_debt_row = 0 THEN CAST(discount AS DECIMAL(18,2)) ELSE 0 END) as installment_discount,\n  SUM(CASE WHEN is_bad_debt_row = 0 THEN \n    CAST(principal AS DECIMAL(18,2)) + CAST(interest AS DECIMAL(18,2)) + CAST(fee AS DECIMAL(18,2)) + \n    CAST(penalty AS DECIMAL(18,2)) + CAST(unlock_fee AS DECIMAL(18,2)) + CAST(overpaid AS DECIMAL(18,2))\n    - CAST(discount AS DECIMAL(18,2))\n  ELSE 0 END) AS sum_breakdown_minus_discount\nFROM debt_collected_cache\nWHERE section = 'Fastfone365'\n",
+  "rows": [
+    {
+      "total_discount": "1915861.46",
+      "installment_discount": "1915861.46",
+      "sum_breakdown_minus_discount": "287351095.87"
+    }
+  ],
+  "messages": [],
+  "stdout": "total_discount\tinstallment_discount\tsum_breakdown_minus_discount\n1915861.46\t1915861.46\t287351095.87\n",
+  "stderr": "",
+  "execution_time_ms": 1981
+}

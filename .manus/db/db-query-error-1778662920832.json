@@ -1,0 +1,10 @@
+{
+  "query": "\nSELECT section, COUNT(*) as rows, SUM(CAST(total_amount AS DECIMAL(18,2))) as total_amount_sum\nFROM debt_collected_cache\nGROUP BY section\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT section, COUNT(*) as rows, SUM(CAST(total_amount AS DECIMAL(18,2))) as total_amount_sum\nFROM debt_collected_cache\nGROUP BY section\n",
+  "returncode": 1,
+  "logs": [
+    "ERROR 1064 (42000) at line 2: You have an error in your SQL syntax; check the manual that corresponds to your TiDB version for the right syntax to use line 1 column 32 near \"rows, SUM(CAST(total_amount AS DECIMAL(18,2))) as total_amount_sum",
+    "FROM debt_collected_cache",
+    "GROUP BY section\""
+  ]
+}

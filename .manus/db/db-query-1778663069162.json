@@ -1,0 +1,16 @@
+{
+  "query": "\nSELECT \n  SUM(CASE WHEN is_bad_debt_row = 0 THEN \n    CAST(principal AS DECIMAL(18,2)) + CAST(interest AS DECIMAL(18,2)) + CAST(fee AS DECIMAL(18,2)) + \n    CAST(penalty AS DECIMAL(18,2)) + CAST(unlock_fee AS DECIMAL(18,2)) + CAST(overpaid AS DECIMAL(18,2))\n  ELSE 0 END) AS sum_breakdown_installment,\n  SUM(CASE WHEN is_bad_debt_row = 0 THEN CAST(total_amount AS DECIMAL(18,2)) ELSE 0 END) AS sum_total_amount_installment,\n  SUM(CASE WHEN is_bad_debt_row = 0 THEN CAST(total_amount AS DECIMAL(18,2)) ELSE CAST(bad_debt AS DECIMAL(18,2)) END) AS total_paid_new,\n  SUM(CASE WHEN is_bad_debt_row = 1 THEN CAST(bad_debt AS DECIMAL(18,2)) ELSE 0 END) AS device_sale\nFROM debt_collected_cache\nWHERE section = 'Fastfone365'\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT \n  SUM(CASE WHEN is_bad_debt_row = 0 THEN \n    CAST(principal AS DECIMAL(18,2)) + CAST(interest AS DECIMAL(18,2)) + CAST(fee AS DECIMAL(18,2)) + \n    CAST(penalty AS DECIMAL(18,2)) + CAST(unlock_fee AS DECIMAL(18,2)) + CAST(overpaid AS DECIMAL(18,2))\n  ELSE 0 END) AS sum_breakdown_installment,\n  SUM(CASE WHEN is_bad_debt_row = 0 THEN CAST(total_amount AS DECIMAL(18,2)) ELSE 0 END) AS sum_total_amount_installment,\n  SUM(CASE WHEN is_bad_debt_row = 0 THEN CAST(total_amount AS DECIMAL(18,2)) ELSE CAST(bad_debt AS DECIMAL(18,2)) END) AS total_paid_new,\n  SUM(CASE WHEN is_bad_debt_row = 1 THEN CAST(bad_debt AS DECIMAL(18,2)) ELSE 0 END) AS device_sale\nFROM debt_collected_cache\nWHERE section = 'Fastfone365'\n",
+  "rows": [
+    {
+      "sum_breakdown_installment": "289266957.33",
+      "sum_total_amount_installment": "287364745.43",
+      "total_paid_new": "310084915.01",
+      "device_sale": "22720169.58"
+    }
+  ],
+  "messages": [],
+  "stdout": "sum_breakdown_installment\tsum_total_amount_installment\ttotal_paid_new\tdevice_sale\n289266957.33\t287364745.43\t310084915.01\t22720169.58\n",
+  "stderr": "",
+  "execution_time_ms": 1962
+}
