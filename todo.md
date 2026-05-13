@@ -1531,3 +1531,4 @@ Task list:
 
 - [x] แก้ไขคอลัมน์ "ยอดผ่อนรวม" ในหน้าเป้าเก็บหนี้ให้แสดงเป็น N×X (installmentCount × installmentAmount) แทนการรวม total_amount ทุกงวด
 - [x] Phase 138: BG สีฟ้า (currentPeriod highlight) ในเป้าเก็บหนี้ — ถ้างวดสุดท้ายที่ค้างชำระเลยกำหนดมาแล้วเกิน 30 วัน ให้ไม่แสดง BG สีฟ้า (ถือว่าไม่มีงวดปัจจุบันแล้ว) แก้ใน debtDb.ts ทั้ง 2 จุด (listDebtTargetStream + listDebtCollectedStream)
+- [ ] Phase 139: สรุปรายเดือน — รวมสถานะ "ยกเลิกสัญญา" เข้าไปในตารางและ badge ด้วย (ปัจจุบันถูกกรองออก)
