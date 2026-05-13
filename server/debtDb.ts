@@ -1577,6 +1577,110 @@ export async function listDebtTarget(params: { section: SectionKey }) {
       }
       lastNormalPeriodByContract.set(key, lastNormalPeriod);
     }
+    // Phase 113C: Populate lastNormalPeriodByContract for ยกเลิกสัญญา contracts NOT yet in lastNormalPeriodByContract.
+    // These are FF365-style cancelled contracts where receipt_no=null — skipped by rawCloseData
+    // (receipt_no IS NOT NULL filter). We fetch all their payments and use assignPayPeriods
+    // to compute lastNormalPeriod with the same Iron Rule as Phase 113.
+    {
+      const cancelledSet = new Set<string>();
+      for (const cr of cRows) {
+        const k = String(cr.external_id ?? "");
+        if (!k) continue;
+        if (cr.status !== "ยกเลิกสัญญา") continue;
+        if (lastNormalPeriodByContract.has(k)) continue; // already handled
+        cancelledSet.add(k);
+      }
+      if (cancelledSet.size > 0) {
+        // Fetch all payments for this section (no receipt_no filter) — filter by cancelledSet in JS
+        const cancelledPayRaw = await db.execute(sql`
+          SELECT contract_external_id,
+                 external_id AS payment_external_id,
+                 receipt_no,
+                 CAST(amount AS DECIMAL(18,2)) AS total_paid_amount,
+                 CAST(JSON_EXTRACT(raw_json, '$.bad_debt_amount') AS DECIMAL(18,2)) AS bad_debt_amount,
+                 CAST(JSON_EXTRACT(raw_json, '$.payment_id') AS UNSIGNED) AS payment_id,
+                 paid_at
+            FROM ${paymentTransactions}
+           WHERE ${paymentTransactions.section} = ${params.section}
+        `);
+        const cancelledPayRows: any[] = (cancelledPayRaw as any)[0] ?? cancelledPayRaw;
+        // Group by contract, only for cancelled contracts not yet handled
+        const cancelledPayByContract = new Map<string, PayRawRow[]>();
+        for (const pr of cancelledPayRows) {
+          const key = String(pr.contract_external_id ?? "");
+          if (!key || !cancelledSet.has(key)) continue;
+          const arr = cancelledPayByContract.get(key) ?? [];
+          arr.push({
+            contract_external_id: key,
+            period: null,
+            paid_at: pr.paid_at ?? null,
+            total_paid_amount: pr.total_paid_amount != null ? Number(pr.total_paid_amount) : null,
+            principal_paid: null,
+            interest_paid: null,
+            fee_paid: null,
+            penalty_paid: null,
+            unlock_fee_paid: null,
+            discount_amount: null,
+            overpaid_amount: null,
+            close_installment_amount: null,
+            bad_debt_amount: pr.bad_debt_amount != null ? Number(pr.bad_debt_amount) : null,
+            receipt_no: pr.receipt_no ?? null,
+            remark: null,
+            payment_id: pr.payment_id != null ? Number(pr.payment_id) : null,
+            updated_by: null,
+            updated_at: null,
+            created_at: null,
+          });
+          cancelledPayByContract.set(key, arr);
+        }
+        // For each cancelled contract, use assignPayPeriods to compute lastNormalPeriod
+        for (const [key, rawPays] of Array.from(cancelledPayByContract.entries())) {
+          // Real payments: numeric external_id OR TXRT receipt pattern
+          const realPayments = rawPays.filter((p) => {
+            const payExtId = String((p as any).payment_external_id ?? "");
+            const receiptNo = p.receipt_no ?? "";
+            return /^\d+$/.test(payExtId) || /^TXRT.*-\d+$/.test(receiptNo);
+          });
+          if (realPayments.length === 0) {
+            // No real payments — suspendedFromPeriod = 1 (no normal periods)
+            lastNormalPeriodByContract.set(key, 0);
+            continue;
+          }
+          const instList = instByContract.get(key) ?? [];
+          const contractNo = contractNoByExtId.get(key) ?? null;
+          const baselineAmt = baselineByKeyPhase78.get(key) ?? 0;
+          const assigned = assignPayPeriods(
+            realPayments,
+            instList.map((i) => {
+              const amt = Number(i.amount ?? 0);
+              return { period: i.period, amount: amt > 0 ? amt : baselineAmt };
+            }),
+            contractNo,
+            params.section,
+          );
+          // latestDate = latest paid_at across all real payments
+          const sortedReal = [...realPayments].sort((a, b) => {
+            const da = (a.paid_at ?? "").substring(0, 10);
+            const db2 = (b.paid_at ?? "").substring(0, 10);
+            return da < db2 ? 1 : da > db2 ? -1 : 0;
+          });
+          const latestDate = (sortedReal[0]?.paid_at ?? "").substring(0, 10);
+          if (!latestDate) {
+            lastNormalPeriodByContract.set(key, 0);
+            continue;
+          }
+          // For ยกเลิกสัญญา (FF365 style): use max(period) from ALL assigned payments.
+          // Iron Rule (exclude latestDate) does NOT apply here — cancelled contracts
+          // have fully paid before cancellation, so there is no partial payment on
+          // the cancel date that should be excluded.
+          let lastNormalPeriod = 0;
+          for (const p of assigned) {
+            if (p.period != null && p.period > lastNormalPeriod) lastNormalPeriod = p.period;
+          }
+          lastNormalPeriodByContract.set(key, lastNormalPeriod);
+        }
+      }
+    }
   }
 
   const today = new Date();

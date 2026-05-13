@@ -1,0 +1,28 @@
+{
+  "query": "\nSELECT pt.external_id, pt.receipt_no, pt.amount, pt.paid_at,\n       JSON_EXTRACT(pt.raw_json, '$.payment_id') AS payment_id,\n       JSON_EXTRACT(pt.raw_json, '$.bad_debt_amount') AS bad_debt_amount,\n       JSON_EXTRACT(pt.raw_json, '$.close_installment_amount') AS close_installment_amount\nFROM payment_transactions pt\nJOIN contracts c ON c.external_id = pt.contract_external_id\nWHERE c.contract_no = 'CT0225-LRI001-9357-01'\nORDER BY pt.paid_at ASC;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT pt.external_id, pt.receipt_no, pt.amount, pt.paid_at,\n       JSON_EXTRACT(pt.raw_json, '$.payment_id') AS payment_id,\n       JSON_EXTRACT(pt.raw_json, '$.bad_debt_amount') AS bad_debt_amount,\n       JSON_EXTRACT(pt.raw_json, '$.close_installment_amount') AS close_installment_amount\nFROM payment_transactions pt\nJOIN contracts c ON c.external_id = pt.contract_external_id\nWHERE c.contract_no = 'CT0225-LRI001-9357-01'\nORDER BY pt.paid_at ASC;\n",
+  "rows": [
+    {
+      "external_id": "23610",
+      "receipt_no": "TXRT0225-LRI001-9357-01-1-1",
+      "amount": "4508.75",
+      "paid_at": "2025-03-23",
+      "payment_id": "23610",
+      "bad_debt_amount": "0",
+      "close_installment_amount": "3958.75"
+    },
+    {
+      "external_id": "37977",
+      "receipt_no": "TXRT0225-LRI001-9357-01-2",
+      "amount": "16312.00",
+      "paid_at": "2025-05-13",
+      "payment_id": "37977",
+      "bad_debt_amount": "0",
+      "close_installment_amount": "3958.75"
+    }
+  ],
+  "messages": [],
+  "stdout": "external_id\treceipt_no\tamount\tpaid_at\tpayment_id\tbad_debt_amount\tclose_installment_amount\n23610\tTXRT0225-LRI001-9357-01-1-1\t4508.75\t2025-03-23\t23610\t0\t3958.75\n37977\tTXRT0225-LRI001-9357-01-2\t16312.00\t2025-05-13\t37977\t0\t3958.75\n",
+  "stderr": "",
+  "execution_time_ms": 2758
+}

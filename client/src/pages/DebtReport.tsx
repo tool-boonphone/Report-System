@@ -1985,8 +1985,10 @@ export default function DebtReport() {
                         if (tab === "target") {
                           const inst = r.installments[i];
                           const closed = !!inst?.isClosed;
-                          const suspended = !!inst?.isSuspended;
-                          const suspendLabel = inst?.suspendLabel ?? "ระงับสัญญา";
+                          // ใช้ isSuspended จาก server โดยตรง เหมือนระงับสัญญา
+                          // server คำนวณ suspendedFromPeriod = lastNormalPeriod + 1 ถูกต้องสำหรับทุกสถานะ
+                          let suspended = !!inst?.isSuspended;
+                          const suspendLabel = inst?.suspendLabel ?? "ยกเลิกสัญญา";
                           // Grey-out applies to both closed AND suspended cells.
                           const dimmed = closed || suspended;
                           // Phase 93: pre-compute isFuturePeriod+isPaid before cell value block

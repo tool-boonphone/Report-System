@@ -1,0 +1,18 @@
+{
+  "query": "\nSELECT \n  'debt_target_cache' AS source,\n  COUNT(DISTINCT contract_external_id) AS cancelled_count\nFROM debt_target_cache\nWHERE contract_status = 'ยกเลิกสัญญา'\n  AND section = 'Fastfone365'\nUNION ALL\nSELECT \n  'contracts' AS source,\n  COUNT(*) AS cancelled_count\nFROM contracts\nWHERE status = 'ยกเลิกสัญญา'\n  AND section = 'Fastfone365';\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT \n  'debt_target_cache' AS source,\n  COUNT(DISTINCT contract_external_id) AS cancelled_count\nFROM debt_target_cache\nWHERE contract_status = 'ยกเลิกสัญญา'\n  AND section = 'Fastfone365'\nUNION ALL\nSELECT \n  'contracts' AS source,\n  COUNT(*) AS cancelled_count\nFROM contracts\nWHERE status = 'ยกเลิกสัญญา'\n  AND section = 'Fastfone365';\n",
+  "rows": [
+    {
+      "source": "contracts",
+      "cancelled_count": "88"
+    },
+    {
+      "source": "debt_target_cache",
+      "cancelled_count": "88"
+    }
+  ],
+  "messages": [],
+  "stdout": "source\tcancelled_count\ncontracts\t88\ndebt_target_cache\t88\n",
+  "stderr": "",
+  "execution_time_ms": 1809
+}
