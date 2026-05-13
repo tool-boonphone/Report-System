@@ -1574,8 +1574,8 @@ Task list:
 - [x] แก้ TypeScript errors ใน debtDb.ts (lines 187, 188, 202, 212) — ลดจาก 12 เหลือ 8 errors (8 ที่เหลือเป็น pre-existing ใน Groups.tsx/Users.tsx/authDb.ts)
 
 ## Fix: N/X display — Cap N และ N+1 rule (2026-05-13)
-- [ ] DebtReport.tsx (tab=collected): Cap maxPaidPeriod ≤ installmentCount
-- [ ] DebtReport.tsx (tab=target): ระงับสัญญา/หนี้เสีย ที่ N=0 → แสดง 1/X (N+1 rule)
-- [ ] BadDebtSummary.tsx: Cap paidInstallments ≤ installmentCount
-- [ ] SuspectedBadDebt.tsx: Cap paidInstallments ≤ installmentCount
-- [ ] badDebtDb.ts: Cap MAX(period) ≤ installment_count ใน SQL/JS
+- [x] DebtReport.tsx (tab=collected): Cap maxPaidPeriod ≤ installmentCount
+- [x] DebtReport.tsx (tab=target): ระงับสัญญา/หนี้เสีย ที่ N=0 → แสดง 1/X (N+1 rule)
+- [x] BadDebtSummary.tsx: Cap paidInstallments ≤ installmentCount
+- [x] SuspectedBadDebt.tsx: Cap paidInstallments ≤ installmentCount
+- [x] badDebtDb.ts: Cap MAX(period) ≤ installment_count ใน SQL/JS
