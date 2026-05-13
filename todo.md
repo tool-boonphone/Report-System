@@ -1564,3 +1564,6 @@ Task list:
 - [x] Revert partnerClient.ts — timeout 30s, retry exponential backoff 1s→2s, ลบ probe logic
 - [x] แก้ startup cleanup — update in_progress → error ตอน server start (skill §12)
 - [x] ตรวจสอบ overall sync timeout Promise.race 10 นาที (skill §13)
+
+## Fix: Login timeout ใน partnerClient.ts (2026-05-13)
+- [x] เพิ่ม timeout 15s สำหรับ login() เพื่อป้องกัน sync ค้างเมื่อ auth server ตอบช้า

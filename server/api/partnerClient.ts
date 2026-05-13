@@ -74,6 +74,9 @@ export class PartnerClient {
   /** Force a fresh login. Invalidates the cached token. */
   async login(): Promise<string> {
     const url = `${this.cfg.baseUrl}api/v1/auth/login`;
+    // Login has its own 15s timeout — separate from per-request timeoutMs.
+    // Without this, a hung auth server will stall the entire sync indefinitely.
+    const LOGIN_TIMEOUT_MS = 15_000;
     const res = await this.rawFetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -81,7 +84,7 @@ export class PartnerClient {
         username: this.cfg.username,
         password: this.cfg.password,
       }),
-    });
+    }, LOGIN_TIMEOUT_MS);
     const body = (await res.json().catch(() => ({}))) as ApiEnvelope<LoginData>;
     if (!res.ok || !body?.data?.access_token) {
       throw new PartnerApiError(
