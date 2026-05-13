@@ -138,6 +138,7 @@ const BUCKET_CASE_DTC = `
     WHEN dtc.contract_status = 'หนี้เสีย'      THEN 'หนี้เสีย'
     WHEN dtc.contract_status = 'ระงับสัญญา'   THEN 'ระงับสัญญา'
     WHEN dtc.contract_status = 'สิ้นสุดสัญญา' THEN 'สิ้นสุดสัญญา'
+    WHEN dtc.contract_status = 'ยกเลิกสัญญา' THEN 'ยกเลิกสัญญา'
     ELSE COALESCE(dtc.debt_range, 'ปกติ')
   END
 `;
@@ -156,8 +157,7 @@ function dtcWhere(section: string, opts: {
   search?: string;
 }): string {
   let w = `dtc.section = '${section}'
-    AND dtc.approve_date IS NOT NULL
-    AND COALESCE(dtc.contract_status, '') != 'ยกเลิกสัญญา'`;
+    AND dtc.approve_date IS NOT NULL`;
 
   if (opts.productType) {
     w += `\n    AND dtc.product_type = '${opts.productType.replace(/'/g, "''")}'`;
@@ -331,7 +331,6 @@ async function queryTarget(
              AND latest.contract_external_id = base.contract_external_id
     WHERE base.section = '${section}'
       AND DATE(base.due_date) <= CURDATE()
-      AND COALESCE(base.contract_status, '') != 'ยกเลิกสัญญา'
       ${dueDateFilter.replace(/dtc\./g, "base.")}
     GROUP BY approve_month, bucket
     ORDER BY approve_month DESC
@@ -548,7 +547,6 @@ async function queryDue(
              AND latest.contract_external_id = base.contract_external_id
     WHERE base.section = '${section}'
       AND base.is_arrears = 1
-      AND COALESCE(base.contract_status, '') != 'ยกเลิกสัญญา'
       ${dueDateFilter.replace(/dtc\./g, "base.")}
     GROUP BY approve_month, bucket
     ORDER BY approve_month DESC
@@ -641,7 +639,6 @@ async function queryNotYetDue(
       AND base.due_date > CURDATE()
       AND COALESCE(base.is_closed, 0) = 0
       AND COALESCE(base.is_paid, 0) = 0
-      AND COALESCE(base.contract_status, '') != 'ยกเลิกสัญญา'
       ${dueDateFilter.replace(/dtc\./g, "base.")}
     GROUP BY approve_month, bucket
     ORDER BY approve_month DESC
@@ -740,7 +737,6 @@ async function queryInstallTotal(
         FROM debt_target_cache dtc2
         WHERE dtc2.section = '${section}'
           AND dtc2.approve_date IS NOT NULL
-          AND COALESCE(dtc2.contract_status, '') != 'ยกเลิกสัญญา'
         GROUP BY dtc2.section, dtc2.contract_external_id
       ) mp ON mp.section = dtc.section
           AND mp.contract_external_id = dtc.contract_external_id
@@ -749,7 +745,6 @@ async function queryInstallTotal(
             AND latest.contract_external_id = CAST(c.external_id AS CHAR)
     WHERE c.section = '${section}'
       AND c.approve_date IS NOT NULL
-      AND COALESCE(c.status, '') NOT IN ('ยกเลิกสัญญา')
       AND c.installment_amount > 0
       AND c.installment_count > 0
       ${opts.search ? `AND (c.contract_no LIKE '%${escapeLike(opts.search)}%' OR c.customer_name LIKE '%${escapeLike(opts.search)}%')` : ''}

@@ -32,7 +32,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 // ─── Constants ───────────────────────────────────────────────────────────────
 const DEBT_BUCKETS = [
   "ปกติ","เกิน 1-7","เกิน 8-14","เกิน 15-30","เกิน 31-60",
-  "เกิน 61-90","เกิน >90","ระงับสัญญา","สิ้นสุดสัญญา","หนี้เสีย",
+  "เกิน 61-90","เกิน >90","ระงับสัญญา","สิ้นสุดสัญญา","หนี้เสีย","ยกเลิกสัญญา",
 ] as const;
 type DebtBucket = (typeof DEBT_BUCKETS)[number];
 
@@ -40,7 +40,7 @@ type ColGroup = { key: string; label: string; buckets: DebtBucket[]; headerBg: s
 const COL_GROUPS: ColGroup[] = [
   { key:"normal",     label:"ปกติ",         buckets:["ปกติ","เกิน 1-7","เกิน 8-14","เกิน 15-30","เกิน 31-60"], headerBg:"bg-green-700",  hasSubtotal:true  },
   { key:"suspect",    label:"สงสัยจะเสีย", buckets:["เกิน 61-90","เกิน >90"],                                   headerBg:"bg-orange-700", hasSubtotal:true  },
-  { key:"standalone", label:"",             buckets:["ระงับสัญญา","สิ้นสุดสัญญา","หนี้เสีย"],                   headerBg:"bg-gray-700",   hasSubtotal:false },
+  { key:"standalone", label:"",             buckets:["ระงับสัญญา","สิ้นสุดสัญญา","หนี้เสีย","ยกเลิกสัญญา"],   headerBg:"bg-gray-700",   hasSubtotal:false },
 ];
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -188,6 +188,7 @@ function bucketPillClasses(b:string):string {
     "ระงับสัญญา":"bg-gray-800 text-white border-gray-900",
     "สิ้นสุดสัญญา":"bg-blue-100 text-blue-800 border-blue-300",
     "หนี้เสีย":"bg-gray-700 text-white border-gray-800",
+    "ยกเลิกสัญญา":"bg-red-100 text-red-800 border-red-300",
   };
   return m[b]??"bg-gray-100 text-gray-700 border-gray-200";
 }
@@ -195,7 +196,7 @@ function bucketHeaderBg(b:string):string {
   const m:Record<string,string>={
     "ปกติ":"bg-green-700","เกิน 1-7":"bg-yellow-600","เกิน 8-14":"bg-amber-600",
     "เกิน 15-30":"bg-orange-600","เกิน 31-60":"bg-red-600","เกิน 61-90":"bg-red-700",
-    "เกิน >90":"bg-rose-800","ระงับสัญญา":"bg-gray-700","สิ้นสุดสัญญา":"bg-blue-700","หนี้เสีย":"bg-gray-800",
+    "เกิน >90":"bg-rose-800","ระงับสัญญา":"bg-gray-700","สิ้นสุดสัญญา":"bg-blue-700","หนี้เสีย":"bg-gray-800","ยกเลิกสัญญา":"bg-red-700",
   };
   return m[b]??"bg-slate-600";
 }
@@ -203,7 +204,7 @@ function bucketCellBg(b:string):string {
   const m:Record<string,string>={
     "ปกติ":"bg-green-50/40","เกิน 1-7":"bg-yellow-50/40","เกิน 8-14":"bg-amber-50/40",
     "เกิน 15-30":"bg-orange-50/40","เกิน 31-60":"bg-red-50/40","เกิน 61-90":"bg-red-100/40",
-    "เกิน >90":"bg-rose-100/40","ระงับสัญญา":"bg-gray-100/40","สิ้นสุดสัญญา":"bg-blue-50/40","หนี้เสีย":"bg-gray-200/40",
+    "เกิน >90":"bg-rose-100/40","ระงับสัญญา":"bg-gray-100/40","สิ้นสุดสัญญา":"bg-blue-50/40","หนี้เสีย":"bg-gray-200/40","ยกเลิกสัญญา":"bg-red-50/40",
   };
   return m[b]??"";
 }
