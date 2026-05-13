@@ -1,0 +1,20 @@
+{
+  "query": "\nSELECT \n  COUNT(*) AS row_count,\n  SUM(CASE WHEN is_bad_debt_row = 0 THEN total_amount ELSE bad_debt END) AS total_paid,\n  SUM(principal) AS sum_principal,\n  SUM(interest) AS sum_interest,\n  SUM(fee) AS sum_fee,\n  SUM(penalty) AS sum_penalty,\n  SUM(unlock_fee) AS sum_unlock_fee,\n  SUM(overpaid) AS sum_overpaid\nFROM debt_collected_cache\nWHERE section = 'Fastfone365'\n  AND approve_date IS NULL;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT \n  COUNT(*) AS row_count,\n  SUM(CASE WHEN is_bad_debt_row = 0 THEN total_amount ELSE bad_debt END) AS total_paid,\n  SUM(principal) AS sum_principal,\n  SUM(interest) AS sum_interest,\n  SUM(fee) AS sum_fee,\n  SUM(penalty) AS sum_penalty,\n  SUM(unlock_fee) AS sum_unlock_fee,\n  SUM(overpaid) AS sum_overpaid\nFROM debt_collected_cache\nWHERE section = 'Fastfone365'\n  AND approve_date IS NULL;\n",
+  "rows": [
+    {
+      "row_count": "0",
+      "total_paid": "NULL",
+      "sum_principal": "NULL",
+      "sum_interest": "NULL",
+      "sum_fee": "NULL",
+      "sum_penalty": "NULL",
+      "sum_unlock_fee": "NULL",
+      "sum_overpaid": "NULL"
+    }
+  ],
+  "messages": [],
+  "stdout": "row_count\ttotal_paid\tsum_principal\tsum_interest\tsum_fee\tsum_penalty\tsum_unlock_fee\tsum_overpaid\n0\tNULL\tNULL\tNULL\tNULL\tNULL\tNULL\tNULL\n",
+  "stderr": "",
+  "execution_time_ms": 1700
+}

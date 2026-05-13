@@ -371,11 +371,15 @@ async function queryPaid(
   const db = await getDb();
   if (!db) return [];
 
-  // Phase 140: ดึงยอดจาก debt_collected_cache โดยตรง (เหมือนหน้ายอดเก็บหนี้)
-  // ทำให้ยอดสรุปรายเดือนตรงกับหน้ายอดเก็บหนี้ 100%
-  // - installment_paid = SUM(total_amount) WHERE is_bad_debt_row = 0
-  // - device_sale_amount = SUM(bad_debt) WHERE is_bad_debt_row = 1
-  // - total_paid = SUM(total_amount) ทุก row (รวม bad_debt row)
+  // Phase 141: ใช้ payment_tx_amount เป็น total base เหมือน DebtReport.tsx (source of truth)
+  // - payment_tx_amount = p.total = pt.amount จาก stream (ตรงกับ ptTotal ของหน้ายอดเก็บหนี้)
+  // - isExtraPenalty = payment_tx_amount=0 AND penalty>0 AND is_bad_debt_row=0
+  //   → ข้ามออกจาก penalty_paid และ total_paid เหมือน DebtReport.tsx
+  // - total_paid = SUM(payment_tx_amount + bad_debt) ทุก row ยกเว้น isExtraPenalty
+  //   = ptTotal ของหน้ายอดเก็บหนี้
+  // - installment_paid = SUM(payment_tx_amount) WHERE is_bad_debt_row=0 AND NOT isExtraPenalty
+  // - device_sale_amount = SUM(bad_debt) WHERE is_bad_debt_row=1
+  // - breakdown fields: ข้าม isExtraPenalty rows ออกจาก penalty_paid เหมือน DebtReport.tsx
   const q = `
     SELECT
       DATE_FORMAT(dcc.approve_date, '%Y-%m') AS approve_month,
@@ -386,20 +390,50 @@ async function queryPaid(
         WHEN dcc.contract_status = 'ยกเลิกสัญญา' THEN 'ยกเลิกสัญญา'
         ELSE COALESCE(dtc_latest.debt_range, 'ปกติ')
       END AS bucket,
-      COUNT(DISTINCT dcc.contract_external_id)                                                         AS contract_count,
-      SUM(CASE WHEN dcc.is_bad_debt_row = 0 THEN CAST(dcc.principal   AS DECIMAL(18,2)) ELSE 0 END)   AS principal_paid,
-      SUM(CASE WHEN dcc.is_bad_debt_row = 0 THEN CAST(dcc.interest    AS DECIMAL(18,2)) ELSE 0 END)   AS interest_paid,
-      SUM(CASE WHEN dcc.is_bad_debt_row = 0 THEN CAST(dcc.fee         AS DECIMAL(18,2)) ELSE 0 END)   AS fee_paid,
-      SUM(CASE WHEN dcc.is_bad_debt_row = 0 THEN CAST(dcc.penalty     AS DECIMAL(18,2)) ELSE 0 END)   AS penalty_paid,
-      SUM(CASE WHEN dcc.is_bad_debt_row = 0 THEN CAST(dcc.unlock_fee  AS DECIMAL(18,2)) ELSE 0 END)   AS unlock_fee_paid,
-      SUM(CASE WHEN dcc.is_bad_debt_row = 0 THEN CAST(dcc.discount    AS DECIMAL(18,2)) ELSE 0 END)   AS discount_amount,
-      SUM(CASE WHEN dcc.is_bad_debt_row = 0 THEN CAST(dcc.overpaid    AS DECIMAL(18,2)) ELSE 0 END)   AS overpaid_amount,
-      SUM(CASE WHEN dcc.is_bad_debt_row = 0 THEN CAST(dcc.total_amount AS DECIMAL(18,2)) ELSE 0 END)  AS installment_paid,
-      SUM(CASE WHEN dcc.is_bad_debt_row = 1 THEN CAST(dcc.bad_debt     AS DECIMAL(18,2)) ELSE 0 END)  AS device_sale_amount,
-      -- total_paid = installment_paid + device_sale_amount
-      -- (is_bad_debt_row=1 มี total_amount=0 แต่ bad_debt มียอด จึงต้องรวม bad_debt ด้วย)
-      SUM(CASE WHEN dcc.is_bad_debt_row = 0 THEN CAST(dcc.total_amount AS DECIMAL(18,2))
-               ELSE CAST(dcc.bad_debt AS DECIMAL(18,2)) END)                                              AS total_paid
+      COUNT(DISTINCT dcc.contract_external_id) AS contract_count,
+      -- breakdown fields: ข้าม isExtraPenalty rows (payment_tx_amount=0 AND penalty>0 AND is_bad_debt_row=0)
+      -- เหมือน DebtReport.tsx บรรทัด 858-861
+      SUM(CASE WHEN dcc.is_bad_debt_row = 0
+                    AND NOT (CAST(dcc.payment_tx_amount AS DECIMAL(18,2)) = 0
+                             AND CAST(dcc.penalty AS DECIMAL(18,2)) > 0)
+               THEN CAST(dcc.principal   AS DECIMAL(18,2)) ELSE 0 END) AS principal_paid,
+      SUM(CASE WHEN dcc.is_bad_debt_row = 0
+                    AND NOT (CAST(dcc.payment_tx_amount AS DECIMAL(18,2)) = 0
+                             AND CAST(dcc.penalty AS DECIMAL(18,2)) > 0)
+               THEN CAST(dcc.interest    AS DECIMAL(18,2)) ELSE 0 END) AS interest_paid,
+      SUM(CASE WHEN dcc.is_bad_debt_row = 0
+                    AND NOT (CAST(dcc.payment_tx_amount AS DECIMAL(18,2)) = 0
+                             AND CAST(dcc.penalty AS DECIMAL(18,2)) > 0)
+               THEN CAST(dcc.fee         AS DECIMAL(18,2)) ELSE 0 END) AS fee_paid,
+      SUM(CASE WHEN dcc.is_bad_debt_row = 0
+                    AND NOT (CAST(dcc.payment_tx_amount AS DECIMAL(18,2)) = 0
+                             AND CAST(dcc.penalty AS DECIMAL(18,2)) > 0)
+               THEN CAST(dcc.penalty     AS DECIMAL(18,2)) ELSE 0 END) AS penalty_paid,
+      SUM(CASE WHEN dcc.is_bad_debt_row = 0
+                    AND NOT (CAST(dcc.payment_tx_amount AS DECIMAL(18,2)) = 0
+                             AND CAST(dcc.penalty AS DECIMAL(18,2)) > 0)
+               THEN CAST(dcc.unlock_fee  AS DECIMAL(18,2)) ELSE 0 END) AS unlock_fee_paid,
+      SUM(CASE WHEN dcc.is_bad_debt_row = 0
+                    AND NOT (CAST(dcc.payment_tx_amount AS DECIMAL(18,2)) = 0
+                             AND CAST(dcc.penalty AS DECIMAL(18,2)) > 0)
+               THEN CAST(dcc.discount    AS DECIMAL(18,2)) ELSE 0 END) AS discount_amount,
+      SUM(CASE WHEN dcc.is_bad_debt_row = 0
+                    AND NOT (CAST(dcc.payment_tx_amount AS DECIMAL(18,2)) = 0
+                             AND CAST(dcc.penalty AS DECIMAL(18,2)) > 0)
+               THEN CAST(dcc.overpaid    AS DECIMAL(18,2)) ELSE 0 END) AS overpaid_amount,
+      -- installment_paid = SUM(payment_tx_amount) ยกเว้น isExtraPenalty
+      SUM(CASE WHEN dcc.is_bad_debt_row = 0
+                    AND NOT (CAST(dcc.payment_tx_amount AS DECIMAL(18,2)) = 0
+                             AND CAST(dcc.penalty AS DECIMAL(18,2)) > 0)
+               THEN CAST(dcc.payment_tx_amount AS DECIMAL(18,2)) ELSE 0 END) AS installment_paid,
+      SUM(CASE WHEN dcc.is_bad_debt_row = 1 THEN CAST(dcc.bad_debt AS DECIMAL(18,2)) ELSE 0 END) AS device_sale_amount,
+      -- total_paid = SUM(payment_tx_amount + bad_debt) ยกเว้น isExtraPenalty
+      -- = ptTotal ของหน้ายอดเก็บหนี้ (DebtReport.tsx บรรทัด 872)
+      SUM(CASE WHEN dcc.is_bad_debt_row = 1 THEN CAST(dcc.bad_debt AS DECIMAL(18,2))
+               WHEN CAST(dcc.payment_tx_amount AS DECIMAL(18,2)) = 0
+                    AND CAST(dcc.penalty AS DECIMAL(18,2)) > 0 THEN 0
+               ELSE CAST(dcc.payment_tx_amount AS DECIMAL(18,2))
+          END) AS total_paid
     FROM debt_collected_cache dcc
     LEFT JOIN (
       SELECT dtc.section, dtc.contract_external_id, dtc.debt_range

@@ -1,0 +1,21 @@
+{
+  "query": "\nSELECT \n  SUM(CASE WHEN is_bad_debt_row = 0 THEN principal ELSE 0 END) AS sum_principal,\n  SUM(CASE WHEN is_bad_debt_row = 0 THEN interest ELSE 0 END) AS sum_interest,\n  SUM(CASE WHEN is_bad_debt_row = 0 THEN fee ELSE 0 END) AS sum_fee,\n  SUM(CASE WHEN is_bad_debt_row = 0 THEN penalty ELSE 0 END) AS sum_penalty,\n  SUM(CASE WHEN is_bad_debt_row = 0 THEN unlock_fee ELSE 0 END) AS sum_unlock_fee,\n  SUM(CASE WHEN is_bad_debt_row = 0 THEN discount ELSE 0 END) AS sum_discount,\n  SUM(CASE WHEN is_bad_debt_row = 0 THEN overpaid ELSE 0 END) AS sum_overpaid,\n  SUM(CASE WHEN is_bad_debt_row = 1 THEN bad_debt ELSE 0 END) AS sum_bad_debt,\n  SUM(CASE WHEN is_bad_debt_row = 0 THEN total_amount ELSE bad_debt END) AS total_paid\nFROM debt_collected_cache\nWHERE section = 'Fastfone365';\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT \n  SUM(CASE WHEN is_bad_debt_row = 0 THEN principal ELSE 0 END) AS sum_principal,\n  SUM(CASE WHEN is_bad_debt_row = 0 THEN interest ELSE 0 END) AS sum_interest,\n  SUM(CASE WHEN is_bad_debt_row = 0 THEN fee ELSE 0 END) AS sum_fee,\n  SUM(CASE WHEN is_bad_debt_row = 0 THEN penalty ELSE 0 END) AS sum_penalty,\n  SUM(CASE WHEN is_bad_debt_row = 0 THEN unlock_fee ELSE 0 END) AS sum_unlock_fee,\n  SUM(CASE WHEN is_bad_debt_row = 0 THEN discount ELSE 0 END) AS sum_discount,\n  SUM(CASE WHEN is_bad_debt_row = 0 THEN overpaid ELSE 0 END) AS sum_overpaid,\n  SUM(CASE WHEN is_bad_debt_row = 1 THEN bad_debt ELSE 0 END) AS sum_bad_debt,\n  SUM(CASE WHEN is_bad_debt_row = 0 THEN total_amount ELSE bad_debt END) AS total_paid\nFROM debt_collected_cache\nWHERE section = 'Fastfone365';\n",
+  "rows": [
+    {
+      "sum_principal": "122633834.76",
+      "sum_interest": "147069666.93",
+      "sum_fee": "7260510.21",
+      "sum_penalty": "8249108.05",
+      "sum_unlock_fee": "2089343.73",
+      "sum_discount": "1915861.46",
+      "sum_overpaid": "1964493.65",
+      "sum_bad_debt": "22720169.58",
+      "total_paid": "310084915.01"
+    }
+  ],
+  "messages": [],
+  "stdout": "sum_principal\tsum_interest\tsum_fee\tsum_penalty\tsum_unlock_fee\tsum_discount\tsum_overpaid\tsum_bad_debt\ttotal_paid\n122633834.76\t147069666.93\t7260510.21\t8249108.05\t2089343.73\t1915861.46\t1964493.65\t22720169.58\t310084915.01\n",
+  "stderr": "",
+  "execution_time_ms": 2114
+}
