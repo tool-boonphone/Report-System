@@ -1551,3 +1551,7 @@ Task list:
 - [x] ข้อ 1: เพิ่ม page size ของ payments จาก 500 → 1000 (ลดจำนวน HTTP requests)
 - [x] ข้อ 2: เปลี่ยน syncPayments ให้ใช้ forEachPageParallel (batchSize=5, delayMs=100) แทน forEachPage sequential
 - [x] ข้อ 3: เพิ่ม Cloud Run timeout protection — ping public URL ควบคู่กับ localhost ระหว่าง payments stage
+
+## Fix: Customers Sync ค้างที่ page 17/45 (2026-05-13)
+- [x] แก้ getLastCustomersResumePage ให้อ่านจาก in_progress row ภายใน 30 นาทีเท่านั้น (ป้องกัน resume จาก page ที่ถูก kill)
+- [x] ลด timeout ของ customers stage จาก 30s → 8s (fail fast แทนที่จะรอ 133s ต่อ page ที่ fail)

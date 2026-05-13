@@ -543,7 +543,7 @@ async function syncCustomers(
         }
       },
       500,      // limit=500 -- 45 pages for FF365 instead of 223
-      30_000,   // 30s per-request timeout -- fail fast instead of hanging
+      8_000,    // 8s per-request timeout -- fail fast (was 30s, caused 133s per failed page × 5 parallel)
       startPage, // resume from last saved page if previous run was killed
       5,        // batchSize=5 -- fetch 5 pages in parallel
       200,      // delayMs=200 -- 200ms between batches to avoid rate limiting

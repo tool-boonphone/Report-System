@@ -1,4 +1,4 @@
-import { desc, eq, and, gt, lt, or, ne } from "drizzle-orm";
+import { desc, eq, and, gt, lt, or, ne, sql } from "drizzle-orm";
 import { syncLogs } from "../../drizzle/schema";
 import { getDb } from "../db";
 import { normalizeSectionKey, type SectionKey, type SyncTrigger } from "../../shared/const";
@@ -72,19 +72,32 @@ export async function updateSyncLogStage(params: {
 export async function getLastCustomersResumePage(section: SectionKey): Promise<number> {
   const db = await getDb();
   if (!db) return 0;
-  // Find the most recent in_progress or error customers sync log with resume_page > 0
+  // Only resume from an in_progress row that:
+  //  1. Was started within the last 30 minutes (not stale/killed)
+  //  2. Has resume_page > 0 (has actually made progress)
+  // This prevents resuming from a page that was stuck/killed in a previous session.
+  // If the previous run was killed, start fresh from page 1 instead.
+  const RESUME_WINDOW_MS = 30 * 60 * 1000; // 30 minutes
+  const cutoff = new Date(Date.now() - RESUME_WINDOW_MS);
   const rows = await db
-    .select({ resumePage: syncLogs.resumePage })
+    .select({ resumePage: syncLogs.resumePage, status: syncLogs.status, startedAt: syncLogs.startedAt })
     .from(syncLogs)
     .where(
       and(
         eq(syncLogs.section, section),
         eq(syncLogs.entity, "customers"),
+        eq(syncLogs.status, "in_progress"),
+        // Only consider rows started within the resume window
+        sql`${syncLogs.startedAt} >= ${cutoff}`,
       ),
     )
     .orderBy(desc(syncLogs.startedAt))
     .limit(1);
-  return rows[0]?.resumePage ?? 0;
+  const resumePage = rows[0]?.resumePage ?? 0;
+  if (resumePage > 1) {
+    console.log(`[syncLog] ${section}: resuming customers from page ${resumePage} (in_progress row started ${rows[0]?.startedAt?.toISOString()})`);
+  }
+  return resumePage;
 }
 
 /**

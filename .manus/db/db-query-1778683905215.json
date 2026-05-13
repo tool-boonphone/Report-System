@@ -1,0 +1,120 @@
+{
+  "query": "SELECT id, section, entity, status, row_count, error_message, started_at, finished_at, TIMESTAMPDIFF(SECOND, started_at, COALESCE(finished_at, NOW())) as duration_sec FROM sync_logs WHERE entity = 'customers' ORDER BY started_at DESC LIMIT 10;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT id, section, entity, status, row_count, error_message, started_at, finished_at, TIMESTAMPDIFF(SECOND, started_at, COALESCE(finished_at, NOW())) as duration_sec FROM sync_logs WHERE entity = 'customers' ORDER BY started_at DESC LIMIT 10;",
+  "rows": [
+    {
+      "id": "1590015",
+      "section": "Fastfone365",
+      "entity": "customers",
+      "status": "in_progress",
+      "row_count": "0",
+      "error_message": "NULL",
+      "started_at": "2026-05-13 14:29:41",
+      "finished_at": "NULL",
+      "duration_sec": "1324"
+    },
+    {
+      "id": "1590009",
+      "section": "Fastfone365",
+      "entity": "customers",
+      "status": "success",
+      "row_count": "22290",
+      "error_message": "NULL",
+      "started_at": "2026-05-13 13:23:53",
+      "finished_at": "2026-05-13 13:26:07",
+      "duration_sec": "134"
+    },
+    {
+      "id": "1590006",
+      "section": "Fastfone365",
+      "entity": "customers",
+      "status": "error",
+      "row_count": "0",
+      "error_message": "Force-cleared by admin: Cloud Run instance killed during sync",
+      "started_at": "2026-05-13 13:19:03",
+      "finished_at": "2026-05-13 13:22:07",
+      "duration_sec": "184"
+    },
+    {
+      "id": "1590003",
+      "section": "Fastfone365",
+      "entity": "customers",
+      "status": "error",
+      "row_count": "0",
+      "error_message": "Force-cleared by admin: Cloud Run instance killed during sync",
+      "started_at": "2026-05-13 13:09:48",
+      "finished_at": "2026-05-13 13:18:20",
+      "duration_sec": "512"
+    },
+    {
+      "id": "1560018",
+      "section": "Fastfone365",
+      "entity": "customers",
+      "status": "error",
+      "row_count": "0",
+      "error_message": "Force-cleared by admin: Cloud Run instance killed during sync",
+      "started_at": "2026-05-13 12:18:40",
+      "finished_at": "2026-05-13 12:41:12",
+      "duration_sec": "1352"
+    },
+    {
+      "id": "1560015",
+      "section": "Fastfone365",
+      "entity": "customers",
+      "status": "error",
+      "row_count": "0",
+      "error_message": "Force-cleared by admin: Cloud Run instance killed during sync",
+      "started_at": "2026-05-13 12:00:41",
+      "finished_at": "2026-05-13 12:13:25",
+      "duration_sec": "764"
+    },
+    {
+      "id": "1560012",
+      "section": "Fastfone365",
+      "entity": "customers",
+      "status": "error",
+      "row_count": "0",
+      "error_message": "Auto-cleared on startup: previous Cloud Run instance was killed during sync",
+      "started_at": "2026-05-13 11:23:55",
+      "finished_at": "2026-05-13 11:41:19",
+      "duration_sec": "1044"
+    },
+    {
+      "id": "1560009",
+      "section": "Fastfone365",
+      "entity": "customers",
+      "status": "error",
+      "row_count": "0",
+      "error_message": "Auto-cleared on startup: previous Cloud Run instance was killed during sync",
+      "started_at": "2026-05-13 11:03:41",
+      "finished_at": "2026-05-13 11:20:17",
+      "duration_sec": "996"
+    },
+    {
+      "id": "1560006",
+      "section": "Fastfone365",
+      "entity": "customers",
+      "status": "error",
+      "row_count": "0",
+      "error_message": "NULL",
+      "started_at": "2026-05-13 09:48:20",
+      "finished_at": "2026-05-13 10:08:57",
+      "duration_sec": "1237"
+    },
+    {
+      "id": "1560003",
+      "section": "Fastfone365",
+      "entity": "customers",
+      "status": "error",
+      "row_count": "0",
+      "error_message": "Force-cleared by admin: Cloud Run instance killed during sync",
+      "started_at": "2026-05-13 05:10:21",
+      "finished_at": "2026-05-13 05:18:29",
+      "duration_sec": "488"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tsection\tentity\tstatus\trow_count\terror_message\tstarted_at\tfinished_at\tduration_sec\n1590015\tFastfone365\tcustomers\tin_progress\t0\tNULL\t2026-05-13 14:29:41\tNULL\t1324\n1590009\tFastfone365\tcustomers\tsuccess\t22290\tNULL\t2026-05-13 13:23:53\t2026-05-13 13:26:07\t134\n1590006\tFastfone365\tcustomers\terror\t0\tForce-cleared by admin: Cloud Run instance killed during sync\t2026-05-13 13:19:03\t2026-05-13 13:22:07\t184\n1590003\tFastfone365\tcustomers\terror\t0\tForce-cleared by admin: Cloud Run instance killed during sync\t2026-05-13 13:09:48\t2026-05-13 13:18:20\t512\n1560018\tFastfone365\tcustomers\terror\t0\tForce-cleared by admin: Cloud Run instance killed during sync\t2026-05-13 12:18:40\t2026-05-13 12:41:12\t1352\n1560015\tFastfone365\tcustomers\terror\t0\tForce-cleared by admin: Cloud Run instance killed during sync\t2026-05-13 12:00:41\t2026-05-13 12:13:25\t764\n1560012\tFastfone365\tcustomers\terror\t0\tAuto-cleared on startup: previous Cloud Run instance was killed during sync\t2026-05-13 11:23:55\t2026-05-13 11:41:19\t1044\n1560009\tFastfone365\tcustomers\terror\t0\tAuto-cleared on startup: previous Cloud Run instance was killed during sync\t2026-05-13 11:03:41\t2026-05-13 11:20:17\t996\n1560006\tFastfone365\tcustomers\terror\t0\tNULL\t2026-05-13 09:48:20\t2026-05-13 10:08:57\t1237\n1560003\tFastfone365\tcustomers\terror\t0\tForce-cleared by admin: Cloud Run instance killed during sync\t2026-05-13 05:10:21\t2026-05-13 05:18:29\t488\n",
+  "stderr": "",
+  "execution_time_ms": 1778
+}
