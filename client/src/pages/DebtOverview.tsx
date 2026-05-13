@@ -928,17 +928,16 @@ export default function DebtOverview() {
         (bv.unlockFee ? row.debtTargetUnlockFee : 0);
 
       const cv = badgeVisibility;
-      // ยอดเก็บหนี้ — ใช้ ptTotal เป็นฐาน (Phase 135: ไม่รวม p.badDebt = ยอดขายเครื่อง)
-      // ptTotal = sum(p.total) = ยอดที่ลูกค้าจ่ายจริง ไม่รวมยอดขายเครื่อง (แยกคอลัมน์อยู่แล้ว)
-      // เมื่อปิด toggle ใด → หักยอดของ field นั้นออกจาก ptTotal
+      // ยอดเก็บหนี้ — ใช้ ptTotal เป็นฐาน (Phase 135: sum(p.total) ไม่รวมยอดขายเครื่อง)
+      // หมายเหตุ: ไม่หัก badDebt ออก เพราะยอดขายเครื่องไม่ได้อยู่ใน ptTotal อยู่แล้ว และยอดขายเครื่องแยกคอลัมน์อยู่แล้ว
       row.collectedTotal = row.collectedPtTotal
         - (!cv.principal ? row.collectedPrincipal : 0)
         - (!cv.interest ? row.collectedInterest : 0)
         - (!cv.fee ? row.collectedFee : 0)
         - (!cv.penalty ? row.collectedPenalty : 0)
         - (!cv.unlockFee ? row.collectedUnlockFee : 0)
-        - (!cv.overpaid ? row.collectedOverpaid : 0)
-        - (!cv.badDebt ? row.collectedBadDebt : 0);
+        - (!cv.overpaid ? row.collectedOverpaid : 0);
+        // หมายเหตุ: ไม่หัก badDebt (cv.badDebt) ออก เพราะยอดขายเครื่องแยกคอลัมน์อยู่แล้ว การปิด Badge ขายเครื่องไม่ควรกระทบคอลัมน์นี้
     });
 
     // Sort by monthKey (default asc = เก่าสุดบนสุด)
