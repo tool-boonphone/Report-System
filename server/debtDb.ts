@@ -2283,8 +2283,18 @@ export async function listDebtTarget(params: { section: SectionKey }) {
         currentPeriod.amount = effectiveBase + totalPenalty + totalUnlockFee;
         // Phase 9AH: keep netAmount in sync (netAmount = principal+interest+fee, no penalty)
         currentPeriod.netAmount = effectiveBase;
-        // Mark this as the current period for UI highlighting
-        currentPeriod.isCurrentPeriod = true;
+        // Mark this as the current period for UI highlighting.
+        // Phase 138 rule: if the current period's due_date is more than 30 days ago,
+        // do NOT highlight it as the "current period" — there is no current period anymore.
+        // (The contract is significantly overdue and has no active installment window.)
+        const currentPeriodDueMs = Date.parse(`${currentPeriod.dueDate}T00:00:00`);
+        const daysOverdueForCurrent = Number.isNaN(currentPeriodDueMs)
+          ? 0
+          : Math.floor((todayMs - currentPeriodDueMs) / (1000 * 60 * 60 * 24));
+        if (daysOverdueForCurrent <= 30) {
+          currentPeriod.isCurrentPeriod = true;
+        }
+        // If > 30 days overdue: isCurrentPeriod stays false (no blue BG highlight)
       }
     }
 
@@ -3640,7 +3650,16 @@ export async function* listDebtTargetStream(params: {
           : (noOverpaidS && currentPeriod.baselineAmount > 0.009 ? currentPeriod.baselineAmount : baseNet);
         currentPeriod.amount = effectiveBase + currentPeriod.penalty + currentPeriod.unlockFee;
         currentPeriod.netAmount = effectiveBase;
-        currentPeriod.isCurrentPeriod = true;
+        // Phase 138 rule: if the current period's due_date is more than 30 days ago,
+        // do NOT highlight it as the "current period" — there is no current period anymore.
+        const cpDueMs = Date.parse(`${currentPeriod.dueDate}T00:00:00`);
+        const cpDaysOverdue = Number.isNaN(cpDueMs)
+          ? 0
+          : Math.floor((todayMs - cpDueMs) / (1000 * 60 * 60 * 24));
+        if (cpDaysOverdue <= 30) {
+          currentPeriod.isCurrentPeriod = true;
+        }
+        // If > 30 days overdue: isCurrentPeriod stays false (no blue BG highlight)
       }
     }
 
