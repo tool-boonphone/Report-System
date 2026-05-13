@@ -217,10 +217,21 @@ async function doSync(
   // Keep a single interval alive for the ENTIRE sync (all stages) so Cloud Run
   // never sees the process as idle -- regardless of which stage is running.
   const selfPingBaseUrl = process.env.SELF_PING_URL ?? `http://localhost:${process.env.PORT ?? 3000}`;
-  // Ping every 5s (was 8s) to prevent Cloud Run from killing idle instances.
-  // Also ping the public URL if available so the load balancer sees traffic.
+  // ข้อ 3: Ping ทั้ง localhost AND public URL (VITE_OAUTH_PORTAL_URL domain) ทุก 5s
+  // เพื่อให้ Cloud Run load balancer เห็น traffic จริง ไม่ใช่แค่ internal loop
+  const publicPingUrl = (() => {
+    const raw = process.env.VITE_OAUTH_PORTAL_URL ?? "";
+    if (!raw) return null;
+    try {
+      const u = new URL(raw);
+      // VITE_OAUTH_PORTAL_URL ชี้ไปที่ OAuth portal ไม่ใช่ app เอง
+      // ใช้ SELF_PING_URL ถ้ามี (production จะ set ไว้) มิฉะนั้น null
+      return process.env.SELF_PING_URL ? `${process.env.SELF_PING_URL}/api/ping` : null;
+    } catch { return null; }
+  })();
   const globalSelfPing = setInterval(() => {
     fetch(`${selfPingBaseUrl}/api/ping`).catch(() => {});
+    if (publicPingUrl) fetch(publicPingUrl).catch(() => {});
   }, 5_000);
 
   /** Helper: throw if user requested cancellation */
@@ -740,7 +751,10 @@ async function syncPayments(
     // This handles cases where admin deletes a payment from the real system.
     const apiExternalIds = new Set<string>();
     const buffer: any[] = [];
-    await client.forEachPage<any>(
+    // ข้อ 1: เพิ่ม page size จาก 500 → 1000 (ลดจำนวน HTTP round-trips ลงครึ่งหนึ่ง)
+    // ข้อ 2: ใช้ forEachPageParallel (batchSize=5, delayMs=100) แทน forEachPage sequential
+    //        ตาม skill external-api-db-sync-patterns §6.1 sweet spot = 5×100ms
+    await client.forEachPageParallel<any>(
       "payment",
       (d) => d?.transactions,
       { action: "transactions" },
@@ -754,7 +768,12 @@ async function syncPayments(
           rowCount += await upsertPayments(buffer.splice(0, buffer.length));
         }
       },
-      500,
+      1000,   // ข้อ 1: page size 1000 (เดิม 500)
+      undefined, // timeoutMs — ใช้ default (20s per request)
+      1,      // startPage
+      5,      // batchSize — 5 pages parallel (safe for partner API)
+      100,    // delayMs — 100ms between batches (skill §6.1 sweet spot)
+      true,   // skipOnError — ข้ามหน้าที่ fail แทนที่จะ throw ทั้งหมด
     );
     if (buffer.length) rowCount += await upsertPayments(buffer);
 
@@ -838,7 +857,7 @@ async function enrichInstallmentsWithUpdatedBy(
     );
   if (rows.length === 0) return 0;
 
-  const contractIds = rows.map((r) => r.contractExternalId);
+  const contractIds = rows.map((r: { contractExternalId: string }) => r.contractExternalId);
   const CONCURRENCY = 5;
   const FLUSH_EVERY = 200;
   type EnrichRow = { contractExternalId: string; period: number; updatedBy: string | null; updatedAt: string | null };
@@ -1051,7 +1070,7 @@ async function computeAndStoreBadDebt(section: SectionKey): Promise<void> {
   if (targetContracts.length === 0) return;
 
   // ---- 2) Fetch installments for these contracts ----
-  const extIds = targetContracts.map((c) => c.externalId);
+  const extIds = targetContracts.map((c: { externalId: string }) => c.externalId);
   // Process in chunks to avoid huge IN() clauses
   const CHUNK = 500;
 
@@ -1064,7 +1083,7 @@ async function computeAndStoreBadDebt(section: SectionKey): Promise<void> {
 
   for (let i = 0; i < extIds.length; i += CHUNK) {
     const slice = extIds.slice(i, i + CHUNK);
-    const inClause = slice.map((id) => sql`${id}`).reduce((acc, cur, idx) => idx === 0 ? cur : sql`${acc}, ${cur}`);
+    const inClause = slice.map((id: string) => sql`${id}`).reduce((acc: ReturnType<typeof sql>, cur: ReturnType<typeof sql>, idx: number) => idx === 0 ? cur : sql`${acc}, ${cur}`);
     const instRows = await db.execute(sql`
       SELECT contract_external_id,
              period,
@@ -1123,8 +1142,7 @@ async function computeAndStoreBadDebt(section: SectionKey): Promise<void> {
         rawJson: paymentTransactions.rawJson,
       })
       .from(paymentTransactions)
-      .where(
-        sql`${paymentTransactions.section} = ${section} AND ${paymentTransactions.contractExternalId} IN (${sql.raw(slice.map((id) => `'${String(id).replace(/'/g, "''")}'`).join(","))})`
+      .where(        sql`${paymentTransactions.section} = ${section} AND ${paymentTransactions.contractExternalId} IN (${sql.raw(slice.map((id: string) => `'${String(id).replace(/'/g, "''")}' `).join(","))})`
       )
       .orderBy(paymentTransactions.contractExternalId, paymentTransactions.paidAt);
     for (const r of payRows) {

@@ -1546,3 +1546,8 @@ Task list:
 - [ ] ตรวจสอบ TypeScript compile ไม่มี errors ใหม่
 - [ ] ทดสอบ Re-Sync ว่า debt_range ถูก populate ลงใน debt_collected_cache
 - [ ] ตรวจสอบหน้าสรุปรายเดือน ตารางยอดเก็บหนี้แสดงข้อมูลแยก bucket ย่อยถูกต้อง
+
+## Fix: Payments Sync Cloud Run Kill Issue (2026-05-13)
+- [x] ข้อ 1: เพิ่ม page size ของ payments จาก 500 → 1000 (ลดจำนวน HTTP requests)
+- [x] ข้อ 2: เปลี่ยน syncPayments ให้ใช้ forEachPageParallel (batchSize=5, delayMs=100) แทน forEachPage sequential
+- [x] ข้อ 3: เพิ่ม Cloud Run timeout protection — ping public URL ควบคู่กับ localhost ระหว่าง payments stage

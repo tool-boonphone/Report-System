@@ -1,0 +1,60 @@
+{
+  "query": "SELECT id, section, entity, status, started_at, finished_at, progress, error_message FROM sync_logs ORDER BY id DESC LIMIT 5;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT id, section, entity, status, started_at, finished_at, progress, error_message FROM sync_logs ORDER BY id DESC LIMIT 5;",
+  "rows": [
+    {
+      "id": "1590012",
+      "section": "Fastfone365",
+      "entity": "payments",
+      "status": "in_progress",
+      "started_at": "2026-05-13 13:50:12",
+      "finished_at": "NULL",
+      "progress": "0",
+      "error_message": "NULL"
+    },
+    {
+      "id": "1590011",
+      "section": "Fastfone365",
+      "entity": "installments",
+      "status": "success",
+      "started_at": "2026-05-13 13:35:17",
+      "finished_at": "2026-05-13 13:50:12",
+      "progress": "0",
+      "error_message": "NULL"
+    },
+    {
+      "id": "1590010",
+      "section": "Fastfone365",
+      "entity": "contracts",
+      "status": "success",
+      "started_at": "2026-05-13 13:26:07",
+      "finished_at": "2026-05-13 13:35:16",
+      "progress": "0",
+      "error_message": "NULL"
+    },
+    {
+      "id": "1590009",
+      "section": "Fastfone365",
+      "entity": "customers",
+      "status": "success",
+      "started_at": "2026-05-13 13:23:53",
+      "finished_at": "2026-05-13 13:26:07",
+      "progress": "0",
+      "error_message": "NULL"
+    },
+    {
+      "id": "1590008",
+      "section": "Fastfone365",
+      "entity": "partners",
+      "status": "success",
+      "started_at": "2026-05-13 13:23:45",
+      "finished_at": "2026-05-13 13:23:53",
+      "progress": "0",
+      "error_message": "NULL"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tsection\tentity\tstatus\tstarted_at\tfinished_at\tprogress\terror_message\n1590012\tFastfone365\tpayments\tin_progress\t2026-05-13 13:50:12\tNULL\t0\tNULL\n1590011\tFastfone365\tinstallments\tsuccess\t2026-05-13 13:35:17\t2026-05-13 13:50:12\t0\tNULL\n1590010\tFastfone365\tcontracts\tsuccess\t2026-05-13 13:26:07\t2026-05-13 13:35:16\t0\tNULL\n1590009\tFastfone365\tcustomers\tsuccess\t2026-05-13 13:23:53\t2026-05-13 13:26:07\t0\tNULL\n1590008\tFastfone365\tpartners\tsuccess\t2026-05-13 13:23:45\t2026-05-13 13:23:53\t0\tNULL\n",
+  "stderr": "",
+  "execution_time_ms": 1734
+}

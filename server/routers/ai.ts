@@ -151,8 +151,8 @@ async function buildDbContext(section: string, question: string): Promise<string
     for (const r of overdueByPeriod) {
       lines.push(`| งวด ${r.period ?? "-"} | ${r.count} ราย | ${Number(r.totalAmount ?? 0).toLocaleString("th-TH", { minimumFractionDigits: 2 })} |`);
     }
-    const totalOverdue = overdueByPeriod.reduce((s, r) => s + Number(r.count), 0);
-    const totalOverdueAmt = overdueByPeriod.reduce((s, r) => s + Number(r.totalAmount ?? 0), 0);
+    const totalOverdue = overdueByPeriod.reduce((s: number, r: { count: unknown; totalAmount?: unknown }) => s + Number(r.count), 0);
+    const totalOverdueAmt = overdueByPeriod.reduce((s: number, r: { count: unknown; totalAmount?: unknown }) => s + Number(r.totalAmount ?? 0), 0);
     lines.push(`\n**รวมสัญญาค้างชำระทั้งหมด: ${totalOverdue} ราย | ยอดรวม: ${totalOverdueAmt.toLocaleString("th-TH", { minimumFractionDigits: 2 })} บาท**`);
   } else {
     lines.push(`\n## ค้างชำระแยกตามงวด\n- ไม่มีสัญญาค้างชำระในขณะนี้`);

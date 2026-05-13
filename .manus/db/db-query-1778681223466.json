@@ -1,0 +1,110 @@
+{
+  "query": "SELECT id, section, entity, status, started_at, finished_at, progress, error_message FROM sync_logs WHERE entity = 'payments' ORDER BY id DESC LIMIT 10;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT id, section, entity, status, started_at, finished_at, progress, error_message FROM sync_logs WHERE entity = 'payments' ORDER BY id DESC LIMIT 10;",
+  "rows": [
+    {
+      "id": "1590012",
+      "section": "Fastfone365",
+      "entity": "payments",
+      "status": "error",
+      "started_at": "2026-05-13 13:50:12",
+      "finished_at": "2026-05-13 14:06:29",
+      "progress": "0",
+      "error_message": "Auto-cleared on startup: previous Cloud Run instance was killed during sync"
+    },
+    {
+      "id": "1530010",
+      "section": "Boonphone",
+      "entity": "payments",
+      "status": "success",
+      "started_at": "2026-05-12 21:14:14",
+      "finished_at": "2026-05-12 21:14:38",
+      "progress": "0",
+      "error_message": "NULL"
+    },
+    {
+      "id": "1500012",
+      "section": "Fastfone365",
+      "entity": "payments",
+      "status": "success",
+      "started_at": "2026-05-11 21:33:25",
+      "finished_at": "2026-05-11 21:56:09",
+      "progress": "0",
+      "error_message": "NULL"
+    },
+    {
+      "id": "1500010",
+      "section": "Boonphone",
+      "entity": "payments",
+      "status": "success",
+      "started_at": "2026-05-11 21:08:24",
+      "finished_at": "2026-05-11 21:08:50",
+      "progress": "0",
+      "error_message": "NULL"
+    },
+    {
+      "id": "1470006",
+      "section": "Fastfone365",
+      "entity": "payments",
+      "status": "success",
+      "started_at": "2026-05-11 13:24:54",
+      "finished_at": "2026-05-11 13:45:06",
+      "progress": "0",
+      "error_message": "NULL"
+    },
+    {
+      "id": "1440015",
+      "section": "Boonphone",
+      "entity": "payments",
+      "status": "success",
+      "started_at": "2026-05-11 11:14:59",
+      "finished_at": "2026-05-11 11:15:22",
+      "progress": "0",
+      "error_message": "NULL"
+    },
+    {
+      "id": "1290006",
+      "section": "Boonphone",
+      "entity": "payments",
+      "status": "success",
+      "started_at": "2026-05-09 12:11:26",
+      "finished_at": "2026-05-09 12:11:50",
+      "progress": "0",
+      "error_message": "NULL"
+    },
+    {
+      "id": "1230078",
+      "section": "boonphone",
+      "entity": "payments",
+      "status": "success",
+      "started_at": "2026-05-09 09:39:31",
+      "finished_at": "2026-05-09 10:00:16",
+      "progress": "0",
+      "error_message": "NULL"
+    },
+    {
+      "id": "1230064",
+      "section": "ff365",
+      "entity": "payments",
+      "status": "success",
+      "started_at": "2026-05-09 07:09:15",
+      "finished_at": "2026-05-09 07:31:19",
+      "progress": "0",
+      "error_message": "NULL"
+    },
+    {
+      "id": "1230016",
+      "section": "Boonphone",
+      "entity": "payments",
+      "status": "success",
+      "started_at": "2026-05-09 02:34:52",
+      "finished_at": "2026-05-09 02:35:14",
+      "progress": "0",
+      "error_message": "NULL"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tsection\tentity\tstatus\tstarted_at\tfinished_at\tprogress\terror_message\n1590012\tFastfone365\tpayments\terror\t2026-05-13 13:50:12\t2026-05-13 14:06:29\t0\tAuto-cleared on startup: previous Cloud Run instance was killed during sync\n1530010\tBoonphone\tpayments\tsuccess\t2026-05-12 21:14:14\t2026-05-12 21:14:38\t0\tNULL\n1500012\tFastfone365\tpayments\tsuccess\t2026-05-11 21:33:25\t2026-05-11 21:56:09\t0\tNULL\n1500010\tBoonphone\tpayments\tsuccess\t2026-05-11 21:08:24\t2026-05-11 21:08:50\t0\tNULL\n1470006\tFastfone365\tpayments\tsuccess\t2026-05-11 13:24:54\t2026-05-11 13:45:06\t0\tNULL\n1440015\tBoonphone\tpayments\tsuccess\t2026-05-11 11:14:59\t2026-05-11 11:15:22\t0\tNULL\n1290006\tBoonphone\tpayments\tsuccess\t2026-05-09 12:11:26\t2026-05-09 12:11:50\t0\tNULL\n1230078\tboonphone\tpayments\tsuccess\t2026-05-09 09:39:31\t2026-05-09 10:00:16\t0\tNULL\n1230064\tff365\tpayments\tsuccess\t2026-05-09 07:09:15\t2026-05-09 07:31:19\t0\tNULL\n1230016\tBoonphone\tpayments\tsuccess\t2026-05-09 02:34:52\t2026-05-09 02:35:14\t0\tNULL\n",
+  "stderr": "",
+  "execution_time_ms": 1837
+}

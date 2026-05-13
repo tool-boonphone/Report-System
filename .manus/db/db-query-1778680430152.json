@@ -1,0 +1,110 @@
+{
+  "query": "SELECT id, section, entity, status, started_at, finished_at, progress, error_message FROM sync_logs ORDER BY id DESC LIMIT 10;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT id, section, entity, status, started_at, finished_at, progress, error_message FROM sync_logs ORDER BY id DESC LIMIT 10;",
+  "rows": [
+    {
+      "id": "1590012",
+      "section": "Fastfone365",
+      "entity": "payments",
+      "status": "in_progress",
+      "started_at": "2026-05-13 13:50:12",
+      "finished_at": "NULL",
+      "progress": "0",
+      "error_message": "NULL"
+    },
+    {
+      "id": "1590011",
+      "section": "Fastfone365",
+      "entity": "installments",
+      "status": "success",
+      "started_at": "2026-05-13 13:35:17",
+      "finished_at": "2026-05-13 13:50:12",
+      "progress": "0",
+      "error_message": "NULL"
+    },
+    {
+      "id": "1590010",
+      "section": "Fastfone365",
+      "entity": "contracts",
+      "status": "success",
+      "started_at": "2026-05-13 13:26:07",
+      "finished_at": "2026-05-13 13:35:16",
+      "progress": "0",
+      "error_message": "NULL"
+    },
+    {
+      "id": "1590009",
+      "section": "Fastfone365",
+      "entity": "customers",
+      "status": "success",
+      "started_at": "2026-05-13 13:23:53",
+      "finished_at": "2026-05-13 13:26:07",
+      "progress": "0",
+      "error_message": "NULL"
+    },
+    {
+      "id": "1590008",
+      "section": "Fastfone365",
+      "entity": "partners",
+      "status": "success",
+      "started_at": "2026-05-13 13:23:45",
+      "finished_at": "2026-05-13 13:23:53",
+      "progress": "0",
+      "error_message": "NULL"
+    },
+    {
+      "id": "1590007",
+      "section": "Fastfone365",
+      "entity": "all",
+      "status": "in_progress",
+      "started_at": "2026-05-13 13:23:45",
+      "finished_at": "NULL",
+      "progress": "65",
+      "error_message": "NULL"
+    },
+    {
+      "id": "1590006",
+      "section": "Fastfone365",
+      "entity": "customers",
+      "status": "error",
+      "started_at": "2026-05-13 13:19:03",
+      "finished_at": "2026-05-13 13:22:07",
+      "progress": "0",
+      "error_message": "Force-cleared by admin: Cloud Run instance killed during sync"
+    },
+    {
+      "id": "1590005",
+      "section": "Fastfone365",
+      "entity": "partners",
+      "status": "success",
+      "started_at": "2026-05-13 13:18:59",
+      "finished_at": "2026-05-13 13:19:03",
+      "progress": "0",
+      "error_message": "NULL"
+    },
+    {
+      "id": "1590004",
+      "section": "Fastfone365",
+      "entity": "all",
+      "status": "error",
+      "started_at": "2026-05-13 13:18:59",
+      "finished_at": "2026-05-13 13:22:07",
+      "progress": "20",
+      "error_message": "Force-cleared by admin: Cloud Run instance killed during sync"
+    },
+    {
+      "id": "1590003",
+      "section": "Fastfone365",
+      "entity": "customers",
+      "status": "error",
+      "started_at": "2026-05-13 13:09:48",
+      "finished_at": "2026-05-13 13:18:20",
+      "progress": "0",
+      "error_message": "Force-cleared by admin: Cloud Run instance killed during sync"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tsection\tentity\tstatus\tstarted_at\tfinished_at\tprogress\terror_message\n1590012\tFastfone365\tpayments\tin_progress\t2026-05-13 13:50:12\tNULL\t0\tNULL\n1590011\tFastfone365\tinstallments\tsuccess\t2026-05-13 13:35:17\t2026-05-13 13:50:12\t0\tNULL\n1590010\tFastfone365\tcontracts\tsuccess\t2026-05-13 13:26:07\t2026-05-13 13:35:16\t0\tNULL\n1590009\tFastfone365\tcustomers\tsuccess\t2026-05-13 13:23:53\t2026-05-13 13:26:07\t0\tNULL\n1590008\tFastfone365\tpartners\tsuccess\t2026-05-13 13:23:45\t2026-05-13 13:23:53\t0\tNULL\n1590007\tFastfone365\tall\tin_progress\t2026-05-13 13:23:45\tNULL\t65\tNULL\n1590006\tFastfone365\tcustomers\terror\t2026-05-13 13:19:03\t2026-05-13 13:22:07\t0\tForce-cleared by admin: Cloud Run instance killed during sync\n1590005\tFastfone365\tpartners\tsuccess\t2026-05-13 13:18:59\t2026-05-13 13:19:03\t0\tNULL\n1590004\tFastfone365\tall\terror\t2026-05-13 13:18:59\t2026-05-13 13:22:07\t20\tForce-cleared by admin: Cloud Run instance killed during sync\n1590003\tFastfone365\tcustomers\terror\t2026-05-13 13:09:48\t2026-05-13 13:18:20\t0\tForce-cleared by admin: Cloud Run instance killed during sync\n",
+  "stderr": "",
+  "execution_time_ms": 1728
+}

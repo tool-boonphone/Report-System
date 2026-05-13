@@ -53,7 +53,7 @@ export async function fillPeriodNosForSection(
     instAmtByContract.set(r.externalId, Number(r.installmentAmount) || 0);
   }
 
-  const contractIds = contractRows.map((r) => r.externalId);
+  const contractIds = contractRows.map((r: { externalId: string; installmentAmount: unknown }) => r.externalId);
   let totalUpdated = 0;
 
   // ─── 2. Process contracts in batches ─────────────────────────────────────
@@ -70,8 +70,7 @@ export async function fillPeriodNosForSection(
         pt.paid_at,
         pt.amount
       FROM payment_transactions pt
-      WHERE pt.section = ${section}
-        AND pt.contract_external_id IN (${sql.raw(batchIds.map((id) => `'${id.replace(/'/g, "''")}'`).join(","))})
+      WHERE pt.section = ${section}        AND pt.contract_external_id IN (${sql.raw(batchIds.map((id: string) => `'${id.replace(/'/g, "''")}' `).join(","))})
       ORDER BY pt.contract_external_id, pt.paid_at, pt.id
     `);
 

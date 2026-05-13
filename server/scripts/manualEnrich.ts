@@ -39,7 +39,7 @@ async function main() {
     .from(installments)
     .where(and(eq(installments.section, section), isNull(installments.updatedBy)));
 
-  const contractIds = rows.map((r) => r.contractExternalId);
+  const contractIds = rows.map((r: { contractExternalId: string }) => r.contractExternalId);
   console.log(`📋 พบ ${contractIds.length} สัญญาที่ต้อง enrich\n`);
 
   if (contractIds.length === 0) {

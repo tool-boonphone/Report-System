@@ -1,0 +1,113 @@
+{
+  "query": "SHOW COLUMNS FROM sync_logs; SELECT * FROM sync_logs ORDER BY id DESC LIMIT 5;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SHOW COLUMNS FROM sync_logs; SELECT * FROM sync_logs ORDER BY id DESC LIMIT 5;",
+  "rows": [
+    {
+      "Field": "id",
+      "Type": "int",
+      "Null": "NO",
+      "Key": "PRI",
+      "Default": "NULL",
+      "Extra": "auto_increment"
+    },
+    {
+      "Field": "section",
+      "Type": "varchar(32)",
+      "Null": "NO",
+      "Key": "MUL",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "entity",
+      "Type": "varchar(48)",
+      "Null": "NO",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "status",
+      "Type": "enum('in_progress','success','error')",
+      "Null": "NO",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "triggered_by",
+      "Type": "varchar(32)",
+      "Null": "NO",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "row_count",
+      "Type": "int",
+      "Null": "YES",
+      "Key": "",
+      "Default": "0",
+      "Extra": ""
+    },
+    {
+      "Field": "error_message",
+      "Type": "text",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "started_at",
+      "Type": "timestamp",
+      "Null": "NO",
+      "Key": "",
+      "Default": "CURRENT_TIMESTAMP",
+      "Extra": ""
+    },
+    {
+      "Field": "finished_at",
+      "Type": "timestamp",
+      "Null": "YES",
+      "Key": "MUL",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "current_stage",
+      "Type": "varchar(32)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "progress",
+      "Type": "int",
+      "Null": "YES",
+      "Key": "",
+      "Default": "0",
+      "Extra": ""
+    },
+    {
+      "Field": "resume_page",
+      "Type": "int",
+      "Null": "YES",
+      "Key": "",
+      "Default": "0",
+      "Extra": ""
+    }
+  ],
+  "messages": [
+    "id\tsection\tentity\tstatus\ttriggered_by\trow_count\terror_message\tstarted_at\tfinished_at\tcurrent_stage\tprogress\tresume_page",
+    "1590012\tFastfone365\tpayments\tin_progress\ton-demand\t0\tNULL\t2026-05-13 13:50:12\tNULL\tNULL\t0\t0",
+    "1590011\tFastfone365\tinstallments\tsuccess\ton-demand\t171363\tNULL\t2026-05-13 13:35:17\t2026-05-13 13:50:12\tNULL\t0\t0",
+    "1590010\tFastfone365\tcontracts\tsuccess\ton-demand\t18876\tNULL\t2026-05-13 13:26:07\t2026-05-13 13:35:16\tNULL\t0\t0",
+    "1590009\tFastfone365\tcustomers\tsuccess\ton-demand\t22290\tNULL\t2026-05-13 13:23:53\t2026-05-13 13:26:07\tNULL\t0\t0",
+    "1590008\tFastfone365\tpartners\tsuccess\ton-demand\t693\tNULL\t2026-05-13 13:23:45\t2026-05-13 13:23:53\tNULL\t0\t0"
+  ],
+  "stdout": "Field\tType\tNull\tKey\tDefault\tExtra\nid\tint\tNO\tPRI\tNULL\tauto_increment\nsection\tvarchar(32)\tNO\tMUL\tNULL\t\nentity\tvarchar(48)\tNO\t\tNULL\t\nstatus\tenum('in_progress','success','error')\tNO\t\tNULL\t\ntriggered_by\tvarchar(32)\tNO\t\tNULL\t\nrow_count\tint\tYES\t\t0\t\nerror_message\ttext\tYES\t\tNULL\t\nstarted_at\ttimestamp\tNO\t\tCURRENT_TIMESTAMP\t\nfinished_at\ttimestamp\tYES\tMUL\tNULL\t\ncurrent_stage\tvarchar(32)\tYES\t\tNULL\t\nprogress\tint\tYES\t\t0\t\nresume_page\tint\tYES\t\t0\t\nid\tsection\tentity\tstatus\ttriggered_by\trow_count\terror_message\tstarted_at\tfinished_at\tcurrent_stage\tprogress\tresume_page\n1590012\tFastfone365\tpayments\tin_progress\ton-demand\t0\tNULL\t2026-05-13 13:50:12\tNULL\tNULL\t0\t0\n1590011\tFastfone365\tinstallments\tsuccess\ton-demand\t171363\tNULL\t2026-05-13 13:35:17\t2026-05-13 13:50:12\tNULL\t0\t0\n1590010\tFastfone365\tcontracts\tsuccess\ton-demand\t18876\tNULL\t2026-05-13 13:26:07\t2026-05-13 13:35:16\tNULL\t0\t0\n1590009\tFastfone365\tcustomers\tsuccess\ton-demand\t22290\tNULL\t2026-05-13 13:23:53\t2026-05-13 13:26:07\tNULL\t0\t0\n1590008\tFastfone365\tpartners\tsuccess\ton-demand\t693\tNULL\t2026-05-13 13:23:45\t2026-05-13 13:23:53\tNULL\t0\t0\n",
+  "stderr": "",
+  "execution_time_ms": 1940
+}
