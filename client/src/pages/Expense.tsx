@@ -4,7 +4,7 @@
  * Tab 3 แถบ:
  *  1. สรุปรายปี   — ตารางสรุปยอดแยกตามปี
  *  2. สรุปรายเดือน — ตารางสรุปยอดแยกตามเดือน-ปี
- *  3. รายการทั้งหมด — รายการค่าคอมมิชชั่นทั้งหมด (หน้าเดิม)
+ *  3. รายการค่าคอมมิชชั่น — รายการค่าคอมมิชชั่นทั้งหมด (หน้าเดิม)
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppShell } from "@/components/AppShell";
@@ -305,7 +305,7 @@ export default function Expense() {
             <div className="flex items-end gap-0 flex-1 overflow-x-auto">
               <button className={tabCls("yearly")} onClick={() => setActiveTab("yearly")}>สรุปรายปี</button>
               <button className={tabCls("monthly")} onClick={() => setActiveTab("monthly")}>สรุปรายเดือน</button>
-              <button className={tabCls("all")} onClick={() => setActiveTab("all")}>รายการทั้งหมด</button>
+              <button className={tabCls("all")} onClick={() => setActiveTab("all")}>รายการค่าคอมมิชชั่น</button>
             </div>
             {canExport && activeTab === "all" && (
               <button onClick={handleExport}
