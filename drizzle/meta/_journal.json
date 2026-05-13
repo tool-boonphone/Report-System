@@ -141,6 +141,13 @@
       "when": 1778492765889,
       "tag": "0019_fine_the_twelve",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "5",
+      "when": 1778669901478,
+      "tag": "0020_heavy_sauron",
+      "breakpoints": true
     }
   ]
 }

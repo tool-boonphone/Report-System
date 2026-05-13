@@ -163,8 +163,34 @@ export async function populateDebtCache(
   console.log(
     `[populateCache] ${section}: inserted ${targetCount} target rows (${Date.now() - startMs}ms)`,
   );
+  // ─── 2.5 Load debt_range lookup from target cache (per contract) ────────────────
+  // ใช้ debt_range ที่ populate ไว้ใน target cache เพื่อให้ collected cache แยก bucket ย่อยได้
+  // ดึง debt_range ของ period ล่าสุดของแต่ละสัญญา (MAX period = สถานะปัจจุบัน)
+  const debtRangeByContract = new Map<string, string>(); // key = contractExternalId
+  {
+    const dtcRangeRaw = await db.execute(sql`
+      SELECT dtc.contract_external_id, dtc.debt_range
+      FROM debt_target_cache dtc
+      INNER JOIN (
+        SELECT section, contract_external_id, MAX(period) AS max_period
+        FROM debt_target_cache
+        WHERE section = ${section}
+        GROUP BY section, contract_external_id
+      ) mp ON mp.section = dtc.section
+           AND mp.contract_external_id = dtc.contract_external_id
+           AND mp.max_period = dtc.period
+      WHERE dtc.section = ${section}
+    `);
+    const dtcRangeRows: any[] = (dtcRangeRaw as any)[0] ?? dtcRangeRaw;
+    for (const r of dtcRangeRows) {
+      if (r.contract_external_id && r.debt_range) {
+        debtRangeByContract.set(String(r.contract_external_id), String(r.debt_range));
+      }
+    }
+    console.log(`[populateCache] ${section}: loaded ${debtRangeByContract.size} debt_range entries from target cache`);
+  }
 
-  // ─── 3. Populate debt_collected_cache ─────────────────────────────────────
+  // ─── 3. Populate debt_collected_cache ─────────────────────────────────────────
   let collectedCount = 0;
   const collectedStream = listDebtCollectedStream({ section, batchSize: 200 });
 
@@ -179,8 +205,8 @@ export async function populateDebtCache(
       const meta = contractMeta.get(extId);
       // listDebtCollectedStream uses `status` field (not `contractStatus`)
       const contractStatus = (contract as any).status ?? meta?.status ?? null;
-
-      // Track close-row count per contract to generate unique payExtId
+      // debt_range จาก target cache (period ล่าสุด)
+      const debtRange = debtRangeByContract.get(extId) ?? null;     // Track close-row count per contract to generate unique payExtId
       const closeRowCounters = new Map<number, number>();
 
       for (const p of (contract as any).payments ?? []) {
@@ -204,6 +230,7 @@ export async function populateDebtCache(
           customerName: (contract as any).customerName ?? null,
           approveDate: (contract as any).approveDate ?? null,
           contractStatus,
+          debtRange,
           partnerCode: meta?.partnerCode ?? null,
           partnerName: meta?.partnerName ?? null,
           productType: (contract as any).productType ?? null,

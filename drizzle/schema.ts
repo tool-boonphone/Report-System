@@ -426,6 +426,9 @@ export const debtCollectedCache = mysqlTable(
     customerName: varchar("customer_name", { length: 255 }),
     approveDate: varchar("approve_date", { length: 20 }),
     contractStatus: varchar("contract_status", { length: 32 }),
+    // Debt bucket at time of payment — derived from debt_target_cache.debt_range at sync time
+    // เพื่อให้ queryPaid แยก bucket ย่อยได้ (เกิน 1-7, เกิน 8-14 ฯลฯ)
+    debtRange: varchar("debt_range", { length: 32 }),
     partnerCode: varchar("partner_code", { length: 255 }),
     partnerName: varchar("partner_name", { length: 255 }),
     productType: varchar("product_type", { length: 64 }),

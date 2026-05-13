@@ -1,0 +1,1 @@
+ALTER TABLE `debt_collected_cache` ADD `debt_range` varchar(32);

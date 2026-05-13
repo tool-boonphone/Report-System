@@ -1,0 +1,9 @@
+{
+  "query": "ALTER TABLE `debt_collected_cache` ADD `debt_range` varchar(32);",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute ALTER TABLE `debt_collected_cache` ADD `debt_range` varchar(32);",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 1977
+}
