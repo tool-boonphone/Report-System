@@ -61,7 +61,7 @@ function computeSplitIndexes(payRows: any[]): number[] {
  */
 function rederiveDaysOverdue(
   contractStatus: string | null,
-  instRows: Array<{ dueDate: string | null; totalAmount: string; paidAmount: string; isClosed: boolean; isSuspended: boolean }>,
+  instRows: Array<{ dueDate: string | null; totalAmount: string; paidAmount: string; isClosed: boolean; isSuspended: boolean; isPaid?: boolean }>,
   today: Date,
 ): { debtStatus: string; daysOverdue: number } {
   if (contractStatus && TERMINAL_STATUSES.has(contractStatus)) {
@@ -70,7 +70,9 @@ function rederiveDaysOverdue(
   const todayMs = today.getTime();
   let maxDays = 0;
   for (const it of instRows) {
-    if (it.isClosed || it.isSuspended) continue;
+    // isPaid=true means the API confirmed full payment even if paid_amount < total_amount
+    // (e.g. discount applied, penalty waived, overpaid from prior period applied, etc.)
+    if (it.isPaid || it.isClosed || it.isSuspended) continue;
     if (!it.dueDate) continue;
     const dueMs = Date.parse(`${it.dueDate}T00:00:00`);
     if (Number.isNaN(dueMs)) continue;
@@ -203,6 +205,7 @@ export async function* streamTargetFromCache(params: {
           paidAmount: String(r.paid_amount ?? 0),
           isClosed: !!r.is_closed,
           isSuspended: !!r.is_suspended,
+          isPaid: !!r.is_paid,
         })),
         today,
       );
@@ -411,6 +414,7 @@ export async function* streamCollectedFromCache(params: {
           paidAmount: String(r.paid_amount ?? 0),
           isClosed: !!r.is_closed,
           isSuspended: !!r.is_suspended,
+          isPaid: !!r.is_paid,
         })),
         today,
       );
@@ -685,6 +689,7 @@ export async function getTargetChunk(params: {
         paidAmount: String(r.paid_amount ?? 0),
         isClosed: !!r.is_closed,
         isSuspended: !!r.is_suspended,
+        isPaid: !!r.is_paid,
       })),
       today,
     );
@@ -895,6 +900,7 @@ export async function getCollectedChunk(params: {
         paidAmount: String(r.paid_amount ?? 0),
         isClosed: !!r.is_closed,
         isSuspended: !!r.is_suspended,
+        isPaid: !!r.is_paid,
       })),
       today,
     );
