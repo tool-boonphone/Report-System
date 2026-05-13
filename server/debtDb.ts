@@ -3726,14 +3726,20 @@ export async function* listDebtCollectedStream(params: {
     const sectionLiteral = params.section.replace(/'/g, "''");
 
     // Query installments for this batch only (installments are smaller, per-batch is fine)
-    // Include due_date, paid_amount, and status for deriveDebtStatus + badDebtPeriod calculation
+    // Phase 137: Include external_id + installment_status_code so dedupInstByPeriod() can
+    // correctly identify PAYMENT_RECORD vs INSTALLMENT_BASE rows — same as listDebtTargetStream.
+    // This fixes the status mismatch between "ยอดเก็บหนี้" and "เป้าเก็บหนี้" tabs.
     const instRaw = await db.execute(sql.raw(`
       SELECT contract_external_id,
+             external_id,
              period,
              CAST(amount AS DECIMAL(18,2)) AS amount,
              due_date,
              CAST(paid_amount AS DECIMAL(18,2)) AS paid_amount,
-             status,
+             status AS inst_status,
+             JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.installment_status_code')) AS installment_status_code,
+             CAST(COALESCE(JSON_EXTRACT(raw_json, '$.penalty_due'), JSON_EXTRACT(raw_json, '$.mulct'), 0) AS DECIMAL(18,2)) AS penalty_due,
+             CAST(COALESCE(JSON_EXTRACT(raw_json, '$.unlock_fee_due'), 0) AS DECIMAL(18,2)) AS unlock_fee_due,
              CAST(JSON_EXTRACT(raw_json, '$.balance') AS DECIMAL(18,2)) AS balance
         FROM installments
        WHERE section = '${sectionLiteral}'
@@ -3741,54 +3747,39 @@ export async function* listDebtCollectedStream(params: {
        ORDER BY contract_external_id, period
     `));
     const instRows: any[] = (instRaw as any)[0] ?? instRaw;
-    const instByContractRaw = new Map<string, Array<{ period: number | null; amount: number; due_date: string | null; paid_amount: number | null; status: string | null; balance: number | null }>>();
+    // Build InstRawRow[] per contract — same shape as listDebtTargetStream
+    const instByContractRaw = new Map<string, InstRawRow[]>();
     for (const r of instRows) {
       const key = String(r.contract_external_id ?? "");
       if (!instByContractRaw.has(key)) instByContractRaw.set(key, []);
       instByContractRaw.get(key)!.push({
+        contract_external_id: key,
+        external_id: r.external_id != null ? String(r.external_id) : null,
         period: r.period != null ? Number(r.period) : null,
-        amount: r.amount != null ? Number(r.amount) : 0,
         due_date: r.due_date ?? null,
+        amount: r.amount != null ? Number(r.amount) : null,
         paid_amount: r.paid_amount != null ? Number(r.paid_amount) : null,
-        status: r.status ?? null,
+        inst_status: r.inst_status ?? null,
+        principal_due: null,
+        interest_due: null,
+        fee_due: null,
+        penalty_due: r.penalty_due != null ? Number(r.penalty_due) : null,
+        unlock_fee_due: r.unlock_fee_due != null ? Number(r.unlock_fee_due) : null,
+        installment_status_code: r.installment_status_code ?? null,
         balance: r.balance != null ? Number(r.balance) : null,
-      });
+      } as InstRawRow);
     }
-    // Dedup per period (DB may have 2 rows per period)
-    const instByContract = new Map<string, Array<{ period: number | null; amount: number; due_date: string | null; paid_amount: number | null; status: string | null; balance: number | null }>>();
+    // Phase 137: Use dedupInstByPeriod() — same as listDebtTargetStream — so PAYMENT_RECORD
+    // rows are correctly identified and paid_amount is taken from confirmed PAY_REC only.
+    // This is the key fix for the status mismatch bug between tabs.
+    const instByContract = new Map<string, InstRawRow[]>();
     for (const [key, list] of Array.from(instByContractRaw.entries())) {
-      // Merge: base = row with highest amount; totalPaid = SUM of all paid_amounts per period;
-      // balance: take the MIN (0 wins — row with balance=0 means fully paid).
-      // (Boonphone API splits paid/due into 2 rows: amount=0/paid=X and amount=X/paid=0)
-      const byPeriod = new Map<number | null, { base: { period: number | null; amount: number; due_date: string | null; paid_amount: number | null; status: string | null; balance: number | null }; totalPaid: number; minBalance: number | null }>();
-      for (const row of list) {
-        const p = row.period;
-        const rowPaid = row.paid_amount != null ? Number(row.paid_amount) : 0;
-        // Only use balance from real installment rows (amount > 0).
-        // Payment-record rows (amount=0) have balance=null which should NOT override
-        // the real installment's balance — doing so causes debtStatus to show overdue
-        // even when the installment is fully paid.
-        const rowBalance = (row.balance != null && row.amount > 0.001) ? Number(row.balance) : null;
-        const existing = byPeriod.get(p);
-        if (!existing) {
-          byPeriod.set(p, { base: row, totalPaid: rowPaid, minBalance: rowBalance });
-        } else {
-          existing.totalPaid += rowPaid;
-          if (row.amount > existing.base.amount) existing.base = row;
-          // Keep minimum balance (0 = fully paid wins over non-null values)
-          if (rowBalance !== null) {
-            existing.minBalance = existing.minBalance === null ? rowBalance : Math.min(existing.minBalance, rowBalance);
-          }
-        }
-      }
-      instByContract.set(key, Array.from(byPeriod.values()).map(({ base, totalPaid, minBalance }) => ({ ...base, paid_amount: totalPaid, balance: minBalance })).sort((a, b) => (a.period ?? 0) - (b.period ?? 0)));
+      instByContract.set(key, dedupInstByPeriod(list));
     }
     // Fix out-of-order due_dates (Boonphone API bug) — same correction as listDebtTargetStream.
     // Without this, deriveDebtStatus receives wrong due_dates → wrong daysOverdue → wrong debtStatus label.
-    // This is the root cause of the status mismatch between "ยอดเก็บหนี้" and "เป้าเก็บหนี้".
     for (const [key, list] of Array.from(instByContract.entries())) {
-      const fixed = fixOutOfOrderDueDates(list as unknown as InstRawRow[]);
-      instByContract.set(key, fixed as unknown as Array<{ period: number | null; amount: number; due_date: string | null; paid_amount: number | null; status: string | null; balance: number | null }>);
+      instByContract.set(key, fixOutOfOrderDueDates(list));
     }
 
     // Query payments for this batch only (per-batch to avoid OOM with 222K rows)
@@ -3868,24 +3859,9 @@ export async function* listDebtCollectedStream(params: {
       // Compute totalAmount (sum of installment amounts) and totalPaid (sum of paid_amount)
       const totalAmount = instList.reduce((s, i) => s + (i.amount ?? 0), 0);
       const totalPaid = instList.reduce((s, i) => s + (i.paid_amount ?? 0), 0);
-      // Derive debtStatus using contract status + installment due_date/paid_amount
-      const instForStatus: InstRawRow[] = instList.map((i) => ({
-        contract_external_id: extId,
-        external_id: null,
-        period: i.period,
-        due_date: i.due_date,
-        amount: i.amount,
-        paid_amount: i.paid_amount,
-        inst_status: null,
-        principal_due: null,
-        interest_due: null,
-        fee_due: null,
-        penalty_due: null,
-        unlock_fee_due: null,
-        installment_status_code: null,
-        balance: (i as any).balance != null ? Number((i as any).balance) : null,
-      }));
-      const { label: debtStatus, daysOverdue } = deriveDebtStatus(ch.status ?? null, instForStatus, today);
+      // Phase 137: instList is now InstRawRow[] (via dedupInstByPeriod), so pass directly.
+      // No need to remap to instForStatus with external_id=null anymore.
+      const { label: debtStatus, daysOverdue } = deriveDebtStatus(ch.status ?? null, instList, today);
       const c = {
         contractExternalId: extId,
         contractNo: ch.contract_no ?? null,
