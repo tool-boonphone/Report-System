@@ -1,0 +1,20 @@
+{
+  "query": "SELECT section, debt_range, COUNT(*) as cnt FROM debt_collected_cache GROUP BY section, debt_range ORDER BY section, cnt DESC LIMIT 20;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT section, debt_range, COUNT(*) as cnt FROM debt_collected_cache GROUP BY section, debt_range ORDER BY section, cnt DESC LIMIT 20;",
+  "rows": [
+    {
+      "section": "Boonphone",
+      "debt_range": "NULL",
+      "cnt": "4694"
+    },
+    {
+      "section": "Fastfone365",
+      "debt_range": "NULL",
+      "cnt": "122356"
+    }
+  ],
+  "messages": [],
+  "stdout": "section\tdebt_range\tcnt\nBoonphone\tNULL\t4694\nFastfone365\tNULL\t122356\n",
+  "stderr": "",
+  "execution_time_ms": 1992
+}
