@@ -364,10 +364,17 @@ export async function* streamCollectedFromCache(params: {
     `);
     const rows: any[] = (rawResult as any)[0] ?? rawResult;
 
-    // Fetch target rows for installments
+    // Fetch target rows for installments (รวม contract_no, customer_name, approve_date เพื่อใช้เป็น fallback เมื่อไม่มี payRows)
     const targetResult = await db.execute(sql`
       SELECT
         contract_external_id,
+        contract_no,
+        customer_name,
+        approve_date,
+        contract_status,
+        product_type,
+        installment_count,
+        debt_range,
         period,
         due_date,
         CAST(total_amount AS DECIMAL(18,4)) AS total_amount,
@@ -820,6 +827,13 @@ export async function getCollectedChunk(params: {
     db.execute(sql`
       SELECT
         contract_external_id,
+        contract_no,
+        customer_name,
+        approve_date,
+        contract_status,
+        product_type,
+        installment_count,
+        debt_range,
         period,
         due_date,
         CAST(total_amount AS DECIMAL(18,4)) AS total_amount,

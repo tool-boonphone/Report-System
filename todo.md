@@ -1597,3 +1597,7 @@ Task list:
 - [x] วิเคราะห์ root cause: rederiveDaysOverdue ใน queryCacheDb.ts ใช้ totalAmount/paidAmount จาก cache แต่ deriveDebtStatus ใน debtDb.ts ใช้ balance field จาก raw_json ซึ่งแม่นยำกว่า
 - [x] แก้ queryCacheDb.ts — ใช้ debt_range จาก cache (per-contract) แทน rederiveDaysOverdue เพื่อให้ debtStatus ตรงกับ deriveDebtStatus (ครบทั้ง 4 จุด: streamTarget, streamCollected, getTargetChunk, getCollectedChunk)
 - [x] เพิ่ม debtRangeToDays helper ใน queryCacheDb.ts เพื่อแปลง bucket label เป็น approximate daysOverdue สำหรับแสดงผล UI
+
+## Fix: รายการ '-' ไม่มีข้อมูลในหน้ายอดเก็บหนี้ (2026-05-14)
+- [ ] วิเคราะห์ root cause: รายการที่แสดง '-' ในคอลัมน์วันที่อนุมัติ, เลขที่สัญญา, ชื่อ-นามสกุล, งวดผ่อน
+- [ ] แก้ไข logic ให้รายการเหล่านี้มีข้อมูลครบถ้วน
