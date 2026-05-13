@@ -531,7 +531,8 @@ type MonthRow = {
   collectedDiscount: number;
   collectedOverpaid: number;
   collectedBadDebt: number;
-  collectedPtTotal: number; // sum(p.total + p.badDebt) — เหมือน DebtReport
+  collectedPtTotal: number; // sum(p.total) — ไม่รวม badDebt — ใช้คำนวณคอลัมน์ยอดเก็บหนี้ในตาราง
+  collectedRevTotal: number; // sum(p.total + p.badDebt) — รวม badDebt — ใช้คำนวณ Badge รายรับรวม
   collectedTotal: number; // computed from visible badges
   // ยอดขายเครื่อง (= badDebt sum)
   deviceSaleAmount: number;
@@ -809,7 +810,7 @@ export default function DebtOverview() {
           installPrincipal: 0, installInterest: 0, installFee: 0, installTotal: 0,
           debtTargetPrincipal: 0, debtTargetInterest: 0, debtTargetFee: 0, debtTargetPenalty: 0, debtTargetUnlockFee: 0, debtTargetTotal: 0,
           collectedPrincipal: 0, collectedInterest: 0, collectedFee: 0, collectedPenalty: 0,
-          collectedUnlockFee: 0, collectedDiscount: 0, collectedOverpaid: 0, collectedBadDebt: 0, collectedPtTotal: 0, collectedTotal: 0,
+          collectedUnlockFee: 0, collectedDiscount: 0, collectedOverpaid: 0, collectedBadDebt: 0, collectedPtTotal: 0, collectedRevTotal: 0, collectedTotal: 0,
           deviceSaleAmount: 0,
           cost: 0,
           notYetDue: 0,
@@ -902,8 +903,10 @@ export default function DebtOverview() {
         row.collectedOverpaid += p.overpaid ?? 0;
         row.collectedBadDebt += p.badDebt ?? 0;
         row.deviceSaleAmount += p.badDebt ?? 0;
-        // ptTotal = sum(p.total) เท่านั้น — ไม่รวม p.badDebt (ยอดขายเครื่อง) เพราะแยกคอลัมน์อยู่แล้ว
+        // ptTotal = sum(p.total) — ไม่รวม badDebt — ใช้คำนวณคอลัมน์ยอดเก็บหนี้ในตาราง
         row.collectedPtTotal += (p.total ?? 0);
+        // revTotal = sum(p.total + p.badDebt) — รวม badDebt — ใช้คำนวณ Badge รายรับรวม
+        row.collectedRevTotal += (p.total ?? 0) + (p.badDebt ?? 0);
       }
     }
 
@@ -975,7 +978,7 @@ export default function DebtOverview() {
   }, [monthRows, hiddenMonths, targetBadgeVisibility, principalOnly]);
 
   const grandCollected = useMemo(() => {
-    let principal = 0, interest = 0, fee = 0, penalty = 0, unlockFee = 0, discount = 0, overpaid = 0, badDebt = 0, ptTotal = 0;
+    let principal = 0, interest = 0, fee = 0, penalty = 0, unlockFee = 0, discount = 0, overpaid = 0, badDebt = 0, revTotal = 0;
     for (const row of monthRows) {
       if (hiddenMonths.has(row.monthKey)) continue;
       principal += row.collectedPrincipal;
@@ -986,12 +989,12 @@ export default function DebtOverview() {
       discount += row.collectedDiscount;
       overpaid += row.collectedOverpaid;
       badDebt += row.collectedBadDebt;
-      ptTotal += row.collectedPtTotal;
+      revTotal += row.collectedRevTotal; // sum(p.total + p.badDebt) — รวมยอดขายเครื่อง — ใช้เป็นฐาน Badge รายรับรวม
     }
     const bv = badgeVisibility;
-    // ยอดเก็บหนี้ — ใช้ ptTotal เป็นฐาน (Phase 135: ไม่รวม p.badDebt = ยอดขายเครื่อง)
-    // ptTotal = sum(p.total) = ยอดที่ลูกค้าจ่ายจริง ไม่รวมยอดขายเครื่อง (แยกคอลัมน์อยู่แล้ว)
-    const total = ptTotal
+    // Badge รายรับรวม — ใช้ revTotal (sum(p.total + p.badDebt)) เป็นฐาน
+    // เพราะ Badge ยอดขายเครื่องแยกอยู่แล้ว จึงต้องรวมไว้ใน Badge รายรับรวม
+    const total = revTotal
       - (!bv.principal ? principal : 0)
       - (!bv.interest ? interest : 0)
       - (!bv.fee ? fee : 0)
