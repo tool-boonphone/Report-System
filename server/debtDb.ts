@@ -1860,13 +1860,15 @@ export async function listDebtTarget(params: { section: SectionKey }) {
         }
       } else if (firstSuspended?.period) {
         // ระงับสัญญา: ใช้ firstSuspended ตามปกติ
-        suspendedFromPeriod = Number(firstSuspended.period);
+        // Phase 114: Math.max(2, ...) ensures period 1 is always charged (never suspended)
+        suspendedFromPeriod = Math.max(2, Number(firstSuspended.period));
         suspendedAt = firstSuspended.due_date ?? null;
       } else {
         // Phase 9AK fallback: ระงับสัญญา ไม่มี installment status ตรงกับ suspendCodes
         const firstPeriod = list.sort((a, b) => (a.period ?? 0) - (b.period ?? 0))[0];
         if (firstPeriod) {
-          suspendedFromPeriod = 1;
+          // Phase 114: always start from period 2 so period 1 is always charged
+          suspendedFromPeriod = 2;
           suspendedAt = firstPeriod.due_date ?? null;
         }
       }
@@ -3436,13 +3438,15 @@ export async function* listDebtTargetStream(params: {
         }
       } else if (firstSuspended?.period) {
         // ระงับสัญญา: ใช้ firstSuspended ตามปกติ
-        suspendedFromPeriod = Number(firstSuspended.period);
+        // Phase 114: Math.max(2, ...) ensures period 1 is always charged (never suspended)
+        suspendedFromPeriod = Math.max(2, Number(firstSuspended.period));
         suspendedAt = firstSuspended.due_date ?? null;
       } else {
         // Phase 9AK fallback: ระงับสัญญา ไม่มี installment status ตรงกับ suspendCodes
         const firstPeriod = list.sort((a, b) => (a.period ?? 0) - (b.period ?? 0))[0];
         if (firstPeriod) {
-          suspendedFromPeriod = 1;
+          // Phase 114: always start from period 2 so period 1 is always charged
+          suspendedFromPeriod = 2;
           suspendedAt = firstPeriod.due_date ?? null;
         }
       }
