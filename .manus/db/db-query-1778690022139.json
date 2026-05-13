@@ -1,0 +1,66 @@
+{
+  "query": "SELECT period, due_date, amount, paid_amount, status FROM installments WHERE contract_external_id = '10008' AND section = 'Fastfone365' ORDER BY period",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT period, due_date, amount, paid_amount, status FROM installments WHERE contract_external_id = '10008' AND section = 'Fastfone365' ORDER BY period",
+  "rows": [
+    {
+      "period": "1",
+      "due_date": "2025-03-10",
+      "amount": "0.00",
+      "paid_amount": "6898.00",
+      "status": "ยืนยันการชำระ"
+    },
+    {
+      "period": "2",
+      "due_date": "2025-04-10",
+      "amount": "0.00",
+      "paid_amount": "6898.00",
+      "status": "ยืนยันการชำระ"
+    },
+    {
+      "period": "3",
+      "due_date": "2025-05-10",
+      "amount": "50.00",
+      "paid_amount": "6898.00",
+      "status": "ยืนยันการชำระ"
+    },
+    {
+      "period": "4",
+      "due_date": "2025-06-10",
+      "amount": "0.00",
+      "paid_amount": "6898.00",
+      "status": "ยืนยันการชำระ"
+    },
+    {
+      "period": "5",
+      "due_date": "2025-07-10",
+      "amount": "0.00",
+      "paid_amount": "6898.00",
+      "status": "ยืนยันการชำระ"
+    },
+    {
+      "period": "6",
+      "due_date": "2025-08-10",
+      "amount": "0.00",
+      "paid_amount": "6898.00",
+      "status": "ยืนยันการชำระ"
+    },
+    {
+      "period": "7",
+      "due_date": "2025-09-10",
+      "amount": "0.00",
+      "paid_amount": "6898.00",
+      "status": "ยืนยันการชำระ"
+    },
+    {
+      "period": "8",
+      "due_date": "2025-10-10",
+      "amount": "50.00",
+      "paid_amount": "6898.00",
+      "status": "ยืนยันการชำระ"
+    }
+  ],
+  "messages": [],
+  "stdout": "period\tdue_date\tamount\tpaid_amount\tstatus\n1\t2025-03-10\t0.00\t6898.00\tยืนยันการชำระ\n2\t2025-04-10\t0.00\t6898.00\tยืนยันการชำระ\n3\t2025-05-10\t50.00\t6898.00\tยืนยันการชำระ\n4\t2025-06-10\t0.00\t6898.00\tยืนยันการชำระ\n5\t2025-07-10\t0.00\t6898.00\tยืนยันการชำระ\n6\t2025-08-10\t0.00\t6898.00\tยืนยันการชำระ\n7\t2025-09-10\t0.00\t6898.00\tยืนยันการชำระ\n8\t2025-10-10\t50.00\t6898.00\tยืนยันการชำระ\n",
+  "stderr": "",
+  "execution_time_ms": 1748
+}

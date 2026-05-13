@@ -1572,3 +1572,10 @@ Task list:
 - [x] UPDATE debt_range ใน debt_collected_cache จาก debt_target_cache ด้วย contract_external_id + period (127,050 rows ครบ, null_count=0)
 - [x] ตรวจสอบ populateCache.ts — logic ถูกต้องแล้ว (section 2.5 โหลด debt_range จาก target cache ก่อน insert collected)
 - [x] แก้ TypeScript errors ใน debtDb.ts (lines 187, 188, 202, 212) — ลดจาก 12 เหลือ 8 errors (8 ที่เหลือเป็น pre-existing ใน Groups.tsx/Users.tsx/authDb.ts)
+
+## Fix: N/X display — Cap N และ N+1 rule (2026-05-13)
+- [ ] DebtReport.tsx (tab=collected): Cap maxPaidPeriod ≤ installmentCount
+- [ ] DebtReport.tsx (tab=target): ระงับสัญญา/หนี้เสีย ที่ N=0 → แสดง 1/X (N+1 rule)
+- [ ] BadDebtSummary.tsx: Cap paidInstallments ≤ installmentCount
+- [ ] SuspectedBadDebt.tsx: Cap paidInstallments ≤ installmentCount
+- [ ] badDebtDb.ts: Cap MAX(period) ≤ installment_count ใน SQL/JS

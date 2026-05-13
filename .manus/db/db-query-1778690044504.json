@@ -1,0 +1,73 @@
+{
+  "query": "SELECT period, installment_count, debt_range, is_bad_debt_row, is_close_row FROM debt_collected_cache WHERE contract_external_id = '10008' AND section = 'Fastfone365' ORDER BY period",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT period, installment_count, debt_range, is_bad_debt_row, is_close_row FROM debt_collected_cache WHERE contract_external_id = '10008' AND section = 'Fastfone365' ORDER BY period",
+  "rows": [
+    {
+      "period": "1",
+      "installment_count": "8",
+      "debt_range": "ปกติ",
+      "is_bad_debt_row": "0",
+      "is_close_row": "0"
+    },
+    {
+      "period": "2",
+      "installment_count": "8",
+      "debt_range": "ปกติ",
+      "is_bad_debt_row": "0",
+      "is_close_row": "0"
+    },
+    {
+      "period": "3",
+      "installment_count": "8",
+      "debt_range": "ปกติ",
+      "is_bad_debt_row": "0",
+      "is_close_row": "0"
+    },
+    {
+      "period": "4",
+      "installment_count": "8",
+      "debt_range": "ปกติ",
+      "is_bad_debt_row": "0",
+      "is_close_row": "0"
+    },
+    {
+      "period": "5",
+      "installment_count": "8",
+      "debt_range": "ปกติ",
+      "is_bad_debt_row": "0",
+      "is_close_row": "0"
+    },
+    {
+      "period": "6",
+      "installment_count": "8",
+      "debt_range": "ปกติ",
+      "is_bad_debt_row": "0",
+      "is_close_row": "0"
+    },
+    {
+      "period": "7",
+      "installment_count": "8",
+      "debt_range": "ปกติ",
+      "is_bad_debt_row": "0",
+      "is_close_row": "0"
+    },
+    {
+      "period": "8",
+      "installment_count": "8",
+      "debt_range": "ปกติ",
+      "is_bad_debt_row": "0",
+      "is_close_row": "0"
+    },
+    {
+      "period": "9",
+      "installment_count": "8",
+      "debt_range": "ปกติ",
+      "is_bad_debt_row": "0",
+      "is_close_row": "0"
+    }
+  ],
+  "messages": [],
+  "stdout": "period\tinstallment_count\tdebt_range\tis_bad_debt_row\tis_close_row\n1\t8\tปกติ\t0\t0\n2\t8\tปกติ\t0\t0\n3\t8\tปกติ\t0\t0\n4\t8\tปกติ\t0\t0\n5\t8\tปกติ\t0\t0\n6\t8\tปกติ\t0\t0\n7\t8\tปกติ\t0\t0\n8\t8\tปกติ\t0\t0\n9\t8\tปกติ\t0\t0\n",
+  "stderr": "",
+  "execution_time_ms": 1743
+}

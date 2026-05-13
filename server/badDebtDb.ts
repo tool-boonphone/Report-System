@@ -226,8 +226,11 @@ export async function getBadDebtSummary(params: {
       cost,
       totalRevenue,
       profitLoss,
-      paidInstallments: collected.paidInstallments,
       installmentCount: c.installment_count != null ? Number(c.installment_count) : null,
+      // Cap: paidInstallments ต้องไม่เกิน installmentCount (กรณีชำระเกินงวด เช่น 9/8 → 8/8)
+      paidInstallments: c.installment_count != null
+        ? Math.min(collected.paidInstallments, Number(c.installment_count))
+        : collected.paidInstallments,
     };
   });
 

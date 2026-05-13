@@ -1,0 +1,112 @@
+{
+  "query": "SELECT column_name FROM information_schema.columns WHERE table_name = 'debt_collected_cache' ORDER BY ordinal_position",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT column_name FROM information_schema.columns WHERE table_name = 'debt_collected_cache' ORDER BY ordinal_position",
+  "rows": [
+    {
+      "column_name": "id"
+    },
+    {
+      "column_name": "section"
+    },
+    {
+      "column_name": "contract_external_id"
+    },
+    {
+      "column_name": "contract_no"
+    },
+    {
+      "column_name": "customer_name"
+    },
+    {
+      "column_name": "approve_date"
+    },
+    {
+      "column_name": "contract_status"
+    },
+    {
+      "column_name": "partner_code"
+    },
+    {
+      "column_name": "partner_name"
+    },
+    {
+      "column_name": "product_type"
+    },
+    {
+      "column_name": "device"
+    },
+    {
+      "column_name": "model"
+    },
+    {
+      "column_name": "finance_amount"
+    },
+    {
+      "column_name": "installment_count"
+    },
+    {
+      "column_name": "payment_external_id"
+    },
+    {
+      "column_name": "period"
+    },
+    {
+      "column_name": "paid_at"
+    },
+    {
+      "column_name": "principal"
+    },
+    {
+      "column_name": "interest"
+    },
+    {
+      "column_name": "fee"
+    },
+    {
+      "column_name": "penalty"
+    },
+    {
+      "column_name": "unlock_fee"
+    },
+    {
+      "column_name": "discount"
+    },
+    {
+      "column_name": "overpaid"
+    },
+    {
+      "column_name": "bad_debt"
+    },
+    {
+      "column_name": "total_amount"
+    },
+    {
+      "column_name": "updated_by"
+    },
+    {
+      "column_name": "is_bad_debt_row"
+    },
+    {
+      "column_name": "populated_at"
+    },
+    {
+      "column_name": "updated_at"
+    },
+    {
+      "column_name": "is_close_row"
+    },
+    {
+      "column_name": "remark"
+    },
+    {
+      "column_name": "payment_tx_amount"
+    },
+    {
+      "column_name": "debt_range"
+    }
+  ],
+  "messages": [],
+  "stdout": "column_name\nid\nsection\ncontract_external_id\ncontract_no\ncustomer_name\napprove_date\ncontract_status\npartner_code\npartner_name\nproduct_type\ndevice\nmodel\nfinance_amount\ninstallment_count\npayment_external_id\nperiod\npaid_at\nprincipal\ninterest\nfee\npenalty\nunlock_fee\ndiscount\noverpaid\nbad_debt\ntotal_amount\nupdated_by\nis_bad_debt_row\npopulated_at\nupdated_at\nis_close_row\nremark\npayment_tx_amount\ndebt_range\n",
+  "stderr": "",
+  "execution_time_ms": 1851
+}

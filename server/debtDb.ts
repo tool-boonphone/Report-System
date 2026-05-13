@@ -4271,7 +4271,10 @@ export async function listSuspectedBadDebt(params: { section: SectionKey }): Pro
       commissionNet,
       cost,
       installmentCount: s.installment_count != null ? Number(s.installment_count) : null,
-      paidInstallments: collected.paidInstallments,
+      // Cap: paidInstallments ต้องไม่เกิน installmentCount (กรณีชำระเกินงวด เช่น 9/8 → 8/8)
+      paidInstallments: s.installment_count != null
+        ? Math.min(collected.paidInstallments, Number(s.installment_count))
+        : collected.paidInstallments,
       totalPaid,
       debtValue,
       debtStatus: s.debt_range ?? "เกิน >90",

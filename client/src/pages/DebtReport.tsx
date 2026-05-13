@@ -611,11 +611,15 @@ export default function DebtReport() {
     const collectedRows = streamData.collected?.rows as CollectedRow[] | undefined;
     if (!collectedRows) return m;
     for (const cr of collectedRows) {
-      const maxPaid = (cr.payments ?? []).reduce((max, p) => {
+      const rawMaxPaid = (cr.payments ?? []).reduce((max, p) => {
         if (p.isBadDebtRow) return max; // ข้ามรายการหนี้เสีย
         if (p.period != null && p.period > max) return p.period;
         return max;
       }, 0);
+      // Cap: maxPaid ต้องไม่เกิน installmentCount (กรณีชำระเกินงวด เช่น 9/8 → 8/8)
+      const maxPaid = cr.installmentCount != null
+        ? Math.min(rawMaxPaid, cr.installmentCount)
+        : rawMaxPaid;
       m.set(cr.contractExternalId, maxPaid);
     }
     return m;
@@ -1713,13 +1717,17 @@ export default function DebtReport() {
                             // ยอดเก็บหนี้: แสดง "ผ่อนถึงงวดที่ X/N"
                             // X = งวดสูงสุดที่มีการชำระเข้ามาแล้ว (max payment.period)
                             // X = 0 เมื่อไม่มีการชำระเลย
+                            // Cap: X ต้องไม่เกิน installmentCount (กรณีชำระเกินงวด เช่น 9/8 → 8/8)
                             const collectedR = r as CollectedRow;
                             // นับเฉพาะ payment ที่ไม่ใช่ isBadDebtRow (หนี้เสีย/ขายเครื่อง)
-                            const maxPaidPeriod = collectedR.payments?.reduce((max, p) => {
+                            const rawMaxPaidPeriod = collectedR.payments?.reduce((max, p) => {
                               if (p.isBadDebtRow) return max; // ข้ามรายการหนี้เสีย
                               if (p.period != null && p.period > max) return p.period;
                               return max;
                             }, 0) ?? 0;
+                            const maxPaidPeriod = r.installmentCount != null
+                              ? Math.min(rawMaxPaidPeriod, r.installmentCount)
+                              : rawMaxPaidPeriod;
                             if (r.installmentCount != null) {
                               return `${maxPaidPeriod}/${r.installmentCount}`;
                             }
@@ -1727,9 +1735,14 @@ export default function DebtReport() {
                           } else {
                             // เป้าเก็บหนี้: ใช้ค่า N/M จากยอดเก็บหนี้โดยตรง (collectedPaidPeriodMap)
                             // ไม่คำนวณเองจาก installments เพราะยอดเก็บหนี้มีค่าที่ถูกต้องอยู่แล้ว
-                            const collectedN = collectedPaidPeriodMap.get(r.contractExternalId);
-                            if (collectedN != null && r.installmentCount != null) {
-                              return `${collectedN}/${r.installmentCount}`;
+                            // Cap: N ต้องไม่เกิน installmentCount
+                            // N+1 rule: ระงับสัญญา/หนี้เสีย ที่ N=0 → แสดง 1/X (ต้องตั้งหนี้ก่อน 1 งวดเสมอ)
+                            const rawN = collectedPaidPeriodMap.get(r.contractExternalId);
+                            if (rawN != null && r.installmentCount != null) {
+                              const cappedN = Math.min(rawN, r.installmentCount);
+                              const isTerminalSuspendBad = r.debtStatus === "ระงับสัญญา" || r.debtStatus === "หนี้เสีย";
+                              const displayN = (cappedN === 0 && isTerminalSuspendBad) ? 1 : cappedN;
+                              return `${displayN}/${r.installmentCount}`;
                             }
                             // fallback เมื่อ collected data ยังไม่โหลด
                             if (r.installmentCount != null) {

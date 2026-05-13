@@ -1,0 +1,18 @@
+{
+  "query": "\nSELECT \n  c.contract_no, c.external_id, c.installment_count, c.section,\n  c.status, c.finance_amount\nFROM contracts c\nWHERE c.contract_no = 'CT0225-PTE001-9255-01';\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT \n  c.contract_no, c.external_id, c.installment_count, c.section,\n  c.status, c.finance_amount\nFROM contracts c\nWHERE c.contract_no = 'CT0225-PTE001-9255-01';\n",
+  "rows": [
+    {
+      "contract_no": "CT0225-PTE001-9255-01",
+      "external_id": "10008",
+      "installment_count": "8",
+      "section": "Fastfone365",
+      "status": "สิ้นสุดสัญญา",
+      "finance_amount": "25900.00"
+    }
+  ],
+  "messages": [],
+  "stdout": "contract_no\texternal_id\tinstallment_count\tsection\tstatus\tfinance_amount\nCT0225-PTE001-9255-01\t10008\t8\tFastfone365\tสิ้นสุดสัญญา\t25900.00\n",
+  "stderr": "",
+  "execution_time_ms": 2212
+}

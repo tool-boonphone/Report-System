@@ -1,0 +1,19 @@
+{
+  "query": "SELECT period, payment_external_id, total_amount, is_bad_debt_row, is_close_row, debt_range, paid_at FROM debt_collected_cache WHERE contract_external_id = '10008' AND section = 'Fastfone365' AND period = 9",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT period, payment_external_id, total_amount, is_bad_debt_row, is_close_row, debt_range, paid_at FROM debt_collected_cache WHERE contract_external_id = '10008' AND section = 'Fastfone365' AND period = 9",
+  "rows": [
+    {
+      "period": "9",
+      "payment_external_id": "10008-p9-s0",
+      "total_amount": "450.00",
+      "is_bad_debt_row": "0",
+      "is_close_row": "0",
+      "debt_range": "ปกติ",
+      "paid_at": "2025-10-20"
+    }
+  ],
+  "messages": [],
+  "stdout": "period\tpayment_external_id\ttotal_amount\tis_bad_debt_row\tis_close_row\tdebt_range\tpaid_at\n9\t10008-p9-s0\t450.00\t0\t0\tปกติ\t2025-10-20\n",
+  "stderr": "",
+  "execution_time_ms": 1736
+}
