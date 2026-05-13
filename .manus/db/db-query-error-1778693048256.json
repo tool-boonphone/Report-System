@@ -1,0 +1,8 @@
+{
+  "query": "\nSELECT \n  dtc.contract_external_id,\n  dtc.period,\n  dtc.is_suspended,\n  dtc.is_bad_debt_row,\n  dtc.is_close_row,\n  dtc.principal,\n  dtc.interest,\n  dtc.fee,\n  dtc.penalty,\n  dtc.unlock_fee,\n  dtc.amount,\n  dtc.debt_range,\n  dtc.due_date\nFROM debt_target_cache dtc\nJOIN contracts c ON c.id = dtc.contract_id\nWHERE c.contract_external_id = 'CT0225-NYK003-9251-01'\nORDER BY dtc.period ASC\nLIMIT 20;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT \n  dtc.contract_external_id,\n  dtc.period,\n  dtc.is_suspended,\n  dtc.is_bad_debt_row,\n  dtc.is_close_row,\n  dtc.principal,\n  dtc.interest,\n  dtc.fee,\n  dtc.penalty,\n  dtc.unlock_fee,\n  dtc.amount,\n  dtc.debt_range,\n  dtc.due_date\nFROM debt_target_cache dtc\nJOIN contracts c ON c.id = dtc.contract_id\nWHERE c.contract_external_id = 'CT0225-NYK003-9251-01'\nORDER BY dtc.period ASC\nLIMIT 20;\n",
+  "returncode": 1,
+  "logs": [
+    "ERROR 1054 (42S22) at line 2: Unknown column 'dtc.contract_id' in 'on clause'"
+  ]
+}

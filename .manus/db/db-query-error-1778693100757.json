@@ -1,0 +1,8 @@
+{
+  "query": "\nSELECT id, contract_external_id, section, contract_status\nFROM contracts\nWHERE contract_external_id LIKE '%NYK003-9251%'\nLIMIT 5;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT id, contract_external_id, section, contract_status\nFROM contracts\nWHERE contract_external_id LIKE '%NYK003-9251%'\nLIMIT 5;\n",
+  "returncode": 1,
+  "logs": [
+    "ERROR 1054 (42S22) at line 2: Unknown column 'contract_external_id' in 'where clause'"
+  ]
+}

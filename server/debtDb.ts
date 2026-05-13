@@ -1798,10 +1798,12 @@ export async function listDebtTarget(params: { section: SectionKey }) {
         } else {
           // No TXRT receipt_no → Phase 113 Iron Rule: use normalPayments to find lastNormalPeriod
           // (same logic as listDebtCollectedStream: latestDate excluded, lastNormalPeriod+1)
-          //   - lastNormalPeriod = 0 (no normal payments) → suspendedFromPeriod = 1
+          //   - lastNormalPeriod = 0 (no normal payments) → suspendedFromPeriod = 2 (งวดที่ 1 ต้องตั้งหนี้เสมอ)
           //   - lastNormalPeriod = N (has normal payments) → suspendedFromPeriod = N + 1
+          // Phase 114: Math.max(2, ...) ensures period 1 is always charged (never suspended)
+          // Covers: N=0 (no payments) and partial payment on period 1 (lastNormalPeriod still 0)
           const lastNormalPeriod = lastNormalPeriodByContract.get(extId) ?? 0;
-          suspendedFromPeriod = lastNormalPeriod + 1;
+          suspendedFromPeriod = Math.max(2, lastNormalPeriod + 1);
           // Find due_date of suspendedFromPeriod
           const suspendedPeriodRow = list
             .filter((r) => Number(r.period ?? 0) === suspendedFromPeriod)
@@ -3373,10 +3375,12 @@ export async function* listDebtTargetStream(params: {
         } else {
           // No TXRT receipt_no → Phase 113 Iron Rule (stream): use normalPayments to find lastNormalPeriod
           // (same logic as listDebtTarget Phase 113 and listDebtCollectedStream)
-          //   - lastNormalPeriod = 0 (no normal payments) → suspendedFromPeriod = 1
+          //   - lastNormalPeriod = 0 (no normal payments) → suspendedFromPeriod = 2 (งวดที่ 1 ต้องตั้งหนี้เสมอ)
           //   - lastNormalPeriod = N (has normal payments) → suspendedFromPeriod = N + 1
+          // Phase 114: Math.max(2, ...) ensures period 1 is always charged (never suspended)
+          // Covers: N=0 (no payments) and partial payment on period 1 (lastNormalPeriod still 0)
           const lastNormalPeriod = lastNormalPeriodByContractStream.get(extId) ?? 0;
-          suspendedFromPeriod = lastNormalPeriod + 1;
+          suspendedFromPeriod = Math.max(2, lastNormalPeriod + 1);
           // Find due_date of suspendedFromPeriod
           const suspendedPeriodRow = list
             .filter((r) => Number(r.period ?? 0) === suspendedFromPeriod)

@@ -1,0 +1,8 @@
+{
+  "query": "\nSELECT id, external_id, section, status, installment_count, finance_amount,\n       phone_no\nFROM contracts\nWHERE phone_no LIKE '%0889094961%'\n   OR JSON_EXTRACT(raw_json, '$.phone_no') LIKE '%0889094961%'\nLIMIT 5;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT id, external_id, section, status, installment_count, finance_amount,\n       phone_no\nFROM contracts\nWHERE phone_no LIKE '%0889094961%'\n   OR JSON_EXTRACT(raw_json, '$.phone_no') LIKE '%0889094961%'\nLIMIT 5;\n",
+  "returncode": 1,
+  "logs": [
+    "ERROR 1054 (42S22) at line 2: Unknown column 'phone_no' in 'where clause'"
+  ]
+}

@@ -1735,14 +1735,12 @@ export default function DebtReport() {
                           } else {
                             // เป้าเก็บหนี้: ใช้ค่า N/M จากยอดเก็บหนี้โดยตรง (collectedPaidPeriodMap)
                             // ไม่คำนวณเองจาก installments เพราะยอดเก็บหนี้มีค่าที่ถูกต้องอยู่แล้ว
-                            // Cap: N ต้องไม่เกิน installmentCount
-                            // N+1 rule: ระงับสัญญา/หนี้เสีย ที่ N=0 → แสดง 1/X (ต้องตั้งหนี้ก่อน 1 งวดเสมอ)
+                            // Cap: N ≤ installmentCount (สัญญาที่ชำระเกินงวด เช่น 9/8 → 8/8)
+                            // N+1 rule ถูกยกเลิก — server จัดการ suspendedFromPeriod ≥ 2 แล้ว (งวดที่ 1 ตั้งหนี้เสมอ)
                             const rawN = collectedPaidPeriodMap.get(r.contractExternalId);
                             if (rawN != null && r.installmentCount != null) {
                               const cappedN = Math.min(rawN, r.installmentCount);
-                              const isTerminalSuspendBad = r.debtStatus === "ระงับสัญญา" || r.debtStatus === "หนี้เสีย";
-                              const displayN = (cappedN === 0 && isTerminalSuspendBad) ? 1 : cappedN;
-                              return `${displayN}/${r.installmentCount}`;
+                              return `${cappedN}/${r.installmentCount}`;
                             }
                             // fallback เมื่อ collected data ยังไม่โหลด
                             if (r.installmentCount != null) {

@@ -1,0 +1,90 @@
+{
+  "query": "\nSELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE\nFROM information_schema.COLUMNS\nWHERE TABLE_NAME = 'debt_target_cache'\nAND ORDINAL_POSITION > 20\nORDER BY ORDINAL_POSITION;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE\nFROM information_schema.COLUMNS\nWHERE TABLE_NAME = 'debt_target_cache'\nAND ORDINAL_POSITION > 20\nORDER BY ORDINAL_POSITION;\n",
+  "rows": [
+    {
+      "COLUMN_NAME": "unlock_fee",
+      "DATA_TYPE": "decimal",
+      "IS_NULLABLE": "NO"
+    },
+    {
+      "COLUMN_NAME": "net_amount",
+      "DATA_TYPE": "decimal",
+      "IS_NULLABLE": "NO"
+    },
+    {
+      "COLUMN_NAME": "total_amount",
+      "DATA_TYPE": "decimal",
+      "IS_NULLABLE": "NO"
+    },
+    {
+      "COLUMN_NAME": "paid_amount",
+      "DATA_TYPE": "decimal",
+      "IS_NULLABLE": "NO"
+    },
+    {
+      "COLUMN_NAME": "overpaid_applied",
+      "DATA_TYPE": "decimal",
+      "IS_NULLABLE": "NO"
+    },
+    {
+      "COLUMN_NAME": "baseline_amount",
+      "DATA_TYPE": "decimal",
+      "IS_NULLABLE": "NO"
+    },
+    {
+      "COLUMN_NAME": "is_paid",
+      "DATA_TYPE": "tinyint",
+      "IS_NULLABLE": "NO"
+    },
+    {
+      "COLUMN_NAME": "is_partial_paid",
+      "DATA_TYPE": "tinyint",
+      "IS_NULLABLE": "NO"
+    },
+    {
+      "COLUMN_NAME": "is_closed",
+      "DATA_TYPE": "tinyint",
+      "IS_NULLABLE": "NO"
+    },
+    {
+      "COLUMN_NAME": "is_suspended",
+      "DATA_TYPE": "tinyint",
+      "IS_NULLABLE": "NO"
+    },
+    {
+      "COLUMN_NAME": "is_current_period",
+      "DATA_TYPE": "tinyint",
+      "IS_NULLABLE": "NO"
+    },
+    {
+      "COLUMN_NAME": "is_future_period",
+      "DATA_TYPE": "tinyint",
+      "IS_NULLABLE": "NO"
+    },
+    {
+      "COLUMN_NAME": "is_arrears",
+      "DATA_TYPE": "tinyint",
+      "IS_NULLABLE": "NO"
+    },
+    {
+      "COLUMN_NAME": "is_bad_debt",
+      "DATA_TYPE": "tinyint",
+      "IS_NULLABLE": "NO"
+    },
+    {
+      "COLUMN_NAME": "debt_range",
+      "DATA_TYPE": "varchar",
+      "IS_NULLABLE": "YES"
+    },
+    {
+      "COLUMN_NAME": "populated_at",
+      "DATA_TYPE": "timestamp",
+      "IS_NULLABLE": "NO"
+    }
+  ],
+  "messages": [],
+  "stdout": "COLUMN_NAME\tDATA_TYPE\tIS_NULLABLE\nunlock_fee\tdecimal\tNO\nnet_amount\tdecimal\tNO\ntotal_amount\tdecimal\tNO\npaid_amount\tdecimal\tNO\noverpaid_applied\tdecimal\tNO\nbaseline_amount\tdecimal\tNO\nis_paid\ttinyint\tNO\nis_partial_paid\ttinyint\tNO\nis_closed\ttinyint\tNO\nis_suspended\ttinyint\tNO\nis_current_period\ttinyint\tNO\nis_future_period\ttinyint\tNO\nis_arrears\ttinyint\tNO\nis_bad_debt\ttinyint\tNO\ndebt_range\tvarchar\tYES\npopulated_at\ttimestamp\tNO\n",
+  "stderr": "",
+  "execution_time_ms": 1735
+}

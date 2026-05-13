@@ -1,0 +1,9 @@
+{
+  "query": "\nSELECT \n  contract_external_id,\n  period,\n  is_suspended,\n  is_bad_debt,\n  is_closed,\n  is_paid,\n  is_future_period,\n  is_current_period,\n  principal,\n  interest,\n  fee,\n  net_amount,\n  total_amount,\n  debt_range,\n  due_date\nFROM debt_target_cache\nWHERE contract_external_id = 'CT0225-NYK003-9251-01'\nORDER BY period ASC;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT \n  contract_external_id,\n  period,\n  is_suspended,\n  is_bad_debt,\n  is_closed,\n  is_paid,\n  is_future_period,\n  is_current_period,\n  principal,\n  interest,\n  fee,\n  net_amount,\n  total_amount,\n  debt_range,\n  due_date\nFROM debt_target_cache\nWHERE contract_external_id = 'CT0225-NYK003-9251-01'\nORDER BY period ASC;\n",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 2156
+}

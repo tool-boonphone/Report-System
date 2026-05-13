@@ -1579,3 +1579,12 @@ Task list:
 - [x] BadDebtSummary.tsx: Cap paidInstallments ≤ installmentCount
 - [x] SuspectedBadDebt.tsx: Cap paidInstallments ≤ installmentCount
 - [x] badDebtDb.ts: Cap MAX(period) ≤ installment_count ใน SQL/JS
+
+## Fix: ยกเลิก N+1 rule + เลื่อนป้ายกำกับระงับสัญญา/หนี้เสีย (2026-05-13)
+- [x] DebtReport.tsx (tab=target): ยกเลิก N+1 rule — ระงับสัญญา/หนี้เสีย ที่ N=0 กลับไปแสดง 0/X เหมือนเดิม
+- [x] DebtReport.tsx (tab=target): ป้ายกำกับ ระงับสัญญา/หนี้เสีย เริ่มที่งวดที่ 2 แทนงวดที่ 1 (suspendedFromPeriod ≥ 2 ใน debtDb.ts แทน)
+
+## Fix: suspendedFromPeriod ≥ 2 เสมอ — งวดที่ 1 ต้องตั้งหนี้เสมอ (2026-05-14)
+- [x] debtDb.ts (listDebtTarget): แก้ suspendedFromPeriod = Math.max(2, lastNormalPeriod + 1) สำหรับ ระงับสัญญา/หนี้เสีย
+- [x] debtDb.ts (listDebtTargetStream): แก้ suspendedFromPeriod = Math.max(2, lastNormalPeriod + 1) สำหรับ ระงับสัญญา/หนี้เสีย
+- [x] ยกเลิก N+1 rule ใน DebtReport.tsx (tab=target) — กลับเป็น 0/X เหมือนเดิม (server จัดการ suspendedFromPeriod ≥ 2 แล้ว)
