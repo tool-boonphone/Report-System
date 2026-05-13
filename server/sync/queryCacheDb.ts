@@ -38,6 +38,21 @@ function bucketFromDays(days: number): string {
   return "เกิน >90";
 }
 
+// debtRangeToDays: แปลง debt_range label เป็น approximate daysOverdue สำหรับแสดงผลใน UI
+// (exact value ไม่ถูกเก็บใน cache — ใช้ค่ากลางของแต่ละ bucket แทน)
+function debtRangeToDays(range: string): number {
+  switch (range) {
+    case "ปกติ": return 0;
+    case "เกิน 1-7": return 4;
+    case "เกิน 8-14": return 11;
+    case "เกิน 15-30": return 22;
+    case "เกิน 31-60": return 45;
+    case "เกิน 61-90": return 75;
+    case "เกิน >90": return 91;
+    default: return 0;
+  }
+}
+
 /**
  * Compute splitIndex for each payment row based on period ordering within a contract.
  * Phase 131: Replaces hardcoded splitIndex: 0 with actual sub-index per period.
@@ -197,22 +212,18 @@ export async function* streamTargetFromCache(params: {
       // เพื่อให้ actual rows ที่ส่งตรงกับ total ที่ประกาศใน meta line
       const first = instRows.length > 0 ? instRows[0] : null;
 
-      const { debtStatus, daysOverdue } = rederiveDaysOverdue(
-        first?.contract_status ?? null,
-        instRows.map((r) => ({
-          dueDate: r.due_date ?? null,
-          totalAmount: String(r.total_amount ?? 0),
-          paidAmount: String(r.paid_amount ?? 0),
-          isClosed: !!r.is_closed,
-          isSuspended: !!r.is_suspended,
-          isPaid: !!r.is_paid,
-        })),
-        today,
-      );
+      // Phase Fix: ใช้ debt_range ที่ populate ไว้ใน cache (มาจาก deriveDebtStatus ผ่าน listDebtTargetStream)
+      // แทนการ rederiveDaysOverdue จาก totalAmount/paidAmount ซึ่งไม่มี balance field จาก raw_json
+      const cachedDebtRange = first?.debt_range ?? null;
+      const contractStatus = first?.contract_status ?? null;
+      const debtStatus = TERMINAL_STATUSES.has(contractStatus ?? "")
+        ? (contractStatus as string)
+        : (cachedDebtRange ?? bucketFromDays(0));
+      // daysOverdue: derive approximate value from debtRange for display (exact value not stored in cache)
+      const daysOverdue = debtRangeToDays(debtStatus);
 
       const totalAmount = instRows.reduce((s: number, r: any) => s + Number(r.total_amount ?? 0), 0);
       const totalPaid = instRows.reduce((s: number, r: any) => s + Number(r.paid_amount ?? 0), 0);
-      const contractStatus = first?.contract_status ?? null;
       const suspendLabel = contractStatus === "หนี้เสีย" ? "หนี้เสีย"
         : contractStatus === "ระงับสัญญา" ? "ระงับสัญญา"
         : contractStatus === "ยกเลิกสัญญา" ? "ยกเลิกสัญญา"
@@ -404,20 +415,12 @@ export async function* streamCollectedFromCache(params: {
       const suspendLabel = contractStatus === "หนี้เสีย" ? "หนี้เสีย"
         : contractStatus === "ระงับสัญญา" ? "ระงับสัญญา"
         : contractStatus === "ยกเลิกสัญญา" ? "ยกเลิกสัญญา"
-        : null;
-
-      const { debtStatus, daysOverdue } = rederiveDaysOverdue(
-        contractStatus,
-        instRows.map((r: any) => ({
-          dueDate: r.due_date ?? null,
-          totalAmount: String(r.total_amount ?? 0),
-          paidAmount: String(r.paid_amount ?? 0),
-          isClosed: !!r.is_closed,
-          isSuspended: !!r.is_suspended,
-          isPaid: !!r.is_paid,
-        })),
-        today,
-      );
+        : null;      // Phase Fix: ใช้ debt_range จาก cache แทน rederiveDaysOverdue
+      const cachedDebtRangeC = instRows[0]?.debt_range ?? null;
+      const debtStatus = TERMINAL_STATUSES.has(contractStatus ?? "")
+        ? (contractStatus as string)
+        : (cachedDebtRangeC ?? bucketFromDays(0));
+      const daysOverdue = debtRangeToDays(debtStatus);
 
       const totalAmount = instRows.reduce((s: number, r: any) => s + Number(r.total_amount ?? 0), 0);
       const totalPaid = instRows.reduce((s: number, r: any) => s + Number(r.paid_amount ?? 0), 0);
@@ -446,9 +449,9 @@ export async function* streamCollectedFromCache(params: {
         isPartialPaid: !!r.is_partial_paid,
       }));
 
-      // Phase 131: คำนวณ splitIndex จาก period ของ rows ใน cache (ไม่ hardcode 0)
-      const splitIndexes = computeSplitIndexes(payRows);
-      const payments = payRows.map((p: any, idx: number) => {
+    // Phase 131: คำนวณ splitIndex จาก period ของ rows ใน cache (ไม่ hardcode 0)
+    const splitIndexesChunk = computeSplitIndexes(payRows);
+    const payments = payRows.map((p: any, idx: number) => {
         const ptAmount = Number(p.total_amount ?? 0);
         const penalty = Number(p.penalty ?? 0);
         const isBadDebtRow = !!p.is_bad_debt_row;
@@ -476,7 +479,7 @@ export async function* streamCollectedFromCache(params: {
         }
         return {
           period: p.period != null ? Number(p.period) : null,
-          splitIndex: splitIndexes[idx],
+          splitIndex: splitIndexesChunk[idx],
           // isCloseRow: ตรวจจาก payment_external_id pattern (close rows มี "-close-" ใน key)
           isCloseRow: String(p.payment_external_id ?? "").includes("-close-"),
           isBadDebtRow,
@@ -681,23 +684,16 @@ export async function getTargetChunk(params: {
     if (instRows.length === 0) continue;
     const first = instRows[0];
 
-    const { debtStatus, daysOverdue } = rederiveDaysOverdue(
-      first.contract_status ?? null,
-      instRows.map((r) => ({
-        dueDate: r.due_date ?? null,
-        totalAmount: String(r.total_amount ?? 0),
-        paidAmount: String(r.paid_amount ?? 0),
-        isClosed: !!r.is_closed,
-        isSuspended: !!r.is_suspended,
-        isPaid: !!r.is_paid,
-      })),
-      today,
-    );
+    // Phase Fix: ใช้ debt_range จาก cache แทน rederiveDaysOverdue
+    const contractStatus = first.contract_status ?? null;
+    const cachedDebtRangeT = first.debt_range ?? null;
+    const debtStatus = TERMINAL_STATUSES.has(contractStatus ?? "")
+      ? (contractStatus as string)
+      : (cachedDebtRangeT ?? bucketFromDays(0));
+    const daysOverdue = debtRangeToDays(debtStatus);
 
     const totalAmount = instRows.reduce((s: number, r: any) => s + Number(r.total_amount ?? 0), 0);
     const totalPaid = instRows.reduce((s: number, r: any) => s + Number(r.paid_amount ?? 0), 0);
-
-    const contractStatus = first.contract_status ?? null;
     const suspendLabel = contractStatus === "หนี้เสีย" ? "หนี้เสีย"
       : contractStatus === "ระงับสัญญา" ? "ระงับสัญญา"
       : contractStatus === "ยกเลิกสัญญา" ? "ยกเลิกสัญญา"
@@ -892,18 +888,12 @@ export async function getCollectedChunk(params: {
       : contractStatus === "ยกเลิกสัญญา" ? "ยกเลิกสัญญา"
       : null;
 
-    const { debtStatus, daysOverdue } = rederiveDaysOverdue(
-      contractStatus,
-      instRows.map((r) => ({
-        dueDate: r.due_date ?? null,
-        totalAmount: String(r.total_amount ?? 0),
-        paidAmount: String(r.paid_amount ?? 0),
-        isClosed: !!r.is_closed,
-        isSuspended: !!r.is_suspended,
-        isPaid: !!r.is_paid,
-      })),
-      today,
-    );
+    // Phase Fix: ใช้ debt_range จาก cache แทน rederiveDaysOverdue
+    const cachedDebtRangeCC = instRows[0]?.debt_range ?? null;
+    const debtStatus = TERMINAL_STATUSES.has(contractStatus ?? "")
+      ? (contractStatus as string)
+      : (cachedDebtRangeCC ?? bucketFromDays(0));
+    const daysOverdue = debtRangeToDays(debtStatus);
 
     const totalAmount = instRows.reduce((s: number, r: any) => s + Number(r.total_amount ?? 0), 0);
     const totalPaid = instRows.reduce((s: number, r: any) => s + Number(r.paid_amount ?? 0), 0);

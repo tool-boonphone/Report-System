@@ -1592,3 +1592,8 @@ Task list:
 - [x] debtDb.ts (listDebtTarget): แก้ suspendedFromPeriod = 2 สำหรับ ระงับสัญญา fallback path (Phase 9AK)
 - [x] debtDb.ts (listDebtTargetStream): แก้ suspendedFromPeriod = Math.max(2, firstSuspended.period) สำหรับ ระงับสัญญา firstSuspended path
 - [x] debtDb.ts (listDebtTargetStream): แก้ suspendedFromPeriod = 2 สำหรับ ระงับสัญญา fallback path (Phase 9AK)
+
+## Fix: debtStatus bucket ไม่ตรงกันระหว่างหน้าสัญญากับหน้าเป้าเก็บหนี้/ยอดเก็บหนี้ (2026-05-14)
+- [x] วิเคราะห์ root cause: rederiveDaysOverdue ใน queryCacheDb.ts ใช้ totalAmount/paidAmount จาก cache แต่ deriveDebtStatus ใน debtDb.ts ใช้ balance field จาก raw_json ซึ่งแม่นยำกว่า
+- [x] แก้ queryCacheDb.ts — ใช้ debt_range จาก cache (per-contract) แทน rederiveDaysOverdue เพื่อให้ debtStatus ตรงกับ deriveDebtStatus (ครบทั้ง 4 จุด: streamTarget, streamCollected, getTargetChunk, getCollectedChunk)
+- [x] เพิ่ม debtRangeToDays helper ใน queryCacheDb.ts เพื่อแปลง bucket label เป็น approximate daysOverdue สำหรับแสดงผล UI
