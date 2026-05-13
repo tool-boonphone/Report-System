@@ -1693,7 +1693,10 @@ export default function DebtReport() {
                           background: pinnedCols.has("totalAmount") ? "#eff6ff" : undefined,
                         }}
                       >
-                        {fmtMoney(r.totalAmount)}
+                        {/* ยอดผ่อนรวม = N × X (งวดผ่อน × ผ่อนงวดละ) */}
+                        {r.installmentCount != null && r.installmentAmount != null
+                          ? fmtMoney(r.installmentCount * r.installmentAmount)
+                          : fmtMoney(r.totalAmount)}
                       </div>
                       <div
                         className="px-2 py-2 border-r text-right tabular-nums"
