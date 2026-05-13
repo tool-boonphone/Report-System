@@ -1555,3 +1555,7 @@ Task list:
 ## Fix: Customers Sync ค้างที่ page 17/45 (2026-05-13)
 - [x] แก้ getLastCustomersResumePage ให้อ่านจาก in_progress row ภายใน 30 นาทีเท่านั้น (ป้องกัน resume จาก page ที่ถูก kill)
 - [x] ลด timeout ของ customers stage จาก 30s → 8s (fail fast แทนที่จะรอ 133s ต่อ page ที่ fail)
+
+## Fix: Customers Sync ค้างที่ page 2/45 (2026-05-13 รอบ 2)
+- [x] ลด retry delays จาก [1000, 3000, 9000] → [500, 1500] (fail fast เมื่อ API timeout บ่อย)
+- [x] แก้ forEachPageParallel Step 1 — probe pages ถัดไปเพื่อหา totalPages เมื่อ startPage fail (ป้องกัน skip ทุก page)

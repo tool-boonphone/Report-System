@@ -116,8 +116,10 @@ export class PartnerClient {
       url.searchParams.set(k, String(v));
     }
 
-    // Up to 4 attempts total (1 + 3 retries). Delays: 1s, 3s, 9s.
-    const delays = [1000, 3000, 9000];
+    // Up to 3 attempts total (1 + 2 retries). Delays: 500ms, 1500ms.
+    // Reduced from [1000, 3000, 9000] to fail fast when API is slow/timeout-prone.
+    // Total overhead per failed request: 8s timeout × 3 + 2s delays = 26s (was 45s).
+    const delays = [500, 1500];
     let lastErr: unknown = null;
     for (let attemptIdx = 0; attemptIdx <= delays.length; attemptIdx++) {
       try {
@@ -243,18 +245,34 @@ export class PartnerClient {
     let totalRows = 0;
     let skippedPages = 0;
 
-    // Step 1: fetch first page to learn totalPages
-    try {
-      const data: any = await this.get<any>(path, { ...params, page: startPage, limit }, timeoutMs);
-      const items = pickItems(data) ?? [];
-      totalPages = Number(data?.pagination?.total_pages ?? 1);
-      totalRows += items.length;
-      await onPage(items, startPage, totalPages);
-      onProgress?.(startPage, totalPages);
-    } catch (err: any) {
-      if (!skipOnError) throw err;
-      skippedPages += 1;
-      console.warn(`[${this.cfg.section}] forEachPageParallel: skipping page ${startPage} (first page) — cannot determine totalPages: ${err?.message ?? err}`);
+    // Step 1: fetch first page to learn totalPages.
+    // If startPage fails and skipOnError=true, try up to 3 subsequent pages to find totalPages.
+    // This prevents skipping all remaining pages when only the resume page is broken.
+    let step1Done = false;
+    for (let probe = startPage; probe <= startPage + 3; probe++) {
+      try {
+        const data: any = await this.get<any>(path, { ...params, page: probe, limit }, timeoutMs);
+        const items = pickItems(data) ?? [];
+        totalPages = Number(data?.pagination?.total_pages ?? 1);
+        totalRows += items.length;
+        await onPage(items, probe, totalPages);
+        onProgress?.(probe, totalPages);
+        // Adjust batchStart to skip pages already tried
+        if (probe > startPage) {
+          // We'll start batch from probe+1 below by updating startPage reference
+          // Use a local variable to track where batch should start
+          startPage = probe; // eslint-disable-line no-param-reassign
+        }
+        step1Done = true;
+        break;
+      } catch (err: any) {
+        if (!skipOnError) throw err;
+        skippedPages += 1;
+        console.warn(`[${this.cfg.section}] forEachPageParallel: skipping page ${probe} (probing for totalPages): ${err?.message ?? err}`);
+      }
+    }
+    if (!step1Done) {
+      console.warn(`[${this.cfg.section}] forEachPageParallel: first 4 pages all failed — cannot determine totalPages, aborting`);
       return 0;
     }
 

@@ -1,0 +1,90 @@
+{
+  "query": "SELECT id, entity, status, current_stage, resume_page, progress, started_at, TIMESTAMPDIFF(SECOND, started_at, COALESCE(finished_at, NOW())) as duration_sec FROM sync_logs WHERE section = 'Fastfone365' ORDER BY started_at DESC LIMIT 8;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT id, entity, status, current_stage, resume_page, progress, started_at, TIMESTAMPDIFF(SECOND, started_at, COALESCE(finished_at, NOW())) as duration_sec FROM sync_logs WHERE section = 'Fastfone365' ORDER BY started_at DESC LIMIT 8;",
+  "rows": [
+    {
+      "id": "1590018",
+      "entity": "customers",
+      "status": "in_progress",
+      "current_stage": "NULL",
+      "resume_page": "0",
+      "progress": "0",
+      "started_at": "2026-05-13 14:57:52",
+      "duration_sec": "319"
+    },
+    {
+      "id": "1590016",
+      "entity": "all",
+      "status": "in_progress",
+      "current_stage": "customers (2/45)",
+      "resume_page": "3",
+      "progress": "21",
+      "started_at": "2026-05-13 14:57:47",
+      "duration_sec": "324"
+    },
+    {
+      "id": "1590017",
+      "entity": "partners",
+      "status": "success",
+      "current_stage": "NULL",
+      "resume_page": "0",
+      "progress": "0",
+      "started_at": "2026-05-13 14:57:47",
+      "duration_sec": "5"
+    },
+    {
+      "id": "1590015",
+      "entity": "customers",
+      "status": "error",
+      "current_stage": "NULL",
+      "resume_page": "0",
+      "progress": "0",
+      "started_at": "2026-05-13 14:29:41",
+      "duration_sec": "1455"
+    },
+    {
+      "id": "1590014",
+      "entity": "partners",
+      "status": "success",
+      "current_stage": "NULL",
+      "resume_page": "0",
+      "progress": "0",
+      "started_at": "2026-05-13 14:29:37",
+      "duration_sec": "4"
+    },
+    {
+      "id": "1590013",
+      "entity": "all",
+      "status": "error",
+      "current_stage": "customers (16/45)",
+      "resume_page": "17",
+      "progress": "27",
+      "started_at": "2026-05-13 14:29:37",
+      "duration_sec": "1459"
+    },
+    {
+      "id": "1590012",
+      "entity": "payments",
+      "status": "success",
+      "current_stage": "NULL",
+      "resume_page": "0",
+      "progress": "0",
+      "started_at": "2026-05-13 13:50:12",
+      "duration_sec": "1343"
+    },
+    {
+      "id": "1590011",
+      "entity": "installments",
+      "status": "success",
+      "current_stage": "NULL",
+      "resume_page": "0",
+      "progress": "0",
+      "started_at": "2026-05-13 13:35:17",
+      "duration_sec": "895"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tentity\tstatus\tcurrent_stage\tresume_page\tprogress\tstarted_at\tduration_sec\n1590018\tcustomers\tin_progress\tNULL\t0\t0\t2026-05-13 14:57:52\t319\n1590016\tall\tin_progress\tcustomers (2/45)\t3\t21\t2026-05-13 14:57:47\t324\n1590017\tpartners\tsuccess\tNULL\t0\t0\t2026-05-13 14:57:47\t5\n1590015\tcustomers\terror\tNULL\t0\t0\t2026-05-13 14:29:41\t1455\n1590014\tpartners\tsuccess\tNULL\t0\t0\t2026-05-13 14:29:37\t4\n1590013\tall\terror\tcustomers (16/45)\t17\t27\t2026-05-13 14:29:37\t1459\n1590012\tpayments\tsuccess\tNULL\t0\t0\t2026-05-13 13:50:12\t1343\n1590011\tinstallments\tsuccess\tNULL\t0\t0\t2026-05-13 13:35:17\t895\n",
+  "stderr": "",
+  "execution_time_ms": 1825
+}
