@@ -333,15 +333,26 @@ export default function Expense() {
     try {
       const { data: exp } = await refetchExport();
       const exportRows = exp?.rows ?? [];
-      const wsData = [
-        ["No.", "วันที่อนุมัติ", "ประเภท", "เลขที่สัญญา", "ยอดเงิน", "ทำรายการโดย", "ทำรายการเมื่อ"],
-        ...exportRows.map((r, i) => [
-          i + 1, fmtDate(r.approveDate), r.expenseType, r.contractNo,
-          r.amount, (r as any).updatedBy ?? "", fmtDateTime((r as any).updatedAt),
-        ]),
-      ];
-      const ws = XLSX.utils.aoa_to_sheet(wsData);
-      ws["!cols"] = [{ wch: 6 }, { wch: 14 }, { wch: 18 }, { wch: 24 }, { wch: 14 }, { wch: 18 }, { wch: 20 }];
+      const XLSX = await import("xlsx");
+      const headers = ["No.", "วันที่อนุมัติ", "เวลาอนุมัติ", "ประเภท", "เลขที่สัญญา", "ยอดเงิน", "ทำรายการโดย", "วันที่ทำรายการ", "เวลาทำรายการ"];
+      const dataRows = exportRows.map((r, i) => {
+        const approveDate = r.approveDate ? r.approveDate.slice(0, 10) : "";
+        const approveTime = r.approveDate ? r.approveDate.slice(11, 19) : "";
+        const updatedDate = (r as any).updatedAt ? (r as any).updatedAt.slice(0, 10) : "";
+        const updatedTime = (r as any).updatedAt ? (r as any).updatedAt.slice(11, 19) : "";
+        return [i + 1, approveDate, approveTime, r.expenseType, r.contractNo, r.amount ?? 0, (r as any).updatedBy ?? "", updatedDate, updatedTime];
+      });
+      const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
+      ws["!cols"] = [{ wch: 6 }, { wch: 12 }, { wch: 12 }, { wch: 16 }, { wch: 18 }, { wch: 14 }, { wch: 16 }, { wch: 12 }, { wch: 12 }];
+      for (let C = 0; C < headers.length; C++) {
+        const addr = XLSX.utils.encode_cell({ r: 0, c: C });
+        if (!ws[addr]) ws[addr] = { t: "s", v: headers[C] };
+        ws[addr].s = { fill: { patternType: "solid", fgColor: { rgb: "DC2626" } }, font: { bold: true, color: { rgb: "FFFFFF" } }, alignment: { horizontal: "center", vertical: "center", wrapText: true }, border: { bottom: { style: "thin", color: { rgb: "D1D5DB" } } } };
+      }
+      for (let R = 1; R <= dataRows.length; R++) {
+        const addr = XLSX.utils.encode_cell({ r: R, c: 5 });
+        if (ws[addr]) { ws[addr].t = "n"; ws[addr].z = "#,##0.00"; }
+      }
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "รายจ่าย");
       XLSX.writeFile(wb, `รายจ่าย_${section}_${new Date().toISOString().slice(0, 10)}.xlsx`);
@@ -356,15 +367,24 @@ export default function Expense() {
     try {
       const { data: exp } = await refetchFinExport();
       const exportRows = exp?.rows ?? [];
-      const wsData = [
-        ["No.", "วันที่อนุมัติ", "เลขที่สัญญา", "ชื่อ-นามสกุล", "ยอดจัดไฟแนนซ์", "ประเภทเครื่อง"],
-        ...exportRows.map((r, i) => [
-          i + 1, fmtDate(r.approveDate), r.contractNo,
-          r.customerName ?? "", r.financeAmount, r.productType ?? "",
-        ]),
-      ];
-      const ws = XLSX.utils.aoa_to_sheet(wsData);
-      ws["!cols"] = [{ wch: 6 }, { wch: 14 }, { wch: 24 }, { wch: 24 }, { wch: 16 }, { wch: 20 }];
+      const XLSX = await import("xlsx");
+      const headers = ["No.", "วันที่อนุมัติ", "เวลาอนุมัติ", "เลขที่สัญญา", "ชื่อ-นามสกุล", "ยอดจัดไฟแนนซ์", "ประเภทเครื่อง"];
+      const dataRows = exportRows.map((r, i) => {
+        const approveDate = r.approveDate ? r.approveDate.slice(0, 10) : "";
+        const approveTime = r.approveDate ? r.approveDate.slice(11, 19) : "";
+        return [i + 1, approveDate, approveTime, r.contractNo, r.customerName ?? "", r.financeAmount ?? 0, r.productType ?? ""];
+      });
+      const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
+      ws["!cols"] = [{ wch: 6 }, { wch: 12 }, { wch: 12 }, { wch: 18 }, { wch: 24 }, { wch: 16 }, { wch: 20 }];
+      for (let C = 0; C < headers.length; C++) {
+        const addr = XLSX.utils.encode_cell({ r: 0, c: C });
+        if (!ws[addr]) ws[addr] = { t: "s", v: headers[C] };
+        ws[addr].s = { fill: { patternType: "solid", fgColor: { rgb: "DC2626" } }, font: { bold: true, color: { rgb: "FFFFFF" } }, alignment: { horizontal: "center", vertical: "center", wrapText: true }, border: { bottom: { style: "thin", color: { rgb: "D1D5DB" } } } };
+      }
+      for (let R = 1; R <= dataRows.length; R++) {
+        const addr = XLSX.utils.encode_cell({ r: R, c: 5 });
+        if (ws[addr]) { ws[addr].t = "n"; ws[addr].z = "#,##0.00"; }
+      }
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "ยอดจัดไฟแนนซ์");
       XLSX.writeFile(wb, `ยอดจัดไฟแนนซ์_${section}_${new Date().toISOString().slice(0, 10)}.xlsx`);

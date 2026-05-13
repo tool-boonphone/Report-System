@@ -1609,3 +1609,26 @@ Task list:
 - [x] เพิ่มแถบ "รายการยอดจัดไฟแนนซ์" ในหน้ารายจ่าย วางไว้ก่อนแถบ "รายการค่าคอมมิชชั่น" ใช้ format เดียวกัน
 - [x] แถบสรุปรายเดือน — เพิ่มคอลัมน์ "ยอดจัดไฟแนนซ์" ไว้ก่อนคอลัมน์ "ค่าคอมมิชชั่น" (sum ต่อเดือน)
 - [x] แถบสรุปรายปี — เพิ่มคอลัมน์ "ยอดจัดไฟแนนซ์" ไว้ก่อนคอลัมน์ "ค่าคอมมิชชั่น" (sum ต่อปี)
+
+## Feature: Refactor Export Excel ทุกหน้า (2026-05-14)
+- [ ] ศึกษาโครงสร้าง export ปัจจุบันทุกหน้า (Contracts, Expense, DebtReport, Accounting ฯลฯ)
+- [ ] Install ExcelJS (server-side) และ setup shared export utility
+- [ ] สร้าง shared Excel utility: header colors, cell types (number/date/string), แยกวันที่/เวลา, multi-row payment (แถวรอง: เลขที่สัญญาตัวเอียง)
+- [ ] Refactor export หน้าสัญญา (Contracts) — ครบคอลัมน์, สี, type, แยกวันที่/เวลา
+- [ ] Refactor export หน้ารายจ่าย (Expense) — ทุกแถบ (รายการยอดจัดไฟแนนซ์, ค่าคอมมิชชั่น, สรุปรายเดือน, สรุปรายปี)
+- [ ] Refactor export หน้าบัญชี (Accounting) — ทุกแถบ
+- [ ] Refactor export หน้าอื่นๆ ที่มีปุ่ม Export Excel
+- [ ] สร้าง pre-generate Excel background job สำหรับเป้าเก็บหนี้ (1 ไฟล์ต่อ brand) หลัง sync เสร็จ
+- [ ] สร้าง pre-generate Excel background job สำหรับยอดเก็บหนี้ (1 ไฟล์ต่อ brand) หลัง sync เสร็จ
+- [ ] Refactor export หน้าเป้าเก็บหนี้ — ดาวน์โหลดจาก pre-generated file, fallback export กรองแล้ว
+- [ ] Refactor export หน้ายอดเก็บหนี้ — ดาวน์โหลดจาก pre-generated file, fallback export กรองแล้ว, payment หลายรายการแยกแถว
+
+## Feature: Refactor Export Excel ทุกหน้า — รายละเอียด (2026-05-14)
+- [ ] Contracts export (server-side): header สี gray + cell type number สำหรับ money columns
+- [ ] Bad Debt Summary export (server-side): header สี + cell type number + แยกวันที่/เวลา
+- [ ] SuspectedBadDebt: เปลี่ยนจาก CSV เป็น XLSX + header สี + cell type number
+- [ ] DebtOverview: header สี + cell type number + grand total row สี
+- [ ] MonthlySummary: header 2 แถว + merge cells ตาม UI + header สี + cell type number
+- [ ] Income: header สี + cell type number + แยกวันที่/เวลา (updatedAt)
+- [ ] Expense: header สี + cell type number + แยกวันที่/เวลา (updatedAt)
+- [ ] debtExportBuilder (pre-built S3): header สี + cell type number + แยกวันที่/เวลา + sub-rows italic

@@ -531,43 +531,69 @@ export default function SuspectedBadDebt() {
     setDebtValueMin("");
   };
 
-  /* ── export CSV ── */
-  const handleExport = useCallback(() => {
+  /* ── export XLSX ── */
+  const handleExport = useCallback(async () => {
     if (!canExport) {
       toast.error("คุณไม่มีสิทธิ์ Export ข้อมูล");
       return;
     }
-    const headers = [
-      "#","วันที่อนุมัติ","เลขที่สัญญา","ชื่อ-นามสกุล","เบอร์โทร",
-      "รุ่น","ราคา","ยอดจัดไฟแนนซ์","ค่าคอมมิชชั่น","ต้นทุน",
-      "งวดที่ชำระ","ยอดผ่อน","มูลค่าหนี้","สถานะหนี้",
-    ];
-    const rows = filteredRows.map((r, i) => [
-      i + 1,
-      r.approveDate ?? "",
-      r.contractNo ?? "",
-      r.customerName ?? "",
-      r.phone ?? "",
-      r.model ?? "",
-      r.sellPrice ?? 0,
-      r.financeAmount ?? 0,
-      r.commissionNet ?? 0,
-      r.cost,
-      `${r.paidInstallments}/${r.installmentCount ?? "-"}`,
-      r.totalPaid,
-      r.debtValue,
-      r.debtStatus,
-    ]);
-    const csv = [headers, ...rows]
-      .map((row) => row.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(","))
-      .join("\n");
-    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `suspected_bad_debt_${section}_${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const toastId = toast.loading("กำลัง Export...");
+    try {
+      const XLSX = await import("xlsx");
+      const wb = XLSX.utils.book_new();
+      const headers = [
+        "#","วันที่อนุมัติ","เลขที่สัญญา","ชื่อ-นามสกุล","เบอร์โทร",
+        "รุ่น","ราคา","ยอดจัดไฟแนนซ์","ค่าคอมมิชชั่น","ต้นทุน",
+        "งวดที่ชำระ","ยอดผ่อน","มูลค่าหนี้","สถานะหนี้",
+      ];
+      const dataRows = filteredRows.map((r, i) => [
+        i + 1,
+        r.approveDate ? r.approveDate.slice(0, 10) : "",
+        r.contractNo ?? "",
+        r.customerName ?? "",
+        r.phone ?? "",
+        r.model ?? "",
+        r.sellPrice ?? 0,
+        r.financeAmount ?? 0,
+        r.commissionNet ?? 0,
+        r.cost ?? 0,
+        `${r.paidInstallments}/${r.installmentCount ?? "-"}`,
+        r.totalPaid ?? 0,
+        r.debtValue ?? 0,
+        r.debtStatus ?? "",
+      ]);
+      const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
+      ws["!cols"] = [
+        { wch: 6 }, { wch: 14 }, { wch: 22 }, { wch: 22 }, { wch: 14 },
+        { wch: 24 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 12 },
+        { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 16 },
+      ];
+      // Style header row (amber-100 bg, mirrors SuspectedBadDebt.tsx UI)
+      for (let C = 0; C < headers.length; C++) {
+        const addr = XLSX.utils.encode_cell({ r: 0, c: C });
+        if (!ws[addr]) ws[addr] = { t: "s", v: headers[C] };
+        ws[addr].s = {
+          fill: { patternType: "solid", fgColor: { rgb: "FEF3C7" } },
+          font: { bold: true, color: { rgb: "78350F" } },
+          alignment: { horizontal: "center", vertical: "center", wrapText: true },
+          border: { bottom: { style: "thin", color: { rgb: "D1D5DB" } } },
+        };
+      }
+      // Cell types: number for money/count columns
+      for (let R = 1; R <= dataRows.length; R++) {
+        const seqAddr = XLSX.utils.encode_cell({ r: R, c: 0 });
+        if (ws[seqAddr]) { ws[seqAddr].t = "n"; ws[seqAddr].z = "#,##0"; }
+        for (const C of [6, 7, 8, 9, 11, 12]) {
+          const addr = XLSX.utils.encode_cell({ r: R, c: C });
+          if (ws[addr]) { ws[addr].t = "n"; ws[addr].z = "#,##0.00"; }
+        }
+      }
+      XLSX.utils.book_append_sheet(wb, ws, "หนี้สงสัยจะเสีย");
+      XLSX.writeFile(wb, `suspected_bad_debt_${section}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+      toast.success("Export สำเร็จ", { id: toastId });
+    } catch (err) {
+      toast.error((err as Error).message ?? "Export failed", { id: toastId });
+    }
   }, [filteredRows, canExport, section]);
 
   /* ── nav actions ── */

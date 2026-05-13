@@ -572,30 +572,37 @@ export default function Income() {
   const handleExport = useCallback(async () => {
     const toastId = toast.loading("กำลัง Export...");
     try {
-      // ใช้ rows จาก cache (ที่ filter แล้วตาม search/date/updatedBy)
       if (!rows.length) { toast.error("ไม่มีข้อมูล", { id: toastId }); return; }
-
-      // apply mode
       let exportRows: IncomeRow[] = rows;
       if (listMode === "slip") {
         exportRows = groupRowsBySlip(exportRows);
       }
-
-      const wsData = [
-        ["No.", "วันที่ชำระ", "ประเภท", "รหัสรายการ", "เลขที่สัญญา", "ชื่อลูกค้า", "ยอดเงิน", "ทำรายการโดย", "ทำรายการเมื่อ"],
-        ...exportRows.map((r, i) => {
-          // ใช้ getDisplayType เพื่อแสดงประเภทตาม mode
-          const displayType = listMode === "detail"
-            ? (r.originalIncomeType === "ปิดยอด" ? "ปิดยอด" : "ค่างวด")
-            : r.incomeType;
-          return [
-            i + 1, fmtDate(r.paidAt), displayType, r.receiptNo ?? "", r.contractNo,
-            r.customerName ?? "", r.amount, r.updatedBy ?? "", fmtDateTime(r.updatedAt),
-          ];
-        }),
-      ];
-      const ws = XLSX.utils.aoa_to_sheet(wsData);
-      ws["!cols"] = [{ wch: 6 }, { wch: 14 }, { wch: 28 }, { wch: 14 }, { wch: 24 }, { wch: 24 }, { wch: 14 }, { wch: 18 }, { wch: 20 }];
+      const XLSX = await import("xlsx");
+      const headers = ["No.", "วันที่ชำระ", "เวลาชำระ", "ประเภท", "รหัสรายการ", "เลขที่สัญญา", "ชื่อลูกค้า", "ยอดเงิน", "ทำรายการโดย", "วันที่ทำรายการ", "เวลาทำรายการ"];
+      const dataRows = exportRows.map((r, i) => {
+        const displayType = listMode === "detail"
+          ? (r.originalIncomeType === "ปิดยอด" ? "ปิดยอด" : "ค่างวด")
+          : r.incomeType;
+        const paidDate = r.paidAt ? r.paidAt.slice(0, 10) : "";
+        const paidTime = r.paidAt ? r.paidAt.slice(11, 19) : "";
+        const updatedDate = r.updatedAt ? r.updatedAt.slice(0, 10) : "";
+        const updatedTime = r.updatedAt ? r.updatedAt.slice(11, 19) : "";
+        return [
+          i + 1, paidDate, paidTime, displayType, r.receiptNo ?? "", r.contractNo,
+          r.customerName ?? "", r.amount ?? 0, r.updatedBy ?? "", updatedDate, updatedTime,
+        ];
+      });
+      const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
+      ws["!cols"] = [{ wch: 6 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 18 }, { wch: 20 }, { wch: 14 }, { wch: 16 }, { wch: 12 }, { wch: 12 }];
+      for (let C = 0; C < headers.length; C++) {
+        const addr = XLSX.utils.encode_cell({ r: 0, c: C });
+        if (!ws[addr]) ws[addr] = { t: "s", v: headers[C] };
+        ws[addr].s = { fill: { patternType: "solid", fgColor: { rgb: "1D4ED8" } }, font: { bold: true, color: { rgb: "FFFFFF" } }, alignment: { horizontal: "center", vertical: "center", wrapText: true }, border: { bottom: { style: "thin", color: { rgb: "D1D5DB" } } } };
+      }
+      for (let R = 1; R <= dataRows.length; R++) {
+        const addr = XLSX.utils.encode_cell({ r: R, c: 7 });
+        if (ws[addr]) { ws[addr].t = "n"; ws[addr].z = "#,##0.00"; }
+      }
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "รายรับ");
       const modeSuffix = listMode === "slip" ? "_ตามสลิป" : "_ตามการบันทึก";

@@ -67,7 +67,6 @@ async function buildExcelBuffer(
   rows: any[],
   variant: "target" | "collected",
 ): Promise<Buffer> {
-  // Determine max periods across all rows (cap at 36)
   let maxPeriods = 0;
   for (const r of rows) {
     const arr = variant === "target" ? r.installments : r.payments;
@@ -82,41 +81,34 @@ async function buildExcelBuffer(
     }
   }
   maxPeriods = Math.min(maxPeriods, 36);
-
   const perGroup = variant === "target" ? TARGET_PER_GROUP : COLLECTED_PER_GROUP;
-
-  // Build column list
-  const cols: Array<{ header: string; key: string; width: number }> = [
-    ...DEBT_LEFT_COLUMNS,
-  ];
+  const cols: Array<{ header: string; key: string; width: number }> = [...DEBT_LEFT_COLUMNS];
   for (let p = 1; p <= maxPeriods; p += 1) {
     for (const g of perGroup) {
       cols.push({ header: `งวดที่ ${p} - ${g.header}`, key: `p${p}_${g.key}`, width: g.width });
     }
   }
-
-  // Use in-memory workbook (not streaming) since we need a Buffer for S3 upload
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet(variant === "target" ? "เป้าเก็บหนี้" : "ยอดเก็บหนี้");
   ws.columns = cols;
-  ws.getRow(1).font = { bold: true };
-  ws.getRow(1).alignment = { vertical: "middle", horizontal: "center" };
-
+  // Style header row (red-700 for target, green-700 for collected)
+  const hdrRow = ws.getRow(1);
+  hdrRow.font = { bold: true, color: { argb: "FFFFFFFF" } };
+  hdrRow.fill = { type: "pattern", pattern: "solid", fgColor: { argb: variant === "target" ? "FFDC2626" : "FF15803D" } };
+  hdrRow.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
+  hdrRow.border = { bottom: { style: "thin", color: { argb: "FFD1D5DB" } } };
   let seq = 0;
   let rowCount = 0;
-
   for (const r of rows) {
     seq += 1;
     rowCount += 1;
-
-    // Yield every 1000 rows to prevent blocking
     if (rowCount % 1000 === 0) {
       await new Promise<void>((resolve) => setImmediate(resolve));
     }
-
+    const approveDate = r.approveDate ? r.approveDate.slice(0, 10) : "";
     const baseRec: Record<string, string | number> = {
       seq,
-      approveDate: r.approveDate ?? "",
+      approveDate,
       contractNo: r.contractNo ?? "",
       customerName: r.customerName ?? "",
       phone: r.phone ?? "",
@@ -126,7 +118,6 @@ async function buildExcelBuffer(
       debtStatus: r.debtStatus ?? "",
       daysOverdue: Number(r.daysOverdue ?? 0),
     };
-
     if (variant === "target") {
       const rec = { ...baseRec };
       const arr = r.installments;
@@ -135,7 +126,7 @@ async function buildExcelBuffer(
           const item = arr[i];
           const p = i + 1;
           rec[`p${p}_period`] = Number(item.period ?? p);
-          rec[`p${p}_dueDate`] = item.dueDate ?? "";
+          rec[`p${p}_dueDate`] = item.dueDate ? item.dueDate.slice(0, 10) : "";
           rec[`p${p}_principal`] = Number(item.principal ?? 0);
           rec[`p${p}_interest`] = Number(item.interest ?? 0);
           rec[`p${p}_fee`] = Number(item.fee ?? 0);
@@ -143,17 +134,13 @@ async function buildExcelBuffer(
           rec[`p${p}_unlockFee`] = Number(item.unlockFee ?? 0);
           let amountCell = 0;
           if (!item.isClosed && !item.isSuspended) {
-            amountCell =
-              Number(item.overpaidApplied ?? 0) > 0.009
-                ? Number(item.netAmount ?? item.amount ?? 0)
-                : Number(item.amount ?? 0);
+            amountCell = Number(item.overpaidApplied ?? 0) > 0.009 ? Number(item.netAmount ?? item.amount ?? 0) : Number(item.amount ?? 0);
           }
           rec[`p${p}_amount`] = amountCell;
         }
       }
       ws.addRow(rec);
     } else {
-      // Collected: group payments by period, emit multiple rows if split
       const arr = r.payments;
       const byPeriod = new Map<number, any[]>();
       if (Array.isArray(arr)) {
@@ -167,7 +154,6 @@ async function buildExcelBuffer(
       byPeriod.forEach((pays) => {
         if (pays.length > lines) lines = pays.length;
       });
-
       for (let li = 0; li < lines; li += 1) {
         const rec: Record<string, string | number> = {};
         if (li === 0) {
@@ -180,7 +166,9 @@ async function buildExcelBuffer(
           const item = pays[li];
           if (item) {
             rec[`p${p}_period`] = li === 0 ? p : "—";
-            rec[`p${p}_paidAt`] = item.paidAt ?? "";
+            const paidDate = item.paidAt ? item.paidAt.slice(0, 10) : "";
+            const paidTime = item.paidAt ? item.paidAt.slice(11, 19) : "";
+            rec[`p${p}_paidAt`] = paidDate + (paidTime ? ` ${paidTime}` : "");
             rec[`p${p}_principal`] = Number(item.principal ?? 0);
             rec[`p${p}_interest`] = Number(item.interest ?? 0);
             rec[`p${p}_fee`] = Number(item.fee ?? 0);
@@ -192,11 +180,31 @@ async function buildExcelBuffer(
             rec[`p${p}_total`] = Number(item.total ?? 0);
           }
         }
-        ws.addRow(rec);
+        // Style sub-rows (italic) for split payments
+        const newRow = ws.addRow(rec);
+        if (li > 0) {
+          newRow.font = { italic: true };
+        }
       }
     }
   }
-
+  // Apply cell types: number for money columns
+  ws.eachRow((row, rowNumber) => {
+    if (rowNumber === 1) return; // Skip header
+    for (let colIdx = 1; colIdx <= cols.length; colIdx++) {
+      const col = cols[colIdx - 1];
+      const cell = row.getCell(colIdx);
+      // Money columns: principal, interest, fee, penalty, unlockFee, discount, overpaid, badDebt, total, totalAmount, perInstallment
+      if (col.key.includes("_principal") || col.key.includes("_interest") || col.key.includes("_fee") || 
+          col.key.includes("_penalty") || col.key.includes("_unlockFee") || col.key.includes("_discount") ||
+          col.key.includes("_overpaid") || col.key.includes("_badDebt") || col.key.includes("_total") ||
+          col.key === "totalAmount" || col.key === "perInstallment") {
+        cell.numFmt = "#,##0.00";
+      } else if (col.key === "seq" || col.key === "installmentCount" || col.key.includes("_period")) {
+        cell.numFmt = "#,##0";
+      }
+    }
+  });
   const buffer = await wb.xlsx.writeBuffer();
   return Buffer.from(buffer);
 }

@@ -1210,9 +1210,11 @@ export default function DebtOverview() {
                     const rows = monthRows.filter((r) => !hiddenMonths.has(r.monthKey));
                     const XLSX = await import("xlsx");
                     const wb = XLSX.utils.book_new();
-                    const wsData = [
-                      ["เดือน-ปีที่อนุมัติ", "สัญญา", "ยอดผ่อนรวม", "ยอดเก็บหนี้", "% การเก็บ", "ยอดขายเครื่อง", "รายรับรวม", "ต้นทุน", "กำไรขั้นต้น", "ยังไม่ถึงกำหนด"],
-                      ...rows.map((r) => {
+                    // ── Headers (mirrors DebtOverview.tsx UI) ──
+                    const headers = ["เดือน-ปีที่อนุมัติ", "สัญญา", principalOnly ? "เป้าเก็บหนี้" : "ยอดผ่อนรวม", "ยอดเก็บหนี้", "% การเก็บ", "ยอดขายเครื่อง", "รายรับรวม", "ต้นทุน", "กำไรขั้นต้น", "ยังไม่ถึงกำหนด"];
+                    // Header ARGB colors matching UI (slate-700/blue-700/green-700/emerald-800/amber-700/sky-700)
+                    const hdrArgb = ["334155","334155",principalOnly?"1D4ED8":"7E22CE","15803D","334155","334155","065F46","334155","B45309","0369A1"];
+                    const dataRows = rows.map((r) => {
                         const deviceSale = showDeviceSale ? r.deviceSaleAmount : 0;
                         const revenue = r.collectedTotal + deviceSale;
                         const profit = revenue - r.cost;
@@ -1221,24 +1223,60 @@ export default function DebtOverview() {
                           fmtMonthYear(r.monthKey), r.contractCount, r.installTotal, r.collectedTotal, rate,
                           r.deviceSaleAmount, revenue, r.cost, profit, r.notYetDue,
                         ];
-                      }),
-                      // ผลรวม
-                      [
-                        "รวมทั้งหมด",
-                        rows.reduce((s, r) => s + r.contractCount, 0),
-                        rows.reduce((s, r) => s + r.installTotal, 0),
-                        rows.reduce((s, r) => s + r.collectedTotal, 0),
-                        rows.reduce((s, r) => s + r.installTotal, 0) > 0
-                          ? (rows.reduce((s, r) => s + r.collectedTotal, 0) / rows.reduce((s, r) => s + r.installTotal, 0) * 100).toFixed(1) + "%"
-                          : "0%",
-                        rows.reduce((s, r) => s + r.deviceSaleAmount, 0),
-                        rows.reduce((s, r) => s + r.collectedTotal + (showDeviceSale ? r.deviceSaleAmount : 0), 0),
-                        rows.reduce((s, r) => s + r.cost, 0),
-                        rows.reduce((s, r) => s + r.collectedTotal + (showDeviceSale ? r.deviceSaleAmount : 0) - r.cost, 0),
-                        rows.reduce((s, r) => s + r.notYetDue, 0),
-                      ],
+                    });
+                    const totalInstall = rows.reduce((s, r) => s + r.installTotal, 0);
+                    const totalCollected = rows.reduce((s, r) => s + r.collectedTotal, 0);
+                    const totalDeviceSale = rows.reduce((s, r) => s + r.deviceSaleAmount, 0);
+                    const totalRevenue = rows.reduce((s, r) => s + r.collectedTotal + (showDeviceSale ? r.deviceSaleAmount : 0), 0);
+                    const totalCost = rows.reduce((s, r) => s + r.cost, 0);
+                    const totalProfit = totalRevenue - totalCost;
+                    const totalNotYet = rows.reduce((s, r) => s + r.notYetDue, 0);
+                    const totalRate = totalInstall > 0 ? (totalCollected / totalInstall * 100).toFixed(1) + "%" : "0%";
+                    const totalRow = [
+                      "รวมทั้งหมด",
+                      rows.reduce((s, r) => s + r.contractCount, 0),
+                      totalInstall, totalCollected, totalRate,
+                      totalDeviceSale, totalRevenue, totalCost, totalProfit, totalNotYet,
                     ];
-                    const ws = XLSX.utils.aoa_to_sheet(wsData);
+                    const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows, totalRow]);
+                    ws["!cols"] = [
+                      { wch: 18 }, { wch: 10 }, { wch: 16 }, { wch: 16 }, { wch: 10 },
+                      { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 },
+                    ];
+                    // Style header row
+                    for (let C = 0; C < headers.length; C++) {
+                      const addr = XLSX.utils.encode_cell({ r: 0, c: C });
+                      if (!ws[addr]) ws[addr] = { t: "s", v: headers[C] };
+                      ws[addr].s = {
+                        fill: { patternType: "solid", fgColor: { rgb: hdrArgb[C] } },
+                        font: { bold: true, color: { rgb: "FFFFFF" } },
+                        alignment: { horizontal: "center", vertical: "center", wrapText: true },
+                        border: { bottom: { style: "thin", color: { rgb: "D1D5DB" } } },
+                      };
+                    }
+                    // Cell types: number for money/count columns (skip col 0=text, col 4=%)
+                    for (let R = 1; R <= dataRows.length + 1; R++) {
+                      for (const C of [1]) {
+                        const addr = XLSX.utils.encode_cell({ r: R, c: C });
+                        if (ws[addr]) { ws[addr].t = "n"; ws[addr].z = "#,##0"; }
+                      }
+                      for (const C of [2, 3, 5, 6, 7, 8, 9]) {
+                        const addr = XLSX.utils.encode_cell({ r: R, c: C });
+                        if (ws[addr]) { ws[addr].t = "n"; ws[addr].z = "#,##0.00"; }
+                      }
+                    }
+                    // Style total row (slate-100 bg, bold)
+                    const totalRowIdx = dataRows.length + 1;
+                    for (let C = 0; C < headers.length; C++) {
+                      const addr = XLSX.utils.encode_cell({ r: totalRowIdx, c: C });
+                      if (ws[addr]) {
+                        ws[addr].s = {
+                          fill: { patternType: "solid", fgColor: { rgb: "F1F5F9" } },
+                          font: { bold: true },
+                          border: { top: { style: "medium", color: { rgb: "94A3B8" } } },
+                        };
+                      }
+                    }
                     XLSX.utils.book_append_sheet(wb, ws, "ภาพรวมหนี้");
                     XLSX.writeFile(wb, `ภาพรวมหนี้_${section}_${new Date().toISOString().slice(0,10)}.xlsx`);
                     toast.success("ดาวน์โหลดสำเร็จ", { id: toastId });
