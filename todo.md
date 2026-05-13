@@ -1588,3 +1588,7 @@ Task list:
 - [x] debtDb.ts (listDebtTarget): แก้ suspendedFromPeriod = Math.max(2, lastNormalPeriod + 1) สำหรับ ระงับสัญญา/หนี้เสีย
 - [x] debtDb.ts (listDebtTargetStream): แก้ suspendedFromPeriod = Math.max(2, lastNormalPeriod + 1) สำหรับ ระงับสัญญา/หนี้เสีย
 - [x] ยกเลิก N+1 rule ใน DebtReport.tsx (tab=target) — กลับเป็น 0/X เหมือนเดิม (server จัดการ suspendedFromPeriod ≥ 2 แล้ว)
+- [x] debtDb.ts (listDebtTarget): แก้ suspendedFromPeriod = Math.max(2, firstSuspended.period) สำหรับ ระงับสัญญา firstSuspended path
+- [x] debtDb.ts (listDebtTarget): แก้ suspendedFromPeriod = 2 สำหรับ ระงับสัญญา fallback path (Phase 9AK)
+- [x] debtDb.ts (listDebtTargetStream): แก้ suspendedFromPeriod = Math.max(2, firstSuspended.period) สำหรับ ระงับสัญญา firstSuspended path
+- [x] debtDb.ts (listDebtTargetStream): แก้ suspendedFromPeriod = 2 สำหรับ ระงับสัญญา fallback path (Phase 9AK)
