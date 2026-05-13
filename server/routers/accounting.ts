@@ -13,6 +13,8 @@ import {
   getExpenseSummary,
   getIncomeSummaryByPeriod,
   getExpenseSummaryByPeriod,
+  listFinance,
+  getFinanceSummaryByPeriod,
   type IncomeType,
   type ExpenseType,
 } from "../accountingDb";
@@ -226,6 +228,50 @@ export const accountingRouter = router({
       } catch (e: any) {
         const mysqlMsg = e?.cause?.message ?? e?.cause?.sqlMessage ?? e?.message ?? String(e);
         console.error('[getExpenseSummaryByPeriod] error:', mysqlMsg);
+        throw e;
+      }
+    }),
+
+  /**
+   * ดึงรายการยอดจัดไฟแนนซ์ พร้อม pagination และ filter
+   */
+  listFinance: appProcedure
+    .input(
+      z.object({
+        section: z.string(),
+        search: z.string().optional(),
+        dateFrom: z.string().optional(),
+        dateTo: z.string().optional(),
+        page: z.number().int().min(1).optional().default(1),
+        pageSize: z.number().int().min(1).max(1000).optional().default(50),
+      }),
+    )
+    .query(async ({ input }) => {
+      const { section, search, dateFrom, dateTo, page, pageSize } = input;
+      if (section !== "Boonphone" && section !== "Fastfone365") return { rows: [], total: 0 };
+      return listFinance({ section, search, dateFrom, dateTo, page, pageSize });
+    }),
+
+  /**
+   * สรุปยอดจัดไฟแนนซ์ แยกตามปี หรือ เดือน
+   */
+  getFinanceSummaryByPeriod: appProcedure
+    .input(
+      z.object({
+        section: z.string(),
+        groupBy: z.enum(["year", "month"]),
+        years: z.array(z.number().int()).optional(),
+        months: z.array(z.number().int().min(1).max(12)).optional(),
+      }),
+    )
+    .query(async ({ input }) => {
+      const { section, groupBy, years, months } = input;
+      if (section !== "Boonphone" && section !== "Fastfone365") return [];
+      try {
+        return await getFinanceSummaryByPeriod({ section, groupBy, years, months });
+      } catch (e: any) {
+        const mysqlMsg = e?.cause?.message ?? e?.cause?.sqlMessage ?? e?.message ?? String(e);
+        console.error('[getFinanceSummaryByPeriod] error:', mysqlMsg);
         throw e;
       }
     }),

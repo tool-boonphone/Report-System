@@ -1602,3 +1602,10 @@ Task list:
 - [x] วิเคราะห์ root cause: streamCollectedFromCache ดึง targetResult โดยไม่มี contract_no/customer_name/approve_date/contract_status/product_type/installment_count/debt_range ทำให้สัญญาที่ไม่มี payRows แสดงเป็น '-'
 - [x] แก้ streamCollectedFromCache targetResult SQL — เพิ่ม contract_no, customer_name, approve_date, contract_status, product_type, installment_count, debt_range ใน SELECT
 - [x] แก้ getCollectedChunk targetResult SQL — เพิ่ม contract_no, customer_name, approve_date, contract_status, product_type, installment_count, debt_range ใน SELECT
+
+## Feature: ยอดจัดไฟแนนซ์ในเมนูรายจ่าย (2026-05-14)
+- [ ] ศึกษาโครงสร้างหน้าค่าคอมมิชชั่น (Expenses.tsx หรือ page ที่เกี่ยวข้อง) และ backend procedure ที่ดึงข้อมูล commission
+- [ ] เพิ่ม backend procedure/query สำหรับดึงข้อมูลยอดจัดไฟแนนซ์ (finance_amount) ต่อสัญญา ถ้า procedure เดิมยังไม่ครอบคลุม
+- [ ] เพิ่มแถบ "รายการยอดจัดไฟแนนซ์" ในหน้ารายจ่าย วางไว้ก่อนแถบ "รายการค่าคอมมิชชั่น" ใช้ format เดียวกัน
+- [ ] แถบสรุปรายเดือน — เพิ่มคอลัมน์ "ยอดจัดไฟแนนซ์" ไว้ก่อนคอลัมน์ "ค่าคอมมิชชั่น" (sum ต่อเดือน)
+- [ ] แถบสรุปรายปี — เพิ่มคอลัมน์ "ยอดจัดไฟแนนซ์" ไว้ก่อนคอลัมน์ "ค่าคอมมิชชั่น" (sum ต่อปี)

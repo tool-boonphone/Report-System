@@ -796,3 +796,114 @@ export async function getExpenseSummaryByPeriod(
     };
   });
 }
+
+// ─── Finance (ยอดจัดไฟแนนซ์) ──────────────────────────────────────────────────
+export interface FinanceRow {
+  id: number;
+  contractNo: string;
+  customerName: string | null;
+  approveDate: string | null;
+  financeAmount: number;
+  productType: string | null;
+  partnerCode: string | null;
+  partnerName: string | null;
+}
+export interface FinanceParams {
+  section: SectionKey;
+  search?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  page?: number;
+  pageSize?: number;
+}
+export interface FinanceSummaryRow {
+  period: string;
+  "ยอดจัดไฟแนนซ์": number;
+  total: number;
+}
+export interface FinanceSummaryParams {
+  section: SectionKey;
+  groupBy: "year" | "month";
+  years?: number[];
+  months?: number[];
+}
+
+/** ดึงรายการยอดจัดไฟแนนซ์ (finance_amount) จาก contracts */
+export async function listFinance(params: FinanceParams): Promise<{ rows: FinanceRow[]; total: number }> {
+  const db = await getDb();
+  if (!db) return { rows: [], total: 0 };
+  const { section, search, dateFrom, dateTo, page = 1, pageSize = 50 } = params;
+  const offset = (page - 1) * pageSize;
+  const esc = (v: string) => v.replace(/'/g, "''");
+  const conditions: string[] = [
+    `c.section = '${esc(section)}'`,
+    `c.finance_amount IS NOT NULL`,
+    `c.finance_amount > 0`,
+  ];
+  if (search) conditions.push(`(c.contract_no LIKE '%${esc(search)}%' OR c.customer_name LIKE '%${esc(search)}%')`);
+  if (dateFrom) conditions.push(`c.approve_date >= '${esc(dateFrom)}'`);
+  if (dateTo) conditions.push(`c.approve_date <= '${esc(dateTo)}'`);
+  const whereStr = conditions.join(" AND ");
+  const [countResult, dataResult] = await Promise.all([
+    db.execute(sql.raw(`SELECT COUNT(*) AS total FROM contracts c WHERE ${whereStr}`)),
+    db.execute(sql.raw(`
+      SELECT c.id, c.contract_no, c.customer_name, c.approve_date,
+             c.finance_amount, c.product_type, c.partner_code, c.partner_name
+      FROM contracts c
+      WHERE ${whereStr} AND c.approve_date != ''
+      ORDER BY c.approve_date DESC, c.id DESC
+      LIMIT ${pageSize} OFFSET ${offset}
+    `)),
+  ]);
+  const countArr: any[] = (countResult as any)[0] ?? countResult;
+  const total = Number(countArr[0]?.total ?? 0);
+  const dataArr: any[] = (dataResult as any)[0] ?? dataResult;
+  const rows: FinanceRow[] = (dataArr ?? []).map((r: any) => ({
+    id: Number(r.id),
+    contractNo: r.contract_no ?? "",
+    customerName: r.customer_name ?? null,
+    approveDate: r.approve_date ?? null,
+    financeAmount: Number(r.finance_amount ?? 0),
+    productType: r.product_type ?? null,
+    partnerCode: r.partner_code ?? null,
+    partnerName: r.partner_name ?? null,
+  }));
+  return { rows, total };
+}
+
+/** สรุปยอดจัดไฟแนนซ์แยกตามปี หรือ เดือน */
+export async function getFinanceSummaryByPeriod(params: FinanceSummaryParams): Promise<FinanceSummaryRow[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const { section, groupBy, years, months } = params;
+  const esc = (v: string) => v.replace(/'/g, "''");
+  const conditions: string[] = [
+    `c.section = '${esc(section)}'`,
+    `c.finance_amount IS NOT NULL`,
+    `c.finance_amount > 0`,
+    `c.approve_date IS NOT NULL`,
+    `c.approve_date != ''`,
+  ];
+  if (years && years.length > 0) {
+    conditions.push(`SUBSTRING(c.approve_date, 1, 4) IN (${years.map(y => "'" + y + "'").join(",")})`);
+  }
+  if (months && months.length > 0) {
+    conditions.push(`SUBSTRING(c.approve_date, 6, 2) IN (${months.map(m => "'" + String(m).padStart(2, "0") + "'").join(",")})`);
+  }
+  const whereStr = conditions.join(" AND ");
+  const periodExpr = groupBy === "year"
+    ? `SUBSTRING(c.approve_date, 1, 4)`
+    : `SUBSTRING(c.approve_date, 1, 7)`;
+  const result = await db.execute(sql.raw(`
+    SELECT ${periodExpr} AS period, SUM(COALESCE(c.finance_amount, 0)) AS fin
+    FROM contracts c
+    WHERE ${whereStr}
+    GROUP BY ${periodExpr}
+    ORDER BY ${periodExpr} ASC
+  `));
+  const arr: any[] = (result as any)[0] ?? result;
+  return (arr ?? []).map((r: any) => {
+    const fin = Number(r.fin ?? 0);
+    return { period: r.period ?? "", "ยอดจัดไฟแนนซ์": fin, total: fin };
+  });
+}
