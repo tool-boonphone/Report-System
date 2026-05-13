@@ -112,6 +112,7 @@ export const DEBT_BUCKETS = [
   "ระงับสัญญา",
   "สิ้นสุดสัญญา",
   "หนี้เสีย",
+  "ยกเลิกสัญญา",
 ] as const;
 export type DebtBucket = (typeof DEBT_BUCKETS)[number];
 
@@ -302,6 +303,7 @@ async function queryTarget(
         WHEN base.contract_status = 'หนี้เสีย'      THEN 'หนี้เสีย'
         WHEN base.contract_status = 'ระงับสัญญา'   THEN 'ระงับสัญญา'
         WHEN base.contract_status = 'สิ้นสุดสัญญา' THEN 'สิ้นสุดสัญญา'
+        WHEN base.contract_status = 'ยกเลิกสัญญา' THEN 'ยกเลิกสัญญา'
         ELSE COALESCE(base.debt_range, 'ปกติ')
       END AS bucket,
       COUNT(DISTINCT base.contract_external_id) AS contract_count,
@@ -376,6 +378,7 @@ async function queryPaid(
         WHEN dcc.contract_status = 'หนี้เสีย'      THEN 'หนี้เสีย'
         WHEN dcc.contract_status = 'ระงับสัญญา'   THEN 'ระงับสัญญา'
         WHEN dcc.contract_status = 'สิ้นสุดสัญญา' THEN 'สิ้นสุดสัญญา'
+        WHEN dcc.contract_status = 'ยกเลิกสัญญา' THEN 'ยกเลิกสัญญา'
         ELSE COALESCE(dtc_latest.debt_range, 'ปกติ')
       END AS bucket,
       COUNT(DISTINCT dcc.contract_external_id)                                                       AS contract_count,
@@ -524,6 +527,7 @@ async function queryDue(
         WHEN base.contract_status = 'หนี้เสีย'      THEN 'หนี้เสีย'
         WHEN base.contract_status = 'ระงับสัญญา'   THEN 'ระงับสัญญา'
         WHEN base.contract_status = 'สิ้นสุดสัญญา' THEN 'สิ้นสุดสัญญา'
+        WHEN base.contract_status = 'ยกเลิกสัญญา' THEN 'ยกเลิกสัญญา'
         ELSE COALESCE(base.debt_range, 'ปกติ')
       END AS bucket,
       COUNT(DISTINCT base.contract_external_id) AS contract_count,
@@ -612,6 +616,7 @@ async function queryNotYetDue(
         WHEN base.contract_status = 'หนี้เสีย'      THEN 'หนี้เสีย'
         WHEN base.contract_status = 'ระงับสัญญา'   THEN 'ระงับสัญญา'
         WHEN base.contract_status = 'สิ้นสุดสัญญา' THEN 'สิ้นสุดสัญญา'
+        WHEN base.contract_status = 'ยกเลิกสัญญา' THEN 'ยกเลิกสัญญา'
         ELSE COALESCE(base.debt_range, 'ปกติ')
       END AS bucket,
       COUNT(DISTINCT base.contract_external_id) AS contract_count,
@@ -693,6 +698,7 @@ async function queryInstallTotal(
         WHEN latest.contract_status = 'หนี้เสีย'      THEN 'หนี้เสีย'
         WHEN latest.contract_status = 'ระงับสัญญา'   THEN 'ระงับสัญญา'
         WHEN latest.contract_status = 'สิ้นสุดสัญญา' THEN 'สิ้นสุดสัญญา'
+        WHEN latest.contract_status = 'ยกเลิกสัญญา' THEN 'ยกเลิกสัญญา'
         ELSE COALESCE(latest.debt_range, 'ปกติ')
       END AS bucket,
       COUNT(DISTINCT c.external_id) AS contract_count,
