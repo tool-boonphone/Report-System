@@ -188,9 +188,9 @@ function dccWhere(section: string, opts: {
   paidAtMonths?: string[];
   search?: string;
 }): string {
+  // หมายเหตุ: ไม่ filter ยกเลิกสัญญา ออก เพราะสัญญายกเลิกอาจมียอดชำระเข้ามาก่อนยกเลิก ซึ่งต้องนับรวมในยอดเก็บหนี้
   let w = `dcc.section = '${section}'
-    AND dcc.approve_date IS NOT NULL
-    AND COALESCE(dcc.contract_status, '') != 'ยกเลิกสัญญา'`;
+    AND dcc.approve_date IS NOT NULL`;
 
   if (opts.productType) {
     w += `\n    AND dcc.product_type = '${opts.productType.replace(/'/g, "''")}'`;
