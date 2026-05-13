@@ -1599,5 +1599,6 @@ Task list:
 - [x] เพิ่ม debtRangeToDays helper ใน queryCacheDb.ts เพื่อแปลง bucket label เป็น approximate daysOverdue สำหรับแสดงผล UI
 
 ## Fix: รายการ '-' ไม่มีข้อมูลในหน้ายอดเก็บหนี้ (2026-05-14)
-- [ ] วิเคราะห์ root cause: รายการที่แสดง '-' ในคอลัมน์วันที่อนุมัติ, เลขที่สัญญา, ชื่อ-นามสกุล, งวดผ่อน
-- [ ] แก้ไข logic ให้รายการเหล่านี้มีข้อมูลครบถ้วน
+- [x] วิเคราะห์ root cause: streamCollectedFromCache ดึง targetResult โดยไม่มี contract_no/customer_name/approve_date/contract_status/product_type/installment_count/debt_range ทำให้สัญญาที่ไม่มี payRows แสดงเป็น '-'
+- [x] แก้ streamCollectedFromCache targetResult SQL — เพิ่ม contract_no, customer_name, approve_date, contract_status, product_type, installment_count, debt_range ใน SELECT
+- [x] แก้ getCollectedChunk targetResult SQL — เพิ่ม contract_no, customer_name, approve_date, contract_status, product_type, installment_count, debt_range ใน SELECT
