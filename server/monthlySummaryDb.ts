@@ -396,7 +396,10 @@ async function queryPaid(
       SUM(CASE WHEN dcc.is_bad_debt_row = 0 THEN CAST(dcc.overpaid    AS DECIMAL(18,2)) ELSE 0 END)   AS overpaid_amount,
       SUM(CASE WHEN dcc.is_bad_debt_row = 0 THEN CAST(dcc.total_amount AS DECIMAL(18,2)) ELSE 0 END)  AS installment_paid,
       SUM(CASE WHEN dcc.is_bad_debt_row = 1 THEN CAST(dcc.bad_debt     AS DECIMAL(18,2)) ELSE 0 END)  AS device_sale_amount,
-      SUM(CAST(dcc.total_amount AS DECIMAL(18,2)))                                                     AS total_paid
+      -- total_paid = installment_paid + device_sale_amount
+      -- (is_bad_debt_row=1 มี total_amount=0 แต่ bad_debt มียอด จึงต้องรวม bad_debt ด้วย)
+      SUM(CASE WHEN dcc.is_bad_debt_row = 0 THEN CAST(dcc.total_amount AS DECIMAL(18,2))
+               ELSE CAST(dcc.bad_debt AS DECIMAL(18,2)) END)                                              AS total_paid
     FROM debt_collected_cache dcc
     LEFT JOIN (
       SELECT dtc.section, dtc.contract_external_id, dtc.debt_range

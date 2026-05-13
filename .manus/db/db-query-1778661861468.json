@@ -1,0 +1,110 @@
+{
+  "query": "\nSELECT \n  contract_no, period, total_amount, bad_debt, is_bad_debt_row,\n  principal, interest, fee\nFROM debt_collected_cache \nWHERE section = 'Fastfone365' AND is_bad_debt_row = 1\nLIMIT 10\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT \n  contract_no, period, total_amount, bad_debt, is_bad_debt_row,\n  principal, interest, fee\nFROM debt_collected_cache \nWHERE section = 'Fastfone365' AND is_bad_debt_row = 1\nLIMIT 10\n",
+  "rows": [
+    {
+      "contract_no": "CT0824-NYK001-00003-01",
+      "period": "1",
+      "total_amount": "0.00",
+      "bad_debt": "19000.00",
+      "is_bad_debt_row": "1",
+      "principal": "0.00",
+      "interest": "0.00",
+      "fee": "0.00"
+    },
+    {
+      "contract_no": "CT0824-NRT001-00010-01",
+      "period": "2",
+      "total_amount": "0.00",
+      "bad_debt": "21000.00",
+      "is_bad_debt_row": "1",
+      "principal": "0.00",
+      "interest": "0.00",
+      "fee": "0.00"
+    },
+    {
+      "contract_no": "CT0824-NRT001-00015-01",
+      "period": "4",
+      "total_amount": "0.00",
+      "bad_debt": "3500.00",
+      "is_bad_debt_row": "1",
+      "principal": "0.00",
+      "interest": "0.00",
+      "fee": "0.00"
+    },
+    {
+      "contract_no": "CT0824-NRT001-00019-02",
+      "period": "3",
+      "total_amount": "0.00",
+      "bad_debt": "10500.00",
+      "is_bad_debt_row": "1",
+      "principal": "0.00",
+      "interest": "0.00",
+      "fee": "0.00"
+    },
+    {
+      "contract_no": "CT0824-NRT001-00021-01",
+      "period": "2",
+      "total_amount": "0.00",
+      "bad_debt": "14000.00",
+      "is_bad_debt_row": "1",
+      "principal": "0.00",
+      "interest": "0.00",
+      "fee": "0.00"
+    },
+    {
+      "contract_no": "CT0824-NRT001-00023-01",
+      "period": "2",
+      "total_amount": "0.00",
+      "bad_debt": "7000.00",
+      "is_bad_debt_row": "1",
+      "principal": "0.00",
+      "interest": "0.00",
+      "fee": "0.00"
+    },
+    {
+      "contract_no": "CT0824-NRT001-00031-01",
+      "period": "3",
+      "total_amount": "0.00",
+      "bad_debt": "1500.00",
+      "is_bad_debt_row": "1",
+      "principal": "0.00",
+      "interest": "0.00",
+      "fee": "0.00"
+    },
+    {
+      "contract_no": "CT0924-NRT001-00074-01",
+      "period": "2",
+      "total_amount": "0.00",
+      "bad_debt": "3500.00",
+      "is_bad_debt_row": "1",
+      "principal": "0.00",
+      "interest": "0.00",
+      "fee": "0.00"
+    },
+    {
+      "contract_no": "CT0924-SNI001-00013-02",
+      "period": "2",
+      "total_amount": "0.00",
+      "bad_debt": "7500.00",
+      "is_bad_debt_row": "1",
+      "principal": "0.00",
+      "interest": "0.00",
+      "fee": "0.00"
+    },
+    {
+      "contract_no": "CT0924-NRT001-00080-01",
+      "period": "4",
+      "total_amount": "0.00",
+      "bad_debt": "4000.00",
+      "is_bad_debt_row": "1",
+      "principal": "0.00",
+      "interest": "0.00",
+      "fee": "0.00"
+    }
+  ],
+  "messages": [],
+  "stdout": "contract_no\tperiod\ttotal_amount\tbad_debt\tis_bad_debt_row\tprincipal\tinterest\tfee\nCT0824-NYK001-00003-01\t1\t0.00\t19000.00\t1\t0.00\t0.00\t0.00\nCT0824-NRT001-00010-01\t2\t0.00\t21000.00\t1\t0.00\t0.00\t0.00\nCT0824-NRT001-00015-01\t4\t0.00\t3500.00\t1\t0.00\t0.00\t0.00\nCT0824-NRT001-00019-02\t3\t0.00\t10500.00\t1\t0.00\t0.00\t0.00\nCT0824-NRT001-00021-01\t2\t0.00\t14000.00\t1\t0.00\t0.00\t0.00\nCT0824-NRT001-00023-01\t2\t0.00\t7000.00\t1\t0.00\t0.00\t0.00\nCT0824-NRT001-00031-01\t3\t0.00\t1500.00\t1\t0.00\t0.00\t0.00\nCT0924-NRT001-00074-01\t2\t0.00\t3500.00\t1\t0.00\t0.00\t0.00\nCT0924-SNI001-00013-02\t2\t0.00\t7500.00\t1\t0.00\t0.00\t0.00\nCT0924-NRT001-00080-01\t4\t0.00\t4000.00\t1\t0.00\t0.00\t0.00\n",
+  "stderr": "",
+  "execution_time_ms": 1746
+}

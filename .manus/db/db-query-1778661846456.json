@@ -1,0 +1,26 @@
+{
+  "query": "\nSELECT \n  section,\n  COUNT(*) as row_count,\n  SUM(CASE WHEN is_bad_debt_row = 0 THEN total_amount ELSE 0 END) as installment_paid,\n  SUM(CASE WHEN is_bad_debt_row = 1 THEN bad_debt ELSE 0 END) as device_sale,\n  SUM(CASE WHEN is_bad_debt_row = 1 THEN total_amount ELSE 0 END) as bad_debt_row_total_amount,\n  SUM(total_amount) as total_paid_sum_total_amount\nFROM debt_collected_cache \nGROUP BY section\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute \nSELECT \n  section,\n  COUNT(*) as row_count,\n  SUM(CASE WHEN is_bad_debt_row = 0 THEN total_amount ELSE 0 END) as installment_paid,\n  SUM(CASE WHEN is_bad_debt_row = 1 THEN bad_debt ELSE 0 END) as device_sale,\n  SUM(CASE WHEN is_bad_debt_row = 1 THEN total_amount ELSE 0 END) as bad_debt_row_total_amount,\n  SUM(total_amount) as total_paid_sum_total_amount\nFROM debt_collected_cache \nGROUP BY section\n",
+  "rows": [
+    {
+      "section": "Fastfone365",
+      "row_count": "122356",
+      "installment_paid": "287364745.43",
+      "device_sale": "22720169.58",
+      "bad_debt_row_total_amount": "0.00",
+      "total_paid_sum_total_amount": "287364745.43"
+    },
+    {
+      "section": "Boonphone",
+      "row_count": "4694",
+      "installment_paid": "11661649.40",
+      "device_sale": "0.00",
+      "bad_debt_row_total_amount": "0.00",
+      "total_paid_sum_total_amount": "11661649.40"
+    }
+  ],
+  "messages": [],
+  "stdout": "section\trow_count\tinstallment_paid\tdevice_sale\tbad_debt_row_total_amount\ttotal_paid_sum_total_amount\nFastfone365\t122356\t287364745.43\t22720169.58\t0.00\t287364745.43\nBoonphone\t4694\t11661649.40\t0.00\t0.00\t11661649.40\n",
+  "stderr": "",
+  "execution_time_ms": 1905
+}
