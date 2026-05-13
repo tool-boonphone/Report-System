@@ -1535,3 +1535,14 @@ Task list:
 - [x] Phase 140: สรุปรายเดือน — ยอดเก็บหนี้ไม่ตรงกับหน้ายอดเก็บหนี้และภาพรวมหนี้ (ต่างกัน ~2 ล้านบาท) ต้องแก้ queryPaid ใน monthlySummaryDb.ts
 - [x] เปลี่ยนชื่อแถบ "รายการทั้งหมด" ในหน้ารายจ่ายเป็น "รายการค่าคอมมิชชั่น"
 - [ ] Phase 141: แก้ไข breakdown fields (เงินต้น/ดอกเบี้ย/ค่าดำเนินการ/ค่าปรับ/ค่าปลดล็อก/ชำระเกิน/ขายเครื่อง) ในหน้าสรุปรายเดือนให้ตรงกับหน้ายอดเก็บหนี้และหน้ารายรับรวม 100%
+
+## Phase Refactor — Sync & Populate Cache
+
+- [ ] แยก runner.ts เป็น stages ย่อย: syncCustomers, syncContracts, syncInstallments, syncPayments, syncBadDebt
+- [ ] เปลี่ยน syncCustomers ให้ใช้ parallel batch fetch (batchSize=10) แทน sequential
+- [ ] แยก populateCache.ts เป็น populateTarget.ts และ populateCollected.ts
+- [ ] แก้ populateCollected.ts ให้ populate debt_range จาก debt_target_cache ให้ถูกต้อง
+- [ ] runner.ts เหลือแค่ orchestrator (< 200 บรรทัด)
+- [ ] ตรวจสอบ TypeScript compile ไม่มี errors ใหม่
+- [ ] ทดสอบ Re-Sync ว่า debt_range ถูก populate ลงใน debt_collected_cache
+- [ ] ตรวจสอบหน้าสรุปรายเดือน ตารางยอดเก็บหนี้แสดงข้อมูลแยก bucket ย่อยถูกต้อง
