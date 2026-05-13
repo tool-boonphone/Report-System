@@ -929,6 +929,10 @@ function deriveDebtStatus(
     // Skip payment-record rows (amount=0) — these are payment receipts, not installment schedules.
     // Only real installment rows (amount > 0) should be considered for overdue calculation.
     if (amt <= 0.001) continue;
+    // Skip installments that the API has confirmed as fully paid (ยืนยันการชำระ).
+    // This handles cases where paid_amount < amount due to waived penalties/discounts
+    // but the API's inst_status confirms the period is settled.
+    if (it.inst_status === 'ยืนยันการชำระ') continue;
     // If paid_amount >= amount, the installment is fully paid regardless of what balance says.
     // This handles cases where the API returns a stale balance (before payment was applied)
     // but paid_amount has already been summed correctly via dedup logic.
