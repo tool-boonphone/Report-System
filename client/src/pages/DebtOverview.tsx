@@ -902,9 +902,8 @@ export default function DebtOverview() {
         row.collectedOverpaid += p.overpaid ?? 0;
         row.collectedBadDebt += p.badDebt ?? 0;
         row.deviceSaleAmount += p.badDebt ?? 0;
-        // ptTotal = sum(p.total) เท่านั้น — ไม่รวม p.badDebt (ยอดขายเครื่อง) เพราะแยกคอลัมน์อยู่แล้ว
-        // p.total = ยอดที่ลูกค้าจ่ายจริง (หลังหักส่วนลด) ไม่รวมยอดขายเครื่อง
-        row.collectedPtTotal += (p.total ?? 0);
+        // ptTotal = sum(p.total + p.badDebt) เหมือน DebtReport — ใช้เป็นฐานคำนวณ collectedTotal
+        row.collectedPtTotal += (p.total ?? 0) + (p.badDebt ?? 0);
       }
     }
 
@@ -926,8 +925,8 @@ export default function DebtOverview() {
         (bv.unlockFee ? row.debtTargetUnlockFee : 0);
 
       const cv = badgeVisibility;
-      // ยอดเก็บหนี้ — ใช้ ptTotal เป็นฐาน (Phase 135: ไม่รวม p.badDebt = ยอดขายเครื่อง)
-      // ptTotal = sum(p.total) = ยอดที่ลูกค้าจ่ายจริง ไม่รวมยอดขายเครื่อง (แยกคอลัมน์อยู่แล้ว)
+      // ยอดเก็บหนี้ — ใช้ ptTotal เป็นฐานเหมือน DebtReport (Phase 134)
+      // ptTotal = sum(p.total + p.badDebt) = ยอดที่ลูกค้าจ่ายจริง (หลังหักส่วนลดแล้ว)
       // เมื่อปิด toggle ใด → หักยอดของ field นั้นออกจาก ptTotal
       row.collectedTotal = row.collectedPtTotal
         - (!cv.principal ? row.collectedPrincipal : 0)
@@ -990,8 +989,8 @@ export default function DebtOverview() {
       ptTotal += row.collectedPtTotal;
     }
     const bv = badgeVisibility;
-    // ยอดเก็บหนี้ — ใช้ ptTotal เป็นฐาน (Phase 135: ไม่รวม p.badDebt = ยอดขายเครื่อง)
-    // ptTotal = sum(p.total) = ยอดที่ลูกค้าจ่ายจริง ไม่รวมยอดขายเครื่อง (แยกคอลัมน์อยู่แล้ว)
+    // รายรับรวม — ใช้ ptTotal เป็นฐานเหมือน DebtReport (Phase 134)
+    // ptTotal = sum(p.total + p.badDebt) = ยอดที่ลูกค้าจ่ายจริง (หลังหักส่วนลดแล้ว)
     const total = ptTotal
       - (!bv.principal ? principal : 0)
       - (!bv.interest ? interest : 0)
