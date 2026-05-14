@@ -64,8 +64,6 @@ export interface SyncLockInfo {
   stageIndex: number;
   /** Total number of stages */
   totalStages: number;
-  /** Running total of rows fetched/upserted so far (updated per batch) */
-  rowCount: number;
 }
 
 type LockMap = Record<string, SyncLockInfo | null>;
@@ -186,7 +184,6 @@ export async function runSectionSync(
     currentStage: "เริ่มต้น",
     stageIndex: -1,
     totalStages: SYNC_STAGES.length,
-    rowCount: 0,
   };
   // Reset cancel flag before starting
   _cancelRequested[section] = false;
@@ -543,7 +540,7 @@ async function syncCustomers(
           const currentStage = `customers (${page}/${totalPages})`;
           const lock = _locks[section];
           if (lock) {
-            _locks[section] = { ...lock, progress, currentStage, rowCount: lock.rowCount + dbRows.length };
+            _locks[section] = { ...lock, progress, currentStage };
           }
           // Save resumePage = next page to fetch (so restart skips already-done pages)
           updateSyncLogStage({ id: logId, currentStage, progress, resumePage: page + 1 }).catch(() => {});
@@ -643,11 +640,7 @@ async function syncContracts(
           buffer.push(row);
         }
         if (buffer.length >= 500) {
-          const upserted = await upsertContracts(buffer.splice(0, buffer.length));
-          rowCount += upserted;
-          // Update running rowCount in lock so UI can show real-time count
-          const lockSnap = _locks[section];
-          if (lockSnap) _locks[section] = { ...lockSnap, rowCount: lockSnap.rowCount + upserted };
+          rowCount += await upsertContracts(buffer.splice(0, buffer.length));
         }
         // Save resume_page so a Cloud Run kill can be recovered by resuming from next page
         updateSyncLogStage({ id: log.id, currentStage: "contracts", progress: Math.round((page / totalPages) * 100), resumePage: page + 1 }).catch(() => {});
@@ -718,10 +711,9 @@ async function syncInstallments(
         async (items) => {
           for (const it of items) buffer.push(mapInstallment(section, it));
           if (buffer.length >= 1000) {
-            const upserted = await upsertInstallments(buffer.splice(0, buffer.length));
-            rowCount += upserted;
-            const lockSnap = _locks[section];
-            if (lockSnap) _locks[section] = { ...lockSnap, rowCount: lockSnap.rowCount + upserted };
+            rowCount += await upsertInstallments(
+              buffer.splice(0, buffer.length),
+            );
           }
         },
         500,
@@ -787,10 +779,7 @@ async function syncPayments(
           apiExternalIds.add(String(it.payment_id));
         }
         if (buffer.length >= 1000) {
-          const upserted = await upsertPayments(buffer.splice(0, buffer.length));
-          rowCount += upserted;
-          const lockSnap = _locks[section];
-          if (lockSnap) _locks[section] = { ...lockSnap, rowCount: lockSnap.rowCount + upserted };
+          rowCount += await upsertPayments(buffer.splice(0, buffer.length));
         }
       },
       1000,   // ข้อ 1: page size 1000 (เดิม 500)

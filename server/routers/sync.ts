@@ -66,7 +66,6 @@ export const syncRouter = router({
         currentStage: bpDb?.currentStage ?? bpMem?.currentStage ?? null,
         stageIndex: bpMem?.stageIndex ?? null,
         totalStages: bpMem?.totalStages ?? null,
-        rowCount: bpMem?.rowCount ?? null,
       },
       Fastfone365: {
         running: ffRunning,
@@ -75,7 +74,6 @@ export const syncRouter = router({
         currentStage: ffDb?.currentStage ?? ffMem?.currentStage ?? null,
         stageIndex: ffMem?.stageIndex ?? null,
         totalStages: ffMem?.totalStages ?? null,
-        rowCount: ffMem?.rowCount ?? null,
       },
       active: await getRunningSyncs(),
     };
