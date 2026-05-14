@@ -88,6 +88,7 @@ function SyncWaitingScreen({
   const currentStage = info?.currentStage ?? "";
   const stageIndex = info?.stageIndex ?? 0;
   const totalStages = info?.totalStages ?? 5;
+  const rowCount = (info as any)?.rowCount as number | null ?? null;
   const startedAt = info?.startedAt ? new Date(info.startedAt) : null;
 
   // คำนวณเวลาที่ใช้ไป
@@ -133,6 +134,11 @@ function SyncWaitingScreen({
           />
         </div>
         <h1 className="text-xl font-bold text-gray-900">ระบบกำลังอัพเดทข้อมูล</h1>
+        {/* Pulse badge — บอก user ว่ายังทำงานอยู่ */}
+        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-green-50 text-green-700 border border-green-200 mt-2">
+          <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+          กำลัง Sync อยู่
+        </span>
         <p className="text-sm text-gray-500 mt-1">
           {section} — กรุณารอสักครู่...
         </p>
@@ -180,9 +186,20 @@ function SyncWaitingScreen({
           </div>
         </div>
 
+        {/* Row count real-time */}
+        {rowCount !== null && rowCount > 0 && (
+          <div className="flex items-center justify-center gap-1.5 mt-4 py-2 px-3 rounded-xl bg-gray-50 border border-gray-100">
+            <span className="text-xs text-gray-500">ดึงข้อมูลแล้ว</span>
+            <span className="text-sm font-bold" style={{ color: accent }}>
+              {rowCount.toLocaleString('th-TH')}
+            </span>
+            <span className="text-xs text-gray-500">รายการ</span>
+          </div>
+        )}
+
         {/* Elapsed time */}
         {startedAt && (
-          <p className="text-xs text-gray-400 text-center mt-4">
+          <p className="text-xs text-gray-400 text-center mt-3">
             ใช้เวลาไปแล้ว {formatElapsed(elapsed)}
           </p>
         )}
