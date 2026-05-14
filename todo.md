@@ -1634,7 +1634,7 @@ Task list:
 - [ ] debtExportBuilder (pre-built S3): header สี + cell type number + แยกวันที่/เวลา + sub-rows italic
 
 ## Bug Fix: Resume Sync หลัง Cloud Run Kill (2026-05-14)
-- [ ] ดึง resume_page จาก last failed sync log สำหรับ contracts stage
-- [ ] ส่ง startPage ไปยัง syncContracts เพื่อ resume จาก page ที่ค้างไว้
-- [ ] ดึง resume_page สำหรับ customers stage ด้วย (กรณี Boonphone ค้างที่ customers)
-- [ ] แสดง "Resuming from page X" ใน sync log เพื่อ debug
+- [x] ดึง resume_page จาก last failed sync log สำหรับ contracts stage
+- [x] ส่ง startPage ไปยัง syncContracts เพื่อ resume จาก page ที่ค้างไว้
+- [x] ดึง resume_page สำหรับ customers stage ด้วย (กรณี Boonphone ค้างที่ customers)
+- [x] แสดง "Resuming from page X" ใน sync log เพื่อ debug
