@@ -101,6 +101,41 @@ export async function getLastCustomersResumePage(section: SectionKey): Promise<n
 }
 
 /**
+ * Get the resume_page for a previous contracts sync that was killed mid-way.
+ * Returns 0 if no recent error row with resume_page > 0 exists (start from page 1).
+ *
+ * Uses a 3-hour window because contracts sync (including IMEI enrichment)
+ * can take up to 2.5 hours for 17k+ contracts.
+ * Only resumes if the error row was started within the window AND has resume_page > 0.
+ */
+export async function getLastContractsResumePage(section: SectionKey): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  // 3-hour window: contracts sync (list + IMEI enrichment) can take ~2.5h
+  const RESUME_WINDOW_MS = 3 * 60 * 60 * 1000;
+  const cutoff = new Date(Date.now() - RESUME_WINDOW_MS);
+  const rows = await db
+    .select({ resumePage: syncLogs.resumePage, status: syncLogs.status, startedAt: syncLogs.startedAt })
+    .from(syncLogs)
+    .where(
+      and(
+        eq(syncLogs.section, section),
+        eq(syncLogs.entity, "contracts"),
+        eq(syncLogs.status, "error"),
+        sql`${syncLogs.startedAt} >= ${cutoff}`,
+        sql`${syncLogs.resumePage} > 0`,
+      ),
+    )
+    .orderBy(desc(syncLogs.startedAt))
+    .limit(1);
+  const resumePage = rows[0]?.resumePage ?? 0;
+  if (resumePage > 1) {
+    console.log(`[syncLog] ${section}: resuming contracts from page ${resumePage} (killed row started ${rows[0]?.startedAt?.toISOString()})`);
+  }
+  return resumePage;
+}
+
+/**
  * Get running sync status from DB for a section.
  * Returns null if no sync is in_progress (or if it's stale > 185 minutes).
  * 185 min = OVERALL_TIMEOUT_MS (180 min) + 5 min buffer.

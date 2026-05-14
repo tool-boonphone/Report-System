@@ -30,6 +30,7 @@ import {
   finishSyncLog,
   updateSyncLogStage,
   getLastCustomersResumePage,
+  getLastContractsResumePage,
 } from "./syncLog";
 import type { SectionKey, SyncTrigger } from "../../shared/const";
 import { invalidateDebtCache } from "../debtCache";
@@ -295,13 +296,16 @@ async function doSync(
     }
 
     // 3) Contracts -- list + detail enrichment.
+    // Resume from last killed page if available (Cloud Run kill recovery).
     checkCancel();
     setStage(section, 2);
+    const contractsStartPage = await getLastContractsResumePage(section);
     const contractRows = await syncContracts(
       client,
       section,
       partnersById,
       customersById,
+      contractsStartPage > 0 ? contractsStartPage : 1,
     );
     overallRows += contractRows;
 
@@ -589,12 +593,18 @@ async function syncContracts(
   section: SectionKey,
   partnersById: Map<string, PartnerListItem>,
   customersById: Map<string, CustomerListItem>,
+  startPage = 1,
 ): Promise<number> {
   const log = await insertSyncLog({
     section,
     entity: "contracts",
     triggeredBy: "on-demand",
   });
+  if (startPage > 1) {
+    console.log(`[sync] ${section}: resuming contracts from page ${startPage}`);
+    // Record the resume start page immediately so we can detect it in logs
+    updateSyncLogStage({ id: log.id, currentStage: "contracts", progress: 0, resumePage: startPage }).catch(() => {});
+  }
   let rowCount = 0;
   try {
     const buffer: any[] = [];
@@ -602,7 +612,7 @@ async function syncContracts(
       "contract",
       (d) => d?.contracts,
       { action: "all" },
-      async (items) => {
+      async (items, page, totalPages) => {
         for (const it of items) {
           const row: any = mapContractListItem(section, it);
           // Enrich with partner fields we already have.
@@ -632,8 +642,12 @@ async function syncContracts(
         if (buffer.length >= 500) {
           rowCount += await upsertContracts(buffer.splice(0, buffer.length));
         }
+        // Save resume_page so a Cloud Run kill can be recovered by resuming from next page
+        updateSyncLogStage({ id: log.id, currentStage: "contracts", progress: Math.round((page / totalPages) * 100), resumePage: page + 1 }).catch(() => {});
       },
       200,
+      undefined, // timeoutMs — use default
+      startPage,  // resume from last saved page if previous run was killed
     );
     // Flush remainder
     if (buffer.length) {
