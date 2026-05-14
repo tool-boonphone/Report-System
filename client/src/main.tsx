@@ -61,6 +61,63 @@ queryClient.getMutationCache().subscribe(event => {
 const TRPC_TIMEOUT_MS = 120_000; // 120 seconds (default)
 const SYNC_TRIGGER_TIMEOUT_MS = 40 * 60 * 1000; // 40 minutes for sync.trigger
 
+/**
+ * Cold Start Retry: Cloud Run ใช้ min-instances=0 ทำให้ server shutdown เมื่อไม่มีคนใช้
+ * เมื่อ server กำลัง boot ใหม่ จะส่ง HTTP 502/503 หรือ HTML "Service Unavailable" แทน JSON
+ * ทำให้ tRPC parse fail ด้วย "Unexpected token 'S'" หรือ "Unexpected token '<'"
+ * → ตรวจจับ error นี้แล้ว retry อัตโนมัติสูงสุด 5 ครั้ง ด้วย delay เพิ่มขึ้นเรื่อยๆ
+ */
+const COLD_START_RETRY_DELAYS = [3000, 5000, 8000, 12000, 15000]; // ms
+
+async function fetchWithColdStartRetry(
+  input: RequestInfo | URL,
+  init: RequestInit | undefined,
+  timeoutMs: number,
+): Promise<Response> {
+  const doFetch = () => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    return globalThis.fetch(input, {
+      ...(init ?? {}),
+      credentials: "include",
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timeoutId));
+  };
+
+  // ลองครั้งแรก
+  let res = await doFetch();
+
+  // ถ้า server ส่ง 502/503 → cold start → retry
+  if (res.status === 502 || res.status === 503) {
+    for (const delay of COLD_START_RETRY_DELAYS) {
+      console.warn(`[tRPC] Cold start detected (HTTP ${res.status}), retrying in ${delay}ms...`);
+      await new Promise((r) => setTimeout(r, delay));
+      res = await doFetch();
+      if (res.status !== 502 && res.status !== 503) break;
+    }
+    return res;
+  }
+
+  // ถ้า response ไม่ใช่ JSON (HTML error page จาก cold start / proxy error)
+  // ตรวจ content-type: ถ้าไม่มี application/json และไม่มี text/plain → น่าจะเป็น HTML
+  const contentType = res.headers.get("content-type") ?? "";
+  if (
+    res.ok &&
+    !contentType.includes("application/json") &&
+    !contentType.includes("text/plain")
+  ) {
+    for (const delay of COLD_START_RETRY_DELAYS) {
+      console.warn(`[tRPC] Non-JSON response (content-type: "${contentType}"), retrying in ${delay}ms...`);
+      await new Promise((r) => setTimeout(r, delay));
+      res = await doFetch();
+      const ct = res.headers.get("content-type") ?? "";
+      if (ct.includes("application/json") || ct.includes("text/plain")) break;
+    }
+  }
+
+  return res;
+}
+
 const trpcClient = trpc.createClient({
   links: [
     httpBatchLink({
@@ -73,13 +130,7 @@ const trpcClient = trpc.createClient({
           : (input as Request).url;
         const isSyncTrigger = url.includes("sync.trigger");
         const timeoutMs = isSyncTrigger ? SYNC_TRIGGER_TIMEOUT_MS : TRPC_TIMEOUT_MS;
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-        return globalThis.fetch(input, {
-          ...(init ?? {}),
-          credentials: "include",
-          signal: controller.signal,
-        }).finally(() => clearTimeout(timeoutId));
+        return fetchWithColdStartRetry(input, init, timeoutMs);
       },
     }),
   ],
