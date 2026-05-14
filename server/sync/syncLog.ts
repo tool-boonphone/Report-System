@@ -346,23 +346,30 @@ export async function clearAllStuckSyncLogs(): Promise<number> {
   return affectedRows;
 }
 
-/** Most recent successful sync for a given (section, entity). */
+/**
+ * Most recent successful sync for a given (section, entity).
+ *
+ * FIX (2026-05-14): When no entity is specified (used by scheduler to check
+ * if today's sync has run), only check entity='all' rows — not sub-entity rows
+ * (partners, customers, contracts, etc.). Sub-entity success rows from a
+ * partially-completed sync should NOT prevent the scheduler from running the
+ * full sync again.
+ */
 export async function getLastSyncedAt(params: {
   section: SectionKey;
   entity?: string;
 }): Promise<Date | null> {
   const db = await getDb();
   if (!db) return null;
-  const cond = params.entity
-    ? and(
-        eq(syncLogs.section, params.section),
-        eq(syncLogs.entity, params.entity),
-        eq(syncLogs.status, "success"),
-      )
-    : and(
-        eq(syncLogs.section, params.section),
-        eq(syncLogs.status, "success"),
-      );
+  // When entity is specified, use it directly (e.g. for UI display).
+  // When entity is NOT specified (scheduler check), only look at entity='all'
+  // so sub-entity success rows don't falsely indicate a completed full sync.
+  const entityFilter = params.entity ?? "all";
+  const cond = and(
+    eq(syncLogs.section, params.section),
+    eq(syncLogs.entity, entityFilter),
+    eq(syncLogs.status, "success"),
+  );
   const rows = await db
     .select({ finishedAt: syncLogs.finishedAt })
     .from(syncLogs)
@@ -413,6 +420,12 @@ export async function listSyncLogs(section?: SectionKey, limit = 50) {
  * Returns the most recent attempt's timestamp for a section where the status
  * was "error". Used by the scheduler to cool off sections whose credentials
  * are invalid (prevents noisy login-fail loops on every restart).
+ *
+ * FIX (2026-05-14): Only check entity='all' rows — not sub-entity rows
+ * (customers, contracts, etc.). Sub-entity errors are expected during resume
+ * and should NOT block the scheduler from retrying the full sync.
+ * Previously, a cleared entity='customers' error row would block Boonphone
+ * from running for 30 min even though the overall sync hadn't started yet.
  */
 export async function getLastErrorAt(params: {
   section: SectionKey;
@@ -425,7 +438,12 @@ export async function getLastErrorAt(params: {
       status: syncLogs.status,
     })
     .from(syncLogs)
-    .where(eq(syncLogs.section, params.section))
+    .where(
+      and(
+        eq(syncLogs.section, params.section),
+        eq(syncLogs.entity, "all"),  // Only overall sync rows, not sub-entity rows
+      ),
+    )
     .orderBy(desc(syncLogs.startedAt))
     .limit(1);
   const last = rows[0];
