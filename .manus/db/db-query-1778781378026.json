@@ -1,0 +1,9 @@
+{
+  "query": "UPDATE sync_logs \nSET status = 'success', error_message = NULL \nWHERE section = 'Boonphone' \n  AND status = 'error' \n  AND error_message LIKE 'Auto-cleared%';",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute UPDATE sync_logs \nSET status = 'success', error_message = NULL \nWHERE section = 'Boonphone' \n  AND status = 'error' \n  AND error_message LIKE 'Auto-cleared%';",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 1810
+}
