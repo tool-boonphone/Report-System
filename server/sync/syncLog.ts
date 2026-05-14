@@ -68,18 +68,22 @@ export async function updateSyncLogStage(params: {
  * Get the last successfully fetched customers page for a section.
  * Used to resume customers sync from where it left off after a Cloud Run kill.
  * Returns 0 if no previous run found (start from page 1).
+ *
+ * Strategy 1: Check entity='customers' in_progress row with resume_page > 0
+ *   (current session is still running — resume from last saved page).
+ * Strategy 2: Fall back to entity='all' row killed during 'customers' stage.
+ *   (clearAllStuckSyncLogs clears entity='customers' rows but overall log
+ *    entity='all' retains the resume_page from the last updateSyncLogStage call)
  */
 export async function getLastCustomersResumePage(section: SectionKey): Promise<number> {
   const db = await getDb();
   if (!db) return 0;
-  // Only resume from an in_progress row that:
-  //  1. Was started within the last 30 minutes (not stale/killed)
-  //  2. Has resume_page > 0 (has actually made progress)
-  // This prevents resuming from a page that was stuck/killed in a previous session.
-  // If the previous run was killed, start fresh from page 1 instead.
+
+  // Strategy 1: entity='customers' in_progress row with resume_page > 0
+  // (within 30 min — current session is still running)
   const RESUME_WINDOW_MS = 30 * 60 * 1000; // 30 minutes
   const cutoff = new Date(Date.now() - RESUME_WINDOW_MS);
-  const rows = await db
+  const customerRows = await db
     .select({ resumePage: syncLogs.resumePage, status: syncLogs.status, startedAt: syncLogs.startedAt })
     .from(syncLogs)
     .where(
@@ -87,15 +91,44 @@ export async function getLastCustomersResumePage(section: SectionKey): Promise<n
         eq(syncLogs.section, section),
         eq(syncLogs.entity, "customers"),
         eq(syncLogs.status, "in_progress"),
-        // Only consider rows started within the resume window
         sql`${syncLogs.startedAt} >= ${cutoff}`,
+        sql`${syncLogs.resumePage} > 0`,
       ),
     )
     .orderBy(desc(syncLogs.startedAt))
     .limit(1);
-  const resumePage = rows[0]?.resumePage ?? 0;
-  if (resumePage > 1) {
-    console.log(`[syncLog] ${section}: resuming customers from page ${resumePage} (in_progress row started ${rows[0]?.startedAt?.toISOString()})`);
+
+  if ((customerRows[0]?.resumePage ?? 0) > 0) {
+    const resumePage = customerRows[0]!.resumePage!;
+    console.log(`[syncLog] ${section}: resuming customers from page ${resumePage} (entity=customers in_progress row, started ${customerRows[0]!.startedAt?.toISOString()})`);
+    return resumePage;
+  }
+
+  // Strategy 2: entity='all' row killed during 'customers' stage.
+  // clearAllStuckSyncLogs clears entity='customers' rows but the overall
+  // entity='all' log retains resume_page from the last updateSyncLogStage call.
+  // Use a 2-hour window (customers sync can take ~1h for large datasets).
+  const CUSTOMERS_RESUME_WINDOW_MS = 2 * 60 * 60 * 1000;
+  const customersCutoff = new Date(Date.now() - CUSTOMERS_RESUME_WINDOW_MS);
+  const overallRows = await db
+    .select({ resumePage: syncLogs.resumePage, startedAt: syncLogs.startedAt, currentStage: syncLogs.currentStage })
+    .from(syncLogs)
+    .where(
+      and(
+        eq(syncLogs.section, section),
+        eq(syncLogs.entity, "all"),
+        eq(syncLogs.status, "error"),
+        sql`${syncLogs.startedAt} >= ${customersCutoff}`,
+        sql`${syncLogs.resumePage} > 0`,
+        sql`${syncLogs.currentStage} LIKE 'customers%'`,
+      ),
+    )
+    .orderBy(desc(syncLogs.startedAt))
+    .limit(1);
+
+  const resumePage = overallRows[0]?.resumePage ?? 0;
+  if (resumePage > 0) {
+    console.log(`[syncLog] ${section}: resuming customers from page ${resumePage} (entity=all row, stage='${overallRows[0]!.currentStage}', started ${overallRows[0]!.startedAt?.toISOString()})`);
   }
   return resumePage;
 }
