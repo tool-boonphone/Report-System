@@ -22,13 +22,23 @@ type LoadItem = {
   icon: string;
 };
 
+type DebtStreamMeta = {
+  type: "meta";
+  total?: number;
+  hasPrincipalBreakdown?: boolean;
+};
+
+type DebtStreamDone = {
+  type: "done";
+  actual?: number;
+  hasPrincipalBreakdown?: boolean;
+};
+
 const LOAD_ITEMS: LoadItem[] = [
   { key: "contracts", label: "สัญญา", icon: "📋" },
   { key: "target", label: "เป้าเก็บหนี้", icon: "🎯" },
   { key: "collected", label: "ยอดเก็บหนี้", icon: "💰" },
 ];
-
-const CHUNK_SIZE = 1000;
 
 const STAGE_LABELS: Record<string, string> = {
   partners: "ดึงข้อมูลพาร์ทเนอร์",
@@ -40,6 +50,84 @@ const STAGE_LABELS: Record<string, string> = {
   populate_collected: "ประมวลผลยอดเก็บหนี้",
   finishing: "กำลังเสร็จสิ้น",
 };
+
+function formatDebtLoadError(t: "target" | "collected", err: unknown): string {
+  const label = t === "target" ? "เป้าเก็บหนี้" : "ยอดเก็บหนี้";
+  const raw = err instanceof Error ? err.message : String(err ?? "");
+
+  if (raw.includes("Unexpected token") || raw.includes("not valid JSON")) {
+    return `โหลด${label}ไม่สำเร็จ: รูปแบบข้อมูลจากเซิร์ฟเวอร์ไม่ถูกต้อง`;
+  }
+  if (raw.includes("Failed to fetch") || raw.includes("NetworkError")) {
+    return `โหลด${label}ไม่สำเร็จ: การเชื่อมต่อขัดข้อง กรุณาลองใหม่`;
+  }
+
+  return raw || `โหลด${label}ไม่สำเร็จ`;
+}
+
+async function readDebtNdjsonStream({
+  url,
+  onMeta,
+  onRow,
+  onDone,
+}: {
+  url: string;
+  onMeta: (meta: DebtStreamMeta) => void;
+  onRow: (row: unknown) => void;
+  onDone: (done: DebtStreamDone) => void;
+}) {
+  const res = await fetch(url, { credentials: "include" });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(text || `HTTP ${res.status}`);
+  }
+
+  if (!res.body) {
+    throw new Error("เบราว์เซอร์ไม่รองรับการอ่านข้อมูลแบบ stream");
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  const handleLine = (line: string): boolean => {
+    const trimmed = line.trim();
+    if (!trimmed) return false;
+
+    const data = JSON.parse(trimmed);
+    if (data?.type === "meta") {
+      onMeta(data);
+      return false;
+    }
+    if (data?.type === "done") {
+      onDone(data);
+      return true;
+    }
+    if (data?.type === "error") {
+      throw new Error(data.message || "โหลดข้อมูลไม่สำเร็จ");
+    }
+
+    onRow(data);
+    return false;
+  };
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() || "";
+
+    for (const line of lines) {
+      if (handleLine(line)) return;
+    }
+  }
+
+  buffer += decoder.decode();
+  if (buffer.trim()) handleLine(buffer);
+}
 
 function SyncWaitingScreen({ section, accent, onSyncDone }: { section: SectionKey; accent: string; onSyncDone: () => void }) {
   const syncStatus = trpc.sync.status.useQuery(undefined, { refetchInterval: 3000 });
@@ -185,24 +273,6 @@ export default function DataLoadingScreen() {
     }
   }, [utils, setStatus, setItemLoaded, setItemTotal, setItemError]);
 
-  const fetchChunkWithRetry = useCallback(async (sec: SectionKey, t: "target" | "collected", offset: number, limit: number, maxRetries = 8) => {
-    let lastErr: unknown;
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
-      try {
-        return t === "target" ? await utils.debt.getTargetChunk.fetch({ section: sec, offset, limit }) : await utils.debt.getCollectedChunk.fetch({ section: sec, offset, limit });
-      } catch (err) {
-        lastErr = err;
-        const errMsg = (err as Error)?.message ?? "";
-        const isTransient = errMsg.includes("Failed to fetch") || errMsg.includes("NetworkError");
-        if (attempt < maxRetries - 1) {
-          const delay = isTransient ? 500 + attempt * 300 : 2000 * Math.pow(2, attempt);
-          await new Promise((r) => setTimeout(r, delay));
-        }
-      }
-    }
-    throw lastErr;
-  }, [utils]);
-
   const fetchDebt = useCallback(async (sec: SectionKey, t: "target" | "collected") => {
     const key = t;
     setStatus(key, "loading");
@@ -212,32 +282,46 @@ export default function DataLoadingScreen() {
     try {
       const rows: any[] = [];
       let hasPrincipalBreakdown = true;
-      let offset = 0;
-      let totalContracts = 0;
-      while (true) {
-        const result = await fetchChunkWithRetry(sec, t, offset, CHUNK_SIZE);
-        const chunkRows = result.rows as any[];
-        totalContracts = result.totalContracts;
-        const hasMore = result.hasMore;
-        if (t === "collected" && (result as any).hasPrincipalBreakdown === false) hasPrincipalBreakdown = false;
-        rows.push(...chunkRows);
-        offset += CHUNK_SIZE;
-        setItemTotal(key, totalContracts);
-        setItemLoaded(key, rows.length);
-        debtCache.setLoadingState(sec, t, { progress: rows.length, total: totalContracts });
-        if (!hasMore) break;
+      const endpoint = `/api/debt/stream/${t}?section=${encodeURIComponent(sec)}`;
+
+      await readDebtNdjsonStream({
+        url: endpoint,
+        onMeta: (meta) => {
+          const nextTotal = Number(meta.total ?? 0);
+          setItemTotal(key, nextTotal);
+          debtCache.setLoadingState(sec, t, { total: nextTotal });
+          if (t === "collected" && meta.hasPrincipalBreakdown === false) hasPrincipalBreakdown = false;
+        },
+        onRow: (row) => {
+          rows.push(row);
+          setItemLoaded(key, rows.length);
+          debtCache.setLoadingState(sec, t, { progress: rows.length });
+        },
+        onDone: (done) => {
+          if (typeof done.actual === "number") {
+            setItemLoaded(key, done.actual);
+            debtCache.setLoadingState(sec, t, { progress: done.actual });
+          }
+          if (t === "collected" && done.hasPrincipalBreakdown === false) hasPrincipalBreakdown = false;
+        },
+      });
+
+      if (total[key] === 0) {
+        setItemTotal(key, rows.length);
+        debtCache.setLoadingState(sec, t, { total: rows.length });
       }
+
       if (t === "target") debtCache.setTargetRows(sec, rows);
       else debtCache.setCollectedRows(sec, rows, hasPrincipalBreakdown);
-      debtCache.setLoadingState(sec, t, { loading: false });
+      debtCache.setLoadingState(sec, t, { loading: false, error: null });
       setStatus(key, "done");
     } catch (err: unknown) {
-      const msg = (err as Error)?.message ?? "เกิดข้อผิดพลาด";
+      const msg = formatDebtLoadError(t, err);
       setItemError(key, msg);
       debtCache.setLoadingState(sec, t, { loading: false, error: msg });
       setStatus(key, "error");
     }
-  }, [fetchChunkWithRetry, debtCache, setStatus, setItemLoaded, setItemTotal, setItemError]);
+  }, [debtCache, setStatus, setItemLoaded, setItemTotal, setItemError, total]);
 
   const startPreload = useCallback(async (sec: SectionKey) => {
     if (startedRef.current) return;
