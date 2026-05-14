@@ -1,4 +1,4 @@
-import { BRAND_LOGOS } from "@/config/brand";
+import { BRAND_LOGOS, SURE_PLUS_LOGO, SURE_PLUS_URL } from "@/config/brand";
 import { useNavActions } from "@/contexts/NavActionsContext";
 import { useSection } from "@/contexts/SectionContext";
 import { useAiChat } from "@/contexts/AiChatContext";
@@ -12,6 +12,7 @@ import {
   CalendarDays,
   ChevronDown,
   ChevronRight,
+  ExternalLink,
   FileText,
   KeyRound,
   LayoutDashboard,
@@ -38,7 +39,8 @@ type MenuCode =
   | "income"
   | "expense"
   | "settings_users"
-  | "settings_groups";
+  | "settings_groups"
+  | "stock_sure_plus";
 
 type NavLeaf = {
   kind: "leaf";
@@ -56,7 +58,19 @@ type NavGroup = {
   children: NavLeaf[];
 };
 
-type NavEntry = NavLeaf | NavGroup;
+/** External link nav item — opens in new tab, not a router path */
+type NavExternal = {
+  kind: "external";
+  label: string;
+  url: string;
+  logo?: string; // image src (optional, falls back to icon)
+  icon: typeof FileText;
+  menuCode: MenuCode;
+  /** Only show when section matches one of these values */
+  onlySections?: string[];
+};
+
+type NavEntry = NavLeaf | NavGroup | NavExternal;
 
 const MAIN_NAV: NavEntry[] = [
   {
@@ -88,6 +102,15 @@ const MAIN_NAV: NavEntry[] = [
       { kind: "leaf", label: "รายรับ", path: "/income", icon: Receipt, menuCode: "income" },
       { kind: "leaf", label: "รายจ่าย", path: "/expense", icon: TrendingDown, menuCode: "expense" },
     ],
+  },
+  {
+    kind: "external",
+    label: "Stock Sure+",
+    url: SURE_PLUS_URL,
+    logo: SURE_PLUS_LOGO,
+    icon: ExternalLink,
+    menuCode: "stock_sure_plus",
+    onlySections: ["Boonphone"],
   },
 ];
 
@@ -186,7 +209,6 @@ export function TopNav() {
   const userMenuRef = useRef<HTMLDivElement>(null);
   const sectionMenuRef = useRef<HTMLDivElement>(null);
   const settingsMenuRef = useRef<HTMLDivElement>(null);
-
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (!userMenuRef.current?.contains(e.target as Node)) setUserMenuOpen(false);
@@ -196,7 +218,6 @@ export function TopNav() {
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, []);
-
   useEffect(() => { setSettingsMenuOpen(false); }, [location]);
   // sync mobile expanded groups เมื่อ location เปลี่ยน (เช่น navigate จาก desktop)
   useEffect(() => {
@@ -210,16 +231,13 @@ export function TopNav() {
       return next;
     });
   }, [location]);
-
   const canSwitchSection = can("section_switch", "view");
   const visibleSettings = SETTINGS_NAV.filter((item) => can(item.menuCode, "view"));
   const settingsActive = visibleSettings.some((item) => location.startsWith(item.path));
-
   const rawAllowed = (me?.group as { allowedSections?: string } | undefined)?.allowedSections ?? "";
   const allowedSectionsList: typeof SECTIONS[number][] = rawAllowed
     ? (rawAllowed.split(",").map((s) => s.trim()).filter((s) => SECTIONS.includes(s as typeof SECTIONS[number])) as typeof SECTIONS[number][])
     : [...SECTIONS];
-
   const handleLogout = async () => {
     try {
       await logout();
@@ -230,14 +248,12 @@ export function TopNav() {
       toast.error("ออกจากระบบไม่สำเร็จ");
     }
   };
-
   const handleSwitchToSection = (target: typeof SECTIONS[number]) => {
     setSectionMenuOpen(false);
     setMobileMenuOpen(false);
     setSection(target);
     navigate("/contracts");
   };
-
   const toggleMobileGroup = (label: string) => {
     setMobileExpanded((prev) => {
       const next = new Set(prev);
@@ -246,6 +262,18 @@ export function TopNav() {
       return next;
     });
   };
+
+  /** Check if a nav entry should be visible based on current section + permission */
+  function isEntryVisible(entry: NavEntry): boolean {
+    if (entry.kind === "external") {
+      if (!can(entry.menuCode, "view")) return false;
+      if (entry.onlySections && section && !entry.onlySections.includes(section)) return false;
+      return true;
+    }
+    if (entry.kind === "leaf") return can(entry.menuCode, "view");
+    // group: check if any child is visible
+    return entry.children.some((c) => can(c.menuCode, "view"));
+  }
 
   return (
     <>
@@ -256,7 +284,6 @@ export function TopNav() {
               className="lg:hidden p-2 -ml-2 rounded-lg hover:bg-gray-100" aria-label="เปิดเมนู">
               {mobileMenuOpen ? <X className="w-5 h-5 text-gray-700" /> : <MenuIcon className="w-5 h-5 text-gray-700" />}
             </button>
-
             {section && (
               <div ref={sectionMenuRef} className="relative flex-shrink-0">
                 <button onClick={() => canSwitchSection && setSectionMenuOpen((v) => !v)}
@@ -279,11 +306,30 @@ export function TopNav() {
                 )}
               </div>
             )}
-
             <div className="hidden lg:flex items-center gap-1">
               {MAIN_NAV.map((entry) => {
+                if (!isEntryVisible(entry)) return null;
+
+                if (entry.kind === "external") {
+                  return (
+                    <a
+                      key={entry.menuCode}
+                      href={entry.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-medium transition-colors text-gray-600 hover:bg-sky-50 hover:text-sky-700"
+                    >
+                      {entry.logo ? (
+                        <img src={entry.logo} alt={entry.label} className="h-5 w-auto object-contain" />
+                      ) : (
+                        <entry.icon className="w-4 h-4" />
+                      )}
+                      <ExternalLink className="w-3 h-3 opacity-50" />
+                    </a>
+                  );
+                }
+
                 if (entry.kind === "leaf") {
-                  if (!can(entry.menuCode, "view")) return null;
                   const isActive = location.startsWith(entry.path);
                   const Icon = entry.icon;
                   return (
@@ -299,10 +345,22 @@ export function TopNav() {
               })}
             </div>
           </div>
-
           <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
             <div className="hidden md:flex items-center gap-2">{actions}</div>
-
+            {/* AI Chat button */}
+            <button
+              onClick={toggleAiChat}
+              aria-label="AI Chat"
+              title="AI Chat"
+              className={cn(
+                "h-9 w-9 inline-flex items-center justify-center rounded-lg border transition-colors",
+                aiChatOpen
+                  ? "bg-blue-50 border-blue-200 text-blue-700"
+                  : "bg-white border-gray-200 text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+              )}
+            >
+              <AiChatIcon active={aiChatOpen} section={section} />
+            </button>
             {visibleSettings.length > 0 && (
               <div ref={settingsMenuRef} className="relative hidden md:block">
                 <button onClick={() => setSettingsMenuOpen((v) => !v)} aria-label="ตั้งค่า" title="ตั้งค่า"
@@ -321,8 +379,8 @@ export function TopNav() {
                       return (
                         <Link key={item.path} href={item.path} onClick={() => setSettingsMenuOpen(false)}
                           className={cn("flex items-center gap-2 px-3 py-2 text-sm",
-                            isActive ? "bg-blue-50 text-blue-700" : "text-gray-700 hover:bg-gray-50")}>
-                          <Icon className="w-4 h-4" />
+                            isActive ? "bg-blue-50 text-blue-700 font-medium" : "text-gray-700 hover:bg-gray-50")}>
+                          <Icon className="w-4 h-4 flex-shrink-0" />
                           {item.label}
                         </Link>
                       );
@@ -331,65 +389,71 @@ export function TopNav() {
                 )}
               </div>
             )}
-
-            {me && (() => {
-              const isBoon = !section || section === "Boonphone";
-              return (
-                <button onClick={toggleAiChat} aria-label="น้องเป๋าตัง AI Assistant" title="น้องเป๋าตัง — AI Assistant"
-                  className={cn("h-9 w-9 inline-flex items-center justify-center rounded-lg border transition-all duration-200",
-                    aiChatOpen
-                      ? isBoon ? "bg-pink-50 border-pink-300 shadow-sm shadow-pink-100" : "bg-orange-50 border-orange-300 shadow-sm shadow-orange-100"
-                      : isBoon ? "bg-white border-gray-200 hover:border-pink-300 hover:bg-pink-50" : "bg-white border-gray-200 hover:border-orange-300 hover:bg-orange-50")}>
-                  <AiChatIcon active={aiChatOpen} section={section} />
-                </button>
-              );
-            })()}
-
-            {me && (
-              <div ref={userMenuRef} className="relative">
-                <button onClick={() => setUserMenuOpen((v) => !v)} className="flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-gray-100">
-                  <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs font-semibold">
-                    {(me.fullName ?? me.username).charAt(0).toUpperCase()}
+            {/* User menu */}
+            <div ref={userMenuRef} className="relative">
+              <button onClick={() => setUserMenuOpen((v) => !v)}
+                className="h-9 w-9 inline-flex items-center justify-center rounded-lg border border-gray-200 bg-white hover:bg-gray-100 transition-colors"
+                aria-label="เมนูผู้ใช้">
+                <span className="text-xs font-semibold text-gray-700">
+                  {(me?.fullName ?? me?.username ?? "?").charAt(0).toUpperCase()}
+                </span>
+              </button>
+              {userMenuOpen && (
+                <div className="absolute top-full right-0 mt-1 w-56 bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-50">
+                  <div className="px-3 py-2 border-b border-gray-100">
+                    <p className="text-sm font-semibold text-gray-900 truncate">{me?.fullName ?? me?.username ?? "-"}</p>
+                    <p className="text-xs text-gray-500 truncate mt-0.5">{me?.group?.name ?? "-"}</p>
                   </div>
-                  <span className="hidden sm:inline text-sm text-gray-700 max-w-[10ch] truncate">{me.fullName ?? me.username}</span>
-                </button>
-                {userMenuOpen && (
-                  <div className="absolute top-full right-0 mt-1 w-56 bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-50">
-                    <div className="px-3 py-2 border-b border-gray-100">
-                      <p className="text-sm font-medium text-gray-800 truncate">{me.fullName ?? me.username}</p>
-                      <p className="text-xs text-gray-500 truncate">{me.group.name}</p>
-                    </div>
-                    <Link href="/change-password" onClick={() => setUserMenuOpen(false)}
-                      className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">
-                      <KeyRound className="w-4 h-4" />
-                      เปลี่ยนรหัสผ่าน
-                    </Link>
-                    <button onClick={handleLogout} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50">
-                      <LogOut className="w-4 h-4" />
-                      ออกจากระบบ
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
+                  <Link href="/change-password" onClick={() => setUserMenuOpen(false)}
+                    className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">
+                    <KeyRound className="w-4 h-4" />
+                    เปลี่ยนรหัสผ่าน
+                  </Link>
+                  <button onClick={handleLogout} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50">
+                    <LogOut className="w-4 h-4" />
+                    ออกจากระบบ
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
-
         {actions && (
           <div className="md:hidden border-t border-gray-100 px-3 py-2 flex items-center gap-2 flex-wrap">
             {actions}
           </div>
         )}
       </nav>
-
       {mobileMenuOpen && (
         <>
           <div className="fixed inset-0 bg-black/30 z-40 lg:hidden" onClick={() => setMobileMenuOpen(false)} />
           <aside className="fixed left-0 top-14 bottom-0 w-64 bg-white border-r border-gray-200 z-40 lg:hidden overflow-y-auto">
             <nav className="p-3 space-y-0.5">
               {MAIN_NAV.map((entry) => {
+                if (!isEntryVisible(entry)) return null;
+
+                if (entry.kind === "external") {
+                  return (
+                    <a
+                      key={entry.menuCode}
+                      href={entry.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-700 hover:bg-sky-50 hover:text-sky-700"
+                    >
+                      {entry.logo ? (
+                        <img src={entry.logo} alt={entry.label} className="h-5 w-auto object-contain flex-shrink-0" />
+                      ) : (
+                        <entry.icon className="w-4 h-4 flex-shrink-0" />
+                      )}
+                      <span className="flex-1">{entry.label}</span>
+                      <ExternalLink className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                    </a>
+                  );
+                }
+
                 if (entry.kind === "leaf") {
-                  if (!can(entry.menuCode, "view")) return null;
                   const Icon = entry.icon;
                   const isActive = location.startsWith(entry.path);
                   return (
@@ -434,7 +498,6 @@ export function TopNav() {
                   </div>
                 );
               })}
-
               {visibleSettings.length > 0 && (
                 <>
                   <div className="pt-3 pb-1 px-3">
