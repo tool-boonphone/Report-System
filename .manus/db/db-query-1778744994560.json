@@ -1,0 +1,75 @@
+{
+  "query": "SELECT id, section, entity, status, triggered_by, current_stage, progress, resume_page, error_message, started_at, finished_at FROM sync_logs WHERE section = 'Boonphone' ORDER BY id DESC LIMIT 5;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3zL6E4esQEHiYzS.root --database WPSwtnWiTSyEVhTdqqAYk7 --execute SELECT id, section, entity, status, triggered_by, current_stage, progress, resume_page, error_message, started_at, finished_at FROM sync_logs WHERE section = 'Boonphone' ORDER BY id DESC LIMIT 5;",
+  "rows": [
+    {
+      "id": "1620018",
+      "section": "Boonphone",
+      "entity": "contracts",
+      "status": "in_progress",
+      "triggered_by": "on-demand",
+      "current_stage": "contracts",
+      "progress": "55",
+      "resume_page": "13",
+      "error_message": "NULL",
+      "started_at": "2026-05-14 07:43:40",
+      "finished_at": "NULL"
+    },
+    {
+      "id": "1620017",
+      "section": "Boonphone",
+      "entity": "customers",
+      "status": "success",
+      "triggered_by": "on-demand",
+      "current_stage": "NULL",
+      "progress": "0",
+      "resume_page": "0",
+      "error_message": "NULL",
+      "started_at": "2026-05-14 07:43:33",
+      "finished_at": "2026-05-14 07:43:40"
+    },
+    {
+      "id": "1620016",
+      "section": "Boonphone",
+      "entity": "partners",
+      "status": "success",
+      "triggered_by": "on-demand",
+      "current_stage": "NULL",
+      "progress": "0",
+      "resume_page": "0",
+      "error_message": "NULL",
+      "started_at": "2026-05-14 07:43:28",
+      "finished_at": "2026-05-14 07:43:32"
+    },
+    {
+      "id": "1620015",
+      "section": "Boonphone",
+      "entity": "all",
+      "status": "in_progress",
+      "triggered_by": "startup",
+      "current_stage": "customers (10/10)",
+      "progress": "40",
+      "resume_page": "11",
+      "error_message": "NULL",
+      "started_at": "2026-05-14 07:43:28",
+      "finished_at": "NULL"
+    },
+    {
+      "id": "1620009",
+      "section": "Boonphone",
+      "entity": "customers",
+      "status": "error",
+      "triggered_by": "on-demand",
+      "current_stage": "NULL",
+      "progress": "0",
+      "resume_page": "0",
+      "error_message": "Force-cleared by admin: Cloud Run instance killed during sync",
+      "started_at": "2026-05-14 07:11:58",
+      "finished_at": "2026-05-14 07:24:27"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tsection\tentity\tstatus\ttriggered_by\tcurrent_stage\tprogress\tresume_page\terror_message\tstarted_at\tfinished_at\n1620018\tBoonphone\tcontracts\tin_progress\ton-demand\tcontracts\t55\t13\tNULL\t2026-05-14 07:43:40\tNULL\n1620017\tBoonphone\tcustomers\tsuccess\ton-demand\tNULL\t0\t0\tNULL\t2026-05-14 07:43:33\t2026-05-14 07:43:40\n1620016\tBoonphone\tpartners\tsuccess\ton-demand\tNULL\t0\t0\tNULL\t2026-05-14 07:43:28\t2026-05-14 07:43:32\n1620015\tBoonphone\tall\tin_progress\tstartup\tcustomers (10/10)\t40\t11\tNULL\t2026-05-14 07:43:28\tNULL\n1620009\tBoonphone\tcustomers\terror\ton-demand\tNULL\t0\t0\tForce-cleared by admin: Cloud Run instance killed during sync\t2026-05-14 07:11:58\t2026-05-14 07:24:27\n",
+  "stderr": "",
+  "execution_time_ms": 1714
+}
