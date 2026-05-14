@@ -1638,3 +1638,38 @@ Task list:
 - [x] ส่ง startPage ไปยัง syncContracts เพื่อ resume จาก page ที่ค้างไว้
 - [x] ดึง resume_page สำหรับ customers stage ด้วย (กรณี Boonphone ค้างที่ customers)
 - [x] แสดง "Resuming from page X" ใน sync log เพื่อ debug
+
+## Feature: รอ API อัปเดต — transfer_date + incentive (รอโปรแกรมเมอร์ Boonphone/FF365)
+
+> **หมายเหตุ:** รายการด้านล่างทั้งหมดรอ API ส่ง field ใหม่มาก่อน ได้แก่ `transfer_date` (วันที่โอนเงิน) และ `incentive` จึงจะเริ่มพัฒนาได้
+
+### หน้ารายจ่าย (Expense) — Refactor ใหม่ทั้งหมด
+- [ ] ยุบแถบ "ยอดจัดไฟแนนซ์" ออก (รวมเข้าแถบหลัก)
+- [ ] เปลี่ยนชื่อแถบ "รายการค่าคอมมิชชั่น" เป็น "รายการทั้งหมด"
+- [ ] ตัดคอลัมน์ "ทำรายการโดย" และ "ทำรายการเมื่อ" ออก
+- [ ] เพิ่มคอลัมน์ "วันที่โอนเงิน" จาก API field `transfer_date`
+- [ ] จัดคอลัมน์ใหม่: No. | วันที่โอนเงิน | เลขที่สัญญา | วันที่อนุมัติ | ยอดจัดไฟแนนซ์ | ค่าคอมมิชชั่น | Incentive | รวมยอดโอน
+- [ ] ฟิลเตอร์: เพิ่ม Select box เลือก "วันที่โอนเงิน / วันที่อนุมัติ" ก่อนเลือกช่วงวันที่ (default: วันที่โอนเงิน)
+- [ ] ตัดฟิลเตอร์ "ทำรายการโดย" ออก
+- [ ] เพิ่ม Badge แสดงยอดรวม: ยอดจัดไฟแนนซ์ / ค่าคอมมิชชั่น / Incentive / รวมยอดโอน พร้อม toggle เปิด/ปิดแต่ละ badge (รวมยอดโอนแปรผันตาม toggle)
+- [ ] สรุปรายเดือน: SUM จากรายการทั้งหมด ยึด "วันที่โอนเงิน" เป็นหลักในการจัดกลุ่มเดือน
+- [ ] สรุปรายปี: SUM ยอดรายเดือนของปีนั้นๆ
+- [ ] Refactor Export Excel ทุกแถบใหม่ทั้งหมดตามเงื่อนไขใหม่
+
+### หน้าภาพรวม (Overview)
+- [ ] ต้นทุนต้องรวม incentive เข้าไปด้วย
+
+### หน้าหนี้สงสัยจะเสีย (SuspectedBadDebt)
+- [ ] เพิ่มคอลัมน์ "Incentive" ต่อจากคอลัมน์ "ค่าคอมมิชชั่น"
+- [ ] ต้นทุนต้องรวม incentive เข้าไปด้วย
+
+### หน้าหนี้เสีย (BadDebt) — ทุกแถบ
+- [ ] เพิ่มคอลัมน์ "Incentive" ต่อจากคอลัมน์ "ค่าคอมมิชชั่น"
+- [ ] ต้นทุนต้องรวม incentive เข้าไปด้วย
+
+### Backend — เพิ่ม field ใหม่ใน DB + Sync
+- [ ] เพิ่ม column `commission_transfer_date` (varchar) ใน contracts table (drizzle schema + migration)
+- [ ] เพิ่ม column `incentive` (decimal 12,2) ใน contracts table (drizzle schema + migration)
+- [ ] แก้ sync runner: map `transfer_date` → `commission_transfer_date` และ `incentive` จาก API response
+- [ ] แก้ accountingDb.ts: listExpense, getExpenseSummaryByPeriod รองรับ field ใหม่
+- [ ] แก้ debtDb.ts: listDebtTarget, listDebtTargetStream, listBadDebt รองรับ incentive ในต้นทุน
