@@ -106,7 +106,11 @@ export async function getLastCustomersResumePage(section: SectionKey): Promise<n
  *
  * Uses a 3-hour window because contracts sync (including IMEI enrichment)
  * can take up to 2.5 hours for 17k+ contracts.
- * Only resumes if the error row was started within the window AND has resume_page > 0.
+ *
+ * Strategy 1: Check entity='contracts' row with resume_page > 0.
+ * Strategy 2: Fall back to entity='all' row killed during 'contracts' stage.
+ *   (clearAllStuckSyncLogs clears entity='contracts' rows but overall log
+ *    entity='all' retains the resume_page from the last updateSyncLogStage call)
  */
 export async function getLastContractsResumePage(section: SectionKey): Promise<number> {
   const db = await getDb();
@@ -114,8 +118,10 @@ export async function getLastContractsResumePage(section: SectionKey): Promise<n
   // 3-hour window: contracts sync (list + IMEI enrichment) can take ~2.5h
   const RESUME_WINDOW_MS = 3 * 60 * 60 * 1000;
   const cutoff = new Date(Date.now() - RESUME_WINDOW_MS);
-  const rows = await db
-    .select({ resumePage: syncLogs.resumePage, status: syncLogs.status, startedAt: syncLogs.startedAt })
+
+  // Strategy 1: entity='contracts' row with resume_page > 0
+  const contractRows = await db
+    .select({ resumePage: syncLogs.resumePage, startedAt: syncLogs.startedAt })
     .from(syncLogs)
     .where(
       and(
@@ -128,9 +134,35 @@ export async function getLastContractsResumePage(section: SectionKey): Promise<n
     )
     .orderBy(desc(syncLogs.startedAt))
     .limit(1);
-  const resumePage = rows[0]?.resumePage ?? 0;
-  if (resumePage > 1) {
-    console.log(`[syncLog] ${section}: resuming contracts from page ${resumePage} (killed row started ${rows[0]?.startedAt?.toISOString()})`);
+
+  if ((contractRows[0]?.resumePage ?? 0) > 0) {
+    const resumePage = contractRows[0]!.resumePage!;
+    console.log(`[syncLog] ${section}: resuming contracts from page ${resumePage} (entity=contracts row, started ${contractRows[0]!.startedAt?.toISOString()})`);
+    return resumePage;
+  }
+
+  // Strategy 2: entity='all' row killed during 'contracts' stage.
+  // clearAllStuckSyncLogs clears entity='contracts' rows but the overall
+  // entity='all' log retains resume_page from the last updateSyncLogStage call.
+  const overallRows = await db
+    .select({ resumePage: syncLogs.resumePage, startedAt: syncLogs.startedAt, currentStage: syncLogs.currentStage })
+    .from(syncLogs)
+    .where(
+      and(
+        eq(syncLogs.section, section),
+        eq(syncLogs.entity, "all"),
+        eq(syncLogs.status, "error"),
+        sql`${syncLogs.startedAt} >= ${cutoff}`,
+        sql`${syncLogs.resumePage} > 0`,
+        sql`${syncLogs.currentStage} LIKE 'contracts%'`,
+      ),
+    )
+    .orderBy(desc(syncLogs.startedAt))
+    .limit(1);
+
+  const resumePage = overallRows[0]?.resumePage ?? 0;
+  if (resumePage > 0) {
+    console.log(`[syncLog] ${section}: resuming contracts from page ${resumePage} (entity=all row, stage='${overallRows[0]!.currentStage}', started ${overallRows[0]!.startedAt?.toISOString()})`);
   }
   return resumePage;
 }
