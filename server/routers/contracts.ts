@@ -46,7 +46,7 @@ export const contractsRouter = router({
         filters: filtersInput,
         sort: sortInput,
         page: z.number().int().min(1).default(1),
-        pageSize: z.number().int().min(10).max(200).default(50),
+        pageSize: z.number().int().min(10).max(20000).default(50),
       }),
     )
     .query(({ input }) =>
