@@ -1,4 +1,4 @@
-import { BRAND_LOGOS, SURE_PLUS_LOGO, SURE_PLUS_URL } from "@/config/brand";
+import { BRAND_LOGOS } from "@/config/brand";
 import { useSection } from "@/contexts/SectionContext";
 import { useAppAuth } from "@/hooks/useAppAuth";
 import { SECTIONS, type SectionKey } from "@shared/const";
@@ -7,7 +7,7 @@ import { useEffect } from "react";
 import { useLocation } from "wouter";
 
 export default function SelectSection() {
-  const { isAuthenticated, isLoading, me, can, logout } = useAppAuth();
+  const { isAuthenticated, isLoading, me, logout } = useAppAuth();
   const { setSection } = useSection();
   const [, navigate] = useLocation();
 
@@ -31,10 +31,6 @@ export default function SelectSection() {
   const allowedSections: SectionKey[] = rawAllowed
     ? (rawAllowed.split(",").map((s) => s.trim()).filter((s) => SECTIONS.includes(s as SectionKey)) as SectionKey[])
     : [...SECTIONS];
-
-  // Check if user can see Stock Sure+ (Boonphone must be in allowed sections + has permission)
-  const canSeeStockSurePlus =
-    allowedSections.includes("Boonphone") && can("stock_sure_plus", "view");
 
   function handlePick(s: SectionKey) {
     setSection(s);
@@ -90,38 +86,6 @@ export default function SelectSection() {
             </button>
           ))}
         </div>
-
-        {/* Stock Sure+ shortcut — Boonphone only, controlled by permission */}
-        {canSeeStockSurePlus && (
-          <div className="mt-6">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="flex-1 h-px bg-gray-200" />
-              <span className="text-xs text-gray-400 whitespace-nowrap">หรือเปิดระบบอื่น</span>
-              <div className="flex-1 h-px bg-gray-200" />
-            </div>
-            <a
-              href={SURE_PLUS_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="group flex items-center gap-4 bg-white border border-gray-200 hover:border-sky-400 hover:shadow-lg rounded-2xl p-5 transition-all w-full"
-            >
-              <div className="w-16 h-16 rounded-xl bg-sky-50 border border-sky-100 flex items-center justify-center overflow-hidden flex-shrink-0">
-                <img
-                  src={SURE_PLUS_LOGO}
-                  alt="Stock Sure+"
-                  className="w-14 h-14 object-contain"
-                />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-base font-semibold text-gray-900">Stock Sure+</p>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  ระบบจัดการสต็อก Boonphone
-                </p>
-              </div>
-              <ArrowRight className="w-5 h-5 text-gray-300 group-hover:text-sky-500 transition-colors flex-shrink-0" />
-            </a>
-          </div>
-        )}
 
         <div className="text-center mt-8">
           <button

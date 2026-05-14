@@ -47,7 +47,6 @@ export const MENU_CODES = [
   "sync_api", // Re-Sync API (ดึงข้อมูลใหม่จาก Partner API)
   "income", // บัญชี > รายรับ
   "expense", // บัญชี > รายจ่าย
-  "stock_sure_plus", // Stock Sure+ (Boonphone only — เปิดลิงก์ภายนอก)
 ] as const;
 export type MenuCode = (typeof MENU_CODES)[number];
 
@@ -65,7 +64,6 @@ export const MENU_LABELS: Record<MenuCode, string> = {
   sync_api: "Re-Sync API",
   income: "รายรับ",
   expense: "รายจ่าย",
-  stock_sure_plus: "Stock Sure+",
 };
 
 /** Permission actions attached to every menu. */
