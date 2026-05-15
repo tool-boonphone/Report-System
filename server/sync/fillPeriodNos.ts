@@ -18,7 +18,7 @@ import { getDb } from "../db";
 import { contracts, paymentTransactions } from "../../drizzle/schema";
 import { computePayPeriods } from "./computePayPeriods";
 import type { SectionKey } from "../../shared/const";
-import { pgRows } from "./db";
+import { pgRows } from "../db";
 
 const CONTRACT_BATCH = 50;
 const UPDATE_BATCH = 500;
