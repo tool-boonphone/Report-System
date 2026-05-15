@@ -20,6 +20,7 @@
 import { sql } from "drizzle-orm";
 import type { SectionKey } from "../shared/const";
 import { getDb } from "./db";
+import { pgRows } from "../db";
 
 // ─── Income Types ─────────────────────────────────────────────────────────────
 
@@ -514,7 +515,7 @@ export async function listExpenseUpdatedBy(section: SectionKey): Promise<string[
       ORDER BY i.updated_by ASC
     `),
   );
-  const arr: any[] = (result as any)[0] ?? result;
+  const arr: any[] = pgRows(result);
   return (arr ?? []).map((r: any) => r.updated_by).filter(Boolean);
 }
 
@@ -578,7 +579,7 @@ export async function getIncomeSummary(
   `;
 
   const result = await db.execute(sql.raw(querySql));
-  const rows: any[] = (result as any)[0] ?? result;
+  const rows: any[] = pgRows(result);
 
   const summary: IncomeSummary = { "ค่างวด": 0, "ขายเครื่อง": 0, "ปิดยอด": 0, "เงินดาวน์": 0, total: 0 };
   for (const r of rows) {
@@ -617,7 +618,7 @@ export async function getExpenseSummary(
   const result = await db.execute(
     sql.raw(`SELECT SUM(commission_net) AS total FROM contracts WHERE ${whereStr}`),
   );
-  const arr: any[] = (result as any)[0] ?? result;
+  const arr: any[] = pgRows(result);
   const total = Number(arr[0]?.total ?? 0);
   return { "ค่าคอมมิชชั่น": total, total };
 }
@@ -718,7 +719,7 @@ export async function getIncomeSummaryByPeriod(
   `;
 
   const result = await db.execute(sql.raw(querySql));
-  const arr: any[] = (result as any)[0] ?? result;
+  const arr: any[] = pgRows(result);
   return (arr ?? []).map((r: any) => {
     const kw = Number(r.kw ?? 0);
     const close = Number(r.close_sum ?? 0);
@@ -786,7 +787,7 @@ export async function getExpenseSummaryByPeriod(
   `;
 
   const result = await db.execute(sql.raw(querySql));
-  const arr: any[] = (result as any)[0] ?? result;
+  const arr: any[] = pgRows(result);
   return (arr ?? []).map((r: any) => {
     const comm = Number(r.comm ?? 0);
     return {
@@ -855,9 +856,9 @@ export async function listFinance(params: FinanceParams): Promise<{ rows: Financ
       LIMIT ${pageSize} OFFSET ${offset}
     `)),
   ]);
-  const countArr: any[] = (countResult as any)[0] ?? countResult;
+  const countArr: any[] = pgRows(countResult);
   const total = Number(countArr[0]?.total ?? 0);
-  const dataArr: any[] = (dataResult as any)[0] ?? dataResult;
+  const dataArr: any[] = pgRows(dataResult);
   const rows: FinanceRow[] = (dataArr ?? []).map((r: any) => ({
     id: Number(r.id),
     contractNo: r.contract_no ?? "",
@@ -901,7 +902,7 @@ export async function getFinanceSummaryByPeriod(params: FinanceSummaryParams): P
     GROUP BY ${periodExpr}
     ORDER BY ${periodExpr} ASC
   `));
-  const arr: any[] = (result as any)[0] ?? result;
+  const arr: any[] = pgRows(result);
   return (arr ?? []).map((r: any) => {
     const fin = Number(r.fin ?? 0);
     return { period: r.period ?? "", "ยอดจัดไฟแนนซ์": fin, total: fin };
