@@ -6,7 +6,6 @@ import { createRoot } from "react-dom/client";
 import superjson from "superjson";
 import App from "./App";
 import "./index.css";
-import { AiChatProvider } from "@/contexts/AiChatContext";
 
 const queryClient = new QueryClient();
 
@@ -140,7 +139,6 @@ createRoot(document.getElementById("root")!).render(
   <trpc.Provider client={trpcClient} queryClient={queryClient}>
     <QueryClientProvider client={queryClient}>
       {/* AiChatProvider: share aiChatOpen state ระหว่าง TopNav และ AppShell */}
-      <AiChatProvider>
         <App />
       </AiChatProvider>
     </QueryClientProvider>
