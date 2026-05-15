@@ -14,7 +14,13 @@ export async function getDb() {
         connectionString: process.env.DATABASE_URL,
         max: 10,
         idleTimeoutMillis: 30000,
-        connectionTimeoutMillis: 2000,
+        connectionTimeoutMillis: 10000,
+        // Keep connections alive during long-running queries (e.g. populate cache for 17k+ contracts)
+        keepAlive: true,
+        keepAliveInitialDelayMillis: 10000,
+        // Allow up to 20 minutes for large queries (populate cache can take 10-15 min for Fastfone365)
+        statement_timeout: 20 * 60 * 1000,
+        query_timeout: 20 * 60 * 1000,
       });
       _db = drizzle(pool);
     } catch (error) {
