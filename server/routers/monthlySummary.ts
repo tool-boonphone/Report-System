@@ -22,7 +22,7 @@ import { getMonthlySummary, DEBT_BUCKETS } from "../monthlySummaryDb";
 import { SECTIONS } from "../../shared/const";
 import { getDb } from "../db";
 import { sql } from "drizzle-orm";
-import { pgRows } from "./db";
+import { pgRows } from "../db";
 
 const debtViewProcedure = requirePermission("debt_report", "view");
 const SectionEnum = z.enum(SECTIONS);
