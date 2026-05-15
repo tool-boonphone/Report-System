@@ -382,10 +382,10 @@ export async function listIncomeUpdatedBy(
         SELECT DISTINCT updated_by
         FROM payment_transactions
         WHERE section = '${secEsc}'
-	          AND raw_json ->> 'source' IS NULL
-	          AND updated_by IS NOT NULL AND updated_by != ''
-	        ORDER BY updated_by ASC
-	      `),
+          AND raw_json->>'source' IS NULL
+          AND updated_by IS NOT NULL AND updated_by != ''
+        ORDER BY updated_by ASC
+      `),
 	    );
 	    const arr: any[] = result.rows ?? result;
 	    return (arr ?? []).map((r: any) => r.updated_by).filter(Boolean);

@@ -58,6 +58,20 @@ async function startServer() {
   app.get("/api/sync-stream/:section", handleSyncStream);
   // Keep-alive ping — frontend polls this every 10s during sync to prevent Cloud Run idle scale-down
   app.get("/api/ping", (_req, res) => res.json({ ok: true, ts: Date.now() }));
+  // Debug endpoint — test SQL query directly
+  app.get("/api/debug/sql", async (req, res) => {
+    try {
+      const { getDb } = await import('../db');
+      const { sql } = await import('drizzle-orm');
+      const db = await getDb();
+      if (!db) return res.status(500).json({ error: 'No DB' });
+      const result = await db.execute(sql.raw(`SELECT SUBSTRING(approve_date, 1, 4) AS yr, COUNT(*) FROM contracts WHERE section = 'Boonphone' AND approve_date IS NOT NULL AND approve_date != '' GROUP BY 1 ORDER BY 1 DESC LIMIT 5`));
+      const rows = (result as any).rows ?? result;
+      return res.json({ ok: true, rows });
+    } catch (err: any) {
+      return res.status(500).json({ error: String(err?.message ?? err), cause: String(err?.cause?.message ?? '') });
+    }
+  });
   // Internal backfill endpoint — no auth, only for local/admin use
   app.post("/api/internal/backfill-cache", async (req, res) => {
     const { section } = req.body as { section?: string };
