@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { router, appProcedure } from "../_core/trpc";
-import { runSectionSync, isSyncRunning, getSyncStatus, requestCancelSync } from "../sync/runner";
+import { runSectionSync, isSyncRunning, getSyncStatus, requestCancelSync, SYNC_STAGES } from "../sync/runner";
 import {
   getLastSyncedAt,
   listSyncLogs,
@@ -57,6 +57,16 @@ export const syncRouter = router({
     const bpRunning = (bpDb?.running ?? false) || isSyncRunning("Boonphone");
     const ffRunning = (ffDb?.running ?? false) || isSyncRunning("Fastfone365");
 
+    // Helper: derive stageIndex from currentStage when in-memory is unavailable (cross-instance)
+    const deriveStageIndex = (stage: string | null | undefined): number | null => {
+      if (stage == null) return null;
+      const idx = SYNC_STAGES.indexOf(stage as any);
+      return idx >= 0 ? idx : null;
+    };
+
+    const bpCurrentStage = bpMem?.currentStage ?? bpDb?.currentStage ?? null;
+    const ffCurrentStage = ffMem?.currentStage ?? ffDb?.currentStage ?? null;
+
     return {
       Boonphone: {
         running: bpRunning,
@@ -64,17 +74,17 @@ export const syncRouter = router({
         // Fall back to DB for cross-instance awareness
         startedAt: bpDb?.startedAt?.getTime() ?? bpMem?.startedAt ?? null,
         progress: bpMem?.progress ?? bpDb?.progress ?? null,
-        currentStage: bpMem?.currentStage ?? bpDb?.currentStage ?? null,
-        stageIndex: bpMem?.stageIndex ?? null,
-        totalStages: bpMem?.totalStages ?? null,
+        currentStage: bpCurrentStage,
+        stageIndex: bpMem?.stageIndex ?? deriveStageIndex(bpCurrentStage),
+        totalStages: bpMem?.totalStages ?? (bpCurrentStage != null ? SYNC_STAGES.length : null),
       },
       Fastfone365: {
         running: ffRunning,
         startedAt: ffDb?.startedAt?.getTime() ?? ffMem?.startedAt ?? null,
         progress: ffMem?.progress ?? ffDb?.progress ?? null,
-        currentStage: ffMem?.currentStage ?? ffDb?.currentStage ?? null,
-        stageIndex: ffMem?.stageIndex ?? null,
-        totalStages: ffMem?.totalStages ?? null,
+        currentStage: ffCurrentStage,
+        stageIndex: ffMem?.stageIndex ?? deriveStageIndex(ffCurrentStage),
+        totalStages: ffMem?.totalStages ?? (ffCurrentStage != null ? SYNC_STAGES.length : null),
       },
       active: await getRunningSyncs(),
     };
