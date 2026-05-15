@@ -7,11 +7,11 @@
  *
  * Tabs:
  *   1. จำนวนสัญญา    (count)      — COUNT DISTINCT contract per approve_month+bucket
- *   2. ยอดที่ต้องชำระ (target)    — SUM total_amount WHERE is_future_period = 0 (ถึงกำหนดแล้ว)
+ *   2. ยอดที่ต้องชำระ (target)    — SUM total_amount WHERE is_future_period = false (ถึงกำหนดแล้ว)
  *   3. ยอดที่ชำระแล้ว (paid)      — SUM from debt_collected_cache
- *   4. ยอดค้างชำระ   (due)        — SUM (total_amount - paid_amount) WHERE is_arrears = 1
+ *   4. ยอดค้างชำระ   (due)        — SUM (total_amount - paid_amount) WHERE is_arrears = true
  *                                    + penalty/unlockFee จากงวดล่าสุดของแต่ละสัญญาเท่านั้น
- *   5. ยอดที่ยังไม่ถึงกำหนด (notYetDue) — SUM total_amount WHERE is_future_period = 1
+ *   5. ยอดที่ยังไม่ถึงกำหนด (notYetDue) — SUM total_amount WHERE is_future_period = true
  *                                    + penalty/unlockFee จากงวดล่าสุดของแต่ละสัญญาเท่านั้น
  *
  * Bucket (debt_status) ใช้ contract_status + debt_range จาก debt_target_cache:
@@ -38,7 +38,7 @@ export type MoneyBreakdown = {
   discount: number;    // paid side เท่านั้น
   overpaid: number;    // paid side เท่านั้น
   badDebt: number;     // paid side เท่านั้น — ยอดขายเครื่อง (bad_debt)
-  badDebtInstallment: number; // paid side — ยอดค่างวดหนี้เสีย (total_amount สำหรับ is_bad_debt_row=0)
+  badDebtInstallment: number; // paid side — ยอดค่างวดหนี้เสีย (total_amount สำหรับ is_bad_debt_row = false)
   total: number;
 };
 
@@ -379,11 +379,11 @@ async function queryPaid(
   // - badge summary ยังถูกต้องเพราะ getMonthlySummary ใช้ totalPaid จาก paidMap|__paid__ โดยตรง
   // - per-bucket paid cell ใน table จะแสดงยอดตาม contract_status bucket
   // - payment_tx_amount = p.total = pt.amount จาก stream (ตรงกับ ptTotal ของหน้ายอดเก็บหนี้)
-  // - isExtraPenalty = payment_tx_amount=0 AND penalty>0 AND is_bad_debt_row=0
+  // - isExtraPenalty = payment_tx_amount=0 AND penalty>0 AND is_bad_debt_row = false
   //   → ข้ามออกจาก penalty_paid และ total_paid เหมือน DebtReport.tsx
   // - total_paid = SUM(payment_tx_amount + bad_debt) ทุก row ยกเว้น isExtraPenalty
-  // - installment_paid = SUM(payment_tx_amount) WHERE is_bad_debt_row=0 AND NOT isExtraPenalty
-  // - device_sale_amount = SUM(bad_debt) WHERE is_bad_debt_row=1
+  // - installment_paid = SUM(payment_tx_amount) WHERE is_bad_debt_row = false AND NOT isExtraPenalty
+  // - device_sale_amount = SUM(bad_debt) WHERE is_bad_debt_row = true
   const q = `
     SELECT
       TO_CHAR(dcc.approve_date, 'YYYY-MM') AS approve_month,
@@ -395,45 +395,45 @@ async function queryPaid(
         ELSE COALESCE(dcc.debt_range, 'ปกติ')
       END AS bucket,
       COUNT(DISTINCT dcc.contract_external_id) AS contract_count,
-      -- breakdown fields: ข้าม isExtraPenalty rows (payment_tx_amount=0 AND penalty>0 AND is_bad_debt_row=0)
+      -- breakdown fields: ข้าม isExtraPenalty rows (payment_tx_amount=0 AND penalty>0 AND is_bad_debt_row = false)
       -- เหมือน DebtReport.tsx บรรทัด 858-861
-      SUM(CASE WHEN dcc.is_bad_debt_row = 0
+      SUM(CASE WHEN dcc.is_bad_debt_row = false
                     AND NOT (CAST(dcc.payment_tx_amount AS DECIMAL(18,2)) = 0
                              AND CAST(dcc.penalty AS DECIMAL(18,2)) > 0)
                THEN CAST(dcc.principal   AS DECIMAL(18,2)) ELSE 0 END) AS principal_paid,
-      SUM(CASE WHEN dcc.is_bad_debt_row = 0
+      SUM(CASE WHEN dcc.is_bad_debt_row = false
                     AND NOT (CAST(dcc.payment_tx_amount AS DECIMAL(18,2)) = 0
                              AND CAST(dcc.penalty AS DECIMAL(18,2)) > 0)
                THEN CAST(dcc.interest    AS DECIMAL(18,2)) ELSE 0 END) AS interest_paid,
-      SUM(CASE WHEN dcc.is_bad_debt_row = 0
+      SUM(CASE WHEN dcc.is_bad_debt_row = false
                     AND NOT (CAST(dcc.payment_tx_amount AS DECIMAL(18,2)) = 0
                              AND CAST(dcc.penalty AS DECIMAL(18,2)) > 0)
                THEN CAST(dcc.fee         AS DECIMAL(18,2)) ELSE 0 END) AS fee_paid,
-      SUM(CASE WHEN dcc.is_bad_debt_row = 0
+      SUM(CASE WHEN dcc.is_bad_debt_row = false
                     AND NOT (CAST(dcc.payment_tx_amount AS DECIMAL(18,2)) = 0
                              AND CAST(dcc.penalty AS DECIMAL(18,2)) > 0)
                THEN CAST(dcc.penalty     AS DECIMAL(18,2)) ELSE 0 END) AS penalty_paid,
-      SUM(CASE WHEN dcc.is_bad_debt_row = 0
+      SUM(CASE WHEN dcc.is_bad_debt_row = false
                     AND NOT (CAST(dcc.payment_tx_amount AS DECIMAL(18,2)) = 0
                              AND CAST(dcc.penalty AS DECIMAL(18,2)) > 0)
                THEN CAST(dcc.unlock_fee  AS DECIMAL(18,2)) ELSE 0 END) AS unlock_fee_paid,
-      SUM(CASE WHEN dcc.is_bad_debt_row = 0
+      SUM(CASE WHEN dcc.is_bad_debt_row = false
                     AND NOT (CAST(dcc.payment_tx_amount AS DECIMAL(18,2)) = 0
                              AND CAST(dcc.penalty AS DECIMAL(18,2)) > 0)
                THEN CAST(dcc.discount    AS DECIMAL(18,2)) ELSE 0 END) AS discount_amount,
-      SUM(CASE WHEN dcc.is_bad_debt_row = 0
+      SUM(CASE WHEN dcc.is_bad_debt_row = false
                     AND NOT (CAST(dcc.payment_tx_amount AS DECIMAL(18,2)) = 0
                              AND CAST(dcc.penalty AS DECIMAL(18,2)) > 0)
                THEN CAST(dcc.overpaid    AS DECIMAL(18,2)) ELSE 0 END) AS overpaid_amount,
       -- installment_paid = SUM(payment_tx_amount) ยกเว้น isExtraPenalty
-      SUM(CASE WHEN dcc.is_bad_debt_row = 0
+      SUM(CASE WHEN dcc.is_bad_debt_row = false
                     AND NOT (CAST(dcc.payment_tx_amount AS DECIMAL(18,2)) = 0
                              AND CAST(dcc.penalty AS DECIMAL(18,2)) > 0)
                THEN CAST(dcc.payment_tx_amount AS DECIMAL(18,2)) ELSE 0 END) AS installment_paid,
-      SUM(CASE WHEN dcc.is_bad_debt_row = 1 THEN CAST(dcc.bad_debt AS DECIMAL(18,2)) ELSE 0 END) AS device_sale_amount,
+      SUM(CASE WHEN dcc.is_bad_debt_row = true THEN CAST(dcc.bad_debt AS DECIMAL(18,2)) ELSE 0 END) AS device_sale_amount,
       -- total_paid = SUM(payment_tx_amount + bad_debt) ยกเว้น isExtraPenalty
       -- = ptTotal ของหน้ายอดเก็บหนี้ (DebtReport.tsx บรรทัด 872)
-      SUM(CASE WHEN dcc.is_bad_debt_row = 1 THEN CAST(dcc.bad_debt AS DECIMAL(18,2))
+      SUM(CASE WHEN dcc.is_bad_debt_row = true THEN CAST(dcc.bad_debt AS DECIMAL(18,2))
                WHEN CAST(dcc.payment_tx_amount AS DECIMAL(18,2)) = 0
                     AND CAST(dcc.penalty AS DECIMAL(18,2)) > 0 THEN 0
                ELSE CAST(dcc.payment_tx_amount AS DECIMAL(18,2))
@@ -449,7 +449,7 @@ async function queryPaid(
 
 // ---------------------------------------------------------------------------
 // Query 4: Due tab — ยอดค้างชำระ
-// SUM (total_amount - paid_amount) WHERE is_arrears = 1
+// SUM (total_amount - paid_amount) WHERE is_arrears = true
 // penalty/unlockFee: ดึงจากงวดล่าสุดของแต่ละสัญญาเท่านั้น
 // ---------------------------------------------------------------------------
 async function queryDue(
@@ -491,7 +491,7 @@ async function queryDue(
   });
 
   /*
-   * penalty/unlockFee ดึงจากงวดล่าสุดของแต่ละสัญญาเท่านั้น (MAX period WHERE is_arrears=1)
+   * penalty/unlockFee ดึงจากงวดล่าสุดของแต่ละสัญญาเท่านั้น (MAX period WHERE is_arrears = true)
    * ยอดอื่น SUM จากทุกงวดที่ค้างชำระ
    */
   const q = `
@@ -518,13 +518,13 @@ async function queryDue(
       SELECT dtc.section, dtc.contract_external_id, MAX(dtc.period) AS max_period
       FROM debt_target_cache dtc
       WHERE ${baseWhere}
-        AND dtc.is_arrears = 1
+        AND dtc.is_arrears = true
         ${dueDateFilter}
       GROUP BY dtc.section, dtc.contract_external_id
     ) latest ON latest.section = base.section
              AND latest.contract_external_id = base.contract_external_id
     WHERE base.section = '${section}'
-      AND base.is_arrears = 1
+      AND base.is_arrears = true
       ${dueDateFilter.replace(/dtc\./g, "base.")}
     GROUP BY 1, 2
     ORDER BY 1 DESC
@@ -535,7 +535,7 @@ async function queryDue(
 
 // ---------------------------------------------------------------------------
 // Query 5: NotYetDue tab — ยอดที่ยังไม่ถึงกำหนด
-// SUM total_amount WHERE is_future_period = 1
+// SUM total_amount WHERE is_future_period = true
 // penalty/unlockFee: ดึงจากงวดล่าสุดของแต่ละสัญญาเท่านั้น
 // ---------------------------------------------------------------------------
 async function queryNotYetDue(
@@ -609,7 +609,7 @@ async function queryNotYetDue(
       WHERE ${baseWhere}
         AND dtc.due_date > CURRENT_DATE
         AND COALESCE(dtc.is_closed, 0) = 0
-        AND COALESCE(dtc.is_paid, 0) = 0
+        AND dtc.is_paid IS NOT TRUE
         ${dueDateFilter}
       GROUP BY dtc.section, dtc.contract_external_id
     ) latest ON latest.section = base.section
@@ -617,7 +617,7 @@ async function queryNotYetDue(
     WHERE base.section = '${section}'
       AND base.due_date > CURRENT_DATE
       AND COALESCE(base.is_closed, 0) = 0
-      AND COALESCE(base.is_paid, 0) = 0
+      AND base.is_paid IS NOT TRUE
       ${dueDateFilter.replace(/dtc\./g, "base.")}
     GROUP BY 1, 2
     ORDER BY 1 DESC

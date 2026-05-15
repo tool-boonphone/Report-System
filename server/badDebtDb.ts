@@ -7,8 +7,8 @@
  *
  * สรุปกำไร/ขาดทุนจากหนี้เสีย:
  *   - ดึงสัญญาที่มีสถานะ "หนี้เสีย" (contract_status = 'หนี้เสีย' ใน debt_target_cache)
- *   - deviceSaleAmount = SUM(bad_debt) WHERE is_bad_debt_row = 1 (debt_collected_cache)
- *   - installmentPaid  = SUM(total_amount) WHERE is_bad_debt_row = 0 (debt_collected_cache)
+ *   - deviceSaleAmount = SUM(bad_debt) WHERE is_bad_debt_row = true (debt_collected_cache)
+ *   - installmentPaid  = SUM(total_amount) WHERE is_bad_debt_row = false (debt_collected_cache)
  *   - ต้นทุน = financeAmount + commissionNet
  *   - รวมรายรับ = installmentPaid + deviceSaleAmount
  *   - กำไร/ขาดทุน = รวมรายรับ - ต้นทุน
@@ -35,7 +35,7 @@ export type BadDebtRow = {
   commissionNet: number;
   /** ยอดเก็บค่างวดปกติ (ไม่รวมยอดขายเครื่อง) */
   installmentPaid: number;
-  /** ยอดขายเครื่อง (SUM bad_debt จาก debt_collected_cache WHERE is_bad_debt_row=1) */
+  /** ยอดขายเครื่อง (SUM bad_debt จาก debt_collected_cache WHERE is_bad_debt_row = true) */
   deviceSaleAmount: number;
   /** วันที่ขายเครื่อง (bad_debt_date จาก contracts) */
   saleDate: string | null;
@@ -136,8 +136,8 @@ export async function getBadDebtSummary(params: {
     sql.raw(`
       SELECT
         contract_external_id,
-        SUM(CASE WHEN is_bad_debt_row = 1 THEN CAST(bad_debt AS DECIMAL(18,2)) ELSE 0 END)        AS device_sale_amount,
-        SUM(CASE WHEN is_bad_debt_row = 0 THEN CAST(total_amount AS DECIMAL(18,2)) ELSE 0 END)    AS installment_paid
+        SUM(CASE WHEN is_bad_debt_row = true THEN CAST(bad_debt AS DECIMAL(18,2)) ELSE 0 END)        AS device_sale_amount,
+        SUM(CASE WHEN is_bad_debt_row = false THEN CAST(total_amount AS DECIMAL(18,2)) ELSE 0 END)    AS installment_paid
       FROM debt_collected_cache
       WHERE section = '${params.section}'
         AND contract_external_id IN (${idsLiteral})
@@ -147,13 +147,13 @@ export async function getBadDebtSummary(params: {
   const collectedArr: Array<any> = pgRows(collectedRaw);
 
   // ─── Step 2b: หางวดสูงสุดที่มีการชำระเข้ามา (ไม่นับ bad_debt row) ─────────────
-  // ใช้ MAX(period) จาก debt_collected_cache ที่ is_bad_debt_row = 0
+  // ใช้ MAX(period) จาก debt_collected_cache ที่ is_bad_debt_row = false
   // ตรงกับ logic ของ DebtReport.tsx (maxPaidPeriod = max payment.period ที่ไม่ใช่ isBadDebtRow)
   const targetCountRaw = await db.execute(
     sql.raw(`
       SELECT
         contract_external_id,
-        MAX(CASE WHEN is_bad_debt_row = 0 THEN period ELSE NULL END) AS paid_installments
+        MAX(CASE WHEN is_bad_debt_row = false THEN period ELSE NULL END) AS paid_installments
       FROM debt_collected_cache
       WHERE section = '${params.section}'
         AND contract_external_id IN (${idsLiteral})

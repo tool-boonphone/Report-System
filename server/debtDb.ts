@@ -4176,7 +4176,7 @@ export async function listSuspectedBadDebt(params: { section: SectionKey }): Pro
       dtc.installment_count,
       dtc.debt_range,
       -- Earliest unpaid arrears due_date for daysOverdue calculation
-      MIN(CASE WHEN dtc.is_arrears = 1 AND dtc.is_paid = 0 AND dtc.total_amount > 0
+      MIN(CASE WHEN dtc.is_arrears = true AND dtc.is_paid = false AND dtc.total_amount > 0
                THEN dtc.due_date END) AS earliest_arrears_due
     FROM debt_target_cache dtc
     WHERE dtc.section = ${params.section}
@@ -4224,8 +4224,8 @@ export async function listSuspectedBadDebt(params: { section: SectionKey }): Pro
     sql.raw(`
       SELECT
         contract_external_id,
-        SUM(CASE WHEN is_bad_debt_row = 0 THEN CAST(total_amount AS DECIMAL(18,2)) ELSE 0 END) AS total_paid,
-        COUNT(CASE WHEN is_bad_debt_row = 0 THEN 1 END)                                         AS paid_installments
+        SUM(CASE WHEN is_bad_debt_row = false THEN CAST(total_amount AS DECIMAL(18,2)) ELSE 0 END) AS total_paid,
+        COUNT(CASE WHEN is_bad_debt_row = false THEN 1 END)                                         AS paid_installments
       FROM debt_collected_cache
       WHERE section = '${params.section}'
         AND contract_external_id IN (${contractIds.map((id) => `'${id.replace(/'/g, "''")}'`).join(",")})
