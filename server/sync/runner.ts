@@ -37,7 +37,7 @@ import { invalidateDebtCache } from "../debtCache";
 import { buildAllDebtExports } from "../debtExportBuilder";
 import { fillPeriodNosForSection } from "./fillPeriodNos";
 import { populateDebtCache } from "./populateCache";
-import { pgRows } from "./db";
+import { pgRows } from "../db";
 
 const OVERALL_TIMEOUT_MS = 180 * 60 * 1000; // 180 minutes ceiling per section (Fastfone365 has 17k contracts + enrichment)
 // A sync row older than this with status=in_progress is treated as abandoned.
