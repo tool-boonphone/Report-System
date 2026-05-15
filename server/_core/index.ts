@@ -128,6 +128,12 @@ async function startServer() {
     } catch (err) {
       console.error("[startup] startScheduler failed:", err);
     }
+    // Self-ping every 10 minutes to prevent Render.com free tier from sleeping
+    const selfPingUrl = `http://localhost:${port}/api/ping`;
+    setInterval(() => {
+      fetch(selfPingUrl).catch(() => { /* ignore errors */ });
+    }, 10 * 60 * 1000);
+    console.log("[keep-alive] Self-ping every 10 min started →", selfPingUrl);
     // Pre-warm debt cache in background (non-blocking, does not crash server on failure)
     prewarmDebtCache().catch((err) =>
       console.warn("[startup] prewarmDebtCache failed:", err)
