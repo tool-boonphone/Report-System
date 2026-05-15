@@ -14,7 +14,7 @@ import { getDb } from "../db";
 import { debtTargetCache, debtCollectedCache } from "../../drizzle/schema";
 import { listDebtTargetStream, listDebtCollectedStream } from "../debtDb";
 import type { SectionKey } from "../../shared/const";
-import { pgRows } from "./db";
+import { pgRows } from "../db";
 
 const contractExternalId = process.argv[2];
 const section: SectionKey = (process.argv[3] ?? "Fastfone365") as SectionKey;
