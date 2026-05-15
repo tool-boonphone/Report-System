@@ -97,3 +97,20 @@ export async function getUserByOpenId(openId: string) {
 
   return result.length > 0 ? result[0] : undefined;
 }
+
+/**
+ * Normalize db.execute() result for PostgreSQL compatibility.
+ * PostgreSQL (via Drizzle) returns { rows: [...] }
+ * MySQL returns [rows, fields]
+ */
+export function pgRows(result: unknown): any[] {
+  if (result && typeof result === 'object' && 'rows' in result) {
+    return (result as any).rows ?? [];
+  }
+  if (Array.isArray(result)) {
+    if (Array.isArray((result as any)[0])) return (result as any)[0];
+    return result as any[];
+  }
+  return [];
+}
+
