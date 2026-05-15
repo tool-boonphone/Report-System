@@ -37,6 +37,7 @@ import { invalidateDebtCache } from "../debtCache";
 import { buildAllDebtExports } from "../debtExportBuilder";
 import { fillPeriodNosForSection } from "./fillPeriodNos";
 import { populateDebtCache } from "./populateCache";
+import { pgRows } from "./db";
 
 const OVERALL_TIMEOUT_MS = 180 * 60 * 1000; // 180 minutes ceiling per section (Fastfone365 has 17k contracts + enrichment)
 // A sync row older than this with status=in_progress is treated as abandoned.
@@ -802,7 +803,7 @@ async function syncPayments(
         // Fetch all external_ids currently in DB for this section
         const dbRows: { external_id: string }[] = (await db.execute(
           sql`SELECT external_id FROM payment_transactions WHERE section = ${section}`
-        ) as any)[0] ?? [];
+        ) as any).rows ?? [];
         const toDelete = dbRows
           .map((r) => r.external_id)
           .filter((eid) => !apiExternalIds.has(eid));
@@ -1108,7 +1109,7 @@ async function computeAndStoreBadDebt(section: SectionKey): Promise<void> {
          AND contract_external_id IN (${inClause})
        ORDER BY contract_external_id, period
     `);
-    const rows: any[] = (instRows as any)[0] ?? instRows;
+    const rows: any[] = pgRows(instRows);
     for (const r of rows) {
       const extId = String(r.contract_external_id ?? "");
       if (!extId) continue;
