@@ -18,6 +18,7 @@ import { getDb } from "../db";
 import { contracts, paymentTransactions } from "../../drizzle/schema";
 import { computePayPeriods } from "./computePayPeriods";
 import type { SectionKey } from "../../shared/const";
+import { pgRows } from "./db";
 
 const CONTRACT_BATCH = 50;
 const UPDATE_BATCH = 500;
@@ -80,7 +81,7 @@ export async function fillPeriodNosForSection(
       contract_external_id: string;
       paid_at: string | null;
       amount: number;
-    }> = ((payRowsRaw as any)[0] ?? payRowsRaw).map((r: any) => ({
+    }> = (pgRows(payRowsRaw)).map((r: any) => ({
       id: Number(r.id),
       external_id: String(r.external_id),
       contract_external_id: String(r.contract_external_id),
