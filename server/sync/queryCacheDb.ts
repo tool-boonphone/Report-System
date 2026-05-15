@@ -24,6 +24,7 @@
 import { sql } from "drizzle-orm";
 import { getDb } from "../db";
 import type { SectionKey } from "../../shared/const";
+import { pgRows } from "./db";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const TERMINAL_STATUSES = new Set(["ระงับสัญญา", "สิ้นสุดสัญญา", "หนี้เสีย", "ยกเลิกสัญญา"]);
@@ -127,7 +128,7 @@ export async function* streamTargetFromCache(params: {
     FROM contracts
     WHERE section = ${section}
   `);
-  const phoneRows: any[] = (phoneResult as any)[0] ?? phoneResult;
+  const phoneRows: any[] = pgRows(phoneResult);
   const phoneMap = new Map<string, string | null>();
   // Phase 9AK: เก็บ installment_amount จาก contracts table โดยตรง (ไม่คำนวณจาก totalAmount)
   const contractInstAmtMap = new Map<string, { installmentAmount: number | null; financeAmount: number | null }>();
@@ -150,7 +151,7 @@ export async function* streamTargetFromCache(params: {
       ORDER BY contract_external_id
       LIMIT ${batchSize} OFFSET ${offset}
     `);
-    const idRows: any[] = (idResult as any)[0] ?? idResult;
+    const idRows: any[] = pgRows(idResult);
     if (idRows.length === 0) break;
 
     const contractIds = idRows.map((r: any) => String(r.contract_external_id));
@@ -194,7 +195,7 @@ export async function* streamTargetFromCache(params: {
         AND contract_external_id IN (${sql.raw(idList)})
       ORDER BY contract_external_id, period
     `);
-    const rows: any[] = (rawResult as any)[0] ?? rawResult;
+    const rows: any[] = pgRows(rawResult);
 
     // Group rows by contract
     const contractMap = new Map<string, any[]>();
@@ -303,7 +304,7 @@ export async function* streamCollectedFromCache(params: {
     FROM contracts
     WHERE section = ${section}
   `);
-  const phoneRows: any[] = (phoneResult as any)[0] ?? phoneResult;
+  const phoneRows: any[] = pgRows(phoneResult);
   const phoneMap = new Map<string, string | null>();
   // Phase 9AK: เก็บ installment_amount จาก contracts table โดยตรง
   const contractInstAmtMap2 = new Map<string, { installmentAmount: number | null; financeAmount: number | null }>();
@@ -325,7 +326,7 @@ export async function* streamCollectedFromCache(params: {
       ORDER BY contract_external_id
       LIMIT ${batchSize} OFFSET ${offset}
     `);
-    const idRows: any[] = (idResult as any)[0] ?? idResult;
+    const idRows: any[] = pgRows(idResult);
     if (idRows.length === 0) break;
 
     const contractIds = idRows.map((r: any) => String(r.contract_external_id));
@@ -362,7 +363,7 @@ export async function* streamCollectedFromCache(params: {
         AND contract_external_id IN (${sql.raw(idList)})
       ORDER BY contract_external_id, paid_at, payment_external_id
     `);
-    const rows: any[] = (rawResult as any)[0] ?? rawResult;
+    const rows: any[] = pgRows(rawResult);
 
     // Fetch target rows for installments (รวม contract_no, customer_name, approve_date เพื่อใช้เป็น fallback เมื่อไม่มี payRows)
     const targetResult = await db.execute(sql`
@@ -394,7 +395,7 @@ export async function* streamCollectedFromCache(params: {
         AND contract_external_id IN (${sql.raw(idList)})
       ORDER BY contract_external_id, period
     `);
-    const targetRows: any[] = (targetResult as any)[0] ?? targetResult;
+    const targetRows: any[] = pgRows(targetResult);
     const targetByContract = new Map<string, any[]>();
     for (const r of targetRows) {
       const key = String(r.contract_external_id);
@@ -553,7 +554,7 @@ export async function getTargetContractCount(section: SectionKey): Promise<numbe
     FROM debt_target_cache
     WHERE section = ${section}
   `);
-  const rows: any[] = (result as any)[0] ?? result;
+  const rows: any[] = pgRows(result);
   return Number(rows[0]?.cnt ?? 0);
 }
 
@@ -569,7 +570,7 @@ export async function getCollectedContractCount(section: SectionKey): Promise<nu
     FROM debt_target_cache
     WHERE section = ${section}
   `);
-  const rows: any[] = (result as any)[0] ?? result;
+  const rows: any[] = pgRows(result);
   return Number(rows[0]?.cnt ?? 0);
 }
 
@@ -602,7 +603,7 @@ export async function getTargetChunk(params: {
     ORDER BY contract_external_id
     LIMIT ${limit} OFFSET ${offset}
   `);
-  const idRows: any[] = (idResult as any)[0] ?? idResult;
+  const idRows: any[] = pgRows(idResult);
   if (idRows.length === 0) {
     const total = await getTargetContractCount(section);
     return { rows: [], totalContracts: total };
@@ -660,8 +661,8 @@ export async function getTargetChunk(params: {
   ]);
 
   const totalContracts = totalResult;
-  const rows: any[] = (rawResult as any)[0] ?? rawResult;
-  const phoneRows: any[] = (phoneResult as any)[0] ?? phoneResult;
+  const rows: any[] = pgRows(rawResult);
+  const phoneRows: any[] = pgRows(phoneResult);
 
   // ── 3. Build phone + finance + installmentAmount map ─────────────────────────────────────────────────────────────────────────────────────────
   const phoneMap = new Map<string, string | null>();
@@ -783,7 +784,7 @@ export async function getCollectedChunk(params: {
     ORDER BY contract_external_id
     LIMIT ${limit} OFFSET ${offset}
   `);
-  const idRows: any[] = (idResult as any)[0] ?? idResult;
+  const idRows: any[] = pgRows(idResult);
   if (idRows.length === 0) {
     const total = await getCollectedContractCount(section);
     return { rows: [], totalContracts: total, hasPrincipalBreakdown: true };
@@ -861,9 +862,9 @@ export async function getCollectedChunk(params: {
     `),
   ]);
 
-  const collectedRows: any[] = (rawResult as any)[0] ?? rawResult;
-  const targetRows: any[] = (targetResult as any)[0] ?? targetResult;
-  const phoneRows: any[] = (phoneResult as any)[0] ?? phoneResult;
+  const collectedRows: any[] = pgRows(rawResult);
+  const targetRows: any[] = pgRows(targetResult);
+  const phoneRows: any[] = pgRows(phoneResult);
 
   // ── 3. Build maps ─────────────────────────────────────────────────────────
   const phoneMap = new Map<string, string | null>();
