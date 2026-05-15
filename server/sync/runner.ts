@@ -1114,7 +1114,7 @@ async function computeAndStoreBadDebt(section: SectionKey): Promise<void> {
       SELECT contract_external_id,
              period,
              due_date,
-             JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.installment_status_code')) AS status_code
+             (raw_json->>'installment_status_code') AS status_code
         FROM ${installments}
        WHERE section = ${section}
          AND contract_external_id IN (${inClause})

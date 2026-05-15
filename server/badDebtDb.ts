@@ -94,7 +94,7 @@ export async function getBadDebtSummary(params: {
   // contract_status = 'หนี้เสีย' is stored on every period row for that contract
   let approveFilter = "";
   if (params.approveMonth) {
-    approveFilter = `AND DATE_FORMAT(dtc.approve_date, '%Y-%m') = '${params.approveMonth.replace(/'/g, "''")}'`;
+    approveFilter = `AND TO_CHAR(dtc.approve_date, 'YYYY-MM') = '${params.approveMonth.replace(/'/g, "''")}'`;
   }
 
   const contractsRaw = await db.execute(
@@ -264,12 +264,12 @@ export async function getBadDebtSummary(params: {
   const totalContractsRaw = await db.execute(
     sql.raw(`
       SELECT
-        DATE_FORMAT(approve_date, '%Y-%m') AS ym,
+        TO_CHAR(approve_date, 'YYYY-MM') AS ym,
         COUNT(*) AS total
       FROM contracts
       WHERE section = '${params.section}'
         AND approve_date IS NOT NULL
-      GROUP BY DATE_FORMAT(approve_date, '%Y-%m')
+      GROUP BY TO_CHAR(approve_date, 'YYYY-MM')
     `)
   );
   const totalContractsArr: Array<any> = pgRows(totalContractsRaw);

@@ -992,13 +992,13 @@ export async function listDebtTarget(params: { section: SectionKey }) {
            CAST(amount AS DECIMAL(18,2))       AS amount,
            CAST(paid_amount AS DECIMAL(18,2))  AS paid_amount,
            status AS inst_status,
-           CAST(JSON_EXTRACT(raw_json, '$.principal_due') AS DECIMAL(18,2)) AS principal_due,
-           CAST(JSON_EXTRACT(raw_json, '$.interest_due')  AS DECIMAL(18,2)) AS interest_due,
-           CAST(JSON_EXTRACT(raw_json, '$.fee_due')       AS DECIMAL(18,2)) AS fee_due,
-           CAST(COALESCE(JSON_EXTRACT(raw_json, '$.penalty_due'), JSON_EXTRACT(raw_json, '$.mulct'), 0) AS DECIMAL(18,2)) AS penalty_due,
-           CAST(COALESCE(JSON_EXTRACT(raw_json, '$.unlock_fee_due'), 0) AS DECIMAL(18,2)) AS unlock_fee_due,
-           JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.installment_status_code')) AS installment_status_code,
-           CAST(JSON_EXTRACT(raw_json, '$.balance') AS DECIMAL(18,2)) AS balance
+           CAST((raw_json->>'principal_due') AS DECIMAL(18,2)) AS principal_due,
+           CAST((raw_json->>'interest_due')  AS DECIMAL(18,2)) AS interest_due,
+           CAST((raw_json->>'fee_due')       AS DECIMAL(18,2)) AS fee_due,
+           CAST(COALESCE((raw_json->>'penalty_due'), (raw_json->>'mulct'), 0) AS DECIMAL(18,2)) AS penalty_due,
+           CAST(COALESCE((raw_json->>'unlock_fee_due'), 0) AS DECIMAL(18,2)) AS unlock_fee_due,
+           (raw_json->>'installment_status_code') AS installment_status_code,
+           CAST((raw_json->>'balance') AS DECIMAL(18,2)) AS balance
       FROM ${installments}
      WHERE ${installments.section} = ${params.section}
      ORDER BY contract_external_id, period
@@ -1105,13 +1105,13 @@ export async function listDebtTarget(params: { section: SectionKey }) {
     const rawCloseAmtData = await db.execute(sql`
       SELECT contract_external_id,
              CAST(amount AS DECIMAL(18,2)) AS total_paid_amount,
-             CAST(JSON_EXTRACT(raw_json, '$.close_installment_amount') AS DECIMAL(18,2)) AS close_installment_amount,
+             CAST((raw_json->>'close_installment_amount') AS DECIMAL(18,2)) AS close_installment_amount,
              DATE(paid_at) AS paid_date,
              receipt_no
         FROM ${paymentTransactions}
        WHERE ${paymentTransactions.section} = ${params.section}
-         AND JSON_EXTRACT(raw_json, '$.close_installment_amount') IS NOT NULL
-         AND CAST(JSON_EXTRACT(raw_json, '$.close_installment_amount') AS DECIMAL(18,2)) > 0
+         AND (raw_json->>'close_installment_amount') IS NOT NULL
+         AND CAST((raw_json->>'close_installment_amount') AS DECIMAL(18,2)) > 0
     `);
     const closeAmtRows: any[] = pgRows(rawCloseAmtData);
     // First pass: collect all total_paid_amounts per contract
@@ -1185,13 +1185,13 @@ export async function listDebtTarget(params: { section: SectionKey }) {
       SELECT contract_external_id,
              external_id AS payment_external_id,
              receipt_no,
-             CAST(JSON_EXTRACT(raw_json, '$.overpaid_amount') AS DECIMAL(18,2)) AS overpaid_amount,
-             CAST(JSON_EXTRACT(raw_json, '$.principal_paid') AS DECIMAL(18,2)) AS principal_paid,
-             CAST(JSON_EXTRACT(raw_json, '$.interest_paid') AS DECIMAL(18,2)) AS interest_paid,
-             CAST(JSON_EXTRACT(raw_json, '$.fee_paid') AS DECIMAL(18,2)) AS fee_paid,
-             CAST(JSON_EXTRACT(raw_json, '$.close_installment_amount') AS DECIMAL(18,2)) AS close_installment_amount,
-             CAST(JSON_EXTRACT(raw_json, '$.bad_debt_amount') AS DECIMAL(18,2)) AS bad_debt_amount,
-             CAST(JSON_EXTRACT(raw_json, '$.payment_id') AS UNSIGNED) AS payment_id,
+             CAST((raw_json->>'overpaid_amount') AS DECIMAL(18,2)) AS overpaid_amount,
+             CAST((raw_json->>'principal_paid') AS DECIMAL(18,2)) AS principal_paid,
+             CAST((raw_json->>'interest_paid') AS DECIMAL(18,2)) AS interest_paid,
+             CAST((raw_json->>'fee_paid') AS DECIMAL(18,2)) AS fee_paid,
+             CAST((raw_json->>'close_installment_amount') AS DECIMAL(18,2)) AS close_installment_amount,
+             CAST((raw_json->>'bad_debt_amount') AS DECIMAL(18,2)) AS bad_debt_amount,
+             CAST((raw_json->>'payment_id') AS BIGINT) AS payment_id,
              CAST(amount AS DECIMAL(18,2)) AS total_paid_amount,
              paid_at
         FROM ${paymentTransactions}
@@ -1602,8 +1602,8 @@ export async function listDebtTarget(params: { section: SectionKey }) {
                  external_id AS payment_external_id,
                  receipt_no,
                  CAST(amount AS DECIMAL(18,2)) AS total_paid_amount,
-                 CAST(JSON_EXTRACT(raw_json, '$.bad_debt_amount') AS DECIMAL(18,2)) AS bad_debt_amount,
-                 CAST(JSON_EXTRACT(raw_json, '$.payment_id') AS UNSIGNED) AS payment_id,
+                 CAST((raw_json->>'bad_debt_amount') AS DECIMAL(18,2)) AS bad_debt_amount,
+                 CAST((raw_json->>'payment_id') AS BIGINT) AS payment_id,
                  paid_at
             FROM ${paymentTransactions}
            WHERE ${paymentTransactions.section} = ${params.section}
@@ -2351,19 +2351,19 @@ export async function listDebtCollected(params: { section: SectionKey }) {
            pt.external_id AS payment_external_id,
            pt.paid_at,
            CAST(pt.amount AS DECIMAL(18,2)) AS total_paid_amount,
-           CAST(JSON_EXTRACT(pt.raw_json, '$.principal_paid')           AS DECIMAL(18,2)) AS principal_paid,
-           CAST(JSON_EXTRACT(pt.raw_json, '$.interest_paid')            AS DECIMAL(18,2)) AS interest_paid,
-           CAST(JSON_EXTRACT(pt.raw_json, '$.fee_paid')                 AS DECIMAL(18,2)) AS fee_paid,
-           CAST(JSON_EXTRACT(pt.raw_json, '$.penalty_paid')             AS DECIMAL(18,2)) AS penalty_paid,
-           CAST(JSON_EXTRACT(pt.raw_json, '$.unlock_fee_paid')          AS DECIMAL(18,2)) AS unlock_fee_paid,
-           CAST(JSON_EXTRACT(pt.raw_json, '$.discount_amount')          AS DECIMAL(18,2)) AS discount_amount,
-           CAST(JSON_EXTRACT(pt.raw_json, '$.overpaid_amount')          AS DECIMAL(18,2)) AS overpaid_amount,
-           CAST(JSON_EXTRACT(pt.raw_json, '$.close_installment_amount') AS DECIMAL(18,2)) AS close_installment_amount,
-           CAST(JSON_EXTRACT(pt.raw_json, '$.bad_debt_amount')          AS DECIMAL(18,2)) AS bad_debt_amount,
-           CAST(JSON_EXTRACT(pt.raw_json, '$.payment_id')               AS UNSIGNED) AS payment_id,
+           CAST((pt.raw_json->>'principal_paid')           AS DECIMAL(18,2)) AS principal_paid,
+           CAST((pt.raw_json->>'interest_paid')            AS DECIMAL(18,2)) AS interest_paid,
+           CAST((pt.raw_json->>'fee_paid')                 AS DECIMAL(18,2)) AS fee_paid,
+           CAST((pt.raw_json->>'penalty_paid')             AS DECIMAL(18,2)) AS penalty_paid,
+           CAST((pt.raw_json->>'unlock_fee_paid')          AS DECIMAL(18,2)) AS unlock_fee_paid,
+           CAST((pt.raw_json->>'discount_amount')          AS DECIMAL(18,2)) AS discount_amount,
+           CAST((pt.raw_json->>'overpaid_amount')          AS DECIMAL(18,2)) AS overpaid_amount,
+           CAST((pt.raw_json->>'close_installment_amount') AS DECIMAL(18,2)) AS close_installment_amount,
+           CAST((pt.raw_json->>'bad_debt_amount')          AS DECIMAL(18,2)) AS bad_debt_amount,
+           CAST((pt.raw_json->>'payment_id')               AS BIGINT) AS payment_id,
            NULL AS installment_external_id,
            pt.receipt_no AS receipt_no,
-           JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.remark'))     AS remark,
+           (pt.raw_json->>'remark')     AS remark,
            pt.status AS ff_status,
            -- updated_at/updated_by/created_at: ดึงจาก column โดยตรง (บันทึกตอน sync จาก API)
            pt.updated_at,
@@ -2371,7 +2371,7 @@ export async function listDebtCollected(params: { section: SectionKey }) {
            pt.created_at
       FROM payment_transactions pt
      WHERE pt.section = ${params.section}
-     ORDER BY pt.contract_external_id, pt.paid_at, CAST(JSON_EXTRACT(pt.raw_json, '$.payment_id') AS UNSIGNED)
+     ORDER BY pt.contract_external_id, pt.paid_at, CAST((pt.raw_json->>'payment_id') AS BIGINT)
   `);
   const pRows: any[] = pgRows(payRowsRaw);
 
@@ -2827,13 +2827,13 @@ export async function* listDebtTargetStream(params: {
            CAST(amount AS DECIMAL(18,2))       AS amount,
            CAST(paid_amount AS DECIMAL(18,2))  AS paid_amount,
            status AS inst_status,
-           CAST(JSON_EXTRACT(raw_json, '$.principal_due') AS DECIMAL(18,2)) AS principal_due,
-           CAST(JSON_EXTRACT(raw_json, '$.interest_due')  AS DECIMAL(18,2)) AS interest_due,
-           CAST(JSON_EXTRACT(raw_json, '$.fee_due')       AS DECIMAL(18,2)) AS fee_due,
-           CAST(COALESCE(JSON_EXTRACT(raw_json, '$.penalty_due'), JSON_EXTRACT(raw_json, '$.mulct'), 0) AS DECIMAL(18,2)) AS penalty_due,
-           CAST(COALESCE(JSON_EXTRACT(raw_json, '$.unlock_fee_due'), 0) AS DECIMAL(18,2)) AS unlock_fee_due,
-           JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.installment_status_code')) AS installment_status_code,
-           CAST(JSON_EXTRACT(raw_json, '$.balance') AS DECIMAL(18,2)) AS balance
+           CAST((raw_json->>'principal_due') AS DECIMAL(18,2)) AS principal_due,
+           CAST((raw_json->>'interest_due')  AS DECIMAL(18,2)) AS interest_due,
+           CAST((raw_json->>'fee_due')       AS DECIMAL(18,2)) AS fee_due,
+           CAST(COALESCE((raw_json->>'penalty_due'), (raw_json->>'mulct'), 0) AS DECIMAL(18,2)) AS penalty_due,
+           CAST(COALESCE((raw_json->>'unlock_fee_due'), 0) AS DECIMAL(18,2)) AS unlock_fee_due,
+           (raw_json->>'installment_status_code') AS installment_status_code,
+           CAST((raw_json->>'balance') AS DECIMAL(18,2)) AS balance
       FROM ${installments}
      WHERE ${installments.section} = ${params.section}
      ORDER BY contract_external_id, period
@@ -2926,13 +2926,13 @@ export async function* listDebtTargetStream(params: {
     const rawCloseAmtData = await db.execute(sql`
       SELECT contract_external_id,
              CAST(amount AS DECIMAL(18,2)) AS total_paid_amount,
-             CAST(JSON_EXTRACT(raw_json, '$.close_installment_amount') AS DECIMAL(18,2)) AS close_installment_amount,
+             CAST((raw_json->>'close_installment_amount') AS DECIMAL(18,2)) AS close_installment_amount,
              DATE(paid_at) AS paid_date,
              receipt_no
         FROM ${paymentTransactions}
        WHERE ${paymentTransactions.section} = ${params.section}
-         AND JSON_EXTRACT(raw_json, '$.close_installment_amount') IS NOT NULL
-         AND CAST(JSON_EXTRACT(raw_json, '$.close_installment_amount') AS DECIMAL(18,2)) > 0
+         AND (raw_json->>'close_installment_amount') IS NOT NULL
+         AND CAST((raw_json->>'close_installment_amount') AS DECIMAL(18,2)) > 0
     `);
     const closeAmtRows: any[] = pgRows(rawCloseAmtData);
     // First pass: collect total_paid_amounts per contract
@@ -2991,13 +2991,13 @@ export async function* listDebtTargetStream(params: {
       SELECT contract_external_id,
              external_id AS payment_external_id,
              receipt_no,
-             CAST(JSON_EXTRACT(raw_json, '$.overpaid_amount') AS DECIMAL(18,2)) AS overpaid_amount,
-             CAST(JSON_EXTRACT(raw_json, '$.principal_paid') AS DECIMAL(18,2)) AS principal_paid,
-             CAST(JSON_EXTRACT(raw_json, '$.interest_paid') AS DECIMAL(18,2)) AS interest_paid,
-             CAST(JSON_EXTRACT(raw_json, '$.fee_paid') AS DECIMAL(18,2)) AS fee_paid,
-             CAST(JSON_EXTRACT(raw_json, '$.close_installment_amount') AS DECIMAL(18,2)) AS close_installment_amount,
-             CAST(JSON_EXTRACT(raw_json, '$.bad_debt_amount') AS DECIMAL(18,2)) AS bad_debt_amount,
-             CAST(JSON_EXTRACT(raw_json, '$.payment_id') AS UNSIGNED) AS payment_id,
+             CAST((raw_json->>'overpaid_amount') AS DECIMAL(18,2)) AS overpaid_amount,
+             CAST((raw_json->>'principal_paid') AS DECIMAL(18,2)) AS principal_paid,
+             CAST((raw_json->>'interest_paid') AS DECIMAL(18,2)) AS interest_paid,
+             CAST((raw_json->>'fee_paid') AS DECIMAL(18,2)) AS fee_paid,
+             CAST((raw_json->>'close_installment_amount') AS DECIMAL(18,2)) AS close_installment_amount,
+             CAST((raw_json->>'bad_debt_amount') AS DECIMAL(18,2)) AS bad_debt_amount,
+             CAST((raw_json->>'payment_id') AS BIGINT) AS payment_id,
              CAST(amount AS DECIMAL(18,2)) AS total_paid_amount,
              paid_at
         FROM ${paymentTransactions}
@@ -3769,10 +3769,10 @@ export async function* listDebtCollectedStream(params: {
              due_date,
              CAST(paid_amount AS DECIMAL(18,2)) AS paid_amount,
              status AS inst_status,
-             JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.installment_status_code')) AS installment_status_code,
-             CAST(COALESCE(JSON_EXTRACT(raw_json, '$.penalty_due'), JSON_EXTRACT(raw_json, '$.mulct'), 0) AS DECIMAL(18,2)) AS penalty_due,
-             CAST(COALESCE(JSON_EXTRACT(raw_json, '$.unlock_fee_due'), 0) AS DECIMAL(18,2)) AS unlock_fee_due,
-             CAST(JSON_EXTRACT(raw_json, '$.balance') AS DECIMAL(18,2)) AS balance
+             (raw_json->>'installment_status_code') AS installment_status_code,
+             CAST(COALESCE((raw_json->>'penalty_due'), (raw_json->>'mulct'), 0) AS DECIMAL(18,2)) AS penalty_due,
+             CAST(COALESCE((raw_json->>'unlock_fee_due'), 0) AS DECIMAL(18,2)) AS unlock_fee_due,
+             CAST((raw_json->>'balance') AS DECIMAL(18,2)) AS balance
         FROM installments
        WHERE section = '${sectionLiteral}'
          AND contract_external_id IN (${batchIdsLiteral})
@@ -3825,18 +3825,18 @@ export async function* listDebtCollectedStream(params: {
              pt.external_id AS payment_external_id,
              pt.paid_at,
              CAST(pt.amount AS DECIMAL(18,2)) AS total_paid_amount,
-             CAST(JSON_EXTRACT(pt.raw_json, '$.principal_paid')           AS DECIMAL(18,2)) AS principal_paid,
-             CAST(JSON_EXTRACT(pt.raw_json, '$.interest_paid')            AS DECIMAL(18,2)) AS interest_paid,
-             CAST(JSON_EXTRACT(pt.raw_json, '$.fee_paid')                 AS DECIMAL(18,2)) AS fee_paid,
-             CAST(JSON_EXTRACT(pt.raw_json, '$.penalty_paid')             AS DECIMAL(18,2)) AS penalty_paid,
-             CAST(JSON_EXTRACT(pt.raw_json, '$.unlock_fee_paid')          AS DECIMAL(18,2)) AS unlock_fee_paid,
-             CAST(JSON_EXTRACT(pt.raw_json, '$.discount_amount')          AS DECIMAL(18,2)) AS discount_amount,
-             CAST(JSON_EXTRACT(pt.raw_json, '$.overpaid_amount')          AS DECIMAL(18,2)) AS overpaid_amount,
-             CAST(JSON_EXTRACT(pt.raw_json, '$.close_installment_amount') AS DECIMAL(18,2)) AS close_installment_amount,
-             CAST(JSON_EXTRACT(pt.raw_json, '$.bad_debt_amount')          AS DECIMAL(18,2)) AS bad_debt_amount,
-             CAST(JSON_EXTRACT(pt.raw_json, '$.payment_id')               AS UNSIGNED) AS payment_id,
+             CAST((pt.raw_json->>'principal_paid')           AS DECIMAL(18,2)) AS principal_paid,
+             CAST((pt.raw_json->>'interest_paid')            AS DECIMAL(18,2)) AS interest_paid,
+             CAST((pt.raw_json->>'fee_paid')                 AS DECIMAL(18,2)) AS fee_paid,
+             CAST((pt.raw_json->>'penalty_paid')             AS DECIMAL(18,2)) AS penalty_paid,
+             CAST((pt.raw_json->>'unlock_fee_paid')          AS DECIMAL(18,2)) AS unlock_fee_paid,
+             CAST((pt.raw_json->>'discount_amount')          AS DECIMAL(18,2)) AS discount_amount,
+             CAST((pt.raw_json->>'overpaid_amount')          AS DECIMAL(18,2)) AS overpaid_amount,
+             CAST((pt.raw_json->>'close_installment_amount') AS DECIMAL(18,2)) AS close_installment_amount,
+             CAST((pt.raw_json->>'bad_debt_amount')          AS DECIMAL(18,2)) AS bad_debt_amount,
+             CAST((pt.raw_json->>'payment_id')               AS BIGINT) AS payment_id,
              pt.receipt_no AS receipt_no,
-             JSON_UNQUOTE(JSON_EXTRACT(pt.raw_json, '$.remark'))     AS remark,
+             (pt.raw_json->>'remark')     AS remark,
              pt.status AS ff_status,
              pt.updated_at,
              pt.updated_by,

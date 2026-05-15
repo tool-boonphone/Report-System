@@ -173,7 +173,7 @@ function dtcWhere(section: string, opts: {
     w += `\n    AND DATE(dtc.approve_date) = '${opts.approveDate}'`;
   } else if (opts.approveMonths && opts.approveMonths.length > 0) {
     const list = opts.approveMonths.map((m) => `'${m}'`).join(",");
-    w += `\n    AND DATE_FORMAT(dtc.approve_date, '%Y-%m') IN (${list})`;
+    w += `\n    AND TO_CHAR(dtc.approve_date, 'YYYY-MM') IN (${list})`;
   }
   if (opts.search) {
     const s = escapeLike(opts.search);
@@ -206,7 +206,7 @@ function dccWhere(section: string, opts: {
     w += `\n    AND DATE(dcc.paid_at) = '${opts.paidAtDate}'`;
   } else if (opts.paidAtMonths && opts.paidAtMonths.length > 0) {
     const list = opts.paidAtMonths.map((m) => `'${m}'`).join(",");
-    w += `\n    AND DATE_FORMAT(dcc.paid_at, '%Y-%m') IN (${list})`;
+    w += `\n    AND TO_CHAR(dcc.paid_at, 'YYYY-MM') IN (${list})`;
   }
   if (opts.search) {
     const s = escapeLike(opts.search);
@@ -235,7 +235,7 @@ async function queryCount(section: SectionKey, opts: {
 
   const q = `
     SELECT
-      DATE_FORMAT(dtc.approve_date, '%Y-%m') AS approve_month,
+      TO_CHAR(dtc.approve_date, 'YYYY-MM') AS approve_month,
       ${BUCKET_CASE_DTC} AS bucket,
       COUNT(DISTINCT dtc.contract_external_id) AS contract_count
     FROM debt_target_cache dtc
@@ -249,8 +249,8 @@ async function queryCount(section: SectionKey, opts: {
 
 // ---------------------------------------------------------------------------
 // Query 2: Target tab — เป้าเก็บหนี้
-// SUM(principal+interest+fee) WHERE due_date <= CURDATE() (งวดที่ถึงกำหนดแล้วเท่านั้น)
-// penalty/unlockFee: ดึงจากงวดล่าสุดที่ถึงกำหนดแล้ว (MAX period WHERE due_date <= CURDATE())
+// SUM(principal+interest+fee) WHERE due_date <= CURRENT_DATE (งวดที่ถึงกำหนดแล้วเท่านั้น)
+// penalty/unlockFee: ดึงจากงวดล่าสุดที่ถึงกำหนดแล้ว (MAX period WHERE due_date <= CURRENT_DATE)
 // ---------------------------------------------------------------------------
 async function queryTarget(
   section: SectionKey,
@@ -289,7 +289,7 @@ async function queryTarget(
     dueDateFilter = `\n    AND DATE(dtc.due_date) = '${opts.dueDate}'`;
   } else if (opts.dueMonths && opts.dueMonths.length > 0) {
     const list = opts.dueMonths.map((m) => `'${m}'`).join(",");
-    dueDateFilter = `\n    AND DATE_FORMAT(dtc.due_date, '%Y-%m') IN (${list})`;
+    dueDateFilter = `\n    AND TO_CHAR(dtc.due_date, 'YYYY-MM') IN (${list})`;
   }
 
   /*
@@ -299,7 +299,7 @@ async function queryTarget(
    */
   const q = `
     SELECT
-      DATE_FORMAT(base.approve_date, '%Y-%m') AS approve_month,
+      TO_CHAR(base.approve_date, 'YYYY-MM') AS approve_month,
       CASE
         WHEN base.contract_status = 'หนี้เสีย'      THEN 'หนี้เสีย'
         WHEN base.contract_status = 'ระงับสัญญา'   THEN 'ระงับสัญญา'
@@ -327,13 +327,13 @@ async function queryTarget(
       SELECT dtc.section, dtc.contract_external_id, MAX(dtc.period) AS max_period
       FROM debt_target_cache dtc
       WHERE ${baseWhere}
-        AND DATE(dtc.due_date) <= CURDATE()
+        AND DATE(dtc.due_date) <= CURRENT_DATE
         ${dueDateFilter}
       GROUP BY dtc.section, dtc.contract_external_id
     ) latest ON latest.section = base.section
              AND latest.contract_external_id = base.contract_external_id
     WHERE base.section = '${section}'
-      AND DATE(base.due_date) <= CURDATE()
+      AND DATE(base.due_date) <= CURRENT_DATE
       ${dueDateFilter.replace(/dtc\./g, "base.")}
     GROUP BY approve_month, bucket
     ORDER BY approve_month DESC
@@ -386,7 +386,7 @@ async function queryPaid(
   // - device_sale_amount = SUM(bad_debt) WHERE is_bad_debt_row=1
   const q = `
     SELECT
-      DATE_FORMAT(dcc.approve_date, '%Y-%m') AS approve_month,
+      TO_CHAR(dcc.approve_date, 'YYYY-MM') AS approve_month,
       CASE
         WHEN dcc.contract_status = 'หนี้เสีย'      THEN 'หนี้เสีย'
         WHEN dcc.contract_status = 'ระงับสัญญา'   THEN 'ระงับสัญญา'
@@ -481,7 +481,7 @@ async function queryDue(
     dueDateFilter = `\n    AND DATE(dtc.due_date) = '${opts.dueAtDate}'`;
   } else if (opts.dueAtMonths && opts.dueAtMonths.length > 0) {
     const list = opts.dueAtMonths.map((m) => `'${m}'`).join(",");
-    dueDateFilter = `\n    AND DATE_FORMAT(dtc.due_date, '%Y-%m') IN (${list})`;
+    dueDateFilter = `\n    AND TO_CHAR(dtc.due_date, 'YYYY-MM') IN (${list})`;
   }
 
   const baseWhere = dtcWhere(section, {
@@ -496,7 +496,7 @@ async function queryDue(
    */
   const q = `
     SELECT
-      DATE_FORMAT(base.approve_date, '%Y-%m') AS approve_month,
+      TO_CHAR(base.approve_date, 'YYYY-MM') AS approve_month,
       CASE
         WHEN base.contract_status = 'หนี้เสีย'      THEN 'หนี้เสีย'
         WHEN base.contract_status = 'ระงับสัญญา'   THEN 'ระงับสัญญา'
@@ -575,17 +575,17 @@ async function queryNotYetDue(
     dueDateFilter = `\n    AND DATE(dtc.due_date) = '${opts.dueDate}'`;
   } else if (opts.dueMonths && opts.dueMonths.length > 0) {
     const list = opts.dueMonths.map((m) => `'${m}'`).join(",");
-    dueDateFilter = `\n    AND DATE_FORMAT(dtc.due_date, '%Y-%m') IN (${list})`;
+    dueDateFilter = `\n    AND TO_CHAR(dtc.due_date, 'YYYY-MM') IN (${list})`;
   }
 
   /*
-   * penalty/unlockFee ดึงจากงวดล่าสุดของแต่ละสัญญา (MAX period WHERE due_date > CURDATE())
-   * หมายเหตุ: ใช้ due_date > CURDATE() แทน is_future_period เพราะ is_future_period ถูก populate
-   * ณ เวลา sync และอาจล้าสมัย ส่วน due_date > CURDATE() คำนวณ real-time เสมอ
+   * penalty/unlockFee ดึงจากงวดล่าสุดของแต่ละสัญญา (MAX period WHERE due_date > CURRENT_DATE)
+   * หมายเหตุ: ใช้ due_date > CURRENT_DATE แทน is_future_period เพราะ is_future_period ถูก populate
+   * ณ เวลา sync และอาจล้าสมัย ส่วน due_date > CURRENT_DATE คำนวณ real-time เสมอ
    */
   const q = `
     SELECT
-      DATE_FORMAT(base.approve_date, '%Y-%m') AS approve_month,
+      TO_CHAR(base.approve_date, 'YYYY-MM') AS approve_month,
       CASE
         WHEN base.contract_status = 'หนี้เสีย'      THEN 'หนี้เสีย'
         WHEN base.contract_status = 'ระงับสัญญา'   THEN 'ระงับสัญญา'
@@ -607,7 +607,7 @@ async function queryNotYetDue(
       SELECT dtc.section, dtc.contract_external_id, MAX(dtc.period) AS max_period
       FROM debt_target_cache dtc
       WHERE ${baseWhere}
-        AND dtc.due_date > CURDATE()
+        AND dtc.due_date > CURRENT_DATE
         AND COALESCE(dtc.is_closed, 0) = 0
         AND COALESCE(dtc.is_paid, 0) = 0
         ${dueDateFilter}
@@ -615,7 +615,7 @@ async function queryNotYetDue(
     ) latest ON latest.section = base.section
              AND latest.contract_external_id = base.contract_external_id
     WHERE base.section = '${section}'
-      AND base.due_date > CURDATE()
+      AND base.due_date > CURRENT_DATE
       AND COALESCE(base.is_closed, 0) = 0
       AND COALESCE(base.is_paid, 0) = 0
       ${dueDateFilter.replace(/dtc\./g, "base.")}
@@ -667,7 +667,7 @@ async function queryInstallTotal(
    */
   const q = `
     SELECT
-      DATE_FORMAT(c.approve_date, '%Y-%m') AS approve_month,
+      TO_CHAR(c.approve_date, 'YYYY-MM') AS approve_month,
       CASE
         WHEN latest.contract_status = 'หนี้เสีย'      THEN 'หนี้เสีย'
         WHEN latest.contract_status = 'ระงับสัญญา'   THEN 'ระงับสัญญา'

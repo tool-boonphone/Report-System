@@ -2,7 +2,7 @@
  * accountingDb.ts — Query helpers สำหรับหน้าบัญชี (รายรับ + รายจ่าย)
  *
  * รายรับ (Income):
- *   - ดึงจาก payment_transactions WHERE JSON_EXTRACT(raw_json, '$.source') IS NULL
+ *   - ดึงจาก payment_transactions WHERE (raw_json->>'source') IS NULL
  *     (เฉพาะ close rows ที่มี principal_paid, interest_paid ฯลฯ ครบถ้วน)
  *   - ยอดรวม = payment_transactions.amount ตรงกับ Fastfone/Boonphone Report เป๊ะ
  *   - แยกประเภทตาม logic:
@@ -154,7 +154,7 @@ const PT_INCOME_TYPE_CASE = `
 const PT_AMOUNT_CASE = `CAST(COALESCE(pt.amount, 0) AS DECIMAL(18,2))`;
 
 // Base WHERE: เฉพาะ close rows (source IS NULL) ที่ตรงกับ Fastfone/Boonphone Report
-const PT_INCOME_BASE_WHERE = `JSON_EXTRACT(pt.raw_json, '$.source') IS NULL`;
+const PT_INCOME_BASE_WHERE = `(pt.raw_json->>'source') IS NULL`;
 
 
 
@@ -215,7 +215,7 @@ function buildBadDebtLastDaysSubquery(section: string): string {
           ) AS rn
         FROM payment_transactions pt2
         WHERE pt2.section = '${section}'
-          AND JSON_EXTRACT(pt2.raw_json, '$.source') IS NULL
+          AND (pt2.raw_json->>'source') IS NULL
       ) AS inner_q
       WHERE inner_q.rn = 1
     ) AS base
@@ -230,7 +230,7 @@ function buildBadDebtLastDaysSubquery(section: string): string {
         SUM(CAST(COALESCE(pt3.amount, 0) AS DECIMAL(18,2))) AS batch_sum
       FROM payment_transactions pt3
       WHERE pt3.section = '${section}'
-        AND JSON_EXTRACT(pt3.raw_json, '$.source') IS NULL
+        AND (pt3.raw_json->>'source') IS NULL
       GROUP BY pt3.contract_no, pt3.section, DATE(pt3.paid_at), DATE(pt3.created_at), pt3.updated_by
     ) AS agg
       ON agg.contract_no = base.contract_no
@@ -248,7 +248,7 @@ function buildBadDebtLastDaysSubquery(section: string): string {
         SUM(CAST(COALESCE(pt4.amount, 0) AS DECIMAL(18,2))) AS fallback_sum
       FROM payment_transactions pt4
       WHERE pt4.section = '${section}'
-        AND JSON_EXTRACT(pt4.raw_json, '$.source') IS NULL
+        AND (pt4.raw_json->>'source') IS NULL
       GROUP BY pt4.contract_no, pt4.section, DATE(pt4.created_at), pt4.updated_by
     ) AS fb
       ON fb.contract_no = base.contract_no
@@ -663,7 +663,7 @@ export async function getIncomeSummaryByPeriod(
 
   const conditions: string[] = [
     `pt.section = '${secEsc}'`,
-    `JSON_EXTRACT(pt.raw_json, '$.source') IS NULL`,
+    `(pt.raw_json->>'source') IS NULL`,
     `pt.paid_at IS NOT NULL`,
     `pt.paid_at != ''`,
   ];
