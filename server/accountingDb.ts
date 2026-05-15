@@ -154,7 +154,7 @@ const PT_INCOME_TYPE_CASE = `
 const PT_AMOUNT_CASE = `CAST(COALESCE(pt.amount, 0) AS DECIMAL(18,2))`;
 
 // Base WHERE: เฉพาะ close rows (source IS NULL) ที่ตรงกับ Fastfone/Boonphone Report
-const PT_INCOME_BASE_WHERE = `(pt.raw_json->>'source') IS NULL`;
+const PT_INCOME_BASE_WHERE = `(pt.raw_json::jsonb->>'source') IS NULL`;
 
 
 
@@ -215,7 +215,7 @@ function buildBadDebtLastDaysSubquery(section: string): string {
           ) AS rn
         FROM payment_transactions pt2
         WHERE pt2.section = '${section}'
-          AND (pt2.raw_json->>'source') IS NULL
+          AND (pt2.raw_json::jsonb->>'source') IS NULL
       ) AS inner_q
       WHERE inner_q.rn = 1
     ) AS base
@@ -230,7 +230,7 @@ function buildBadDebtLastDaysSubquery(section: string): string {
         SUM(CAST(COALESCE(pt3.amount, 0) AS DECIMAL(18,2))) AS batch_sum
       FROM payment_transactions pt3
       WHERE pt3.section = '${section}'
-        AND (pt3.raw_json->>'source') IS NULL
+        AND (pt3.raw_json::jsonb->>'source') IS NULL
       GROUP BY pt3.contract_no, pt3.section, DATE(pt3.paid_at), DATE(pt3.created_at), pt3.updated_by
     ) AS agg
       ON agg.contract_no = base.contract_no
@@ -248,7 +248,7 @@ function buildBadDebtLastDaysSubquery(section: string): string {
         SUM(CAST(COALESCE(pt4.amount, 0) AS DECIMAL(18,2))) AS fallback_sum
       FROM payment_transactions pt4
       WHERE pt4.section = '${section}'
-        AND (pt4.raw_json->>'source') IS NULL
+        AND (pt4.raw_json::jsonb->>'source') IS NULL
       GROUP BY pt4.contract_no, pt4.section, DATE(pt4.created_at), pt4.updated_by
     ) AS fb
       ON fb.contract_no = base.contract_no
@@ -382,7 +382,7 @@ export async function listIncomeUpdatedBy(
         SELECT DISTINCT updated_by
         FROM payment_transactions
         WHERE section = '${secEsc}'
-          AND raw_json->>'source' IS NULL
+          AND raw_json::jsonb->>'source' IS NULL
           AND updated_by IS NOT NULL AND updated_by != ''
         ORDER BY updated_by ASC
       `),
@@ -663,15 +663,15 @@ export async function getIncomeSummaryByPeriod(
 
   const conditions: string[] = [
     `pt.section = '${secEsc}'`,
-    `(pt.raw_json->>'source') IS NULL`,
+    `(pt.raw_json::jsonb->>'source') IS NULL`,
     `pt.paid_at IS NOT NULL`,
     `pt.paid_at != ''`,
   ];
   if (years && years.length > 0) {
-    conditions.push(`SUBSTRING(pt.paid_at, 1, 4) IN (${years.map(y => "'" + y + "'").join(",")})`);
+    conditions.push(`LEFT(pt.paid_at::text, 4) IN (${years.map(y => "'" + y + "'").join(",")})`);
   }
   if (months && months.length > 0) {
-    conditions.push(`SUBSTRING(pt.paid_at, 6, 2) IN (${months.map(m => "'" + String(m).padStart(2,'0') + "'").join(",")})`);
+    conditions.push(`SUBSTRING(pt.paid_at::text, 6, 2) IN (${months.map(m => "'" + String(m).padStart(2,'0') + "'").join(",")})`);
   }
   const whereStr = conditions.join(" AND ");
   const periodLen = groupBy === "year" ? 4 : 7;
@@ -687,7 +687,7 @@ export async function getIncomeSummaryByPeriod(
       SUM(CASE WHEN income_type = 'ขายเครื่อง' THEN amt ELSE 0 END) AS bad_debt_sum
     FROM (
       SELECT
-        SUBSTRING(pt.paid_at, 1, ${periodLen}) AS period,
+        LEFT(pt.paid_at::text, ${periodLen}) AS period,
         CAST(COALESCE(pt.amount, 0) AS DECIMAL(18,2)) AS amt,
         CASE
           -- ขายเครื่อง: สัญญาหนี้เสีย + batch สุดท้าย (logic เดียวกับ PT_INCOME_TYPE_CASE)
@@ -764,17 +764,17 @@ export async function getExpenseSummaryByPeriod(
     `c.approve_date IS NOT NULL`,
   ];
   if (years && years.length > 0) {
-    conditions.push(`SUBSTRING(c.approve_date, 1, 4) IN (${years.map(y => "'" + y + "'").join(",")})`);
+    conditions.push(`LEFT(c.approve_date::text, 4) IN (${years.map(y => "'" + y + "'").join(",")})`);
   }
   if (months && months.length > 0) {
-    conditions.push(`SUBSTRING(c.approve_date, 6, 2) IN (${months.map(m => "'" + String(m).padStart(2,'0') + "'").join(",")})`);
+    conditions.push(`SUBSTRING(c.approve_date::text, 6, 2) IN (${months.map(m => "'" + String(m).padStart(2,'0') + "'").join(",")})`);
   }
   const whereStr = conditions.join(" AND ");
 
   const periodExpr =
     groupBy === "year"
-      ? `SUBSTRING(c.approve_date, 1, 4)`
-      : `SUBSTRING(c.approve_date, 1, 7)`;
+      ? `LEFT(c.approve_date::text, 4)`
+      : `LEFT(c.approve_date::text, 7)`;
 
   const querySql = `
     SELECT
@@ -886,15 +886,15 @@ export async function getFinanceSummaryByPeriod(params: FinanceSummaryParams): P
     `c.approve_date != ''`,
   ];
   if (years && years.length > 0) {
-    conditions.push(`SUBSTRING(c.approve_date, 1, 4) IN (${years.map(y => "'" + y + "'").join(",")})`);
+    conditions.push(`LEFT(c.approve_date::text, 4) IN (${years.map(y => "'" + y + "'").join(",")})`);
   }
   if (months && months.length > 0) {
-    conditions.push(`SUBSTRING(c.approve_date, 6, 2) IN (${months.map(m => "'" + String(m).padStart(2, "0") + "'").join(",")})`);
+    conditions.push(`SUBSTRING(c.approve_date::text, 6, 2) IN (${months.map(m => "'" + String(m).padStart(2, "0") + "'").join(",")})`);
   }
   const whereStr = conditions.join(" AND ");
   const periodExpr = groupBy === "year"
-    ? `SUBSTRING(c.approve_date, 1, 4)`
-    : `SUBSTRING(c.approve_date, 1, 7)`;
+    ? `LEFT(c.approve_date::text, 4)`
+    : `LEFT(c.approve_date::text, 7)`;
   const result = await db.execute(sql.raw(`
     SELECT ${periodExpr} AS period, SUM(COALESCE(c.finance_amount, 0)) AS fin
     FROM contracts c
