@@ -11,7 +11,7 @@ COPY package.json pnpm-lock.yaml* ./
 COPY patches ./patches
 
 # Install dependencies
-RUN pnpm install --frozen-lockfile
+RUN pnpm install
 
 # Copy source code
 COPY . .
@@ -37,7 +37,7 @@ COPY --from=builder /app/server ./server
 COPY --from=builder /app/shared ./shared
 
 # Install production dependencies only
-RUN pnpm install --prod --frozen-lockfile
+RUN pnpm install --prod
 
 # Set environment variables
 ENV NODE_ENV=production
