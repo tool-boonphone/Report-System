@@ -68,7 +68,7 @@ export async function populateDebtCache(
     FROM contracts
     WHERE section = ${section}
   `);
-  const metaRows: any[] = (metaRaw as any)[0] ?? metaRaw;
+  const metaRows: any[] = Array.isArray((metaRaw as any).rows) ? (metaRaw as any).rows : (Array.isArray((metaRaw as any)[0]) ? (metaRaw as any)[0] : Array.isArray(metaRaw) ? metaRaw as any[] : []);
   const contractMeta = new Map<string, ContractMeta>();
   for (const r of metaRows) {
     contractMeta.set(String(r.external_id), {
@@ -181,7 +181,7 @@ export async function populateDebtCache(
            AND mp.max_period = dtc.period
       WHERE dtc.section = ${section}
     `);
-    const dtcRangeRows: any[] = (dtcRangeRaw as any)[0] ?? dtcRangeRaw;
+    const dtcRangeRows: any[] = Array.isArray((dtcRangeRaw as any).rows) ? (dtcRangeRaw as any).rows : (Array.isArray((dtcRangeRaw as any)[0]) ? (dtcRangeRaw as any)[0] : Array.isArray(dtcRangeRaw) ? dtcRangeRaw as any[] : []);
     for (const r of dtcRangeRows) {
       if (r.contract_external_id && r.debt_range) {
         debtRangeByContract.set(String(r.contract_external_id), String(r.debt_range));
