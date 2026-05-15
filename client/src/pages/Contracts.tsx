@@ -306,42 +306,6 @@ export default function Contracts() {
 
   const allRows = listQuery.data ?? [];
 
-  // ─── Loading skeleton ─────────────────────────────────────────────────────
-  if (listQuery.isLoading) {
-    return (
-      <AppShell>
-        <div className="flex flex-col gap-4 p-6 animate-pulse">
-          <div className="h-8 bg-gray-200 rounded-lg w-1/3" />
-          <div className="h-10 bg-gray-200 rounded-lg w-full" />
-          {Array.from({ length: 10 }).map((_, i) => (
-            <div key={i} className="h-10 bg-gray-100 rounded-lg w-full" />
-          ))}
-        </div>
-      </AppShell>
-    );
-  }
-
-  // ─── Error state with retry ───────────────────────────────────────────────
-  if (listQuery.isError) {
-    return (
-      <AppShell>
-        <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
-          <div className="text-red-500 text-5xl">⚠️</div>
-          <h2 className="text-lg font-semibold text-gray-800">โหลดข้อมูลไม่สำเร็จ</h2>
-          <p className="text-sm text-gray-500 max-w-sm text-center">
-            {listQuery.error?.message ?? "เกิดข้อผิดพลาดในการโหลดข้อมูลสัญญา"}
-          </p>
-          <button
-            onClick={() => listQuery.refetch()}
-            className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm hover:bg-blue-700 transition-colors"
-          >
-            ลองใหม่อีกครั้ง
-          </button>
-        </div>
-      </AppShell>
-    );
-  }
-
   // ─── Cascading dynamic options ────────────────────────────────────────────
   const dynamicOptions = useMemo(() => {
     const rowPassesExcept = (r: any, excludeKey: string) => {
@@ -577,6 +541,34 @@ export default function Contracts() {
   // ----- Render -----
   return (
     <AppShell>
+      {/* Loading skeleton */}
+      {listQuery.isLoading && (
+        <div className="flex flex-col gap-4 p-6 animate-pulse">
+          <div className="h-8 bg-gray-200 rounded-lg w-1/3" />
+          <div className="h-10 bg-gray-200 rounded-lg w-full" />
+          {Array.from({ length: 10 }).map((_, i) => (
+            <div key={i} className="h-10 bg-gray-100 rounded-lg w-full" />
+          ))}
+        </div>
+      )}
+      {/* Error state with retry */}
+      {listQuery.isError && (
+        <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
+          <div className="text-red-500 text-5xl">⚠️</div>
+          <h2 className="text-lg font-semibold text-gray-800">โหลดข้อมูลไม่สำเร็จ</h2>
+          <p className="text-sm text-gray-500 max-w-sm text-center">
+            {listQuery.error?.message ?? "เกิดข้อผิดพลาดในการโหลดข้อมูลสัญญา"}
+          </p>
+          <button
+            onClick={() => listQuery.refetch()}
+            className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm hover:bg-blue-700 transition-colors"
+          >
+            ลองใหม่อีกครั้ง
+          </button>
+        </div>
+      )}
+      {/* Main content */}
+      {!listQuery.isLoading && !listQuery.isError && (
       <div className="w-full px-3 md:px-5 py-3">
         {/* Toolbar: search + export */}
         <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-3 mb-3">
@@ -928,6 +920,7 @@ export default function Contracts() {
           </div>
         </div>
       </div>
+      )}
     </AppShell>
   );
 }
