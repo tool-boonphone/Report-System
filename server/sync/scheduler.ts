@@ -90,6 +90,10 @@ async function tick() {
  */
 export async function startScheduler() {
   if (_timer) return;
+  if (process.env.DISABLE_SCHEDULER === "true") {
+    console.log("[scheduler] DISABLED via DISABLE_SCHEDULER=true — skipping cron setup");
+    return;
+  }
   const now = new Date();
   const { hour: bangkokHour, daySlot } = getBangkokTimeParts(now);
     console.log(`[scheduler] started (daily at 04:00 Asia/Bangkok) — current Bangkok time: ${bangkokHour}:xx, slot: ${daySlot}`);
