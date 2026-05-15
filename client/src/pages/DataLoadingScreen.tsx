@@ -13,7 +13,7 @@
  *     → เมื่อครบทั้ง 3 → navigate("/contracts")
  */
 
-import { BRAND_ACCENT, BRAND_LOGOS } from "@/config/brand";
+import { BRAND_ACCENT, BRAND_LOGOS_SQUARE } from "@/config/brand";
 import { useDebtCache } from "@/contexts/DebtCacheContext";
 import { useAppAuth } from "@/hooks/useAppAuth";
 import { popReturnPath } from "@/components/AppShell";
@@ -565,7 +565,7 @@ export default function DataLoadingScreen() {
           {/* Header */}
           <div className="text-center mb-8">
             <img
-              src={BRAND_LOGOS[section as SectionKey]}
+              src={BRAND_LOGOS_SQUARE[section as SectionKey]}
               alt={section}
               className="w-20 h-20 mx-auto rounded-2xl object-contain bg-white border border-gray-100 shadow-sm mb-4"
             />

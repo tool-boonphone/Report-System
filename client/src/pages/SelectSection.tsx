@@ -1,4 +1,4 @@
-import { BRAND_LOGOS } from "@/config/brand";
+import { BRAND_LOGOS_SQUARE } from "@/config/brand";
 import { useSection } from "@/contexts/SectionContext";
 import { useAppAuth } from "@/hooks/useAppAuth";
 import { SECTIONS, type SectionKey } from "@shared/const";
@@ -71,7 +71,7 @@ export default function SelectSection() {
             >
               <div className="flex items-center gap-4">
                 <img
-                  src={BRAND_LOGOS[s]}
+                  src={BRAND_LOGOS_SQUARE[s]}
                   alt={s}
                   className="w-16 h-16 rounded-xl object-contain bg-white border border-gray-100"
                 />

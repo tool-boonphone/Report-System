@@ -1,4 +1,4 @@
-import { BRAND_LOGOS } from "@/config/brand";
+import { BRAND_LOGOS_SQUARE } from "@/config/brand";
 import { useNavActions } from "@/contexts/NavActionsContext";
 import { useSection } from "@/contexts/SectionContext";
 import { useAppAuth } from "@/hooks/useAppAuth";
@@ -236,7 +236,7 @@ export function TopNav() {
               <div ref={sectionMenuRef} className="relative flex-shrink-0">
                 <button onClick={() => canSwitchSection && setSectionMenuOpen((v) => !v)}
                   className={"flex items-center gap-2 py-1 pr-2 pl-1 rounded-lg" + (canSwitchSection ? " hover:bg-gray-100 cursor-pointer" : " cursor-default")}>
-                  <img src={BRAND_LOGOS[section]} alt={section} className="w-8 h-8 rounded-md object-contain bg-white border border-gray-200" />
+                  <img src={BRAND_LOGOS_SQUARE[section]} alt={section} className="w-8 h-8 rounded-md object-contain bg-white border border-gray-200" />
                   <span className="hidden sm:inline text-sm font-semibold text-gray-800">{section}</span>
                   {canSwitchSection && <ChevronDown className="w-3 h-3 text-gray-400" />}
                 </button>
@@ -246,7 +246,7 @@ export function TopNav() {
                     {allowedSectionsList.filter((s) => s !== section).map((s) => (
                       <button key={s} onClick={() => handleSwitchToSection(s)}
                         className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">
-                        <img src={BRAND_LOGOS[s]} alt={s} className="w-7 h-7 rounded-md object-contain bg-white border border-gray-200" />
+                        <img src={BRAND_LOGOS_SQUARE[s]} alt={s} className="w-7 h-7 rounded-md object-contain bg-white border border-gray-200" />
                         <span className="font-medium">{s}</span>
                       </button>
                     ))}
