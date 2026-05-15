@@ -24,7 +24,7 @@
 import { sql } from "drizzle-orm";
 import { getDb } from "../db";
 import type { SectionKey } from "../../shared/const";
-import { pgRows } from "./db";
+import { pgRows } from "../db";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const TERMINAL_STATUSES = new Set(["ระงับสัญญา", "สิ้นสุดสัญญา", "หนี้เสีย", "ยกเลิกสัญญา"]);
