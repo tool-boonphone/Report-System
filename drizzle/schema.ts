@@ -14,6 +14,7 @@ import {
 
 export const roleEnum = pgEnum("role", ["user", "admin"]);
 export const syncStatusEnum = pgEnum("sync_status", ["in_progress", "success", "error"]);
+export const exportVariantEnum = pgEnum("export_variant", ["target", "collected"]);
 
 export const users = pgTable("users", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
@@ -266,5 +267,123 @@ export const paymentTransactions = pgTable(
       t.section,
       t.contractExternalId,
     ),
+  }),
+);
+
+export const debtTargetCache = pgTable(
+  "debt_target_cache",
+  {
+    id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+    section: varchar("section", { length: 32 }).notNull(),
+    contractExternalId: varchar("contract_external_id", { length: 64 }).notNull(),
+    contractNo: varchar("contract_no", { length: 64 }),
+    customerName: varchar("customer_name", { length: 255 }),
+    approveDate: varchar("approve_date", { length: 20 }),
+    productType: varchar("product_type", { length: 64 }),
+    installmentCount: integer("installment_count"),
+    installmentAmount: decimal("installment_amount", { precision: 12, scale: 2 }),
+    dueDate: varchar("due_date", { length: 20 }),
+    period: integer("period"),
+    amount: decimal("amount", { precision: 12, scale: 2 }),
+    paidAmount: decimal("paid_amount", { precision: 12, scale: 2 }),
+    status: varchar("status", { length: 32 }),
+    updatedBy: varchar("updated_by", { length: 128 }),
+    updatedAt: varchar("updated_at", { length: 32 }),
+    populatedAt: timestamp("populated_at").defaultNow().notNull(),
+  },
+  (t) => ({
+    sectionContractPeriodIdx: uniqueIndex("dtc_section_contract_period_idx").on(
+      t.section,
+      t.contractExternalId,
+      t.period,
+    ),
+    sectionDueIdx: index("dtc_section_due_idx").on(t.section, t.dueDate),
+  }),
+);
+
+export const debtCollectedCache = pgTable(
+  "debt_collected_cache",
+  {
+    id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+    section: varchar("section", { length: 32 }).notNull(),
+    paymentExternalId: varchar("payment_external_id", { length: 64 }).notNull(),
+    contractExternalId: varchar("contract_external_id", { length: 64 }),
+    contractNo: varchar("contract_no", { length: 64 }),
+    customerName: varchar("customer_name", { length: 255 }),
+    approveDate: varchar("approve_date", { length: 20 }),
+    productType: varchar("product_type", { length: 64 }),
+    paidAt: varchar("paid_at", { length: 32 }),
+    periodNo: integer("period_no"),
+    subNo: integer("sub_no"),
+    principal: decimal("principal", { precision: 12, scale: 2 }).notNull().default("0"),
+    interest: decimal("interest", { precision: 12, scale: 2 }).notNull().default("0"),
+    fee: decimal("fee", { precision: 12, scale: 2 }).notNull().default("0"),
+    penalty: decimal("penalty", { precision: 12, scale: 2 }).notNull().default("0"),
+    unlockFee: decimal("unlock_fee", { precision: 12, scale: 2 }).notNull().default("0"),
+    discount: decimal("discount", { precision: 12, scale: 2 }).notNull().default("0"),
+    overpaid: decimal("overpaid", { precision: 12, scale: 2 }).notNull().default("0"),
+    badDebt: decimal("bad_debt", { precision: 12, scale: 2 }).notNull().default("0"),
+    totalAmount: decimal("total_amount", { precision: 12, scale: 2 }).notNull().default("0"),
+    paymentTxAmount: decimal("payment_tx_amount", { precision: 12, scale: 2 }).notNull().default("0"),
+    updatedBy: varchar("updated_by", { length: 128 }),
+    updatedAt: varchar("updated_at", { length: 32 }),
+    isBadDebtRow: boolean("is_bad_debt_row").notNull().default(false),
+    isCloseRow: boolean("is_close_row").notNull().default(false),
+    remark: text("remark"),
+    populatedAt: timestamp("populated_at").defaultNow().notNull(),
+  },
+  (t) => ({
+    sectionPaymentIdx: uniqueIndex("dcc_section_payment_idx").on(
+      t.section,
+      t.paymentExternalId,
+    ),
+    sectionContractIdx: index("dcc_section_contract_idx").on(t.section, t.contractExternalId),
+    sectionPaidAtIdx: index("dcc_section_paid_at_idx").on(t.section, t.paidAt),
+  }),
+);
+
+export const debtExportCache = pgTable(
+  "debt_export_cache",
+  {
+    id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+    section: varchar("section", { length: 64 }).notNull(),
+    variant: exportVariantEnum("variant").notNull(),
+    storageKey: varchar("storage_key", { length: 512 }).notNull(),
+    storageUrl: varchar("storage_url", { length: 512 }).notNull(),
+    rowCount: integer("row_count").notNull().default(0),
+    builtAt: timestamp("built_at").defaultNow().notNull(),
+  },
+  (t) => ({
+    sectionVariantIdx: uniqueIndex("dec_section_variant_idx").on(t.section, t.variant),
+  }),
+);
+
+export const cachedCustomers = pgTable(
+  "cached_customers",
+  {
+    id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+    section: varchar("section", { length: 32 }).notNull(),
+    customerId: varchar("customer_id", { length: 64 }).notNull(),
+    customerCode: varchar("customer_code", { length: 64 }),
+    fullName: varchar("full_name", { length: 255 }),
+    nationality: varchar("nationality", { length: 64 }),
+    idDocumentNo: varchar("id_document_no", { length: 32 }),
+    gender: varchar("gender", { length: 16 }),
+    ageYears: integer("age_years"),
+    occupationTitle: varchar("occupation_title", { length: 512 }),
+    monthlyIncome: decimal("monthly_income", { precision: 12, scale: 2 }),
+    workplaceName: varchar("workplace_name", { length: 1024 }),
+    mobilePhone: varchar("mobile_phone", { length: 32 }),
+    idcardDistrict: varchar("idcard_district", { length: 128 }),
+    idcardProvince: varchar("idcard_province", { length: 128 }),
+    currentDistrict: varchar("current_district", { length: 128 }),
+    currentProvince: varchar("current_province", { length: 128 }),
+    workDistrict: varchar("work_district", { length: 128 }),
+    workProvince: varchar("work_province", { length: 128 }),
+    syncedAt: timestamp("synced_at").defaultNow().notNull(),
+  },
+  (t) => ({
+    sectionCustomerIdx: uniqueIndex("cc_section_customer_idx").on(t.section, t.customerId),
+    sectionIdx: index("cc_section_idx").on(t.section),
   }),
 );
