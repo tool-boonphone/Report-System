@@ -1,7 +1,6 @@
 import { BRAND_LOGOS } from "@/config/brand";
 import { useNavActions } from "@/contexts/NavActionsContext";
 import { useSection } from "@/contexts/SectionContext";
-import { useAiChat } from "@/contexts/AiChatContext";
 import { useAppAuth } from "@/hooks/useAppAuth";
 import { cn } from "@/lib/utils";
 import { SECTIONS } from "@shared/const";
@@ -96,29 +95,6 @@ const SETTINGS_NAV: NavLeaf[] = [
   { kind: "leaf", label: "จัดการสิทธิ์", path: "/settings/groups", icon: Shield, menuCode: "settings_groups" },
 ];
 
-function AiChatIcon({ active, section }: { active: boolean; section: string | null }) {
-  const isBoon = !section || section === "Boonphone";
-  const gradId = isBoon ? "aiGradBoon" : "aiGradFast";
-  return (
-    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"
-      className={cn("w-[18px] h-[18px]", active ? "" : "animate-ai-sparkle")} aria-hidden="true">
-      <defs>
-        {isBoon ? (
-          <linearGradient id={gradId} x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#F03E7B" /><stop offset="60%" stopColor="#FF6BA8" /><stop offset="100%" stopColor="#FFD700" />
-          </linearGradient>
-        ) : (
-          <linearGradient id={gradId} x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#F5A623" /><stop offset="60%" stopColor="#F07A1A" /><stop offset="100%" stopColor="#E8621A" />
-          </linearGradient>
-        )}
-      </defs>
-      <path d="M12 2l1.5 4.5L18 8l-4.5 1.5L12 14l-1.5-4.5L6 8l4.5-1.5L12 2z" fill={`url(#${gradId})`} />
-      <path d="M19 3l.75 2.25L22 6l-2.25.75L19 9l-.75-2.25L16 6l2.25-.75L19 3z" fill={`url(#${gradId})`} opacity="0.8" />
-      <path d="M5 15l.6 1.8L7.4 17.4l-1.8.6L5 20l-.6-1.8L2.6 17.4l1.8-.6L5 15z" fill={`url(#${gradId})`} opacity="0.6" />
-    </svg>
-  );
-}
 
 function DesktopGroupMenu({ entry, location }: { entry: NavGroup; location: string }) {
   const [open, setOpen] = useState(false);
@@ -167,7 +143,6 @@ export function TopNav() {
   const { me, can, logout } = useAppAuth();
   const { section, setSection, clearSection } = useSection();
   const { actions } = useNavActions();
-  const { aiChatOpen, toggleAiChat } = useAiChat();
   const [location, navigate] = useLocation();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -335,13 +310,6 @@ export function TopNav() {
             {me && (() => {
               const isBoon = !section || section === "Boonphone";
               return (
-                <button onClick={toggleAiChat} aria-label="น้องเป๋าตัง AI Assistant" title="น้องเป๋าตัง — AI Assistant"
-                  className={cn("h-9 w-9 inline-flex items-center justify-center rounded-lg border transition-all duration-200",
-                    aiChatOpen
-                      ? isBoon ? "bg-pink-50 border-pink-300 shadow-sm shadow-pink-100" : "bg-orange-50 border-orange-300 shadow-sm shadow-orange-100"
-                      : isBoon ? "bg-white border-gray-200 hover:border-pink-300 hover:bg-pink-50" : "bg-white border-gray-200 hover:border-orange-300 hover:bg-orange-50")}>
-                  <AiChatIcon active={aiChatOpen} section={section} />
-                </button>
               );
             })()}
 
