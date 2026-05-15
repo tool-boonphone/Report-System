@@ -26,10 +26,10 @@ import {
   getTargetChunk,
   getCollectedChunk,
 } from "../sync/queryCacheDb";
-import { SECTIONS } from "../../shared/const";
+import { sectionSchema } from "../../shared/const";
 
 const debtViewProcedure = requirePermission("debt_report", "view");
-const SectionEnum = z.enum(SECTIONS);
+const SectionEnum = sectionSchema;
 const DateStr = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, "date must be YYYY-MM-DD");
@@ -172,7 +172,7 @@ export const debtRouter = router({
   /** Get pre-built export info (builtAt, rowCount) for a section+variant */
   getExportInfo: debtViewProcedure
     .input(z.object({
-      section: z.string(),
+      section: sectionSchema,
       variant: z.enum(["target", "collected"]),
     }))
     .query(async ({ input }) => {

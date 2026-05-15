@@ -1,4 +1,4 @@
-import { SECTIONS, type SectionKey } from "@shared/const";
+import { normalizeSectionKey, type SectionKey } from "@shared/const";
 import {
   createContext,
   useCallback,
@@ -23,10 +23,12 @@ const SectionContext = createContext<SectionContextValue | null>(null);
 function readStored(): SectionKey | null {
   if (typeof window === "undefined") return null;
   const v = window.localStorage.getItem(STORAGE_KEY);
-  if (v && (SECTIONS as readonly string[]).includes(v)) {
-    return v as SectionKey;
+  if (!v) return null;
+  try {
+    return normalizeSectionKey(v);
+  } catch {
+    return null;
   }
-  return null;
 }
 
 export function SectionProvider({ children }: { children: ReactNode }) {

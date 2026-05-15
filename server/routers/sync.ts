@@ -9,9 +9,9 @@ import {
   getDbSyncStatus,
   clearStuckSyncLogs,
 } from "../sync/syncLog";
-import { SECTIONS, type SectionKey } from "../../shared/const";
+import { sectionSchema, type SectionKey } from "../../shared/const";
 
-const sectionSchema = z.enum(SECTIONS as unknown as [string, ...string[]]);
+// sectionSchema imported from shared/const — normalizes any case to canonical SectionKey
 
 export const syncRouter = router({
   /**

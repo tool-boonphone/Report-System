@@ -19,13 +19,13 @@
 import { z } from "zod";
 import { requirePermission, router } from "../_core/trpc";
 import { getMonthlySummary, DEBT_BUCKETS } from "../monthlySummaryDb";
-import { SECTIONS } from "../../shared/const";
+import { sectionSchema } from "../../shared/const";
 import { getDb } from "../db";
 import { sql } from "drizzle-orm";
 import { pgRows } from "../db";
 
 const debtViewProcedure = requirePermission("debt_report", "view");
-const SectionEnum = z.enum(SECTIONS);
+const SectionEnum = sectionSchema;
 const DateStr = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "date must be YYYY-MM-DD").optional();
 const MonthStr = z.string().regex(/^\d{4}-\d{2}$/, "month must be YYYY-MM");
 const DeviceFamily = z.enum(["iOS", "Android"]).optional();

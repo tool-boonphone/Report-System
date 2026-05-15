@@ -7,12 +7,12 @@
 import { z } from "zod";
 import { protectedProcedure, router } from "../_core/trpc";
 import { fillPeriodNosForSection, fillPeriodNosAll } from "../sync/fillPeriodNos";
-import type { SectionKey } from "../../shared/const";
+import { sectionSchema, type SectionKey } from "../../shared/const";
 
 export const fillPeriodNosRouter = router({
   /** Backfill period_no/sub_no สำหรับ section ที่ระบุ */
   fillSection: protectedProcedure
-    .input(z.object({ section: z.enum(["Boonphone", "Fastfone365"]) }))
+    .input(z.object({ section: sectionSchema }))
     .mutation(async ({ input }) => {
       const count = await fillPeriodNosForSection(input.section as SectionKey);
       return { ok: true, updatedRows: count };

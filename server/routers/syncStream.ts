@@ -22,8 +22,7 @@ import { APP_SESSION_COOKIE } from "../../shared/const";
 import { getUserFromSession, checkPermission } from "../authDb";
 import { runSectionSync, isSyncRunning, getSyncStatus } from "../sync/runner";
 import { getDbSyncStatus } from "../sync/syncLog";
-import type { SectionKey } from "../../shared/const";
-import { SECTIONS } from "../../shared/const";
+import { normalizeSectionKey, type SectionKey } from "../../shared/const";
 
 function parseCookies(header: string | undefined): Record<string, string> {
   if (!header) return {};
@@ -47,10 +46,11 @@ function sendEvent(res: Response, data: object) {
 }
 
 export async function handleSyncStream(req: Request, res: Response) {
-  const section = req.params.section as SectionKey;
-
-  // Validate section
-  if (!SECTIONS.includes(section as any)) {
+  // Validate and normalize section
+  let section: SectionKey;
+  try {
+    section = normalizeSectionKey(req.params.section ?? "");
+  } catch {
     return res.status(400).json({ error: "Invalid section" });
   }
 

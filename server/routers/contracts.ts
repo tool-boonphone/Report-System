@@ -8,9 +8,9 @@ import {
   type ContractFilters,
   type ContractSort,
 } from "../contractsDb";
-import { SECTIONS } from "../../shared/const";
+import { sectionSchema } from "../../shared/const";
 
-const sectionInput = z.enum(SECTIONS);
+const sectionInput = sectionSchema;
 const filtersInput = z
   .object({
     search: z.string().optional(),

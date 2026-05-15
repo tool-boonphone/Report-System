@@ -10,7 +10,7 @@ import {
   APP_SESSION_COOKIE,
   CONTRACT_COLUMNS,
   type ContractColumnKey,
-  SECTIONS,
+  normalizeSectionKey,
   type SectionKey,
 } from "../../shared/const";
 import { checkPermission, getUserFromSession } from "../authDb";
@@ -78,11 +78,13 @@ export async function handleContractsExport(req: Request, res: Response) {
     }
 
     const sectionRaw = String(req.query.section ?? "");
-    if (!SECTIONS.includes(sectionRaw as SectionKey)) {
+    let section: SectionKey;
+    try {
+      section = normalizeSectionKey(sectionRaw);
+    } catch {
       res.status(400).json({ message: "ต้องระบุ section" });
       return;
     }
-    const section = sectionRaw as SectionKey;
 
     const filters: ContractFilters = {
       search: req.query.search ? String(req.query.search) : undefined,
@@ -330,11 +332,13 @@ export async function handleDebtExport(req: Request, res: Response) {
     }
 
     const sectionRaw = String(req.query.section ?? "");
-    if (!SECTIONS.includes(sectionRaw as SectionKey)) {
+    let section: SectionKey;
+    try {
+      section = normalizeSectionKey(sectionRaw);
+    } catch {
       res.status(400).json({ message: "ต้องระบุ section" });
       return;
     }
-    const section = sectionRaw as SectionKey;
 
     const variantRaw = String(req.query.variant ?? "target");
     if (variantRaw !== "target" && variantRaw !== "collected") {
@@ -644,11 +648,13 @@ export async function handleBadDebtExport(req: Request, res: Response) {
       return;
     }
     const sectionRaw = String(req.query.section ?? "");
-    if (!SECTIONS.includes(sectionRaw as SectionKey)) {
+    let section: SectionKey;
+    try {
+      section = normalizeSectionKey(sectionRaw);
+    } catch {
       res.status(400).json({ message: "ต้องระบุ section" });
       return;
     }
-    const section = sectionRaw as SectionKey;
     const approveMonth = req.query.approveMonth
       ? String(req.query.approveMonth)
       : undefined;

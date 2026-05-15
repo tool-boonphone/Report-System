@@ -1,7 +1,7 @@
 import { BRAND_LOGOS_SQUARE } from "@/config/brand";
 import { useSection } from "@/contexts/SectionContext";
 import { useAppAuth } from "@/hooks/useAppAuth";
-import { SECTIONS, type SectionKey } from "@shared/const";
+import { SECTIONS, normalizeSectionKey, type SectionKey } from "@shared/const";
 import { ArrowRight, Loader2 } from "lucide-react";
 import { useEffect } from "react";
 import { useLocation } from "wouter";
@@ -29,7 +29,10 @@ export default function SelectSection() {
   // Empty allowedSections = all sections allowed
   const rawAllowed = me?.group?.allowedSections ?? "";
   const allowedSections: SectionKey[] = rawAllowed
-    ? (rawAllowed.split(",").map((s) => s.trim()).filter((s) => SECTIONS.includes(s as SectionKey)) as SectionKey[])
+    ? rawAllowed.split(",").map((s) => s.trim()).reduce<SectionKey[]>((acc, s) => {
+        try { acc.push(normalizeSectionKey(s)); } catch { /* skip invalid */ }
+        return acc;
+      }, [])
     : [...SECTIONS];
 
   function handlePick(s: SectionKey) {

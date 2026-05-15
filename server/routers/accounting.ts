@@ -19,13 +19,14 @@ import {
   type ExpenseType,
 } from "../accountingDb";
 import { getDb } from "../db";
+import { sectionSchema } from "../../shared/const";
 
 // "เงินดาวน์" ซ่อนไว้ก่อน — ไม่มีในข้อมูลจริง
 const INCOME_TYPES: IncomeType[] = ["ค่างวด", "ขายเครื่อง", "ปิดยอด"];
 const EXPENSE_TYPES: ExpenseType[] = ["ค่าคอมมิชชั่น"];
 
 const incomeFilterInput = z.object({
-  section: z.string(),
+  section: sectionSchema,
   search: z.string().optional(),
   dateFrom: z.string().optional(),
   dateTo: z.string().optional(),
@@ -36,7 +37,7 @@ const incomeFilterInput = z.object({
 });
 
 const expenseFilterInput = z.object({
-  section: z.string(),
+  section: sectionSchema,
   search: z.string().optional(),
   dateFrom: z.string().optional(),
   dateTo: z.string().optional(),
@@ -57,9 +58,6 @@ export const accountingRouter = router({
     )
     .query(async ({ input }) => {
       const { section, search, dateFrom, dateTo, dateField, incomeTypes, updatedBy, page, pageSize } = input;
-      if (section !== "Boonphone" && section !== "Fastfone365") {
-        return { rows: [], total: 0 };
-      }
       return listIncome({
         section,
         search,
@@ -80,9 +78,6 @@ export const accountingRouter = router({
     .input(incomeFilterInput)
     .query(async ({ input }) => {
       const { section, search, dateFrom, dateTo, dateField, incomeTypes, updatedBy } = input;
-      if (section !== "Boonphone" && section !== "Fastfone365") {
-        return { "ค่างวด": 0, "ขายเครื่อง": 0, "ปิดยอด": 0, "เงินดาวน์": 0, total: 0 };
-      }
       return getIncomeSummary({
         section,
         search,
@@ -100,7 +95,7 @@ export const accountingRouter = router({
   listIncomeUpdatedBy: appProcedure
     .input(
       z.object({
-        section: z.string(),
+        section: sectionSchema,
         search: z.string().optional(),
         dateFrom: z.string().optional(),
         dateTo: z.string().optional(),
@@ -109,8 +104,7 @@ export const accountingRouter = router({
       })
     )
     .query(async ({ input }) => {
-      if (input.section !== "Boonphone" && input.section !== "Fastfone365") return [];
-      return listIncomeUpdatedBy(input.section as "Boonphone" | "Fastfone365", {
+      return listIncomeUpdatedBy(input.section, {
         search: input.search,
         dateFrom: input.dateFrom,
         dateTo: input.dateTo,
@@ -131,9 +125,6 @@ export const accountingRouter = router({
     )
     .query(async ({ input }) => {
       const { section, search, dateFrom, dateTo, expenseTypes, updatedBy, page, pageSize } = input;
-      if (section !== "Boonphone" && section !== "Fastfone365") {
-        return { rows: [], total: 0 };
-      }
       return listExpense({
         section,
         search,
@@ -153,9 +144,6 @@ export const accountingRouter = router({
     .input(expenseFilterInput)
     .query(async ({ input }) => {
       const { section, search, dateFrom, dateTo } = input;
-      if (section !== "Boonphone" && section !== "Fastfone365") {
-        return { "ค่าคอมมิชชั่น": 0, total: 0 };
-      }
       return getExpenseSummary({ section, search, dateFrom, dateTo });
     }),
 
@@ -163,9 +151,8 @@ export const accountingRouter = router({
    * ดึง distinct updatedBy สำหรับ expense filter dropdown
    */
   listExpenseUpdatedBy: appProcedure
-    .input(z.object({ section: z.string() }))
+    .input(z.object({ section: sectionSchema }))
     .query(async ({ input }) => {
-      if (input.section !== "Boonphone" && input.section !== "Fastfone365") return [];
       const db = await getDb();
       if (!db) return [];
       const esc = (v: string) => v.replace(/'/g, "''");
@@ -190,7 +177,7 @@ export const accountingRouter = router({
   getIncomeSummaryByPeriod: appProcedure
     .input(
       z.object({
-        section: z.string(),
+        section: sectionSchema,
         groupBy: z.enum(["year", "month"]),
         years: z.array(z.number().int()).optional(),
         months: z.array(z.number().int().min(1).max(12)).optional(),
@@ -198,7 +185,6 @@ export const accountingRouter = router({
     )
     .query(async ({ input }) => {
       const { section, groupBy, years, months } = input;
-      if (section !== "Boonphone" && section !== "Fastfone365") return [];
       try {
         return await getIncomeSummaryByPeriod({ section, groupBy, years, months });
       } catch (e: any) {
@@ -214,7 +200,7 @@ export const accountingRouter = router({
   getExpenseSummaryByPeriod: appProcedure
     .input(
       z.object({
-        section: z.string(),
+        section: sectionSchema,
         groupBy: z.enum(["year", "month"]),
         years: z.array(z.number().int()).optional(),
         months: z.array(z.number().int().min(1).max(12)).optional(),
@@ -222,7 +208,6 @@ export const accountingRouter = router({
     )
     .query(async ({ input }) => {
       const { section, groupBy, years, months } = input;
-      if (section !== "Boonphone" && section !== "Fastfone365") return [];
       try {
         return await getExpenseSummaryByPeriod({ section, groupBy, years, months });
       } catch (e: any) {
@@ -238,7 +223,7 @@ export const accountingRouter = router({
   listFinance: appProcedure
     .input(
       z.object({
-        section: z.string(),
+        section: sectionSchema,
         search: z.string().optional(),
         dateFrom: z.string().optional(),
         dateTo: z.string().optional(),
@@ -248,7 +233,6 @@ export const accountingRouter = router({
     )
     .query(async ({ input }) => {
       const { section, search, dateFrom, dateTo, page, pageSize } = input;
-      if (section !== "Boonphone" && section !== "Fastfone365") return { rows: [], total: 0 };
       return listFinance({ section, search, dateFrom, dateTo, page, pageSize });
     }),
 
@@ -258,7 +242,7 @@ export const accountingRouter = router({
   getFinanceSummaryByPeriod: appProcedure
     .input(
       z.object({
-        section: z.string(),
+        section: sectionSchema,
         groupBy: z.enum(["year", "month"]),
         years: z.array(z.number().int()).optional(),
         months: z.array(z.number().int().min(1).max(12)).optional(),
@@ -266,7 +250,6 @@ export const accountingRouter = router({
     )
     .query(async ({ input }) => {
       const { section, groupBy, years, months } = input;
-      if (section !== "Boonphone" && section !== "Fastfone365") return [];
       try {
         return await getFinanceSummaryByPeriod({ section, groupBy, years, months });
       } catch (e: any) {

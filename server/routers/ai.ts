@@ -5,6 +5,7 @@
  */
 import { z } from "zod";
 import { router, appProcedure } from "../_core/trpc";
+import { sectionSchema } from "../../shared/const";
 import { invokeLLM } from "../_core/llm";
 import { getDb } from "../db";
 import { contracts, installments, paymentTransactions } from "../../drizzle/schema";
@@ -238,7 +239,7 @@ export const aiRouter = router({
             content: z.string(),
           }),
         ),
-        section: z.string(), // "Boonphone" | "Fastfone365"
+        section: sectionSchema,
         userName: z.string().optional(), // ชื่อผู้ใช้สำหรับเรียก
       }),
     )

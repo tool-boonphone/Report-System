@@ -1,6 +1,7 @@
 /**
  * Shared constants between client and server.
  */
+import { z } from "zod";
 
 export const COOKIE_NAME = "app_session_id";
 export const ONE_YEAR_MS = 1000 * 60 * 60 * 24 * 365;
@@ -31,6 +32,25 @@ export function normalizeSectionKey(raw: string): SectionKey {
   if ((SECTIONS as readonly string[]).includes(raw.trim())) return raw.trim() as SectionKey;
   throw new Error(`Unknown section key: "${raw}" — must be one of ${SECTIONS.join(", ")}`);
 }
+
+/**
+ * Zod schema สำหรับ section input — รับทุก case แล้ว normalize เป็น canonical SectionKey
+ * ใช้แทน z.enum(SECTIONS) ในทุก router เพื่อป้องกันปัญหา case sensitivity
+ * ตัวอย่าง: "boonphone" | "BOONPHONE" | "Boonphone" → "Boonphone"
+ */
+export const sectionSchema = z
+  .string()
+  .transform((val, ctx) => {
+    try {
+      return normalizeSectionKey(val);
+    } catch {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Invalid section: "${val}" — must be one of ${SECTIONS.join(", ")}`,
+      });
+      return z.NEVER;
+    }
+  });
 
 /** Menu codes used by group permissions. */
 export const MENU_CODES = [

@@ -6,10 +6,10 @@
 import { z } from "zod";
 import { requirePermission, router } from "../_core/trpc";
 import { getBadDebtSummary } from "../badDebtDb";
-import { SECTIONS } from "../../shared/const";
+import { sectionSchema } from "../../shared/const";
 
 const badDebtViewProcedure = requirePermission("bad_debt_summary", "view");
-const SectionEnum = z.enum(SECTIONS);
+const SectionEnum = sectionSchema;
 
 export const badDebtRouter = router({
   summary: badDebtViewProcedure

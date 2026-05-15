@@ -42,8 +42,7 @@ import {
   getTargetContractCount,
   getCollectedContractCount,
 } from "../sync/queryCacheDb";
-import type { SectionKey } from "../../shared/const";
-import { SECTIONS } from "../../shared/const";
+import { normalizeSectionKey, type SectionKey } from "../../shared/const";
 
 function parseCookies(header: string | undefined): Record<string, string> {
   if (!header) return {};
@@ -174,8 +173,11 @@ export async function handleDebtStreamTarget(
   }
 
   // Validate section
-  const section = req.query.section as string;
-  if (!SECTIONS.includes(section as SectionKey)) {
+  const sectionRaw = req.query.section as string;
+  let section: SectionKey;
+  try {
+    section = normalizeSectionKey(sectionRaw ?? "");
+  } catch {
     res.status(400).json({ error: "Invalid section" });
     return;
   }
@@ -262,8 +264,11 @@ export async function handleDebtStreamCollected(
   }
 
   // Validate section
-  const section = req.query.section as string;
-  if (!SECTIONS.includes(section as SectionKey)) {
+  const sectionRaw = req.query.section as string;
+  let section: SectionKey;
+  try {
+    section = normalizeSectionKey(sectionRaw ?? "");
+  } catch {
     res.status(400).json({ error: "Invalid section" });
     return;
   }
