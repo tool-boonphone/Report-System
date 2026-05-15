@@ -16,6 +16,7 @@
 import { sql } from "drizzle-orm";
 import type { SectionKey } from "../shared/const";
 import { getDb } from "./db";
+import { pgRows } from "../db";
 
 export type BadDebtRow = {
   contractExternalId: string;
@@ -123,7 +124,7 @@ export async function getBadDebtSummary(params: {
       ORDER BY dtc.approve_date DESC
     `)
   );
-  const contractsArr: Array<any> = (contractsRaw as any)[0] ?? contractsRaw;
+  const contractsArr: Array<any> = pgRows(contractsRaw);
 
   if (contractsArr.length === 0) return { rows: [], summary: emptySummary, totalContractsByApproveMonth: {} };
 
@@ -143,7 +144,7 @@ export async function getBadDebtSummary(params: {
       GROUP BY contract_external_id
     `)
   );
-  const collectedArr: Array<any> = (collectedRaw as any)[0] ?? collectedRaw;
+  const collectedArr: Array<any> = pgRows(collectedRaw);
 
   // ─── Step 2b: หางวดสูงสุดที่มีการชำระเข้ามา (ไม่นับ bad_debt row) ─────────────
   // ใช้ MAX(period) จาก debt_collected_cache ที่ is_bad_debt_row = 0
@@ -159,7 +160,7 @@ export async function getBadDebtSummary(params: {
       GROUP BY contract_external_id
     `)
   );
-  const targetCountArr: Array<any> = (targetCountRaw as any)[0] ?? targetCountRaw;
+  const targetCountArr: Array<any> = pgRows(targetCountRaw);
   const targetCountMap = new Map<string, number>();
   for (const r of targetCountArr) {
     // MAX(period) อาจเป็น NULL ถ้าไม่มีการชำระปกติเลย (มีแค่ bad_debt row) → ใช้ 0
@@ -189,7 +190,7 @@ export async function getBadDebtSummary(params: {
         AND external_id IN (${idsLiteral})
     `)
   );
-  const contractInfoArr: Array<any> = (contractInfoRaw as any)[0] ?? contractInfoRaw;
+  const contractInfoArr: Array<any> = pgRows(contractInfoRaw);
   const contractInfoMap = new Map<string, any>();
   for (const r of contractInfoArr) {
     contractInfoMap.set(r.external_id, r);
@@ -271,7 +272,7 @@ export async function getBadDebtSummary(params: {
       GROUP BY DATE_FORMAT(approve_date, '%Y-%m')
     `)
   );
-  const totalContractsArr: Array<any> = (totalContractsRaw as any)[0] ?? totalContractsRaw;
+  const totalContractsArr: Array<any> = pgRows(totalContractsRaw);
   const totalContractsByApproveMonth: TotalContractsByApproveMonth = {};
   for (const r of totalContractsArr) {
     if (r.ym) totalContractsByApproveMonth[r.ym] = Number(r.total ?? 0);
