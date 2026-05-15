@@ -105,82 +105,60 @@ export function SyncStatusBar() {
       ? (elapsedSecs / progress) * (100 - progress)
       : null;
 
-  // Trigger via SSE stream — keeps Cloud Run alive during sync
-  // GET /api/sync-stream/:section maintains an open HTTP connection
-  // so Cloud Run does NOT scale-to-zero while sync is running.
+  // Trigger via SSE stream — keeps Render/Cloud Run alive during sync
+  // ใช้ EventSource ตัวเดียว (ไม่ต้อง probe แยก) เพราะ server ส่ง SSE event แทน HTTP status codes
   const triggerSSE = useCallback(
-    async (sec: string, onDone: () => void) => {
+    (sec: string, onDone: () => void) => {
       if (sseRef.current) {
         sseRef.current.close();
         sseRef.current = null;
       }
 
-      // ── ตรวจสอบ HTTP status ก่อนเปิด EventSource ──────────────────────────
-      // EventSource ไม่ expose HTTP status code ดังนั้นต้อง fetch ก่อน
-      // เพื่อให้แสดง Toast error ที่ชัดเจนได้
-      try {
-        const probe = await fetch(`/api/sync-stream/${sec}`, {
-          method: "GET",
-          credentials: "include",
-          headers: { Accept: "text/event-stream" },
-          signal: AbortSignal.timeout(30000), // 30s to handle DB cold start on Render.com free tier
-        });
-
-        if (!probe.ok) {
-          onDone();
-          if (probe.status === 401) {
-            toast.error("Session หมดอายุ กรุณา Login ใหม่");
-          } else if (probe.status === 403) {
-            toast.error("ไม่มีสิทธิ์ใช้งาน Re-Sync");
-          } else if (probe.status === 409) {
-            toast.info(`Sync ${sec} กำลังทำงานอยู่แล้ว`);
-            utils.sync.status.invalidate();
-          } else {
-            toast.error(`Re-Sync ล้มเหลว (${probe.status})`);
-          }
-          return;
-        }
-        // ถ้า response เป็น SSE stream ให้ปิด probe แล้วเปิด EventSource แทน
-        // (fetch จะได้ response headers แล้ว แต่ EventSource จะจัดการ stream เอง)
-        probe.body?.cancel().catch(() => {});
-      } catch (err: any) {
-        // timeout หรือ network error
-        if (err?.name === "TimeoutError") {
-          toast.error("Server ไม่ตอบสนอง กรุณาลองใหม่");
-        } else {
-          toast.error("ไม่สามารถเชื่อมต่อ Server ได้");
-        }
-        onDone();
-        return;
-      }
-
-      // ── เปิด EventSource เพื่อรับ progress stream ─────────────────────────
-      // withCredentials: true ensures browser sends session cookie with SSE request
+      // เปิด EventSource ตรงๆ — server จะส่ง event แรกบอกสถานะ
+      // (started / already_running / error)
       const es = new EventSource(`/api/sync-stream/${sec}`, { withCredentials: true });
       sseRef.current = es;
+
+      // Timeout กรณี server ไม่ส่ง event ใดๆ ภายใน 30 วินาที
+      const connectTimeout = setTimeout(() => {
+        toast.error("Server ไม่ตอบสนอง กรุณาลองใหม่");
+        onDone();
+        es.close();
+        sseRef.current = null;
+      }, 30000);
 
       es.onmessage = (e) => {
         try {
           const msg = JSON.parse(e.data);
+
+          // ยกเลิก connect timeout เมื่อได้รับ event แรก
+          clearTimeout(connectTimeout);
+
           if (msg.type === "started") {
             toast.info(`เริ่ม Re-Sync ${sec}...`);
             onDone(); // ปุ่มกลับมา enable เมื่อ sync เริ่มแล้ว (progress bar จะแสดงแทน)
             utils.sync.status.invalidate();
+          } else if (msg.type === "already_running") {
+            toast.info(`Sync ${sec} กำลังทำงานอยู่แล้ว`);
+            onDone();
+            utils.sync.status.invalidate();
+            es.close();
+            sseRef.current = null;
           } else if (msg.type === "done") {
             toast.success(`Re-Sync ${sec} สำเร็จ (${msg.rowCount ?? 0} rows)`);
+            onDone();
             utils.sync.status.invalidate();
             utils.sync.lastSyncedAt.invalidate();
-            // Invalidate income cache เพื่อ refetch ข้อมูลรายรับใหม่หลัง sync
             if (section) incomeCache.invalidateIncomeCache(section as SectionKey);
             es.close();
             sseRef.current = null;
           } else if (msg.type === "error") {
             toast.error(`Sync ${sec} ล้มเหลว: ${msg.message}`);
+            onDone();
             utils.sync.status.invalidate();
             es.close();
             sseRef.current = null;
-          } else if (msg.type === "progress") {
-            // Trigger status re-fetch on progress updates
+          } else if (msg.type === "progress" || msg.type === "heartbeat") {
             utils.sync.status.invalidate();
           }
         } catch {
@@ -189,21 +167,21 @@ export function SyncStatusBar() {
       };
 
       es.onerror = () => {
-        // SSE connection error หลังจากเปิดแล้ว (network drop, server restart)
+        clearTimeout(connectTimeout);
+        // SSE connection error (network drop, server restart, 401/403)
         onDone();
         utils.sync.status.invalidate();
-        // ตรวจสอบว่า sync ยังทำงานอยู่ไหม ถ้าไม่ใช่ให้แจ้ง error
         setTimeout(() => {
           const d = (status.data as any)?.[sec];
           if (!d?.running) {
-            toast.error("การเชื่อมต่อ Re-Sync ขาดหาย กรุณาตรวจสอบสถานะและลองใหม่");
+            toast.error("ไม่สามารถเชื่อมต่อ Re-Sync ได้ กรุณาลองใหม่");
           }
         }, 3000);
         es.close();
         sseRef.current = null;
       };
     },
-    [utils, section, status.data],
+    [utils, section, status.data, incomeCache],
   );
 
   // Cleanup SSE on unmount

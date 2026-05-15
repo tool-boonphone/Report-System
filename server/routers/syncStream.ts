@@ -69,17 +69,20 @@ export async function handleSyncStream(req: Request, res: Response) {
     return res.status(403).json({ error: "ไม่มีสิทธิ์ใช้งาน Re-Sync" });
   }
 
-  // Check if already running
-  if (isSyncRunning(section)) {
-    return res.status(409).json({ error: `Sync for ${section} is already running` });
-  }
-
-  // Set SSE headers — keep connection alive
+  // Set SSE headers — keep connection alive (BEFORE any event checks)
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache, no-transform");
   res.setHeader("Connection", "keep-alive");
   res.setHeader("X-Accel-Buffering", "no"); // Disable nginx buffering
   res.flushHeaders();
+
+  // Check if already running — send SSE event instead of HTTP 409
+  // so EventSource client can handle it properly
+  if (isSyncRunning(section)) {
+    sendEvent(res, { type: "already_running", section });
+    res.end();
+    return;
+  }
 
   // Send initial event
   sendEvent(res, { type: "started", section });
