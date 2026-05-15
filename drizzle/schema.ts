@@ -290,6 +290,31 @@ export const debtTargetCache = pgTable(
     updatedBy: varchar("updated_by", { length: 128 }),
     updatedAt: varchar("updated_at", { length: 32 }),
     populatedAt: timestamp("populated_at").defaultNow().notNull(),
+    // --- columns added to match SQL schema ---
+    partnerCode: varchar("partner_code", { length: 255 }),
+    partnerName: varchar("partner_name", { length: 255 }),
+    device: varchar("device", { length: 64 }),
+    model: varchar("model", { length: 128 }),
+    financeAmount: decimal("finance_amount", { precision: 12, scale: 2 }),
+    contractStatus: varchar("contract_status", { length: 32 }),
+    debtRange: varchar("debt_range", { length: 32 }),
+    principal: decimal("principal", { precision: 12, scale: 2 }).notNull().default("0"),
+    interest: decimal("interest", { precision: 12, scale: 2 }).notNull().default("0"),
+    fee: decimal("fee", { precision: 12, scale: 2 }).notNull().default("0"),
+    penalty: decimal("penalty", { precision: 12, scale: 2 }).notNull().default("0"),
+    unlockFee: decimal("unlock_fee", { precision: 12, scale: 2 }).notNull().default("0"),
+    totalAmount: decimal("total_amount", { precision: 12, scale: 2 }).notNull().default("0"),
+    netAmount: decimal("net_amount", { precision: 12, scale: 2 }).notNull().default("0"),
+    baselineAmount: decimal("baseline_amount", { precision: 12, scale: 2 }).notNull().default("0"),
+    overpaidApplied: decimal("overpaid_applied", { precision: 12, scale: 2 }).notNull().default("0"),
+    isPaid: boolean("is_paid").notNull().default(false),
+    isArrears: boolean("is_arrears").notNull().default(false),
+    isBadDebt: boolean("is_bad_debt").notNull().default(false),
+    isClosed: boolean("is_closed").notNull().default(false),
+    isSuspended: boolean("is_suspended").notNull().default(false),
+    isCurrentPeriod: boolean("is_current_period").notNull().default(false),
+    isFuturePeriod: boolean("is_future_period").notNull().default(false),
+    isPartialPaid: boolean("is_partial_paid").notNull().default(false),
   },
   (t) => ({
     sectionContractPeriodIdx: uniqueIndex("dtc_section_contract_period_idx").on(
@@ -298,6 +323,9 @@ export const debtTargetCache = pgTable(
       t.period,
     ),
     sectionDueIdx: index("dtc_section_due_idx").on(t.section, t.dueDate),
+    sectionIsPaidIdx: index("dtc_section_is_paid_idx").on(t.section, t.isPaid),
+    sectionIsArrearsIdx: index("dtc_section_is_arrears_idx").on(t.section, t.isArrears),
+    sectionIsBadDebtIdx: index("dtc_section_is_bad_debt_idx").on(t.section, t.isBadDebt),
   }),
 );
 
@@ -331,6 +359,16 @@ export const debtCollectedCache = pgTable(
     isCloseRow: boolean("is_close_row").notNull().default(false),
     remark: text("remark"),
     populatedAt: timestamp("populated_at").defaultNow().notNull(),
+    // --- columns added to match SQL schema ---
+    partnerCode: varchar("partner_code", { length: 255 }),
+    partnerName: varchar("partner_name", { length: 255 }),
+    device: varchar("device", { length: 64 }),
+    model: varchar("model", { length: 128 }),
+    financeAmount: decimal("finance_amount", { precision: 12, scale: 2 }),
+    installmentCount: integer("installment_count"),
+    contractStatus: varchar("contract_status", { length: 32 }),
+    debtRange: varchar("debt_range", { length: 32 }),
+    period: integer("period"),
   },
   (t) => ({
     sectionPaymentIdx: uniqueIndex("dcc_section_payment_idx").on(
