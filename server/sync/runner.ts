@@ -880,9 +880,10 @@ async function enrichInstallmentsWithUpdatedBy(
   const updates: Array<EnrichRow> = [];
   let flushed = 0;
 
-  // Open a single persistent connection for all flush operations
-  const mysqlLib = await import("mysql2/promise");
-  const enrichConn = await mysqlLib.default.createConnection(process.env.DATABASE_URL!);
+  // Open a single persistent pg client for all flush operations
+  const pgLib = await import("pg");
+  const enrichConn = new pgLib.default.Client({ connectionString: process.env.DATABASE_URL });
+  await enrichConn.connect();
 
   async function flush() {
     if (updates.length === 0) return;
@@ -897,17 +898,26 @@ async function enrichInstallmentsWithUpdatedBy(
     for (const contractExtId of Array.from(grouped.keys())) {
       const batchRows = grouped.get(contractExtId)!;
       if (batchRows.length === 0) continue;
-      // Build CASE WHEN for updatedBy and updatedAt
+      // Build parameterized CASE WHEN for PostgreSQL
+      let paramIdx = 1;
+      const params: (string | number | null)[] = [];
+      const caseUpdatedBy = batchRows.map((r: EnrichRow) => {
+        if (r.updatedBy) { params.push(r.updatedBy); return `WHEN period = ${r.period} THEN $${paramIdx++}`; }
+        return `WHEN period = ${r.period} THEN NULL`;
+      }).join(" ");
+      const caseUpdatedAt = batchRows.map((r: EnrichRow) => {
+        if (r.updatedAt) { params.push(r.updatedAt); return `WHEN period = ${r.period} THEN $${paramIdx++}`; }
+        return `WHEN period = ${r.period} THEN NULL`;
+      }).join(" ");
       const periodList = batchRows.map((r: EnrichRow) => r.period).join(",");
-      const caseUpdatedBy = batchRows.map((r: EnrichRow) => `WHEN period = ${r.period} THEN ${r.updatedBy ? enrichConn.escape(r.updatedBy) : 'NULL'}`).join(" ");
-      const caseUpdatedAt = batchRows.map((r: EnrichRow) => `WHEN period = ${r.period} THEN ${r.updatedAt ? enrichConn.escape(r.updatedAt) : 'NULL'}`).join(" ");
-      await enrichConn.execute(
-        `UPDATE installments SET 
+      params.push(section, contractExtId);
+      await enrichConn.query(
+        `UPDATE installments SET
           updated_by = CASE ${caseUpdatedBy} ELSE updated_by END,
           updated_at = CASE ${caseUpdatedAt} ELSE updated_at END,
           synced_at = CURRENT_TIMESTAMP
-        WHERE section = ? AND contract_external_id = ? AND period IN (${periodList})`,
-        [section, contractExtId]
+        WHERE section = $${paramIdx++} AND contract_external_id = $${paramIdx++} AND period IN (${periodList})`,
+        params
       );
     }
     flushed += batch.length;
@@ -950,7 +960,7 @@ async function enrichInstallmentsWithUpdatedBy(
     );
     await flush();
   } finally {
-    await enrichConn.end();
+    await enrichConn.end().catch(() => {});
   }
   console.log(`[sync] ${section} installments updated_by enriched: ${flushed} rows from ${contractIds.length} contracts`);
   return flushed;
@@ -986,10 +996,11 @@ async function enrichContractsWithDeviceIds(
     );
   if (targets.length === 0) return 0;
 
-  // Use a single dedicated MySQL connection for all UPDATE queries
+  // Use a single dedicated pg Client for all UPDATE queries
   // to avoid exhausting the connection pool during enrichment.
-  const mysql = await import("mysql2/promise");
-  const enrichConn = await mysql.createConnection(process.env.DATABASE_URL!);
+  const pgLib2 = await import("pg");
+  const enrichConn = new pgLib2.default.Client({ connectionString: process.env.DATABASE_URL });
+  await enrichConn.connect();
 
   const CONCURRENCY = 5;
   const FLUSH_EVERY = 200;
@@ -1000,9 +1011,9 @@ async function enrichContractsWithDeviceIds(
     if (updates.length === 0) return;
     const batch = updates.splice(0, updates.length);
     for (const row of batch) {
-      await enrichConn.execute(
-        `UPDATE contracts SET imei = ?, serial_no = ?, synced_at = CURRENT_TIMESTAMP
-         WHERE section = ? AND external_id = ?`,
+      await enrichConn.query(
+        `UPDATE contracts SET imei = $1, serial_no = $2, synced_at = CURRENT_TIMESTAMP
+         WHERE section = $3 AND external_id = $4`,
         [row.imei, row.serialNo, section, row.externalId],
       );
     }
@@ -1039,7 +1050,7 @@ async function enrichContractsWithDeviceIds(
     );
     await flush();
   } finally {
-    await enrichConn.end();
+    await enrichConn.end().catch(() => {});
   }
   return flushed;
 }

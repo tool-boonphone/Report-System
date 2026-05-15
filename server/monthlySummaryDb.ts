@@ -23,7 +23,7 @@
 import type { SectionKey } from "../shared/const";
 import { getDb } from "./db";
 import { sql } from "drizzle-orm";
-import { pgRows } from "../db";
+import { pgRows } from "./db";
 
 // ---------------------------------------------------------------------------
 // Types

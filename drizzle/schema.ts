@@ -88,6 +88,9 @@ export const appUsers = pgTable(
     groupIdx: index("app_users_group_idx").on(t.groupId),
   }),
 );
+export type AppUser = typeof appUsers.$inferSelect;
+export type AppGroup = typeof appGroups.$inferSelect;
+export type AppGroupPermission = typeof appGroupPermissions.$inferSelect;
 
 export const appSessions = pgTable(
   "app_sessions",
@@ -119,10 +122,11 @@ export const syncLogs = pgTable(
     finishedAt: timestamp("finished_at"),
   },
   (t) => ({
-    sectionIdx: index("sync_logs_section_idx").on(t.section),
+        sectionIdx: index("sync_logs_section_idx").on(t.section),
     finishedIdx: index("sync_logs_finished_idx").on(t.finishedAt),
   }),
 );
+export type SyncLog = typeof syncLogs.$inferSelect;
 
 export const contracts = pgTable(
   "contracts",
@@ -202,6 +206,7 @@ export const contracts = pgTable(
     ),
   }),
 );
+export type Contract = typeof contracts.$inferSelect;
 
 export const installments = pgTable(
   "installments",
@@ -233,6 +238,7 @@ export const installments = pgTable(
     sectionDueIdx: index("installments_section_due_idx").on(t.section, t.dueDate),
   }),
 );
+export type Installment = typeof installments.$inferSelect;
 
 export const paymentTransactions = pgTable(
   "payment_transactions",
@@ -269,6 +275,7 @@ export const paymentTransactions = pgTable(
     ),
   }),
 );
+export type PaymentTransaction = typeof paymentTransactions.$inferSelect;
 
 export const debtTargetCache = pgTable(
   "debt_target_cache",

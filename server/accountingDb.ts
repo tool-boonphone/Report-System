@@ -20,7 +20,7 @@
 import { sql } from "drizzle-orm";
 import type { SectionKey } from "../shared/const";
 import { getDb } from "./db";
-import { pgRows } from "../db";
+import { pgRows } from "./db";
 
 // ─── Income Types ─────────────────────────────────────────────────────────────
 
