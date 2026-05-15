@@ -1,13 +1,11 @@
 import { useAppAuth } from "@/hooks/useAppAuth";
 import { useSection } from "@/contexts/SectionContext";
 import { useDebtCache } from "@/contexts/DebtCacheContext";
-import { useAiChat } from "@/contexts/AiChatContext";
 import type { SectionKey } from "@shared/const";
 import { Loader2 } from "lucide-react";
 import { type ReactNode, useEffect } from "react";
 import { useLocation } from "wouter";
 import { TopNav } from "./TopNav";
-import { AIChatPanel } from "./AIChatPanel";
 
 /** Key ที่ใช้เก็บ returnPath ใน localStorage (ใช้ localStorage แทน sessionStorage เพื่อให้รอดจาก OAuth redirect) */
 export const DATA_LOADING_RETURN_KEY = "dl_return_path";
@@ -56,7 +54,6 @@ export function AppShell({
   const { isLoading, isAuthenticated } = useAppAuth();
   const { hasSection, section } = useSection();
   const debtCache = useDebtCache();
-  const { aiChatOpen } = useAiChat();
   const [location, navigate] = useLocation();
 
   useEffect(() => {
@@ -97,12 +94,9 @@ export function AppShell({
         {/* Main content — transition margin เมื่อ panel เปิด */}
         <main
           className={`flex-1 min-w-0 transition-all duration-300 ${fullHeight ? 'overflow-hidden flex flex-col' : 'overflow-y-auto overflow-x-hidden'}`}
-          style={aiChatOpen ? { marginRight: "400px" } : {}}
         >
           {children}
         </main>
-        {/* AI Chat Panel — fixed right, ไม่ทับ content */}
-        <AIChatPanel />
       </div>
     </div>
   );
