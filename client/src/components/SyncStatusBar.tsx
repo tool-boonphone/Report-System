@@ -123,7 +123,7 @@ export function SyncStatusBar() {
           method: "GET",
           credentials: "include",
           headers: { Accept: "text/event-stream" },
-          signal: AbortSignal.timeout(8000),
+          signal: AbortSignal.timeout(30000), // 30s to handle DB cold start on Render.com free tier
         });
 
         if (!probe.ok) {
