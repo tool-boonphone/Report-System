@@ -240,8 +240,8 @@ async function queryCount(section: SectionKey, opts: {
       COUNT(DISTINCT dtc.contract_external_id) AS contract_count
     FROM debt_target_cache dtc
     WHERE ${dtcWhere(section, opts)}
-    GROUP BY approve_month, bucket
-    ORDER BY approve_month DESC
+    GROUP BY 1, 2
+    ORDER BY 1 DESC
   `;
   const rows = await db.execute(sql.raw(q));
   return pgRows(rows);
@@ -335,8 +335,8 @@ async function queryTarget(
     WHERE base.section = '${section}'
       AND DATE(base.due_date) <= CURRENT_DATE
       ${dueDateFilter.replace(/dtc\./g, "base.")}
-    GROUP BY approve_month, bucket
-    ORDER BY approve_month DESC
+    GROUP BY 1, 2
+    ORDER BY 1 DESC
   `;
   const rows = await db.execute(sql.raw(q));
   return pgRows(rows);
@@ -440,8 +440,8 @@ async function queryPaid(
           END) AS total_paid
     FROM debt_collected_cache dcc
     WHERE ${dccWhere(section, { paidAtDate: opts.paidAtDate, paidAtMonths: opts.paidAtMonths, productType: opts.productType, deviceFamily: opts.deviceFamily, search: opts.search })}
-    GROUP BY approve_month, bucket
-    ORDER BY approve_month DESC
+    GROUP BY 1, 2
+    ORDER BY 1 DESC
   `;
   const rows = await db.execute(sql.raw(q));
   return pgRows(rows);
@@ -526,8 +526,8 @@ async function queryDue(
     WHERE base.section = '${section}'
       AND base.is_arrears = 1
       ${dueDateFilter.replace(/dtc\./g, "base.")}
-    GROUP BY approve_month, bucket
-    ORDER BY approve_month DESC
+    GROUP BY 1, 2
+    ORDER BY 1 DESC
   `;
   const rows = await db.execute(sql.raw(q));
   return pgRows(rows);
@@ -619,8 +619,8 @@ async function queryNotYetDue(
       AND COALESCE(base.is_closed, 0) = 0
       AND COALESCE(base.is_paid, 0) = 0
       ${dueDateFilter.replace(/dtc\./g, "base.")}
-    GROUP BY approve_month, bucket
-    ORDER BY approve_month DESC
+    GROUP BY 1, 2
+    ORDER BY 1 DESC
   `;
   const rows = await db.execute(sql.raw(q));
   return pgRows(rows);
@@ -728,8 +728,8 @@ async function queryInstallTotal(
       AND c.installment_amount > 0
       AND c.installment_count > 0
       ${opts.search ? `AND (c.contract_no LIKE '%${escapeLike(opts.search)}%' OR c.customer_name LIKE '%${escapeLike(opts.search)}%')` : ''}
-    GROUP BY approve_month, bucket
-    ORDER BY approve_month DESC
+    GROUP BY 1, 2
+    ORDER BY 1 DESC
   `;
   const rows = await db.execute(sql.raw(q));
   return pgRows(rows);
@@ -824,7 +824,7 @@ export async function getMonthlySummary(
     });
   }
 
-  // Phase 141+ fix3: queryPaid มี bucket แล้ว (GROUP BY approve_month, bucket)
+  // Phase 141+ fix3: queryPaid มี bucket แล้ว (GROUP BY 1, 2)
   // - ใช้ key ${month}|${bucket} สำหรับ per-bucket paid cell ในตาราง
   // - สะสม __paid__ key เพื่อใช้เป็น totalPaid ของ badge (ยังคงถูกต้อง)
   const paidMap = new Map<CellKey, MoneyBreakdown>();

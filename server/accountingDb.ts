@@ -575,7 +575,7 @@ export async function getIncomeSummary(
       WHERE ${whereStr}
     ) AS sub
     ${incomeTypeFilter}
-    GROUP BY income_type
+    GROUP BY 1
   `;
 
   const result = await db.execute(sql.raw(querySql));
@@ -714,8 +714,8 @@ export async function getIncomeSummaryByPeriod(
       LEFT JOIN (${bdlSubquery}) AS bdl ON bdl.contract_no = pt.contract_no AND bdl.section = pt.section
       WHERE ${whereStr}
     ) AS sub
-    GROUP BY period
-    ORDER BY period ASC
+    GROUP BY 1
+    ORDER BY 1 ASC
   `;
 
   const result = await db.execute(sql.raw(querySql));

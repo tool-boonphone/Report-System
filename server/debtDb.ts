@@ -58,8 +58,7 @@ export async function getDebtReport(params: {
   // --- Target side (installments due in range) ---
   // MySQL SUBSTRING avoids per-row DATE parse overhead on our YYYY-MM-DD strings.
   // Note: only_full_group_by requires a deterministic grouping key. We
-  // compute the month string once and GROUP BY the alias to avoid MySQL
-  // complaining about the non-aggregated expression.
+  // compute the month string once and GROUP BY ordinal position (PostgreSQL compatible).
   const targetRowsRaw = await db.execute(sql`
     SELECT SUBSTRING(${installments.dueDate}, 1, 7) AS month,
            COALESCE(SUM(CAST(${installments.amount} AS DECIMAL(18,2))), 0) AS target,
@@ -68,7 +67,7 @@ export async function getDebtReport(params: {
      WHERE ${installments.section} = ${params.section}
        AND ${installments.dueDate} >= ${params.from}
        AND ${installments.dueDate} <= ${params.to}
-     GROUP BY month
+     GROUP BY 1
   `);
   const targetRows: Array<{ month: string; target: unknown; cnt: unknown }> =
     (targetRowsRaw as any)[0] ?? (targetRowsRaw as any);
@@ -86,7 +85,7 @@ export async function getDebtReport(params: {
        AND ${paymentTransactions.paidAt} <= ${`${params.to} 23:59:59`}
        AND (${paymentTransactions.status} IS NULL
             OR LOWER(${paymentTransactions.status}) IN ('active', 'paid', 'success', 'completed'))
-     GROUP BY month
+     GROUP BY 1
   `);
   const collectedRows: Array<{ month: string; collected: unknown; cnt: unknown }> =
     (collectedRowsRaw as any)[0] ?? (collectedRowsRaw as any);
