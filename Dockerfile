@@ -36,8 +36,8 @@ COPY --from=builder /app/drizzle ./drizzle
 COPY --from=builder /app/server ./server
 COPY --from=builder /app/shared ./shared
 
-# Install production dependencies only
-RUN pnpm install --prod
+# Install all dependencies (required because build-time plugins are referenced in runtime)
+RUN pnpm install
 
 # Set environment variables
 ENV NODE_ENV=production
