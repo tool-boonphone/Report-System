@@ -31,6 +31,7 @@ RUN npm install -g pnpm
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/package.json ./
 COPY --from=builder /app/pnpm-lock.yaml* ./
+COPY --from=builder /app/patches ./patches
 COPY --from=builder /app/drizzle ./drizzle
 COPY --from=builder /app/server ./server
 COPY --from=builder /app/shared ./shared
