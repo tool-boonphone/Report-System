@@ -109,11 +109,52 @@ export function SyncStatusBar() {
   // GET /api/sync-stream/:section maintains an open HTTP connection
   // so Cloud Run does NOT scale-to-zero while sync is running.
   const triggerSSE = useCallback(
-    (sec: string) => {
+    async (sec: string, onDone: () => void) => {
       if (sseRef.current) {
         sseRef.current.close();
         sseRef.current = null;
       }
+
+      // ── ตรวจสอบ HTTP status ก่อนเปิด EventSource ──────────────────────────
+      // EventSource ไม่ expose HTTP status code ดังนั้นต้อง fetch ก่อน
+      // เพื่อให้แสดง Toast error ที่ชัดเจนได้
+      try {
+        const probe = await fetch(`/api/sync-stream/${sec}`, {
+          method: "GET",
+          credentials: "include",
+          headers: { Accept: "text/event-stream" },
+          signal: AbortSignal.timeout(8000),
+        });
+
+        if (!probe.ok) {
+          onDone();
+          if (probe.status === 401) {
+            toast.error("Session หมดอายุ กรุณา Login ใหม่");
+          } else if (probe.status === 403) {
+            toast.error("ไม่มีสิทธิ์ใช้งาน Re-Sync");
+          } else if (probe.status === 409) {
+            toast.info(`Sync ${sec} กำลังทำงานอยู่แล้ว`);
+            utils.sync.status.invalidate();
+          } else {
+            toast.error(`Re-Sync ล้มเหลว (${probe.status})`);
+          }
+          return;
+        }
+        // ถ้า response เป็น SSE stream ให้ปิด probe แล้วเปิด EventSource แทน
+        // (fetch จะได้ response headers แล้ว แต่ EventSource จะจัดการ stream เอง)
+        probe.body?.cancel().catch(() => {});
+      } catch (err: any) {
+        // timeout หรือ network error
+        if (err?.name === "TimeoutError") {
+          toast.error("Server ไม่ตอบสนอง กรุณาลองใหม่");
+        } else {
+          toast.error("ไม่สามารถเชื่อมต่อ Server ได้");
+        }
+        onDone();
+        return;
+      }
+
+      // ── เปิด EventSource เพื่อรับ progress stream ─────────────────────────
       // withCredentials: true ensures browser sends session cookie with SSE request
       const es = new EventSource(`/api/sync-stream/${sec}`, { withCredentials: true });
       sseRef.current = es;
@@ -123,6 +164,7 @@ export function SyncStatusBar() {
           const msg = JSON.parse(e.data);
           if (msg.type === "started") {
             toast.info(`เริ่ม Re-Sync ${sec}...`);
+            onDone(); // ปุ่มกลับมา enable เมื่อ sync เริ่มแล้ว (progress bar จะแสดงแทน)
             utils.sync.status.invalidate();
           } else if (msg.type === "done") {
             toast.success(`Re-Sync ${sec} สำเร็จ (${msg.rowCount ?? 0} rows)`);
@@ -146,17 +188,22 @@ export function SyncStatusBar() {
         }
       };
 
-      es.onerror = (event) => {
-        // SSE error — could be 409 (already running), 401, or network issue
-        // EventSource doesn't expose HTTP status, so we just poll status
+      es.onerror = () => {
+        // SSE connection error หลังจากเปิดแล้ว (network drop, server restart)
+        onDone();
         utils.sync.status.invalidate();
-        // If sync is already running, the status poll will show it
-        // Don't show error toast here as it might be a false alarm
+        // ตรวจสอบว่า sync ยังทำงานอยู่ไหม ถ้าไม่ใช่ให้แจ้ง error
+        setTimeout(() => {
+          const d = (status.data as any)?.[sec];
+          if (!d?.running) {
+            toast.error("การเชื่อมต่อ Re-Sync ขาดหาย กรุณาตรวจสอบสถานะและลองใหม่");
+          }
+        }, 3000);
         es.close();
         sseRef.current = null;
       };
     },
-    [utils],
+    [utils, section, status.data],
   );
 
   // Cleanup SSE on unmount
@@ -181,9 +228,13 @@ export function SyncStatusBar() {
   const handleResync = useCallback(() => {
     if (!section || isRunning || isTriggerPending) return;
     setIsTriggerPending(true);
-    // Small delay to show loading state, then open SSE
-    setTimeout(() => setIsTriggerPending(false), 2000);
-    triggerSSE(section);
+    // isTriggerPending จะ reset เมื่อ SSE ตอบกลับ (started/error) ผ่าน onDone callback
+    // มี fallback timeout 15 วินาที กันกรณีที่ไม่มี response ใดๆ เลย
+    const fallbackTimer = setTimeout(() => setIsTriggerPending(false), 15000);
+    triggerSSE(section, () => {
+      clearTimeout(fallbackTimer);
+      setIsTriggerPending(false);
+    });
   }, [section, isRunning, isTriggerPending, triggerSSE]);
 
   // Clear Cache handler
