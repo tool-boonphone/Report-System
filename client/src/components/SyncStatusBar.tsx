@@ -107,6 +107,16 @@ export function SyncStatusBar() {
 
   // isSyncingLocally = true ทันทีที่กด Re-Sync เพื่อแสดง progress bar โดยไม่ต้องรอ polling
   const [isSyncingLocally, setIsSyncingLocally] = useState(false);
+  const syncingLocallyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // helper: reset isSyncingLocally หลัง delay เล็กน้อย (minimum display time)
+  const clearSyncingLocally = useCallback((delayMs = 1500) => {
+    if (syncingLocallyTimerRef.current) clearTimeout(syncingLocallyTimerRef.current);
+    syncingLocallyTimerRef.current = setTimeout(() => {
+      setIsSyncingLocally(false);
+      syncingLocallyTimerRef.current = null;
+    }, delayMs);
+  }, []);
 
   // Trigger via SSE stream — keeps Render/Cloud Run alive during sync
   // ใช้ EventSource ตัวเดียว (ไม่ต้อง probe แยก) เพราะ server ส่ง SSE event แทน HTTP status codes

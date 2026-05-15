@@ -14,6 +14,7 @@ import {
   installments,
   paymentTransactions,
   cachedCustomers,
+  commissions,
 } from "../../drizzle/schema";
 import { normalizeSectionKey } from "../../shared/const";
 
@@ -188,6 +189,27 @@ export async function upsertCachedCustomers(rows: AnyRow[]): Promise<number> {
         set: setObj as any,
       });
     total += deduped.length;
+  }
+  return total;
+}
+
+export async function upsertCommissions(rows: AnyRow[]): Promise<number> {
+  if (rows.length === 0) return 0;
+  const db = await getDb();
+  if (!db) throw new Error("DB not available for upsertCommissions");
+  let total = 0;
+  for (const batch of chunks(normalizeRows(rows), BATCH_SIZE)) {
+    const merged = mergeBatch(batch);
+    const sample = unionKeys(merged);
+    const setObj = buildUpsertSet(sample, commissions as any);
+    await db
+      .insert(commissions)
+      .values(merged as any)
+      .onConflictDoUpdate({
+        target: [commissions.section, commissions.externalId],
+        set: setObj as any,
+      });
+    total += merged.length;
   }
   return total;
 }

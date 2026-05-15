@@ -310,3 +310,62 @@ export function mapPayment(section: SectionKey, it: PaymentItem) {
     updatedAt: it.updated_at ? String(it.updated_at) : null,
   };
 }
+
+/* -------------------------------------------------------------------------- */
+/* Commissions (รายจ่าย).                                                     */
+/* -------------------------------------------------------------------------- */
+
+export type CommissionItem = {
+  id?: string | number;
+  contract_id?: string | number;
+  contract_code?: string;
+  approved_at?: string;
+  partner_code?: string;
+  member_name?: string;
+  member_tel?: string;
+  product_name?: string;
+  product_price?: string | number;
+  deposit_amount?: string | number;
+  finance_amount?: string | number;
+  installment_number?: string | number;
+  installment_amount?: string | number;
+  comm_amount?: string | number;
+  incentive?: string | number;
+  total_transfer?: string | number;
+  payment_at?: string;
+  payment_status?: string;
+  payment_slip?: string;
+  payment_slip2?: string;
+  payment_channel?: string;
+  payment_by?: string;
+  [key: string]: unknown;
+};
+
+export function mapCommission(section: SectionKey, it: CommissionItem) {
+  return {
+    section,
+    externalId: String(it.id),
+    contractExternalId: it.contract_id ? String(it.contract_id) : null,
+    contractNo: it.contract_code ?? null,
+    approvedAt: it.approved_at ?? null,
+    partnerCode: it.partner_code ?? null,
+    memberName: it.member_name ?? null,
+    memberTel: it.member_tel ?? null,
+    productName: it.product_name ?? null,
+    productPrice: toNumStr(it.product_price),
+    depositAmount: toNumStr(it.deposit_amount),
+    financeAmount: toNumStr(it.finance_amount),
+    installmentNumber: it.installment_number != null ? Number(it.installment_number) : null,
+    installmentAmount: toNumStr(it.installment_amount),
+    commAmount: toNumStr(it.comm_amount),
+    incentive: toNumStr(it.incentive),
+    totalTransfer: toNumStr(it.total_transfer),
+    paymentAt: it.payment_at ?? null,
+    paymentStatus: it.payment_status ?? null,
+    paymentSlip: it.payment_slip ?? null,
+    paymentSlip2: it.payment_slip2 ?? null,
+    paymentChannel: it.payment_channel ?? null,
+    paymentBy: it.payment_by ?? null,
+    rawJson: it as any,
+  };
+}

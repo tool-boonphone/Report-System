@@ -994,8 +994,8 @@ export async function listDebtTarget(params: { section: SectionKey }) {
            CAST((raw_json::jsonb->>'principal_due') AS DECIMAL(18,2)) AS principal_due,
            CAST((raw_json::jsonb->>'interest_due')  AS DECIMAL(18,2)) AS interest_due,
            CAST((raw_json::jsonb->>'fee_due')       AS DECIMAL(18,2)) AS fee_due,
-           CAST(COALESCE((raw_json::jsonb->>'penalty_due'), (raw_json::jsonb->>'mulct'), 0) AS DECIMAL(18,2)) AS penalty_due,
-           CAST(COALESCE((raw_json::jsonb->>'unlock_fee_due'), 0) AS DECIMAL(18,2)) AS unlock_fee_due,
+           CAST(COALESCE((raw_json::jsonb->>'penalty_due'), (raw_json::jsonb->>'mulct'), '0') AS DECIMAL(18,2)) AS penalty_due,
+           CAST(COALESCE((raw_json::jsonb->>'unlock_fee_due'), '0') AS DECIMAL(18,2)) AS unlock_fee_due,
            (raw_json::jsonb->>'installment_status_code') AS installment_status_code,
            CAST((raw_json::jsonb->>'balance') AS DECIMAL(18,2)) AS balance
       FROM ${installments}
@@ -2829,8 +2829,8 @@ export async function* listDebtTargetStream(params: {
            CAST((raw_json::jsonb->>'principal_due') AS DECIMAL(18,2)) AS principal_due,
            CAST((raw_json::jsonb->>'interest_due')  AS DECIMAL(18,2)) AS interest_due,
            CAST((raw_json::jsonb->>'fee_due')       AS DECIMAL(18,2)) AS fee_due,
-           CAST(COALESCE((raw_json::jsonb->>'penalty_due'), (raw_json::jsonb->>'mulct'), 0) AS DECIMAL(18,2)) AS penalty_due,
-           CAST(COALESCE((raw_json::jsonb->>'unlock_fee_due'), 0) AS DECIMAL(18,2)) AS unlock_fee_due,
+           CAST(COALESCE((raw_json::jsonb->>'penalty_due'), (raw_json::jsonb->>'mulct'), '0') AS DECIMAL(18,2)) AS penalty_due,
+           CAST(COALESCE((raw_json::jsonb->>'unlock_fee_due'), '0') AS DECIMAL(18,2)) AS unlock_fee_due,
            (raw_json::jsonb->>'installment_status_code') AS installment_status_code,
            CAST((raw_json::jsonb->>'balance') AS DECIMAL(18,2)) AS balance
       FROM ${installments}
@@ -3769,8 +3769,8 @@ export async function* listDebtCollectedStream(params: {
              CAST(paid_amount AS DECIMAL(18,2)) AS paid_amount,
              status AS inst_status,
              (raw_json::jsonb->>'installment_status_code') AS installment_status_code,
-             CAST(COALESCE((raw_json::jsonb->>'penalty_due'), (raw_json::jsonb->>'mulct'), 0) AS DECIMAL(18,2)) AS penalty_due,
-             CAST(COALESCE((raw_json::jsonb->>'unlock_fee_due'), 0) AS DECIMAL(18,2)) AS unlock_fee_due,
+             CAST(COALESCE((raw_json::jsonb->>'penalty_due'), (raw_json::jsonb->>'mulct'), '0') AS DECIMAL(18,2)) AS penalty_due,
+             CAST(COALESCE((raw_json::jsonb->>'unlock_fee_due'), '0') AS DECIMAL(18,2)) AS unlock_fee_due,
              CAST((raw_json::jsonb->>'balance') AS DECIMAL(18,2)) AS balance
         FROM installments
        WHERE section = '${sectionLiteral}'

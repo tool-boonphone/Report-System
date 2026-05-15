@@ -292,12 +292,11 @@ export const debtTargetCache = pgTable(
     dueDate: varchar("due_date", { length: 20 }),
     period: integer("period"),
     amount: decimal("amount", { precision: 12, scale: 2 }),
-    paidAmount: decimal("paid_amount", { precision: 12, scale: 2 }),
     status: varchar("status", { length: 32 }),
     updatedBy: varchar("updated_by", { length: 128 }),
     updatedAt: varchar("updated_at", { length: 32 }),
     populatedAt: timestamp("populated_at").defaultNow().notNull(),
-    // --- columns added to match SQL schema ---
+    // --- columns matching DB schema ---
     partnerCode: varchar("partner_code", { length: 255 }),
     partnerName: varchar("partner_name", { length: 255 }),
     device: varchar("device", { length: 64 }),
@@ -312,6 +311,7 @@ export const debtTargetCache = pgTable(
     unlockFee: decimal("unlock_fee", { precision: 12, scale: 2 }).notNull().default("0"),
     totalAmount: decimal("total_amount", { precision: 12, scale: 2 }).notNull().default("0"),
     netAmount: decimal("net_amount", { precision: 12, scale: 2 }).notNull().default("0"),
+    paidAmount: decimal("paid_amount", { precision: 12, scale: 2 }).notNull().default("0"),
     baselineAmount: decimal("baseline_amount", { precision: 12, scale: 2 }).notNull().default("0"),
     overpaidApplied: decimal("overpaid_applied", { precision: 12, scale: 2 }).notNull().default("0"),
     isPaid: boolean("is_paid").notNull().default(false),
@@ -432,3 +432,50 @@ export const cachedCustomers = pgTable(
     sectionIdx: index("cc_section_idx").on(t.section),
   }),
 );
+
+export const commissions = pgTable(
+  "commissions",
+  {
+    id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+    section: varchar("section", { length: 32 }).notNull(),
+    externalId: varchar("external_id", { length: 64 }).notNull(),
+    contractExternalId: varchar("contract_external_id", { length: 64 }),
+    contractNo: varchar("contract_no", { length: 64 }),
+    approvedAt: varchar("approved_at", { length: 32 }),
+    partnerCode: varchar("partner_code", { length: 64 }),
+    memberName: varchar("member_name", { length: 255 }),
+    memberTel: varchar("member_tel", { length: 32 }),
+    productName: varchar("product_name", { length: 512 }),
+    productPrice: decimal("product_price", { precision: 12, scale: 2 }),
+    depositAmount: decimal("deposit_amount", { precision: 12, scale: 2 }),
+    financeAmount: decimal("finance_amount", { precision: 12, scale: 2 }),
+    installmentNumber: integer("installment_number"),
+    installmentAmount: decimal("installment_amount", { precision: 12, scale: 2 }),
+    commAmount: decimal("comm_amount", { precision: 12, scale: 2 }),
+    incentive: decimal("incentive", { precision: 12, scale: 2 }),
+    totalTransfer: decimal("total_transfer", { precision: 12, scale: 2 }),
+    paymentAt: varchar("payment_at", { length: 32 }),
+    paymentStatus: varchar("payment_status", { length: 64 }),
+    paymentSlip: text("payment_slip"),
+    paymentSlip2: text("payment_slip2"),
+    paymentChannel: varchar("payment_channel", { length: 64 }),
+    paymentBy: varchar("payment_by", { length: 128 }),
+    rawJson: jsonb("raw_json"),
+    syncedAt: timestamp("synced_at").defaultNow().notNull(),
+  },
+  (t) => ({
+    sectionExternalIdx: uniqueIndex("commissions_section_external_idx").on(
+      t.section,
+      t.externalId,
+    ),
+    sectionContractIdx: index("commissions_section_contract_idx").on(
+      t.section,
+      t.contractExternalId,
+    ),
+    sectionApprovedIdx: index("commissions_section_approved_idx").on(
+      t.section,
+      t.approvedAt,
+    ),
+  }),
+);
+export type Commission = typeof commissions.$inferSelect;
