@@ -114,6 +114,30 @@ function setStage(section: SectionKey, stageIndex: number) {
   }
 }
 
+/**
+ * Update sub-progress within a stage — shows "contracts (1500/17809)" in UI.
+ * Called every N rows to give real-time feedback without flooding DB.
+ * Only updates in-memory lock (no DB write) for performance.
+ */
+function setSubProgress(
+  section: SectionKey,
+  stageName: string,
+  current: number,
+  total: number,
+) {
+  const lock = _locks[section];
+  if (!lock) return;
+  // Compute fine-grained progress within the stage band
+  const stageIndex = SYNC_STAGES.indexOf(stageName as any);
+  const totalStages = SYNC_STAGES.length;
+  const stageStart = Math.round(5 + (stageIndex / totalStages) * 90);
+  const stageEnd = Math.round(5 + ((stageIndex + 1) / totalStages) * 90);
+  const subFraction = total > 0 ? current / total : 0;
+  const progress = Math.min(stageEnd - 1, Math.round(stageStart + subFraction * (stageEnd - stageStart)));
+  const currentStage = total > 0 ? `${stageName} (${current}/${total})` : stageName;
+  _locks[section] = { ...lock, progress, currentStage };
+}
+
 export function isSyncRunning(section: SectionKey): boolean {
   return _locks[section] !== null;
 }
@@ -609,11 +633,16 @@ async function syncContracts(
   let rowCount = 0;
   try {
     const buffer: any[] = [];
+    let totalContractRows = 0; // will be set on first page
     await client.forEachPage<any>(
       "contract",
       (d) => d?.contracts,
       { action: "all" },
       async (items, page, totalPages) => {
+        // Estimate total rows from totalPages × pageSize (200)
+        if (totalContractRows === 0 && totalPages > 0) {
+          totalContractRows = totalPages * 200;
+        }
         for (const it of items) {
           const row: any = mapContractListItem(section, it);
           // Enrich with partner fields we already have.
@@ -643,6 +672,8 @@ async function syncContracts(
         if (buffer.length >= 500) {
           rowCount += await upsertContracts(buffer.splice(0, buffer.length));
         }
+        // Update real-time sub-progress in UI
+        setSubProgress(section, "contracts", page * 200, totalContractRows);
         // Save resume_page so a Cloud Run kill can be recovered by resuming from next page
         updateSyncLogStage({ id: log.id, currentStage: "contracts", progress: Math.round((page / totalPages) * 100), resumePage: page + 1 }).catch(() => {});
       },
@@ -704,18 +735,21 @@ async function syncInstallments(
     // GET /api/v1/contract?action=installments
     // Response fields are identical: installment_status_code, principal_due, interest_due, etc.
     const buffer: any[] = [];
+    let totalInstRows = 0;
     try {
       await client.forEachPage<any>(
         "contract",
         (d) => d?.installments,
         { action: "installments" },
-        async (items) => {
+        async (items, page, totalPages) => {
+          if (totalInstRows === 0 && totalPages > 0) totalInstRows = totalPages * 500;
           for (const it of items) buffer.push(mapInstallment(section, it));
           if (buffer.length >= 1000) {
             rowCount += await upsertInstallments(
               buffer.splice(0, buffer.length),
             );
           }
+          setSubProgress(section, "installments", page * 500, totalInstRows);
         },
         500,
       );
@@ -773,7 +807,7 @@ async function syncPayments(
       "payment",
       (d) => d?.transactions,
       { action: "transactions" },
-      async (items) => {
+      async (items, page, totalPages) => {
         for (const it of items) {
           const mapped = mapPayment(section, it);
           buffer.push(mapped);
@@ -782,6 +816,7 @@ async function syncPayments(
         if (buffer.length >= 1000) {
           rowCount += await upsertPayments(buffer.splice(0, buffer.length));
         }
+        setSubProgress(section, "payments", page * 1000, totalPages * 1000);
       },
       1000,   // ข้อ 1: page size 1000 (เดิม 500)
       undefined, // timeoutMs — ใช้ default (20s per request)
