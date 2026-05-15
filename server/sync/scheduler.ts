@@ -4,8 +4,10 @@
  * haven't already synced today, it kicks off a run for each configured section.
  *
  * NOTE: Changed from 09:00 → 04:00 per business requirement (2026-05-11).
- * Sync runs at 04:00 and pulls data up to yesterday only (today's records
- * are deleted post-sync via cleanupTodayPayments in runner.ts).
+ * Sync is idempotent (upsert-only) — no data is deleted after sync.
+ *
+ * Missed-sync recovery: if the server restarts after 04:00 and the daily sync
+ * hasn't run yet (last sync > 23h ago), it will kick off immediately on startup.
  *
  * IMPORTANT: Server may run in UTC or other timezones. All time comparisons
  * MUST use Asia/Bangkok (UTC+7) to match business requirements.
