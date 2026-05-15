@@ -307,11 +307,7 @@ export function TopNav() {
               </div>
             )}
 
-            {me && (() => {
-              const isBoon = !section || section === "Boonphone";
-              return (
-              );
-            })()}
+
 
             {me && (
               <div ref={userMenuRef} className="relative">
