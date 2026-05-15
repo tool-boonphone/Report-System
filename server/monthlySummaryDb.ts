@@ -608,7 +608,7 @@ async function queryNotYetDue(
       FROM debt_target_cache dtc
       WHERE ${baseWhere}
         AND dtc.due_date > CURRENT_DATE
-        AND COALESCE(dtc.is_closed, 0) = 0
+        AND dtc.is_closed IS NOT TRUE
         AND dtc.is_paid IS NOT TRUE
         ${dueDateFilter}
       GROUP BY dtc.section, dtc.contract_external_id
@@ -616,7 +616,7 @@ async function queryNotYetDue(
              AND latest.contract_external_id = base.contract_external_id
     WHERE base.section = '${section}'
       AND base.due_date > CURRENT_DATE
-      AND COALESCE(base.is_closed, 0) = 0
+      AND base.is_closed IS NOT TRUE
       AND base.is_paid IS NOT TRUE
       ${dueDateFilter.replace(/dtc\./g, "base.")}
     GROUP BY 1, 2
