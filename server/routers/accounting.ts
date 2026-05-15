@@ -180,7 +180,7 @@ export const accountingRouter = router({
           ORDER BY i.updated_by ASC
         `),
       );
-      const arr: any[] = (result as any)[0] ?? result;
+      const arr: any[] = result.rows ?? result;
       return (arr ?? []).map((r: any) => r.updated_by).filter(Boolean) as string[];
     }),
 
@@ -202,8 +202,8 @@ export const accountingRouter = router({
       try {
         return await getIncomeSummaryByPeriod({ section, groupBy, years, months });
       } catch (e: any) {
-        const mysqlMsg = e?.cause?.message ?? e?.cause?.sqlMessage ?? e?.message ?? String(e);
-        console.error('[getIncomeSummaryByPeriod] error:', mysqlMsg);
+        const pgMsg = e?.cause?.message ?? e?.message ?? String(e);
+        console.error('[getIncomeSummaryByPeriod] error:', pgMsg);
         throw e;
       }
     }),
@@ -226,8 +226,8 @@ export const accountingRouter = router({
       try {
         return await getExpenseSummaryByPeriod({ section, groupBy, years, months });
       } catch (e: any) {
-        const mysqlMsg = e?.cause?.message ?? e?.cause?.sqlMessage ?? e?.message ?? String(e);
-        console.error('[getExpenseSummaryByPeriod] error:', mysqlMsg);
+        const pgMsg = e?.cause?.message ?? e?.message ?? String(e);
+        console.error('[getExpenseSummaryByPeriod] error:', pgMsg);
         throw e;
       }
     }),
@@ -270,8 +270,8 @@ export const accountingRouter = router({
       try {
         return await getFinanceSummaryByPeriod({ section, groupBy, years, months });
       } catch (e: any) {
-        const mysqlMsg = e?.cause?.message ?? e?.cause?.sqlMessage ?? e?.message ?? String(e);
-        console.error('[getFinanceSummaryByPeriod] error:', mysqlMsg);
+        const pgMsg = e?.cause?.message ?? e?.message ?? String(e);
+        console.error('[getFinanceSummaryByPeriod] error:', pgMsg);
         throw e;
       }
     }),

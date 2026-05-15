@@ -333,14 +333,14 @@ export async function listIncome(params: IncomeParams): Promise<{
     LIMIT ${pageSize} OFFSET ${offset}
   `;
 
-  const [countResult, dataResult] = await Promise.all([
-    db.execute(sql.raw(countSql)),
-    db.execute(sql.raw(dataSql)),
-  ]);
+	  const [countResult, dataResult] = await Promise.all([
+	    db.execute(sql.raw(countSql)),
+	    db.execute(sql.raw(dataSql)),
+	  ]);
 
-  const countArr: any[] = (countResult as any)[0] ?? countResult;
-  const total = Number(countArr[0]?.total ?? 0);
-  const dataArr: any[] = (dataResult as any)[0] ?? dataResult;
+	  const countArr: any[] = countResult.rows ?? countResult;
+	  const total = Number(countArr[0]?.total ?? 0);
+	  const dataArr: any[] = dataResult.rows ?? dataResult;
   const rows: IncomeRow[] = (dataArr ?? []).map((r: any) => ({
     id: Number(r.id),
     contractNo: r.contract_no ?? "",
@@ -381,13 +381,13 @@ export async function listIncomeUpdatedBy(
         SELECT DISTINCT updated_by
         FROM payment_transactions
         WHERE section = '${secEsc}'
-          AND JSON_EXTRACT(raw_json, '$.source') IS NULL
-          AND updated_by IS NOT NULL AND updated_by != ''
-        ORDER BY updated_by ASC
-      `),
-    );
-    const arr: any[] = (result as any)[0] ?? result;
-    return (arr ?? []).map((r: any) => r.updated_by).filter(Boolean);
+	          AND raw_json ->> 'source' IS NULL
+	          AND updated_by IS NOT NULL AND updated_by != ''
+	        ORDER BY updated_by ASC
+	      `),
+	    );
+	    const arr: any[] = result.rows ?? result;
+	    return (arr ?? []).map((r: any) => r.updated_by).filter(Boolean);
   }
 
   // มี filter เพิ่มเติม — ต้อง JOIN contracts + bad_debt_last_days เพื่อ filter income_type
@@ -427,9 +427,9 @@ export async function listIncomeUpdatedBy(
     ORDER BY updated_by ASC
   `;
 
-  const result = await db.execute(sql.raw(querySql));
-  const arr: any[] = (result as any)[0] ?? result;
-  return (arr ?? []).map((r: any) => r.updated_by).filter(Boolean);
+	  const result = await db.execute(sql.raw(querySql));
+	  const arr: any[] = result.rows ?? result;
+	  return (arr ?? []).map((r: any) => r.updated_by).filter(Boolean);
 }
 
 // ─── Expense ──────────────────────────────────────────────────────────────────
@@ -471,20 +471,20 @@ export async function listExpense(params: ExpenseParams): Promise<{
       )
     ) AS latest_i ON latest_i.contract_no = c.contract_no AND latest_i.section = c.section
   `;
-  const [countResult, dataResult] = await Promise.all([
-    db.execute(sql.raw(`SELECT COUNT(*) AS total ${joinSql} WHERE ${whereStr}`)),
-    db.execute(sql.raw(`
-      SELECT c.id, c.contract_no, c.approve_date, c.commission_net, c.partner_code, c.partner_name,
-             latest_i.updated_by, latest_i.updated_at
-      ${joinSql}
-      WHERE ${whereStr}
-      ORDER BY c.approve_date DESC, c.id DESC
-      LIMIT ${pageSize} OFFSET ${offset}
-    `)),
-  ]);
-  const countArr: any[] = (countResult as any)[0] ?? countResult;
-  const total = Number(countArr[0]?.total ?? 0);
-  const dataArr: any[] = (dataResult as any)[0] ?? dataResult;
+	  const [countResult, dataResult] = await Promise.all([
+	    db.execute(sql.raw(`SELECT COUNT(*) AS total ${joinSql} WHERE ${whereStr}`)),
+	    db.execute(sql.raw(`
+	      SELECT c.id, c.contract_no, c.approve_date, c.commission_net, c.partner_code, c.partner_name,
+	             latest_i.updated_by, latest_i.updated_at
+	      ${joinSql}
+	      WHERE ${whereStr}
+	      ORDER BY c.approve_date DESC, c.id DESC
+	      LIMIT ${pageSize} OFFSET ${offset}
+	    `)),
+	  ]);
+	  const countArr: any[] = countResult.rows ?? countResult;
+	  const total = Number(countArr[0]?.total ?? 0);
+	  const dataArr: any[] = dataResult.rows ?? dataResult;
   const rows: ExpenseRow[] = (dataArr ?? []).map((r: any) => ({
     id: Number(r.id),
     contractNo: r.contract_no ?? "",
