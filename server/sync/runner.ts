@@ -409,13 +409,14 @@ async function doSync(
       console.error(`[runner] ${section}: pre-build export failed:`, exportErr?.message ?? exportErr);
     }
 
-    // Post-sync cleanup: ลบ payment_transactions ที่ created_at = วันที่ sync รัน
-    // เพื่อให้ข้อมูลในระบบมีเฉพาะถึงเมื่อวาน (วันที่ sync รันถือว่ายังไม่ครบวัน)
-    try {
-      await cleanupTodayPayments(section);
-    } catch (cleanupErr: any) {
-      console.warn(`[runner] ${section}: post-sync cleanup failed (non-fatal):`, cleanupErr?.message ?? cleanupErr);
-    }
+    // Post-sync cleanup: ปิดไว้ก่อน — cleanupTodayPayments ลบ payments ที่ created_at = วันนี้
+    // แต่ Boonphone/FF365 บันทึก created_at = วันที่ sync รัน ทำให้ข้อมูลหายไปทั้งหมด
+    // TODO: พิจารณา logic ที่ถูกต้องก่อน enable กลับ
+    // try {
+    //   await cleanupTodayPayments(section);
+    // } catch (cleanupErr: any) {
+    //   console.warn(`[runner] ${section}: post-sync cleanup failed (non-fatal):`, cleanupErr?.message ?? cleanupErr);
+    // }
 
     clearInterval(globalSelfPing);
     return { ok: true, rowCount: overallRows };
