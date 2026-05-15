@@ -17,9 +17,8 @@ export async function insertSyncLog(params: {
     triggeredBy: params.triggeredBy,
     status: "in_progress",
     startedAt: now,
-  });
-  // mysql2/drizzle returns ResultSetHeader; insertId is the autoincrement pk.
-  const id = (res as any)?.insertId ?? 0;
+  }).returning({ id: syncLogs.id });
+  const id = res?.id ?? 0;
   return { id, startedAt: now };
 }
 
@@ -241,8 +240,8 @@ export async function clearStuckSyncLogs(section: SectionKey): Promise<number> {
         eq(syncLogs.section, section),
         eq(syncLogs.status, "in_progress"),
       ),
-    );
-  const affectedRows = (result[0] as any)?.affectedRows ?? 0;
+    ).returning({ id: syncLogs.id });
+  const affectedRows = result.length;
   console.log(`[syncLog] clearStuck(${section}): cleared ${affectedRows} stuck rows`);
   return affectedRows;
 }
@@ -273,8 +272,8 @@ export async function clearAllStuckSyncLogs(): Promise<number> {
         eq(syncLogs.status, "in_progress"),
         lt(syncLogs.startedAt, cutoff),
       ),
-    );
-  const affectedRows = (result[0] as any)?.affectedRows ?? 0;
+    ).returning({ id: syncLogs.id });
+  const affectedRows = result.length;
   if (affectedRows > 0) {
     console.log(`[syncLog] startup cleanup: cleared ${affectedRows} stuck in_progress row(s) older than 15 min`);
   }

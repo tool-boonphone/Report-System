@@ -2,64 +2,55 @@ import {
   boolean,
   decimal,
   index,
-  int,
-  json,
-  mysqlEnum,
-  mysqlTable,
+  integer,
+  jsonb,
+  pgEnum,
+  pgTable,
   text,
   timestamp,
   uniqueIndex,
   varchar,
-} from "drizzle-orm/mysql-core";
+} from "drizzle-orm/pg-core";
 
-/* =============================================================================
- * Legacy Manus OAuth table (kept for framework compatibility but unused).
- * The Report System uses its own app_users/app_sessions tables below.
- * ============================================================================= */
+export const roleEnum = pgEnum("role", ["user", "admin"]);
+export const syncStatusEnum = pgEnum("sync_status", ["in_progress", "success", "error"]);
 
-export const users = mysqlTable("users", {
-  id: int("id").autoincrement().primaryKey(),
+export const users = pgTable("users", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   openId: varchar("openId", { length: 64 }).notNull().unique(),
   name: text("name"),
   email: varchar("email", { length: 320 }),
   loginMethod: varchar("loginMethod", { length: 64 }),
-  role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
+  role: roleEnum("role").default("user").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
 });
+
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
-/* =============================================================================
- * Authentication & Authorization
- * ============================================================================= */
-
-/** Groups that hold the permission matrix. */
-export const appGroups = mysqlTable(
+export const appGroups = pgTable(
   "app_groups",
   {
-    id: int("id").autoincrement().primaryKey(),
+    id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
     name: varchar("name", { length: 64 }).notNull(),
     description: varchar("description", { length: 255 }),
     isSuperAdmin: boolean("is_super_admin").notNull().default(false),
-    // Comma-separated allowed sections e.g. "Boonphone,Fastfone365"
-    // Empty string = all sections allowed (used for Super Admin / backward compat)
     allowedSections: varchar("allowed_sections", { length: 255 }).notNull().default(""),
     createdAt: timestamp("created_at").defaultNow().notNull(),
-    updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
   (t) => ({
     nameIdx: uniqueIndex("app_groups_name_idx").on(t.name),
   }),
 );
 
-/** Permission matrix: one row per (group, menu). */
-export const appGroupPermissions = mysqlTable(
+export const appGroupPermissions = pgTable(
   "app_group_permissions",
   {
-    id: int("id").autoincrement().primaryKey(),
-    groupId: int("group_id").notNull(),
+    id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+    groupId: integer("group_id").notNull(),
     menuCode: varchar("menu_code", { length: 64 }).notNull(),
     canView: boolean("can_view").notNull().default(false),
     canAdd: boolean("can_add").notNull().default(false),
@@ -77,20 +68,19 @@ export const appGroupPermissions = mysqlTable(
   }),
 );
 
-/** In-app users (independent from Manus OAuth). */
-export const appUsers = mysqlTable(
+export const appUsers = pgTable(
   "app_users",
   {
-    id: int("id").autoincrement().primaryKey(),
+    id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
     username: varchar("username", { length: 64 }).notNull(),
     passwordHash: varchar("password_hash", { length: 255 }).notNull(),
     fullName: varchar("full_name", { length: 128 }),
     email: varchar("email", { length: 255 }),
-    groupId: int("group_id").notNull(),
+    groupId: integer("group_id").notNull(),
     isActive: boolean("is_active").notNull().default(true),
     lastLoginAt: timestamp("last_login_at"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
-    updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
   (t) => ({
     usernameIdx: uniqueIndex("app_users_username_idx").on(t.username),
@@ -98,12 +88,11 @@ export const appUsers = mysqlTable(
   }),
 );
 
-/** Session tokens for the custom login flow. */
-export const appSessions = mysqlTable(
+export const appSessions = pgTable(
   "app_sessions",
   {
     id: varchar("id", { length: 64 }).primaryKey(),
-    userId: int("user_id").notNull(),
+    userId: integer("user_id").notNull(),
     expiresAt: timestamp("expires_at").notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
@@ -112,30 +101,19 @@ export const appSessions = mysqlTable(
   }),
 );
 
-export type AppUser = typeof appUsers.$inferSelect;
-export type AppGroup = typeof appGroups.$inferSelect;
-export type AppGroupPermission = typeof appGroupPermissions.$inferSelect;
-
-/* =============================================================================
- * Sync Log
- * ============================================================================= */
-
-export const syncLogs = mysqlTable(
+export const syncLogs = pgTable(
   "sync_logs",
   {
-    id: int("id").autoincrement().primaryKey(),
-    section: varchar("section", { length: 32 }).notNull(), // Boonphone | Fastfone365
-    entity: varchar("entity", { length: 48 }).notNull(), // contracts | installments | payments | all
-    status: mysqlEnum("status", ["in_progress", "success", "error"]).notNull(),
-    triggeredBy: varchar("triggered_by", { length: 32 }).notNull(), // cron | manual | on-demand | startup
-    rowCount: int("row_count").default(0),
+    id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+    section: varchar("section", { length: 32 }).notNull(),
+    entity: varchar("entity", { length: 48 }).notNull(),
+    status: syncStatusEnum("status").notNull(),
+    triggeredBy: varchar("triggered_by", { length: 32 }).notNull(),
+    rowCount: integer("row_count").default(0),
     errorMessage: text("error_message"),
-    // Stage tracking for cross-instance progress reporting (Cloud Run multi-instance)
     currentStage: varchar("current_stage", { length: 32 }),
-    progress: int("progress").default(0),
-    // Resume support: last page successfully fetched (for customers stage)
-    // Allows resuming from where we left off if Cloud Run is killed mid-sync
-    resumePage: int("resume_page").default(0),
+    progress: integer("progress").default(0),
+    resumePage: integer("resume_page").default(0),
     startedAt: timestamp("started_at").defaultNow().notNull(),
     finishedAt: timestamp("finished_at"),
   },
@@ -144,41 +122,28 @@ export const syncLogs = mysqlTable(
     finishedIdx: index("sync_logs_finished_idx").on(t.finishedAt),
   }),
 );
-export type SyncLog = typeof syncLogs.$inferSelect;
 
-/* =============================================================================
- * Shared contract schema used by BOTH Boonphone + Fastfone365.
- * We use the `section` column to distinguish the source, backed by an index
- * so per-section queries stay in milliseconds.
- * ============================================================================= */
-
-export const contracts = mysqlTable(
+export const contracts = pgTable(
   "contracts",
   {
-    id: int("id").autoincrement().primaryKey(),
-    section: varchar("section", { length: 32 }).notNull(), // Boonphone | Fastfone365
-    externalId: varchar("external_id", { length: 64 }).notNull(), // API contract id
+    id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+    section: varchar("section", { length: 32 }).notNull(),
+    externalId: varchar("external_id", { length: 64 }).notNull(),
     contractNo: varchar("contract_no", { length: 64 }).notNull(),
-
-    // === Contract header ===
-    submitDate: varchar("submit_date", { length: 20 }), // YYYY-MM-DD
+    submitDate: varchar("submit_date", { length: 20 }),
     approveDate: varchar("approve_date", { length: 20 }),
     channel: varchar("channel", { length: 64 }),
     status: varchar("status", { length: 32 }),
-
-    // === Partner ===
     partnerCode: varchar("partner_code", { length: 255 }),
     partnerName: varchar("partner_name", { length: 255 }),
     partnerProvince: varchar("partner_province", { length: 64 }),
     partnerStatus: varchar("partner_status", { length: 32 }),
     commissionNet: decimal("commission_net", { precision: 12, scale: 2 }),
-
-    // === Customer ===
     customerName: varchar("customer_name", { length: 255 }),
     nationality: varchar("nationality", { length: 64 }),
     citizenId: varchar("citizen_id", { length: 32 }),
     gender: varchar("gender", { length: 16 }),
-    age: int("age"),
+    age: integer("age"),
     occupation: varchar("occupation", { length: 512 }),
     salary: decimal("salary", { precision: 12, scale: 2 }),
     workplace: varchar("workplace", { length: 1024 }),
@@ -189,8 +154,6 @@ export const contracts = mysqlTable(
     addrProvince: varchar("addr_province", { length: 128 }),
     workDistrict: varchar("work_district", { length: 128 }),
     workProvince: varchar("work_province", { length: 128 }),
-
-    // === Product ===
     promotionName: varchar("promotion_name", { length: 255 }),
     device: varchar("device", { length: 64 }),
     productType: varchar("product_type", { length: 64 }),
@@ -199,30 +162,19 @@ export const contracts = mysqlTable(
     serialNo: varchar("serial_no", { length: 64 }),
     sellPrice: decimal("sell_price", { precision: 12, scale: 2 }),
     deviceStatus: varchar("device_status", { length: 32 }),
-
-    // === Financing ===
     downPayment: decimal("down_payment", { precision: 12, scale: 2 }),
     financeAmount: decimal("finance_amount", { precision: 12, scale: 2 }),
-    installmentCount: int("installment_count"),
+    installmentCount: integer("installment_count"),
     multiplier: decimal("multiplier", { precision: 6, scale: 2 }),
     installmentAmount: decimal("installment_amount", { precision: 12, scale: 2 }),
-    paymentDay: int("payment_day"),
-    paidInstallments: int("paid_installments").default(0),
+    paymentDay: integer("payment_day"),
+    paidInstallments: integer("paid_installments").default(0),
     debtType: varchar("debt_type", { length: 32 }),
-
-    // Bookkeeping
-    rawJson: json("raw_json"),
+    rawJson: jsonb("raw_json"),
     syncedAt: timestamp("synced_at").defaultNow().notNull(),
-
-    // Bad-debt summary — computed & stored after each sync.
-    // bad_debt_amount:       total proceeds from device sale (ยอดขายเครื่อง)
-    // bad_debt_date:         date the bad-debt was recorded (YYYY-MM-DD)
-    // suspended_from_period: first installment period that became suspended/bad-debt
-    // bad_debt_updated_by:   ผู้ทำรายการสุดท้าย (จาก installments.updated_by ของรายการล่าสุด)
-    // bad_debt_updated_at:   วันเวลาที่ทำรายการสุดท้าย (จาก installments.updated_at ของรายการล่าสุด)
     badDebtAmount: decimal("bad_debt_amount", { precision: 12, scale: 2 }),
     badDebtDate: varchar("bad_debt_date", { length: 20 }),
-    suspendedFromPeriod: int("suspended_from_period"),
+    suspendedFromPeriod: integer("suspended_from_period"),
     badDebtUpdatedBy: varchar("bad_debt_updated_by", { length: 128 }),
     badDebtUpdatedAt: varchar("bad_debt_updated_at", { length: 32 }),
   },
@@ -249,27 +201,23 @@ export const contracts = mysqlTable(
     ),
   }),
 );
-export type Contract = typeof contracts.$inferSelect;
 
-/* Installments attached to a contract. Used for "เป้าเก็บหนี้" computation. */
-export const installments = mysqlTable(
+export const installments = pgTable(
   "installments",
   {
-    id: int("id").autoincrement().primaryKey(),
+    id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
     section: varchar("section", { length: 32 }).notNull(),
     externalId: varchar("external_id", { length: 64 }).notNull(),
     contractExternalId: varchar("contract_external_id", { length: 64 }).notNull(),
     contractNo: varchar("contract_no", { length: 64 }),
-    period: int("period"),
+    period: integer("period"),
     dueDate: varchar("due_date", { length: 20 }),
     amount: decimal("amount", { precision: 12, scale: 2 }),
     paidAmount: decimal("paid_amount", { precision: 12, scale: 2 }).default("0"),
     status: varchar("status", { length: 32 }),
-    /** ผู้บันทึก — ดึงจาก contract?action=detail → installments[].updated_by (ทั้ง Boonphone และ FF365) */
     updatedBy: varchar("updated_by", { length: 128 }),
-    /** วันเวลาที่บันทึก — ดึงจาก contract?action=detail → installments[].updated_at */
     updatedAt: varchar("updated_at", { length: 32 }),
-    rawJson: json("raw_json"),
+    rawJson: jsonb("raw_json"),
     syncedAt: timestamp("synced_at").defaultNow().notNull(),
   },
   (t) => ({
@@ -284,13 +232,11 @@ export const installments = mysqlTable(
     sectionDueIdx: index("installments_section_due_idx").on(t.section, t.dueDate),
   }),
 );
-export type Installment = typeof installments.$inferSelect;
 
-/* Payment transactions. Used for "ยอดเก็บหนี้" computation. */
-export const paymentTransactions = mysqlTable(
+export const paymentTransactions = pgTable(
   "payment_transactions",
   {
-    id: int("id").autoincrement().primaryKey(),
+    id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
     section: varchar("section", { length: 32 }).notNull(),
     externalId: varchar("external_id", { length: 64 }).notNull(),
     contractExternalId: varchar("contract_external_id", { length: 64 }),
@@ -300,30 +246,16 @@ export const paymentTransactions = mysqlTable(
     amount: decimal("amount", { precision: 12, scale: 2 }),
     method: varchar("method", { length: 64 }),
     status: varchar("status", { length: 32 }),
-    rawJson: json("raw_json"),
+    rawJson: jsonb("raw_json"),
     syncedAt: timestamp("synced_at").defaultNow().notNull(),
-    /** เลขที่ใบเสร็จ — TXRT prefix สำหรับ FF365 ใช้ระบุ period ใน assignPayPeriods */
     receiptNo: varchar("receipt_no", { length: 128 }),
-    /** เวลาชำระเงิน — จาก payment_time (HH:mm:ss) รวมกับ paid_at เป็น datetime เต็ม */
     paymentTime: varchar("payment_time", { length: 8 }),
-    /** ผู้สร้างรายการ — จาก created_by */
     createdBy: varchar("created_by", { length: 128 }),
-    /** วันเวลาที่สร้างรายการ — จาก created_at */
     createdAt: varchar("created_at", { length: 32 }),
-    /** ผู้แก้ไขล่าสุด — จาก updated_by */
     updatedBy: varchar("updated_by", { length: 128 }),
-    /** วันเวลาที่แก้ไขล่าสุด — จาก updated_at */
     updatedAt: varchar("updated_at", { length: 32 }),
-    /**
-     * งวดที่ชำระ — คำนวณจาก computePayPeriods() (pure accumulation, ไม่พึ่ง receipt_no)
-     * NULL = ยังไม่ได้คำนวณ (pre-migration rows)
-     */
-    periodNo: int("period_no"),
-    /**
-     * ลำดับย่อยภายในงวด — 1 = ชำระครั้งแรกของงวดนี้, 2 = ครั้งที่สอง ฯลฯ
-     * NULL = ยังไม่ได้คำนวณ
-     */
-    subNo: int("sub_no"),
+    periodNo: integer("period_no"),
+    subNo: integer("sub_no"),
   },
   (t) => ({
     sectionExternalIdx: uniqueIndex("payments_section_external_idx").on(
@@ -334,202 +266,5 @@ export const paymentTransactions = mysqlTable(
       t.section,
       t.contractExternalId,
     ),
-    sectionPaidAtIdx: index("payments_section_paid_at_idx").on(
-      t.section,
-      t.paidAt,
-    ),
   }),
 );
-export type PaymentTransaction = typeof paymentTransactions.$inferSelect;
-
-/* =============================================================================
- * Precomputed Cache Tables
- * Built once per day (06:00 cron) from contracts + installments + payment_transactions.
- * Frontend reads directly from these tables — no real-time calculation needed.
- * ============================================================================= */
-
-/**
- * debt_target_cache — เป้าเก็บหนี้ (1 row per installment period per contract)
- * Stores all calculated fields needed to render the target table without any joins.
- */
-export const debtTargetCache = mysqlTable(
-  "debt_target_cache",
-  {
-    id: int("id").autoincrement().primaryKey(),
-    section: varchar("section", { length: 32 }).notNull(),
-    contractExternalId: varchar("contract_external_id", { length: 64 }).notNull(),
-    contractNo: varchar("contract_no", { length: 64 }).notNull(),
-    customerName: varchar("customer_name", { length: 255 }),
-    approveDate: varchar("approve_date", { length: 20 }),
-    contractStatus: varchar("contract_status", { length: 32 }),
-    partnerCode: varchar("partner_code", { length: 255 }),
-    partnerName: varchar("partner_name", { length: 255 }),
-    productType: varchar("product_type", { length: 64 }),
-    device: varchar("device", { length: 64 }),
-    model: varchar("model", { length: 128 }),
-    financeAmount: decimal("finance_amount", { precision: 12, scale: 2 }),
-    installmentCount: int("installment_count"),
-    // === Per-period fields ===
-    period: int("period").notNull(),
-    dueDate: varchar("due_date", { length: 20 }),
-    // Calculated amounts
-    principal: decimal("principal", { precision: 12, scale: 2 }).notNull().default("0"),
-    interest: decimal("interest", { precision: 12, scale: 2 }).notNull().default("0"),
-    fee: decimal("fee", { precision: 12, scale: 2 }).notNull().default("0"),
-    penalty: decimal("penalty", { precision: 12, scale: 2 }).notNull().default("0"),
-    unlockFee: decimal("unlock_fee", { precision: 12, scale: 2 }).notNull().default("0"),
-    netAmount: decimal("net_amount", { precision: 12, scale: 2 }).notNull().default("0"),
-    totalAmount: decimal("total_amount", { precision: 12, scale: 2 }).notNull().default("0"),
-    paidAmount: decimal("paid_amount", { precision: 12, scale: 2 }).notNull().default("0"),
-    overpaidApplied: decimal("overpaid_applied", { precision: 12, scale: 2 }).notNull().default("0"),
-    baselineAmount: decimal("baseline_amount", { precision: 12, scale: 2 }).notNull().default("0"),
-    // Status flags (stored as tinyint 0/1)
-    isPaid: boolean("is_paid").notNull().default(false),
-    isPartialPaid: boolean("is_partial_paid").notNull().default(false),
-    isClosed: boolean("is_closed").notNull().default(false),
-    isSuspended: boolean("is_suspended").notNull().default(false),
-    isCurrentPeriod: boolean("is_current_period").notNull().default(false),
-    isFuturePeriod: boolean("is_future_period").notNull().default(false),
-    isArrears: boolean("is_arrears").notNull().default(false),
-    isBadDebt: boolean("is_bad_debt").notNull().default(false),
-    // Debt range badge (เกิน 1-30, เกิน 31-60, ฯลฯ)
-    debtRange: varchar("debt_range", { length: 32 }),
-    // Bookkeeping
-    populatedAt: timestamp("populated_at").defaultNow().notNull(),
-  },
-  (t) => ({
-    sectionContractPeriodIdx: uniqueIndex("dtc_section_contract_period_idx").on(
-      t.section,
-      t.contractExternalId,
-      t.period,
-    ),
-    sectionDueDateIdx: index("dtc_section_due_date_idx").on(t.section, t.dueDate),
-    sectionApproveDateIdx: index("dtc_section_approve_date_idx").on(t.section, t.approveDate),
-    sectionStatusIdx: index("dtc_section_status_idx").on(t.section, t.contractStatus),
-    sectionDebtRangeIdx: index("dtc_section_debt_range_idx").on(t.section, t.debtRange),
-    sectionProductTypeIdx: index("dtc_section_product_type_idx").on(t.section, t.productType),
-  }),
-);
-export type DebtTargetCache = typeof debtTargetCache.$inferSelect;
-
-/**
- * debt_collected_cache — ยอดเก็บหนี้ (1 row per payment transaction)
- * Stores all calculated fields needed to render the collected table without any joins.
- */
-export const debtCollectedCache = mysqlTable(
-  "debt_collected_cache",
-  {
-    id: int("id").autoincrement().primaryKey(),
-    section: varchar("section", { length: 32 }).notNull(),
-    contractExternalId: varchar("contract_external_id", { length: 64 }).notNull(),
-    contractNo: varchar("contract_no", { length: 64 }).notNull(),
-    customerName: varchar("customer_name", { length: 255 }),
-    approveDate: varchar("approve_date", { length: 20 }),
-    contractStatus: varchar("contract_status", { length: 32 }),
-    // Debt bucket at time of payment — derived from debt_target_cache.debt_range at sync time
-    // เพื่อให้ queryPaid แยก bucket ย่อยได้ (เกิน 1-7, เกิน 8-14 ฯลฯ)
-    debtRange: varchar("debt_range", { length: 32 }),
-    partnerCode: varchar("partner_code", { length: 255 }),
-    partnerName: varchar("partner_name", { length: 255 }),
-    productType: varchar("product_type", { length: 64 }),
-    device: varchar("device", { length: 64 }),
-    model: varchar("model", { length: 128 }),
-    financeAmount: decimal("finance_amount", { precision: 12, scale: 2 }),
-    installmentCount: int("installment_count"),
-    // === Per-payment fields ===
-    paymentExternalId: varchar("payment_external_id", { length: 64 }).notNull(),
-    period: int("period"),
-    paidAt: varchar("paid_at", { length: 32 }),
-    // Calculated amounts
-    principal: decimal("principal", { precision: 12, scale: 2 }).notNull().default("0"),
-    interest: decimal("interest", { precision: 12, scale: 2 }).notNull().default("0"),
-    fee: decimal("fee", { precision: 12, scale: 2 }).notNull().default("0"),
-    penalty: decimal("penalty", { precision: 12, scale: 2 }).notNull().default("0"),
-    unlockFee: decimal("unlock_fee", { precision: 12, scale: 2 }).notNull().default("0"),
-    discount: decimal("discount", { precision: 12, scale: 2 }).notNull().default("0"),
-    overpaid: decimal("overpaid", { precision: 12, scale: 2 }).notNull().default("0"),
-    badDebt: decimal("bad_debt", { precision: 12, scale: 2 }).notNull().default("0"),
-    totalAmount: decimal("total_amount", { precision: 12, scale: 2 }).notNull().default("0"),
-    // Raw payment_transactions.amount (ตรงกับ Fastfone Report — source IS NULL rows)
-    paymentTxAmount: decimal("payment_tx_amount", { precision: 12, scale: 2 }).notNull().default("0"),
-    // Metadata
-    updatedBy: varchar("updated_by", { length: 128 }),
-    updatedAt: varchar("updated_at", { length: 32 }),
-    isBadDebtRow: boolean("is_bad_debt_row").notNull().default(false),
-    isCloseRow: boolean("is_close_row").notNull().default(false),
-    // Payment remark (from raw_json.remark)
-    remark: text("remark"),
-    // Bookkeeping
-    populatedAt: timestamp("populated_at").defaultNow().notNull(),
-  },
-  (t) => ({
-    sectionPaymentIdx: uniqueIndex("dcc_section_payment_idx").on(
-      t.section,
-      t.paymentExternalId,
-    ),
-    sectionContractIdx: index("dcc_section_contract_idx").on(t.section, t.contractExternalId),
-    sectionPaidAtIdx: index("dcc_section_paid_at_idx").on(t.section, t.paidAt),
-    sectionApproveDateIdx: index("dcc_section_approve_date_idx").on(t.section, t.approveDate),
-    sectionProductTypeIdx: index("dcc_section_product_type_idx").on(t.section, t.productType),
-    sectionUpdatedByIdx: index("dcc_section_updated_by_idx").on(t.section, t.updatedBy),
-  }),
-);
-export type DebtCollectedCache = typeof debtCollectedCache.$inferSelect;
-
-/* =============================================================================
- * Pre-built Export Cache
- * สร้างไฟล์ Excel ล่วงหน้าหลัง sync เสร็จ แล้วเก็บ S3 URL ไว้
- * ============================================================================= */
-
-export const debtExportCache = mysqlTable(
-  "debt_export_cache",
-  {
-    id: int("id").autoincrement().primaryKey(),
-    section: varchar("section", { length: 64 }).notNull(),
-    variant: mysqlEnum("variant", ["target", "collected"]).notNull(),
-    storageKey: varchar("storage_key", { length: 512 }).notNull(),
-    storageUrl: varchar("storage_url", { length: 512 }).notNull(),
-    rowCount: int("row_count").notNull().default(0),
-    builtAt: timestamp("built_at").defaultNow().notNull(),
-  },
-  (t) => ({
-    sectionVariantIdx: uniqueIndex("dec_section_variant_idx").on(t.section, t.variant),
-  }),
-);
-export type DebtExportCache = typeof debtExportCache.$inferSelect;
-
-/* =============================================================================
- * Customers Cache
- * เก็บข้อมูลลูกค้าจาก customers endpoint แยกต่างหาก
- * เพื่อให้ contracts sync ดึงจาก DB แทน API (แก้ปัญหา sync ค้าง)
- * ============================================================================= */
-export const cachedCustomers = mysqlTable(
-  "cached_customers",
-  {
-    id: int("id").autoincrement().primaryKey(),
-    section: varchar("section", { length: 32 }).notNull(), // Boonphone | Fastfone365
-    customerId: varchar("customer_id", { length: 64 }).notNull(),
-    customerCode: varchar("customer_code", { length: 64 }),
-    fullName: varchar("full_name", { length: 255 }),
-    nationality: varchar("nationality", { length: 64 }),
-    idDocumentNo: varchar("id_document_no", { length: 32 }),
-    gender: varchar("gender", { length: 16 }),
-    ageYears: int("age_years"),
-    occupationTitle: varchar("occupation_title", { length: 512 }),
-    monthlyIncome: decimal("monthly_income", { precision: 12, scale: 2 }),
-    workplaceName: varchar("workplace_name", { length: 1024 }),
-    mobilePhone: varchar("mobile_phone", { length: 32 }),
-    idcardDistrict: varchar("idcard_district", { length: 128 }),
-    idcardProvince: varchar("idcard_province", { length: 128 }),
-    currentDistrict: varchar("current_district", { length: 128 }),
-    currentProvince: varchar("current_province", { length: 128 }),
-    workDistrict: varchar("work_district", { length: 128 }),
-    workProvince: varchar("work_province", { length: 128 }),
-    syncedAt: timestamp("synced_at").defaultNow().notNull(),
-  },
-  (t) => ({
-    sectionCustomerIdx: uniqueIndex("cc_section_customer_idx").on(t.section, t.customerId),
-    sectionIdx: index("cc_section_idx").on(t.section),
-  }),
-);
-export type CachedCustomer = typeof cachedCustomers.$inferSelect;
