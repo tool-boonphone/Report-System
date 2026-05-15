@@ -15,6 +15,7 @@ import {
 } from "../drizzle/schema";
 import type { SectionKey } from "../shared/const";
 import { getDb } from "./db";
+import { pgRows } from "../db";
 
 export type MonthlyRow = {
   month: string; // YYYY-MM
@@ -978,7 +979,7 @@ export async function listDebtTarget(params: { section: SectionKey }) {
       FROM ${contracts}
      WHERE ${contracts.section} = ${params.section}
   `);
-  const cRows: Array<any> = (contractRowsRaw as any)[0] ?? contractRowsRaw;
+  const cRows: Array<any> = pgRows(contractRowsRaw);
 
   // --- Load installments with sub-fields extracted from raw_json once ---
   // Both Boonphone and Fastfone365 use the same API fields:
@@ -1002,7 +1003,7 @@ export async function listDebtTarget(params: { section: SectionKey }) {
      WHERE ${installments.section} = ${params.section}
      ORDER BY contract_external_id, period
   `);
-  const iRows: InstRawRow[] = (instRowsRaw as any)[0] ?? instRowsRaw;
+  const iRows: InstRawRow[] = pgRows(instRowsRaw);
 
   const instByContract = new Map<string, InstRawRow[]>();
   for (const r of iRows) {
@@ -1112,7 +1113,7 @@ export async function listDebtTarget(params: { section: SectionKey }) {
          AND JSON_EXTRACT(raw_json, '$.close_installment_amount') IS NOT NULL
          AND CAST(JSON_EXTRACT(raw_json, '$.close_installment_amount') AS DECIMAL(18,2)) > 0
     `);
-    const closeAmtRows: any[] = (rawCloseAmtData as any)[0] ?? rawCloseAmtData;
+    const closeAmtRows: any[] = pgRows(rawCloseAmtData);
     // First pass: collect all total_paid_amounts per contract
     for (const row of closeAmtRows) {
       const key = String(row.contract_external_id ?? "");
@@ -1197,7 +1198,7 @@ export async function listDebtTarget(params: { section: SectionKey }) {
        WHERE ${paymentTransactions.section} = ${params.section}
          AND receipt_no IS NOT NULL
     `);
-    const allPayRows: any[] = (rawCloseData as any)[0] ?? rawCloseData;
+    const allPayRows: any[] = pgRows(rawCloseData);
 
     // Pass 1: collect paidAts, TXRTC close markers, and build per-contract payment lists
     // for assignPayPeriods-based period derivation (Phase 78).
@@ -1607,7 +1608,7 @@ export async function listDebtTarget(params: { section: SectionKey }) {
             FROM ${paymentTransactions}
            WHERE ${paymentTransactions.section} = ${params.section}
         `);
-        const cancelledPayRows: any[] = (cancelledPayRaw as any)[0] ?? cancelledPayRaw;
+        const cancelledPayRows: any[] = pgRows(cancelledPayRaw);
         // Group by contract, only for cancelled contracts not yet handled
         const cancelledPayByContract = new Map<string, PayRawRow[]>();
         for (const pr of cancelledPayRows) {
@@ -2372,7 +2373,7 @@ export async function listDebtCollected(params: { section: SectionKey }) {
      WHERE pt.section = ${params.section}
      ORDER BY pt.contract_external_id, pt.paid_at, CAST(JSON_EXTRACT(pt.raw_json, '$.payment_id') AS UNSIGNED)
   `);
-  const pRows: any[] = (payRowsRaw as any)[0] ?? payRowsRaw;
+  const pRows: any[] = pgRows(payRowsRaw);
 
   const payByContract = new Map<string, PayRawRow[]>();
   for (const r of pRows) {
@@ -2814,7 +2815,7 @@ export async function* listDebtTargetStream(params: {
       FROM ${contracts}
      WHERE ${contracts.section} = ${params.section}
   `);
-  const cRows: Array<any> = (contractRowsRaw as any)[0] ?? contractRowsRaw;
+  const cRows: Array<any> = pgRows(contractRowsRaw);
   if (!cRows.length) return;
 
   // --- Load installments ---
@@ -2837,7 +2838,7 @@ export async function* listDebtTargetStream(params: {
      WHERE ${installments.section} = ${params.section}
      ORDER BY contract_external_id, period
   `);
-  const iRows: InstRawRow[] = (instRowsRaw as any)[0] ?? instRowsRaw;
+  const iRows: InstRawRow[] = pgRows(instRowsRaw);
 
   const instByContract = new Map<string, InstRawRow[]>();
   for (const r of iRows) {
@@ -2933,7 +2934,7 @@ export async function* listDebtTargetStream(params: {
          AND JSON_EXTRACT(raw_json, '$.close_installment_amount') IS NOT NULL
          AND CAST(JSON_EXTRACT(raw_json, '$.close_installment_amount') AS DECIMAL(18,2)) > 0
     `);
-    const closeAmtRows: any[] = (rawCloseAmtData as any)[0] ?? rawCloseAmtData;
+    const closeAmtRows: any[] = pgRows(rawCloseAmtData);
     // First pass: collect total_paid_amounts per contract
     for (const row of closeAmtRows) {
       const key = String(row.contract_external_id ?? "");
@@ -3003,7 +3004,7 @@ export async function* listDebtTargetStream(params: {
        WHERE ${paymentTransactions.section} = ${params.section}
          AND receipt_no IS NOT NULL
     `);
-    const allPayRows: any[] = (rawCloseData as any)[0] ?? rawCloseData;
+    const allPayRows: any[] = pgRows(rawCloseData);
     const closeDatesByContract = new Map<string, Date[]>();
     // Phase 78: group raw payment rows by contract for assignPayPeriods
     const rawPaysByContractStream = new Map<string, PayRawRow[]>();
@@ -3742,7 +3743,7 @@ export async function* listDebtCollectedStream(params: {
      WHERE ${contracts.section} = ${params.section}
      ORDER BY external_id
   `);
-  const allContractHeaders: any[] = (contractHeadersRaw as any)[0] ?? contractHeadersRaw;
+  const allContractHeaders: any[] = pgRows(contractHeadersRaw);
   if (!allContractHeaders.length) return;
 
   // Step 2 + 3: Process contracts in batches — query BOTH installments AND payments per batch.
@@ -3777,7 +3778,7 @@ export async function* listDebtCollectedStream(params: {
          AND contract_external_id IN (${batchIdsLiteral})
        ORDER BY contract_external_id, period
     `));
-    const instRows: any[] = (instRaw as any)[0] ?? instRaw;
+    const instRows: any[] = pgRows(instRaw);
     // Build InstRawRow[] per contract — same shape as listDebtTargetStream
     const instByContractRaw = new Map<string, InstRawRow[]>();
     for (const r of instRows) {
@@ -3848,7 +3849,7 @@ export async function* listDebtCollectedStream(params: {
          AND pt.contract_external_id IN (${batchIdsLiteral})
        ORDER BY pt.contract_external_id, pt.period_no, pt.sub_no
     `));
-    const payRows: any[] = (payRaw as any)[0] ?? payRaw;
+    const payRows: any[] = pgRows(payRaw);
     const batchPayByContract = new Map<string, PayRawRow[]>();
     for (const r of payRows) {
       const key = String(r.contract_external_id ?? "");
@@ -4193,7 +4194,7 @@ export async function listSuspectedBadDebt(params: { section: SectionKey }): Pro
       dtc.debt_range
     ORDER BY dtc.approve_date DESC
   `);
-  const suspectedRows: Array<any> = (suspectedRaw as any)[0] ?? suspectedRaw;
+  const suspectedRows: Array<any> = pgRows(suspectedRaw);
 
   if (suspectedRows.length === 0) return { rows: [] };
 
@@ -4213,7 +4214,7 @@ export async function listSuspectedBadDebt(params: { section: SectionKey }): Pro
         AND external_id IN (${contractIds.map((id) => `'${id.replace(/'/g, "''")}'`).join(",")})
     `)
   );
-  const contractInfoArr: Array<any> = (contractInfoRaw2 as any)[0] ?? contractInfoRaw2;
+  const contractInfoArr: Array<any> = pgRows(contractInfoRaw2);
   const contractInfoMap = new Map<string, any>();
   for (const r of contractInfoArr) {
     contractInfoMap.set(r.external_id, r);
@@ -4232,7 +4233,7 @@ export async function listSuspectedBadDebt(params: { section: SectionKey }): Pro
       GROUP BY contract_external_id
     `)
   );
-  const collectedArr: Array<any> = (collectedRaw as any)[0] ?? collectedRaw;
+  const collectedArr: Array<any> = pgRows(collectedRaw);
   const collectedMap = new Map<string, { totalPaid: number; paidInstallments: number }>();
   for (const r of collectedArr) {
     collectedMap.set(r.contract_external_id, {
