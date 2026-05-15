@@ -323,8 +323,8 @@ export function buildClientFromEnv(
 ): PartnerClient | null {
   const prefix = section === "Boonphone" ? "BOONPHONE" : "FASTFONE";
   const baseUrl = process.env[`${prefix}_API_URL`];
-  const username = process.env[`${prefix}_API_USERNAME`];
-  const password = process.env[`${prefix}_API_PASSWORD`];
+  const username = process.env[`${prefix}_USERNAME`];
+  const password = process.env[`${prefix}_PASSWORD`];
   if (!baseUrl || !username || !password) return null;
   return new PartnerClient({ section, baseUrl, username, password });
 }
