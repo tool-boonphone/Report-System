@@ -105,6 +105,9 @@ export function SyncStatusBar() {
       ? (elapsedSecs / progress) * (100 - progress)
       : null;
 
+  // isSyncingLocally = true ทันทีที่กด Re-Sync เพื่อแสดง progress bar โดยไม่ต้องรอ polling
+  const [isSyncingLocally, setIsSyncingLocally] = useState(false);
+
   // Trigger via SSE stream — keeps Render/Cloud Run alive during sync
   // ใช้ EventSource ตัวเดียว (ไม่ต้อง probe แยก) เพราะ server ส่ง SSE event แทน HTTP status codes
   const triggerSSE = useCallback(
@@ -141,12 +144,14 @@ export function SyncStatusBar() {
           } else if (msg.type === "already_running") {
             toast.info(`Sync ${sec} กำลังทำงานอยู่แล้ว`);
             onDone();
+            setIsSyncingLocally(false);
             utils.sync.status.invalidate();
             es.close();
             sseRef.current = null;
           } else if (msg.type === "done") {
             toast.success(`Re-Sync ${sec} สำเร็จ (${msg.rowCount ?? 0} rows)`);
             onDone();
+            setIsSyncingLocally(false);
             utils.sync.status.invalidate();
             utils.sync.lastSyncedAt.invalidate();
             if (section) incomeCache.invalidateIncomeCache(section as SectionKey);
@@ -155,6 +160,7 @@ export function SyncStatusBar() {
           } else if (msg.type === "error") {
             toast.error(`Sync ${sec} ล้มเหลว: ${msg.message}`);
             onDone();
+            setIsSyncingLocally(false);
             utils.sync.status.invalidate();
             es.close();
             sseRef.current = null;
@@ -170,6 +176,7 @@ export function SyncStatusBar() {
         clearTimeout(connectTimeout);
         // SSE connection error (network drop, server restart, 401/403)
         onDone();
+        setIsSyncingLocally(false);
         utils.sync.status.invalidate();
         setTimeout(() => {
           const d = (status.data as any)?.[sec];
@@ -181,7 +188,7 @@ export function SyncStatusBar() {
         sseRef.current = null;
       };
     },
-    [utils, section, status.data, incomeCache],
+    [utils, section, status.data, incomeCache, setIsSyncingLocally],
   );
 
   // Cleanup SSE on unmount
@@ -203,17 +210,31 @@ export function SyncStatusBar() {
 
   const [isTriggerPending, setIsTriggerPending] = useState(false);
 
+  // เมื่อ server confirm ว่า running แล้ว ให้ reset isSyncingLocally
+  useEffect(() => {
+    if (isRunning) setIsSyncingLocally(false);
+  }, [isRunning]);
+
+  // isShowingProgress = true เมื่อ sync กำลังทำงาน (ทั้งจาก server หรือ local state)
+  const isShowingProgress = isRunning || isSyncingLocally;
+
   const handleResync = useCallback(() => {
-    if (!section || isRunning || isTriggerPending) return;
+    if (!section || isShowingProgress || isTriggerPending) return;
     setIsTriggerPending(true);
+    setIsSyncingLocally(true); // แสดง progress bar ทันที
     // isTriggerPending จะ reset เมื่อ SSE ตอบกลับ (started/error) ผ่าน onDone callback
     // มี fallback timeout 15 วินาที กันกรณีที่ไม่มี response ใดๆ เลย
-    const fallbackTimer = setTimeout(() => setIsTriggerPending(false), 15000);
+    const fallbackTimer = setTimeout(() => {
+      setIsTriggerPending(false);
+      setIsSyncingLocally(false);
+    }, 15000);
     triggerSSE(section, () => {
       clearTimeout(fallbackTimer);
       setIsTriggerPending(false);
+      // ไม่ reset isSyncingLocally ที่นี่ — รอ isRunning จาก server แทน
+      // (ถ้า sync เสร็จเร็วมาก done event จะมาก่อน isRunning เป็น true)
     });
-  }, [section, isRunning, isTriggerPending, triggerSSE]);
+  }, [section, isShowingProgress, isTriggerPending, triggerSSE]);
 
   // Clear Cache handler
   const handleClearCache = async () => {
@@ -251,7 +272,7 @@ export function SyncStatusBar() {
         ข้อมูล ณ {lastLabel}
       </span>
 
-      {isRunning && canResync ? (
+      {isShowingProgress && canResync ? (
         /* ---- Progress bar (แสดงแทนปุ่มขณะ Sync กำลังทำงาน) ---- */
         <div className="flex items-center gap-2">
           <div className="min-w-[180px] max-w-[260px]">
