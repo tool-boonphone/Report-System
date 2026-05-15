@@ -2,7 +2,7 @@
  * accountingDb.ts — Query helpers สำหรับหน้าบัญชี (รายรับ + รายจ่าย)
  *
  * รายรับ (Income):
- *   - ดึงจาก payment_transactions WHERE (raw_json->>'source') IS NULL
+ *   - ดึงจาก payment_transactions WHERE (raw_json::jsonb->>'source') IS NULL
  *     (เฉพาะ close rows ที่มี principal_paid, interest_paid ฯลฯ ครบถ้วน)
  *   - ยอดรวม = payment_transactions.amount ตรงกับ Fastfone/Boonphone Report เป๊ะ
  *   - แยกประเภทตาม logic:

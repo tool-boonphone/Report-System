@@ -65,7 +65,7 @@ async function startServer() {
       const { sql } = await import('drizzle-orm');
       const db = await getDb();
       if (!db) return res.status(500).json({ error: 'No DB' });
-      const result = await db.execute(sql.raw(`SELECT SUBSTRING(approve_date, 1, 4) AS yr, COUNT(*) FROM contracts WHERE section = 'Boonphone' AND approve_date IS NOT NULL AND approve_date != '' GROUP BY 1 ORDER BY 1 DESC LIMIT 5`));
+      const result = await db.execute(sql.raw(`SELECT LEFT(approve_date::text, 4) AS yr, COUNT(*) FROM contracts WHERE section = 'Boonphone' AND approve_date IS NOT NULL AND approve_date != '' GROUP BY 1 ORDER BY 1 DESC LIMIT 5`));
       const rows = (result as any).rows ?? result;
       return res.json({ ok: true, rows });
     } catch (err: any) {

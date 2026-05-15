@@ -265,7 +265,8 @@ export async function buildAndUploadDebtExcel(
       storageUrl: url,
       rowCount: rows.length,
     })
-    .onDuplicateKeyUpdate({
+    .onConflictDoUpdate({
+      target: [debtExportCache.section, debtExportCache.variant],
       set: {
         storageKey: key,
         storageUrl: url,
