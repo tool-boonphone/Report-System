@@ -138,9 +138,7 @@ const trpcClient = trpc.createClient({
 createRoot(document.getElementById("root")!).render(
   <trpc.Provider client={trpcClient} queryClient={queryClient}>
     <QueryClientProvider client={queryClient}>
-      {/* AiChatProvider: share aiChatOpen state ระหว่าง TopNav และ AppShell */}
-        <App />
-      </AiChatProvider>
+      <App />
     </QueryClientProvider>
   </trpc.Provider>
 );
