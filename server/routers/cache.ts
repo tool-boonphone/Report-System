@@ -11,7 +11,7 @@ import { router, superAdminProcedure, appProcedure } from "../_core/trpc";
 import { populateDebtCache } from "../sync/populateCache";
 import { getDb } from "../db";
 import { SECTIONS, type SectionKey } from "../../shared/const";
-import { pgRows } from "./db";
+import { pgRows } from "../db";
 
 const sectionSchema = z.enum(SECTIONS as unknown as [string, ...string[]]);
 
