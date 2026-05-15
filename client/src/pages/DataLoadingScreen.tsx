@@ -268,10 +268,27 @@ export default function DataLoadingScreen() {
   const accent = section ? BRAND_ACCENT[section as SectionKey] : "#1e40af";
 
   // ─── ตรวจสอบ sync status ครั้งแรก ────────────────────────────────────────
+  const [checkingElapsed, setCheckingElapsed] = useState(0);
   const syncStatusQuery = trpc.sync.status.useQuery(undefined, {
     enabled: phase === "checking" && !!section && !authLoading && isAuthenticated,
     refetchOnWindowFocus: false,
   });
+
+  // นับเวลาที่ค้างอยู่ใน phase "checking"
+  useEffect(() => {
+    if (phase !== "checking") return;
+    const t = setInterval(() => setCheckingElapsed((s) => s + 1), 1000);
+    return () => clearInterval(t);
+  }, [phase]);
+
+  // Auto-skip เมื่อ sync status ไม่ตอบกลับนานเกิน 15 วินาที
+  useEffect(() => {
+    if (phase !== "checking") return;
+    if (checkingElapsed >= 15) {
+      console.warn("[DataLoadingScreen] sync.status timeout — skipping to loading phase");
+      setPhase("loading");
+    }
+  }, [checkingElapsed, phase]);
 
   useEffect(() => {
     if (phase !== "checking") return;
@@ -511,6 +528,17 @@ export default function DataLoadingScreen() {
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="w-10 h-10 animate-spin" style={{ color: accent }} />
           <p className="text-sm text-gray-500">กำลังตรวจสอบสถานะระบบ...</p>
+          {checkingElapsed >= 10 && (
+            <div className="flex flex-col items-center gap-2 mt-2">
+              <p className="text-xs text-gray-400">ใช้เวลานานกว่าปกติ ({checkingElapsed}s)</p>
+              <button
+                onClick={() => setPhase("loading")}
+                className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+              >
+                ข้ามการตรวจสอบและโหลดข้อมูลเลย
+              </button>
+            </div>
+          )}
         </div>
       )}
 
