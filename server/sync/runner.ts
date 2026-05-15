@@ -130,6 +130,11 @@ function setSubProgress(section: SectionKey, stageName: string, current: number,
   const progress = Math.min(stageEnd - 1, Math.round(stageStart + subFraction * (stageEnd - stageStart)));
   const currentStage = total > 0 ? `${stageName} (${current}/${total})` : stageName;
   _locks[section] = { ...lock, progress, currentStage };
+  // อัพเดต DB ด้วยเพื่อให้ frontend poll แล้วเห็น progress จริง
+  const logId = _overallLogId[section];
+  if (logId) {
+    updateSyncLogStage({ id: logId, currentStage, progress }).catch(() => {});
+  }
 }
 
 /* ─────────────────────────────────────────────────────────────────────────── */

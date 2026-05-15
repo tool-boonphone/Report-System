@@ -60,18 +60,19 @@ export const syncRouter = router({
     return {
       Boonphone: {
         running: bpRunning,
-        // Prefer DB values (cross-instance), fall back to in-memory
+        // Prefer in-memory for progress/currentStage (updates more frequently via setSubProgress)
+        // Fall back to DB for cross-instance awareness
         startedAt: bpDb?.startedAt?.getTime() ?? bpMem?.startedAt ?? null,
-        progress: bpDb?.progress ?? bpMem?.progress ?? null,
-        currentStage: bpDb?.currentStage ?? bpMem?.currentStage ?? null,
+        progress: bpMem?.progress ?? bpDb?.progress ?? null,
+        currentStage: bpMem?.currentStage ?? bpDb?.currentStage ?? null,
         stageIndex: bpMem?.stageIndex ?? null,
         totalStages: bpMem?.totalStages ?? null,
       },
       Fastfone365: {
         running: ffRunning,
         startedAt: ffDb?.startedAt?.getTime() ?? ffMem?.startedAt ?? null,
-        progress: ffDb?.progress ?? ffMem?.progress ?? null,
-        currentStage: ffDb?.currentStage ?? ffMem?.currentStage ?? null,
+        progress: ffMem?.progress ?? ffDb?.progress ?? null,
+        currentStage: ffMem?.currentStage ?? ffDb?.currentStage ?? null,
         stageIndex: ffMem?.stageIndex ?? null,
         totalStages: ffMem?.totalStages ?? null,
       },
