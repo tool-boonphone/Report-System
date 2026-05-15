@@ -23,6 +23,7 @@
 import type { SectionKey } from "../shared/const";
 import { getDb } from "./db";
 import { sql } from "drizzle-orm";
+import { pgRows } from "../db";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -243,7 +244,7 @@ async function queryCount(section: SectionKey, opts: {
     ORDER BY approve_month DESC
   `;
   const rows = await db.execute(sql.raw(q));
-  return (rows as any)[0] ?? [];
+  return pgRows(rows);
 }
 
 // ---------------------------------------------------------------------------
@@ -338,7 +339,7 @@ async function queryTarget(
     ORDER BY approve_month DESC
   `;
   const rows = await db.execute(sql.raw(q));
-  return (rows as any)[0] ?? [];
+  return pgRows(rows);
 }
 
 // ---------------------------------------------------------------------------
@@ -443,7 +444,7 @@ async function queryPaid(
     ORDER BY approve_month DESC
   `;
   const rows = await db.execute(sql.raw(q));
-  return (rows as any)[0] ?? [];
+  return pgRows(rows);
 }
 
 // ---------------------------------------------------------------------------
@@ -529,7 +530,7 @@ async function queryDue(
     ORDER BY approve_month DESC
   `;
   const rows = await db.execute(sql.raw(q));
-  return (rows as any)[0] ?? [];
+  return pgRows(rows);
 }
 
 // ---------------------------------------------------------------------------
@@ -622,7 +623,7 @@ async function queryNotYetDue(
     ORDER BY approve_month DESC
   `;
   const rows = await db.execute(sql.raw(q));
-  return (rows as any)[0] ?? [];
+  return pgRows(rows);
 }
 
 // ---------------------------------------------------------------------------
@@ -731,7 +732,7 @@ async function queryInstallTotal(
     ORDER BY approve_month DESC
   `;
   const rows = await db.execute(sql.raw(q));
-  return (rows as any)[0] ?? [];
+  return pgRows(rows);
 }
 
 // ---------------------------------------------------------------------------
