@@ -63,28 +63,11 @@ export async function getDb(section?: SectionKey) {
   return _boonphoneDb;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let _authDb: any = null;
-
 /**
- * Get auth database (users, app_users).
- * Uses AUTH_DATABASE_URL if set, otherwise falls back to boonphone-db.
+ * Get auth database (app_users, app_groups, app_sessions).
+ * Always uses boonphone-db — auth tables live there.
  */
 export async function getAuthDb() {
-  // If AUTH_DATABASE_URL is set and different from BOONPHONE_DATABASE_URL, use dedicated auth DB
-  const authUrl = process.env.AUTH_DATABASE_URL;
-  const boonUrl = process.env.BOONPHONE_DATABASE_URL || process.env.DATABASE_URL;
-  if (authUrl && authUrl !== boonUrl) {
-    if (!_authDb) {
-      try {
-        _authDb = drizzle(createPool(authUrl));
-      } catch (error) {
-        console.warn("[Database] Failed to connect to auth-db:", error);
-        return getDb("Boonphone");
-      }
-    }
-    return _authDb;
-  }
   return getDb("Boonphone");
 }
 
