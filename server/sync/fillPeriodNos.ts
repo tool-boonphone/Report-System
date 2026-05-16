@@ -30,7 +30,7 @@ const UPDATE_BATCH = 500;
 export async function fillPeriodNosForSection(
   section: SectionKey,
 ): Promise<number> {
-  const db = await getDb();
+  const db = await getDb(section);
   if (!db) throw new Error("[fillPeriodNos] DB not available");
 
   console.log(`[fillPeriodNos] Starting for section: ${section}`);

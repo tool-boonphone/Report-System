@@ -35,7 +35,7 @@ function bucketFromDays(days: number): string {
 }
 
 async function main() {
-  const db = await getDb();
+  const db = await getDb(section);
   if (!db) throw new Error("DB not available");
 
   console.log(`[SinglePopulate] Contract: ${contractExternalId}, Section: ${section}`);

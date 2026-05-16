@@ -254,7 +254,7 @@ export async function buildAndUploadDebtExcel(
   );
 
   // Upsert into DB
-  const db = await getDb();
+  const db = await getDb(section);
   if (!db) throw new Error("DB not available");
   await db
     .insert(debtExportCache)
@@ -303,11 +303,11 @@ export async function buildAllDebtExports(section: SectionKey): Promise<void> {
  * Returns null if not yet built.
  */
 export async function getDebtExportEntry(
-  section: string,
+  section: SectionKey,
   variant: "target" | "collected",
 ): Promise<{ storageKey: string; storageUrl: string; builtAt: Date; rowCount: number } | null> {
   const { eq, and } = await import("drizzle-orm");
-  const db = await getDb();
+  const db = await getDb(section);
   if (!db) return null;
   const rows = await db
     .select()

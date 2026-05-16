@@ -146,7 +146,7 @@ async function isSectionLockedInDb(section: SectionKey): Promise<boolean> {
     const { getDb } = await import("../db");
     const { syncLogs } = await import("../../drizzle/schema");
     const { and, eq, gt } = await import("drizzle-orm");
-    const db = await getDb();
+    const db = await getDb(section);
     if (!db) return false;
     const threshold = new Date(Date.now() - STALE_INPROGRESS_MS);
     const rows = await db
@@ -477,7 +477,7 @@ async function syncCustomers(
           workDistrict: it.work_district ?? null,
           workProvince: it.work_province ?? null,
         }));
-        await upsertCachedCustomers(dbRows);
+        await upsertCachedCustomers(dbRows, section);
         totalUpserted += dbRows.length;
         for (const it of items) byId.set(String(it.customer_id), it);
 
@@ -553,7 +553,7 @@ async function syncContracts(
           buffer.push(row);
         }
 
-        if (buffer.length >= 500) rowCount += await upsertContracts(buffer.splice(0, buffer.length));
+        if (buffer.length >= 500) rowCount += await upsertContracts(buffer.splice(0, buffer.length), section);
 
         setSubProgress(section, "contracts", page * 200, totalContractRows);
         updateSyncLogStage({
@@ -568,7 +568,7 @@ async function syncContracts(
       startPage,
     );
 
-    if (buffer.length) rowCount += await upsertContracts(buffer);
+    if (buffer.length) rowCount += await upsertContracts(buffer, section);
 
     await finishSyncLog({ id: log.id, status: "success", rowCount });
     return rowCount;
@@ -599,7 +599,7 @@ async function syncInstallments(
         async (items, page, totalPages) => {
           if (totalInstRows === 0 && totalPages > 0) totalInstRows = totalPages * 500;
           for (const it of items) buffer.push(mapInstallment(section, it));
-          if (buffer.length >= 1000) rowCount += await upsertInstallments(buffer.splice(0, buffer.length));
+          if (buffer.length >= 1000) rowCount += await upsertInstallments(buffer.splice(0, buffer.length), section);
           setSubProgress(section, "installments", page * 500, totalInstRows);
         },
         500,
@@ -612,7 +612,7 @@ async function syncInstallments(
       }
     }
 
-    if (buffer.length) rowCount += await upsertInstallments(buffer);
+    if (buffer.length) rowCount += await upsertInstallments(buffer, section);
     await finishSyncLog({ id: log.id, status: "success", rowCount });
     return rowCount;
   } catch (err: any) {
@@ -642,14 +642,14 @@ async function syncPayments(
       { action: "transactions" },
       async (items, page, totalPages) => {
         for (const it of items) buffer.push(mapPayment(section, it));
-        if (buffer.length >= 1000) rowCount += await upsertPayments(buffer.splice(0, buffer.length));
+        if (buffer.length >= 1000) rowCount += await upsertPayments(buffer.splice(0, buffer.length), section);
         setSubProgress(section, "payments", page * 1000, totalPages * 1000);
       },
       1000, // page size 1000
       30_000, // 30s per-request timeout
     );
 
-    if (buffer.length) rowCount += await upsertPayments(buffer);
+    if (buffer.length) rowCount += await upsertPayments(buffer, section);
     await finishSyncLog({ id: log.id, status: "success", rowCount });
     return rowCount;
   } catch (err: any) {
@@ -674,7 +674,7 @@ async function computeAndStoreBadDebt(section: SectionKey): Promise<void> {
   const { getDb } = await import("../db");
   const { contracts, paymentTransactions, installments } = await import("../../drizzle/schema");
   const { and, eq, sql } = await import("drizzle-orm");
-  const db = await getDb();
+  const db = await getDb(section);
   if (!db) return;
 
   // ดึง contracts ที่เป็น bad-debt หรือ suspended

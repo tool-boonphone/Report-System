@@ -73,7 +73,7 @@ export const monthlySummaryRouter = router({
     .query(async ({ input }) => {
       const [summaryRows, productTypesResult] = await Promise.all([
         getMonthlySummary(input),
-        getDb().then(async (db) => {
+        getDb(input.section).then(async (db) => {
           if (!db) return [] as string[];
           const r = await db.execute(sql.raw(`
             SELECT DISTINCT product_type

@@ -153,7 +153,7 @@ export const accountingRouter = router({
   listExpenseUpdatedBy: appProcedure
     .input(z.object({ section: sectionSchema }))
     .query(async ({ input }) => {
-      const db = await getDb();
+      const db = await getDb(input.section);
       if (!db) return [];
       const esc = (v: string) => v.replace(/'/g, "''");
       const result = await db.execute(

@@ -22,7 +22,7 @@ import {
   type MenuCode,
   type PermissionAction,
 } from "../shared/const";
-import { getDb } from "./db";
+import { getAuthDb } from "./db";
 
 export type AppUserWithGroup = AppUser & {
   group: AppGroup;
@@ -35,7 +35,7 @@ export type AppUserWithGroup = AppUser & {
 
 /** Ensures the Super Admin group + default Sadmin user exist. */
 export async function seedSuperAdmin(): Promise<void> {
-  const db = await getDb();
+  const db = await getAuthDb();
   if (!db) {
     console.warn("[authDb] Cannot seed: database unavailable");
     return;
@@ -117,7 +117,7 @@ export async function authenticate(
   username: string,
   password: string,
 ): Promise<AppUser | null> {
-  const db = await getDb();
+  const db = await getAuthDb();
   if (!db) return null;
 
   const rows = await db
@@ -142,7 +142,7 @@ export async function authenticate(
 }
 
 export async function createSession(userId: number): Promise<string> {
-  const db = await getDb();
+  const db = await getAuthDb();
   if (!db) throw new Error("Database unavailable");
 
   const id = nanoid(48);
@@ -155,7 +155,7 @@ export async function createSession(userId: number): Promise<string> {
 export async function getUserFromSession(
   sessionId: string,
 ): Promise<AppUserWithGroup | null> {
-  const db = await getDb();
+  const db = await getAuthDb();
   if (!db) return null;
 
   const rows = await db
@@ -192,7 +192,7 @@ export async function getUserFromSession(
 }
 
 export async function destroySession(sessionId: string): Promise<void> {
-  const db = await getDb();
+  const db = await getAuthDb();
   if (!db) return;
   await db.delete(appSessions).where(eq(appSessions.id, sessionId));
 }
@@ -234,7 +234,7 @@ export function checkPermission(
  * ------------------------------------------------------------------------ */
 
 export async function listUsers() {
-  const db = await getDb();
+  const db = await getAuthDb();
   if (!db) return [];
   return db
     .select({
@@ -261,7 +261,7 @@ export async function createUser(input: {
   groupId: number;
   isActive?: boolean;
 }) {
-  const db = await getDb();
+  const db = await getAuthDb();
   if (!db) throw new Error("Database unavailable");
   const hash = await bcrypt.hash(input.password, 10);
   await db.insert(appUsers).values({
@@ -283,13 +283,13 @@ export async function updateUser(
     isActive: boolean;
   }>,
 ) {
-  const db = await getDb();
+  const db = await getAuthDb();
   if (!db) throw new Error("Database unavailable");
   await db.update(appUsers).set(patch).where(eq(appUsers.id, id));
 }
 
 export async function changeUserPassword(id: number, newPassword: string) {
-  const db = await getDb();
+  const db = await getAuthDb();
   if (!db) throw new Error("Database unavailable");
   const hash = await bcrypt.hash(newPassword, 10);
   await db
@@ -299,20 +299,22 @@ export async function changeUserPassword(id: number, newPassword: string) {
 }
 
 export async function deleteUser(id: number) {
-  const db = await getDb();
+  const db = await getAuthDb();
   if (!db) throw new Error("Database unavailable");
   await db.delete(appSessions).where(eq(appSessions.userId, id));
   await db.delete(appUsers).where(eq(appUsers.id, id));
 }
 
 export async function listGroupsWithPermissions() {
-  const db = await getDb();
+  const db = await getAuthDb();
   if (!db) return [];
   const groups = await db.select().from(appGroups).orderBy(appGroups.id);
   const permissions = await db.select().from(appGroupPermissions);
-  return groups.map((g) => ({
+  type GroupRow = typeof groups[number];
+  type PermRow = typeof permissions[number];
+  return groups.map((g: GroupRow) => ({
     ...g,
-    permissions: permissions.filter((p) => p.groupId === g.id),
+    permissions: permissions.filter((p: PermRow) => p.groupId === g.id),
   }));
 }
 
@@ -321,7 +323,7 @@ export async function createGroup(input: {
   description?: string | null;
   allowedSections?: string;
 }) {
-  const db = await getDb();
+  const db = await getAuthDb();
   if (!db) throw new Error("Database unavailable");
   const [res] = await db.insert(appGroups).values({
     name: input.name,
@@ -345,13 +347,13 @@ export async function updateGroup(
   id: number,
   patch: { name?: string; description?: string | null; allowedSections?: string },
 ) {
-  const db = await getDb();
+  const db = await getAuthDb();
   if (!db) throw new Error("Database unavailable");
   await db.update(appGroups).set(patch).where(eq(appGroups.id, id));
 }
 
 export async function deleteGroup(id: number) {
-  const db = await getDb();
+  const db = await getAuthDb();
   if (!db) throw new Error("Database unavailable");
   // Protect super admin
   const rows = await db.select().from(appGroups).where(eq(appGroups.id, id)).limit(1);
@@ -375,7 +377,7 @@ export async function updateGroupPermission(
     canSync: boolean;
   }>,
 ) {
-  const db = await getDb();
+  const db = await getAuthDb();
   if (!db) throw new Error("Database unavailable");
 
   // Ensure a row exists first

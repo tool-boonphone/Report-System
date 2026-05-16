@@ -291,7 +291,7 @@ export async function listIncome(params: IncomeParams): Promise<{
   rows: IncomeRow[];
   total: number;
 }> {
-  const db = await getDb();
+  const db = await getDb(params.section);
   if (!db) return { rows: [], total: 0 };
 
   const {
@@ -398,7 +398,7 @@ export async function listIncomeUpdatedBy(
     incomeTypes?: IncomeType[];
   },
 ): Promise<string[]> {
-  const db = await getDb();
+  const db = await getDb(section);
   if (!db) return [];
   const esc = (v: string) => v.replace(/'/g, "''");
   const secEsc = esc(section);
@@ -469,7 +469,7 @@ export async function listExpense(params: ExpenseParams): Promise<{
   rows: ExpenseRow[];
   total: number;
 }> {
-  const db = await getDb();
+  const db = await getDb(params.section);
   if (!db) return { rows: [], total: 0 };
 
   const {
@@ -535,7 +535,7 @@ export async function listExpense(params: ExpenseParams): Promise<{
 }
 
 export async function listExpenseUpdatedBy(section: SectionKey): Promise<string[]> {
-  const db = await getDb();
+  const db = await getDb(section);
   if (!db) return [];
   const esc = (v: string) => v.replace(/'/g, "''");
   const result = await db.execute(
@@ -566,7 +566,7 @@ export interface IncomeSummary {
 export async function getIncomeSummary(
   params: Omit<IncomeParams, "page" | "pageSize">,
 ): Promise<IncomeSummary> {
-  const db = await getDb();
+  const db = await getDb(params.section);
   if (!db) return { "ค่างวด": 0, "ขายเครื่อง": 0, "ปิดยอด": 0, "เงินดาวน์": 0, total: 0 };
 
   const {
@@ -634,7 +634,7 @@ export interface ExpenseSummary {
 export async function getExpenseSummary(
   params: Omit<ExpenseParams, "page" | "pageSize">,
 ): Promise<ExpenseSummary> {
-  const db = await getDb();
+  const db = await getDb(params.section);
   if (!db) return { "ค่าคอมมิชชั่น": 0, total: 0 };
 
   const { section, search, dateFrom, dateTo } = params;
@@ -685,7 +685,7 @@ export interface IncomeSummaryParams {
 export async function getIncomeSummaryByPeriod(
   params: IncomeSummaryParams,
 ): Promise<IncomeSummaryRow[]> {
-  const db = await getDb();
+  const db = await getDb(params.section);
   if (!db) return [];
 
   const { section, groupBy, years, months } = params;
@@ -765,7 +765,7 @@ export interface ExpenseSummaryParams {
 export async function getExpenseSummaryByPeriod(
   params: ExpenseSummaryParams,
 ): Promise<ExpenseSummaryRow[]> {
-  const db = await getDb();
+  const db = await getDb(params.section);
   if (!db) return [];
 
   const { section, groupBy, years, months } = params;
@@ -850,7 +850,7 @@ export interface FinanceSummaryParams {
 
 /** ดึงรายการยอดจัดไฟแนนซ์ (finance_amount) จาก contracts */
 export async function listFinance(params: FinanceParams): Promise<{ rows: FinanceRow[]; total: number }> {
-  const db = await getDb();
+  const db = await getDb(params.section);
   if (!db) return { rows: [], total: 0 };
 
   const { section, search, dateFrom, dateTo, page = 1, pageSize = 50 } = params;
@@ -898,7 +898,7 @@ export async function listFinance(params: FinanceParams): Promise<{ rows: Financ
 
 /** สรุปยอดจัดไฟแนนซ์แยกตามปี หรือ เดือน */
 export async function getFinanceSummaryByPeriod(params: FinanceSummaryParams): Promise<FinanceSummaryRow[]> {
-  const db = await getDb();
+  const db = await getDb(params.section);
   if (!db) return [];
 
   const { section, groupBy, years, months } = params;

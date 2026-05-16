@@ -230,7 +230,7 @@ async function queryCount(section: SectionKey, opts: {
   bucket: string;
   contract_count: number;
 }>> {
-  const db = await getDb();
+  const db = await getDb(section);
   if (!db) return [];
 
   const q = `
@@ -273,7 +273,7 @@ async function queryTarget(
   unlock_fee_target: number;
   total_target: number;
 }>> {
-  const db = await getDb();
+  const db = await getDb(section);
   if (!db) return [];
 
   const baseWhere = dtcWhere(section, {
@@ -369,7 +369,7 @@ async function queryPaid(
   device_sale_amount: number;
   total_paid: number;
 }>> {
-  const db = await getDb();
+  const db = await getDb(section);
   if (!db) return [];
 
   // Phase 141+: ใช้ payment_tx_amount เป็น total base เหมือน DebtReport.tsx (source of truth)
@@ -472,7 +472,7 @@ async function queryDue(
   unlock_fee_due: number;
   total_due: number;
 }>> {
-  const db = await getDb();
+  const db = await getDb(section);
   if (!db) return [];
 
   // due_date filter
@@ -559,7 +559,7 @@ async function queryNotYetDue(
   unlock_fee_notyet: number;
   total_notyet: number;
 }>> {
-  const db = await getDb();
+  const db = await getDb(section);
   if (!db) return [];
 
   const baseWhere = dtcWhere(section, {
@@ -648,7 +648,7 @@ async function queryInstallTotal(
   fee_install: number;
   total_install: number;
 }>> {
-  const db = await getDb();
+  const db = await getDb(section);
   if (!db) return [];
 
   const baseWhere = dtcWhere(section, {

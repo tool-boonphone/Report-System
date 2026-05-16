@@ -116,7 +116,7 @@ export async function* streamTargetFromCache(params: {
   batchSize?: number;
 }): AsyncGenerator<any[]> {
   const { section, batchSize = 500 } = params;
-  const db = await getDb();
+  const db = await getDb(section);
   if (!db) return;
 
   const today = new Date();
@@ -292,7 +292,7 @@ export async function* streamCollectedFromCache(params: {
   batchSize?: number;
 }): AsyncGenerator<{ rows: any[]; meta: { hasPrincipalBreakdown: boolean } }> {
   const { section, batchSize = 500 } = params;
-  const db = await getDb();
+  const db = await getDb(section);
   if (!db) return;
 
   const today = new Date();
@@ -547,7 +547,7 @@ export async function* streamCollectedFromCache(params: {
  * Get total distinct contract count for target cache (for pagination).
  */
 export async function getTargetContractCount(section: SectionKey): Promise<number> {
-  const db = await getDb();
+  const db = await getDb(section);
   if (!db) return 0;
   const result = await db.execute(sql`
     SELECT COUNT(DISTINCT contract_external_id) AS cnt
@@ -562,7 +562,7 @@ export async function getTargetContractCount(section: SectionKey): Promise<numbe
  * Get total distinct contract count for collected cache (for pagination).
  */
 export async function getCollectedContractCount(section: SectionKey): Promise<number> {
-  const db = await getDb();
+  const db = await getDb(section);
   if (!db) return 0;
   // ใช้ debt_target_cache เพื่อให้ครอบคลุมสัญญาที่ไม่มียอดชำระด้วย
   const result = await db.execute(sql`
@@ -589,7 +589,7 @@ export async function getTargetChunk(params: {
   limit: number;
 }): Promise<{ rows: any[]; totalContracts: number }> {
   const { section, offset, limit } = params;
-  const db = await getDb();
+  const db = await getDb(section);
   if (!db) return { rows: [], totalContracts: 0 };
 
   const today = new Date();
@@ -770,7 +770,7 @@ export async function getCollectedChunk(params: {
   limit: number;
 }): Promise<{ rows: any[]; totalContracts: number; hasPrincipalBreakdown: boolean }> {
   const { section, offset, limit } = params;
-  const db = await getDb();
+  const db = await getDb(section);
   if (!db) return { rows: [], totalContracts: 0, hasPrincipalBreakdown: true };
 
   const today = new Date();

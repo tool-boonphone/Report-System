@@ -16,7 +16,7 @@ import {
   cachedCustomers,
   commissions,
 } from "../../drizzle/schema";
-import { normalizeSectionKey } from "../../shared/const";
+import { normalizeSectionKey, type SectionKey } from "../../shared/const";
 
 const BATCH_SIZE = 200;
 
@@ -65,9 +65,9 @@ function normalizeRows(rows: AnyRow[]): AnyRow[] {
   }));
 }
 
-export async function upsertContracts(rows: AnyRow[]): Promise<number> {
+export async function upsertContracts(rows: AnyRow[], section: SectionKey): Promise<number> {
   if (rows.length === 0) return 0;
-  const db = await getDb();
+  const db = await getDb(section);
   if (!db) throw new Error("DB not available for upsertContracts");
   let total = 0;
   for (const batch of chunks(normalizeRows(rows), BATCH_SIZE)) {
@@ -86,9 +86,9 @@ export async function upsertContracts(rows: AnyRow[]): Promise<number> {
   return total;
 }
 
-export async function upsertInstallments(rows: AnyRow[]): Promise<number> {
+export async function upsertInstallments(rows: AnyRow[], section: SectionKey): Promise<number> {
   if (rows.length === 0) return 0;
-  const db = await getDb();
+  const db = await getDb(section);
   if (!db) throw new Error("DB not available for upsertInstallments");
   let total = 0;
   for (const batch of chunks(normalizeRows(rows), BATCH_SIZE)) {
@@ -111,9 +111,9 @@ export async function upsertInstallments(rows: AnyRow[]): Promise<number> {
   return total;
 }
 
-export async function upsertPayments(rows: AnyRow[]): Promise<number> {
+export async function upsertPayments(rows: AnyRow[], section: SectionKey): Promise<number> {
   if (rows.length === 0) return 0;
-  const db = await getDb();
+  const db = await getDb(section);
   if (!db) throw new Error("DB not available for upsertPayments");
   let total = 0;
   for (const batch of chunks(normalizeRows(rows), BATCH_SIZE)) {
@@ -172,9 +172,9 @@ function unionKeys(rows: AnyRow[]): AnyRow {
  * Upsert customer rows into `cached_customers`.
  * Unique key: (section, customer_id).
  */
-export async function upsertCachedCustomers(rows: AnyRow[]): Promise<number> {
+export async function upsertCachedCustomers(rows: AnyRow[], section: SectionKey): Promise<number> {
   if (rows.length === 0) return 0;
-  const db = await getDb();
+  const db = await getDb(section);
   if (!db) throw new Error("DB not available for upsertCachedCustomers");
   let total = 0;
   for (const batch of chunks(normalizeRows(rows), BATCH_SIZE)) {
@@ -193,9 +193,9 @@ export async function upsertCachedCustomers(rows: AnyRow[]): Promise<number> {
   return total;
 }
 
-export async function upsertCommissions(rows: AnyRow[]): Promise<number> {
+export async function upsertCommissions(rows: AnyRow[], section: SectionKey): Promise<number> {
   if (rows.length === 0) return 0;
-  const db = await getDb();
+  const db = await getDb(section);
   if (!db) throw new Error("DB not available for upsertCommissions");
   let total = 0;
   for (const batch of chunks(normalizeRows(rows), BATCH_SIZE)) {
@@ -218,9 +218,9 @@ export async function upsertCommissions(rows: AnyRow[]): Promise<number> {
  * Load all cached customers for a section into a Map keyed by customer_id string.
  */
 export async function loadCachedCustomersBySection(
-  section: string,
+  section: SectionKey,
 ): Promise<Map<string, AnyRow>> {
-  const db = await getDb();
+  const db = await getDb(section);
   if (!db) return new Map();
   const { eq } = await import("drizzle-orm");
   const rows = await db

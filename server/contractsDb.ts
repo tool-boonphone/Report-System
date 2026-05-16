@@ -93,7 +93,8 @@ function resolveOrder(sort: ContractSort | undefined) {
 export async function listAllContracts(params: {
   section: SectionKey;
 }): Promise<Array<Omit<Contract, "rawJson">>> {
-  const db = await getDb();
+  const { section } = params;
+  const db = await getDb(section);
   if (!db) return [];
   const rows = await db
     .select({
@@ -160,7 +161,8 @@ export async function listContractChunk(params: {
   offset: number;
   limit: number;
 }): Promise<{ rows: Array<Omit<Contract, "rawJson">>; total: number; hasMore: boolean }> {
-  const db = await getDb();
+  const { section } = params;
+  const db = await getDb(section);
   if (!db) return { rows: [], total: 0, hasMore: false };
   const where = eq(contracts.section, params.section);
   // Count total rows (cheap — indexed on section)
@@ -237,7 +239,8 @@ export async function listContracts(params: {
   page: number;
   pageSize: number;
 }) {
-  const db = await getDb();
+  const { section } = params;
+  const db = await getDb(section);
   if (!db) return { rows: [] as Contract[], total: 0 };
 
   const where = buildWhere(params.section, params.filters ?? {});
@@ -273,7 +276,8 @@ export async function* iterateContracts(params: {
   sort?: ContractSort;
   batchSize?: number;
 }): AsyncGenerator<Contract[]> {
-  const db = await getDb();
+  const { section } = params;
+  const db = await getDb(section);
   if (!db) return;
 
   const batchSize = params.batchSize ?? 1000;
@@ -298,7 +302,7 @@ export async function* iterateContracts(params: {
 
 /** Distinct picker values for filter dropdowns (cheap thanks to indexes). */
 export async function listContractFilterOptions(section: SectionKey) {
-  const db = await getDb();
+  const db = await getDb(section);
   if (!db) return { statuses: [], debtTypes: [], partnerCodes: [] };
   const [statuses, debtTypes, partnerCodes] = await Promise.all([
     db

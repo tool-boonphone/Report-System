@@ -56,7 +56,7 @@ interface ContractMeta {
 export async function populateDebtCache(
   section: SectionKey,
 ): Promise<{ targetRows: number; collectedRows: number }> {
-  const db = await getDb();
+  const db = await getDb(section);
   if (!db) throw new Error("[populateCache] DB not available");
 
   console.log(`[populateCache] Starting populate for section: ${section}`);

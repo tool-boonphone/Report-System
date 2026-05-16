@@ -14,7 +14,7 @@ import {
 import { appUsers } from "../../drizzle/schema";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
-import { getDb } from "../db";
+import { getAuthDb } from "../db";
 import { appProcedure, publicProcedure, router } from "../_core/trpc";
 
 function cookieOptions(req: { protocol?: string; headers: Record<string, unknown> }) {
@@ -102,7 +102,7 @@ export const authRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      const db = await getDb();
+      const db = await getAuthDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
       const rows = await db
         .select()

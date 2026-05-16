@@ -74,7 +74,8 @@ export async function getBadDebtSummary(params: {
   /** Optional: filter by sale date year-month YYYY-MM (วันที่ขายเครื่อง) */
   saleMonth?: string;
 }): Promise<{ rows: BadDebtRow[]; summary: BadDebtSummary; totalContractsByApproveMonth: TotalContractsByApproveMonth }> {
-  const db = await getDb();
+  const { section } = params;
+  const db = await getDb(section);
   const emptySummary: BadDebtSummary = {
     contractCount: 0,
     totalSalePrice: 0,

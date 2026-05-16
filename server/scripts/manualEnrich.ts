@@ -25,7 +25,7 @@ async function main() {
     process.exit(1);
   }
 
-  const db = await getDb();
+  const db = await getDb(section);
   if (!db) {
     console.error("❌ Cannot connect to database");
     process.exit(1);

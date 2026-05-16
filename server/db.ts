@@ -3,54 +3,89 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
 import { InsertUser, users } from "../drizzle/schema";
 import { ENV } from './_core/env';
+import type { SectionKey } from "../shared/const";
+
+// ─── Connection pools ─────────────────────────────────────────────────────────
+// boonphone-db  → Boonphone data + auth (users/app_users)
+// fastfone-db   → Fastfone365 data only
+// ─────────────────────────────────────────────────────────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-let _db: any = null;
+let _boonphoneDb: any = null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let _fastfoneDb: any = null;
 
-export async function getDb() {
-  if (!_db && process.env.DATABASE_URL) {
+function createPool(connectionString: string) {
+  return new pg.Pool({
+    connectionString,
+    max: 10,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 10000,
+    keepAlive: true,
+    keepAliveInitialDelayMillis: 10000,
+    statement_timeout: 20 * 60 * 1000,
+    query_timeout: 20 * 60 * 1000,
+  });
+}
+
+/**
+ * Get database connection for a specific section.
+ * - "Boonphone"   → boonphone-db  (DATABASE_URL_BOONPHONE)
+ * - "Fastfone365" → fastfone-db   (DATABASE_URL_FASTFONE365)
+ * - undefined     → falls back to DATABASE_URL (legacy)
+ */
+export async function getDb(section?: SectionKey) {
+  if (section === "Fastfone365") {
+    if (!_fastfoneDb) {
+      const url = process.env.DATABASE_URL_FASTFONE365 || process.env.DATABASE_URL;
+      if (!url) return null;
+      try {
+        _fastfoneDb = drizzle(createPool(url));
+      } catch (error) {
+        console.warn("[Database] Failed to connect to fastfone-db:", error);
+        return null;
+      }
+    }
+    return _fastfoneDb;
+  }
+
+  // Default: Boonphone (also used as auth DB)
+  if (!_boonphoneDb) {
+    const url = process.env.DATABASE_URL_BOONPHONE || process.env.DATABASE_URL;
+    if (!url) return null;
     try {
-      const pool = new pg.Pool({
-        connectionString: process.env.DATABASE_URL,
-        max: 10,
-        idleTimeoutMillis: 30000,
-        connectionTimeoutMillis: 10000,
-        // Keep connections alive during long-running queries (e.g. populate cache for 17k+ contracts)
-        keepAlive: true,
-        keepAliveInitialDelayMillis: 10000,
-        // Allow up to 20 minutes for large queries (populate cache can take 10-15 min for Fastfone365)
-        statement_timeout: 20 * 60 * 1000,
-        query_timeout: 20 * 60 * 1000,
-      });
-      _db = drizzle(pool);
+      _boonphoneDb = drizzle(createPool(url));
     } catch (error) {
-      console.warn("[Database] Failed to connect:", error);
-      _db = null;
+      console.warn("[Database] Failed to connect to boonphone-db:", error);
+      return null;
     }
   }
-  return _db;
+  return _boonphoneDb;
+}
+
+/**
+ * Get auth database (users, app_users) — always boonphone-db.
+ */
+export async function getAuthDb() {
+  return getDb("Boonphone");
 }
 
 export async function upsertUser(user: InsertUser): Promise<void> {
   if (!user.openId) {
     throw new Error("User openId is required for upsert");
   }
-
-  const db = await getDb();
+  const db = await getAuthDb();
   if (!db) {
     console.warn("[Database] Cannot upsert user: database not available");
     return;
   }
-
   try {
     const values: InsertUser = {
       openId: user.openId,
     };
     const updateSet: Record<string, unknown> = {};
-
     const textFields = ["name", "email", "loginMethod"] as const;
     type TextField = (typeof textFields)[number];
-
     const assignNullable = (field: TextField) => {
       const value = user[field];
       if (value === undefined) return;
@@ -58,9 +93,7 @@ export async function upsertUser(user: InsertUser): Promise<void> {
       values[field] = normalized;
       updateSet[field] = normalized;
     };
-
     textFields.forEach(assignNullable);
-
     if (user.lastSignedIn !== undefined) {
       values.lastSignedIn = user.lastSignedIn;
       updateSet.lastSignedIn = user.lastSignedIn;
@@ -72,16 +105,12 @@ export async function upsertUser(user: InsertUser): Promise<void> {
       values.role = 'admin';
       updateSet.role = 'admin';
     }
-
     if (!values.lastSignedIn) {
       values.lastSignedIn = new Date();
     }
-
     if (Object.keys(updateSet).length === 0) {
       updateSet.lastSignedIn = new Date();
     }
-
-    // PostgreSQL uses onConflictDoUpdate instead of onDuplicateKeyUpdate
     await db.insert(users).values(values).onConflictDoUpdate({
       target: users.openId,
       set: updateSet,
@@ -93,21 +122,17 @@ export async function upsertUser(user: InsertUser): Promise<void> {
 }
 
 export async function getUserByOpenId(openId: string) {
-  const db = await getDb();
+  const db = await getAuthDb();
   if (!db) {
     console.warn("[Database] Cannot get user: database not available");
     return undefined;
   }
-
   const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
-
   return result.length > 0 ? result[0] : undefined;
 }
 
 /**
  * Normalize db.execute() result for PostgreSQL compatibility.
- * PostgreSQL (via Drizzle) returns { rows: [...] }
- * MySQL returns [rows, fields]
  */
 export function pgRows(result: unknown): any[] {
   if (result && typeof result === 'object' && 'rows' in result) {
@@ -119,4 +144,3 @@ export function pgRows(result: unknown): any[] {
   }
   return [];
 }
-

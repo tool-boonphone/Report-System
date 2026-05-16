@@ -44,7 +44,8 @@ export async function getDebtReport(params: {
   /** YYYY-MM-DD inclusive */
   to: string;
 }): Promise<{ summary: DebtSummary; monthly: MonthlyRow[] }> {
-  const db = await getDb();
+  const { section } = params;
+  const db = await getDb(section);
   const empty: DebtSummary = {
     target: 0,
     targetCount: 0,
@@ -152,7 +153,8 @@ export async function getOverdueTopList(params: {
   asOf: string; // YYYY-MM-DD
   limit?: number;
 }) {
-  const db = await getDb();
+  const { section } = params;
+  const db = await getDb(section);
   if (!db) return [];
   const limit = params.limit ?? 20;
 
@@ -955,7 +957,8 @@ function deriveDebtStatus(
  * principal / interest / fee / penalty for each period.
  */
 export async function listDebtTarget(params: { section: SectionKey }) {
-  const db = await getDb();
+  const { section } = params;
+  const db = await getDb(section);
   if (!db) return { rows: [] as any[] };
 
   // --- Load contract headers (trimmed — no rawJson) ---
@@ -2336,7 +2339,8 @@ export async function listDebtTarget(params: { section: SectionKey }) {
  * installment period they closed (`close_installment_amount` / derived).
  */
 export async function listDebtCollected(params: { section: SectionKey }) {
-  const db = await getDb();
+  const { section } = params;
+  const db = await getDb(section);
   if (!db) return { rows: [] as any[] };
 
   // Reuse target list for shared summary columns & debt-status derivation.
@@ -2790,8 +2794,9 @@ export async function* listDebtTargetStream(params: {
   /** rows per yield (default 100) */
   batchSize?: number;
 }): AsyncGenerator<any[], void, unknown> {
+  const { section } = params;
   const BATCH = params.batchSize ?? 100;
-  const db = await getDb();
+  const db = await getDb(section);
   if (!db) return;
 
   // --- Load contract headers ---
@@ -3715,11 +3720,12 @@ export async function* listDebtCollectedStream(params: {
   section: SectionKey;
   batchSize?: number;
 }): AsyncGenerator<{ rows: any[]; meta?: Record<string, unknown> }, void, unknown> {
-  const CONTRACT_BATCH = 500; // contracts per DB query batch (keeps memory low)
+  const CONTRACT_BATCH = 100; // contracts per DB query batch (keeps memory low, reduced from 500 to avoid connection timeout)
   const YIELD_BATCH = params.batchSize ?? 100; // rows per HTTP chunk
   const today = new Date(); // used by deriveDebtStatus
 
-  const db = await getDb();
+  const { section } = params;
+  const db = await getDb(section);
   if (!db) return;
 
   // Step 1: Load only contract headers (no installments) — small payload
@@ -4156,7 +4162,8 @@ export async function listSuspectedBadDebt(params: { section: SectionKey }): Pro
     daysOverdue: number;
   }>;
 }> {
-  const db = await getDb();
+  const { section } = params;
+  const db = await getDb(section);
   if (!db) return { rows: [] };
 
   const { debtTargetCache, debtCollectedCache } = await import("../drizzle/schema");

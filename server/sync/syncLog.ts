@@ -8,7 +8,7 @@ export async function insertSyncLog(params: {
   entity: string;
   triggeredBy: SyncTrigger;
 }) {
-  const db = await getDb();
+  const db = await getDb(params.section);
   if (!db) throw new Error("DB not available for syncLog.insert");
   const now = new Date();
   const [res] = await db.insert(syncLogs).values({
@@ -24,11 +24,12 @@ export async function insertSyncLog(params: {
 
 export async function finishSyncLog(params: {
   id: number;
+  section?: SectionKey;
   status: "success" | "error";
   rowCount?: number;
   errorMessage?: string;
 }) {
-  const db = await getDb();
+  const db = await getDb(params.section);
   if (!db || !params.id) return;
   await db
     .update(syncLogs)
@@ -47,11 +48,12 @@ export async function finishSyncLog(params: {
  */
 export async function updateSyncLogStage(params: {
   id: number;
+  section?: SectionKey;
   currentStage: string;
   progress: number;
   resumePage?: number;
 }) {
-  const db = await getDb();
+  const db = await getDb(params.section);
   if (!db || !params.id) return;
   await db
     .update(syncLogs)
@@ -69,7 +71,7 @@ export async function updateSyncLogStage(params: {
  * Returns 0 if no previous run found (start from page 1).
  */
 export async function getLastCustomersResumePage(section: SectionKey): Promise<number> {
-  const db = await getDb();
+  const db = await getDb(section);
   if (!db) return 0;
   // Only resume from an in_progress row that:
   //  1. Was started within the last 30 minutes (not stale/killed)
@@ -108,7 +110,7 @@ export async function getLastCustomersResumePage(section: SectionKey): Promise<n
  * Only resumes if the error row was started within the window AND has resume_page > 0.
  */
 export async function getLastContractsResumePage(section: SectionKey): Promise<number> {
-  const db = await getDb();
+  const db = await getDb(section);
   if (!db) return 0;
   // 3-hour window: contracts sync (list + IMEI enrichment) can take ~2.5h
   const RESUME_WINDOW_MS = 3 * 60 * 60 * 1000;
@@ -150,7 +152,7 @@ export async function getDbSyncStatus(section: SectionKey): Promise<{
   currentStage: string | null;
   progress: number | null;
 } | null> {
-  const db = await getDb();
+  const db = await getDb(section);
   if (!db) return null;
   // Treat in_progress rows older than 185 minutes as abandoned
   // (matches OVERALL_TIMEOUT_MS=180min + 5min buffer in runner.ts)
@@ -225,7 +227,7 @@ export async function getDbSyncStatus(section: SectionKey): Promise<{
  * Returns the number of rows updated.
  */
 export async function clearStuckSyncLogs(section: SectionKey): Promise<number> {
-  const db = await getDb();
+  const db = await getDb(section);
   if (!db) return 0;
   // Clear any in_progress rows for this section (regardless of age)
   const result = await db
@@ -253,7 +255,25 @@ export async function clearStuckSyncLogs(section: SectionKey): Promise<number> {
  * Returns total number of rows cleared.
  */
 export async function clearAllStuckSyncLogs(): Promise<number> {
-  const db = await getDb();
+  // Run cleanup on both databases
+  const dbBoon = await getDb("Boonphone");
+  const dbFast = await getDb("Fastfone365");
+  let total = 0;
+  for (const db of [dbBoon, dbFast].filter(Boolean)) {
+    if (!db) continue;
+    const cutoff = new Date(Date.now() - 15 * 60 * 1000);
+    const rows = await db
+      .update(syncLogs)
+      .set({ status: "error", errorMessage: "Cleared by startup cleanup (stuck > 15 min)", finishedAt: new Date() })
+      .where(and(eq(syncLogs.status, "in_progress"), lt(syncLogs.startedAt, cutoff)))
+      .returning({ id: syncLogs.id });
+    total += rows.length;
+  }
+  return total;
+}
+// _clearAllStuckSyncLogsOld - kept for reference
+async function _clearAllStuckSyncLogsOld(): Promise<number> {
+  const db = await getDb("Boonphone");
   if (!db) return 0;
   // Only clear rows that have been in_progress for more than 15 minutes.
   // 15 min is enough to avoid clearing a sync that just started on the same instance,
@@ -285,7 +305,7 @@ export async function getLastSyncedAt(params: {
   section: SectionKey;
   entity?: string;
 }): Promise<Date | null> {
-  const db = await getDb();
+  const db = await getDb(params.section);
   if (!db) return null;
   const cond = params.entity
     ? and(
@@ -308,31 +328,36 @@ export async function getLastSyncedAt(params: {
 
 /** Latest in-flight sync for each section. Used to report progress to UI. */
 export async function getRunningSyncs() {
-  const db = await getDb();
-  if (!db) return [] as Array<{
+  const dbBoon = await getDb("Boonphone");
+  const dbFast = await getDb("Fastfone365");
+  const results: Array<{
     id: number;
     section: string;
     entity: string;
     startedAt: Date;
     triggeredBy: string;
-  }>;
-  const rows = await db
-    .select({
-      id: syncLogs.id,
-      section: syncLogs.section,
-      entity: syncLogs.entity,
-      startedAt: syncLogs.startedAt,
-      triggeredBy: syncLogs.triggeredBy,
-    })
-    .from(syncLogs)
-    .where(eq(syncLogs.status, "in_progress"))
-    .orderBy(desc(syncLogs.startedAt));
-  return rows;
+  }> = [];
+  for (const db of [dbBoon, dbFast]) {
+    if (!db) continue;
+    const rows = await db
+      .select({
+        id: syncLogs.id,
+        section: syncLogs.section,
+        entity: syncLogs.entity,
+        startedAt: syncLogs.startedAt,
+        triggeredBy: syncLogs.triggeredBy,
+      })
+      .from(syncLogs)
+      .where(eq(syncLogs.status, "in_progress"))
+      .orderBy(desc(syncLogs.startedAt));
+    results.push(...rows);
+  }
+  return results;
 }
 
 /** Recent sync history for a section (for Sync Logs panel in Settings). */
 export async function listSyncLogs(section?: SectionKey, limit = 50) {
-  const db = await getDb();
+  const db = await getDb(section ?? "Boonphone");
   if (!db) return [];
   const cond = section ? eq(syncLogs.section, section) : undefined;
   const q = db
@@ -351,7 +376,7 @@ export async function listSyncLogs(section?: SectionKey, limit = 50) {
 export async function getLastErrorAt(params: {
   section: SectionKey;
 }): Promise<Date | null> {
-  const db = await getDb();
+  const db = await getDb(params.section);
   if (!db) return null;
   const rows = await db
     .select({

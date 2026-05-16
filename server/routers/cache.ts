@@ -12,9 +12,7 @@ import { populateDebtCache } from "../sync/populateCache";
 import { getDb } from "../db";
 import { SECTIONS, sectionSchema, type SectionKey } from "../../shared/const";
 import { pgRows } from "../db";
-
 // sectionSchema imported from shared/const — normalizes any case to canonical SectionKey
-
 export const cacheRouter = router({
   /**
    * Trigger populate for a specific section.
@@ -33,7 +31,6 @@ export const cacheRouter = router({
         populatedAt: new Date().toISOString(),
       };
     }),
-
   /**
    * Trigger populate asynchronously (fire-and-forget).
    * Returns immediately; populate runs in background.
@@ -49,47 +46,47 @@ export const cacheRouter = router({
       );
       return { section, started: true, startedAt: new Date().toISOString() };
     }),
-
   /**
    * Get row counts for each section's cache tables.
+   * Queries each section's dedicated DB separately and merges results.
    * Available to all authenticated users.
    */
   status: appProcedure.query(async () => {
-    const db = await getDb();
-    if (!db) return { sections: [] };
-
-    const rows = await db.execute(sql`
-      SELECT
-        'target' AS cache_type,
-        section,
-        COUNT(*) AS row_count,
-        MAX(populated_at) AS last_populated_at
-      FROM debt_target_cache
-      GROUP BY section
-      UNION ALL
-      SELECT
-        'collected' AS cache_type,
-        section,
-        COUNT(*) AS row_count,
-        MAX(populated_at) AS last_populated_at
-      FROM debt_collected_cache
-      GROUP BY section
-    `);
-
-    const rawRows: any[] = pgRows(rows);
-
+    const rawRows: any[] = [];
+    for (const sec of SECTIONS) {
+      const db = await getDb(sec);
+      if (!db) continue;
+      const rows = await db.execute(sql`
+        SELECT
+          'target' AS cache_type,
+          section,
+          COUNT(*) AS row_count,
+          MAX(populated_at) AS last_populated_at
+        FROM debt_target_cache
+        WHERE section = ${sec}
+        GROUP BY section
+        UNION ALL
+        SELECT
+          'collected' AS cache_type,
+          section,
+          COUNT(*) AS row_count,
+          MAX(populated_at) AS last_populated_at
+        FROM debt_collected_cache
+        WHERE section = ${sec}
+        GROUP BY section
+      `);
+      rawRows.push(...pgRows(rows));
+    }
     const result: Record<string, {
       target: { rowCount: number; lastPopulatedAt: string | null };
       collected: { rowCount: number; lastPopulatedAt: string | null };
     }> = {};
-
     for (const section of SECTIONS) {
       result[section] = {
         target: { rowCount: 0, lastPopulatedAt: null },
         collected: { rowCount: 0, lastPopulatedAt: null },
       };
     }
-
     for (const r of rawRows) {
       const section = String(r.section);
       const cacheType = String(r.cache_type) as "target" | "collected";
@@ -100,7 +97,6 @@ export const cacheRouter = router({
         };
       }
     }
-
     return { sections: result };
   }),
 });
