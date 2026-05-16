@@ -594,7 +594,6 @@ export async function getIncomeSummaryByPeriod(
     `pt.section = '${secEsc}'`,
     `(pt.raw_json::jsonb->>'source') IS NULL`,
     `pt.paid_at IS NOT NULL`,
-    `pt.paid_at != ''`,
   ];
   if (years && years.length > 0) {
     conditions.push(`LEFT(pt.paid_at::text, 4) IN (${years.map((y) => "'" + y + "'").join(",")})`);
