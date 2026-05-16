@@ -37,7 +37,7 @@ function createPool(connectionString: string) {
 export async function getDb(section?: SectionKey) {
   if (section === "Fastfone365") {
     if (!_fastfoneDb) {
-      const url = process.env.DATABASE_URL_FASTFONE365 || process.env.DATABASE_URL;
+      const url = process.env.FASTFONE_DATABASE_URL || process.env.FASTFONE365_DATABASE_URL || process.env.DATABASE_URL;
       if (!url) return null;
       try {
         _fastfoneDb = drizzle(createPool(url));
@@ -51,7 +51,7 @@ export async function getDb(section?: SectionKey) {
 
   // Default: Boonphone (also used as auth DB)
   if (!_boonphoneDb) {
-    const url = process.env.DATABASE_URL_BOONPHONE || process.env.DATABASE_URL;
+    const url = process.env.BOONPHONE_DATABASE_URL || process.env.DATABASE_URL_BOONPHONE || process.env.DATABASE_URL;
     if (!url) return null;
     try {
       _boonphoneDb = drizzle(createPool(url));
@@ -63,10 +63,28 @@ export async function getDb(section?: SectionKey) {
   return _boonphoneDb;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let _authDb: any = null;
+
 /**
- * Get auth database (users, app_users) — always boonphone-db.
+ * Get auth database (users, app_users).
+ * Uses AUTH_DATABASE_URL if set, otherwise falls back to boonphone-db.
  */
 export async function getAuthDb() {
+  // If AUTH_DATABASE_URL is set and different from BOONPHONE_DATABASE_URL, use dedicated auth DB
+  const authUrl = process.env.AUTH_DATABASE_URL;
+  const boonUrl = process.env.BOONPHONE_DATABASE_URL || process.env.DATABASE_URL;
+  if (authUrl && authUrl !== boonUrl) {
+    if (!_authDb) {
+      try {
+        _authDb = drizzle(createPool(authUrl));
+      } catch (error) {
+        console.warn("[Database] Failed to connect to auth-db:", error);
+        return getDb("Boonphone");
+      }
+    }
+    return _authDb;
+  }
   return getDb("Boonphone");
 }
 
