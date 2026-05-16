@@ -6,8 +6,7 @@
  * NOTE: Changed from 09:00 → 04:00 per business requirement (2026-05-11).
  * Sync is idempotent (upsert-only) — no data is deleted after sync.
  *
- * Missed-sync recovery: if the server restarts after 04:00 and the daily sync
- * hasn't run yet (last sync > 23h ago), it will kick off immediately on startup.
+ * No missed-sync recovery on startup — sync runs ONLY at 04:00 daily.
  *
  * IMPORTANT: Server may run in UTC or other timezones. All time comparisons
  * MUST use Asia/Bangkok (UTC+7) to match business requirements.
@@ -16,7 +15,7 @@
 import type { SectionKey } from "../../shared/const";
 import { SECTIONS } from "../../shared/const";
 import { runSectionSync, isSyncRunning } from "./runner";
-import { getLastSyncedAt, getLastErrorAt, clearAllStuckSyncLogs } from "./syncLog";
+import { clearAllStuckSyncLogs } from "./syncLog";
 import { buildClientFromEnv } from "../api/partnerClient";
 
 /** Returns true if both base URL + credentials are present for the section. */
@@ -53,11 +52,6 @@ function getBangkokTimeParts(d = new Date()): { hour: number; minute: number; da
   return { hour, minute, daySlot };
 }
 
-function isSyncTime(d = new Date()): boolean {
-  const { hour } = getBangkokTimeParts(d);
-  return hour === SYNC_HOUR;
-}
-
 function currentDaySlot(d = new Date()): string {
   return getBangkokTimeParts(d).daySlot;
 }
@@ -84,9 +78,8 @@ async function tick() {
 }
 
 /**
- * Start the scheduler. Also checks whether the most recent hour slot has been
- * run — if the server restarted during business hours and missed a sync, we
- * schedule one right away.
+ * Start the scheduler.
+ * Only sets up the 04:00 daily cron — no missed-sync recovery on startup.
  */
 export async function startScheduler() {
   if (_timer) return;
@@ -105,33 +98,6 @@ export async function startScheduler() {
     tick().catch((err) => console.error("[scheduler] tick error:", err));
   }, 60_000);
 
-  // Missed-sync recovery: if today's sync hasn't run yet (last sync older than
-  // 23h) and we're past 09:00 Bangkok time, kick one immediately on startup.
-  const pastSyncHour = bangkokHour >= SYNC_HOUR;
-  if (pastSyncHour) {
-    for (const section of SECTIONS as readonly SectionKey[]) {
-      if (!isSectionConfigured(section)) {
-        console.log(`[scheduler] ${section} skipped (no credentials configured)`);
-        continue;
-      }
-      // Cool-off: if the previous attempt errored within the last 30 min, skip.
-      const lastErr = await getLastErrorAt({ section });
-      if (lastErr && now.getTime() - lastErr.getTime() < 30 * 60 * 1000) {
-        console.log(
-          `[scheduler] ${section} skipped (recent error at ${lastErr.toISOString()})`,
-        );
-        continue;
-      }
-      const last = await getLastSyncedAt({ section });
-      const oneDayMs = 23 * 60 * 60 * 1000; // 23h threshold
-      if (!last || now.getTime() - last.getTime() > oneDayMs) {
-        if (!isSyncRunning(section)) {
-          console.log(`[scheduler] missed-sync catch-up for ${section}`);
-          runSectionSync(section, "startup").catch(() => {});
-        }
-      }
-    }
-  }
 }
 
 export function stopScheduler() {
