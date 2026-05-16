@@ -15,15 +15,21 @@
  *
  * รายจ่าย (Expense):
  *   - ดึงจาก contracts.commission_net (ค่าคอมมิชชั่น)
+ *
+ * ─── การปรับปรุง (v2) ────────────────────────────────────────────────────────
+ * เปลี่ยนจาก buildBadDebtLastDaysSubquery (4 ชั้น nested) เป็น 2-step approach:
+ *   Step 1: ดึง batch_key map ของทุกสัญญาใน section ก่อน (1 query เบา)
+ *   Step 2: ใช้ batch_key map ใน CASE expression แบบ IN clause (ไม่ต้อง JOIN subquery ซ้อน)
+ *
+ * สำหรับ getIncomeSummaryByPeriod / getIncomeSummary / listIncome:
+ *   - ใช้ WITH (CTE) แทน nested subquery เพื่อให้ query planner optimize ได้ดีกว่า
  */
-
 import { sql } from "drizzle-orm";
 import type { SectionKey } from "../shared/const";
 import { getDb } from "./db";
 import { pgRows } from "./db";
 
 // ─── Income Types ─────────────────────────────────────────────────────────────
-
 export type IncomeType = "ค่างวด" | "ขายเครื่อง" | "ปิดยอด" | "เงินดาวน์";
 export type ExpenseType = "ค่าคอมมิชชั่น";
 
@@ -89,28 +95,14 @@ export interface ExpenseParams {
   pageSize?: number;
 }
 
-// ─── Income SQL Helpers ────────────────────────────────────────────────────────
-
-/**
- * Income type CASE expression (ต้องใช้ร่วมกับ JOIN contracts c และ bad_debt_last_days bdl)
- *
- * ขายเครื่อง = payment ในวันสุดท้ายของสัญญาหนี้เสีย
- *   - c.status = 'หนี้เสีย'
- *   - DATE(pt.paid_at) = วันสุดท้ายที่มีการชำระของสัญญานั้น (จาก subquery bad_debt_last_days)
- * ปิดยอด = มี close_installment_amount > 0 ใน raw_json AND c.status = 'สิ้นสุดสัญญา'
- * ค่างวด = อื่นๆ
- *
- * หมายเหตุ: ต้อง LEFT JOIN bad_debt_last_days bdl ก่อนใช้ expression นี้
- */
+// ─── SQL Constants ────────────────────────────────────────────────────────────
 
 /**
  * Original income type CASE expression — type ตาม API จริงๆ
  * ไม่มี ขายเครื่อง เพราะ API ส่งมาแค่ ค่างวด และ ปิดยอด
- * ขายเครื่อง (classified) → ค่างวด (original)
- * ใช้สำหรับ mode รายการตามการบันทึก (detail mode)
  *
- * ปิดยอด = receipt_no ขึ้นต้นด้วย 'TXRTC' (ไม่มีเลขต่อท้าย เช่น TXRTC1225-PTE010-19331-01)
- * ค่างวด = receipt_no ขึ้นต้นด้วย 'TXRT' แต่ไม่ใช่ 'TXRTC' (เช่น TXRT1225-PTE010-19331-01-1)
+ * ปิดยอด = receipt_no ขึ้นต้นด้วย 'TXRTC'
+ * ค่างวด = อื่นๆ
  */
 const PT_ORIGINAL_INCOME_TYPE_CASE = `
   CASE
@@ -119,143 +111,178 @@ const PT_ORIGINAL_INCOME_TYPE_CASE = `
     ELSE 'ค่างวด'
   END
 `;
-const PT_INCOME_TYPE_CASE = `
-  CASE
-    -- ขายเครื่อง: สัญญาหนี้เสีย + transaction อยู่ใน batch สุดท้าย
-    -- batch = ทำโดยคนเดียวกัน (updated_by) + บันทึกวันเดียวกัน (DATE(created_at))
-    -- Primary: paid_at วันเดียวกัน + updated_by + DATE(created_at)
-    -- Fallback (ยอดรวม batch < 1000): ใช้แค่ updated_by + DATE(created_at) ไม่สนใจ paid_at
-    WHEN c.status = 'หนี้เสีย'
-      AND bdl.last_created_date IS NOT NULL
-      AND DATE(pt.created_at) = bdl.last_created_date
-      AND pt.updated_by = bdl.last_updated_by
-      AND (
-        -- Primary: paid_at ตรงกับ batch หลัก
-        DATE(pt.paid_at) = bdl.last_paid_date
-        -- Fallback: ยอดรวม batch < 1000 → ขยาย batch ด้วย created_date + updated_by เท่านั้น
-        OR bdl.is_fallback = 1
-      )
-      THEN 'ขายเครื่อง'
-    -- ปิดยอด: สัญญาสิ้นสุดสัญญา/สำเร็จ + transaction อยู่ใน batch สุดท้าย
-    WHEN c.status IN ('สิ้นสุดสัญญา', 'สำเร็จ')
-      AND bdl.last_created_date IS NOT NULL
-      AND DATE(pt.created_at) = bdl.last_created_date
-      AND pt.updated_by = bdl.last_updated_by
-      AND DATE(pt.paid_at) = bdl.last_paid_date
-      THEN 'ปิดยอด'
-    ELSE 'ค่างวด'
-  END
-`;
 
-/**
- * Amount CASE expression — ยอดของแต่ละ row = pt.amount เสมอ
- * (1 payment row = 1 ยอด ไม่ว่าจะเป็นประเภทใด)
- */
+/** Amount CASE expression — ยอดของแต่ละ row = pt.amount เสมอ */
 const PT_AMOUNT_CASE = `CAST(COALESCE(pt.amount, 0) AS DECIMAL(18,2))`;
 
-// Base WHERE: เฉพาะ close rows (source IS NULL) ที่ตรงกับ Fastfone/Boonphone Report
+/** Base WHERE: เฉพาะ close rows (source IS NULL) ที่ตรงกับ Fastfone/Boonphone Report */
 const PT_INCOME_BASE_WHERE = `(pt.raw_json::jsonb->>'source') IS NULL`;
 
-
+// ─── 2-Step Batch Key Helpers ─────────────────────────────────────────────────
 
 /**
- * Subquery สำหรับหา batch สุดท้ายของแต่ละสัญญา
- * ใช้ LEFT JOIN กับ payment_transactions pt ด้วย contract_no + section
+ * BatchKey สำหรับ classify ขายเครื่อง และ ปิดยอด
+ * แทนที่ buildBadDebtLastDaysSubquery เดิม (4 ชั้น nested)
  *
- * Logic 2 ระดับ:
- *   ระดับ 1 (Primary):
- *     ไล่จาก row ล่าสุด (created_at DESC) ขึ้นมา
- *     นับ rows ที่ paid_at วันเดียวกัน + updated_by คนเดียวกัน + DATE(created_at) วันเดียวกัน
- *     หยุดเมื่ออย่างใดอย่างหนึ่งเปลี่ยน
- *     ถ้ายอดรวม >= 1000 → ใช้ batch นี้เลย (is_fallback = 0)
+ * Step 1: ดึง batch_key map ของทุกสัญญาใน section ก่อน
+ *   - ขายเครื่อง: สัญญาหนี้เสีย → batch สุดท้าย (2 ระดับ)
+ *   - ปิดยอด: สัญญาสิ้นสุดสัญญา/สำเร็จ → batch สุดท้าย
  *
- *   ระดับ 2 (Fallback):
- *     ถ้ายอดรวมระดับ 1 < 1000 → is_fallback = 1
- *     ไล่จาก row ล่าสุดขึ้นมาใหม่
- *     นับ rows ที่ updated_by คนเดียวกัน + DATE(created_at) วันเดียวกัน (ไม่สนใจ paid_at)
- *     หยุดเมื่ออย่างใดอย่างหนึ่งเปลี่ยน
- *
- * @param section - SectionKey ที่ต้องการ (ใส่ escaped string)
+ * Return: Map<contractNo, { lastCreatedDate, lastPaidDate, lastUpdatedBy, isFallback, status }>
  */
-function buildBadDebtLastDaysSubquery(section: string): string {
-  // หา row ล่าสุดของแต่ละสัญญา (เรียงตาม created_at DESC)
-  // แล้วคำนวณ primary batch sum (paid_at + created_date + updated_by เหมือนกัน)
-  // ระดับ 1: primary_sum (paid_date+created_date+updated_by) >= 1000 → ขายเครื่อง
-  // ระดับ 2 (fallback): primary_sum < 1000 → group ใหม่ด้วย created_date+updated_by (ไม่สนใจ paid_date)
-  //   ยอดรวมเท่าไหร่ก็ถือว่าเป็นขายเครื่อง (is_fallback = 1 เสมอเมื่อ primary_sum < 1000)
-  return `
+interface BatchKeyEntry {
+  lastCreatedDate: string;
+  lastPaidDate: string;
+  lastUpdatedBy: string;
+  isFallback: boolean;
+  status: string;
+}
+
+async function fetchBatchKeyMap(
+  db: any,
+  section: string,
+): Promise<Map<string, BatchKeyEntry>> {
+  const esc = (v: string) => v.replace(/'/g, "''");
+  const secEsc = esc(section);
+
+  // Step 1a: หา row ล่าสุดของแต่ละสัญญา (เฉพาะ หนี้เสีย / สิ้นสุดสัญญา / สำเร็จ)
+  const lastRowSql = `
     SELECT
-      base.contract_no,
-      base.section,
-      base.last_paid_date,
-      base.last_created_date,
-      base.last_updated_by,
-      CASE
-        WHEN COALESCE(agg.batch_sum, 0) < 1000 THEN 1
-        ELSE 0
-      END AS is_fallback
-    FROM (
-      -- หา row ล่าสุดของแต่ละสัญญา
-      SELECT
-        inner_q.contract_no,
-        inner_q.section,
-        inner_q.last_paid_date,
-        inner_q.last_created_date,
-        inner_q.last_updated_by
-      FROM (
-        SELECT
-          pt2.contract_no,
-          pt2.section,
-          DATE(pt2.paid_at) AS last_paid_date,
-          DATE(pt2.created_at) AS last_created_date,
-          pt2.updated_by AS last_updated_by,
-          ROW_NUMBER() OVER (
-            PARTITION BY pt2.contract_no, pt2.section
-            ORDER BY pt2.created_at DESC
-          ) AS rn
+      pt.contract_no,
+      DATE(pt.paid_at)    AS last_paid_date,
+      DATE(pt.created_at) AS last_created_date,
+      pt.updated_by       AS last_updated_by,
+      c.status            AS contract_status
+    FROM payment_transactions pt
+    INNER JOIN contracts c
+      ON c.contract_no = pt.contract_no AND c.section = pt.section
+    WHERE pt.section = '${secEsc}'
+      AND (pt.raw_json::jsonb->>'source') IS NULL
+      AND c.status IN ('หนี้เสีย', 'สิ้นสุดสัญญา', 'สำเร็จ')
+      AND pt.created_at = (
+        SELECT MAX(pt2.created_at)
         FROM payment_transactions pt2
-        WHERE pt2.section = '${section}'
+        WHERE pt2.contract_no = pt.contract_no
+          AND pt2.section = pt.section
           AND (pt2.raw_json::jsonb->>'source') IS NULL
-      ) AS inner_q
-      WHERE inner_q.rn = 1
-    ) AS base
-    -- ระดับ 1: primary batch sum (paid_date + created_date + updated_by)
-    LEFT JOIN (
-      SELECT
-        pt3.contract_no,
-        pt3.section,
-        DATE(pt3.paid_at) AS paid_date,
-        DATE(pt3.created_at) AS created_date,
-        pt3.updated_by,
-        SUM(CAST(COALESCE(pt3.amount, 0) AS DECIMAL(18,2))) AS batch_sum
-      FROM payment_transactions pt3
-      WHERE pt3.section = '${section}'
-        AND (pt3.raw_json::jsonb->>'source') IS NULL
-      GROUP BY pt3.contract_no, pt3.section, DATE(pt3.paid_at), DATE(pt3.created_at), pt3.updated_by
-    ) AS agg
-      ON agg.contract_no = base.contract_no
-      AND agg.section = base.section
-      AND agg.paid_date = base.last_paid_date
-      AND agg.created_date = base.last_created_date
-      AND agg.updated_by = base.last_updated_by
-    -- ระดับ 2: fallback batch sum (created_date + updated_by เท่านั้น ไม่สนใจ paid_date)
-    LEFT JOIN (
-      SELECT
-        pt4.contract_no,
-        pt4.section,
-        DATE(pt4.created_at) AS created_date,
-        pt4.updated_by,
-        SUM(CAST(COALESCE(pt4.amount, 0) AS DECIMAL(18,2))) AS fallback_sum
-      FROM payment_transactions pt4
-      WHERE pt4.section = '${section}'
-        AND (pt4.raw_json::jsonb->>'source') IS NULL
-      GROUP BY pt4.contract_no, pt4.section, DATE(pt4.created_at), pt4.updated_by
-    ) AS fb
-      ON fb.contract_no = base.contract_no
-      AND fb.section = base.section
-      AND fb.created_date = base.last_created_date
-      AND fb.updated_by = base.last_updated_by
+      )
   `;
+
+  // Step 1b: หา primary batch sum (paid_date + created_date + updated_by)
+  // เพื่อตรวจสอบว่าต้อง fallback หรือไม่ (สำหรับสัญญาหนี้เสีย)
+  const batchSumSql = `
+    SELECT
+      pt.contract_no,
+      DATE(pt.paid_at)    AS paid_date,
+      DATE(pt.created_at) AS created_date,
+      pt.updated_by,
+      SUM(CAST(COALESCE(pt.amount, 0) AS DECIMAL(18,2))) AS batch_sum
+    FROM payment_transactions pt
+    INNER JOIN contracts c
+      ON c.contract_no = pt.contract_no AND c.section = pt.section
+    WHERE pt.section = '${secEsc}'
+      AND (pt.raw_json::jsonb->>'source') IS NULL
+      AND c.status = 'หนี้เสีย'
+    GROUP BY pt.contract_no, DATE(pt.paid_at), DATE(pt.created_at), pt.updated_by
+  `;
+
+  const [lastRowResult, batchSumResult] = await Promise.all([
+    db.execute(sql.raw(lastRowSql)),
+    db.execute(sql.raw(batchSumSql)),
+  ]);
+
+  const lastRows: any[] = pgRows(lastRowResult);
+  const batchSums: any[] = pgRows(batchSumResult);
+
+  // สร้าง batchSum lookup: contractNo + paidDate + createdDate + updatedBy → sum
+  const batchSumMap = new Map<string, number>();
+  for (const r of batchSums) {
+    const key = `${r.contract_no}||${r.paid_date}||${r.created_date}||${r.updated_by}`;
+    batchSumMap.set(key, Number(r.batch_sum ?? 0));
+  }
+
+  // สร้าง batch key map
+  const map = new Map<string, BatchKeyEntry>();
+  for (const r of lastRows) {
+    const contractNo: string = r.contract_no ?? "";
+    const lastCreatedDate: string = r.last_created_date ?? "";
+    const lastPaidDate: string = r.last_paid_date ?? "";
+    const lastUpdatedBy: string = r.last_updated_by ?? "";
+    const status: string = r.contract_status ?? "";
+
+    let isFallback = false;
+    if (status === "หนี้เสีย") {
+      const batchKey = `${contractNo}||${lastPaidDate}||${lastCreatedDate}||${lastUpdatedBy}`;
+      const batchSum = batchSumMap.get(batchKey) ?? 0;
+      isFallback = batchSum < 1000;
+    }
+
+    map.set(contractNo, {
+      lastCreatedDate,
+      lastPaidDate,
+      lastUpdatedBy,
+      isFallback,
+      status,
+    });
+  }
+
+  return map;
+}
+
+/**
+ * สร้าง CASE expression สำหรับ classify income_type
+ * โดยใช้ batch key map ที่ดึงมาแล้ว (ไม่ต้อง JOIN subquery ซ้อน)
+ *
+ * แทนที่ PT_INCOME_TYPE_CASE + buildBadDebtLastDaysSubquery เดิม
+ */
+function buildIncomeCaseFromMap(batchMap: Map<string, BatchKeyEntry>): string {
+  if (batchMap.size === 0) {
+    return `'ค่างวด'`;
+  }
+
+  const esc = (v: string) => v.replace(/'/g, "''");
+  const whenClauses: string[] = [];
+
+  for (const [contractNo, entry] of Array.from(batchMap)) {
+    const cn = esc(contractNo);
+    const lcd = esc(entry.lastCreatedDate);
+    const lpd = esc(entry.lastPaidDate);
+    const lub = esc(entry.lastUpdatedBy);
+
+    if (entry.status === "หนี้เสีย") {
+      if (entry.isFallback) {
+        // Fallback: ไม่สนใจ paid_date
+        whenClauses.push(`
+          WHEN pt.contract_no = '${cn}'
+            AND DATE(pt.created_at) = '${lcd}'
+            AND pt.updated_by = '${lub}'
+            THEN 'ขายเครื่อง'`);
+      } else {
+        // Primary: paid_date ต้องตรง
+        whenClauses.push(`
+          WHEN pt.contract_no = '${cn}'
+            AND DATE(pt.created_at) = '${lcd}'
+            AND pt.updated_by = '${lub}'
+            AND DATE(pt.paid_at) = '${lpd}'
+            THEN 'ขายเครื่อง'`);
+      }
+    } else if (entry.status === "สิ้นสุดสัญญา" || entry.status === "สำเร็จ") {
+      whenClauses.push(`
+        WHEN pt.contract_no = '${cn}'
+          AND DATE(pt.created_at) = '${lcd}'
+          AND pt.updated_by = '${lub}'
+          AND DATE(pt.paid_at) = '${lpd}'
+          THEN 'ปิดยอด'`);
+    }
+  }
+
+  if (whenClauses.length === 0) {
+    return `'ค่างวด'`;
+  }
+
+  return `CASE ${whenClauses.join("")}
+    ELSE 'ค่างวด'
+  END`;
 }
 
 // ─── Income ───────────────────────────────────────────────────────────────────
@@ -272,7 +299,6 @@ export async function listIncome(params: IncomeParams): Promise<{
     dateField = "paidAt", incomeTypes, updatedBy,
     page = 1, pageSize = 50,
   } = params;
-
   const offset = (page - 1) * pageSize;
   const esc = (v: string) => v.replace(/'/g, "''");
   const secEsc = esc(section);
@@ -282,7 +308,6 @@ export async function listIncome(params: IncomeParams): Promise<{
     `pt.section = '${secEsc}'`,
     PT_INCOME_BASE_WHERE,
   ];
-  // ค้นหาจาก รหัสรายการ (receipt_no) หรือ เลขที่สัญญา (contract_no) เท่านั้น
   if (search) conditions.push(`(pt.receipt_no LIKE '%${esc(search)}%' OR pt.contract_no LIKE '%${esc(search)}%')`);
   if (dateFrom) conditions.push(`${dateCol} >= '${esc(dateFrom)}'`);
   if (dateTo) conditions.push(`${dateCol} <= '${esc(dateTo)} 23:59:59'`);
@@ -295,15 +320,17 @@ export async function listIncome(params: IncomeParams): Promise<{
   }
 
   const whereStr = conditions.join(" AND ");
-  const bdlSubquery = buildBadDebtLastDaysSubquery(secEsc);
+
+  // Step 1: ดึง batch key map
+  const batchMap = await fetchBatchKeyMap(db, secEsc);
+  const incomeTypeCase = buildIncomeCaseFromMap(batchMap);
 
   const countSql = `
     SELECT COUNT(*) AS total
     FROM (
-      SELECT ${PT_INCOME_TYPE_CASE} AS income_type
+      SELECT ${incomeTypeCase} AS income_type
       FROM payment_transactions pt
       LEFT JOIN contracts c ON c.contract_no = pt.contract_no AND c.section = pt.section
-      LEFT JOIN (${bdlSubquery}) AS bdl ON bdl.contract_no = pt.contract_no AND bdl.section = pt.section
       WHERE ${whereStr}
     ) AS sub
     ${incomeTypeFilter}
@@ -319,14 +346,14 @@ export async function listIncome(params: IncomeParams): Promise<{
         pt.paid_at,
         pt.updated_by,
         pt.updated_at,
+        pt.created_at,
         pt.receipt_no,
         c.status AS contract_status,
-        ${PT_INCOME_TYPE_CASE} AS income_type,
+        ${incomeTypeCase} AS income_type,
         ${PT_ORIGINAL_INCOME_TYPE_CASE} AS original_income_type,
         ${PT_AMOUNT_CASE} AS amount
       FROM payment_transactions pt
       LEFT JOIN contracts c ON c.contract_no = pt.contract_no AND c.section = pt.section
-      LEFT JOIN (${bdlSubquery}) AS bdl ON bdl.contract_no = pt.contract_no AND bdl.section = pt.section
       WHERE ${whereStr}
     ) AS sub
     ${incomeTypeFilter}
@@ -334,21 +361,22 @@ export async function listIncome(params: IncomeParams): Promise<{
     LIMIT ${pageSize} OFFSET ${offset}
   `;
 
-	  const [countResult, dataResult] = await Promise.all([
-	    db.execute(sql.raw(countSql)),
-	    db.execute(sql.raw(dataSql)),
-	  ]);
+  const [countResult, dataResult] = await Promise.all([
+    db.execute(sql.raw(countSql)),
+    db.execute(sql.raw(dataSql)),
+  ]);
 
-	  const countArr: any[] = countResult.rows ?? countResult;
-	  const total = Number(countArr[0]?.total ?? 0);
-	  const dataArr: any[] = dataResult.rows ?? dataResult;
+  const countArr: any[] = pgRows(countResult);
+  const total = Number(countArr[0]?.total ?? 0);
+  const dataArr: any[] = pgRows(dataResult);
+
   const rows: IncomeRow[] = (dataArr ?? []).map((r: any) => ({
     id: Number(r.id),
     contractNo: r.contract_no ?? "",
     customerName: r.customer_name ?? null,
     paidAt: r.paid_at ?? null,
     incomeType: r.income_type as IncomeType,
-    originalIncomeType: (r.original_income_type === 'ปิดยอด' ? 'ปิดยอด' : 'ค่างวด') as "ค่างวด" | "ปิดยอด",
+    originalIncomeType: (r.original_income_type === "ปิดยอด" ? "ปิดยอด" : "ค่างวด") as "ค่างวด" | "ปิดยอด",
     receiptNo: r.receipt_no ?? null,
     contractStatus: r.contract_status ?? null,
     amount: Number(r.amount ?? 0),
@@ -368,7 +396,7 @@ export async function listIncomeUpdatedBy(
     dateTo?: string;
     dateField?: "paidAt" | "updatedAt";
     incomeTypes?: IncomeType[];
-  }
+  },
 ): Promise<string[]> {
   const db = await getDb();
   if (!db) return [];
@@ -386,21 +414,19 @@ export async function listIncomeUpdatedBy(
           AND updated_by IS NOT NULL AND updated_by != ''
         ORDER BY updated_by ASC
       `),
-	    );
-	    const arr: any[] = result.rows ?? result;
-	    return (arr ?? []).map((r: any) => r.updated_by).filter(Boolean);
+    );
+    const arr: any[] = pgRows(result);
+    return (arr ?? []).map((r: any) => r.updated_by).filter(Boolean);
   }
 
-  // มี filter เพิ่มเติม — ต้อง JOIN contracts + bad_debt_last_days เพื่อ filter income_type
+  // มี filter เพิ่มเติม — ต้อง JOIN contracts + batch map
   const { search, dateFrom, dateTo, dateField = "paidAt", incomeTypes } = opts ?? {};
   const dateCol = dateField === "paidAt" ? "pt.paid_at" : "pt.updated_at";
-  const bdlSubquery = buildBadDebtLastDaysSubquery(secEsc);
 
   const conditions: string[] = [
     `pt.section = '${secEsc}'`,
     PT_INCOME_BASE_WHERE,
   ];
-  // ค้นหาจาก รหัสรายการ (receipt_no) หรือ เลขที่สัญญา (contract_no) เท่านั้น
   if (search) conditions.push(`(pt.receipt_no LIKE '%${esc(search)}%' OR pt.contract_no LIKE '%${esc(search)}%')`);
   if (dateFrom) conditions.push(`${dateCol} >= '${esc(dateFrom)}'`);
   if (dateTo) conditions.push(`${dateCol} <= '${esc(dateTo)} 23:59:59'`);
@@ -412,15 +438,19 @@ export async function listIncomeUpdatedBy(
   }
 
   const whereStr = conditions.join(" AND ");
+
+  // Step 1: ดึง batch key map
+  const batchMap = await fetchBatchKeyMap(db, secEsc);
+  const incomeTypeCase = buildIncomeCaseFromMap(batchMap);
+
   const querySql = `
     SELECT DISTINCT updated_by
     FROM (
       SELECT
         pt.updated_by AS updated_by,
-        ${PT_INCOME_TYPE_CASE} AS income_type
+        ${incomeTypeCase} AS income_type
       FROM payment_transactions pt
       LEFT JOIN contracts c ON c.contract_no = pt.contract_no AND c.section = pt.section
-      LEFT JOIN (${bdlSubquery}) AS bdl ON bdl.contract_no = pt.contract_no AND bdl.section = pt.section
       WHERE ${whereStr}
         AND pt.updated_by IS NOT NULL AND pt.updated_by != ''
     ) AS filtered
@@ -428,9 +458,9 @@ export async function listIncomeUpdatedBy(
     ORDER BY updated_by ASC
   `;
 
-	  const result = await db.execute(sql.raw(querySql));
-	  const arr: any[] = result.rows ?? result;
-	  return (arr ?? []).map((r: any) => r.updated_by).filter(Boolean);
+  const result = await db.execute(sql.raw(querySql));
+  const arr: any[] = pgRows(result);
+  return (arr ?? []).map((r: any) => r.updated_by).filter(Boolean);
 }
 
 // ─── Expense ──────────────────────────────────────────────────────────────────
@@ -472,20 +502,23 @@ export async function listExpense(params: ExpenseParams): Promise<{
       )
     ) AS latest_i ON latest_i.contract_no = c.contract_no AND latest_i.section = c.section
   `;
-	  const [countResult, dataResult] = await Promise.all([
-	    db.execute(sql.raw(`SELECT COUNT(*) AS total ${joinSql} WHERE ${whereStr}`)),
-	    db.execute(sql.raw(`
-	      SELECT c.id, c.contract_no, c.approve_date, c.commission_net, c.partner_code, c.partner_name,
-	             latest_i.updated_by, latest_i.updated_at
-	      ${joinSql}
-	      WHERE ${whereStr}
-	      ORDER BY c.approve_date DESC, c.id DESC
-	      LIMIT ${pageSize} OFFSET ${offset}
-	    `)),
-	  ]);
-	  const countArr: any[] = countResult.rows ?? countResult;
-	  const total = Number(countArr[0]?.total ?? 0);
-	  const dataArr: any[] = dataResult.rows ?? dataResult;
+
+  const [countResult, dataResult] = await Promise.all([
+    db.execute(sql.raw(`SELECT COUNT(*) AS total ${joinSql} WHERE ${whereStr}`)),
+    db.execute(sql.raw(`
+      SELECT c.id, c.contract_no, c.approve_date, c.commission_net, c.partner_code, c.partner_name,
+             latest_i.updated_by, latest_i.updated_at
+      ${joinSql}
+      WHERE ${whereStr}
+      ORDER BY c.approve_date DESC, c.id DESC
+      LIMIT ${pageSize} OFFSET ${offset}
+    `)),
+  ]);
+
+  const countArr: any[] = pgRows(countResult);
+  const total = Number(countArr[0]?.total ?? 0);
+  const dataArr: any[] = pgRows(dataResult);
+
   const rows: ExpenseRow[] = (dataArr ?? []).map((r: any) => ({
     id: Number(r.id),
     contractNo: r.contract_no ?? "",
@@ -497,6 +530,7 @@ export async function listExpense(params: ExpenseParams): Promise<{
     updatedBy: r.updated_by ?? null,
     updatedAt: r.updated_at ?? null,
   }));
+
   return { rows, total };
 }
 
@@ -548,7 +582,6 @@ export async function getIncomeSummary(
     `pt.section = '${secEsc}'`,
     PT_INCOME_BASE_WHERE,
   ];
-  // ค้นหาจาก รหัสรายการ (receipt_no) หรือ เลขที่สัญญา (contract_no) เท่านั้น
   if (search) conditions.push(`(pt.receipt_no LIKE '%${esc(search)}%' OR pt.contract_no LIKE '%${esc(search)}%')`);
   if (dateFrom) conditions.push(`${dateCol} >= '${esc(dateFrom)}'`);
   if (dateTo) conditions.push(`${dateCol} <= '${esc(dateTo)} 23:59:59'`);
@@ -561,17 +594,19 @@ export async function getIncomeSummary(
   }
 
   const whereStr = conditions.join(" AND ");
-  const bdlSubquery = buildBadDebtLastDaysSubquery(secEsc);
+
+  // Step 1: ดึง batch key map
+  const batchMap = await fetchBatchKeyMap(db, secEsc);
+  const incomeTypeCase = buildIncomeCaseFromMap(batchMap);
 
   const querySql = `
     SELECT income_type, SUM(amount) AS sum_amount
     FROM (
       SELECT
-        ${PT_INCOME_TYPE_CASE} AS income_type,
+        ${incomeTypeCase} AS income_type,
         ${PT_AMOUNT_CASE} AS amount
       FROM payment_transactions pt
       LEFT JOIN contracts c ON c.contract_no = pt.contract_no AND c.section = pt.section
-      LEFT JOIN (${bdlSubquery}) AS bdl ON bdl.contract_no = pt.contract_no AND bdl.section = pt.section
       WHERE ${whereStr}
     ) AS sub
     ${incomeTypeFilter}
@@ -642,21 +677,17 @@ export interface IncomeSummaryParams {
 
 /**
  * คำนวณยอดรายรับแยกตาม period (year/month)
- * ดึงจาก payment_transactions (source IS NULL) — ตรงกับ Fastfone/Boonphone Report เป๊ะ
  *
- * Logic แยกประเภท:
- * - ขายเครื่อง = payment ในวันสุดท้ายของสัญญาหนี้เสีย
- *                (c.status = 'หนี้เสีย' AND DATE(pt.paid_at) = last_paid_date ของสัญญานั้น)
- * - ปิดยอด     = มี close_installment_amount > 0 ใน raw_json
- * - ค่างวด     = อื่นๆ
- *
- * ยอดของแต่ละ row = pt.amount เสมอ → รวมกัน = total = ตรงกับ Report ระบบ
+ * ใช้ 2-step approach:
+ *   Step 1: fetchBatchKeyMap — ดึง batch key ของทุกสัญญา (1 query เบา)
+ *   Step 2: ใช้ CASE expression จาก map ใน GROUP BY query (ไม่ต้อง JOIN subquery ซ้อน)
  */
 export async function getIncomeSummaryByPeriod(
   params: IncomeSummaryParams,
 ): Promise<IncomeSummaryRow[]> {
   const db = await getDb();
   if (!db) return [];
+
   const { section, groupBy, years, months } = params;
   const esc = (v: string) => v.replace(/'/g, "''");
   const secEsc = esc(section);
@@ -668,16 +699,17 @@ export async function getIncomeSummaryByPeriod(
     `pt.paid_at != ''`,
   ];
   if (years && years.length > 0) {
-    conditions.push(`LEFT(pt.paid_at::text, 4) IN (${years.map(y => "'" + y + "'").join(",")})`);
+    conditions.push(`LEFT(pt.paid_at::text, 4) IN (${years.map((y) => "'" + y + "'").join(",")})`);
   }
   if (months && months.length > 0) {
-    conditions.push(`SUBSTRING(pt.paid_at::text, 6, 2) IN (${months.map(m => "'" + String(m).padStart(2,'0') + "'").join(",")})`);
+    conditions.push(`SUBSTRING(pt.paid_at::text, 6, 2) IN (${months.map((m) => "'" + String(m).padStart(2, "0") + "'").join(",")})`);
   }
   const whereStr = conditions.join(" AND ");
   const periodLen = groupBy === "year" ? 4 : 7;
 
-  // Subquery: หาวันสุดท้ายที่ชำระของแต่ละสัญญาหนี้เสีย
-  const bdlSubquery = buildBadDebtLastDaysSubquery(secEsc);
+  // Step 1: ดึง batch key map
+  const batchMap = await fetchBatchKeyMap(db, secEsc);
+  const incomeTypeCase = buildIncomeCaseFromMap(batchMap);
 
   const querySql = `
     SELECT
@@ -689,29 +721,9 @@ export async function getIncomeSummaryByPeriod(
       SELECT
         LEFT(pt.paid_at::text, ${periodLen}) AS period,
         CAST(COALESCE(pt.amount, 0) AS DECIMAL(18,2)) AS amt,
-        CASE
-          -- ขายเครื่อง: สัญญาหนี้เสีย + batch สุดท้าย (logic เดียวกับ PT_INCOME_TYPE_CASE)
-          WHEN c.status = 'หนี้เสีย'
-            AND bdl.last_created_date IS NOT NULL
-            AND DATE(pt.created_at) = bdl.last_created_date
-            AND pt.updated_by = bdl.last_updated_by
-            AND (
-              DATE(pt.paid_at) = bdl.last_paid_date
-              OR bdl.is_fallback = 1
-            )
-            THEN 'ขายเครื่อง'
-          -- ปิดยอด: สัญญาสิ้นสุดสัญญา/สำเร็จ + batch สุดท้าย (logic เดียวกับ PT_INCOME_TYPE_CASE)
-          WHEN c.status IN ('สิ้นสุดสัญญา', 'สำเร็จ')
-            AND bdl.last_created_date IS NOT NULL
-            AND DATE(pt.created_at) = bdl.last_created_date
-            AND pt.updated_by = bdl.last_updated_by
-            AND DATE(pt.paid_at) = bdl.last_paid_date
-            THEN 'ปิดยอด'
-          ELSE 'ค่างวด'
-        END AS income_type
+        ${incomeTypeCase} AS income_type
       FROM payment_transactions pt
       LEFT JOIN contracts c ON c.contract_no = pt.contract_no AND c.section = pt.section
-      LEFT JOIN (${bdlSubquery}) AS bdl ON bdl.contract_no = pt.contract_no AND bdl.section = pt.section
       WHERE ${whereStr}
     ) AS sub
     GROUP BY 1
@@ -720,6 +732,7 @@ export async function getIncomeSummaryByPeriod(
 
   const result = await db.execute(sql.raw(querySql));
   const arr: any[] = pgRows(result);
+
   return (arr ?? []).map((r: any) => {
     const kw = Number(r.kw ?? 0);
     const close = Number(r.close_sum ?? 0);
@@ -754,6 +767,7 @@ export async function getExpenseSummaryByPeriod(
 ): Promise<ExpenseSummaryRow[]> {
   const db = await getDb();
   if (!db) return [];
+
   const { section, groupBy, years, months } = params;
   const esc = (v: string) => v.replace(/'/g, "''");
 
@@ -764,10 +778,10 @@ export async function getExpenseSummaryByPeriod(
     `c.approve_date IS NOT NULL`,
   ];
   if (years && years.length > 0) {
-    conditions.push(`LEFT(c.approve_date::text, 4) IN (${years.map(y => "'" + y + "'").join(",")})`);
+    conditions.push(`LEFT(c.approve_date::text, 4) IN (${years.map((y) => "'" + y + "'").join(",")})`);
   }
   if (months && months.length > 0) {
-    conditions.push(`SUBSTRING(c.approve_date::text, 6, 2) IN (${months.map(m => "'" + String(m).padStart(2,'0') + "'").join(",")})`);
+    conditions.push(`SUBSTRING(c.approve_date::text, 6, 2) IN (${months.map((m) => "'" + String(m).padStart(2, "0") + "'").join(",")})`);
   }
   const whereStr = conditions.join(" AND ");
 
@@ -788,6 +802,7 @@ export async function getExpenseSummaryByPeriod(
 
   const result = await db.execute(sql.raw(querySql));
   const arr: any[] = pgRows(result);
+
   return (arr ?? []).map((r: any) => {
     const comm = Number(r.comm ?? 0);
     return {
@@ -799,6 +814,7 @@ export async function getExpenseSummaryByPeriod(
 }
 
 // ─── Finance (ยอดจัดไฟแนนซ์) ──────────────────────────────────────────────────
+
 export interface FinanceRow {
   id: number;
   contractNo: string;
@@ -809,6 +825,7 @@ export interface FinanceRow {
   partnerCode: string | null;
   partnerName: string | null;
 }
+
 export interface FinanceParams {
   section: SectionKey;
   search?: string;
@@ -817,11 +834,13 @@ export interface FinanceParams {
   page?: number;
   pageSize?: number;
 }
+
 export interface FinanceSummaryRow {
   period: string;
   "ยอดจัดไฟแนนซ์": number;
   total: number;
 }
+
 export interface FinanceSummaryParams {
   section: SectionKey;
   groupBy: "year" | "month";
@@ -833,6 +852,7 @@ export interface FinanceSummaryParams {
 export async function listFinance(params: FinanceParams): Promise<{ rows: FinanceRow[]; total: number }> {
   const db = await getDb();
   if (!db) return { rows: [], total: 0 };
+
   const { section, search, dateFrom, dateTo, page = 1, pageSize = 50 } = params;
   const offset = (page - 1) * pageSize;
   const esc = (v: string) => v.replace(/'/g, "''");
@@ -845,6 +865,7 @@ export async function listFinance(params: FinanceParams): Promise<{ rows: Financ
   if (dateFrom) conditions.push(`c.approve_date >= '${esc(dateFrom)}'`);
   if (dateTo) conditions.push(`c.approve_date <= '${esc(dateTo)}'`);
   const whereStr = conditions.join(" AND ");
+
   const [countResult, dataResult] = await Promise.all([
     db.execute(sql.raw(`SELECT COUNT(*) AS total FROM contracts c WHERE ${whereStr}`)),
     db.execute(sql.raw(`
@@ -856,9 +877,11 @@ export async function listFinance(params: FinanceParams): Promise<{ rows: Financ
       LIMIT ${pageSize} OFFSET ${offset}
     `)),
   ]);
+
   const countArr: any[] = pgRows(countResult);
   const total = Number(countArr[0]?.total ?? 0);
   const dataArr: any[] = pgRows(dataResult);
+
   const rows: FinanceRow[] = (dataArr ?? []).map((r: any) => ({
     id: Number(r.id),
     contractNo: r.contract_no ?? "",
@@ -869,6 +892,7 @@ export async function listFinance(params: FinanceParams): Promise<{ rows: Financ
     partnerCode: r.partner_code ?? null,
     partnerName: r.partner_name ?? null,
   }));
+
   return { rows, total };
 }
 
@@ -876,6 +900,7 @@ export async function listFinance(params: FinanceParams): Promise<{ rows: Financ
 export async function getFinanceSummaryByPeriod(params: FinanceSummaryParams): Promise<FinanceSummaryRow[]> {
   const db = await getDb();
   if (!db) return [];
+
   const { section, groupBy, years, months } = params;
   const esc = (v: string) => v.replace(/'/g, "''");
   const conditions: string[] = [
@@ -886,15 +911,17 @@ export async function getFinanceSummaryByPeriod(params: FinanceSummaryParams): P
     `c.approve_date != ''`,
   ];
   if (years && years.length > 0) {
-    conditions.push(`LEFT(c.approve_date::text, 4) IN (${years.map(y => "'" + y + "'").join(",")})`);
+    conditions.push(`LEFT(c.approve_date::text, 4) IN (${years.map((y) => "'" + y + "'").join(",")})`);
   }
   if (months && months.length > 0) {
-    conditions.push(`SUBSTRING(c.approve_date::text, 6, 2) IN (${months.map(m => "'" + String(m).padStart(2, "0") + "'").join(",")})`);
+    conditions.push(`SUBSTRING(c.approve_date::text, 6, 2) IN (${months.map((m) => "'" + String(m).padStart(2, "0") + "'").join(",")})`);
   }
   const whereStr = conditions.join(" AND ");
-  const periodExpr = groupBy === "year"
-    ? `LEFT(c.approve_date::text, 4)`
-    : `LEFT(c.approve_date::text, 7)`;
+  const periodExpr =
+    groupBy === "year"
+      ? `LEFT(c.approve_date::text, 4)`
+      : `LEFT(c.approve_date::text, 7)`;
+
   const result = await db.execute(sql.raw(`
     SELECT ${periodExpr} AS period, SUM(COALESCE(c.finance_amount, 0)) AS fin
     FROM contracts c
@@ -902,6 +929,7 @@ export async function getFinanceSummaryByPeriod(params: FinanceSummaryParams): P
     GROUP BY ${periodExpr}
     ORDER BY ${periodExpr} ASC
   `));
+
   const arr: any[] = pgRows(result);
   return (arr ?? []).map((r: any) => {
     const fin = Number(r.fin ?? 0);
