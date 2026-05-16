@@ -7,8 +7,8 @@
  *   - ยอดรวม = payment_transactions.amount ตรงกับ Fastfone/Boonphone Report เป๊ะ
  *   - แยกประเภทตาม logic:
  *       ขายเครื่อง = payment ในวันสุดท้ายของสัญญาที่มีสถานะ 'หนี้เสีย'
- *                    (c.status = 'หนี้เสีย' AND DATE(pt.paid_at) = last paid date ของสัญญานั้น)
- *       ปิดยอด     = มี close_installment_amount > 0 ใน raw_json (สัญญาสิ้นสุด ลูกค้าชำระครบ)
+ *                    (c.status = 'หนี้เสีย' AND DATE(pt.created_at) = last created date ของสัญญานั้น)
+ *       ปิดยอด     = receipt_no ขึ้นต้นด้วย 'TXRTC'
  *       ค่างวด     = payment ปกติที่ไม่ใช่สองประเภทข้างต้น
  *   - ยอดของแต่ละประเภท = pt.amount (ไม่ต้องแยกย่อย เพราะ 1 row = 1 payment)
  *   - ค่างวด + ปิดยอด + ขายเครื่อง = total = ตรงกับ Fastfone/Boonphone Report เป๊ะ
@@ -16,13 +16,30 @@
  * รายจ่าย (Expense):
  *   - ดึงจาก contracts.commission_net (ค่าคอมมิชชั่น)
  *
- * ─── การปรับปรุง (v2) ────────────────────────────────────────────────────────
- * เปลี่ยนจาก buildBadDebtLastDaysSubquery (4 ชั้น nested) เป็น 2-step approach:
- *   Step 1: ดึง batch_key map ของทุกสัญญาใน section ก่อน (1 query เบา)
- *   Step 2: ใช้ batch_key map ใน CASE expression แบบ IN clause (ไม่ต้อง JOIN subquery ซ้อน)
+ * ─── การปรับปรุง (v3) ────────────────────────────────────────────────────────
+ * เปลี่ยนจาก 2-step approach (fetchBatchKeyMap + buildIncomeCaseFromMap) ที่สร้าง
+ * CASE expression ขนาดใหญ่มาก เป็น single SQL query ด้วย CTE:
  *
- * สำหรับ getIncomeSummaryByPeriod / getIncomeSummary / listIncome:
- *   - ใช้ WITH (CTE) แทน nested subquery เพื่อให้ query planner optimize ได้ดีกว่า
+ *   WITH bad_debt_last AS (
+ *     -- หา MAX(created_at) ของแต่ละสัญญาหนี้เสีย
+ *     SELECT contract_no, MAX(DATE(created_at)) AS last_created_date
+ *     FROM payment_transactions
+ *     WHERE section = $sec AND source IS NULL
+ *     GROUP BY contract_no
+ *     -- เฉพาะสัญญาที่ status = 'หนี้เสีย' (JOIN กับ contracts)
+ *   )
+ *   SELECT ...,
+ *     CASE
+ *       WHEN pt.receipt_no LIKE 'TXRTC%' THEN 'ปิดยอด'
+ *       WHEN c.status = 'หนี้เสีย'
+ *            AND DATE(pt.created_at) = bdl.last_created_date THEN 'ขายเครื่อง'
+ *       ELSE 'ค่างวด'
+ *     END AS income_type
+ *   FROM payment_transactions pt
+ *   LEFT JOIN contracts c ON ...
+ *   LEFT JOIN bad_debt_last bdl ON bdl.contract_no = pt.contract_no
+ *
+ * ข้อดี: ไม่ต้อง fetch ข้อมูลมา JS แล้วสร้าง CASE ขนาดใหญ่ → เร็วขึ้นมาก
  */
 import { sql } from "drizzle-orm";
 import type { SectionKey } from "../shared/const";
@@ -118,171 +135,56 @@ const PT_AMOUNT_CASE = `CAST(COALESCE(pt.amount, 0) AS DECIMAL(18,2))`;
 /** Base WHERE: เฉพาะ close rows (source IS NULL) ที่ตรงกับ Fastfone/Boonphone Report */
 const PT_INCOME_BASE_WHERE = `(pt.raw_json::jsonb->>'source') IS NULL`;
 
-// ─── 2-Step Batch Key Helpers ─────────────────────────────────────────────────
+// ─── CTE-based Income Type CASE ───────────────────────────────────────────────
 
 /**
- * BatchKey สำหรับ classify ขายเครื่อง และ ปิดยอด
- * แทนที่ buildBadDebtLastDaysSubquery เดิม (4 ชั้น nested)
+ * สร้าง CTE + CASE expression สำหรับ classify income_type
+ * ใช้ single SQL query แทน 2-step approach เดิม
  *
- * Step 1: ดึง batch_key map ของทุกสัญญาใน section ก่อน
- *   - ขายเครื่อง: สัญญาหนี้เสีย → batch สุดท้าย (2 ระดับ)
- *   - ปิดยอด: สัญญาสิ้นสุดสัญญา/สำเร็จ → batch สุดท้าย
+ * CTE: bad_debt_last — หา MAX(DATE(created_at)) ของแต่ละสัญญาหนี้เสีย
+ * CASE:
+ *   ปิดยอด     = receipt_no LIKE 'TXRTC%'
+ *   ขายเครื่อง = c.status = 'หนี้เสีย' AND DATE(pt.created_at) = bdl.last_created_date
+ *   ค่างวด     = อื่นๆ
  *
- * Return: Map<contractNo, { lastCreatedDate, lastPaidDate, lastUpdatedBy, isFallback, status }>
+ * @param secEsc - section name (escaped)
+ * @returns { cte, incomeTypeCase, joinClause }
  */
-interface BatchKeyEntry {
-  lastCreatedDate: string;
-  lastPaidDate: string;
-  lastUpdatedBy: string;
-  isFallback: boolean;
-  status: string;
-}
-
-async function fetchBatchKeyMap(
-  db: any,
-  section: string,
-): Promise<Map<string, BatchKeyEntry>> {
-  const esc = (v: string) => v.replace(/'/g, "''");
-  const secEsc = esc(section);
-
-  // Step 1a: หา row ล่าสุดของแต่ละสัญญา (เฉพาะ หนี้เสีย / สิ้นสุดสัญญา / สำเร็จ)
-  const lastRowSql = `
-    SELECT
-      pt.contract_no,
-      DATE(pt.paid_at)    AS last_paid_date,
-      DATE(pt.created_at) AS last_created_date,
-      pt.updated_by       AS last_updated_by,
-      c.status            AS contract_status
-    FROM payment_transactions pt
-    INNER JOIN contracts c
-      ON c.contract_no = pt.contract_no AND c.section = pt.section
-    WHERE pt.section = '${secEsc}'
-      AND (pt.raw_json::jsonb->>'source') IS NULL
-      AND c.status IN ('หนี้เสีย', 'สิ้นสุดสัญญา', 'สำเร็จ')
-      AND pt.created_at = (
-        SELECT MAX(pt2.created_at)
-        FROM payment_transactions pt2
-        WHERE pt2.contract_no = pt.contract_no
-          AND pt2.section = pt.section
-          AND (pt2.raw_json::jsonb->>'source') IS NULL
-      )
+function buildIncomeCTE(secEsc: string): {
+  cte: string;
+  incomeTypeCase: string;
+  joinClause: string;
+} {
+  const cte = `
+    bad_debt_last AS (
+      SELECT
+        pt2.contract_no,
+        MAX(DATE(pt2.created_at)) AS last_created_date
+      FROM payment_transactions pt2
+      INNER JOIN contracts c2
+        ON c2.contract_no = pt2.contract_no AND c2.section = pt2.section
+      WHERE pt2.section = '${secEsc}'
+        AND (pt2.raw_json::jsonb->>'source') IS NULL
+        AND c2.status = 'หนี้เสีย'
+      GROUP BY pt2.contract_no
+    )
   `;
 
-  // Step 1b: หา primary batch sum (paid_date + created_date + updated_by)
-  // เพื่อตรวจสอบว่าต้อง fallback หรือไม่ (สำหรับสัญญาหนี้เสีย)
-  const batchSumSql = `
-    SELECT
-      pt.contract_no,
-      DATE(pt.paid_at)    AS paid_date,
-      DATE(pt.created_at) AS created_date,
-      pt.updated_by,
-      SUM(CAST(COALESCE(pt.amount, 0) AS DECIMAL(18,2))) AS batch_sum
-    FROM payment_transactions pt
-    INNER JOIN contracts c
-      ON c.contract_no = pt.contract_no AND c.section = pt.section
-    WHERE pt.section = '${secEsc}'
-      AND (pt.raw_json::jsonb->>'source') IS NULL
-      AND c.status = 'หนี้เสีย'
-    GROUP BY pt.contract_no, DATE(pt.paid_at), DATE(pt.created_at), pt.updated_by
+  const incomeTypeCase = `
+    CASE
+      WHEN pt.receipt_no LIKE 'TXRTC%'
+        THEN 'ปิดยอด'
+      WHEN c.status = 'หนี้เสีย'
+        AND bdl.last_created_date IS NOT NULL
+        AND DATE(pt.created_at) = bdl.last_created_date
+        THEN 'ขายเครื่อง'
+      ELSE 'ค่างวด'
+    END
   `;
 
-  const [lastRowResult, batchSumResult] = await Promise.all([
-    db.execute(sql.raw(lastRowSql)),
-    db.execute(sql.raw(batchSumSql)),
-  ]);
+  const joinClause = `LEFT JOIN bad_debt_last bdl ON bdl.contract_no = pt.contract_no`;
 
-  const lastRows: any[] = pgRows(lastRowResult);
-  const batchSums: any[] = pgRows(batchSumResult);
-
-  // สร้าง batchSum lookup: contractNo + paidDate + createdDate + updatedBy → sum
-  const batchSumMap = new Map<string, number>();
-  for (const r of batchSums) {
-    const key = `${r.contract_no}||${r.paid_date}||${r.created_date}||${r.updated_by}`;
-    batchSumMap.set(key, Number(r.batch_sum ?? 0));
-  }
-
-  // สร้าง batch key map
-  const map = new Map<string, BatchKeyEntry>();
-  for (const r of lastRows) {
-    const contractNo: string = r.contract_no ?? "";
-    const lastCreatedDate: string = r.last_created_date ?? "";
-    const lastPaidDate: string = r.last_paid_date ?? "";
-    const lastUpdatedBy: string = r.last_updated_by ?? "";
-    const status: string = r.contract_status ?? "";
-
-    let isFallback = false;
-    if (status === "หนี้เสีย") {
-      const batchKey = `${contractNo}||${lastPaidDate}||${lastCreatedDate}||${lastUpdatedBy}`;
-      const batchSum = batchSumMap.get(batchKey) ?? 0;
-      isFallback = batchSum < 1000;
-    }
-
-    map.set(contractNo, {
-      lastCreatedDate,
-      lastPaidDate,
-      lastUpdatedBy,
-      isFallback,
-      status,
-    });
-  }
-
-  return map;
-}
-
-/**
- * สร้าง CASE expression สำหรับ classify income_type
- * โดยใช้ batch key map ที่ดึงมาแล้ว (ไม่ต้อง JOIN subquery ซ้อน)
- *
- * แทนที่ PT_INCOME_TYPE_CASE + buildBadDebtLastDaysSubquery เดิม
- */
-function buildIncomeCaseFromMap(batchMap: Map<string, BatchKeyEntry>): string {
-  if (batchMap.size === 0) {
-    return `'ค่างวด'`;
-  }
-
-  const esc = (v: string) => v.replace(/'/g, "''");
-  const whenClauses: string[] = [];
-
-  for (const [contractNo, entry] of Array.from(batchMap)) {
-    const cn = esc(contractNo);
-    const lcd = esc(entry.lastCreatedDate);
-    const lpd = esc(entry.lastPaidDate);
-    const lub = esc(entry.lastUpdatedBy);
-
-    if (entry.status === "หนี้เสีย") {
-      if (entry.isFallback) {
-        // Fallback: ไม่สนใจ paid_date
-        whenClauses.push(`
-          WHEN pt.contract_no = '${cn}'
-            AND DATE(pt.created_at) = '${lcd}'
-            AND pt.updated_by = '${lub}'
-            THEN 'ขายเครื่อง'`);
-      } else {
-        // Primary: paid_date ต้องตรง
-        whenClauses.push(`
-          WHEN pt.contract_no = '${cn}'
-            AND DATE(pt.created_at) = '${lcd}'
-            AND pt.updated_by = '${lub}'
-            AND DATE(pt.paid_at) = '${lpd}'
-            THEN 'ขายเครื่อง'`);
-      }
-    } else if (entry.status === "สิ้นสุดสัญญา" || entry.status === "สำเร็จ") {
-      whenClauses.push(`
-        WHEN pt.contract_no = '${cn}'
-          AND DATE(pt.created_at) = '${lcd}'
-          AND pt.updated_by = '${lub}'
-          AND DATE(pt.paid_at) = '${lpd}'
-          THEN 'ปิดยอด'`);
-    }
-  }
-
-  if (whenClauses.length === 0) {
-    return `'ค่างวด'`;
-  }
-
-  return `CASE ${whenClauses.join("")}
-    ELSE 'ค่างวด'
-  END`;
+  return { cte, incomeTypeCase, joinClause };
 }
 
 // ─── Income ───────────────────────────────────────────────────────────────────
@@ -320,23 +222,23 @@ export async function listIncome(params: IncomeParams): Promise<{
   }
 
   const whereStr = conditions.join(" AND ");
-
-  // Step 1: ดึง batch key map
-  const batchMap = await fetchBatchKeyMap(db, secEsc);
-  const incomeTypeCase = buildIncomeCaseFromMap(batchMap);
+  const { cte, incomeTypeCase, joinClause } = buildIncomeCTE(secEsc);
 
   const countSql = `
+    WITH ${cte}
     SELECT COUNT(*) AS total
     FROM (
       SELECT ${incomeTypeCase} AS income_type
       FROM payment_transactions pt
       LEFT JOIN contracts c ON c.contract_no = pt.contract_no AND c.section = pt.section
+      ${joinClause}
       WHERE ${whereStr}
     ) AS sub
     ${incomeTypeFilter}
   `;
 
   const dataSql = `
+    WITH ${cte}
     SELECT *
     FROM (
       SELECT
@@ -354,6 +256,7 @@ export async function listIncome(params: IncomeParams): Promise<{
         ${PT_AMOUNT_CASE} AS amount
       FROM payment_transactions pt
       LEFT JOIN contracts c ON c.contract_no = pt.contract_no AND c.section = pt.section
+      ${joinClause}
       WHERE ${whereStr}
     ) AS sub
     ${incomeTypeFilter}
@@ -419,7 +322,7 @@ export async function listIncomeUpdatedBy(
     return (arr ?? []).map((r: any) => r.updated_by).filter(Boolean);
   }
 
-  // มี filter เพิ่มเติม — ต้อง JOIN contracts + batch map
+  // มี filter เพิ่มเติม — ต้อง JOIN contracts + CTE
   const { search, dateFrom, dateTo, dateField = "paidAt", incomeTypes } = opts ?? {};
   const dateCol = dateField === "paidAt" ? "pt.paid_at" : "pt.updated_at";
 
@@ -438,12 +341,10 @@ export async function listIncomeUpdatedBy(
   }
 
   const whereStr = conditions.join(" AND ");
-
-  // Step 1: ดึง batch key map
-  const batchMap = await fetchBatchKeyMap(db, secEsc);
-  const incomeTypeCase = buildIncomeCaseFromMap(batchMap);
+  const { cte, incomeTypeCase, joinClause } = buildIncomeCTE(secEsc);
 
   const querySql = `
+    WITH ${cte}
     SELECT DISTINCT updated_by
     FROM (
       SELECT
@@ -451,6 +352,7 @@ export async function listIncomeUpdatedBy(
         ${incomeTypeCase} AS income_type
       FROM payment_transactions pt
       LEFT JOIN contracts c ON c.contract_no = pt.contract_no AND c.section = pt.section
+      ${joinClause}
       WHERE ${whereStr}
         AND pt.updated_by IS NOT NULL AND pt.updated_by != ''
     ) AS filtered
@@ -594,12 +496,10 @@ export async function getIncomeSummary(
   }
 
   const whereStr = conditions.join(" AND ");
-
-  // Step 1: ดึง batch key map
-  const batchMap = await fetchBatchKeyMap(db, secEsc);
-  const incomeTypeCase = buildIncomeCaseFromMap(batchMap);
+  const { cte, incomeTypeCase, joinClause } = buildIncomeCTE(secEsc);
 
   const querySql = `
+    WITH ${cte}
     SELECT income_type, SUM(amount) AS sum_amount
     FROM (
       SELECT
@@ -607,6 +507,7 @@ export async function getIncomeSummary(
         ${PT_AMOUNT_CASE} AS amount
       FROM payment_transactions pt
       LEFT JOIN contracts c ON c.contract_no = pt.contract_no AND c.section = pt.section
+      ${joinClause}
       WHERE ${whereStr}
     ) AS sub
     ${incomeTypeFilter}
@@ -677,10 +578,7 @@ export interface IncomeSummaryParams {
 
 /**
  * คำนวณยอดรายรับแยกตาม period (year/month)
- *
- * ใช้ 2-step approach:
- *   Step 1: fetchBatchKeyMap — ดึง batch key ของทุกสัญญา (1 query เบา)
- *   Step 2: ใช้ CASE expression จาก map ใน GROUP BY query (ไม่ต้อง JOIN subquery ซ้อน)
+ * ใช้ single CTE query แทน 2-step approach เดิม
  */
 export async function getIncomeSummaryByPeriod(
   params: IncomeSummaryParams,
@@ -707,11 +605,10 @@ export async function getIncomeSummaryByPeriod(
   const whereStr = conditions.join(" AND ");
   const periodLen = groupBy === "year" ? 4 : 7;
 
-  // Step 1: ดึง batch key map
-  const batchMap = await fetchBatchKeyMap(db, secEsc);
-  const incomeTypeCase = buildIncomeCaseFromMap(batchMap);
+  const { cte, incomeTypeCase, joinClause } = buildIncomeCTE(secEsc);
 
   const querySql = `
+    WITH ${cte}
     SELECT
       period,
       SUM(CASE WHEN income_type = 'ค่างวด'     THEN amt ELSE 0 END) AS kw,
@@ -724,6 +621,7 @@ export async function getIncomeSummaryByPeriod(
         ${incomeTypeCase} AS income_type
       FROM payment_transactions pt
       LEFT JOIN contracts c ON c.contract_no = pt.contract_no AND c.section = pt.section
+      ${joinClause}
       WHERE ${whereStr}
     ) AS sub
     GROUP BY 1
