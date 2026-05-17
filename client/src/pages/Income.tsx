@@ -215,39 +215,74 @@ function groupRowsBySlip(rows: IncomeRow[]): IncomeRow[] {
   const groupedClosing = groupByBatch(closingRows, "ปิดยอด");
 
   /**
-   * groupByDevice — group ขายเครื่อง ตาม batch key ระดับ 2:
-   * key = contractNo + DATE(createdAt) + updatedBy
-   * (เงื่อนไขเดียวกับ server: ผู้ทำรายการคนเดียวกัน + วันบันทึกวันเดียวกัน)
-   * sum amount ทุก row ใน group เดียวกัน
-   * representative row = row ล่าสุด (id สูงสุด) ของแต่ละ group
+   * groupByDevice — group ขายเครื่อง ตาม batch key 2 ระดับ (เหมือน debtDb.ts Phase 106):
+   *
+   * ระดับ 1 (Primary): contractNo + DATE(createdAt) + updatedBy + paidAt
+   *   → ถ้ายอดรวม >= 1,000 บาท → ใช้ batch นี้
+   *
+   * ระดับ 2 (Fallback): contractNo + DATE(createdAt) + updatedBy (ไม่สนใจ paidAt)
+   *   → ถ้า primary < 1,000 → ขยาย batch รวม rows ที่ paidAt ต่างกันด้วย
+   *
+   * representative row = row ล่าสุด (id สูงสุด) ของ batch
    */
   function groupByDevice(typeRows: IncomeRow[]): IncomeRow[] {
-    // Map: batchKey → { rows, totalAmount }
-    const batchMap = new Map<string, { rows: IncomeRow[]; totalAmount: number }>();
-
+    // Group ตาม contractNo ก่อน
+    const contractMap = new Map<string, IncomeRow[]>();
     for (const row of typeRows) {
-      const createdDate = row.createdAt ? row.createdAt.slice(0, 10) : "";
-      const updBy = row.updatedBy ?? "";
-      // batch key: contractNo + DATE(createdAt) + updatedBy
-      const batchKey = `${row.contractNo}||${createdDate}||${updBy}`;
-
-      if (!batchMap.has(batchKey)) {
-        batchMap.set(batchKey, { rows: [], totalAmount: 0 });
-      }
-      const entry = batchMap.get(batchKey)!;
-      entry.rows.push(row);
-      entry.totalAmount += row.amount ?? 0;
+      const key = row.contractNo;
+      if (!contractMap.has(key)) contractMap.set(key, []);
+      contractMap.get(key)!.push(row);
     }
 
     const grouped: IncomeRow[] = [];
-    for (const [, entry] of Array.from(batchMap)) {
-      // representative row = row ล่าสุด (id สูงสุด)
-      const repRow = entry.rows.reduce(
-        (best, r) => ((r as any).id ?? 0) > ((best as any).id ?? 0) ? r : best,
-        entry.rows[0],
+
+    for (const [, contractRows] of Array.from(contractMap)) {
+      // เรียงตาม created_at DESC (ล่าสุดก่อน) เหมือน debtDb.ts
+      const sorted = [...contractRows].sort((a, b) =>
+        ((b.createdAt ?? "") > (a.createdAt ?? "") ? 1 : -1)
       );
-      grouped.push({ ...repRow, incomeType: "ขายเครื่อง", amount: entry.totalAmount });
+      const latestRow = sorted[0];
+      const latestCreatedDate = latestRow.createdAt ? latestRow.createdAt.slice(0, 10) : "";
+      const latestUpdatedBy   = latestRow.updatedBy ?? "";
+      const latestPaidDate    = latestRow.paidAt ? latestRow.paidAt.slice(0, 10) : "";
+
+      // ── ระดับ 1 (Primary): paidAt + updatedBy + DATE(createdAt) เหมือนกัน ──
+      const primaryBatch = sorted.filter((r) => {
+        const rPaidDate    = r.paidAt ? r.paidAt.slice(0, 10) : "";
+        const rCreatedDate = r.createdAt ? r.createdAt.slice(0, 10) : "";
+        const rUpdatedBy   = r.updatedBy ?? "";
+        return rPaidDate === latestPaidDate
+          && rCreatedDate === latestCreatedDate
+          && rUpdatedBy === latestUpdatedBy;
+      });
+      const primaryTotal = primaryBatch.reduce((sum, r) => sum + (r.amount ?? 0), 0);
+
+      let finalBatch: IncomeRow[];
+      let finalTotal: number;
+
+      if (primaryTotal >= 1000) {
+        // ระดับ 1 ผ่าน
+        finalBatch = primaryBatch;
+        finalTotal = primaryTotal;
+      } else {
+        // ── ระดับ 2 (Fallback): updatedBy + DATE(createdAt) เท่านั้น ──
+        const fallbackBatch = sorted.filter((r) => {
+          const rCreatedDate = r.createdAt ? r.createdAt.slice(0, 10) : "";
+          const rUpdatedBy   = r.updatedBy ?? "";
+          return rCreatedDate === latestCreatedDate && rUpdatedBy === latestUpdatedBy;
+        });
+        finalBatch = fallbackBatch;
+        finalTotal = fallbackBatch.reduce((sum, r) => sum + (r.amount ?? 0), 0);
+      }
+
+      // representative row = row ล่าสุด (id สูงสุด) ของ finalBatch
+      const repRow = finalBatch.reduce(
+        (best, r) => ((r as any).id ?? 0) > ((best as any).id ?? 0) ? r : best,
+        finalBatch[0],
+      );
+      grouped.push({ ...repRow, incomeType: "ขายเครื่อง", amount: finalTotal });
     }
+
     return grouped;
   }
 
@@ -488,10 +523,25 @@ export default function Income() {
         return activeTypes.has(displayType);
       });
     }
-    // slip mode: group ก่อน แล้ว filter ตาม activeTypes
+    // slip mode: group ก่อน แล้ว sort แล้ว filter ตาม activeTypes
     const grouped = groupRowsBySlip(rows);
-    return grouped.filter((r) => activeTypes.has(r.incomeType as IncomeType));
-  }, [rows, sortedRows, listMode, activeTypes]);
+    const filtered = grouped.filter((r) => activeTypes.has(r.incomeType as IncomeType));
+    // sort หลัง group (client-side)
+    if (sortKey === "paidAt" || sortKey === "updatedAt" || sortKey === "no") return filtered;
+    const sorted = [...filtered];
+    sorted.sort((a, b) => {
+      let av: string | number = 0;
+      let bv: string | number = 0;
+      if (sortKey === "incomeType") { av = a.incomeType; bv = b.incomeType; }
+      else if (sortKey === "contractNo") { av = a.contractNo; bv = b.contractNo; }
+      else if (sortKey === "amount") { av = a.amount; bv = b.amount; }
+      else if (sortKey === "updatedBy") { av = a.updatedBy ?? ""; bv = b.updatedBy ?? ""; }
+      if (av < bv) return sortDir === "asc" ? -1 : 1;
+      if (av > bv) return sortDir === "asc" ? 1 : -1;
+      return 0;
+    });
+    return sorted;
+  }, [rows, sortedRows, listMode, activeTypes, sortKey, sortDir]);
 
   /**
    * getDisplayType — ดึง type ที่จะแสดงใน badge ตาม mode
@@ -510,6 +560,8 @@ export default function Income() {
   // server-side pagination: totalCount จาก server
   // slip mode: totalCount = displayRows.length (grouped ทั้งหมด, ไม่ใช่แค่ page นี้)
   // detail mode: totalCount = serverTotal (จาก server)
+  // detail mode: badge แสดง serverTotal (จำนวนรายการที่กรองได้ทั้งหมดจาก server)
+  // slip mode: badge แสดง displayRows.length (หลัง group ทั้งหมด)
   const totalCount = listMode === "slip" ? displayRows.length : serverTotal;
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
 
