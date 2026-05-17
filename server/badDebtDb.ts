@@ -33,13 +33,15 @@ export type BadDebtRow = {
   financeAmount: number;
   /** ค่าคอมมิชชั่น */
   commissionNet: number;
+  /** Incentive (จาก commissions table) */
+  incentive: number;
   /** ยอดเก็บค่างวดปกติ (ไม่รวมยอดขายเครื่อง) */
   installmentPaid: number;
   /** ยอดขายเครื่อง (SUM bad_debt จาก debt_collected_cache WHERE is_bad_debt_row = true) */
   deviceSaleAmount: number;
   /** วันที่ขายเครื่อง (bad_debt_date จาก contracts) */
   saleDate: string | null;
-  /** ต้นทุน = financeAmount + commissionNet */
+  /** ต้นทุน = financeAmount + commissionNet + incentive */
   cost: number;
   /** รวมรายรับ = installmentPaid + deviceSaleAmount */
   totalRevenue: number;
@@ -58,6 +60,7 @@ export type BadDebtSummary = {
   totalSalePrice: number;
   totalFinanceAmount: number;
   totalCommissionNet: number;
+  totalIncentive: number;
   totalInstallmentPaid: number;
   totalDeviceSaleAmount: number;
   totalCost: number;
@@ -81,6 +84,7 @@ export async function getBadDebtSummary(params: {
     totalSalePrice: 0,
     totalFinanceAmount: 0,
     totalCommissionNet: 0,
+    totalIncentive: 0,
     totalInstallmentPaid: 0,
     totalDeviceSaleAmount: 0,
     totalCost: 0,
@@ -197,6 +201,26 @@ export async function getBadDebtSummary(params: {
     contractInfoMap.set(r.external_id, r);
   }
 
+
+  // ─── Step 3b: ดึง incentive จาก commissions table ─────────────────────────
+  const contractNos = contractsArr.map((c: any) => c.contract_no as string).filter(Boolean);
+  const incentiveMap = new Map<string, number>();
+  if (contractNos.length > 0) {
+    const nosLiteral = contractNos.map((n: string) => `'${n.replace(/'/g, "''")}'`).join(",");
+    const incentiveRaw = await db.execute(
+      sql.raw(`
+        SELECT contract_no, SUM(COALESCE(incentive, 0)) AS inc
+        FROM commissions
+        WHERE section = '${params.section}'
+          AND contract_no IN (${nosLiteral})
+          AND payment_status = 'ชำระแล้ว'
+        GROUP BY contract_no
+      `)
+    );
+    for (const r of (pgRows(incentiveRaw) as any[])) {
+      if (r.contract_no) incentiveMap.set(r.contract_no, Number(r.inc ?? 0));
+    }
+  }
   // ─── Step 4: Assemble rows ─────────────────────────────────────────────────
   const allRows: BadDebtRow[] = contractsArr.map((c: any) => {
     const extId: string = c.contract_external_id;
@@ -207,7 +231,8 @@ export async function getBadDebtSummary(params: {
     const commissionNet = cInfo?.commission_net != null ? Number(cInfo.commission_net) : 0;
     const deviceSaleAmount = collected.deviceSaleAmount;
     const installmentPaid = collected.installmentPaid;
-    const cost = financeAmount + commissionNet;
+    const incentive = incentiveMap.get(c.contract_no ?? "") ?? 0;
+    const cost = financeAmount + commissionNet + incentive;
     const totalRevenue = installmentPaid + deviceSaleAmount;
     const profitLoss = totalRevenue - cost;
 
@@ -222,6 +247,7 @@ export async function getBadDebtSummary(params: {
       salePrice: cInfo?.sell_price != null ? Number(cInfo.sell_price) : null,
       financeAmount,
       commissionNet,
+      incentive,
       installmentPaid,
       deviceSaleAmount,
       saleDate: cInfo?.bad_debt_date ?? null,
@@ -248,6 +274,7 @@ export async function getBadDebtSummary(params: {
       totalSalePrice: acc.totalSalePrice + (r.salePrice ?? 0),
       totalFinanceAmount: acc.totalFinanceAmount + r.financeAmount,
       totalCommissionNet: acc.totalCommissionNet + r.commissionNet,
+      totalIncentive: acc.totalIncentive + r.incentive,
       totalInstallmentPaid: acc.totalInstallmentPaid + r.installmentPaid,
       totalDeviceSaleAmount: acc.totalDeviceSaleAmount + r.deviceSaleAmount,
       totalCost: acc.totalCost + r.cost,

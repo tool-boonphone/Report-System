@@ -15,6 +15,9 @@ import {
   getExpenseSummaryByPeriod,
   listFinance,
   getFinanceSummaryByPeriod,
+  listCommissions,
+  getCommissionSummary,
+  getCommissionSummaryByPeriod,
   type IncomeType,
   type ExpenseType,
 } from "../accountingDb";
@@ -255,6 +258,67 @@ export const accountingRouter = router({
       } catch (e: any) {
         const pgMsg = e?.cause?.message ?? e?.message ?? String(e);
         console.error('[getFinanceSummaryByPeriod] error:', pgMsg);
+        throw e;
+      }
+    }),
+
+  /**
+   * ดึงรายการ commissions (ชำระแล้ว) พร้อม pagination และ filter
+   */
+  listCommissions: appProcedure
+    .input(
+      z.object({
+        section: sectionSchema,
+        search: z.string().optional(),
+        dateFrom: z.string().optional(),
+        dateTo: z.string().optional(),
+        dateField: z.enum(["paymentAt", "approvedAt"]).optional().default("paymentAt"),
+        page: z.number().int().min(1).optional().default(1),
+        pageSize: z.number().int().min(1).max(1000).optional().default(50),
+      }),
+    )
+    .query(async ({ input }) => {
+      const { section, search, dateFrom, dateTo, dateField, page, pageSize } = input;
+      return listCommissions({ section, search, dateFrom, dateTo, dateField, page, pageSize });
+    }),
+
+  /**
+   * คำนวณ SUM badge ของ commissions (ชำระแล้ว)
+   */
+  getCommissionSummary: appProcedure
+    .input(
+      z.object({
+        section: sectionSchema,
+        search: z.string().optional(),
+        dateFrom: z.string().optional(),
+        dateTo: z.string().optional(),
+        dateField: z.enum(["paymentAt", "approvedAt"]).optional().default("paymentAt"),
+      }),
+    )
+    .query(async ({ input }) => {
+      const { section, search, dateFrom, dateTo, dateField } = input;
+      return getCommissionSummary({ section, search, dateFrom, dateTo, dateField });
+    }),
+
+  /**
+   * สรุป commissions แยกตามปี หรือ เดือน (ยึด payment_at)
+   */
+  getCommissionSummaryByPeriod: appProcedure
+    .input(
+      z.object({
+        section: sectionSchema,
+        groupBy: z.enum(["year", "month"]),
+        years: z.array(z.number().int()).optional(),
+        months: z.array(z.number().int().min(1).max(12)).optional(),
+      }),
+    )
+    .query(async ({ input }) => {
+      const { section, groupBy, years, months } = input;
+      try {
+        return await getCommissionSummaryByPeriod({ section, groupBy, years, months });
+      } catch (e: any) {
+        const pgMsg = e?.cause?.message ?? e?.message ?? String(e);
+        console.error('[getCommissionSummaryByPeriod] error:', pgMsg);
         throw e;
       }
     }),

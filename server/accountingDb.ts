@@ -840,3 +840,207 @@ export async function getFinanceSummaryByPeriod(params: FinanceSummaryParams): P
     return { period: r.period ?? "", "ยอดจัดไฟแนนซ์": fin, total: fin };
   });
 }
+
+// ─── Commissions (จาก tb commissions) ────────────────────────────────────────
+
+export interface CommissionRow {
+  id: number;
+  externalId: string | null;
+  contractNo: string;
+  approvedAt: string | null;
+  paymentAt: string | null;
+  paymentStatus: string | null;
+  paymentBy: string | null;
+  memberName: string | null;
+  memberTel: string | null;
+  productName: string | null;
+  financeAmount: number;
+  commAmount: number;
+  incentive: number;
+  totalTransfer: number;
+}
+
+export interface CommissionParams {
+  section: SectionKey;
+  search?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  /** "paymentAt" (default) หรือ "approvedAt" */
+  dateField?: "paymentAt" | "approvedAt";
+  page?: number;
+  pageSize?: number;
+}
+
+export interface CommissionSummary {
+  financeAmount: number;
+  commAmount: number;
+  incentive: number;
+  totalTransfer: number;
+  total: number;
+}
+
+export interface CommissionSummaryRow {
+  period: string;
+  financeAmount: number;
+  commAmount: number;
+  incentive: number;
+  totalTransfer: number;
+}
+
+export interface CommissionSummaryParams {
+  section: SectionKey;
+  groupBy: "year" | "month";
+  years?: number[];
+  months?: number[];
+}
+
+const PAID_STATUS = "'ชำระแล้ว'";
+
+/** ดึงรายการ commissions (เฉพาะสถานะ ชำระแล้ว) พร้อม pagination */
+export async function listCommissions(params: CommissionParams): Promise<{
+  rows: CommissionRow[];
+  total: number;
+}> {
+  const db = await getDb(params.section);
+  if (!db) return { rows: [], total: 0 };
+
+  const {
+    section, search, dateFrom, dateTo,
+    dateField = "paymentAt",
+    page = 1, pageSize = 50,
+  } = params;
+  const offset = (page - 1) * pageSize;
+  const esc = (v: string) => v.replace(/'/g, "''");
+
+  const dbDateField = dateField === "approvedAt" ? "approved_at" : "payment_at";
+
+  const conditions: string[] = [
+    `section = '${esc(section)}'`,
+    `payment_status = ${PAID_STATUS}`,
+  ];
+  if (search) conditions.push(`(contract_no LIKE '%${esc(search)}%' OR member_name LIKE '%${esc(search)}%')`);
+  if (dateFrom) conditions.push(`${dbDateField} >= '${esc(dateFrom)}'`);
+  if (dateTo) conditions.push(`${dbDateField} <= '${esc(dateTo)} 23:59:59'`);
+  const whereStr = conditions.join(" AND ");
+
+  const [countResult, dataResult] = await Promise.all([
+    db.execute(sql.raw(`SELECT COUNT(*) AS total FROM commissions WHERE ${whereStr}`)),
+    db.execute(sql.raw(`
+      SELECT id, external_id, contract_no, approved_at, payment_at, payment_status,
+             payment_by, member_name, member_tel, product_name,
+             finance_amount, comm_amount, incentive, total_transfer
+      FROM commissions
+      WHERE ${whereStr}
+      ORDER BY ${dbDateField} DESC, id DESC
+      LIMIT ${pageSize} OFFSET ${offset}
+    `)),
+  ]);
+
+  const total = Number((pgRows(countResult)[0] as any)?.total ?? 0);
+  const rows: CommissionRow[] = (pgRows(dataResult) as any[]).map((r) => ({
+    id: Number(r.id),
+    externalId: r.external_id ?? null,
+    contractNo: r.contract_no ?? "",
+    approvedAt: r.approved_at ?? null,
+    paymentAt: r.payment_at ?? null,
+    paymentStatus: r.payment_status ?? null,
+    paymentBy: r.payment_by ?? null,
+    memberName: r.member_name ?? null,
+    memberTel: r.member_tel ?? null,
+    productName: r.product_name ?? null,
+    financeAmount: Number(r.finance_amount ?? 0),
+    commAmount: Number(r.comm_amount ?? 0),
+    incentive: Number(r.incentive ?? 0),
+    totalTransfer: Number(r.total_transfer ?? 0),
+  }));
+
+  return { rows, total };
+}
+
+/** คำนวณ SUM badge ของ commissions (เฉพาะสถานะ ชำระแล้ว) */
+export async function getCommissionSummary(
+  params: Omit<CommissionParams, "page" | "pageSize">,
+): Promise<CommissionSummary> {
+  const db = await getDb(params.section);
+  if (!db) return { financeAmount: 0, commAmount: 0, incentive: 0, totalTransfer: 0, total: 0 };
+
+  const { section, search, dateFrom, dateTo, dateField = "paymentAt" } = params;
+  const esc = (v: string) => v.replace(/'/g, "''");
+  const dbDateField = dateField === "approvedAt" ? "approved_at" : "payment_at";
+
+  const conditions: string[] = [
+    `section = '${esc(section)}'`,
+    `payment_status = ${PAID_STATUS}`,
+  ];
+  if (search) conditions.push(`(contract_no LIKE '%${esc(search)}%' OR member_name LIKE '%${esc(search)}%')`);
+  if (dateFrom) conditions.push(`${dbDateField} >= '${esc(dateFrom)}'`);
+  if (dateTo) conditions.push(`${dbDateField} <= '${esc(dateTo)} 23:59:59'`);
+  const whereStr = conditions.join(" AND ");
+
+  const result = await db.execute(sql.raw(`
+    SELECT
+      SUM(COALESCE(finance_amount, 0)) AS fin,
+      SUM(COALESCE(comm_amount, 0)) AS comm,
+      SUM(COALESCE(incentive, 0)) AS inc,
+      SUM(COALESCE(total_transfer, 0)) AS tot
+    FROM commissions
+    WHERE ${whereStr}
+  `));
+  const r = (pgRows(result)[0] as any) ?? {};
+  const fin = Number(r.fin ?? 0);
+  const comm = Number(r.comm ?? 0);
+  const inc = Number(r.inc ?? 0);
+  const tot = Number(r.tot ?? 0);
+  return { financeAmount: fin, commAmount: comm, incentive: inc, totalTransfer: tot, total: tot };
+}
+
+/**
+ * สรุป commissions แยกตาม period (year/month)
+ * ยึดจาก payment_at เป็นหลัก (วันที่โอนเงิน)
+ */
+export async function getCommissionSummaryByPeriod(
+  params: CommissionSummaryParams,
+): Promise<CommissionSummaryRow[]> {
+  const db = await getDb(params.section);
+  if (!db) return [];
+
+  const { section, groupBy, years, months } = params;
+  const esc = (v: string) => v.replace(/'/g, "''");
+
+  const conditions: string[] = [
+    `section = '${esc(section)}'`,
+    `payment_status = ${PAID_STATUS}`,
+    `payment_at IS NOT NULL`,
+  ];
+  if (years && years.length > 0) {
+    conditions.push(`LEFT(payment_at::text, 4) IN (${years.map((y) => "'" + y + "'").join(",")})`);
+  }
+  if (months && months.length > 0) {
+    conditions.push(`SUBSTRING(payment_at::text, 6, 2) IN (${months.map((m) => "'" + String(m).padStart(2, "0") + "'").join(",")})`);
+  }
+  const whereStr = conditions.join(" AND ");
+  const periodExpr = groupBy === "year"
+    ? `LEFT(payment_at::text, 4)`
+    : `LEFT(payment_at::text, 7)`;
+
+  const result = await db.execute(sql.raw(`
+    SELECT
+      ${periodExpr} AS period,
+      SUM(COALESCE(finance_amount, 0)) AS fin,
+      SUM(COALESCE(comm_amount, 0)) AS comm,
+      SUM(COALESCE(incentive, 0)) AS inc,
+      SUM(COALESCE(total_transfer, 0)) AS tot
+    FROM commissions
+    WHERE ${whereStr}
+    GROUP BY ${periodExpr}
+    ORDER BY ${periodExpr} ASC
+  `));
+
+  return (pgRows(result) as any[]).map((r) => ({
+    period: r.period ?? "",
+    financeAmount: Number(r.fin ?? 0),
+    commAmount: Number(r.comm ?? 0),
+    incentive: Number(r.inc ?? 0),
+    totalTransfer: Number(r.tot ?? 0),
+  }));
+}
