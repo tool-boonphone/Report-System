@@ -25,14 +25,17 @@ import {
   mapCustomerProfile,
   mapInstallment,
   mapPayment,
+  mapCommission,
   type CustomerListItem,
   type PartnerListItem,
 } from "../api/mappers";
+
 import {
   upsertContracts,
   upsertInstallments,
   upsertPayments,
   upsertCachedCustomers,
+  upsertCommissions,
   loadCachedCustomersBySection,
 } from "./dbUpsert";
 import {
@@ -62,6 +65,7 @@ export const SYNC_STAGES = [
   "contracts",
   "installments",
   "payments",
+  "commissions",
   "bad_debt",
 ] as const;
 export type SyncStage = (typeof SYNC_STAGES)[number];
@@ -340,9 +344,20 @@ async function doSync(
       }
     }
 
-    // ── Stage 6: Bad-debt computation ─────────────────────────────────────
+    // ── Stage 6: Commissions ──────────────────────────────────────────────
     checkCancel();
     setStage(section, 5);
+    try {
+      const commRows = await syncCommissions(client, section);
+      overallRows += commRows;
+      console.log(`[sync] ${section}: commissions upserted ${commRows} rows`);
+    } catch (commErr: any) {
+      console.warn(`[sync] ${section}: commissions failed (non-fatal):`, commErr?.message ?? commErr);
+    }
+
+    // ── Stage 7: Bad-debt computation ─────────────────────────────────────
+    checkCancel();
+    setStage(section, 6);
     try {
       await computeAndStoreBadDebt(section);
       console.log(`[sync] ${section}: bad-debt computed`);
@@ -659,7 +674,50 @@ async function syncPayments(
 }
 
 /* ─────────────────────────────────────────────────────────────────────────── */
-/* Stage 6: Bad-debt computation                                               */
+/* Stage 6: Commissions                                                        */
+/* ─────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * Stage 6: Commissions — ดึงจาก API แล้ว upsert ลง commissions table
+ */
+async function syncCommissions(
+  client: PartnerClient,
+  section: SectionKey,
+): Promise<number> {
+  const log = await insertSyncLog({ section, entity: "commissions", triggeredBy: "on-demand" });
+  let rowCount = 0;
+  try {
+    const buffer: any[] = [];
+    try {
+      await client.forEachPage<any>(
+        "commission",
+        (d) => d?.commissions,
+        { action: "all" },
+        async (items, _page, _totalPages) => {
+          for (const it of items) buffer.push(mapCommission(section, it));
+          if (buffer.length >= 500) rowCount += await upsertCommissions(buffer.splice(0, buffer.length), section);
+        },
+        200,
+        60_000,
+      );
+    } catch (err) {
+      if (err instanceof PartnerApiError && err.status === 404) {
+        console.warn(`[sync] ${section}: commissions endpoint not available (404)`);
+      } else {
+        throw err;
+      }
+    }
+    if (buffer.length) rowCount += await upsertCommissions(buffer, section);
+    await finishSyncLog({ id: log.id, status: "success", rowCount });
+    return rowCount;
+  } catch (err: any) {
+    await finishSyncLog({ id: log.id, status: "error", rowCount, errorMessage: err?.message ?? String(err) });
+    throw err;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────── */
+/* Stage 7: Bad-debt computation                                               */
 /* ─────────────────────────────────────────────────────────────────────────── */
 
 /**

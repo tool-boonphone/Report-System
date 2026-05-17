@@ -700,7 +700,7 @@ export async function getExpenseSummaryByPeriod(
       ${periodExpr} AS period,
       SUM(COALESCE(c.commission_net, 0)) AS comm
     FROM contracts c
-    WHERE ${whereStr} AND c.approve_date != ''
+    WHERE ${whereStr}
     GROUP BY ${periodExpr}
     ORDER BY ${periodExpr} ASC
   `;
@@ -777,7 +777,7 @@ export async function listFinance(params: FinanceParams): Promise<{ rows: Financ
       SELECT c.id, c.contract_no, c.customer_name, c.approve_date,
              c.finance_amount, c.product_type, c.partner_code, c.partner_name
       FROM contracts c
-      WHERE ${whereStr} AND c.approve_date != ''
+      WHERE ${whereStr}
       ORDER BY c.approve_date DESC, c.id DESC
       LIMIT ${pageSize} OFFSET ${offset}
     `)),
@@ -813,10 +813,9 @@ export async function getFinanceSummaryByPeriod(params: FinanceSummaryParams): P
     `c.finance_amount IS NOT NULL`,
     `c.finance_amount > 0`,
     `c.approve_date IS NOT NULL`,
-    `c.approve_date != ''`,
   ];
   if (years && years.length > 0) {
-    conditions.push(`LEFT(c.approve_date::text, 4) IN (${years.map((y) => "'" + y + "'").join(",")})`);
+    conditions.push(`LEFT(c.approve_date::text, 4) IN (${years.map((y) => "'" + y + "'").join(",")})`)
   }
   if (months && months.length > 0) {
     conditions.push(`SUBSTRING(c.approve_date::text, 6, 2) IN (${months.map((m) => "'" + String(m).padStart(2, "0") + "'").join(",")})`);
