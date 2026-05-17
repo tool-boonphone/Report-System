@@ -336,6 +336,11 @@ export default function Income() {
     return "paidAt"; // default
   }, [sortKey]);
 
+  // slip mode: ดึงทั้งหมดจาก server (pageSize=20000) แล้ว group + slice ที่ client
+  // detail mode: server-side pagination ตามปกติ
+  const serverPage = listMode === "slip" ? 1 : page;
+  const serverPageSize = listMode === "slip" ? 20000 : pageSize;
+
   const { data: listData, isLoading: listLoading, error: listError } = trpc.accounting.listIncome.useQuery(
     {
       section: (section ?? "Boonphone") as SectionKey,
@@ -345,8 +350,8 @@ export default function Income() {
       dateField: serverSortKey === "updatedAt" ? "updatedAt" : "paidAt",
       incomeTypes: serverIncomeTypes,
       updatedBy: updatedBy || undefined,
-      page,
-      pageSize,
+      page: serverPage,
+      pageSize: serverPageSize,
     },
     { enabled: !!section && canView && activeTab === "all" },
   );
@@ -503,7 +508,8 @@ export default function Income() {
 
 
   // server-side pagination: totalCount จาก server
-  // slip mode ยังคง client-side group แต่ใช้ serverTotal เป็น base
+  // slip mode: totalCount = displayRows.length (grouped ทั้งหมด, ไม่ใช่แค่ page นี้)
+  // detail mode: totalCount = serverTotal (จาก server)
   const totalCount = listMode === "slip" ? displayRows.length : serverTotal;
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
 
@@ -941,9 +947,9 @@ export default function Income() {
                 </button>
               </div>
 
-              {/* จำนวนรายการ — ใช้ displayRows.length เสมอ (filtered count) */}
+              {/* จำนวนรายการทั้งหมด — totalCount (หลัง group สำหรับ slip mode) */}
               <span className="text-sm text-gray-500">
-                {`${displayRows.length.toLocaleString()} รายการ`}
+                {`${totalCount.toLocaleString()} รายการ`}
               </span>
 
               <div className="flex-1" />
