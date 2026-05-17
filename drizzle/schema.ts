@@ -479,3 +479,28 @@ export const commissions = pgTable(
   }),
 );
 export type Commission = typeof commissions.$inferSelect;
+
+// ─── Income Monthly Summary (pre-aggregated) ──────────────────────────────────
+export const incomeMonthlySummary = pgTable(
+  "income_monthly_summary",
+  {
+    id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+    section: varchar("section", { length: 32 }).notNull(),
+    year: integer("year").notNull(),
+    month: integer("month").notNull(),
+    incomeType: varchar("income_type", { length: 32 }).notNull(),
+    totalAmount: decimal("total_amount", { precision: 18, scale: 2 }).notNull().default("0"),
+    rowCount: integer("row_count").notNull().default(0),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => ({
+    sectionYearMonthTypeIdx: uniqueIndex("ims_section_year_month_type_idx").on(
+      t.section,
+      t.year,
+      t.month,
+      t.incomeType,
+    ),
+    sectionYearIdx: index("ims_section_year_idx").on(t.section, t.year),
+  }),
+);
+export type IncomeMonthlySummary = typeof incomeMonthlySummary.$inferSelect;

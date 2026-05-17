@@ -586,7 +586,8 @@ export interface IncomeSummaryParams {
 
 /**
  * คำนวณยอดรายรับแยกตาม period (year/month)
- * ใช้ single CTE query แทน 2-step approach เดิม
+ * Query จาก income_monthly_summary table (pre-aggregated) เพื่อความเร็ว
+ * ถ้า summary table ยังไม่มีข้อมูล (empty) จะ fallback ไป query จาก payment_transactions โดยตรง
  */
 export async function getIncomeSummaryByPeriod(
   params: IncomeSummaryParams,
@@ -598,6 +599,57 @@ export async function getIncomeSummaryByPeriod(
   const esc = (v: string) => v.replace(/'/g, "''");
   const secEsc = esc(section);
 
+  // ตรวจว่า summary table มีข้อมูลหรือเปล่า
+  const checkResult = await db.execute(sql.raw(
+    `SELECT COUNT(*) AS cnt FROM income_monthly_summary WHERE section = '${secEsc}'`
+  ));
+  const summaryCount = Number((pgRows(checkResult)[0] as any)?.cnt ?? 0);
+
+  if (summaryCount > 0) {
+    // ── Fast path: query จาก income_monthly_summary ──────────────────────────────────────
+    const conditions: string[] = [`section = '${secEsc}'`];
+    if (years && years.length > 0) {
+      conditions.push(`year IN (${years.join(",")})`);
+    }
+    if (months && months.length > 0) {
+      conditions.push(`month IN (${months.join(",")})`);
+    }
+    const whereStr = conditions.join(" AND ");
+
+    const periodExpr = groupBy === "year"
+      ? `year::text`
+      : `LPAD(year::text, 4, '0') || '-' || LPAD(month::text, 2, '0')`;
+
+    const querySql = `
+      SELECT
+        ${periodExpr} AS period,
+        SUM(CASE WHEN income_type = 'ค่างวด'     THEN total_amount ELSE 0 END) AS kw,
+        SUM(CASE WHEN income_type = 'ปิดยอด'     THEN total_amount ELSE 0 END) AS close_sum,
+        SUM(CASE WHEN income_type = 'ขายเครื่อง' THEN total_amount ELSE 0 END) AS bad_debt_sum
+      FROM income_monthly_summary
+      WHERE ${whereStr}
+      GROUP BY ${periodExpr}
+      ORDER BY ${periodExpr} ASC
+    `;
+
+    const result = await db.execute(sql.raw(querySql));
+    const arr: any[] = pgRows(result);
+
+    return (arr ?? []).map((r: any) => {
+      const kw = Number(r.kw ?? 0);
+      const close = Number(r.close_sum ?? 0);
+      const sell = Number(r.bad_debt_sum ?? 0);
+      return {
+        period: r.period ?? "",
+        "ค่างวด": kw,
+        "ปิดยอด": close,
+        "ขายเครื่อง": sell,
+        total: kw + close + sell,
+      };
+    });
+  }
+
+  // ── Fallback: query จาก payment_transactions โดยตรง (summary ยังไม่ถูก build) ──────
   const conditions: string[] = [
     `pt.section = '${secEsc}'`,
     ptIncomeBaseWhere(secEsc),
@@ -1043,4 +1095,90 @@ export async function getCommissionSummaryByPeriod(
     incentive: Number(r.inc ?? 0),
     totalTransfer: Number(r.tot ?? 0),
   }));
+}
+
+
+// ─── Income Monthly Summary — Rebuild ─────────────────────────────────────────
+
+/**
+ * Pre-aggregate ยอดรายรับรายเดือนลง income_monthly_summary table
+ * เรียกหลัง sync payments เสร็จ เพื่อให้หน้าสรุปรายเดือน/รายปีโหลดเร็วขึ้น
+ *
+ * Logic:
+ *   DELETE ทุก row ของ section นี้ แล้ว INSERT ใหม่ทั้งหมด
+ *   GROUP BY section, year, month, income_type
+ */
+export async function rebuildIncomeMonthlySummary(section: SectionKey): Promise<number> {
+  const db = await getDb(section);
+  if (!db) return 0;
+
+  const esc = (v: string) => v.replace(/'/g, "''");
+  const secEsc = esc(section);
+
+  // sourceWhere ใช้ alias pt2 ใน CTE และ pt ใน classified CTE
+  const sourceWherePt2 = secEsc === 'Fastfone365' ? 'TRUE' : `(pt2.raw_json::jsonb->>'source') IS NULL`;
+  const sourceWherePt  = secEsc === 'Fastfone365' ? 'TRUE' : `(pt.raw_json::jsonb->>'source') IS NULL`;
+
+  // Step 1: DELETE existing rows for this section
+  await db.execute(sql.raw(`DELETE FROM income_monthly_summary WHERE section = '${secEsc}'`));
+
+  // Step 2: INSERT aggregated data
+  // สร้าง CTE เองแทนใช้ buildIncomeCTE เพื่อควบคุม alias ให้ถูกต้อง
+  const insertSql = `
+    WITH bad_debt_last AS (
+      SELECT
+        pt2.contract_no,
+        MAX(DATE(pt2.created_at)) AS last_created_date
+      FROM payment_transactions pt2
+      INNER JOIN contracts c2
+        ON c2.contract_no = pt2.contract_no AND c2.section = pt2.section
+      WHERE pt2.section = '${secEsc}'
+        AND ${sourceWherePt2}
+        AND c2.status = 'หนี้เสีย'
+      GROUP BY pt2.contract_no
+    ),
+    classified AS (
+      SELECT
+        pt.section,
+        EXTRACT(YEAR  FROM pt.paid_at::date)::integer AS year,
+        EXTRACT(MONTH FROM pt.paid_at::date)::integer AS month,
+        CASE
+          WHEN pt.receipt_no LIKE 'TXRTC%'
+            THEN 'ปิดยอด'
+          WHEN c.status = 'หนี้เสีย'
+            AND bdl.last_created_date IS NOT NULL
+            AND DATE(pt.created_at) = bdl.last_created_date
+            THEN 'ขายเครื่อง'
+          ELSE 'ค่างวด'
+        END AS income_type,
+        CAST(COALESCE(pt.amount, 0) AS DECIMAL(18,2)) AS amt
+      FROM payment_transactions pt
+      LEFT JOIN contracts c ON c.contract_no = pt.contract_no AND c.section = pt.section
+      LEFT JOIN bad_debt_last bdl ON bdl.contract_no = pt.contract_no
+      WHERE pt.section = '${secEsc}'
+        AND ${sourceWherePt}
+        AND pt.paid_at IS NOT NULL
+    )
+    INSERT INTO income_monthly_summary (section, year, month, income_type, total_amount, row_count, updated_at)
+    SELECT
+      section,
+      year,
+      month,
+      income_type,
+      SUM(amt)   AS total_amount,
+      COUNT(*)   AS row_count,
+      NOW()      AS updated_at
+    FROM classified
+    GROUP BY section, year, month, income_type
+    ON CONFLICT (section, year, month, income_type)
+    DO UPDATE SET
+      total_amount = EXCLUDED.total_amount,
+      row_count    = EXCLUDED.row_count,
+      updated_at   = EXCLUDED.updated_at
+  `;
+
+  const result = await db.execute(sql.raw(insertSql));
+  const rowCount = (result as any)?.rowCount ?? (result as any)?.count ?? 0;
+  console.log(`[rebuildIncomeMonthlySummary] ${section}: inserted/updated ${rowCount} rows`);
+  return Number(rowCount);
 }

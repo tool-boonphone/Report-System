@@ -51,6 +51,7 @@ import { buildAllDebtExports } from "../debtExportBuilder";
 import { fillPeriodNosForSection } from "./fillPeriodNos";
 import { populateDebtCache } from "./populateCache";
 import { pgRows } from "../db";
+import { rebuildIncomeMonthlySummary } from "../accountingDb";
 
 /* ─────────────────────────────────────────────────────────────────────────── */
 /* Constants & types                                                           */
@@ -341,6 +342,14 @@ async function doSync(
         console.log(`[sync] ${section}: filled period_no/sub_no for ${fillCount} payment rows`);
       } catch (fillErr: any) {
         console.warn(`[sync] ${section}: fillPeriodNos failed (non-fatal):`, fillErr?.message ?? fillErr);
+      }
+
+      // Rebuild income_monthly_summary หลัง payments sync สำเร็จ
+      try {
+        const summaryRows = await rebuildIncomeMonthlySummary(section);
+        console.log(`[sync] ${section}: income_monthly_summary rebuilt — ${summaryRows} rows`);
+      } catch (summaryErr: any) {
+        console.warn(`[sync] ${section}: rebuildIncomeMonthlySummary failed (non-fatal):`, summaryErr?.message ?? summaryErr);
       }
     }
 
