@@ -312,51 +312,66 @@ export default function Income() {
 
   // ── tRPC queries ──
   const utils = trpc.useUtils();
-  void utils; // ยังคงไว้สำหรับ export query
 
-  // ── Income Cache (global pre-warm) ──
+  // ── Income Cache (global pre-warm) — ใช้เฉพาะ Export Excel ──
   const incomeCache = useIncomeCache();
   const cache = section ? incomeCache.getCache(section as SectionKey) : null;
 
-  // Prefetch เมื่อ section พร้อม
+  // Prefetch เมื่อ section พร้อม (background สำหรับ export)
   useEffect(() => {
     if (section && canView) {
       incomeCache.prefetch(section as SectionKey);
     }
   }, [section, canView, incomeCache]);
 
-  // ── compat: rows / isLoading / error ──
-  // Cache เก็บ raw rows ทั้งหมด (ไม่มี filter) — filter ที่ client ด้วย useMemo ด้านล่าง
-  const rawCacheRows = (cache?.rows ?? []) as IncomeRow[];
-  const isLoading = !cache || (cache.isLoading && rawCacheRows.length === 0);
-  const isPartialLoading = !!(cache?.isLoading && rawCacheRows.length > 0);
+  // ── Server-side pagination query (แทน client-side cache) ──
+  // ใช้ incomeTypes filter เฉพาะ slip mode (detail mode filter ที่ client ด้วย originalIncomeType)
+  const serverIncomeTypes = useMemo<IncomeType[] | undefined>(() => {
+    if (listMode === "slip") {
+      const types = Array.from(activeTypes) as IncomeType[];
+      if (types.length === ALL_INCOME_TYPES.length) return undefined;
+      return types;
+    }
+    return undefined; // detail mode: ดึงทั้งหมด แล้ว filter ที่ client ด้วย originalIncomeType
+  }, [listMode, activeTypes]);
+
+  // server sort: map sortKey → DB column
+  const serverSortKey = useMemo(() => {
+    if (sortKey === "paidAt") return "paidAt";
+    if (sortKey === "updatedAt") return "updatedAt";
+    return "paidAt"; // default
+  }, [sortKey]);
+
+  const { data: listData, isLoading: listLoading, error: listError } = trpc.accounting.listIncome.useQuery(
+    {
+      section: (section ?? "Boonphone") as SectionKey,
+      search: search || undefined,
+      dateFrom: dateFrom || undefined,
+      dateTo: dateTo || undefined,
+      dateField: serverSortKey === "updatedAt" ? "updatedAt" : "paidAt",
+      incomeTypes: serverIncomeTypes,
+      updatedBy: updatedBy || undefined,
+      page,
+      pageSize,
+    },
+    { enabled: !!section && canView && activeTab === "all" },
+  );
+
+  // rows จาก server (ไม่ต้อง filter ที่ client อีก ยกเว้น detail mode filter originalIncomeType)
+  const serverRows = (listData?.rows ?? []) as IncomeRow[];
+  const serverTotal = listData?.total ?? 0;
+
+  // isLoading / error สำหรับ all tab
+  const isLoading = activeTab === "all" && listLoading && serverRows.length === 0;
+  const error = listError ? { message: listError.message } : null;
+
+  // progress bar ยังแสดงจาก cache (background)
+  const isPartialLoading = !!(cache?.isLoading && (cache?.loadedCount ?? 0) > 0);
   const loadedCount = cache?.loadedCount ?? 0;
   const totalFromApi = cache?.totalCount ?? 0;
-  const error = cache?.error ? { message: cache.error } : null;
 
-  // ── Client-side filter ตาม search, dateFrom, dateTo, dateField, updatedBy ──
-  const rows = useMemo<IncomeRow[]>(() => {
-    if (!rawCacheRows.length) return [];
-    return rawCacheRows.filter((row) => {
-      // filter search: receiptNo หรือ contractNo
-      if (search) {
-        const q = search.toLowerCase();
-        const matchReceipt = (row.receiptNo ?? "").toLowerCase().includes(q);
-        const matchContract = (row.contractNo ?? "").toLowerCase().includes(q);
-        if (!matchReceipt && !matchContract) return false;
-      }
-      // filter updatedBy
-      if (updatedBy && (row.updatedBy ?? "") !== updatedBy) return false;
-      // filter dateFrom / dateTo
-      if (dateFrom || dateTo) {
-        const dateVal = dateField === "paidAt" ? row.paidAt : row.updatedAt;
-        const rowDate = dateVal ? (dateVal as string).slice(0, 10) : "";
-        if (dateFrom && rowDate < dateFrom) return false;
-        if (dateTo && rowDate > dateTo) return false;
-      }
-      return true;
-    });
-  }, [rawCacheRows, search, updatedBy, dateFrom, dateTo, dateField]);
+  // rows ที่ใช้ใน table (server-side แล้ว ไม่ต้อง filter ซ้ำ)
+  const rows = serverRows;
 
   const { data: updatedByList } = trpc.accounting.listIncomeUpdatedBy.useQuery(
     {
@@ -396,16 +411,17 @@ export default function Income() {
     { enabled: !!section && canView && activeTab === "monthly" },
   );
 
+  // ── Summary badges — โหลดทันทีโดยไม่รอ tab หรือ cache ──
   const { data: summaryData } = trpc.accounting.getIncomeSummary.useQuery(
     {
-      section: section ?? "Boonphone",
+      section: (section ?? "Boonphone") as SectionKey,
       search: search || undefined,
       dateFrom: dateFrom || undefined,
       dateTo: dateTo || undefined,
       dateField,
       updatedBy: updatedBy || undefined,
     },
-    { enabled: !!section && canView && activeTab === "all" },
+    { enabled: !!section && canView },
   );
 
   /**
@@ -441,19 +457,18 @@ export default function Income() {
     return visibleTypes.filter((t) => activeTypes.has(t)).reduce((s, t) => s + (badgeSums[t] ?? 0), 0);
   }, [badgeSums, activeTypes, listMode]);
 
-  // ── Sort rows ──
+  // ── Sort rows (client-side สำหรับ columns ที่ server ไม่ sort) ──
   const sortedRows = useMemo(() => {
+    // paidAt และ updatedAt sort ที่ server แล้ว ไม่ต้อง sort ซ้ำ
+    if (sortKey === "paidAt" || sortKey === "updatedAt" || sortKey === "no") return rows;
     const sorted = [...rows];
     sorted.sort((a, b) => {
       let av: string | number = 0;
       let bv: string | number = 0;
-      if (sortKey === "no") return 0;
-      if (sortKey === "paidAt") { av = a.paidAt ?? ""; bv = b.paidAt ?? ""; }
-      else if (sortKey === "incomeType") { av = a.incomeType; bv = b.incomeType; }
+      if (sortKey === "incomeType") { av = a.incomeType; bv = b.incomeType; }
       else if (sortKey === "contractNo") { av = a.contractNo; bv = b.contractNo; }
       else if (sortKey === "amount") { av = a.amount; bv = b.amount; }
       else if (sortKey === "updatedBy") { av = a.updatedBy ?? ""; bv = b.updatedBy ?? ""; }
-      else if (sortKey === "updatedAt") { av = a.updatedAt ?? ""; bv = b.updatedAt ?? ""; }
       if (av < bv) return sortDir === "asc" ? -1 : 1;
       if (av > bv) return sortDir === "asc" ? 1 : -1;
       return 0;
@@ -463,54 +478,23 @@ export default function Income() {
 
   /**
    * displayRows — rows ที่จะแสดงในตาราง
-   * mode = detail: filter ตาม originalIncomeType + activeTypes
-   *   (เพราะ API filter ใช้ income_type (classified) ซึ่งอาจ mismatch กับ originalIncomeType)
-   * mode = slip: group ปิดยอด/ขายเครื่อง ที่ชำระวันเดียวกัน + คนเดียวกัน แสดง incomeType (classified)
+   * Server ส่งมาแล้ว (paginated) — ต้อง filter/group เฉพาะบาง case ที่ client
+   * detail mode: filter ตาม activeTypes ด้วย originalIncomeType (server ไม่ filter originalIncomeType)
+   * slip mode: group ปิดยอด/ขายเครื่อง ที่ชำระวันเดียวกัน + คนเดียวกัน
    */
   const displayRows = useMemo(() => {
     if (listMode === "detail") {
-      // ใน detail mode ต้อง filter ที่ client ด้วย originalIncomeType
-      // เพราะ API filter ใช้ income_type (classified) ซึ่งอาจ mismatch กับ originalIncomeType
-      // เช่น: incomeType=ปิดยอด แต่ originalIncomeType=ค่างวด (เพราะ receipt_no ไม่ขึ้นต้นด้วย TXRTC)
-      // filter ตาม activeTypes เสมอ (ไม่ early return) เพื่อให้ count ถูกต้อง
+      // detail mode: filter ที่ client ด้วย originalIncomeType + activeTypes
       return sortedRows.filter((row) => {
         const orig = (row.originalIncomeType as string) ?? "ค่างวด";
         const displayType: IncomeType = orig === "ปิดยอด" ? "ปิดยอด" : "ค่างวด";
-        // detail mode ไม่มี ขายเครื่อง — ถ้า activeTypes ไม่มี ขายเครื่อง ให้ filter ด้วย displayType
         return activeTypes.has(displayType);
       });
     }
-    // slip mode: group ก่อน แล้ว filter ตาม activeTypes แล้ว sort
-    const grouped = groupRowsBySlip(rows); // group จาก rows ดิบ (ไม่ผ่าน sortedRows)
-    // filter ตาม activeTypes (classified incomeType)
-    const filteredGrouped = grouped.filter((r) => activeTypes.has(r.incomeType as IncomeType));
-    const slipSorted = [...filteredGrouped];
-    if (sortKey !== "no") {
-      slipSorted.sort((a, b) => {
-        let av: string | number = 0;
-        let bv: string | number = 0;
-        if (sortKey === "paidAt") { av = a.paidAt ?? ""; bv = b.paidAt ?? ""; }
-        else if (sortKey === "incomeType") { av = a.incomeType; bv = b.incomeType; }
-        else if (sortKey === "contractNo") { av = a.contractNo; bv = b.contractNo; }
-        else if (sortKey === "amount") { av = a.amount; bv = b.amount; }
-        else if (sortKey === "updatedBy") { av = a.updatedBy ?? ""; bv = b.updatedBy ?? ""; }
-        else if (sortKey === "updatedAt") { av = a.updatedAt ?? ""; bv = b.updatedAt ?? ""; }
-        if (av < bv) return sortDir === "asc" ? -1 : 1;
-        if (av > bv) return sortDir === "asc" ? 1 : -1;
-        return 0;
-      });
-    } else {
-      // sortKey === "no": sort ตาม paidAt ASC (default)
-      slipSorted.sort((a, b) => {
-        const av = a.paidAt ?? "";
-        const bv = b.paidAt ?? "";
-        if (av < bv) return -1;
-        if (av > bv) return 1;
-        return 0;
-      });
-    }
-    return slipSorted;
-  }, [rows, sortedRows, listMode, activeTypes, sortKey, sortDir]);
+    // slip mode: group ก่อน แล้ว filter ตาม activeTypes
+    const grouped = groupRowsBySlip(rows);
+    return grouped.filter((r) => activeTypes.has(r.incomeType as IncomeType));
+  }, [rows, sortedRows, listMode, activeTypes]);
 
   /**
    * getDisplayType — ดึง type ที่จะแสดงใน badge ตาม mode
@@ -526,15 +510,19 @@ export default function Income() {
   };
 
 
-  // ทั้ง 2 mode: client-side pagination (displayRows.length เป็น source of truth)
-  const totalCount = displayRows.length;
+  // server-side pagination: totalCount จาก server
+  // slip mode ยังคง client-side group แต่ใช้ serverTotal เป็น base
+  const totalCount = listMode === "slip" ? displayRows.length : serverTotal;
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
 
-  // pagedRows: slice displayRows ตาม page (ทั้ง detail และ slip mode)
+  // pagedRows: slip mode ยัง slice ที่ client (เพราะ group แล้ว), detail mode ใช้ displayRows ตรงๆ
   const pagedRows = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return displayRows.slice(start, start + pageSize);
-  }, [displayRows, page, pageSize]);
+    if (listMode === "slip") {
+      const start = (page - 1) * pageSize;
+      return displayRows.slice(start, start + pageSize);
+    }
+    return displayRows; // detail mode: server ส่งมาแล้ว pageSize rows
+  }, [displayRows, page, pageSize, listMode]);
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
