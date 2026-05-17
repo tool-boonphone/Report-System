@@ -733,7 +733,7 @@ export default function MonthlySummary() {
       fee:paidVis.fee?(tp.fee??0):0,
       penalty:paidVis.penalty?(tp.penalty??0):0,
       unlockFee:paidVis.unlockFee?(tp.unlockFee??0):0,
-      discount:paidVis.discount?(tp.discount??0):0,
+      discount:tp.discount??0, // แสดงเสมอ ไม่ขึ้นกับ toggle (canToggle:false)
       overpaid:paidVis.overpaid?(tp.overpaid??0):0,
       badDebt:showBadDebtSale?(tp.badDebt??0):0,
       badDebtInstallment:paidVis.badDebtInstallment?(tp.badDebtInstallment??0):0,
