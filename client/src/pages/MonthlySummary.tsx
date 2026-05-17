@@ -165,8 +165,10 @@ function computeMoneyTotal(m:MoneyBreakdown, v:Record<MoneyBadgeKey,boolean>):nu
   // คือ installment_paid (= m.badDebtInstallment) เพราะ badDebt row ถูกแยกออกแล้ว
   // อย่างไรก็ตาม m.total = total_paid ซึ่งรวม badDebt แล้ว ดังนั้นต้องหัก m.badDebt ออกก่อน
   // แล้วค่อยบวก badDebt กลับถ้า toggle เปิด (จัดการโดย caller)
-  // สรุป: ใช้ (m.total - m.badDebt) เป็น installment base แล้วหัก field ที่ปิด toggle
-  const installmentBase = m.total - m.badDebt;
+  // สรุป: ใช้ (m.total - m.badDebt - m.discount) เป็น installment base แล้วหัก field ที่ปิด toggle
+  // หัก m.discount ออกด้วยเพราะ discount ถูกปิดเสมอ (canToggle:false) แต่รวมอยู่ใน m.total
+  // ถ้าไม่หัก discount ออก เมื่อปิด badge ทุกตัวจะได้ค่าติดลบ = -discount
+  const installmentBase = m.total - m.badDebt - m.discount;
   return installmentBase
     - (!v.principal ? m.principal : 0)
     - (!v.interest  ? m.interest  : 0)

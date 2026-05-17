@@ -834,7 +834,7 @@ export default function BadDebtSummary() {
                   <th className="px-2 py-2 text-center text-xs font-semibold whitespace-nowrap">ราคา</th>
                   <Th label="ยอดจัดไฟแนนซ์" col="financeAmount" />
                   <Th label="ค่าคอมมิชชั่น" col="commissionNet" />
-                  <Th label="Incentive" col="cost" />
+                  <Th label="Incentive" col="incentive" />
                   <Th label="ต้นทุน" col="cost" />
                   <th className="px-2 py-2 text-center text-xs font-semibold whitespace-nowrap">งวดที่ชำระ</th>
                   <Th label="ยอดผ่อน" col="installmentPaid" />
@@ -878,8 +878,8 @@ export default function BadDebtSummary() {
                   <tr>
                     <td colSpan={7} className="px-2 py-2 text-right text-gray-600">รวม {filteredRows.length} รายการ</td>
                     <td className="px-2 py-2 text-right">{fmtMoney(filteredRows.reduce((s, r) => s + r.financeAmount, 0))}</td>
+                    <td className="px-2 py-2 text-right">{fmtMoney(filteredRows.reduce((s, r) => s + ((r as any).commissionNet ?? 0), 0))}</td>
                     <td className="px-2 py-2 text-right">{fmtMoney(filteredRows.reduce((s, r) => s + ((r as any).incentive ?? 0), 0))}</td>
-                    <td className="px-2 py-2 text-right">{fmtMoney(filteredRows.reduce((s, r) => s + r.commissionNet, 0))}</td>
                     <td className="px-2 py-2 text-right text-orange-700">{fmtMoney(filteredRows.reduce((s, r) => s + r.cost, 0))}</td>
                     <td className="px-2 py-2"></td>
                     <td className="px-2 py-2 text-right">{fmtMoney(filteredRows.reduce((s, r) => s + r.installmentPaid, 0))}</td>
