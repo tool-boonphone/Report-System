@@ -132,7 +132,14 @@ const PT_ORIGINAL_INCOME_TYPE_CASE = `
 /** Amount CASE expression — ยอดของแต่ละ row = pt.amount เสมอ */
 const PT_AMOUNT_CASE = `CAST(COALESCE(pt.amount, 0) AS DECIMAL(18,2))`;
 
-/** Base WHERE: เฉพาะ close rows (source IS NULL) ที่ตรงกับ Fastfone/Boonphone Report */
+/** Base WHERE: เฉพาะ close rows (source IS NULL) ที่ตรงกับ Fastfone/Boonphone Report
+ * Fastfone365 ไม่มี source field เลย → ใช้ TRUE เพื่อข้าม jsonb cast ที่ช้า
+ */
+function ptIncomeBaseWhere(secEsc: string): string {
+  if (secEsc === 'Fastfone365') return 'TRUE';
+  return `(pt.raw_json::jsonb->>'source') IS NULL`;
+}
+// compat alias สำหรับ Boonphone (default)
 const PT_INCOME_BASE_WHERE = `(pt.raw_json::jsonb->>'source') IS NULL`;
 
 // ─── CTE-based Income Type CASE ───────────────────────────────────────────────
@@ -155,6 +162,7 @@ function buildIncomeCTE(secEsc: string): {
   incomeTypeCase: string;
   joinClause: string;
 } {
+  const sourceWhere = ptIncomeBaseWhere(secEsc);
   const cte = `
     bad_debt_last AS (
       SELECT
@@ -164,7 +172,7 @@ function buildIncomeCTE(secEsc: string): {
       INNER JOIN contracts c2
         ON c2.contract_no = pt2.contract_no AND c2.section = pt2.section
       WHERE pt2.section = '${secEsc}'
-        AND (pt2.raw_json::jsonb->>'source') IS NULL
+        AND ${sourceWhere}
         AND c2.status = 'หนี้เสีย'
       GROUP BY pt2.contract_no
     )
@@ -208,7 +216,7 @@ export async function listIncome(params: IncomeParams): Promise<{
 
   const conditions: string[] = [
     `pt.section = '${secEsc}'`,
-    PT_INCOME_BASE_WHERE,
+    ptIncomeBaseWhere(secEsc),
   ];
   if (search) conditions.push(`(pt.receipt_no LIKE '%${esc(search)}%' OR pt.contract_no LIKE '%${esc(search)}%')`);
   if (dateFrom) conditions.push(`${dateCol} >= '${esc(dateFrom)}'`);
@@ -313,7 +321,7 @@ export async function listIncomeUpdatedBy(
         SELECT DISTINCT updated_by
         FROM payment_transactions
         WHERE section = '${secEsc}'
-          AND raw_json::jsonb->>'source' IS NULL
+          AND ${ptIncomeBaseWhere(secEsc)}
           AND updated_by IS NOT NULL AND updated_by != ''
         ORDER BY updated_by ASC
       `),
@@ -328,7 +336,7 @@ export async function listIncomeUpdatedBy(
 
   const conditions: string[] = [
     `pt.section = '${secEsc}'`,
-    PT_INCOME_BASE_WHERE,
+    ptIncomeBaseWhere(secEsc),
   ];
   if (search) conditions.push(`(pt.receipt_no LIKE '%${esc(search)}%' OR pt.contract_no LIKE '%${esc(search)}%')`);
   if (dateFrom) conditions.push(`${dateCol} >= '${esc(dateFrom)}'`);
@@ -482,7 +490,7 @@ export async function getIncomeSummary(
 
   const conditions: string[] = [
     `pt.section = '${secEsc}'`,
-    PT_INCOME_BASE_WHERE,
+    ptIncomeBaseWhere(secEsc),
   ];
   if (search) conditions.push(`(pt.receipt_no LIKE '%${esc(search)}%' OR pt.contract_no LIKE '%${esc(search)}%')`);
   if (dateFrom) conditions.push(`${dateCol} >= '${esc(dateFrom)}'`);
@@ -592,7 +600,7 @@ export async function getIncomeSummaryByPeriod(
 
   const conditions: string[] = [
     `pt.section = '${secEsc}'`,
-    `(pt.raw_json::jsonb->>'source') IS NULL`,
+    ptIncomeBaseWhere(secEsc),
     `pt.paid_at IS NOT NULL`,
   ];
   if (years && years.length > 0) {
