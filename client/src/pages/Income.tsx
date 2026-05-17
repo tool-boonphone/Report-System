@@ -12,7 +12,6 @@
  *    เป็น 1 row (เฉพาะ ปิดยอด และ ขายเครื่อง)
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useIncomeCache } from "@/contexts/IncomeCacheContext";
 import type { SectionKey } from "@shared/const";
 import { AppShell } from "@/components/AppShell";
 import { SyncStatusBar } from "@/components/SyncStatusBar";
@@ -313,26 +312,21 @@ export default function Income() {
   // ── tRPC queries ──
   const utils = trpc.useUtils();
 
-  // ── Income Cache (global pre-warm) — ใช้เฉพาะ Export Excel ──
-  const incomeCache = useIncomeCache();
-  const cache = section ? incomeCache.getCache(section as SectionKey) : null;
-
-  // Prefetch เมื่อ section พร้อม (background สำหรับ export)
-  useEffect(() => {
-    if (section && canView) {
-      incomeCache.prefetch(section as SectionKey);
-    }
-  }, [section, canView, incomeCache]);
-
-  // ── Server-side pagination query (แทน client-side cache) ──
-  // ใช้ incomeTypes filter เฉพาะ slip mode (detail mode filter ที่ client ด้วย originalIncomeType)
+  // ── Server-side pagination query ──
+  // ส่ง incomeTypes ไปที่ server ทั้ง detail และ slip mode
   const serverIncomeTypes = useMemo<IncomeType[] | undefined>(() => {
-    if (listMode === "slip") {
-      const types = Array.from(activeTypes) as IncomeType[];
-      if (types.length === ALL_INCOME_TYPES.length) return undefined;
-      return types;
+    const types = Array.from(activeTypes) as IncomeType[];
+    if (types.length === ALL_INCOME_TYPES.length) return undefined; // ทุก type = ไม่ต้อง filter
+    if (listMode === "detail") {
+      // detail mode: ค่างวด + ขายเครื่อง รวมกัน (originalIncomeType = ค่างวด)
+      // ถ้าปิด ค่างวด → ส่ง ปิดยอด เท่านั้น; ถ้าปิด ปิดยอด → ส่ง ค่างวด + ขายเครื่อง
+      const serverTypes = new Set<IncomeType>();
+      if (activeTypes.has("ค่างวด")) { serverTypes.add("ค่างวด"); serverTypes.add("ขายเครื่อง"); }
+      if (activeTypes.has("ปิดยอด")) serverTypes.add("ปิดยอด");
+      return Array.from(serverTypes);
     }
-    return undefined; // detail mode: ดึงทั้งหมด แล้ว filter ที่ client ด้วย originalIncomeType
+    // slip mode: ส่งตรงๆ
+    return types;
   }, [listMode, activeTypes]);
 
   // server sort: map sortKey → DB column
@@ -365,10 +359,10 @@ export default function Income() {
   const isLoading = activeTab === "all" && listLoading && serverRows.length === 0;
   const error = listError ? { message: listError.message } : null;
 
-  // progress bar ยังแสดงจาก cache (background)
-  const isPartialLoading = !!(cache?.isLoading && (cache?.loadedCount ?? 0) > 0);
-  const loadedCount = cache?.loadedCount ?? 0;
-  const totalFromApi = cache?.totalCount ?? 0;
+  // ไม่มี background cache อีกต่อไป
+  const isPartialLoading = false;
+  const loadedCount = 0;
+  const totalFromApi = 0;
 
   // rows ที่ใช้ใน table (server-side แล้ว ไม่ต้อง filter ซ้ำ)
   const rows = serverRows;
@@ -384,8 +378,6 @@ export default function Income() {
     },
     { enabled: !!section && canView },
   );
-
-  // exportData ใช้ rows จาก cache แทน (cache เก็บ raw rows ทั้งหมดแล้ว)
 
   // ── Yearly summary ──
   const yearlyYearsParam = useMemo(
@@ -560,8 +552,21 @@ export default function Income() {
   const handleExport = useCallback(async () => {
     const toastId = toast.loading("กำลัง Export...");
     try {
-      if (!rows.length) { toast.error("ไม่มีข้อมูล", { id: toastId }); return; }
-      let exportRows: IncomeRow[] = rows;
+      if (!section) { toast.error("ไม่พบ section", { id: toastId }); return; }
+      // ดึงข้อมูลทั้งหมดจาก server โดยตรงพร้อม filter ปัจจุบัน
+      const result = await utils.accounting.listIncome.fetch({
+        section: section as SectionKey,
+        search: search || undefined,
+        dateFrom: dateFrom || undefined,
+        dateTo: dateTo || undefined,
+        dateField: dateField === "updatedAt" ? "updatedAt" : "paidAt",
+        incomeTypes: serverIncomeTypes,
+        updatedBy: updatedBy || undefined,
+        page: 1,
+        pageSize: 20000, // max
+      });
+      let exportRows: IncomeRow[] = (result?.rows ?? []) as IncomeRow[];
+      if (!exportRows.length) { toast.error("ไม่มีข้อมูล", { id: toastId }); return; }
       if (listMode === "slip") {
         exportRows = groupRowsBySlip(exportRows);
       }
@@ -599,7 +604,7 @@ export default function Income() {
     } catch (err) {
       toast.error((err as Error).message ?? "Export failed", { id: toastId });
     }
-  }, [rows, section, listMode]);
+  }, [utils, section, search, dateFrom, dateTo, dateField, serverIncomeTypes, updatedBy, listMode]);
 
   const handleExportYearly = () => {
     const rows2 = yearlyData ?? [];
