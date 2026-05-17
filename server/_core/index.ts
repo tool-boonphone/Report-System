@@ -8,11 +8,11 @@ import { registerOAuthRoutes } from "./oauth";
 import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
 import { seedSuperAdmin } from "../authDb";
-import { handleContractsExport, handleDebtExport, handleBadDebtExport, handleIncomeExport, handleExpenseExport } from "../routers/exportExcel";
-import { handleDebtStreamTarget, handleDebtStreamCollected, handleDebtCacheInvalidate } from "../routers/debtStream";
+import { handleContractsExport, handleDebtTargetExport, handleDebtCollectedExport, handleBadDebtExport, handleMonthlySummaryExport, handleYearlySummaryExport, handleBadDebtSummaryExport, handleIncomeExport, handleExpenseExport } from "../routers/exportExcel";
+
 import { handleSyncStream } from "../routers/syncStream";
 import { startScheduler } from "../sync/scheduler";
-import { prewarmDebtCache } from "../debtPrewarm";
+
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 
@@ -47,15 +47,17 @@ async function startServer() {
   registerOAuthRoutes(app);
   // Excel export (streams large files so it's outside of tRPC)
   app.get("/api/export/contracts", handleContractsExport);
-  app.get("/api/export/debt", handleDebtExport);
+
+  app.get("/api/export/debt-target", handleDebtTargetExport);
+  app.get("/api/export/debt-collected", handleDebtCollectedExport);
   app.get("/api/export/bad-debt", handleBadDebtExport);
+  app.get("/api/export/monthly-summary", handleMonthlySummaryExport);
+  app.get("/api/export/yearly-summary", handleYearlySummaryExport);
+  app.get("/api/export/bad-debt-summary", handleBadDebtSummaryExport);
   app.get("/api/export/income", handleIncomeExport);
   app.get("/api/export/expense", handleExpenseExport);
   // Phase 33: Streaming debt data endpoints — bypass tRPC buffering to avoid proxy 503 timeout
-  app.get("/api/debt/stream/target", handleDebtStreamTarget);
-  app.get("/api/debt/stream/collected", handleDebtStreamCollected);
-  // Phase 88: Cache invalidation endpoint — admin can force-clear server cache
-  app.post("/api/debt/cache/invalidate", handleDebtCacheInvalidate);
+
   // SSE sync stream — keeps Cloud Run connection alive during long sync
   app.get("/api/sync-stream/:section", handleSyncStream);
   // Keep-alive ping — frontend polls this every 10s during sync to prevent Cloud Run idle scale-down
@@ -137,9 +139,7 @@ async function startServer() {
     }, 10 * 60 * 1000);
     console.log("[keep-alive] Self-ping every 10 min started →", selfPingUrl);
     // Pre-warm debt cache in background (non-blocking, does not crash server on failure)
-    prewarmDebtCache().catch((err) =>
-      console.warn("[startup] prewarmDebtCache failed:", err)
-    );
+
   });
 }
 

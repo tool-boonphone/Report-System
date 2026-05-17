@@ -19,16 +19,9 @@ import {
   type ContractFilters,
   type ContractSort,
 } from "../contractsDb";
-import { listDebtTarget, listDebtCollected } from "../debtDb";
-import {
-  getCachedTarget,
-  getCachedCollected,
-  waitForPrewarmTarget,
-  waitForPrewarmCollected,
-} from "../debtCache";
+import { listDebtTargetStream, listDebtCollectedStream } from "../debtDb";
+
 import { getBadDebtSummary } from "../badDebtDb";
-import { getDebtExportEntry } from "../debtExportBuilder";
-import { storageGetSignedUrl } from "../storage";
 import {
   setMoneyCell,
   setIntCell,
@@ -316,6 +309,319 @@ function matchesSearch(hay: string | null | undefined, needle: string) {
   if (!needle) return true;
   const h = (hay ?? "").toLowerCase();
   return h.includes(needle.toLowerCase());
+}
+
+export async function handleDebtTargetExport(req: Request, res: Response) {
+  try {
+    const sid = parseCookies(req.headers.cookie)[APP_SESSION_COOKIE];
+    const appUser = sid ? await getUserFromSession(sid) : null;
+    if (!appUser) {
+      res.status(401).json({ message: "Please login (10001)" });
+      return;
+    }
+    if (!checkPermission(appUser, "debt_report", "export")) {
+      res.status(403).json({ message: "ไม่มีสิทธิ์ Export รายงานหนี้" });
+      return;
+    }
+
+    const sectionRaw = String(req.query.section ?? "");
+    let section: SectionKey;
+    try {
+      section = normalizeSectionKey(sectionRaw);
+    } catch {
+      res.status(400).json({ message: "ต้องระบุ section" });
+      return;
+    }
+
+    const search = req.query.search ? String(req.query.search) : undefined;
+    const dateFrom = req.query.dateFrom ? String(req.query.dateFrom) : undefined;
+    const dateTo = req.query.dateTo ? String(req.query.dateTo) : undefined;
+    const dateField = req.query.dateField === "approveDate" ? "approveDate" : req.query.dateField === "dueDate" ? "dueDate" : undefined;
+    const minDaysOverdue = req.query.minDaysOverdue ? Number(req.query.minDaysOverdue) : undefined;
+    const maxDaysOverdue = req.query.maxDaysOverdue ? Number(req.query.maxDaysOverdue) : undefined;
+    const minInstallmentsOverdue = req.query.minInstallmentsOverdue ? Number(req.query.minInstallmentsOverdue) : undefined;
+    const maxInstallmentsOverdue = req.query.maxInstallmentsOverdue ? Number(req.query.maxInstallmentsOverdue) : undefined;
+    const debtStatus = req.query.debtStatus ? String(req.query.debtStatus) : undefined;
+
+    const fileName = `debt_target_${section}_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.xlsx`;
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+    res.flushHeaders();
+
+    const wb = new ExcelJS.stream.xlsx.WorkbookWriter({ stream: res, useStyles: true });
+    const ws = wb.addWorksheet("ยอดหนี้เป้าหมาย");
+
+    // Define columns for the worksheet
+    const columns = [
+      ...DEBT_LEFT_COLUMNS_TARGET,
+      ...DEBT_SUB_TARGET,
+    ];
+
+    ws.columns = columns.map(col => ({ key: col.key, width: col.width }));
+
+    // Style header row (Blue for Income/Contracts, Red for Expenses/Bad Debt)
+    // ── Row 1: Group header (merged cells per group) ────────────────────────
+    const row1 = ws.getRow(1);
+    let colOffset = 1;
+    const debtTargetGroups = [
+      { label: "ข้อมูลสัญญา", colCount: DEBT_LEFT_COLUMNS_TARGET.length, argb: DEBT_LEFT_ARGB },
+      { label: "ยอดหนี้เป้าหมาย", colCount: DEBT_SUB_TARGET.length, argb: DEBT_GROUP_ARGB_TARGET },
+    ];
+    for (const grp of debtTargetGroups) {
+      for (let ci = 0; ci < grp.colCount; ci++) {
+        const cell = row1.getCell(colOffset + ci);
+        cell.value = ci === 0 ? grp.label : null;
+        cell.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: grp.argb },
+        };
+        cell.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 10 };
+        cell.alignment = { vertical: "middle", horizontal: "center" };
+      }
+      // Merge cells for this group label
+      if (grp.colCount > 1) {
+        ws.mergeCells(1, colOffset, 1, colOffset + grp.colCount - 1);
+      }
+      colOffset += grp.colCount;
+    }
+    row1.height = 22;
+    row1.commit();
+
+    // ── Row 2: Column headers with group-tinted background ─────────────────
+    const row2 = ws.getRow(2);
+    let colIdx2 = 1;
+    for (const grp of debtTargetGroups) {
+      for (let ci = 0; ci < grp.colCount; ci++) {
+        const col = columns[colIdx2 - 1];
+        const cell = row2.getCell(colIdx2);
+        cell.value = col?.header ?? "";
+        cell.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: grp.argb === DEBT_LEFT_ARGB ? DEBT_LEFT_SUB_ARGB : "FFFBE9E9" }, // Light amber for sub-columns
+        };
+        cell.font = { bold: true, size: 9 };
+        cell.alignment = {
+          vertical: "middle",
+          horizontal: "center",
+          wrapText: true,
+        };
+        cell.border = {
+          bottom: { style: "thin", color: { argb: "FFD1D5DB" } },
+        };
+        colIdx2++;
+      }
+    }
+    row2.height = 30;
+    row2.commit();
+
+    let seq = 0;
+    for await (const batch of listDebtCollectedStream({
+      section,
+      search,
+      dateFrom,
+      dateTo,
+      dateField,
+      minDaysOverdue,
+      maxDaysOverdue,
+      minInstallmentsOverdue,
+      maxInstallmentsOverdue,
+      debtStatus,
+      productType,
+    })) {
+      for (const row of batch) {
+        seq += 1;
+        const exRow = ws.addRow({});
+        let colIdx = 1;
+        for (const col of columns) {
+          const cell = exRow.getCell(colIdx++);
+          const value = (row as any)[col.key];
+          if (col.key === "seq") {
+            cell.value = seq;
+            cell.numFmt = INT_FORMAT;
+            cell.alignment = { horizontal: "center" };
+          } else if (col.key === "totalAmount" || col.key === "perInstallment" || col.key === "totalOverdueAmount" || col.key === "badDebtAmount" || col.key === "paidAmount") {
+            setMoneyCell(cell, value);
+          } else if (col.key === "installmentCount" || col.key === "daysOverdue" || col.key === "installmentsOverdue") {
+            setIntCell(cell, value);
+          } else if (col.key === "approveDate" || col.key === "badDebtDate" || col.key === "badDebtUpdatedAt" || col.key === "paidAt") {
+            setDateCell(cell, value);
+          } else {
+            cell.value = value != null ? String(value) : "";
+          }
+        }
+        exRow.commit();
+      }
+    }
+
+    ws.commit();
+    await wb.commit();
+  } catch (err) {
+    console.error("[export] debt-target failed:", err);
+    if (!res.headersSent) {
+      res.status(500).json({ message: "Export failed" });
+    } else {
+      res.end();
+    }
+  }
+}
+
+export async function handleDebtCollectedExport(req: Request, res: Response) {
+  try {
+    const sid = parseCookies(req.headers.cookie)[APP_SESSION_COOKIE];
+    const appUser = sid ? await getUserFromSession(sid) : null;
+    if (!appUser) {
+      res.status(401).json({ message: "Please login (10001)" });
+      return;
+    }
+    if (!checkPermission(appUser, "debt_report", "export")) {
+      res.status(403).json({ message: "ไม่มีสิทธิ์ Export รายงานหนี้" });
+      return;
+    }
+
+    const sectionRaw = String(req.query.section ?? "");
+    let section: SectionKey;
+    try {
+      section = normalizeSectionKey(sectionRaw);
+    } catch {
+      res.status(400).json({ message: "ต้องระบุ section" });
+      return;
+    }
+
+    const search = req.query.search ? String(req.query.search) : undefined;
+    const dateFrom = req.query.dateFrom ? String(req.query.dateFrom) : undefined;
+    const dateTo = req.query.dateTo ? String(req.query.dateTo) : undefined;
+    const dateField = req.query.dateField === "paidAt" ? "paidAt" : "updatedAt";
+    const minDaysOverdue = req.query.minDaysOverdue ? Number(req.query.minDaysOverdue) : undefined;
+    const maxDaysOverdue = req.query.maxDaysOverdue ? Number(req.query.maxDaysOverdue) : undefined;
+    const minInstallmentsOverdue = req.query.minInstallmentsOverdue ? Number(req.query.minInstallmentsOverdue) : undefined;
+    const maxInstallmentsOverdue = req.query.maxInstallmentsOverdue ? Number(req.query.maxInstallmentsOverdue) : undefined;
+    const debtStatus = req.query.debtStatus ? String(req.query.debtStatus) : undefined;
+    const productType = req.query.productType ? String(req.query.productType) : undefined;
+
+    const fileName = `debt_collected_${section}_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.xlsx`;
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+    res.flushHeaders();
+
+    const wb = new ExcelJS.stream.xlsx.WorkbookWriter({ stream: res, useStyles: true });
+    const ws = wb.addWorksheet("ยอดเก็บหนี้");
+
+    // Define columns for the worksheet
+    const columns = [
+      ...DEBT_LEFT_COLUMNS_COLLECTED,
+      ...DEBT_SUB_COLLECTED,
+    ];
+
+    ws.columns = columns.map(col => ({ key: col.key, width: col.width }));
+
+    // Style header row (Red for Expenses/Bad Debt)
+    // ── Row 1: Group header (merged cells per group) ────────────────────────
+    const row1 = ws.getRow(1);
+    let colOffset = 1;
+    const debtCollectedGroups = [
+      { label: "ข้อมูลสัญญา", colCount: DEBT_LEFT_COLUMNS_COLLECTED.length, argb: DEBT_LEFT_ARGB },
+      { label: "ยอดเก็บหนี้", colCount: DEBT_SUB_COLLECTED.length, argb: DEBT_GROUP_ARGB_COLLECTED },
+    ];
+    for (const grp of debtCollectedGroups) {
+      for (let ci = 0; ci < grp.colCount; ci++) {
+        const cell = row1.getCell(colOffset + ci);
+        cell.value = ci === 0 ? grp.label : null;
+        cell.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: grp.argb },
+        };
+        cell.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 10 };
+        cell.alignment = { vertical: "middle", horizontal: "center" };
+      }
+      // Merge cells for this group label
+      if (grp.colCount > 1) {
+        ws.mergeCells(1, colOffset, 1, colOffset + grp.colCount - 1);
+      }
+      colOffset += grp.colCount;
+    }
+    row1.height = 22;
+    row1.commit();
+
+    // ── Row 2: Column headers with group-tinted background ─────────────────
+    const row2 = ws.getRow(2);
+    let colIdx2 = 1;
+    for (const grp of debtCollectedGroups) {
+      for (let ci = 0; ci < grp.colCount; ci++) {
+        const col = columns[colIdx2 - 1];
+        const cell = row2.getCell(colIdx2);
+        cell.value = col?.header ?? "";
+        cell.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: grp.argb === DEBT_LEFT_ARGB ? DEBT_LEFT_SUB_ARGB : "FFF0FDFA" }, // Light teal for sub-columns
+        };
+        cell.font = { bold: true, size: 9 };
+        cell.alignment = {
+          vertical: "middle",
+          horizontal: "center",
+          wrapText: true,
+        };
+        cell.border = {
+          bottom: { style: "thin", color: { argb: "FFD1D5DB" } },
+        };
+        colIdx2++;
+      }
+    }
+    row2.height = 30;
+    row2.commit();
+
+    let seq = 0;
+    for await (const batch of listDebtCollectedStream({
+      section,
+      search,
+      dateFrom,
+      dateTo,
+      dateField,
+      minDaysOverdue,
+      maxDaysOverdue,
+      minInstallmentsOverdue,
+      maxInstallmentsOverdue,
+      debtStatus,
+      productType,
+    })) {
+      for (const row of batch.rows) { // Note: listDebtCollectedStream yields { rows, meta }
+        seq += 1;
+        const exRow = ws.addRow({});
+        let colIdx = 1;
+        for (const col of columns) {
+          const cell = exRow.getCell(colIdx++);
+          const value = (row as any)[col.key];
+          if (col.key === "seq") {
+            cell.value = seq;
+            cell.numFmt = INT_FORMAT;
+            cell.alignment = { horizontal: "center" };
+          } else if (col.key === "totalAmount" || col.key === "perInstallment" || col.key === "principal" || col.key === "interest" || col.key === "fee" || col.key === "penalty" || col.key === "unlockFee" || col.key === "discount" || col.key === "overpaid" || col.key === "badDebt" || col.key === "total") {
+            setMoneyCell(cell, value);
+          } else if (col.key === "installmentCount" || col.key === "daysOverdue" || col.key === "installmentsOverdue") {
+            setIntCell(cell, value);
+          } else if (col.key === "approveDate" || col.key === "paidAt" || col.key === "updatedAt") {
+            setDateCell(cell, value);
+          } else {
+            cell.value = value != null ? String(value) : "";
+          }
+        }
+        exRow.commit();
+      }
+    }
+
+    ws.commit();
+    await wb.commit();
+  } catch (err) {
+    console.error("[export] debt-collected failed:", err);
+    if (!res.headersSent) {
+      res.status(500).json({ message: "Export failed" });
+    } else {
+      res.end();
+    }
+  }
 }
 
 export async function handleDebtExport(req: Request, res: Response) {
@@ -968,5 +1274,315 @@ export async function handleExpenseExport(req: Request, res: Response) {
     console.error("[export] expense failed:", err);
     if (!res.headersSent) res.status(500).json({ message: "Export failed" });
     else res.end();
+  }
+}
+
+
+export async function handleMonthlySummaryExport(req: Request, res: Response) {
+  try {
+    const sid = parseCookies(req.headers.cookie)[APP_SESSION_COOKIE];
+    const appUser = sid ? await getUserFromSession(sid) : null;
+    if (!appUser) {
+      res.status(401).json({ message: "Please login (10001)" });
+      return;
+    }
+    if (!checkPermission(appUser, "debt_report", "export")) {
+      res.status(403).json({ message: "ไม่มีสิทธิ์ Export รายงานหนี้" });
+      return;
+    }
+
+        const year = req.query.year ? String(req.query.year) : undefined;
+    const month = req.query.month ? String(req.query.month) : undefined;
+
+    if (!year) {
+      res.status(400).json({ message: "ต้องระบุปี (year)" });
+      return;
+    }
+
+    const dateFrom = month ? `${year}-${month.padStart(2, '0')}-01` : `${year}-01-01`;
+    const dateTo = month ? `${year}-${month.padStart(2, '0')}-${new Date(Number(year), Number(month), 0).getDate()}` : `${year}-12-31`;
+
+    const { monthly, summary } = await getDebtReport({
+      section: section,
+      from: dateFrom,
+      to: dateTo,
+    });
+
+    const fileName = `monthly_summary_${section}_${year}${month ? `-${month}` : ''}_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.xlsx`;
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+    res.flushHeaders();
+
+    const wb = new ExcelJS.stream.xlsx.WorkbookWriter({ stream: res, useStyles: true });
+    const ws = wb.addWorksheet("สรุปรายเดือน");
+
+    const columns = [
+      { key: "month", header: "เดือน", width: 12, type: "text" },
+      { key: "target", header: "เป้าเก็บหนี้ (บาท)", width: 20, type: "money" },
+      { key: "targetCount", header: "งวดที่ครบกำหนด", width: 18, type: "number" },
+      { key: "collected", header: "ยอดเก็บหนี้ (บาท)", width: 20, type: "money" },
+      { key: "collectedCount", header: "จำนวนธุรกรรมจ่าย", width: 20, type: "number" },
+      { key: "gap", header: "ส่วนต่าง (บาท)", width: 18, type: "money" },
+      { key: "rate", header: "อัตราการเก็บ", width: 16, type: "number" },
+    ];
+
+    ws.columns = columns.map(col => ({ key: col.key, width: col.width }));
+
+    const headerRow = ws.getRow(1);
+    headerRow.height = 28;
+    headerRow.eachCell((cell, colNumber) => {
+      cell.value = columns[colNumber - 1].header;
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF10B981" } }; // Emerald-500
+      cell.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 10 };
+      cell.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
+    });
+    headerRow.commit();
+
+    // Summary row
+    const summaryRow = ws.addRow({});
+    summaryRow.getCell(1).value = "รวม";
+    setMoneyCell(summaryRow.getCell(2), summary.target);
+    setIntCell(summaryRow.getCell(3), summary.targetCount);
+    setMoneyCell(summaryRow.getCell(4), summary.collected);
+    setIntCell(summaryRow.getCell(5), summary.collectedCount);
+    setMoneyCell(summaryRow.getCell(6), summary.gap);
+    summaryRow.getCell(7).value = summary.rate.toFixed(2); // Format rate as percentage or decimal
+    summaryRow.getCell(7).numFmt = '0.00%';
+    summaryRow.font = { bold: true };
+    summaryRow.commit();
+
+    for (const row of monthly) {
+      const exRow = ws.addRow({});
+      let colIdx = 1;
+      for (const col of columns) {
+        const cell = exRow.getCell(colIdx++);
+        const value = (row as any)[col.key];
+        if (col.key === "month") {
+          cell.value = value;
+        } else if (col.type === "money") {
+          setMoneyCell(cell, value);
+        } else if (col.type === "number") {
+          setIntCell(cell, value);
+        } else if (col.key === "rate") {
+          cell.value = value;
+          cell.numFmt = '0.00%';
+        } else {
+          cell.value = value != null ? String(value) : "";
+        }
+      }
+      exRow.commit();
+    }
+
+    ws.commit();
+    await wb.commit();
+
+
+  } catch (err) {
+    console.error("[export] monthly-summary failed:", err);
+    if (!res.headersSent) {
+      res.status(500).json({ message: "Export failed" });
+    } else {
+      res.end();
+    }
+  }
+}
+
+export async function handleYearlySummaryExport(req: Request, res: Response) {
+  try {
+    const sid = parseCookies(req.headers.cookie)[APP_SESSION_COOKIE];
+    const appUser = sid ? await getUserFromSession(sid) : null;
+    if (!appUser) {
+      res.status(401).json({ message: "Please login (10001)" });
+      return;
+    }
+    if (!checkPermission(appUser, "debt_report", "export")) {
+      res.status(403).json({ message: "ไม่มีสิทธิ์ Export รายงานหนี้" });
+      return;
+    }
+
+        const year = req.query.year ? String(req.query.year) : undefined;
+
+    if (!year) {
+      res.status(400).json({ message: "ต้องระบุปี (year)" });
+      return;
+    }
+
+    const dateFrom = `${year}-01-01`;
+    const dateTo = `${year}-12-31`;
+
+    const { monthly, summary } = await getDebtReport({
+      section: section,
+      from: dateFrom,
+      to: dateTo,
+    });
+
+    const fileName = `yearly_summary_${section}_${year}_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.xlsx`;
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+    res.flushHeaders();
+
+    const wb = new ExcelJS.stream.xlsx.WorkbookWriter({ stream: res, useStyles: true });
+    const ws = wb.addWorksheet("สรุปรายปี");
+
+    const columns = [
+      { key: "month", header: "เดือน", width: 12, type: "text" },
+      { key: "target", header: "เป้าเก็บหนี้ (บาท)", width: 20, type: "money" },
+      { key: "targetCount", header: "งวดที่ครบกำหนด", width: 18, type: "number" },
+      { key: "collected", header: "ยอดเก็บหนี้ (บาท)", width: 20, type: "money" },
+      { key: "collectedCount", header: "จำนวนธุรกรรมจ่าย", width: 20, type: "number" },
+      { key: "gap", header: "ส่วนต่าง (บาท)", width: 18, type: "money" },
+      { key: "rate", header: "อัตราการเก็บ", width: 16, type: "number" },
+    ];
+
+    ws.columns = columns.map(col => ({ key: col.key, width: col.width }));
+
+    const headerRow = ws.getRow(1);
+    headerRow.height = 28;
+    headerRow.eachCell((cell, colNumber) => {
+      cell.value = columns[colNumber - 1].header;
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF10B981" } }; // Emerald-500
+      cell.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 10 };
+      cell.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
+    });
+    headerRow.commit();
+
+    // Summary row
+    const summaryRow = ws.addRow({});
+    summaryRow.getCell(1).value = "รวม";
+    setMoneyCell(summaryRow.getCell(2), summary.target);
+    setIntCell(summaryRow.getCell(3), summary.targetCount);
+    setMoneyCell(summaryRow.getCell(4), summary.collected);
+    setIntCell(summaryRow.getCell(5), summary.collectedCount);
+    setMoneyCell(summaryRow.getCell(6), summary.gap);
+    summaryRow.getCell(7).value = summary.rate.toFixed(2); // Format rate as percentage or decimal
+    summaryRow.getCell(7).numFmt = '0.00%';
+    summaryRow.font = { bold: true };
+    summaryRow.commit();
+
+    for (const row of monthly) {
+      const exRow = ws.addRow({});
+      let colIdx = 1;
+      for (const col of columns) {
+        const cell = exRow.getCell(colIdx++);
+        const value = (row as any)[col.key];
+        if (col.key === "month") {
+          cell.value = value;
+        } else if (col.type === "money") {
+          setMoneyCell(cell, value);
+        } else if (col.type === "number") {
+          setIntCell(cell, value);
+        } else if (col.key === "rate") {
+          cell.value = value;
+          cell.numFmt = '0.00%';
+        } else {
+          cell.value = value != null ? String(value) : "";
+        }
+      }
+      exRow.commit();
+    }
+
+    ws.commit();
+    await wb.commit();
+
+
+  } catch (err) {
+    console.error("[export] yearly-summary failed:", err);
+    if (!res.headersSent) {
+      res.status(500).json({ message: "Export failed" });
+    } else {
+      res.end();
+    }
+  }
+}
+
+export async function handleBadDebtSummaryExport(req: Request, res: Response) {
+  try {
+    const sid = parseCookies(req.headers.cookie)[APP_SESSION_COOKIE];
+    const appUser = sid ? await getUserFromSession(sid) : null;
+    if (!appUser) {
+      res.status(401).json({ message: "Please login (10001)" });
+      return;
+    }
+    if (!checkPermission(appUser, "debt_report", "export")) {
+      res.status(403).json({ message: "ไม่มีสิทธิ์ Export รายงานหนี้" });
+      return;
+    }
+
+        const year = req.query.year ? String(req.query.year) : undefined;
+
+    if (!year) {
+      res.status(400).json({ message: "ต้องระบุปี (year)" });
+      return;
+    }
+
+    const { summary } = await getBadDebtSummary({
+      section: section,
+      year: Number(year),
+    });
+
+    const fileName = `bad_debt_summary_${section}_${year}_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.xlsx`;
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+    res.flushHeaders();
+
+    const wb = new ExcelJS.stream.xlsx.WorkbookWriter({ stream: res, useStyles: true });
+    const ws = wb.addWorksheet("สรุปหนี้เสีย");
+
+    const columns = [
+      { key: "month", header: "เดือน", width: 12, type: "text" },
+      { key: "badDebtCount", header: "จำนวนสัญญาหนี้เสีย", width: 20, type: "number" },
+      { key: "badDebtAmount", header: "ยอดหนี้เสีย (บาท)", width: 20, type: "money" },
+    ];
+
+    ws.columns = columns.map(col => ({ key: col.key, width: col.width }));
+
+    const headerRow = ws.getRow(1);
+    headerRow.height = 28;
+    headerRow.eachCell((cell, colNumber) => {
+      cell.value = columns[colNumber - 1].header;
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFDC2626" } }; // Red-600
+      cell.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 10 };
+      cell.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
+    });
+    headerRow.commit();
+
+    // Summary row
+    const summaryRow = ws.addRow({});
+    summaryRow.getCell(1).value = "รวม";
+    setIntCell(summaryRow.getCell(2), summary.totalBadDebtCount);
+    setMoneyCell(summaryRow.getCell(3), summary.totalBadDebtAmount);
+    summaryRow.font = { bold: true };
+    summaryRow.commit();
+
+    for (const row of summary.monthlyBreakdown) {
+      const exRow = ws.addRow({});
+      let colIdx = 1;
+      for (const col of columns) {
+        const cell = exRow.getCell(colIdx++);
+        const value = (row as any)[col.key];
+        if (col.key === "month") {
+          cell.value = value;
+        } else if (col.type === "money") {
+          setMoneyCell(cell, value);
+        } else if (col.type === "number") {
+          setIntCell(cell, value);
+        } else {
+          cell.value = value != null ? String(value) : "";
+        }
+      }
+      exRow.commit();
+    }
+
+    ws.commit();
+    await wb.commit();
+
+
+  } catch (err) {
+    console.error("[export] bad-debt-summary failed:", err);
+    if (!res.headersSent) {
+      res.status(500).json({ message: "Export failed" });
+    } else {
+      res.end();
+    }
   }
 }

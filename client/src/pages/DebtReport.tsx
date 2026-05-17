@@ -900,7 +900,8 @@ export default function DebtReport() {
   // Export handler (used inline in toolbar)
   const handleExport = React.useCallback(async () => {
     if (!section) return;
-    const params = new URLSearchParams({ section, variant: tab });
+    const endpoint = tab === "target" ? "/api/export/debt-target" : "/api/export/debt-collected";
+    const params = new URLSearchParams({ section });
     if (search) params.set("search", search);
     if (statusFilter.size > 0) params.set("status", Array.from(statusFilter).join(","));
     // Phase 29: pass date/month filters to export endpoint
@@ -910,7 +911,7 @@ export default function DebtReport() {
     if (productTypeFilter.size > 0) params.set("productType", Array.from(productTypeFilter).join(","));
     const toastId = toast.loading("กำลังเตรียมไฟล์ Excel…");
     try {
-      const resp = await fetch(`/api/export/debt?${params.toString()}`, {
+      const resp = await fetch(`${endpoint}?${params.toString()}`, {
         credentials: "include",
       });
       if (!resp.ok) {

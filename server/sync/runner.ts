@@ -46,8 +46,7 @@ import {
   getLastContractsResumePage,
 } from "./syncLog";
 import type { SectionKey, SyncTrigger } from "../../shared/const";
-import { invalidateDebtCache } from "../debtCache";
-import { buildAllDebtExports } from "../debtExportBuilder";
+
 import { fillPeriodNosForSection } from "./fillPeriodNos";
 import { populateDebtCache } from "./populateCache";
 import { pgRows } from "../db";
@@ -385,22 +384,7 @@ async function doSync(
         : undefined,
     });
 
-    invalidateDebtCache(section);
-
-    // ── Populate cache ────────────────────────────────────────────────────
-    try {
-      const cacheResult = await populateDebtCache(section);
-      console.log(`[sync] ${section}: cache populated — target=${cacheResult.targetRows}, collected=${cacheResult.collectedRows}`);
-    } catch (cacheErr: any) {
-      console.error(`[sync] ${section}: cache population failed:`, cacheErr?.message ?? cacheErr);
-    }
-
-    // ── Pre-build Excel exports ───────────────────────────────────────────
-    try {
-      await buildAllDebtExports(section);
-    } catch (exportErr: any) {
-      console.error(`[sync] ${section}: export build failed:`, exportErr?.message ?? exportErr);
-    }
+    // Note: Legacy cache population and pre-build excel exports removed in favor of streaming.
 
     clearInterval(selfPingInterval);
     return { ok: true, rowCount: overallRows };
