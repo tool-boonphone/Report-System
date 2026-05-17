@@ -98,9 +98,9 @@ type SortKey =
   | "contractNo" | "approveDate" | "financeAmount" | "commissionNet"
   | "installmentPaid" | "deviceSaleAmount" | "totalRevenue" | "cost"
   | "profitLoss" | "saleDate";
-type MonthlySortKey = "ym" | "count" | "financeAmount" | "commissionNet" | "cost" | "installmentPaid" | "deviceSaleAmount" | "totalRevenue" | "profitLoss";
+type MonthlySortKey = "ym" | "count" | "financeAmount" | "commissionNet" | "incentive" | "cost" | "installmentPaid" | "deviceSaleAmount" | "totalRevenue" | "profitLoss";
 type MonthlySortKeyWithRate = MonthlySortKey | "badDebtRate";
-type YearlySortKey = "year" | "count" | "financeAmount" | "commissionNet" | "cost" | "installmentPaid" | "deviceSaleAmount" | "totalRevenue" | "profitLoss";
+type YearlySortKey = "year" | "count" | "financeAmount" | "commissionNet" | "incentive" | "cost" | "installmentPaid" | "deviceSaleAmount" | "totalRevenue" | "profitLoss";
 type YearlySortKeyWithRate = YearlySortKey | "badDebtRate";
 type SortDir = "asc" | "desc";
 type ActiveTab = "list" | "monthly" | "yearly";
@@ -407,15 +407,16 @@ export default function BadDebtSummary() {
     const src = filterYear ? rows.filter((r) => (r.saleDate ?? "").startsWith(filterYear)) : rows;
     const map = new Map<string, {
       ym: string; count: number;
-      financeAmount: number; commissionNet: number; cost: number;
+      financeAmount: number; commissionNet: number; incentive: number; cost: number;
       installmentPaid: number; deviceSaleAmount: number; totalRevenue: number; profitLoss: number;
     }>();
     src.forEach((r) => {
       const ym = (r.saleDate ?? "").slice(0, 7) || "ไม่ระบุ";
-      const cur = map.get(ym) ?? { ym, count: 0, financeAmount: 0, commissionNet: 0, cost: 0, installmentPaid: 0, deviceSaleAmount: 0, totalRevenue: 0, profitLoss: 0 };
+      const cur = map.get(ym) ?? { ym, count: 0, financeAmount: 0, commissionNet: 0, incentive: 0, cost: 0, installmentPaid: 0, deviceSaleAmount: 0, totalRevenue: 0, profitLoss: 0 };
       cur.count++;
       cur.financeAmount += r.financeAmount;
       cur.commissionNet += r.commissionNet;
+      cur.incentive += (r.incentive ?? 0);
       cur.cost += r.cost;
       cur.installmentPaid += r.installmentPaid;
       cur.deviceSaleAmount += r.deviceSaleAmount;
@@ -438,15 +439,16 @@ export default function BadDebtSummary() {
     const src = filterYear ? rows.filter((r) => (r.approveDate ?? "").startsWith(filterYear)) : rows;
     const map = new Map<string, {
       ym: string; count: number;
-      financeAmount: number; commissionNet: number; cost: number;
+      financeAmount: number; commissionNet: number; incentive: number; cost: number;
       installmentPaid: number; deviceSaleAmount: number; totalRevenue: number; profitLoss: number;
     }>();
     src.forEach((r) => {
       const ym = (r.approveDate ?? "").slice(0, 7) || "ไม่ระบุ";
-      const cur = map.get(ym) ?? { ym, count: 0, financeAmount: 0, commissionNet: 0, cost: 0, installmentPaid: 0, deviceSaleAmount: 0, totalRevenue: 0, profitLoss: 0 };
+      const cur = map.get(ym) ?? { ym, count: 0, financeAmount: 0, commissionNet: 0, incentive: 0, cost: 0, installmentPaid: 0, deviceSaleAmount: 0, totalRevenue: 0, profitLoss: 0 };
       cur.count++;
       cur.financeAmount += r.financeAmount;
       cur.commissionNet += r.commissionNet;
+      cur.incentive += (r.incentive ?? 0);
       cur.cost += r.cost;
       cur.installmentPaid += r.installmentPaid;
       cur.deviceSaleAmount += r.deviceSaleAmount;
@@ -474,15 +476,16 @@ export default function BadDebtSummary() {
     const src = filterYear ? rows.filter((r) => (r.saleDate ?? "").startsWith(filterYear)) : rows;
     const map = new Map<string, {
       year: string; count: number;
-      financeAmount: number; commissionNet: number; cost: number;
+      financeAmount: number; commissionNet: number; incentive: number; cost: number;
       installmentPaid: number; deviceSaleAmount: number; totalRevenue: number; profitLoss: number;
     }>();
     src.forEach((r) => {
       const year = (r.saleDate ?? "").slice(0, 4) || "ไม่ระบุ";
-      const cur = map.get(year) ?? { year, count: 0, financeAmount: 0, commissionNet: 0, cost: 0, installmentPaid: 0, deviceSaleAmount: 0, totalRevenue: 0, profitLoss: 0 };
+      const cur = map.get(year) ?? { year, count: 0, financeAmount: 0, commissionNet: 0, incentive: 0, cost: 0, installmentPaid: 0, deviceSaleAmount: 0, totalRevenue: 0, profitLoss: 0 };
       cur.count++;
       cur.financeAmount += r.financeAmount;
       cur.commissionNet += r.commissionNet;
+      cur.incentive += (r.incentive ?? 0);
       cur.cost += r.cost;
       cur.installmentPaid += r.installmentPaid;
       cur.deviceSaleAmount += r.deviceSaleAmount;
@@ -505,16 +508,17 @@ export default function BadDebtSummary() {
     const src = filterYear ? rows.filter((r) => (r.approveDate ?? "").startsWith(filterYear)) : rows;
     const map = new Map<string, {
       year: string; count: number;
-      financeAmount: number; commissionNet: number; cost: number;
+      financeAmount: number; commissionNet: number; incentive: number; cost: number;
       installmentPaid: number; deviceSaleAmount: number; totalRevenue: number; profitLoss: number;
       badDebtCountByApproveMonth: Map<string, number>;
     }>();
     src.forEach((r) => {
       const year = (r.approveDate ?? "").slice(0, 4) || "ไม่ระบุ";
-      const cur = map.get(year) ?? { year, count: 0, financeAmount: 0, commissionNet: 0, cost: 0, installmentPaid: 0, deviceSaleAmount: 0, totalRevenue: 0, profitLoss: 0, badDebtCountByApproveMonth: new Map() };
+      const cur = map.get(year) ?? { year, count: 0, financeAmount: 0, commissionNet: 0, incentive: 0, cost: 0, installmentPaid: 0, deviceSaleAmount: 0, totalRevenue: 0, profitLoss: 0, badDebtCountByApproveMonth: new Map() };
       cur.count++;
       cur.financeAmount += r.financeAmount;
       cur.commissionNet += r.commissionNet;
+      cur.incentive += (r.incentive ?? 0);
       cur.cost += r.cost;
       cur.installmentPaid += r.installmentPaid;
       cur.deviceSaleAmount += r.deviceSaleAmount;
@@ -531,7 +535,7 @@ export default function BadDebtSummary() {
         totalAll += totalContractsByApproveMonth[aym] ?? 0;
       });
       const badDebtRate = totalAll > 0 ? (totalBadDebt / totalAll) * 100 : null;
-      return { year: r.year, count: r.count, financeAmount: r.financeAmount, commissionNet: r.commissionNet, cost: r.cost, installmentPaid: r.installmentPaid, deviceSaleAmount: r.deviceSaleAmount, totalRevenue: r.totalRevenue, profitLoss: r.profitLoss, badDebtRate, totalBadDebt, totalAll };
+      return { year: r.year, count: r.count, financeAmount: r.financeAmount, commissionNet: r.commissionNet, incentive: r.incentive, cost: r.cost, installmentPaid: r.installmentPaid, deviceSaleAmount: r.deviceSaleAmount, totalRevenue: r.totalRevenue, profitLoss: r.profitLoss, badDebtRate, totalBadDebt, totalAll };
     });
     raw.sort((a, b) => {
       const av: any = a[yearlyApproveSortKey as keyof typeof a] ?? "";
@@ -830,6 +834,7 @@ export default function BadDebtSummary() {
                   <th className="px-2 py-2 text-center text-xs font-semibold whitespace-nowrap">ราคา</th>
                   <Th label="ยอดจัดไฟแนนซ์" col="financeAmount" />
                   <Th label="ค่าคอมมิชชั่น" col="commissionNet" />
+                  <Th label="Incentive" col="cost" />
                   <Th label="ต้นทุน" col="cost" />
                   <th className="px-2 py-2 text-center text-xs font-semibold whitespace-nowrap">งวดที่ชำระ</th>
                   <Th label="ยอดผ่อน" col="installmentPaid" />
@@ -841,7 +846,7 @@ export default function BadDebtSummary() {
               </thead>
               <tbody>
                 {filteredRows.length === 0 ? (
-                  <tr><td colSpan={16} className="text-center py-12 text-gray-400">ไม่พบข้อมูล</td></tr>
+                  <tr><td colSpan={17} className="text-center py-12 text-gray-400">ไม่พบข้อมูล</td></tr>
                 ) : (
                   filteredRows.map((r, idx) => (
                     <tr key={r.contractExternalId} className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}>
@@ -854,6 +859,7 @@ export default function BadDebtSummary() {
                       <td className="px-2 py-2 text-right whitespace-nowrap text-xs">{fmtMoney(r.salePrice)}</td>
                       <td className="px-2 py-2 text-right whitespace-nowrap text-xs">{fmtMoney(r.financeAmount)}</td>
                       <td className="px-2 py-2 text-right whitespace-nowrap text-xs">{fmtMoney(r.commissionNet)}</td>
+                      <td className="px-2 py-2 text-right whitespace-nowrap text-xs">{fmtMoney((r as any).incentive ?? 0)}</td>
                       <td className="px-2 py-2 text-right whitespace-nowrap text-xs font-medium text-orange-700">{fmtMoney(r.cost)}</td>
                       <td className="px-2 py-2 text-center whitespace-nowrap text-xs">
                         {r.installmentCount != null ? `${r.paidInstallments}/${r.installmentCount}` : `${r.paidInstallments}`}
@@ -872,6 +878,7 @@ export default function BadDebtSummary() {
                   <tr>
                     <td colSpan={7} className="px-2 py-2 text-right text-gray-600">รวม {filteredRows.length} รายการ</td>
                     <td className="px-2 py-2 text-right">{fmtMoney(filteredRows.reduce((s, r) => s + r.financeAmount, 0))}</td>
+                    <td className="px-2 py-2 text-right">{fmtMoney(filteredRows.reduce((s, r) => s + ((r as any).incentive ?? 0), 0))}</td>
                     <td className="px-2 py-2 text-right">{fmtMoney(filteredRows.reduce((s, r) => s + r.commissionNet, 0))}</td>
                     <td className="px-2 py-2 text-right text-orange-700">{fmtMoney(filteredRows.reduce((s, r) => s + r.cost, 0))}</td>
                     <td className="px-2 py-2"></td>
@@ -986,6 +993,7 @@ export default function BadDebtSummary() {
                           <td className="px-2 py-2 text-center text-sm">{r.count.toLocaleString("th-TH")}</td>
                           <td className="px-2 py-2 text-right text-sm">{fmtMoney(r.financeAmount)}</td>
                           <td className="px-2 py-2 text-right text-sm">{fmtMoney(r.commissionNet)}</td>
+                          <td className="px-2 py-2 text-right text-sm">{fmtMoney(r.incentive)}</td>
                           <td className="px-2 py-2 text-right text-sm text-orange-700 font-medium">{fmtMoney(r.cost)}</td>
                           <td className="px-2 py-2 text-right text-sm">{fmtMoney(r.installmentPaid)}</td>
                           <td className="px-2 py-2 text-right text-sm text-blue-700 font-medium">{fmtMoney(r.deviceSaleAmount)}</td>
@@ -1068,6 +1076,7 @@ export default function BadDebtSummary() {
                           <td className="px-2 py-2 text-center text-sm">{r.count.toLocaleString("th-TH")}</td>
                           <td className="px-2 py-2 text-right text-sm">{fmtMoney(r.financeAmount)}</td>
                           <td className="px-2 py-2 text-right text-sm">{fmtMoney(r.commissionNet)}</td>
+                          <td className="px-2 py-2 text-right text-sm">{fmtMoney(r.incentive)}</td>
                           <td className="px-2 py-2 text-right text-sm text-orange-700 font-medium">{fmtMoney(r.cost)}</td>
                           <td className="px-2 py-2 text-right text-sm">{fmtMoney(r.installmentPaid)}</td>
                           <td className="px-2 py-2 text-right text-sm text-blue-700 font-medium">{fmtMoney(r.deviceSaleAmount)}</td>
@@ -1083,6 +1092,7 @@ export default function BadDebtSummary() {
                         <td className="px-2 py-2 text-center">{yearlyBySaleRows.reduce((s, r) => s + r.count, 0).toLocaleString("th-TH")}</td>
                         <td className="px-2 py-2 text-right">{fmtMoney(yearlyBySaleRows.reduce((s, r) => s + r.financeAmount, 0))}</td>
                         <td className="px-2 py-2 text-right">{fmtMoney(yearlyBySaleRows.reduce((s, r) => s + r.commissionNet, 0))}</td>
+                        <td className="px-2 py-2 text-right">{fmtMoney(yearlyBySaleRows.reduce((s, r) => s + r.incentive, 0))}</td>
                         <td className="px-2 py-2 text-right text-orange-700">{fmtMoney(yearlyBySaleRows.reduce((s, r) => s + r.cost, 0))}</td>
                         <td className="px-2 py-2 text-right">{fmtMoney(yearlyBySaleRows.reduce((s, r) => s + r.installmentPaid, 0))}</td>
                         <td className="px-2 py-2 text-right text-blue-700">{fmtMoney(yearlyBySaleRows.reduce((s, r) => s + r.deviceSaleAmount, 0))}</td>
@@ -1106,7 +1116,7 @@ export default function BadDebtSummary() {
                       <ThYA label="ปีที่อนุมัติ" col="year" rowSpan={2} className="px-3 text-left border-r border-purple-500" />
                       <th className="px-2 py-1 text-center text-xs font-semibold border-r border-purple-500 whitespace-nowrap" rowSpan={2}>สัญญา</th>
                       <ThYA label="หนี้เสีย" col="count" rowSpan={2} className="border-r border-purple-500" />
-                      <th colSpan={3} className="px-2 py-1 text-center text-xs font-semibold border-b border-purple-500 border-r border-purple-500">ต้นทุน</th>
+                      <th colSpan={4} className="px-2 py-1 text-center text-xs font-semibold border-b border-purple-500 border-r border-purple-500">ต้นทุน</th>
                       <th colSpan={3} className="px-2 py-1 text-center text-xs font-semibold border-b border-purple-500 border-r border-purple-500">รายรับ</th>
                       <th className="px-2 py-1 text-center text-xs font-semibold border-r border-purple-500 whitespace-nowrap" rowSpan={2}>% หนี้เสีย</th>
                       <ThYA label="กำไร/ขาดทุน" col="profitLoss" rowSpan={2} />
@@ -1114,6 +1124,7 @@ export default function BadDebtSummary() {
                     <tr>
                       <ThYA label="ยอดจัดไฟแนนซ์" col="financeAmount" />
                       <ThYA label="ค่าคอมมิชชั่น" col="commissionNet" />
+                      <ThYA label="Incentive" col="incentive" />
                       <ThYA label="ต้นทุนรวม" col="cost" className="border-r border-purple-500" />
                       <ThYA label="ยอดเก็บค่างวด" col="installmentPaid" />
                       <ThYA label="ยอดขายเครื่อง" col="deviceSaleAmount" />
@@ -1131,6 +1142,7 @@ export default function BadDebtSummary() {
                           <td className="px-2 py-2 text-center text-sm">{r.count.toLocaleString("th-TH")}</td>
                           <td className="px-2 py-2 text-right text-sm">{fmtMoney(r.financeAmount)}</td>
                           <td className="px-2 py-2 text-right text-sm">{fmtMoney(r.commissionNet)}</td>
+                          <td className="px-2 py-2 text-right text-sm">{fmtMoney(r.incentive)}</td>
                           <td className="px-2 py-2 text-right text-sm text-orange-700 font-medium">{fmtMoney(r.cost)}</td>
                           <td className="px-2 py-2 text-right text-sm">{fmtMoney(r.installmentPaid)}</td>
                           <td className="px-2 py-2 text-right text-sm text-blue-700 font-medium">{fmtMoney(r.deviceSaleAmount)}</td>
@@ -1151,6 +1163,7 @@ export default function BadDebtSummary() {
                         <td className="px-2 py-2 text-center">{yearlyByApproveRows.reduce((s, r) => s + r.count, 0).toLocaleString("th-TH")}</td>
                         <td className="px-2 py-2 text-right">{fmtMoney(yearlyByApproveRows.reduce((s, r) => s + r.financeAmount, 0))}</td>
                         <td className="px-2 py-2 text-right">{fmtMoney(yearlyByApproveRows.reduce((s, r) => s + r.commissionNet, 0))}</td>
+                        <td className="px-2 py-2 text-right">{fmtMoney(yearlyByApproveRows.reduce((s, r) => s + r.incentive, 0))}</td>
                         <td className="px-2 py-2 text-right text-orange-700">{fmtMoney(yearlyByApproveRows.reduce((s, r) => s + r.cost, 0))}</td>
                         <td className="px-2 py-2 text-right">{fmtMoney(yearlyByApproveRows.reduce((s, r) => s + r.installmentPaid, 0))}</td>
                         <td className="px-2 py-2 text-right text-blue-700">{fmtMoney(yearlyByApproveRows.reduce((s, r) => s + r.deviceSaleAmount, 0))}</td>

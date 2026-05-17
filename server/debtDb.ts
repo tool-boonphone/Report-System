@@ -1040,6 +1040,24 @@ export async function listDebtTarget(params: { section: SectionKey }) {
     instByContract.set(key, fixOutOfOrderDueDates(list));
   }
 
+  // --- Load incentive from commissions table ---
+  const incentiveMapTarget = new Map<string, number>();
+  if (cRows.length > 0) {
+    const contractNos = cRows.map((r: any) => `'${(r.contract_no ?? "").replace(/'/g, "''")}'`).join(",");
+    const incentiveTargetRaw = await db.execute(
+      sql.raw(`
+        SELECT contract_no, SUM(COALESCE(incentive, 0)) AS inc
+        FROM commissions
+        WHERE section = '${section}'
+          AND contract_no IN (${contractNos})
+        GROUP BY contract_no
+      `)
+    );
+    for (const r of (pgRows(incentiveTargetRaw) as any[])) {
+      if (r.contract_no) incentiveMapTarget.set(r.contract_no, Number(r.inc ?? 0));
+    }
+  }
+
   // --- Detect "ปิดค่างวด" (customer settles ALL remaining periods at once).
   //
   // Phase 52 rule (2026-04-26): use the LAST period that has paid_amount > 0
@@ -2327,6 +2345,7 @@ export async function listDebtTarget(params: { section: SectionKey }) {
       contractBadDebtUpdatedAt: c.bad_debt_updated_at ?? null,
       financeAmount: c.finance_amount != null ? Number(c.finance_amount) : null,
       commissionNet: c.commission_net != null ? Number(c.commission_net) : null,
+      incentive: incentiveMapTarget.get(c.contract_no ?? "") ?? 0,
     };
   });
 
@@ -4144,7 +4163,7 @@ export async function* listDebtCollectedStream(params: {
  * Each row contains:
  *   contractNo, approveDate, customerName, phone, model, device,
  *   sellPrice, financeAmount, commissionNet,
- *   cost (= financeAmount + commissionNet),
+ *   cost (= financeAmount + commissionNet + incentive),
  *   paidInstallments (งวดที่ชำระ — COUNT non-bad-debt rows in collected cache),
  *   totalPaid (ยอดเก็บค่างวด — SUM total_amount excl. bad_debt_row),
  *   debtValue (= cost - totalPaid),
@@ -4164,6 +4183,7 @@ export async function listSuspectedBadDebt(params: { section: SectionKey }): Pro
     financeAmount: number | null;
     multiplier: number | null;
     commissionNet: number | null;
+    incentive: number;
     cost: number;
     installmentCount: number | null;
     paidInstallments: number;
@@ -4259,6 +4279,21 @@ export async function listSuspectedBadDebt(params: { section: SectionKey }): Pro
     });
   }
 
+  // --- Step 3b: Get incentive from commissions table ---
+  const incentiveRaw2 = await db.execute(
+    sql.raw(`
+      SELECT contract_no, SUM(COALESCE(incentive, 0)) AS inc
+      FROM commissions
+      WHERE section = '${params.section}'
+        AND contract_no IN (${suspectedRows.map((r: any) => `'${(r.contract_no ?? "").replace(/'/g, "''")}'`).join(",")})
+      GROUP BY contract_no
+    `)
+  );
+  const incentiveMap2 = new Map<string, number>();
+  for (const r of (pgRows(incentiveRaw2) as any[])) {
+    if (r.contract_no) incentiveMap2.set(r.contract_no, Number(r.inc ?? 0));
+  }
+
   // --- Step 4: Assemble rows ---
   const today = new Date();
   const rows: ReturnType<typeof listSuspectedBadDebt> extends Promise<{ rows: infer R }> ? R : never = [];
@@ -4270,7 +4305,8 @@ export async function listSuspectedBadDebt(params: { section: SectionKey }): Pro
 
     const financeAmount = s.finance_amount != null ? Number(s.finance_amount) : null;
     const commissionNet = cInfo?.commission_net != null ? Number(cInfo.commission_net) : null;
-    const cost = (financeAmount ?? 0) + (commissionNet ?? 0);
+    const incentive = incentiveMap2.get(s.contract_no ?? "") ?? 0;
+    const cost = (financeAmount ?? 0) + (commissionNet ?? 0) + incentive;
     const totalPaid = collected.totalPaid;
     const debtValue = cost - totalPaid;
 
@@ -4295,6 +4331,7 @@ export async function listSuspectedBadDebt(params: { section: SectionKey }): Pro
       financeAmount,
       multiplier: cInfo?.multiplier != null ? Number(cInfo.multiplier) : null,
       commissionNet,
+      incentive,
       cost,
       installmentCount: s.installment_count != null ? Number(s.installment_count) : null,
       // Cap: paidInstallments ต้องไม่เกิน installmentCount (กรณีชำระเกินงวด เช่น 9/8 → 8/8)
