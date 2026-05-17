@@ -256,8 +256,8 @@ export async function populateDebtCache(
           totalAmount: String(Number(p.total ?? 0)),
           // Raw payment_transactions.amount — ตรงกับ Fastfone Report (source IS NULL rows)
           paymentTxAmount: String(Number(p.total ?? 0)),
-          updatedBy: p.updatedBy ?? null,
-          updatedAt: p.updatedAt ?? null,
+          updatedBy: p.updatedBy ?? (p as any).updated_by ?? null,
+          updatedAt: p.updatedAt ?? (p as any).updated_at ?? null,
           isBadDebtRow: !!p.isBadDebtRow,
           isCloseRow: !!p.isCloseRow,
           remark: p.remark ?? null,
