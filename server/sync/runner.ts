@@ -829,7 +829,6 @@ async function computeAndStoreBadDebt(section: SectionKey): Promise<void> {
             .sort()
             .reverse()[0] ?? null
         : null;
-
       // Suspended from period = งวดแรกที่มี status suspend/cancel
       const SUSPEND_CODES = ["ระงับ", "ยกเลิก", "suspend", "cancel", "cancelled", "suspended"];
       const suspendedInst = cInsts

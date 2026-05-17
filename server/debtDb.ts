@@ -2588,9 +2588,14 @@ export async function listDebtCollected(params: { section: SectionKey }) {
         return inst;
       });
 
-      // updated_by/updated_at สำหรับ bad debt row: ดึงจาก contracts table ที่ sync ไว้แล้ว
-      const contractBadDebtUpdatedBy = (c as any).contractBadDebtUpdatedBy as string | null ?? null;
-      const contractBadDebtUpdatedAt = (c as any).contractBadDebtUpdatedAt as string | null ?? null;
+      // updated_by/updated_at สำหรับ bad debt row: ดึงจาก payment row ล่าสุดใน finalBatch
+      const _finalBatchArr: any[] = Array.from((sortedRealForBadDebt as any).__finalBatch ?? []);
+      const latestBadDebtPayRow = _finalBatchArr.length > 0
+        ? _finalBatchArr.sort((a: any, b: any) =>
+            ((b.created_at ?? "")).localeCompare((a.created_at ?? "")))[0]
+        : null;
+      const contractBadDebtUpdatedBy = latestBadDebtPayRow?.updated_by ?? null;
+      const contractBadDebtUpdatedAt = latestBadDebtPayRow?.updated_at ?? null;
 
       const badDebtRow: any = {
         contract_external_id: c.contractExternalId,
@@ -4042,8 +4047,14 @@ export async function* listDebtCollectedStream(params: {
         }
         const badDebtPeriod = lastNormalPeriod === 0 ? 1 : lastNormalPeriod + 1;
 
-        const contractBadDebtUpdatedBy = (c as any).contractBadDebtUpdatedBy as string | null ?? null;
-        const contractBadDebtUpdatedAt = (c as any).contractBadDebtUpdatedAt as string | null ?? null;
+        // ดึง updated_by/updated_at จาก payment row ล่าสุดใน finalBatch (real-time จาก payment_transactions)
+        const _finalBatchArr2: any[] = Array.from(((realPaymentsRaw as any).__finalBatch ?? []) as unknown[]);
+        const latestBadDebtPayRow2 = _finalBatchArr2.length > 0
+          ? _finalBatchArr2.sort((a: any, b: any) =>
+              ((b.created_at ?? "")).localeCompare((a.created_at ?? "")))[0]
+          : null;
+        const contractBadDebtUpdatedBy = latestBadDebtPayRow2?.updated_by ?? null;
+        const contractBadDebtUpdatedAt = latestBadDebtPayRow2?.updated_at ?? null;
         const badDebtRow: any = {
           contract_external_id: c.contractExternalId,
           period: badDebtPeriod, splitIndex: 0, isCloseRow: false, isBadDebtRow: true,
