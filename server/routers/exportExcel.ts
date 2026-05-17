@@ -786,3 +786,187 @@ export async function handleBadDebtExport(req: Request, res: Response) {
     }
   }
 }
+
+/* ----------------------------------------------------------------------- */
+/*  Income (รายรับ) export — no row limit                                  */
+/* ----------------------------------------------------------------------- */
+
+/**
+ * GET /api/export/income?section=...&dateFrom=...&dateTo=...&dateField=...&incomeTypes=...&updatedBy=...&listMode=detail|slip
+ */
+export async function handleIncomeExport(req: Request, res: Response) {
+  try {
+    const sid = parseCookies(req.headers.cookie)[APP_SESSION_COOKIE];
+    const appUser = sid ? await getUserFromSession(sid) : null;
+    if (!appUser) { res.status(401).json({ message: "Please login (10001)" }); return; }
+
+    const sectionRaw = String(req.query.section ?? "");
+    let section: SectionKey;
+    try { section = normalizeSectionKey(sectionRaw); } catch {
+      res.status(400).json({ message: "ต้องระบุ section" }); return;
+    }
+
+    const { listIncome } = await import("../accountingDb");
+    const dateFrom = req.query.dateFrom ? String(req.query.dateFrom) : undefined;
+    const dateTo = req.query.dateTo ? String(req.query.dateTo) : undefined;
+    const dateField = req.query.dateField === "updatedAt" ? "updatedAt" : "paidAt";
+    const updatedBy = req.query.updatedBy ? String(req.query.updatedBy) : undefined;
+    const listMode = req.query.listMode === "slip" ? "slip" : "detail";
+    const incomeTypesRaw = req.query.incomeTypes ? String(req.query.incomeTypes) : "";
+    const incomeTypes = incomeTypesRaw ? incomeTypesRaw.split(",").map((t) => t.trim()).filter(Boolean) : undefined;
+
+    // Fetch all rows without limit (pageSize = 500000)
+    const { rows: allRows } = await listIncome({
+      section, dateFrom, dateTo, dateField,
+      incomeTypes: incomeTypes as any,
+      updatedBy,
+      page: 1,
+      pageSize: 500000,
+    });
+
+    // Group by slip if needed
+    let exportRows = allRows;
+    if (listMode === "slip") {
+      const slipMap = new Map<string, typeof allRows[0]>();
+      for (const r of allRows) {
+        const key = r.receiptNo ?? `__no_slip_${r.id}`;
+        if (!slipMap.has(key)) slipMap.set(key, r);
+        else {
+          const existing = slipMap.get(key)!;
+          slipMap.set(key, { ...existing, amount: (existing.amount ?? 0) + (r.amount ?? 0) });
+        }
+      }
+      exportRows = Array.from(slipMap.values());
+    }
+
+    const fileName = `รายรับ_${section}_${listMode === "slip" ? "ตามสลิป" : "ตามการบันทึก"}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`);
+
+    const wb = new ExcelJS.stream.xlsx.WorkbookWriter({ stream: res, useStyles: true });
+    const ws = wb.addWorksheet("รายรับ");
+    ws.columns = [
+      { header: "No.", width: 6 },
+      { header: "วันที่ชำระ", width: 14 },
+      { header: "เวลาชำระ", width: 12 },
+      { header: "ประเภท", width: 14 },
+      { header: "รหัสรายการ", width: 20 },
+      { header: "เลขที่สัญญา", width: 22 },
+      { header: "ชื่อลูกค้า", width: 22 },
+      { header: "ยอดเงิน", width: 16 },
+      { header: "ทำรายการโดย", width: 18 },
+      { header: "วันที่ทำรายการ", width: 14 },
+      { header: "เวลาทำรายการ", width: 14 },
+    ];
+    // Style header row
+    ws.getRow(1).eachCell((cell) => {
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1D4ED8" } };
+      cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
+      cell.alignment = { horizontal: "center", vertical: "middle" };
+    });
+    ws.getRow(1).commit();
+
+    for (let i = 0; i < exportRows.length; i++) {
+      const r = exportRows[i];
+      const displayType = listMode === "detail"
+        ? (r.originalIncomeType === "ปิดยอด" ? "ปิดยอด" : "ค่างวด")
+        : r.incomeType;
+      const paidDate = r.paidAt ? String(r.paidAt).slice(0, 10) : "";
+      const paidTime = r.paidAt ? String(r.paidAt).slice(11, 19) : "";
+      const updatedDate = r.updatedAt ? String(r.updatedAt).slice(0, 10) : "";
+      const updatedTime = r.updatedAt ? String(r.updatedAt).slice(11, 19) : "";
+      const row = ws.addRow([i + 1, paidDate, paidTime, displayType, r.receiptNo ?? "", r.contractNo, r.customerName ?? "", r.amount ?? 0, r.updatedBy ?? "", updatedDate, updatedTime]);
+      setMoneyCell(row.getCell(8), r.amount ?? 0);
+      row.commit();
+    }
+    ws.commit();
+    await wb.commit();
+  } catch (err) {
+    console.error("[export] income failed:", err);
+    if (!res.headersSent) res.status(500).json({ message: "Export failed" });
+    else res.end();
+  }
+}
+
+/* ----------------------------------------------------------------------- */
+/*  Expense (รายจ่าย) export — no row limit                                */
+/* ----------------------------------------------------------------------- */
+
+/**
+ * GET /api/export/expense?section=...&dateFrom=...&dateTo=...&dateField=...&search=...
+ */
+export async function handleExpenseExport(req: Request, res: Response) {
+  try {
+    const sid = parseCookies(req.headers.cookie)[APP_SESSION_COOKIE];
+    const appUser = sid ? await getUserFromSession(sid) : null;
+    if (!appUser) { res.status(401).json({ message: "Please login (10001)" }); return; }
+
+    const sectionRaw = String(req.query.section ?? "");
+    let section: SectionKey;
+    try { section = normalizeSectionKey(sectionRaw); } catch {
+      res.status(400).json({ message: "ต้องระบุ section" }); return;
+    }
+
+    const { listCommissions } = await import("../accountingDb");
+    const search = req.query.search ? String(req.query.search).trim() : undefined;
+    const dateFrom = req.query.dateFrom ? String(req.query.dateFrom) : undefined;
+    const dateTo = req.query.dateTo ? String(req.query.dateTo) : undefined;
+    const dateField = req.query.dateField === "approvedAt" ? "approvedAt" : "paymentAt";
+
+    const { rows } = await listCommissions({
+      section, search, dateFrom, dateTo, dateField,
+      page: 1,
+      pageSize: 500000,
+    });
+
+    const fileName = `รายจ่าย_รายการทั้งหมด_${section}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`);
+
+    const wb = new ExcelJS.stream.xlsx.WorkbookWriter({ stream: res, useStyles: true });
+    const ws = wb.addWorksheet("รายการทั้งหมด");
+    ws.columns = [
+      { header: "No.", width: 6 },
+      { header: "วันที่โอนเงิน", width: 14 },
+      { header: "เลขที่สัญญา", width: 22 },
+      { header: "วันที่อนุมัติ", width: 14 },
+      { header: "ยอดจัดไฟแนนซ์", width: 18 },
+      { header: "ค่าคอมมิชชั่น", width: 18 },
+      { header: "Incentive", width: 14 },
+      { header: "รวมยอดโอน", width: 16 },
+      { header: "ผู้จ่าย", width: 16 },
+    ];
+    ws.getRow(1).eachCell((cell) => {
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFDC2626" } };
+      cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
+      cell.alignment = { horizontal: "center", vertical: "middle" };
+    });
+    ws.getRow(1).commit();
+
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i];
+      const row = ws.addRow([
+        i + 1,
+        r.paymentAt ? String(r.paymentAt).slice(0, 10) : "",
+        r.contractNo,
+        r.approvedAt ? String(r.approvedAt).slice(0, 10) : "",
+        r.financeAmount ?? 0,
+        r.commAmount ?? 0,
+        r.incentive ?? 0,
+        r.totalTransfer ?? 0,
+        r.paymentBy ?? "",
+      ]);
+      setMoneyCell(row.getCell(5), r.financeAmount ?? 0);
+      setMoneyCell(row.getCell(6), r.commAmount ?? 0);
+      setMoneyCell(row.getCell(7), r.incentive ?? 0);
+      setMoneyCell(row.getCell(8), r.totalTransfer ?? 0);
+      row.commit();
+    }
+    ws.commit();
+    await wb.commit();
+  } catch (err) {
+    console.error("[export] expense failed:", err);
+    if (!res.headersSent) res.status(500).json({ message: "Export failed" });
+    else res.end();
+  }
+}

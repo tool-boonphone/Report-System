@@ -6,6 +6,7 @@
  *   3. รายการขายเครื่อง
  */
 import React, { useMemo, useState, useEffect, useCallback } from "react";
+import * as XLSX from "xlsx";
 import { toast } from "sonner";
 import {
   AlertTriangle,
@@ -566,31 +567,69 @@ export default function BadDebtSummary() {
   /* ── export ── */
   const handleExport = useCallback(async () => {
     if (!section) return;
-    const params = new URLSearchParams({ section });
-    if (approveMonth) params.set("approveMonth", approveMonth);
-    if (saleMonth) params.set("saleMonth", saleMonth);
     const toastId = toast.loading("กำลังเตรียมไฟล์ Excel…");
     try {
-      const resp = await fetch(`/api/export/bad-debt?${params.toString()}`, { credentials: "include" });
-      if (!resp.ok) {
-        const { message } = await resp.json().catch(() => ({ message: "Export failed" }));
-        toast.error(message, { id: toastId });
-        return;
+      // --- สรุปรายปี ---
+      if (activeTab === "yearly") {
+        if (yearlySubTab === "bySale") {
+          if (!yearlyBySaleRows.length) { toast.error("ไม่มีข้อมูล", { id: toastId }); return; }
+          const headers = ["ปี", "จำนวนสัญญา", "ยอดจัดไฟแนนซ์", "ค่าคอมมิชชั่น", "Incentive", "ต้นทุน", "ยอดผ่อน", "ยอดขายเครื่อง", "รายรับรวม", "กำไร/ขาดทุน"];
+          const dataRows = yearlyBySaleRows.map((r) => [r.year, r.count, r.financeAmount, r.commissionNet, r.incentive, r.cost, r.installmentPaid, r.deviceSaleAmount, r.totalRevenue, r.profitLoss]);
+          const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
+          ws["!cols"] = [{ wch: 8 }, { wch: 14 }, { wch: 18 }, { wch: 18 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 18 }, { wch: 14 }, { wch: 16 }];
+          const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "สรุปรายปี_ตามปีที่ขาย");
+          XLSX.writeFile(wb, `หนี้เสีย_สรุปรายปี_ตามปีที่ขาย_${section}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+        } else {
+          if (!yearlyByApproveRows.length) { toast.error("ไม่มีข้อมูล", { id: toastId }); return; }
+          const headers = ["ปี", "สัญญาทั้งหมด", "จำนวนหนี้เสีย", "ยอดจัดไฟแนนซ์", "ค่าคอมมิชชั่น", "Incentive", "ต้นทุน", "ยอดผ่อน", "ยอดขายเครื่อง", "รายรับรวม", "% หนี้เสีย", "กำไร/ขาดทุน"];
+          const dataRows = yearlyByApproveRows.map((r) => [r.year, r.totalAll, r.count, r.financeAmount, r.commissionNet, r.incentive, r.cost, r.installmentPaid, r.deviceSaleAmount, r.totalRevenue, r.badDebtRate != null ? parseFloat(r.badDebtRate.toFixed(2)) : "", r.profitLoss]);
+          const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
+          ws["!cols"] = [{ wch: 8 }, { wch: 14 }, { wch: 14 }, { wch: 18 }, { wch: 18 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 18 }, { wch: 14 }, { wch: 12 }, { wch: 16 }];
+          const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "สรุปรายปี_ตามปีที่อนุมัติ");
+          XLSX.writeFile(wb, `หนี้เสีย_สรุปรายปี_ตามปีที่อนุมัติ_${section}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+        }
+      // --- สรุปรายเดือน ---
+      } else if (activeTab === "monthly") {
+        if (monthlySubTab === "bySale") {
+          if (!monthlyBySaleRows.length) { toast.error("ไม่มีข้อมูล", { id: toastId }); return; }
+          const headers = ["เดือน-ปี", "จำนวนสัญญา", "ยอดจัดไฟแนนซ์", "ค่าคอมมิชชั่น", "Incentive", "ต้นทุน", "ยอดผ่อน", "ยอดขายเครื่อง", "รายรับรวม", "กำไร/ขาดทุน"];
+          const dataRows = monthlyBySaleRows.map((r) => [r.ym === "ไม่ระบุ" ? "ไม่ระบุ" : fmtMonthLabel(r.ym), r.count, r.financeAmount, r.commissionNet, r.incentive, r.cost, r.installmentPaid, r.deviceSaleAmount, r.totalRevenue, r.profitLoss]);
+          const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
+          ws["!cols"] = [{ wch: 12 }, { wch: 14 }, { wch: 18 }, { wch: 18 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 18 }, { wch: 14 }, { wch: 16 }];
+          const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "สรุปรายเดือน_ตามเดือนที่ขาย");
+          XLSX.writeFile(wb, `หนี้เสีย_สรุปรายเดือน_ตามเดือนที่ขาย_${section}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+        } else {
+          if (!monthlyByApproveRows.length) { toast.error("ไม่มีข้อมูล", { id: toastId }); return; }
+          const headers = ["เดือน-ปี", "สัญญาทั้งหมด", "จำนวนหนี้เสีย", "ยอดจัดไฟแนนซ์", "ค่าคอมมิชชั่น", "Incentive", "ต้นทุน", "ยอดผ่อน", "ยอดขายเครื่อง", "รายรับรวม", "% หนี้เสีย", "กำไร/ขาดทุน"];
+          const dataRows = monthlyByApproveRows.map((r) => [r.ym === "ไม่ระบุ" ? "ไม่ระบุ" : fmtMonthLabel(r.ym), r.totalAll, r.count, r.financeAmount, r.commissionNet, r.incentive, r.cost, r.installmentPaid, r.deviceSaleAmount, r.totalRevenue, r.badDebtRate != null ? parseFloat(r.badDebtRate.toFixed(2)) : "", r.profitLoss]);
+          const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
+          ws["!cols"] = [{ wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 18 }, { wch: 18 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 18 }, { wch: 14 }, { wch: 12 }, { wch: 16 }];
+          const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "สรุปรายเดือน_ตามเดือนที่อนุมัติ");
+          XLSX.writeFile(wb, `หนี้เสีย_สรุปรายเดือน_ตามเดือนที่อนุมัติ_${section}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+        }
+      // --- รายการขายเครื่อง (เรียก API เหมือนเดิม) ---
+      } else {
+        const params = new URLSearchParams({ section });
+        if (approveMonth) params.set("approveMonth", approveMonth);
+        if (saleMonth) params.set("saleMonth", saleMonth);
+        const resp = await fetch(`/api/export/bad-debt?${params.toString()}`, { credentials: "include" });
+        if (!resp.ok) {
+          const { message } = await resp.json().catch(() => ({ message: "Export failed" }));
+          toast.error(message, { id: toastId }); return;
+        }
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `bad_debt_summary_${section}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+        document.body.appendChild(a); a.click(); a.remove();
+        URL.revokeObjectURL(url);
       }
-      const blob = await resp.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `bad_debt_summary_${section}_${new Date().toISOString().slice(0, 10)}.xlsx`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
       toast.success("ดาวน์โหลดสำเร็จ", { id: toastId });
     } catch (err) {
       toast.error((err as Error).message ?? "Export failed", { id: toastId });
     }
-  }, [section, approveMonth, saleMonth]);
+  }, [section, approveMonth, saleMonth, activeTab, yearlySubTab, monthlySubTab, yearlyBySaleRows, yearlyByApproveRows, monthlyBySaleRows, monthlyByApproveRows]);
 
   /* ── nav actions: SyncStatusBar ── */
   useEffect(() => {

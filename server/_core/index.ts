@@ -8,7 +8,7 @@ import { registerOAuthRoutes } from "./oauth";
 import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
 import { seedSuperAdmin } from "../authDb";
-import { handleContractsExport, handleDebtExport, handleBadDebtExport } from "../routers/exportExcel";
+import { handleContractsExport, handleDebtExport, handleBadDebtExport, handleIncomeExport, handleExpenseExport } from "../routers/exportExcel";
 import { handleDebtStreamTarget, handleDebtStreamCollected, handleDebtCacheInvalidate } from "../routers/debtStream";
 import { handleSyncStream } from "../routers/syncStream";
 import { startScheduler } from "../sync/scheduler";
@@ -49,6 +49,8 @@ async function startServer() {
   app.get("/api/export/contracts", handleContractsExport);
   app.get("/api/export/debt", handleDebtExport);
   app.get("/api/export/bad-debt", handleBadDebtExport);
+  app.get("/api/export/income", handleIncomeExport);
+  app.get("/api/export/expense", handleExpenseExport);
   // Phase 33: Streaming debt data endpoints — bypass tRPC buffering to avoid proxy 503 timeout
   app.get("/api/debt/stream/target", handleDebtStreamTarget);
   app.get("/api/debt/stream/collected", handleDebtStreamCollected);

@@ -234,53 +234,30 @@ export default function Expense() {
   const handleExport = useCallback(async () => {
     const toastId = toast.loading("กำลัง Export...");
     try {
-      const { data: exp } = await refetchExport();
-      const exportRows = exp?.rows ?? [];
-      const headers = [
-        "No.", "วันที่โอนเงิน", "เลขที่สัญญา", "วันที่อนุมัติ",
-        "ยอดจัดไฟแนนซ์", "ค่าคอมมิชชั่น", "Incentive", "รวมยอดโอน", "ผู้จ่าย",
-      ];
-      const dataRows = exportRows.map((r, i) => [
-        i + 1,
-        r.paymentAt ? r.paymentAt.slice(0, 10) : "",
-        r.contractNo,
-        r.approvedAt ? r.approvedAt.slice(0, 10) : "",
-        r.financeAmount ?? 0,
-        r.commAmount ?? 0,
-        r.incentive ?? 0,
-        r.totalTransfer ?? 0,
-        r.paymentBy ?? "",
-      ]);
-      const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
-      ws["!cols"] = [
-        { wch: 6 }, { wch: 14 }, { wch: 22 }, { wch: 14 },
-        { wch: 16 }, { wch: 16 }, { wch: 14 }, { wch: 16 }, { wch: 16 },
-      ];
-      for (let C = 0; C < headers.length; C++) {
-        const addr = XLSX.utils.encode_cell({ r: 0, c: C });
-        if (!ws[addr]) ws[addr] = { t: "s", v: headers[C] };
-        ws[addr].s = {
-          fill: { patternType: "solid", fgColor: { rgb: "DC2626" } },
-          font: { bold: true, color: { rgb: "FFFFFF" } },
-          alignment: { horizontal: "center", vertical: "center", wrapText: true },
-          border: { bottom: { style: "thin", color: { rgb: "D1D5DB" } } },
-        };
+      if (!section) { toast.error("ไม่พบ section", { id: toastId }); return; }
+      // ใช้ server-side streaming export endpoint — ไม่มี row limit
+      const params = new URLSearchParams({ section });
+      if (search) params.set("search", search);
+      if (dateFrom) params.set("dateFrom", dateFrom);
+      if (dateTo) params.set("dateTo", dateTo);
+      if (dateField) params.set("dateField", dateField);
+      const resp = await fetch(`/api/export/expense?${params.toString()}`, { credentials: "include" });
+      if (!resp.ok) {
+        const { message } = await resp.json().catch(() => ({ message: "Export failed" }));
+        toast.error(message, { id: toastId }); return;
       }
-      // format number columns
-      for (let R = 1; R <= dataRows.length; R++) {
-        for (const C of [4, 5, 6, 7]) {
-          const addr = XLSX.utils.encode_cell({ r: R, c: C });
-          if (ws[addr]) { ws[addr].t = "n"; ws[addr].z = "#,##0.00"; }
-        }
-      }
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "รายการทั้งหมด");
-      XLSX.writeFile(wb, `รายจ่าย_รายการทั้งหมด_${section}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `รายจ่าย_รายการทั้งหมด_${section}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
       toast.success("Export สำเร็จ", { id: toastId });
     } catch (err) {
       toast.error((err as Error).message ?? "Export failed", { id: toastId });
     }
-  }, [refetchExport, section]);
+  }, [section, search, dateFrom, dateTo, dateField]);
 
   const handleExportYearly = () => {
     if (!yearlyData?.length) { toast.error("ไม่มีข้อมูล"); return; }

@@ -611,58 +611,32 @@ export default function Income() {
     const toastId = toast.loading("กำลัง Export...");
     try {
       if (!section) { toast.error("ไม่พบ section", { id: toastId }); return; }
-      // ดึงข้อมูลทั้งหมดจาก server โดยตรงพร้อม filter ปัจจุบัน
-      const result = await utils.accounting.listIncome.fetch({
-        section: section as SectionKey,
-        search: search || undefined,
-        dateFrom: dateFrom || undefined,
-        dateTo: dateTo || undefined,
-        dateField: dateField === "updatedAt" ? "updatedAt" : "paidAt",
-        incomeTypes: serverIncomeTypes,
-        updatedBy: updatedBy || undefined,
-        page: 1,
-        pageSize: 20000, // max
-      });
-      let exportRows: IncomeRow[] = (result?.rows ?? []) as IncomeRow[];
-      if (!exportRows.length) { toast.error("ไม่มีข้อมูล", { id: toastId }); return; }
-      if (listMode === "slip") {
-        exportRows = groupRowsBySlip(exportRows);
+      // ใช้ server-side streaming export endpoint — ไม่มี row limit
+      const params = new URLSearchParams({ section, listMode });
+      if (search) params.set("search", search);
+      if (dateFrom) params.set("dateFrom", dateFrom);
+      if (dateTo) params.set("dateTo", dateTo);
+      if (dateField) params.set("dateField", dateField);
+      if (updatedBy) params.set("updatedBy", updatedBy);
+      if (serverIncomeTypes && serverIncomeTypes.length > 0) params.set("incomeTypes", serverIncomeTypes.join(","));
+      const resp = await fetch(`/api/export/income?${params.toString()}`, { credentials: "include" });
+      if (!resp.ok) {
+        const { message } = await resp.json().catch(() => ({ message: "Export failed" }));
+        toast.error(message, { id: toastId }); return;
       }
-      const XLSX = await import("xlsx");
-      const headers = ["No.", "วันที่ชำระ", "เวลาชำระ", "ประเภท", "รหัสรายการ", "เลขที่สัญญา", "ชื่อลูกค้า", "ยอดเงิน", "ทำรายการโดย", "วันที่ทำรายการ", "เวลาทำรายการ"];
-      const dataRows = exportRows.map((r, i) => {
-        const displayType = listMode === "detail"
-          ? (r.originalIncomeType === "ปิดยอด" ? "ปิดยอด" : "ค่างวด")
-          : r.incomeType;
-        const paidDate = r.paidAt ? r.paidAt.slice(0, 10) : "";
-        const paidTime = r.paidAt ? r.paidAt.slice(11, 19) : "";
-        const updatedDate = r.updatedAt ? r.updatedAt.slice(0, 10) : "";
-        const updatedTime = r.updatedAt ? r.updatedAt.slice(11, 19) : "";
-        return [
-          i + 1, paidDate, paidTime, displayType, r.receiptNo ?? "", r.contractNo,
-          r.customerName ?? "", r.amount ?? 0, r.updatedBy ?? "", updatedDate, updatedTime,
-        ];
-      });
-      const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
-      ws["!cols"] = [{ wch: 6 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 18 }, { wch: 20 }, { wch: 14 }, { wch: 16 }, { wch: 12 }, { wch: 12 }];
-      for (let C = 0; C < headers.length; C++) {
-        const addr = XLSX.utils.encode_cell({ r: 0, c: C });
-        if (!ws[addr]) ws[addr] = { t: "s", v: headers[C] };
-        ws[addr].s = { fill: { patternType: "solid", fgColor: { rgb: "1D4ED8" } }, font: { bold: true, color: { rgb: "FFFFFF" } }, alignment: { horizontal: "center", vertical: "center", wrapText: true }, border: { bottom: { style: "thin", color: { rgb: "D1D5DB" } } } };
-      }
-      for (let R = 1; R <= dataRows.length; R++) {
-        const addr = XLSX.utils.encode_cell({ r: R, c: 7 });
-        if (ws[addr]) { ws[addr].t = "n"; ws[addr].z = "#,##0.00"; }
-      }
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "รายรับ");
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
       const modeSuffix = listMode === "slip" ? "_ตามสลิป" : "_ตามการบันทึก";
-      XLSX.writeFile(wb, `รายรับ_${section}${modeSuffix}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+      a.download = `รายรับ_${section}${modeSuffix}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
       toast.success("Export สำเร็จ", { id: toastId });
     } catch (err) {
       toast.error((err as Error).message ?? "Export failed", { id: toastId });
     }
-  }, [utils, section, search, dateFrom, dateTo, dateField, serverIncomeTypes, updatedBy, listMode]);
+  }, [section, search, dateFrom, dateTo, dateField, serverIncomeTypes, updatedBy, listMode]);
 
   const handleExportYearly = () => {
     const rows2 = yearlyData ?? [];
