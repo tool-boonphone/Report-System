@@ -658,76 +658,78 @@ async function queryInstallTotal(
   });
 
   /*
-   * Phase 9AK fix: ใช้ installment_amount × installment_count จาก contracts table โดยตรง
-   * ไม่ต้องสนใจสถานะงวด (suspended/closed/normal)
-   * Breakdown ต่องวด (Phase 9X):
-   *   basePrincipal = CEIL(finance_amount / installment_count)
-   *   baseFee       = 100
-   *   baseInterest  = installment_amount - basePrincipal - baseFee
+   * Phase 9AK-fix2: ดึงจาก debt_target_cache โดยตรงเหมือน queryCount
+   * ใช้ latest period (ROW_NUMBER DESC) เพื่อให้ bucket ตรงกับแถบสัญญา
+   * Breakdown:
+   *   total_install  = baseline_amount × installment_count  (ยอดผ่อนรวมทั้งสัญญา)
+   *   principal_install = CEIL(finance_amount / installment_count) × installment_count
+   *   fee_install    = 100 × installment_count
+   *   interest_install = total_install - principal_install - fee_install
    */
   const q = `
-    SELECT
-      TO_CHAR(c.approve_date, 'YYYY-MM') AS approve_month,
-      CASE
-        WHEN latest.contract_status = 'หนี้เสีย'      THEN 'หนี้เสีย'
-        WHEN latest.contract_status = 'ระงับสัญญา'   THEN 'ระงับสัญญา'
-        WHEN latest.contract_status = 'สิ้นสุดสัญญา' THEN 'สิ้นสุดสัญญา'
-        WHEN latest.contract_status = 'ยกเลิกสัญญา' THEN 'ยกเลิกสัญญา'
-        ELSE COALESCE(latest.debt_range, 'ปกติ')
-      END AS bucket,
-      COUNT(DISTINCT c.external_id) AS contract_count,
-      -- Phase 9X breakdown: principal/งวด = CEIL(finance/count), fee=100, interest=instAmt-principal-100
-      SUM(
-        CASE
-          WHEN c.finance_amount > 0 AND c.installment_count > 0
-          THEN CEIL(CAST(c.finance_amount AS DECIMAL(18,2)) / c.installment_count) * c.installment_count
-          ELSE CAST(c.installment_amount AS DECIMAL(18,2)) * c.installment_count
-        END
-      ) AS principal_install,
-      SUM(
-        CASE
-          WHEN c.finance_amount > 0 AND c.installment_count > 0
-            AND CAST(c.installment_amount AS DECIMAL(18,2)) > 0
-          THEN GREATEST(0,
-            CAST(c.installment_amount AS DECIMAL(18,2))
-            - CEIL(CAST(c.finance_amount AS DECIMAL(18,2)) / c.installment_count)
-            - 100
-          ) * c.installment_count
-          ELSE 0
-        END
-      ) AS interest_install,
-      SUM(
-        CASE
-          WHEN c.finance_amount > 0 AND c.installment_count > 0
-          THEN 100 * c.installment_count
-          ELSE 0
-        END
-      ) AS fee_install,
-      SUM(CAST(c.installment_amount AS DECIMAL(18,2)) * c.installment_count) AS total_install
-    FROM contracts c
-    JOIN (
+    WITH latest AS (
       SELECT
         dtc.section,
         dtc.contract_external_id,
         dtc.contract_status,
-        dtc.debt_range
+        dtc.debt_range,
+        dtc.approve_date,
+        dtc.baseline_amount,
+        dtc.installment_count,
+        dtc.finance_amount,
+        dtc.product_type,
+        dtc.device,
+        ROW_NUMBER() OVER (
+          PARTITION BY dtc.section, dtc.contract_external_id
+          ORDER BY dtc.period DESC
+        ) AS rn
       FROM debt_target_cache dtc
-      INNER JOIN (
-        SELECT dtc2.section, dtc2.contract_external_id, MAX(dtc2.period) AS max_period
-        FROM debt_target_cache dtc2
-        WHERE dtc2.section = '${section}'
-          AND dtc2.approve_date IS NOT NULL
-        GROUP BY dtc2.section, dtc2.contract_external_id
-      ) mp ON mp.section = dtc.section
-          AND mp.contract_external_id = dtc.contract_external_id
-          AND mp.max_period = dtc.period
-    ) latest ON latest.section = c.section
-            AND latest.contract_external_id = CAST(c.external_id AS CHAR)
-    WHERE c.section = '${section}'
-      AND c.approve_date IS NOT NULL
-      AND c.installment_amount > 0
-      AND c.installment_count > 0
-      ${opts.search ? `AND (c.contract_no LIKE '%${escapeLike(opts.search)}%' OR c.customer_name LIKE '%${escapeLike(opts.search)}%')` : ''}
+      WHERE ${baseWhere}
+    )
+    SELECT
+      TO_CHAR(l.approve_date, 'YYYY-MM') AS approve_month,
+      CASE
+        WHEN l.contract_status = 'หนี้เสีย'      THEN 'หนี้เสีย'
+        WHEN l.contract_status = 'ระงับสัญญา'   THEN 'ระงับสัญญา'
+        WHEN l.contract_status = 'สิ้นสุดสัญญา' THEN 'สิ้นสุดสัญญา'
+        WHEN l.contract_status = 'ยกเลิกสัญญา' THEN 'ยกเลิกสัญญา'
+        ELSE COALESCE(l.debt_range, 'ปกติ')
+      END AS bucket,
+      COUNT(DISTINCT l.contract_external_id) AS contract_count,
+      -- principal = CEIL(finance_amount / installment_count) × installment_count
+      SUM(
+        CASE
+          WHEN l.finance_amount > 0 AND l.installment_count > 0
+          THEN CEIL(CAST(l.finance_amount AS DECIMAL(18,2)) / l.installment_count) * l.installment_count
+          ELSE COALESCE(l.baseline_amount, 0) * COALESCE(l.installment_count, 0)
+        END
+      ) AS principal_install,
+      -- interest = total - principal - fee
+      SUM(
+        CASE
+          WHEN l.finance_amount > 0 AND l.installment_count > 0
+            AND l.baseline_amount > 0
+          THEN GREATEST(0,
+            l.baseline_amount * l.installment_count
+            - CEIL(CAST(l.finance_amount AS DECIMAL(18,2)) / l.installment_count) * l.installment_count
+            - 100 * l.installment_count
+          )
+          ELSE 0
+        END
+      ) AS interest_install,
+      -- fee = 100 × installment_count
+      SUM(
+        CASE
+          WHEN l.finance_amount > 0 AND l.installment_count > 0
+          THEN 100 * l.installment_count
+          ELSE 0
+        END
+      ) AS fee_install,
+      -- total = baseline_amount × installment_count
+      SUM(COALESCE(l.baseline_amount, 0) * COALESCE(l.installment_count, 0)) AS total_install
+    FROM latest l
+    WHERE l.rn = 1
+      ${opts.search ? `AND (l.contract_external_id LIKE '%${escapeLike(opts.search)}%')` : ''}
     GROUP BY 1, 2
     ORDER BY 1 DESC
   `;
