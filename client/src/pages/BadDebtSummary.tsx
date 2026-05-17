@@ -907,13 +907,14 @@ export default function BadDebtSummary() {
                     <tr>
                       <ThM label="เดือน-ปีที่ขาย" col="ym" rowSpan={2} className="px-3 text-left border-r border-blue-500" />
                       <ThM label="จำนวน" col="count" rowSpan={2} className="border-r border-blue-500" />
-                      <th colSpan={3} className="px-2 py-1 text-center text-xs font-semibold border-b border-blue-500 border-r border-blue-500">ต้นทุน</th>
+                      <th colSpan={4} className="px-2 py-1 text-center text-xs font-semibold border-b border-blue-500 border-r border-blue-500">ต้นทุน</th>
                       <th colSpan={3} className="px-2 py-1 text-center text-xs font-semibold border-b border-blue-500 border-r border-blue-500">รายรับ</th>
                       <ThM label="กำไร/ขาดทุน" col="profitLoss" rowSpan={2} />
                     </tr>
                     <tr>
                       <ThM label="ยอดจัดไฟแนนซ์" col="financeAmount" />
                       <ThM label="ค่าคอมมิชชั่น" col="commissionNet" />
+                      <ThM label="Incentive" col="incentive" />
                       <ThM label="ต้นทุนรวม" col="cost" className="border-r border-blue-500" />
                       <ThM label="ยอดเก็บค่างวด" col="installmentPaid" />
                       <ThM label="ยอดขายเครื่อง" col="deviceSaleAmount" />
@@ -922,7 +923,7 @@ export default function BadDebtSummary() {
                   </thead>
                   <tbody>
                     {monthlyBySaleRows.length === 0 ? (
-                      <tr><td colSpan={9} className="text-center py-12 text-gray-400">ไม่พบข้อมูล</td></tr>
+                      <tr><td colSpan={10} className="text-center py-12 text-gray-400">ไม่พบข้อมูล</td></tr>
                     ) : (
                       monthlyBySaleRows.map((r, idx) => (
                         <tr key={r.ym} className={`border-b border-gray-100 hover:bg-gray-50 ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}>
@@ -930,6 +931,7 @@ export default function BadDebtSummary() {
                           <td className="px-2 py-2 text-center text-sm">{r.count.toLocaleString("th-TH")}</td>
                           <td className="px-2 py-2 text-right text-sm">{fmtMoney(r.financeAmount)}</td>
                           <td className="px-2 py-2 text-right text-sm">{fmtMoney(r.commissionNet)}</td>
+                          <td className="px-2 py-2 text-right text-sm">{fmtMoney(r.incentive)}</td>
                           <td className="px-2 py-2 text-right text-sm text-orange-700 font-medium">{fmtMoney(r.cost)}</td>
                           <td className="px-2 py-2 text-right text-sm">{fmtMoney(r.installmentPaid)}</td>
                           <td className="px-2 py-2 text-right text-sm text-blue-700 font-medium">{fmtMoney(r.deviceSaleAmount)}</td>
@@ -945,6 +947,7 @@ export default function BadDebtSummary() {
                         <td className="px-2 py-2 text-center">{monthlyBySaleRows.reduce((s, r) => s + r.count, 0).toLocaleString("th-TH")}</td>
                         <td className="px-2 py-2 text-right">{fmtMoney(monthlyBySaleRows.reduce((s, r) => s + r.financeAmount, 0))}</td>
                         <td className="px-2 py-2 text-right">{fmtMoney(monthlyBySaleRows.reduce((s, r) => s + r.commissionNet, 0))}</td>
+                        <td className="px-2 py-2 text-right">{fmtMoney(monthlyBySaleRows.reduce((s, r) => s + r.incentive, 0))}</td>
                         <td className="px-2 py-2 text-right text-orange-700">{fmtMoney(monthlyBySaleRows.reduce((s, r) => s + r.cost, 0))}</td>
                         <td className="px-2 py-2 text-right">{fmtMoney(monthlyBySaleRows.reduce((s, r) => s + r.installmentPaid, 0))}</td>
                         <td className="px-2 py-2 text-right text-blue-700">{fmtMoney(monthlyBySaleRows.reduce((s, r) => s + r.deviceSaleAmount, 0))}</td>
@@ -968,7 +971,7 @@ export default function BadDebtSummary() {
                       <ThMA label="เดือน-ปีที่อนุมัติ" col="ym" rowSpan={2} className="px-3 text-left border-r border-blue-500" />
                       <th className="px-2 py-1 text-center text-xs font-semibold border-r border-blue-500 whitespace-nowrap" rowSpan={2}>สัญญา</th>
                       <ThMA label="หนี้เสีย" col="count" rowSpan={2} className="border-r border-blue-500" />
-                      <th colSpan={3} className="px-2 py-1 text-center text-xs font-semibold border-b border-blue-500 border-r border-blue-500">ต้นทุน</th>
+                      <th colSpan={4} className="px-2 py-1 text-center text-xs font-semibold border-b border-blue-500 border-r border-blue-500">ต้นทุน</th>
                       <th colSpan={3} className="px-2 py-1 text-center text-xs font-semibold border-b border-blue-500 border-r border-blue-500">รายรับ</th>
                       <th className="px-2 py-1 text-center text-xs font-semibold border-r border-blue-500 whitespace-nowrap" rowSpan={2}>% หนี้เสีย</th>
                       <ThMA label="กำไร/ขาดทุน" col="profitLoss" rowSpan={2} />
@@ -976,6 +979,7 @@ export default function BadDebtSummary() {
                     <tr>
                       <ThMA label="ยอดจัดไฟแนนซ์" col="financeAmount" />
                       <ThMA label="ค่าคอมมิชชั่น" col="commissionNet" />
+                      <ThMA label="Incentive" col="incentive" />
                       <ThMA label="ต้นทุนรวม" col="cost" className="border-r border-blue-500" />
                       <ThMA label="ยอดเก็บค่างวด" col="installmentPaid" />
                       <ThMA label="ยอดขายเครื่อง" col="deviceSaleAmount" />
@@ -984,7 +988,7 @@ export default function BadDebtSummary() {
                   </thead>
                   <tbody>
                     {monthlyByApproveRows.length === 0 ? (
-                      <tr><td colSpan={10} className="text-center py-12 text-gray-400">ไม่พบข้อมูล</td></tr>
+                      <tr><td colSpan={12} className="text-center py-12 text-gray-400">ไม่พบข้อมูล</td></tr>
                     ) : (
                       monthlyByApproveRows.map((r, idx) => (
                         <tr key={r.ym} className={`border-b border-gray-100 hover:bg-gray-50 ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}>
@@ -1013,6 +1017,7 @@ export default function BadDebtSummary() {
                         <td className="px-2 py-2 text-center">{monthlyByApproveRows.reduce((s, r) => s + r.count, 0).toLocaleString("th-TH")}</td>
                         <td className="px-2 py-2 text-right">{fmtMoney(monthlyByApproveRows.reduce((s, r) => s + r.financeAmount, 0))}</td>
                         <td className="px-2 py-2 text-right">{fmtMoney(monthlyByApproveRows.reduce((s, r) => s + r.commissionNet, 0))}</td>
+                        <td className="px-2 py-2 text-right">{fmtMoney(monthlyByApproveRows.reduce((s, r) => s + r.incentive, 0))}</td>
                         <td className="px-2 py-2 text-right text-orange-700">{fmtMoney(monthlyByApproveRows.reduce((s, r) => s + r.cost, 0))}</td>
                         <td className="px-2 py-2 text-right">{fmtMoney(monthlyByApproveRows.reduce((s, r) => s + r.installmentPaid, 0))}</td>
                         <td className="px-2 py-2 text-right text-blue-700">{fmtMoney(monthlyByApproveRows.reduce((s, r) => s + r.deviceSaleAmount, 0))}</td>
@@ -1053,13 +1058,14 @@ export default function BadDebtSummary() {
                     <tr>
                       <ThY label="ปีที่ขาย" col="year" rowSpan={2} className="px-3 text-left border-r border-purple-500" />
                       <ThY label="จำนวน" col="count" rowSpan={2} className="border-r border-purple-500" />
-                      <th colSpan={3} className="px-2 py-1 text-center text-xs font-semibold border-b border-purple-500 border-r border-purple-500">ต้นทุน</th>
+                      <th colSpan={4} className="px-2 py-1 text-center text-xs font-semibold border-b border-purple-500 border-r border-purple-500">ต้นทุน</th>
                       <th colSpan={3} className="px-2 py-1 text-center text-xs font-semibold border-b border-purple-500 border-r border-purple-500">รายรับ</th>
                       <ThY label="กำไร/ขาดทุน" col="profitLoss" rowSpan={2} />
                     </tr>
                     <tr>
                       <ThY label="ยอดจัดไฟแนนซ์" col="financeAmount" />
                       <ThY label="ค่าคอมมิชชั่น" col="commissionNet" />
+                      <ThY label="Incentive" col="incentive" />
                       <ThY label="ต้นทุนรวม" col="cost" className="border-r border-purple-500" />
                       <ThY label="ยอดเก็บค่างวด" col="installmentPaid" />
                       <ThY label="ยอดขายเครื่อง" col="deviceSaleAmount" />
@@ -1068,7 +1074,7 @@ export default function BadDebtSummary() {
                   </thead>
                   <tbody>
                     {yearlyBySaleRows.length === 0 ? (
-                      <tr><td colSpan={9} className="text-center py-12 text-gray-400">ไม่พบข้อมูล</td></tr>
+                      <tr><td colSpan={10} className="text-center py-12 text-gray-400">ไม่พบข้อมูล</td></tr>
                     ) : (
                       yearlyBySaleRows.map((r, idx) => (
                         <tr key={r.year} className={`border-b border-gray-100 hover:bg-gray-50 ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}>
@@ -1133,7 +1139,7 @@ export default function BadDebtSummary() {
                   </thead>
                   <tbody>
                     {yearlyByApproveRows.length === 0 ? (
-                      <tr><td colSpan={10} className="text-center py-12 text-gray-400">ไม่พบข้อมูล</td></tr>
+                      <tr><td colSpan={12} className="text-center py-12 text-gray-400">ไม่พบข้อมูล</td></tr>
                     ) : (
                       yearlyByApproveRows.map((r, idx) => (
                         <tr key={r.year} className={`border-b border-gray-100 hover:bg-gray-50 ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}>

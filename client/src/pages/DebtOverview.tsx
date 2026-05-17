@@ -136,6 +136,7 @@ type TargetRow = {
   installments: InstallmentCell[];
   financeAmount?: number | null;   // Phase 9X: ใช้คำนวณ breakdown สำหรับสัญญา suspended
   commissionNet?: number | null;
+  incentive?: number | null;
 };
 type CollectedRow = TargetRow & { payments: PaymentCell[] };
 
@@ -829,10 +830,11 @@ export default function DebtOverview() {
       if (!seenContracts.has(r.contractExternalId)) {
         seenContracts.set(r.contractExternalId, monthKey);
         row.contractCount += 1;
-        // ต้นทุน = financeAmount + commissionNet
+        // ต้นทุน = financeAmount + commissionNet + incentive
         const fa = r.financeAmount ?? 0;
         const cn = r.commissionNet ?? 0;
-        row.cost += fa + cn;
+        const inc = (r as any).incentive ?? 0;
+        row.cost += fa + cn + inc;
       }
 
       // ยังไม่ถึงกำหนด: ยอดค่างวด (principal+interest+fee) ของงวดที่ยังไม่ถึง dueDate

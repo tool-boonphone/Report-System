@@ -119,6 +119,7 @@ type SortKey =
   | "sellPrice"
   | "financeAmount"
   | "commissionNet"
+  | "incentive"
   | "cost"
   | "paidInstallments"
   | "totalPaid"
@@ -137,6 +138,7 @@ type Row = {
   financeAmount: number | null;
   multiplier: number | null;
   commissionNet: number | null;
+  incentive: number;
   cost: number;
   installmentCount: number | null;
   paidInstallments: number;
@@ -452,6 +454,7 @@ export default function SuspectedBadDebt() {
         case "sellPrice":     av = a.sellPrice ?? 0;      bv = b.sellPrice ?? 0;      break;
         case "financeAmount": av = a.financeAmount ?? 0;  bv = b.financeAmount ?? 0;  break;
         case "commissionNet": av = a.commissionNet ?? 0;  bv = b.commissionNet ?? 0;  break;
+        case "incentive": av = a.incentive ?? 0;  bv = b.incentive ?? 0;  break;
         case "cost":          av = a.cost;                bv = b.cost;                break;
         case "paidInstallments": av = a.paidInstallments; bv = b.paidInstallments;   break;
         case "totalPaid":     av = a.totalPaid;           bv = b.totalPaid;           break;
@@ -543,7 +546,7 @@ export default function SuspectedBadDebt() {
       const wb = XLSX.utils.book_new();
       const headers = [
         "#","วันที่อนุมัติ","เลขที่สัญญา","ชื่อ-นามสกุล","เบอร์โทร",
-        "รุ่น","ราคา","ยอดจัดไฟแนนซ์","ค่าคอมมิชชั่น","ต้นทุน",
+        "รุ่น","ราคา","ยอดจัดไฟแนนซ์","ค่าคอมมิชชั่น","Incentive","ต้นทุน",
         "งวดที่ชำระ","ยอดผ่อน","มูลค่าหนี้","สถานะหนี้",
       ];
       const dataRows = filteredRows.map((r, i) => [
@@ -556,6 +559,7 @@ export default function SuspectedBadDebt() {
         r.sellPrice ?? 0,
         r.financeAmount ?? 0,
         r.commissionNet ?? 0,
+        r.incentive ?? 0,
         r.cost ?? 0,
         `${r.paidInstallments}/${r.installmentCount ?? "-"}`,
         r.totalPaid ?? 0,
@@ -565,7 +569,7 @@ export default function SuspectedBadDebt() {
       const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
       ws["!cols"] = [
         { wch: 6 }, { wch: 14 }, { wch: 22 }, { wch: 22 }, { wch: 14 },
-        { wch: 24 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 12 },
+        { wch: 24 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 12 },
         { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 16 },
       ];
       // Style header row (amber-100 bg, mirrors SuspectedBadDebt.tsx UI)
@@ -803,6 +807,9 @@ export default function SuspectedBadDebt() {
                       <Th col="commissionNet" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="min-w-[110px] text-right">
                         ค่าคอมมิชชั่น
                       </Th>
+                      <Th col="incentive" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="min-w-[100px] text-right">
+                        Incentive
+                      </Th>
                       <Th col="cost" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="min-w-[100px] text-right">
                         ต้นทุน
                       </Th>
@@ -824,7 +831,7 @@ export default function SuspectedBadDebt() {
                     {/* top padding for virtual scroll */}
                     {paddingTop > 0 && (
                       <tr>
-                        <td colSpan={14} style={{ height: paddingTop }} />
+                        <td colSpan={15} style={{ height: paddingTop }} />
                       </tr>
                     )}
                     {virtualRows.map((vRow) => {
@@ -867,6 +874,9 @@ export default function SuspectedBadDebt() {
                           <td className="px-3 py-1.5 text-right whitespace-nowrap">
                             {fmtMoney(r.commissionNet)}
                           </td>
+                          <td className="px-3 py-1.5 text-right whitespace-nowrap">
+                            {fmtMoney(r.incentive)}
+                          </td>
                           <td className="px-3 py-1.5 text-right whitespace-nowrap font-semibold">
                             {fmtMoney(r.cost)}
                           </td>
@@ -902,7 +912,7 @@ export default function SuspectedBadDebt() {
                     {/* bottom padding for virtual scroll */}
                     {paddingBottom > 0 && (
                       <tr>
-                        <td colSpan={14} style={{ height: paddingBottom }} />
+                        <td colSpan={15} style={{ height: paddingBottom }} />
                       </tr>
                     )}
                   </tbody>
