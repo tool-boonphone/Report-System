@@ -158,17 +158,11 @@ const NOT_YET_DUE_BADGE_ITEMS: Array<{key:NotYetDueBadgeKey;label:string;icon:Re
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function computeMoneyTotal(m:MoneyBreakdown, v:Record<MoneyBadgeKey,boolean>):number {
-  // Phase 140 Fix v2: ใช้ m.total เป็นฐาน (= total_paid จาก DB = sum(p.total + p.badDebt))
-  // แล้วหัก field ที่ปิด toggle ออก — เหมือน DebtReport.tsx บรรทัด 884-891
-  // m.total = installment_paid + device_sale_amount (รวม badDebt แล้ว)
-  // แต่ badDebt จัดการแยกใน caller (bucket หนี้เสีย) ดังนั้น m.total ที่ใช้ที่นี่
-  // คือ installment_paid (= m.badDebtInstallment) เพราะ badDebt row ถูกแยกออกแล้ว
-  // อย่างไรก็ตาม m.total = total_paid ซึ่งรวม badDebt แล้ว ดังนั้นต้องหัก m.badDebt ออกก่อน
-  // แล้วค่อยบวก badDebt กลับถ้า toggle เปิด (จัดการโดย caller)
-  // สรุป: ใช้ (m.total - m.badDebt - m.discount) เป็น installment base แล้วหัก field ที่ปิด toggle
-  // หัก m.discount ออกด้วยเพราะ discount ถูกปิดเสมอ (canToggle:false) แต่รวมอยู่ใน m.total
-  // ถ้าไม่หัก discount ออก เมื่อปิด badge ทุกตัวจะได้ค่าติดลบ = -discount
-  const installmentBase = m.total - m.badDebt - m.discount;
+  // m.total = total_paid จาก DB ซึ่ง discount ถูกหักออกแล้วตั้งแต่ตอน sync
+  // (payment_tx_amount = pt.amount ซึ่งเป็นยอดที่จ่ายจริงหลังหัก discount แล้ว)
+  // ดังนั้น m.total ไม่รวม discount → ไม่ต้องหัก m.discount ซ้ำอีก
+  // ต้องหักแค่ m.badDebt เพราะ badDebt จัดการแยกโดย caller (bucket หนี้เสีย)
+  const installmentBase = m.total - m.badDebt;
   return installmentBase
     - (!v.principal ? m.principal : 0)
     - (!v.interest  ? m.interest  : 0)
