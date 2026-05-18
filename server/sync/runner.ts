@@ -64,6 +64,7 @@ export const SYNC_STAGES = [
   "partners",
   "customers",
   "contracts",
+  "imei_enrich",
   "installments",
   "payments",
   "commissions",
@@ -309,6 +310,7 @@ async function doSync(
 
     // ── Stage 3b: Enrich IMEI / Serial No (best-effort) ──────────────────
     checkCancel();
+    setStage(section, 3); // imei_enrich
     try {
       await enrichContractDeviceIds(client, section);
       console.log(`[sync] ${section}: IMEI/Serial No enrichment done`);
@@ -316,9 +318,9 @@ async function doSync(
       console.warn(`[sync] ${section}: IMEI enrichment failed (non-fatal):`, enrichErr?.message ?? enrichErr);
     }
 
-    // ── Stage 4: Installments (best-effort) ───────────────────────────────
+    // ── Stage 5: Installments (best-effort) ───────────────────────────────
     checkCancel();
-    setStage(section, 3);
+    setStage(section, 4);
     let instFailed = false;
     try {
       const instRows = await syncInstallments(client, section);
@@ -332,7 +334,7 @@ async function doSync(
 
     // ── Stage 5: Payments (best-effort) ──────────────────────────────────
     checkCancel();
-    setStage(section, 4);
+    setStage(section, 5);
     let payFailed = false;
     try {
       const payRows = await syncPayments(client, section);
@@ -364,7 +366,7 @@ async function doSync(
 
     // ── Stage 6: Commissions ──────────────────────────────────────────────
     checkCancel();
-    setStage(section, 5);
+    setStage(section, 6);
     try {
       const commRows = await syncCommissions(client, section);
       overallRows += commRows;
@@ -375,7 +377,7 @@ async function doSync(
 
     // ── Stage 7: Bad-debt computation ─────────────────────────────────────
     checkCancel();
-    setStage(section, 6);
+    setStage(section, 7);
     try {
       await computeAndStoreBadDebt(section);
       console.log(`[sync] ${section}: bad-debt computed`);
@@ -617,10 +619,12 @@ async function enrichContractDeviceIds(
     .where(eq(contracts.section, section));
 
   const contractIds = rows.map((r: { externalId: string }) => r.externalId);
-  console.log(`[enrichDeviceIds] ${section}: enriching ${contractIds.length} contracts...`);
+  const total = contractIds.length;
+  console.log(`[enrichDeviceIds] ${section}: enriching ${total} contracts...`);
 
   const CONCURRENCY = 5;
   let idx = 0;
+  let done = 0;
   let enriched = 0;
   let errors = 0;
   const startTime = Date.now();
@@ -651,9 +655,11 @@ async function enrichContractDeviceIds(
       } catch {
         errors++;
       }
-      if ((myIdx + 1) % 200 === 0 || myIdx + 1 === contractIds.length) {
+      done++;
+      if (done % 200 === 0 || done === total) {
         const elapsed = Math.round((Date.now() - startTime) / 1000);
-        console.log(`[enrichDeviceIds] ${section}: ${myIdx + 1}/${contractIds.length} done (enriched=${enriched}, errors=${errors}, elapsed=${elapsed}s)`);
+        console.log(`[enrichDeviceIds] ${section}: ${done}/${total} done (enriched=${enriched}, errors=${errors}, elapsed=${elapsed}s)`);
+        setSubProgress(section, "imei_enrich", done, total);
       }
     }
   };
