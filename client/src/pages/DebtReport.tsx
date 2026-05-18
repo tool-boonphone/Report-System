@@ -395,16 +395,6 @@ export default function DebtReport() {
 
   const [tab, setTab] = useState<"target" | "collected">("target");
 
-  // Pre-built export info
-  const { data: exportInfoTarget } = trpc.debt.getExportInfo.useQuery(
-    { section: section as string, variant: "target" },
-    { enabled: canExport, staleTime: 60_000 },
-  );
-  const { data: exportInfoCollected } = trpc.debt.getExportInfo.useQuery(
-    { section: section as string, variant: "collected" },
-    { enabled: canExport, staleTime: 60_000 },
-  );
-  const exportInfo = tab === "target" ? exportInfoTarget : exportInfoCollected;
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
   // New filters: month-year approve date, month-year due date, product type
@@ -1135,19 +1125,9 @@ export default function DebtReport() {
                   <Download className="w-4 h-4 mr-1.5" />
                   Export Excel
                 </Button>
-                {exportInfo ? (
-                  <span className="text-xs text-muted-foreground">
-                    ไฟล์พร้อม · {exportInfo.rowCount.toLocaleString()} รายการ ·{" "}
-                    {new Date(exportInfo.builtAt).toLocaleString("th-TH", {
-                      day: "numeric", month: "short", year: "numeric",
-                      hour: "2-digit", minute: "2-digit",
-                    })}
-                  </span>
-                ) : (
-                  <span className="text-xs text-muted-foreground">
-                    ยังไม่มีไฟล์ (สร้างหลัง sync)
-                  </span>
-                )}
+                <span className="text-xs text-muted-foreground">
+                  {filteredRows.length.toLocaleString("th-TH")} รายการ (กรองแล้ว)
+                </span>
               </div>
             )}
           </div>

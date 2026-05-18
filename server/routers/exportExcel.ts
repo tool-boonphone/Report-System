@@ -234,7 +234,7 @@ const DEBT_LEFT_COLUMNS_TARGET: Array<{
   { key: "phone",             header: "เบอร์โทร",        width: 14, type: "text"   },
   { key: "totalAmount",       header: "ยอดผ่อนรวม",     width: 16, type: "money"  },
   { key: "installmentCount",  header: "งวดผ่อน",         width: 10, type: "number" },
-  { key: "perInstallment",    header: "ผ่อนงวดละ",       width: 14, type: "money"  },
+  { key: "installmentAmount", header: "ผ่อนงวดละ",       width: 14, type: "money"  },
   { key: "debtStatus",        header: "สถานะหนี้",       width: 14, type: "text"   },
   { key: "daysOverdue",       header: "เกินกำหนด (วัน)", width: 14, type: "number" },
 ];
@@ -253,7 +253,7 @@ const DEBT_LEFT_COLUMNS_COLLECTED: Array<{
   { key: "productType",       header: "ประเภทเครื่อง",  width: 14, type: "text"   },
   { key: "totalAmount",       header: "ยอดผ่อนรวม",     width: 16, type: "money"  },
   { key: "installmentCount",  header: "งวดผ่อน",         width: 10, type: "number" },
-  { key: "perInstallment",    header: "ผ่อนงวดละ",       width: 14, type: "money"  },
+  { key: "installmentAmount", header: "ผ่อนงวดละ",       width: 14, type: "money"  },
   { key: "debtStatus",        header: "สถานะหนี้",       width: 14, type: "text"   },
   { key: "daysOverdue",       header: "เกินกำหนด (วัน)", width: 14, type: "number" },
 ];
@@ -417,41 +417,40 @@ export async function handleDebtTargetExport(req: Request, res: Response) {
     row2.commit();
 
     let seq = 0;
-    for await (const batch of listDebtCollectedStream({
+    for await (const batch of listDebtTargetStream({
       section,
-      search,
-      dateFrom,
-      dateTo,
-      dateField,
-      minDaysOverdue,
-      maxDaysOverdue,
-      minInstallmentsOverdue,
-      maxInstallmentsOverdue,
-      debtStatus,
-      productType,
     })) {
-      for (const row of batch) {
-        seq += 1;
-        const exRow = ws.addRow({});
-        let colIdx = 1;
-        for (const col of columns) {
-          const cell = exRow.getCell(colIdx++);
-          const value = (row as any)[col.key];
-          if (col.key === "seq") {
-            cell.value = seq;
-            cell.numFmt = INT_FORMAT;
-            cell.alignment = { horizontal: "center" };
-          } else if (col.key === "totalAmount" || col.key === "perInstallment" || col.key === "totalOverdueAmount" || col.key === "badDebtAmount" || col.key === "paidAmount") {
-            setMoneyCell(cell, value);
-          } else if (col.key === "installmentCount" || col.key === "daysOverdue" || col.key === "installmentsOverdue") {
-            setIntCell(cell, value);
-          } else if (col.key === "approveDate" || col.key === "badDebtDate" || col.key === "badDebtUpdatedAt" || col.key === "paidAt") {
-            setDateCell(cell, value);
-          } else {
-            cell.value = value != null ? String(value) : "";
+      for (const contract of batch) {
+        const installments: any[] = Array.isArray((contract as any).installments) ? (contract as any).installments : [];
+        // If no installments, still write one row with contract info only
+        const rows = installments.length > 0 ? installments : [null];
+        for (const inst of rows) {
+          seq += 1;
+          const exRow = ws.addRow({});
+          let colIdx = 1;
+          for (const col of columns) {
+            const cell = exRow.getCell(colIdx++);
+            // Left columns come from contract, sub-columns come from installment
+            const isSubCol = DEBT_SUB_TARGET.some((sc) => sc.key === col.key);
+            const value = isSubCol
+              ? (inst != null ? (inst as any)[col.key] : null)
+              : (contract as any)[col.key];
+            if (col.key === "seq") {
+              cell.value = seq;
+              cell.numFmt = INT_FORMAT;
+              cell.alignment = { horizontal: "center" };
+            } else if (col.type === "money") {
+              setMoneyCell(cell, value);
+            } else if (col.type === "number") {
+              setIntCell(cell, value);
+            } else if (col.type === "date") {
+              setDateCell(cell, value);
+            } else {
+              cell.value = value != null ? String(value) : "";
+            }
           }
+          exRow.commit();
         }
-        exRow.commit();
       }
     }
 
@@ -576,42 +575,40 @@ export async function handleDebtCollectedExport(req: Request, res: Response) {
     let seq = 0;
     for await (const batch of listDebtCollectedStream({
       section,
-      search,
-      dateFrom,
-      dateTo,
-      dateField,
-      minDaysOverdue,
-      maxDaysOverdue,
-      minInstallmentsOverdue,
-      maxInstallmentsOverdue,
-      debtStatus,
-      productType,
     })) {
-      for (const row of batch.rows) { // Note: listDebtCollectedStream yields { rows, meta }
-        seq += 1;
-        const exRow = ws.addRow({});
-        let colIdx = 1;
-        for (const col of columns) {
-          const cell = exRow.getCell(colIdx++);
-          const value = (row as any)[col.key];
-          if (col.key === "seq") {
-            cell.value = seq;
-            cell.numFmt = INT_FORMAT;
-            cell.alignment = { horizontal: "center" };
-          } else if (col.key === "totalAmount" || col.key === "perInstallment" || col.key === "principal" || col.key === "interest" || col.key === "fee" || col.key === "penalty" || col.key === "unlockFee" || col.key === "discount" || col.key === "overpaid" || col.key === "badDebt" || col.key === "total") {
-            setMoneyCell(cell, value);
-          } else if (col.key === "installmentCount" || col.key === "daysOverdue" || col.key === "installmentsOverdue") {
-            setIntCell(cell, value);
-          } else if (col.key === "approveDate" || col.key === "paidAt" || col.key === "updatedAt") {
-            setDateCell(cell, value);
-          } else {
-            cell.value = value != null ? String(value) : "";
+      for (const contract of batch.rows) {
+        const payments: any[] = Array.isArray((contract as any).payments) ? (contract as any).payments : [];
+        // If no payments, still write one row with contract info only
+        const rows = payments.length > 0 ? payments : [null];
+        for (const pmt of rows) {
+          seq += 1;
+          const exRow = ws.addRow({});
+          let colIdx = 1;
+          for (const col of columns) {
+            const cell = exRow.getCell(colIdx++);
+            // Left columns come from contract, sub-columns come from payment
+            const isSubCol = DEBT_SUB_COLLECTED.some((sc) => sc.key === col.key);
+            const value = isSubCol
+              ? (pmt != null ? (pmt as any)[col.key] : null)
+              : (contract as any)[col.key];
+            if (col.key === "seq") {
+              cell.value = seq;
+              cell.numFmt = INT_FORMAT;
+              cell.alignment = { horizontal: "center" };
+            } else if (col.type === "money") {
+              setMoneyCell(cell, value);
+            } else if (col.type === "number") {
+              setIntCell(cell, value);
+            } else if (col.type === "date") {
+              setDateCell(cell, value);
+            } else {
+              cell.value = value != null ? String(value) : "";
+            }
           }
+          exRow.commit();
         }
-        exRow.commit();
       }
     }
-
     ws.commit();
     await wb.commit();
   } catch (err) {
