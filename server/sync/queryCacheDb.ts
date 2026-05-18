@@ -590,7 +590,7 @@ export async function getTargetChunk(params: {
 }): Promise<{ rows: any[]; totalContracts: number }> {
   const { section, offset, limit } = params;
   const db = await getDb(section);
-  if (!db) return { rows: [], totalContracts: 0 };
+  if (!db) return { rows: [], totalContracts: 0, hasMore: false };
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -606,7 +606,7 @@ export async function getTargetChunk(params: {
   const idRows: any[] = pgRows(idResult);
   if (idRows.length === 0) {
     const total = await getTargetContractCount(section);
-    return { rows: [], totalContracts: total };
+    return { rows: [], totalContracts: total, hasMore: false };
   }
   const contractIds = idRows.map((r: any) => String(r.contract_external_id));
 
@@ -752,7 +752,7 @@ export async function getTargetChunk(params: {
     });
   }
 
-  return { rows: result, totalContracts };
+  return { rows: result, totalContracts, hasMore: offset + result.length < totalContracts };
 }
 
 /**
@@ -771,7 +771,7 @@ export async function getCollectedChunk(params: {
 }): Promise<{ rows: any[]; totalContracts: number; hasPrincipalBreakdown: boolean }> {
   const { section, offset, limit } = params;
   const db = await getDb(section);
-  if (!db) return { rows: [], totalContracts: 0, hasPrincipalBreakdown: true };
+  if (!db) return { rows: [], totalContracts: 0, hasPrincipalBreakdown: true, hasMore: false };
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -787,7 +787,7 @@ export async function getCollectedChunk(params: {
   const idRows: any[] = pgRows(idResult);
   if (idRows.length === 0) {
     const total = await getCollectedContractCount(section);
-    return { rows: [], totalContracts: total, hasPrincipalBreakdown: true };
+    return { rows: [], totalContracts: total, hasPrincipalBreakdown: true, hasMore: false };
   }
   const contractIds = idRows.map((r: any) => String(r.contract_external_id));
   const idListSql = contractIds.map((id) => `'${id.replace(/'/g, "''")}'`).join(",");
@@ -1010,5 +1010,5 @@ export async function getCollectedChunk(params: {
     });
   }
 
-  return { rows: result, totalContracts, hasPrincipalBreakdown: true };
+  return { rows: result, totalContracts, hasPrincipalBreakdown: true, hasMore: offset + result.length < totalContracts };
 }
