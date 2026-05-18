@@ -256,15 +256,17 @@ export async function clearStuckSyncLogs(section: SectionKey): Promise<number> {
  */
 export async function clearAllStuckSyncLogs(): Promise<number> {
   // Run cleanup on both databases
+  // Use 185-minute timeout to match OVERALL_TIMEOUT_MS (180 min) + 5 min buffer in runner.ts
+  // Previously 15 min caused false-positive cleanup of long-running syncs (e.g. IMEI enrichment)
   const dbBoon = await getDb("Boonphone");
   const dbFast = await getDb("Fastfone365");
   let total = 0;
   for (const db of [dbBoon, dbFast].filter(Boolean)) {
     if (!db) continue;
-    const cutoff = new Date(Date.now() - 15 * 60 * 1000);
+    const cutoff = new Date(Date.now() - 185 * 60 * 1000);
     const rows = await db
       .update(syncLogs)
-      .set({ status: "error", errorMessage: "Cleared by startup cleanup (stuck > 15 min)", finishedAt: new Date() })
+      .set({ status: "error", errorMessage: "Cleared by startup cleanup (stuck > 185 min)", finishedAt: new Date() })
       .where(and(eq(syncLogs.status, "in_progress"), lt(syncLogs.startedAt, cutoff)))
       .returning({ id: syncLogs.id });
     total += rows.length;

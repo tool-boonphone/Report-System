@@ -39,8 +39,10 @@ const STAGE_LABELS: Record<string, string> = {
   partners: "ดึงข้อมูลตัวแทน",
   customers: "ดึงข้อมูลลูกค้า",
   contracts: "ดึงข้อมูลสัญญา",
+  imei_enrich: "ดึง IMEI/Serial No",
   installments: "ดึงข้อมูลงวด",
   payments: "ดึงข้อมูลการชำระ",
+  commissions: "ดึงข้อมูลค่าคอมมิชชัน",
   bad_debt: "คำนวณหนี้เสีย",
   finishing: "กำลังบันทึก",
   เริ่มต้น: "กำลังเริ่มต้น",
@@ -62,13 +64,16 @@ export function SyncStatusBar() {
     { enabled: !!section, refetchOnWindowFocus: true },
   );
 
-  // Poll sync status from DB — fast poll when running, stop when idle.
+  // Poll sync status from DB — fast poll when running, slow poll when idle.
+  // IMPORTANT: always keep polling (never return false) so we detect a new sync
+  // starting (e.g. cron at 01:00) without requiring a page reload.
   const status = trpc.sync.status.useQuery(undefined, {
     refetchInterval: (q) => {
       const d = q.state.data as any;
       if (!d) return 3000;
       const s = section ?? "Boonphone";
-      return d?.[s]?.running ? 2000 : false;
+      // Fast poll (2s) while running, slow poll (10s) when idle
+      return d?.[s]?.running ? 2000 : 10000;
     },
   });
 
