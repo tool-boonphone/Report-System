@@ -65,6 +65,26 @@ export const debtRouter = router({
       return listDebtCollected(input);
     }),
 
+  getTargetChunk: debtViewProcedure
+    .input(z.object({
+      section: SectionEnum,
+      offset: z.number().int().min(0),
+      limit: z.number().int().min(1).max(5000),
+    }))
+    .query(async ({ input }) => {
+      return getTargetChunk(input);
+    }),
+
+  getCollectedChunk: debtViewProcedure
+    .input(z.object({
+      section: SectionEnum,
+      offset: z.number().int().min(0),
+      limit: z.number().int().min(1).max(5000),
+    }))
+    .query(async ({ input }) => {
+      return getCollectedChunk(input);
+    }),
+
   /** Get pre-built export info (builtAt, rowCount) for a section+variant */
   getExportInfo: debtViewProcedure
     .input(z.object({
