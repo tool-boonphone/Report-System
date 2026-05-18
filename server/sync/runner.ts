@@ -12,6 +12,7 @@
  *  1. partners    → in-memory map (ไม่ upsert ลง DB)
  *  2. customers   → upsert cached_customers
  *  3. contracts   → upsert contracts (list endpoint เท่านั้น)
+ *  3b. enrich IMEI/Serial No → ดึง detail endpoint ทุกสัญญา (parallel 5 req)
  *  4. installments → upsert installments
  *  5. payments    → upsert payment_transactions
  *  6. bad_debt    → compute & store bad-debt columns บน contracts
@@ -306,6 +307,15 @@ async function doSync(
     overallRows += contractRows;
     console.log(`[sync] ${section}: contracts synced — ${contractRows} rows`);
 
+    // ── Stage 3b: Enrich IMEI / Serial No (best-effort) ──────────────────
+    checkCancel();
+    try {
+      await enrichContractDeviceIds(client, section);
+      console.log(`[sync] ${section}: IMEI/Serial No enrichment done`);
+    } catch (enrichErr: any) {
+      console.warn(`[sync] ${section}: IMEI enrichment failed (non-fatal):`, enrichErr?.message ?? enrichErr);
+    }
+
     // ── Stage 4: Installments (best-effort) ───────────────────────────────
     checkCancel();
     setStage(section, 3);
@@ -584,6 +594,73 @@ async function syncContracts(
     await finishSyncLog({ id: log.id, status: "error", rowCount, errorMessage: err?.message ?? String(err) });
     throw err;
   }
+}
+
+/**
+ * Stage 3b: Enrich IMEI / Serial No — ดึง detail endpoint ทุกสัญญา แบบ parallel 5 req
+ * เพื่อให้ imei และ serialNo ใน contracts table ถูกต้องและ up-to-date ทุกรอบ sync
+ */
+async function enrichContractDeviceIds(
+  client: PartnerClient,
+  section: SectionKey,
+): Promise<void> {
+  const { getDb } = await import("../db");
+  const { contracts } = await import("../../drizzle/schema");
+  const { eq, sql } = await import("drizzle-orm");
+  const db = await getDb(section);
+  if (!db) return;
+
+  // ดึง externalId ทุกสัญญาใน section
+  const rows = await db
+    .select({ externalId: contracts.externalId })
+    .from(contracts)
+    .where(eq(contracts.section, section));
+
+  const contractIds = rows.map((r: { externalId: string }) => r.externalId);
+  console.log(`[enrichDeviceIds] ${section}: enriching ${contractIds.length} contracts...`);
+
+  const CONCURRENCY = 5;
+  let idx = 0;
+  let enriched = 0;
+  let errors = 0;
+  const startTime = Date.now();
+
+  const worker = async () => {
+    while (idx < contractIds.length) {
+      const myIdx = idx++;
+      const contractId = contractIds[myIdx];
+      try {
+        const data: any = await client.get("contract", {
+          action: "detail",
+          id: contractId,
+        });
+        const product = data?.contract?.product ?? {};
+        const imei = product.imei ?? null;
+        const serialNo = product.serial_no ?? null;
+        await db
+          .update(contracts)
+          .set({
+            imei,
+            serialNo,
+            syncedAt: sql`CURRENT_TIMESTAMP`,
+          })
+          .where(
+            eq(contracts.externalId, contractId)
+          );
+        enriched++;
+      } catch {
+        errors++;
+      }
+      if ((myIdx + 1) % 200 === 0 || myIdx + 1 === contractIds.length) {
+        const elapsed = Math.round((Date.now() - startTime) / 1000);
+        console.log(`[enrichDeviceIds] ${section}: ${myIdx + 1}/${contractIds.length} done (enriched=${enriched}, errors=${errors}, elapsed=${elapsed}s)`);
+      }
+    }
+  };
+
+  await Promise.all(Array.from({ length: CONCURRENCY }, () => worker()));
+  const totalSec = Math.round((Date.now() - startTime) / 1000);
+  console.log(`[enrichDeviceIds] ${section}: finished enriched=${enriched}, errors=${errors}, total=${totalSec}s`);
 }
 
 /**

@@ -1,12 +1,12 @@
 /**
- * Simple in-process scheduler — runs once a day at 04:00 Asia/Bangkok time.
- * The process checks once a minute; when hour matches 04 (Bangkok time) and we
+ * Simple in-process scheduler — runs once a day at 22:00 Asia/Bangkok time.
+ * The process checks once a minute; when hour matches 22 (Bangkok time) and we
  * haven't already synced today, it kicks off a run for each configured section.
  *
- * NOTE: Changed from 09:00 → 04:00 per business requirement (2026-05-11).
+ * NOTE: Changed from 04:00 → 22:00 per business requirement (2026-05-18).
  * Sync is idempotent (upsert-only) — no data is deleted after sync.
  *
- * No missed-sync recovery on startup — sync runs ONLY at 04:00 daily.
+ * No missed-sync recovery on startup — sync runs ONLY at 22:00 daily.
  *
  * IMPORTANT: Server may run in UTC or other timezones. All time comparisons
  * MUST use Asia/Bangkok (UTC+7) to match business requirements.
@@ -24,7 +24,7 @@ function isSectionConfigured(section: SectionKey): boolean {
   return Boolean(client && client.isConfigured());
 }
 
-const SYNC_HOUR = 4; // 04:00 daily (Asia/Bangkok)
+const SYNC_HOUR = 22; // 22:00 daily (Asia/Bangkok)
 const BANGKOK_TZ = "Asia/Bangkok";
 
 let _timer: NodeJS.Timeout | null = null;
@@ -70,7 +70,7 @@ async function tick() {
     if (_lastTick[section] === slot) continue;
     if (isSyncRunning(section)) continue;
     _lastTick[section] = slot;
-    console.log(`[scheduler] ${tag} triggering daily cron sync at 04:00 (Bangkok time: ${hour}:${String(minute).padStart(2,"0")})`);
+    console.log(`[scheduler] ${tag} triggering daily cron sync at 22:00 (Bangkok time: ${hour}:${String(minute).padStart(2,"00")})`);
     runSectionSync(section, "cron").catch((err) =>
       console.error(`[scheduler] ${tag} failed:`, err),
     );
@@ -89,7 +89,7 @@ export async function startScheduler() {
   }
   const now = new Date();
   const { hour: bangkokHour, daySlot } = getBangkokTimeParts(now);
-    console.log(`[scheduler] started (daily at 04:00 Asia/Bangkok) — current Bangkok time: ${bangkokHour}:xx, slot: ${daySlot}`);
+    console.log(`[scheduler] started (daily at 22:00 Asia/Bangkok) — current Bangkok time: ${bangkokHour}:xx, slot: ${daySlot}`);
 
   // On startup: clear any orphaned in_progress rows left by a previous
   // Cloud Run instance that was killed mid-sync.
