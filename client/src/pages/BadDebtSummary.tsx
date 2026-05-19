@@ -432,7 +432,7 @@ export default function BadDebtSummary() {
       return 0;
     });
     return r;
-  }, [rows, osFilter, modelFilter, sortKey, sortDir]);
+  }, [rows, osFilter, modelFilter, sortKey, sortDir, searchText, partnerFilter, profitFilter]);
 
   /* ── monthly bySale summary (ไม่มี % หนี้เสีย) ── */
   const monthlyBySaleRows = useMemo(() => {
@@ -809,21 +809,21 @@ export default function BadDebtSummary() {
           </div>
         )}
 
-        {/* ── Search Box (list tab only) ── */}
-        {activeTab === "list" && (
-          <div className="flex flex-col gap-1">
-            <label className="text-xs text-gray-500">ค้นหา</label>
-            <input
-              type="text"
-              value={searchText}
-              onChange={(e) => setSearchText(e.target.value)}
-              placeholder="เลขที่สัญญา / ชื่อ / เบอร์โทร / IMEI"
-              className="border rounded px-2 py-1.5 text-sm h-9 bg-white w-64 focus:outline-none focus:ring-2 focus:ring-blue-400"
-            />
-          </div>
-        )}
         {/* ── Filters ── */}
         <div className="flex flex-wrap gap-3 items-end">
+          {/* Search Box (list tab only) */}
+          {activeTab === "list" && (
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-gray-500">ค้นหา</label>
+              <input
+                type="text"
+                value={searchText}
+                onChange={(e) => setSearchText(e.target.value)}
+                placeholder="เลขที่สัญญา / ชื่อ / เบอร์โทร / IMEI"
+                className="border rounded px-2 py-1.5 text-sm h-9 bg-white w-64 focus:outline-none focus:ring-2 focus:ring-blue-400"
+              />
+            </div>
+          )}
           <div className="flex flex-col gap-1">
             <label className="text-xs text-gray-500">เดือนที่อนุมัติ</label>
             <select value={approveMonth} onChange={(e) => setApproveMonth(e.target.value)} className="border rounded px-2 py-1.5 text-sm h-9 bg-white">
@@ -1003,18 +1003,19 @@ export default function BadDebtSummary() {
               {filteredRows.length > 0 && (
                 <tfoot className="bg-red-50 border-t-2 border-red-200 font-semibold text-xs sticky bottom-0 z-10">
                   <tr>
-                    <td colSpan={9} className="px-2 py-2 text-right text-gray-600">รวม {filteredRows.length} รายการ</td>
+                    {/* colSpan=7: #(1) + สัญญา(2) + ชื่อ(3) + เบอร์(4) + รุ่น(5) + IMEI(6) + ราคา(7) */}
+                    <td colSpan={7} className="px-2 py-2 text-right text-gray-600">รวม {filteredRows.length} รายการ</td>
                     <td className="px-2 py-2 text-right">{fmtMoney(filteredRows.reduce((s, r) => s + r.financeAmount, 0))}</td>
-                    <td className="px-2 py-2 text-right">{fmtMoney(filteredRows.reduce((s, r) => s + ((r as any).commissionNet ?? 0), 0))}</td>
-                    <td className="px-2 py-2 text-right">{fmtMoney(filteredRows.reduce((s, r) => s + ((r as any).incentive ?? 0), 0))}</td>
+                    <td className="px-2 py-2 text-right">{fmtMoney(filteredRows.reduce((s, r) => s + r.commissionNet, 0))}</td>
+                    <td className="px-2 py-2 text-right">{fmtMoney(filteredRows.reduce((s, r) => s + (r.incentive ?? 0), 0))}</td>
                     <td className="px-2 py-2 text-right text-orange-700">{fmtMoney(filteredRows.reduce((s, r) => s + r.cost, 0))}</td>
-                    <td className="px-2 py-2"></td>
+                    <td className="px-2 py-2"></td>{/* งวดที่ชำระ */}
                     <td className="px-2 py-2 text-right">{fmtMoney(filteredRows.reduce((s, r) => s + r.installmentPaid, 0))}</td>
                     <td className="px-2 py-2 text-right text-blue-700">{fmtMoney(filteredRows.reduce((s, r) => s + r.deviceSaleAmount, 0))}</td>
                     <td className="px-2 py-2 text-right">{fmtMoney(filteredRows.reduce((s, r) => s + r.totalRevenue, 0))}</td>
-                    <td className="px-2 py-2"></td>
-                    <td className="px-2 py-2"></td>
-                    <td className="px-2 py-2"></td>
+                    <td className="px-2 py-2"></td>{/* วันที่อนุมัติ */}
+                    <td className="px-2 py-2"></td>{/* พาร์ทเนอร์ */}
+                    <td className="px-2 py-2"></td>{/* วันที่ขาย */}
                     <td className="px-2 py-2 text-right"><ProfitBadge value={filteredRows.reduce((s, r) => s + r.profitLoss, 0)} /></td>
                   </tr>
                 </tfoot>

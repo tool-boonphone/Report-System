@@ -27,6 +27,10 @@ export type BadDebtRow = {
   productType: string | null;
   /** รุ่นสินค้า */
   model: string | null;
+  /** IMEI (ถ้าไม่มีใช้ serial_no แทน) */
+  imei: string | null;
+  /** ชื่อพาร์ทเนอร์ */
+  partnerName: string | null;
   /** ราคาขาย (sell_price) */
   salePrice: number | null;
   /** ยอดจัดไฟแนนซ์ */
@@ -189,7 +193,9 @@ export async function getBadDebtSummary(params: {
         phone,
         CAST(sell_price AS DECIMAL(18,2))     AS sell_price,
         CAST(commission_net AS DECIMAL(18,2)) AS commission_net,
-        bad_debt_date
+        bad_debt_date,
+        COALESCE(NULLIF(TRIM(imei), ''), NULLIF(TRIM(serial_no), '')) AS imei_or_sn,
+        partner_name
       FROM contracts
       WHERE section = '${params.section}'
         AND external_id IN (${idsLiteral})
@@ -244,6 +250,8 @@ export async function getBadDebtSummary(params: {
       approveDate: c.approve_date ?? null,
       productType: c.product_type ?? null,
       model: c.model ?? null,
+      imei: cInfo?.imei_or_sn ?? null,
+      partnerName: cInfo?.partner_name ?? null,
       salePrice: cInfo?.sell_price != null ? Number(cInfo.sell_price) : null,
       financeAmount,
       commissionNet,
