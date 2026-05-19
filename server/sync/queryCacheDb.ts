@@ -114,8 +114,14 @@ function rederiveDaysOverdue(
 export async function* streamTargetFromCache(params: {
   section: SectionKey;
   batchSize?: number;
+  filters?: {
+    search?: string;
+    status?: string[];
+    productType?: string[];
+    approveDateMonths?: string[];
+  };
 }): AsyncGenerator<any[]> {
-  const { section, batchSize = 500 } = params;
+  const { section, batchSize = 500, filters } = params;
   const db = await getDb(section);
   if (!db) return;
 
@@ -144,10 +150,26 @@ export async function* streamTargetFromCache(params: {
   let offset = 0;
   while (true) {
     // Get next page of distinct contract IDs
+    let whereClause = sql`section = ${section}`;
+    
+    if (filters?.search) {
+      const searchLike = `%${filters.search.toLowerCase()}%`;
+      whereClause = sql`${whereClause} AND (LOWER(contract_no) LIKE ${searchLike} OR LOWER(customer_name) LIKE ${searchLike})`;
+    }
+    if (filters?.status && filters.status.length > 0) {
+      whereClause = sql`${whereClause} AND contract_status IN ${filters.status}`;
+    }
+    if (filters?.productType && filters.productType.length > 0) {
+      whereClause = sql`${whereClause} AND product_type IN ${filters.productType}`;
+    }
+    if (filters?.approveDateMonths && filters.approveDateMonths.length > 0) {
+      whereClause = sql`${whereClause} AND LEFT(approve_date, 7) IN ${filters.approveDateMonths}`;
+    }
+
     const idResult = await db.execute(sql`
       SELECT DISTINCT contract_external_id
       FROM debt_target_cache
-      WHERE section = ${section}
+      WHERE ${whereClause}
       ORDER BY contract_external_id
       LIMIT ${batchSize} OFFSET ${offset}
     `);
@@ -290,8 +312,15 @@ export async function* streamTargetFromCache(params: {
 export async function* streamCollectedFromCache(params: {
   section: SectionKey;
   batchSize?: number;
+  filters?: {
+    search?: string;
+    status?: string[];
+    productType?: string[];
+    approveDateMonths?: string[];
+    updatedBy?: string;
+  };
 }): AsyncGenerator<{ rows: any[]; meta: { hasPrincipalBreakdown: boolean } }> {
-  const { section, batchSize = 500 } = params;
+  const { section, batchSize = 500, filters } = params;
   const db = await getDb(section);
   if (!db) return;
 
@@ -319,10 +348,26 @@ export async function* streamCollectedFromCache(params: {
   // ── 2. Paginate through distinct contract IDs (ดึงจาก debt_target_cache เพื่อครอบคลุมสัญญาที่ไม่มียอดชำระ) ─────────────────────────────────────────────────
   let offset = 0;
   while (true) {
+    let whereClause = sql`section = ${section}`;
+    
+    if (filters?.search) {
+      const searchLike = `%${filters.search.toLowerCase()}%`;
+      whereClause = sql`${whereClause} AND (LOWER(contract_no) LIKE ${searchLike} OR LOWER(customer_name) LIKE ${searchLike})`;
+    }
+    if (filters?.status && filters.status.length > 0) {
+      whereClause = sql`${whereClause} AND contract_status IN ${filters.status}`;
+    }
+    if (filters?.productType && filters.productType.length > 0) {
+      whereClause = sql`${whereClause} AND product_type IN ${filters.productType}`;
+    }
+    if (filters?.approveDateMonths && filters.approveDateMonths.length > 0) {
+      whereClause = sql`${whereClause} AND LEFT(approve_date, 7) IN ${filters.approveDateMonths}`;
+    }
+
     const idResult = await db.execute(sql`
       SELECT DISTINCT contract_external_id
       FROM debt_target_cache
-      WHERE section = ${section}
+      WHERE ${whereClause}
       ORDER BY contract_external_id
       LIMIT ${batchSize} OFFSET ${offset}
     `);

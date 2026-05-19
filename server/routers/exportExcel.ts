@@ -448,9 +448,19 @@ export async function handleDebtTargetExport(req: Request, res: Response) {
     row2.height = 30;
     row2.commit();
 
+    // Extract specific filter params that can be pushed to DB
+    const filters = {
+      search,
+      status: statusSet ? Array.from(statusSet) : undefined,
+      productType: productTypeSet ? Array.from(productTypeSet) : undefined,
+      approveDateMonths: approveDateMonths ? Array.from(approveDateMonths) : undefined,
+      // We don't push dueDate or debtSetMode to DB because they require row-level parsing
+    };
+
     let seq = 0;
     for await (const batch of streamTargetFromCache({
       section,
+      filters,
     })) {
       for (const contract of batch) {
         // Apply frontend-equivalent filters server-side
@@ -679,9 +689,20 @@ export async function handleDebtCollectedExport(req: Request, res: Response) {
     row2.height = 30;
     row2.commit();
 
+    // Extract specific filter params that can be pushed to DB
+    const filters = {
+      search: searchC,
+      status: statusSetC ? Array.from(statusSetC) : undefined,
+      productType: productTypeSetC ? Array.from(productTypeSetC) : undefined,
+      approveDateMonths: approveDateMonthsC ? Array.from(approveDateMonthsC) : undefined,
+      updatedBy: updatedByFilterC,
+      // We don't push dueDate to DB because it requires row-level parsing
+    };
+
     let seq = 0;
     for await (const batch of streamCollectedFromCache({
       section,
+      filters,
     })) {
       for (const contract of batch.rows) {
         // Apply frontend-equivalent filters server-side
