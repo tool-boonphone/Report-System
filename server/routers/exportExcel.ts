@@ -451,10 +451,22 @@ export async function handleDebtTargetExport(req: Request, res: Response) {
       for (const contract of batch) {
         // Apply frontend-equivalent filters server-side
         if (!contractMatchesTarget(contract)) continue;
-        const installments: any[] = Array.isArray((contract as any).installments) ? (contract as any).installments : [];
-        // If no installments, still write one row with contract info only
-        const rows = installments.length > 0 ? installments : [null];
-        for (const inst of rows) {
+        let installments: any[] = Array.isArray((contract as any).installments) ? (contract as any).installments : [];
+        // Filter installments at row level to match what UI shows
+        if (dueDateExact) {
+          installments = installments.filter((inst: any) => {
+            const dd = inst.dueDate ? String(inst.dueDate).slice(0, 10) : null;
+            return dd === dueDateExact;
+          });
+        } else if (dueDateMonths && dueDateMonths.size > 0) {
+          installments = installments.filter((inst: any) => {
+            const dd = inst.dueDate ? String(inst.dueDate).slice(0, 7) : null;
+            return dd != null && dueDateMonths.has(dd);
+          });
+        }
+        // If no installments after filter, skip contract entirely
+        if (installments.length === 0) continue;
+        for (const inst of installments) {
           seq += 1;
           const exRow = ws.addRow({});
           let colIdx = 1;
@@ -637,10 +649,22 @@ export async function handleDebtCollectedExport(req: Request, res: Response) {
       for (const contract of batch.rows) {
         // Apply frontend-equivalent filters server-side
         if (!contractMatchesCollected(contract)) continue;
-        const payments: any[] = Array.isArray((contract as any).payments) ? (contract as any).payments : [];
-        // If no payments, still write one row with contract info only
-        const rows = payments.length > 0 ? payments : [null];
-        for (const pmt of rows) {
+        let payments: any[] = Array.isArray((contract as any).payments) ? (contract as any).payments : [];
+        // Filter payments at row level to match what UI shows
+        if (dueDateExactC) {
+          payments = payments.filter((pmt: any) => {
+            const pd = pmt.paidAt ? String(pmt.paidAt).slice(0, 10) : null;
+            return pd === dueDateExactC;
+          });
+        } else if (dueDateMonthsC && dueDateMonthsC.size > 0) {
+          payments = payments.filter((pmt: any) => {
+            const pd = pmt.paidAt ? String(pmt.paidAt).slice(0, 7) : null;
+            return pd != null && dueDateMonthsC.has(pd);
+          });
+        }
+        // If no payments after filter, skip contract entirely
+        if (payments.length === 0) continue;
+        for (const pmt of payments) {
           seq += 1;
           const exRow = ws.addRow({});
           let colIdx = 1;
