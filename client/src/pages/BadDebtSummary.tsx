@@ -281,6 +281,9 @@ export default function BadDebtSummary() {
   const [filterYear, setFilterYear] = useState("");
   const [osFilter, setOsFilter] = useState<Set<string>>(new Set());
   const [modelFilter, setModelFilter] = useState<Set<string>>(new Set());
+  const [partnerFilter, setPartnerFilter] = useState<Set<string>>(new Set());
+  const [profitFilter, setProfitFilter] = useState<Set<string>>(new Set());
+  const [searchText, setSearchText] = useState("");
   const [activeTab, setActiveTab] = useState<ActiveTab>("yearly");
   // sub-tabs
   const [monthlySubTab, setMonthlySubTab] = useState<MonthlySubTab>("bySale");
@@ -339,6 +342,13 @@ export default function BadDebtSummary() {
     return Array.from(set).sort().reverse();
   }, [rows]);
 
+  /* ── partner options ── */
+  const partnerOptions = useMemo(() => {
+    const set = new Set<string>();
+    rows.forEach((r) => { if (r.partnerName) set.add(r.partnerName); });
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "th"));
+  }, [rows]);
+
   /* ── model canonical map (lowercase key → canonical display) ── */
   const modelCanonicalMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -380,6 +390,16 @@ export default function BadDebtSummary() {
   /* ── filtered rows (list tab) ── */
   const filteredRows = useMemo(() => {
     let r = [...rows];
+    // search
+    if (searchText.trim()) {
+      const q = searchText.trim().toLowerCase();
+      r = r.filter((row) =>
+        (row.contractNo ?? "").toLowerCase().includes(q) ||
+        (row.customerName ?? "").toLowerCase().includes(q) ||
+        (row.phone ?? "").toLowerCase().includes(q) ||
+        (row.imei ?? "").toLowerCase().includes(q)
+      );
+    }
     if (osFilter.size > 0) {
       r = r.filter((row) => {
         const os = deriveOS(row.model ?? null);
@@ -391,6 +411,17 @@ export default function BadDebtSummary() {
         if (!row.model) return false;
         const base = parseModelBase(row.model);
         return base != null && modelFilter.has(base.toLowerCase());
+      });
+    }
+    if (partnerFilter.size > 0) {
+      r = r.filter((row) => partnerFilter.has(row.partnerName ?? ""));
+    }
+    if (profitFilter.size > 0) {
+      r = r.filter((row) => {
+        if (profitFilter.has("+กำไร") && row.profitLoss > 0) return true;
+        if (profitFilter.has("เท่าทุน") && row.profitLoss === 0) return true;
+        if (profitFilter.has("-ขาดทุน") && row.profitLoss < 0) return true;
+        return false;
       });
     }
     r.sort((a, b) => {
@@ -607,29 +638,49 @@ export default function BadDebtSummary() {
           const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "สรุปรายเดือน_ตามเดือนที่อนุมัติ");
           XLSX.writeFile(wb, `หนี้เสีย_สรุปรายเดือน_ตามเดือนที่อนุมัติ_${section}_${new Date().toISOString().slice(0, 10)}.xlsx`);
         }
-      // --- รายการขายเครื่อง (เรียก API เหมือนเดิม) ---
+      // --- รายการขายเครื่อง (client-side export จาก filteredRows) ---
       } else {
-        const params = new URLSearchParams({ section });
-        if (approveMonth) params.set("approveMonth", approveMonth);
-        if (saleMonth) params.set("saleMonth", saleMonth);
-        const resp = await fetch(`/api/export/bad-debt?${params.toString()}`, { credentials: "include" });
-        if (!resp.ok) {
-          const { message } = await resp.json().catch(() => ({ message: "Export failed" }));
-          toast.error(message, { id: toastId }); return;
-        }
-        const blob = await resp.blob();
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `bad_debt_summary_${section}_${new Date().toISOString().slice(0, 10)}.xlsx`;
-        document.body.appendChild(a); a.click(); a.remove();
-        URL.revokeObjectURL(url);
+        if (!filteredRows.length) { toast.error("ไม่มีข้อมูล", { id: toastId }); return; }
+        const headers = [
+          "#", "วันที่อนุมัติ", "เลขที่สัญญา", "ชื่อ-นามสกุล", "เบอร์โทร",
+          "รุ่น", "IMEI/SN", "ราคา", "ยอดจัดไฟแนนซ์", "ค่าคอมมิชชั่น", "ต้นทุน",
+          "งวดที่ชำระ", "ยอดผ่อน", "ยอดขายเครื่อง", "รวมรายรับ", "พาร์ทเนอร์", "วันที่ขาย", "กำไร/ขาดทุน",
+        ];
+        const dataRows = filteredRows.map((r, i) => [
+          i + 1,
+          r.approveDate ? new Date(r.approveDate).toLocaleDateString("th-TH") : "-",
+          r.contractNo ?? "-",
+          r.customerName ?? "-",
+          r.phone ?? "-",
+          r.model ?? "-",
+          r.imei ?? "-",
+          r.salePrice ?? 0,
+          r.financeAmount,
+          r.commissionNet,
+          r.cost,
+          r.installmentCount != null ? `${r.paidInstallments}/${r.installmentCount}` : `${r.paidInstallments}`,
+          r.installmentPaid,
+          r.deviceSaleAmount,
+          r.totalRevenue,
+          r.partnerName ?? "-",
+          r.saleDate ? new Date(r.saleDate).toLocaleDateString("th-TH") : "-",
+          r.profitLoss,
+        ]);
+        const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
+        ws["!cols"] = [
+          { wch: 6 }, { wch: 14 }, { wch: 24 }, { wch: 24 }, { wch: 14 },
+          { wch: 22 }, { wch: 18 }, { wch: 14 }, { wch: 16 }, { wch: 14 }, { wch: 14 },
+          { wch: 12 }, { wch: 14 }, { wch: 16 }, { wch: 16 }, { wch: 20 }, { wch: 14 }, { wch: 14 },
+        ];
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "รายการขายเครื่อง");
+        XLSX.writeFile(wb, `หนี้เสีย_รายการขายเครื่อง_${section}_${new Date().toISOString().slice(0, 10)}.xlsx`);
       }
       toast.success("ดาวน์โหลดสำเร็จ", { id: toastId });
     } catch (err) {
       toast.error((err as Error).message ?? "Export failed", { id: toastId });
     }
-  }, [section, approveMonth, saleMonth, activeTab, yearlySubTab, monthlySubTab, yearlyBySaleRows, yearlyByApproveRows, monthlyBySaleRows, monthlyByApproveRows]);
+  }, [section, approveMonth, saleMonth, searchText, partnerFilter, profitFilter, osFilter, modelFilter, activeTab, yearlySubTab, monthlySubTab, yearlyBySaleRows, yearlyByApproveRows, monthlyBySaleRows, monthlyByApproveRows, filteredRows]);
 
   /* ── nav actions: SyncStatusBar ── */
   useEffect(() => {
@@ -758,6 +809,19 @@ export default function BadDebtSummary() {
           </div>
         )}
 
+        {/* ── Search Box (list tab only) ── */}
+        {activeTab === "list" && (
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-gray-500">ค้นหา</label>
+            <input
+              type="text"
+              value={searchText}
+              onChange={(e) => setSearchText(e.target.value)}
+              placeholder="เลขที่สัญญา / ชื่อ / เบอร์โทร / IMEI"
+              className="border rounded px-2 py-1.5 text-sm h-9 bg-white w-64 focus:outline-none focus:ring-2 focus:ring-blue-400"
+            />
+          </div>
+        )}
         {/* ── Filters ── */}
         <div className="flex flex-wrap gap-3 items-end">
           <div className="flex flex-col gap-1">
@@ -806,8 +870,28 @@ export default function BadDebtSummary() {
             placeholder="ทุกรุ่น"
             formatOption={(k) => modelCanonicalMap.get(k) ?? k}
           />
+          {/* พาร์ทเนอร์ (list tab only) */}
+          {activeTab === "list" && (
+            <MultiSelectFilter
+              label="พาร์ทเนอร์"
+              selected={partnerFilter}
+              onChange={setPartnerFilter}
+              options={partnerOptions}
+              placeholder="ทุกพาร์ทเนอร์"
+            />
+          )}
+          {/* กำไร/ขาดทุน (list tab only) */}
+          {activeTab === "list" && (
+            <MultiSelectFilter
+              label="กำไร/ขาดทุน"
+              selected={profitFilter}
+              onChange={setProfitFilter}
+              options={["+กำไร", "เท่าทุน", "-ขาดทุน"]}
+              placeholder="ทุกรายการ"
+            />
+          )}
           <button
-            onClick={() => { setApproveMonth(""); setSaleMonth(""); setFilterYear(""); setOsFilter(new Set()); setModelFilter(new Set()); }}
+            onClick={() => { setApproveMonth(""); setSaleMonth(""); setFilterYear(""); setOsFilter(new Set()); setModelFilter(new Set()); setPartnerFilter(new Set()); setProfitFilter(new Set()); setSearchText(""); }}
             className="flex items-center gap-1 h-9 px-3 text-sm border rounded hover:bg-gray-50 text-gray-600"
           >
             <X className="w-3.5 h-3.5" />
@@ -865,11 +949,11 @@ export default function BadDebtSummary() {
               <thead className="bg-red-700 text-white sticky top-0 z-10">
                 <tr>
                   <th className="px-2 py-2 text-center text-xs font-semibold w-10">#</th>
-                  <Th label="วันที่อนุมัติ" col="approveDate" />
                   <Th label="เลขที่สัญญา" col="contractNo" />
                   <th className="px-2 py-2 text-center text-xs font-semibold whitespace-nowrap">ชื่อ-นามสกุล</th>
                   <th className="px-2 py-2 text-center text-xs font-semibold whitespace-nowrap">เบอร์โทร</th>
                   <th className="px-2 py-2 text-center text-xs font-semibold whitespace-nowrap">รุ่น</th>
+                  <th className="px-2 py-2 text-center text-xs font-semibold whitespace-nowrap">IMEI/SN</th>
                   <th className="px-2 py-2 text-center text-xs font-semibold whitespace-nowrap">ราคา</th>
                   <Th label="ยอดจัดไฟแนนซ์" col="financeAmount" />
                   <Th label="ค่าคอมมิชชั่น" col="commissionNet" />
@@ -879,26 +963,28 @@ export default function BadDebtSummary() {
                   <Th label="ยอดผ่อน" col="installmentPaid" />
                   <Th label="ยอดขายเครื่อง" col="deviceSaleAmount" />
                   <Th label="รวมรายรับ" col="totalRevenue" />
+                  <Th label="วันที่อนุมัติ" col="approveDate" />
+                  <th className="px-2 py-2 text-center text-xs font-semibold whitespace-nowrap">พาร์ทเนอร์</th>
                   <Th label="วันที่ขาย" col="saleDate" />
                   <Th label="กำไร/ขาดทุน" col="profitLoss" />
                 </tr>
               </thead>
               <tbody>
                 {filteredRows.length === 0 ? (
-                  <tr><td colSpan={17} className="text-center py-12 text-gray-400">ไม่พบข้อมูล</td></tr>
+                  <tr><td colSpan={19} className="text-center py-12 text-gray-400">ไม่พบข้อมูล</td></tr>
                 ) : (
                   filteredRows.map((r, idx) => (
                     <tr key={r.contractExternalId} className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}>
                       <td className="px-2 py-2 text-center text-gray-400 text-xs">{idx + 1}</td>
-                      <td className="px-2 py-2 text-center whitespace-nowrap text-xs">{fmtDate(r.approveDate)}</td>
                       <td className="px-2 py-2 text-center whitespace-nowrap font-mono text-xs">{r.contractNo ?? "-"}</td>
                       <td className="px-2 py-2 whitespace-nowrap text-xs">{r.customerName ?? "-"}</td>
                       <td className="px-2 py-2 text-center whitespace-nowrap text-xs">{r.phone ?? "-"}</td>
                       <td className="px-2 py-2 whitespace-nowrap text-xs">{r.model ?? "-"}</td>
+                      <td className="px-2 py-2 text-center whitespace-nowrap font-mono text-xs text-gray-600">{r.imei ?? "-"}</td>
                       <td className="px-2 py-2 text-right whitespace-nowrap text-xs">{fmtMoney(r.salePrice)}</td>
                       <td className="px-2 py-2 text-right whitespace-nowrap text-xs">{fmtMoney(r.financeAmount)}</td>
                       <td className="px-2 py-2 text-right whitespace-nowrap text-xs">{fmtMoney(r.commissionNet)}</td>
-                      <td className="px-2 py-2 text-right whitespace-nowrap text-xs">{fmtMoney((r as any).incentive ?? 0)}</td>
+                      <td className="px-2 py-2 text-right whitespace-nowrap text-xs">{fmtMoney(r.incentive ?? 0)}</td>
                       <td className="px-2 py-2 text-right whitespace-nowrap text-xs font-medium text-orange-700">{fmtMoney(r.cost)}</td>
                       <td className="px-2 py-2 text-center whitespace-nowrap text-xs">
                         {r.installmentCount != null ? `${r.paidInstallments}/${r.installmentCount}` : `${r.paidInstallments}`}
@@ -906,6 +992,8 @@ export default function BadDebtSummary() {
                       <td className="px-2 py-2 text-right whitespace-nowrap text-xs">{fmtMoney(r.installmentPaid)}</td>
                       <td className="px-2 py-2 text-right whitespace-nowrap text-xs text-blue-700 font-medium">{fmtMoney(r.deviceSaleAmount)}</td>
                       <td className="px-2 py-2 text-right whitespace-nowrap text-xs font-medium">{fmtMoney(r.totalRevenue)}</td>
+                      <td className="px-2 py-2 text-center whitespace-nowrap text-xs">{fmtDate(r.approveDate)}</td>
+                      <td className="px-2 py-2 whitespace-nowrap text-xs text-gray-600">{r.partnerName ?? "-"}</td>
                       <td className="px-2 py-2 text-center whitespace-nowrap text-xs">{fmtDate(r.saleDate)}</td>
                       <td className="px-2 py-2 text-right whitespace-nowrap text-xs"><ProfitBadge value={r.profitLoss} /></td>
                     </tr>
@@ -915,7 +1003,7 @@ export default function BadDebtSummary() {
               {filteredRows.length > 0 && (
                 <tfoot className="bg-red-50 border-t-2 border-red-200 font-semibold text-xs sticky bottom-0 z-10">
                   <tr>
-                    <td colSpan={7} className="px-2 py-2 text-right text-gray-600">รวม {filteredRows.length} รายการ</td>
+                    <td colSpan={9} className="px-2 py-2 text-right text-gray-600">รวม {filteredRows.length} รายการ</td>
                     <td className="px-2 py-2 text-right">{fmtMoney(filteredRows.reduce((s, r) => s + r.financeAmount, 0))}</td>
                     <td className="px-2 py-2 text-right">{fmtMoney(filteredRows.reduce((s, r) => s + ((r as any).commissionNet ?? 0), 0))}</td>
                     <td className="px-2 py-2 text-right">{fmtMoney(filteredRows.reduce((s, r) => s + ((r as any).incentive ?? 0), 0))}</td>
@@ -924,6 +1012,8 @@ export default function BadDebtSummary() {
                     <td className="px-2 py-2 text-right">{fmtMoney(filteredRows.reduce((s, r) => s + r.installmentPaid, 0))}</td>
                     <td className="px-2 py-2 text-right text-blue-700">{fmtMoney(filteredRows.reduce((s, r) => s + r.deviceSaleAmount, 0))}</td>
                     <td className="px-2 py-2 text-right">{fmtMoney(filteredRows.reduce((s, r) => s + r.totalRevenue, 0))}</td>
+                    <td className="px-2 py-2"></td>
+                    <td className="px-2 py-2"></td>
                     <td className="px-2 py-2"></td>
                     <td className="px-2 py-2 text-right"><ProfitBadge value={filteredRows.reduce((s, r) => s + r.profitLoss, 0)} /></td>
                   </tr>
