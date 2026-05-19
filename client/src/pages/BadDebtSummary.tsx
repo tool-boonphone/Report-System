@@ -1013,8 +1013,6 @@ export default function BadDebtSummary() {
                     <td className="px-2 py-2 text-right">{fmtMoney(filteredRows.reduce((s, r) => s + r.installmentPaid, 0))}</td>
                     <td className="px-2 py-2 text-right text-blue-700">{fmtMoney(filteredRows.reduce((s, r) => s + r.deviceSaleAmount, 0))}</td>
                     <td className="px-2 py-2 text-right">{fmtMoney(filteredRows.reduce((s, r) => s + r.totalRevenue, 0))}</td>
-                    <td className="px-2 py-2"></td>{/* วันที่อนุมัติ */}
-                    <td className="px-2 py-2"></td>{/* พาร์ทเนอร์ */}
                     <td className="px-2 py-2"></td>{/* วันที่ขาย */}
                     <td className="px-2 py-2 text-right"><ProfitBadge value={filteredRows.reduce((s, r) => s + r.profitLoss, 0)} /></td>
                   </tr>
