@@ -44,6 +44,7 @@ const STAGE_LABELS: Record<string, string> = {
   payments: "ดึงข้อมูลการชำระ",
   commissions: "ดึงข้อมูลค่าคอมมิชชัน",
   bad_debt: "คำนวณหนี้เสีย",
+  populate: "สร้าง Cache รายงาน",
   finishing: "กำลังบันทึก",
   เริ่มต้น: "กำลังเริ่มต้น",
 };

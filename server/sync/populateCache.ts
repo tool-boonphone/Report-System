@@ -55,6 +55,7 @@ interface ContractMeta {
  */
 export async function populateDebtCache(
   section: SectionKey,
+  onProgress?: (phase: "target" | "collected", current: number, total: number) => void,
 ): Promise<{ targetRows: number; collectedRows: number }> {
   const db = await getDb(section);
   if (!db) throw new Error("[populateCache] DB not available");
@@ -156,6 +157,7 @@ export async function populateDebtCache(
       if (batch.length > 0) {
         await db.insert(debtTargetCache).values(batch);
         targetCount += batch.length;
+        if (onProgress) onProgress("target", targetCount, 0);
       }
     }
   }
@@ -191,11 +193,30 @@ export async function populateDebtCache(
   }
 
   // ─── 3. Populate debt_collected_cache ─────────────────────────────────────────
+  // Estimate total collected rows from payment_transactions count
+  let estimatedCollected = 0;
+  try {
+    const { getDb: _getDb } = await import("../db");
+    const _db = await _getDb(section);
+    if (_db) {
+      const countRaw = await _db.execute(sql`SELECT COUNT(*) as cnt FROM payment_transactions WHERE section = ${section}`);
+      const countRows: any[] = Array.isArray((countRaw as any).rows) ? (countRaw as any).rows : (Array.isArray(countRaw) ? countRaw as any[] : []);
+      estimatedCollected = Number(countRows[0]?.cnt ?? 0);
+    }
+  } catch { /* non-fatal */ }
+
+  // Small delay to let connection pool recover after heavy target insert
+  await new Promise<void>((resolve) => setTimeout(resolve, 2000));
+
   let collectedCount = 0;
+  console.log(`[populateCache] ${section}: starting collected stream...`);
   const collectedStream = listDebtCollectedStream({ section, batchSize: 200 });
 
+  let chunkCount = 0;
   for await (const chunk of collectedStream) {
+    chunkCount++;
     const contractBatch = (chunk as any).rows ?? [];
+    console.log(`[populateCache] ${section}: collected chunk #${chunkCount}, contracts=${contractBatch.length}`);
     const insertRows: (typeof debtCollectedCache.$inferInsert)[] = [];
 
     for (const contract of contractBatch) {
@@ -271,6 +292,7 @@ export async function populateDebtCache(
       if (batch.length > 0) {
         await db.insert(debtCollectedCache).values(batch);
         collectedCount += batch.length;
+        if (onProgress) onProgress("collected", collectedCount, estimatedCollected);
       }
     }
   }

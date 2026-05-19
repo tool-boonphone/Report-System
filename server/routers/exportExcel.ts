@@ -19,7 +19,7 @@ import {
   type ContractFilters,
   type ContractSort,
 } from "../contractsDb";
-import { listDebtTargetStream, listDebtCollectedStream } from "../debtDb";
+import { streamTargetFromCache, streamCollectedFromCache } from "../sync/queryCacheDb";
 
 import { getBadDebtSummary } from "../badDebtDb";
 import {
@@ -333,15 +333,43 @@ export async function handleDebtTargetExport(req: Request, res: Response) {
       return;
     }
 
-    const search = req.query.search ? String(req.query.search) : undefined;
-    const dateFrom = req.query.dateFrom ? String(req.query.dateFrom) : undefined;
-    const dateTo = req.query.dateTo ? String(req.query.dateTo) : undefined;
-    const dateField = req.query.dateField === "approveDate" ? "approveDate" : req.query.dateField === "dueDate" ? "dueDate" : undefined;
-    const minDaysOverdue = req.query.minDaysOverdue ? Number(req.query.minDaysOverdue) : undefined;
-    const maxDaysOverdue = req.query.maxDaysOverdue ? Number(req.query.maxDaysOverdue) : undefined;
-    const minInstallmentsOverdue = req.query.minInstallmentsOverdue ? Number(req.query.minInstallmentsOverdue) : undefined;
-    const maxInstallmentsOverdue = req.query.maxInstallmentsOverdue ? Number(req.query.maxInstallmentsOverdue) : undefined;
-    const debtStatus = req.query.debtStatus ? String(req.query.debtStatus) : undefined;
+    // Filters from frontend (same params as DebtReport.tsx handleExport)
+    const search = req.query.search ? String(req.query.search).toLowerCase() : undefined;
+    const statusSet = req.query.status ? new Set(String(req.query.status).split(",").map(s => s.trim()).filter(Boolean)) : undefined;
+    const dueDateExact = req.query.dueDateExact ? String(req.query.dueDateExact) : undefined; // YYYY-MM-DD
+    const dueDateMonths = req.query.dueDateFilter ? new Set(String(req.query.dueDateFilter).split(",").map(s => s.trim()).filter(Boolean)) : undefined; // YYYY-MM
+    const approveDateMonths = req.query.approveDate ? new Set(String(req.query.approveDate).split(",").map(s => s.trim()).filter(Boolean)) : undefined; // YYYY-MM
+    const productTypeSet = req.query.productType ? new Set(String(req.query.productType).split(",").map(s => s.trim()).filter(Boolean)) : undefined;
+
+    // Helper: check if a contract matches all active filters (target tab)
+    function contractMatchesTarget(contract: any): boolean {
+      if (search) {
+        const hay = `${contract.contractNo ?? ""} ${contract.customerName ?? ""} ${contract.phone ?? ""}`.toLowerCase();
+        if (!hay.includes(search)) return false;
+      }
+      if (statusSet && statusSet.size > 0) {
+        if (!statusSet.has(contract.debtStatus)) return false;
+      }
+      if (approveDateMonths && approveDateMonths.size > 0) {
+        const ym = contract.approveDate ? String(contract.approveDate).slice(0, 7) : null;
+        if (!ym || !approveDateMonths.has(ym)) return false;
+      }
+      if (productTypeSet && productTypeSet.size > 0) {
+        if (!productTypeSet.has(contract.productType ?? "")) return false;
+      }
+      if (dueDateExact || (dueDateMonths && dueDateMonths.size > 0)) {
+        const insts: any[] = Array.isArray(contract.installments) ? contract.installments : [];
+        const hasMatch = insts.some((inst: any) => {
+          const dd = inst.dueDate ? String(inst.dueDate).slice(0, 10) : null;
+          if (!dd) return false;
+          if (dueDateExact && dd !== dueDateExact) return false;
+          if (dueDateMonths && dueDateMonths.size > 0 && !dueDateMonths.has(dd.slice(0, 7))) return false;
+          return true;
+        });
+        if (!hasMatch) return false;
+      }
+      return true;
+    }
 
     const fileName = `debt_target_${section}_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.xlsx`;
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
@@ -417,10 +445,12 @@ export async function handleDebtTargetExport(req: Request, res: Response) {
     row2.commit();
 
     let seq = 0;
-    for await (const batch of listDebtTargetStream({
+    for await (const batch of streamTargetFromCache({
       section,
     })) {
       for (const contract of batch) {
+        // Apply frontend-equivalent filters server-side
+        if (!contractMatchesTarget(contract)) continue;
         const installments: any[] = Array.isArray((contract as any).installments) ? (contract as any).installments : [];
         // If no installments, still write one row with contract info only
         const rows = installments.length > 0 ? installments : [null];
@@ -488,16 +518,44 @@ export async function handleDebtCollectedExport(req: Request, res: Response) {
       return;
     }
 
-    const search = req.query.search ? String(req.query.search) : undefined;
-    const dateFrom = req.query.dateFrom ? String(req.query.dateFrom) : undefined;
-    const dateTo = req.query.dateTo ? String(req.query.dateTo) : undefined;
-    const dateField = req.query.dateField === "paidAt" ? "paidAt" : "updatedAt";
-    const minDaysOverdue = req.query.minDaysOverdue ? Number(req.query.minDaysOverdue) : undefined;
-    const maxDaysOverdue = req.query.maxDaysOverdue ? Number(req.query.maxDaysOverdue) : undefined;
-    const minInstallmentsOverdue = req.query.minInstallmentsOverdue ? Number(req.query.minInstallmentsOverdue) : undefined;
-    const maxInstallmentsOverdue = req.query.maxInstallmentsOverdue ? Number(req.query.maxInstallmentsOverdue) : undefined;
-    const debtStatus = req.query.debtStatus ? String(req.query.debtStatus) : undefined;
-    const productType = req.query.productType ? String(req.query.productType) : undefined;
+    // Filters from frontend (same params as DebtReport.tsx handleExport)
+    const searchC = req.query.search ? String(req.query.search).toLowerCase() : undefined;
+    const statusSetC = req.query.status ? new Set(String(req.query.status).split(",").map(s => s.trim()).filter(Boolean)) : undefined;
+    const dueDateExactC = req.query.dueDateExact ? String(req.query.dueDateExact) : undefined; // YYYY-MM-DD
+    const dueDateMonthsC = req.query.dueDateFilter ? new Set(String(req.query.dueDateFilter).split(",").map(s => s.trim()).filter(Boolean)) : undefined; // YYYY-MM (matches paidAt for collected)
+    const approveDateMonthsC = req.query.approveDate ? new Set(String(req.query.approveDate).split(",").map(s => s.trim()).filter(Boolean)) : undefined; // YYYY-MM
+    const productTypeSetC = req.query.productType ? new Set(String(req.query.productType).split(",").map(s => s.trim()).filter(Boolean)) : undefined;
+
+    // Helper: check if a contract matches all active filters (collected tab)
+    // Note: dueDateFilter on collected tab matches paidAt (payment date), not due_date
+    function contractMatchesCollected(contract: any): boolean {
+      if (searchC) {
+        const hay = `${contract.contractNo ?? ""} ${contract.customerName ?? ""} ${contract.phone ?? ""}`.toLowerCase();
+        if (!hay.includes(searchC)) return false;
+      }
+      if (statusSetC && statusSetC.size > 0) {
+        if (!statusSetC.has(contract.debtStatus)) return false;
+      }
+      if (approveDateMonthsC && approveDateMonthsC.size > 0) {
+        const ym = contract.approveDate ? String(contract.approveDate).slice(0, 7) : null;
+        if (!ym || !approveDateMonthsC.has(ym)) return false;
+      }
+      if (productTypeSetC && productTypeSetC.size > 0) {
+        if (!productTypeSetC.has(contract.productType ?? "")) return false;
+      }
+      if (dueDateExactC || (dueDateMonthsC && dueDateMonthsC.size > 0)) {
+        const pmts: any[] = Array.isArray(contract.payments) ? contract.payments : [];
+        const hasMatch = pmts.some((pmt: any) => {
+          const pd = pmt.paidAt ? String(pmt.paidAt).slice(0, 10) : null;
+          if (!pd) return false;
+          if (dueDateExactC && pd !== dueDateExactC) return false;
+          if (dueDateMonthsC && dueDateMonthsC.size > 0 && !dueDateMonthsC.has(pd.slice(0, 7))) return false;
+          return true;
+        });
+        if (!hasMatch) return false;
+      }
+      return true;
+    }
 
     const fileName = `debt_collected_${section}_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.xlsx`;
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
@@ -573,10 +631,12 @@ export async function handleDebtCollectedExport(req: Request, res: Response) {
     row2.commit();
 
     let seq = 0;
-    for await (const batch of listDebtCollectedStream({
+    for await (const batch of streamCollectedFromCache({
       section,
     })) {
       for (const contract of batch.rows) {
+        // Apply frontend-equivalent filters server-side
+        if (!contractMatchesCollected(contract)) continue;
         const payments: any[] = Array.isArray((contract as any).payments) ? (contract as any).payments : [];
         // If no payments, still write one row with contract info only
         const rows = payments.length > 0 ? payments : [null];

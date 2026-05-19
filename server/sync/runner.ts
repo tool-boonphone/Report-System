@@ -69,6 +69,7 @@ export const SYNC_STAGES = [
   "payments",
   "commissions",
   "bad_debt",
+  "populate",
 ] as const;
 export type SyncStage = (typeof SYNC_STAGES)[number];
 
@@ -385,6 +386,20 @@ async function doSync(
       console.warn(`[sync] ${section}: bad-debt computation failed (non-fatal):`, bdErr?.message ?? bdErr);
     }
 
+    // ── Stage 8: Populate debt cache ──────────────────────────────────────
+    checkCancel();
+    setStage(section, 8);
+    try {
+      const cacheResult = await populateDebtCache(section, (phase, current, total) => {
+        if (phase === "collected" && total > 0) {
+          setSubProgress(section, "populate", current, total);
+        }
+      });
+      console.log(`[sync] ${section}: cache populated — target=${cacheResult.targetRows}, collected=${cacheResult.collectedRows}`);
+    } catch (cacheErr: any) {
+      console.warn(`[sync] ${section}: cache populate failed (non-fatal):`, cacheErr?.message ?? cacheErr);
+    }
+
     // ── Finish sync log ───────────────────────────────────────────────────
     const partialFail = instFailed || payFailed;
     await finishSyncLog({
@@ -396,8 +411,6 @@ async function doSync(
         : undefined,
     });
 
-    // Note: Legacy cache population and pre-build excel exports removed in favor of streaming.
-
     clearInterval(selfPingInterval);
     return { ok: true, rowCount: overallRows };
 
@@ -405,7 +418,11 @@ async function doSync(
     clearInterval(selfPingInterval);
     // Try to populate cache from existing DB data even on failure
     try {
-      const cacheResult = await populateDebtCache(section);
+      const cacheResult = await populateDebtCache(section, (phase, current, total) => {
+        if (phase === "collected" && total > 0) {
+          setSubProgress(section, "populate", current, total);
+        }
+      });
       console.log(`[sync] ${section}: post-failure cache populated — target=${cacheResult.targetRows}, collected=${cacheResult.collectedRows}`);
     } catch (cacheErr: any) {
       console.error(`[sync] ${section}: post-failure cache populate failed:`, cacheErr?.message ?? cacheErr);
