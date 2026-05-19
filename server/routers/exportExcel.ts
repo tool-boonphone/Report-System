@@ -340,6 +340,10 @@ export async function handleDebtTargetExport(req: Request, res: Response) {
     const dueDateMonths = req.query.dueDateFilter ? new Set(String(req.query.dueDateFilter).split(",").map(s => s.trim()).filter(Boolean)) : undefined; // YYYY-MM
     const approveDateMonths = req.query.approveDate ? new Set(String(req.query.approveDate).split(",").map(s => s.trim()).filter(Boolean)) : undefined; // YYYY-MM
     const productTypeSet = req.query.productType ? new Set(String(req.query.productType).split(",").map(s => s.trim()).filter(Boolean)) : undefined;
+    // UI control states
+    const principalOnly = req.query.principalOnly === "1"; // Switch เฉพาะเงินต้น
+    const debtSetMode = req.query.debtSetMode === "1";     // Switch ตั้งหนี้
+    const todayStr = new Date().toISOString().slice(0, 10); // YYYY-MM-DD for future period check
 
     // Helper: check if a contract matches all active filters (target tab)
     function contractMatchesTarget(contract: any): boolean {
@@ -464,6 +468,17 @@ export async function handleDebtTargetExport(req: Request, res: Response) {
             return dd != null && dueDateMonths.has(dd);
           });
         }
+        // Apply debtSetMode: skip installments that are paid/future/dimmed (same as UI masking)
+        if (debtSetMode) {
+          installments = installments.filter((inst: any) => {
+            const isPaid = inst.isPaid === true;
+            const isFuture = inst.dueDate ? String(inst.dueDate).slice(0, 10) > todayStr : false;
+            const isClosed = inst.isClosed === true;
+            const isSuspended = inst.isSuspended === true;
+            // debtSetMode hides: isPaid (green), future periods, closed, suspended
+            return !isPaid && !isFuture && !isClosed && !isSuspended;
+          });
+        }
         // If no installments after filter, skip contract entirely
         if (installments.length === 0) continue;
         for (const inst of installments) {
@@ -474,9 +489,18 @@ export async function handleDebtTargetExport(req: Request, res: Response) {
             const cell = exRow.getCell(colIdx++);
             // Left columns come from contract, sub-columns come from installment
             const isSubCol = DEBT_SUB_TARGET.some((sc) => sc.key === col.key);
-            const value = isSubCol
+            let value = isSubCol
               ? (inst != null ? (inst as any)[col.key] : null)
               : (contract as any)[col.key];
+            // Apply principalOnly: zero out penalty and unlockFee (same as UI Switch เฉพาะเงินต้น)
+            if (principalOnly && (col.key === "penalty" || col.key === "unlockFee")) {
+              value = 0;
+            }
+            // Recalculate amount when principalOnly is on
+            if (principalOnly && col.key === "amount" && inst != null) {
+              const netAmt = (inst.principal ?? 0) + (inst.interest ?? 0) + (inst.fee ?? 0);
+              value = netAmt;
+            }
             if (col.key === "seq") {
               cell.value = seq;
               cell.numFmt = INT_FORMAT;
@@ -537,6 +561,10 @@ export async function handleDebtCollectedExport(req: Request, res: Response) {
     const dueDateMonthsC = req.query.dueDateFilter ? new Set(String(req.query.dueDateFilter).split(",").map(s => s.trim()).filter(Boolean)) : undefined; // YYYY-MM (matches paidAt for collected)
     const approveDateMonthsC = req.query.approveDate ? new Set(String(req.query.approveDate).split(",").map(s => s.trim()).filter(Boolean)) : undefined; // YYYY-MM
     const productTypeSetC = req.query.productType ? new Set(String(req.query.productType).split(",").map(s => s.trim()).filter(Boolean)) : undefined;
+    // UI control states for collected tab
+    // hiddenBadges: badge keys that are OFF in the UI (those fields should be zeroed in export)
+    const hiddenBadgesC = req.query.hiddenBadges ? new Set(String(req.query.hiddenBadges).split(",").map(s => s.trim()).filter(Boolean)) : new Set<string>();
+    const updatedByFilterC = req.query.updatedBy ? String(req.query.updatedBy).toLowerCase() : undefined;
 
     // Helper: check if a contract matches all active filters (collected tab)
     // Note: dueDateFilter on collected tab matches paidAt (payment date), not due_date
@@ -563,6 +591,15 @@ export async function handleDebtCollectedExport(req: Request, res: Response) {
           if (dueDateExactC && pd !== dueDateExactC) return false;
           if (dueDateMonthsC && dueDateMonthsC.size > 0 && !dueDateMonthsC.has(pd.slice(0, 7))) return false;
           return true;
+        });
+        if (!hasMatch) return false;
+      }
+      // Filter by updatedBy (badge filter in UI)
+      if (updatedByFilterC) {
+        const pmts: any[] = Array.isArray(contract.payments) ? contract.payments : [];
+        const hasMatch = pmts.some((pmt: any) => {
+          const by = (pmt.updatedBy ?? "").toLowerCase();
+          return by.includes(updatedByFilterC);
         });
         if (!hasMatch) return false;
       }
@@ -662,6 +699,13 @@ export async function handleDebtCollectedExport(req: Request, res: Response) {
             return pd != null && dueDateMonthsC.has(pd);
           });
         }
+        // Filter payments by updatedBy at row level
+        if (updatedByFilterC) {
+          payments = payments.filter((pmt: any) => {
+            const by = (pmt.updatedBy ?? "").toLowerCase();
+            return by.includes(updatedByFilterC);
+          });
+        }
         // If no payments after filter, skip contract entirely
         if (payments.length === 0) continue;
         for (const pmt of payments) {
@@ -672,9 +716,22 @@ export async function handleDebtCollectedExport(req: Request, res: Response) {
             const cell = exRow.getCell(colIdx++);
             // Left columns come from contract, sub-columns come from payment
             const isSubCol = DEBT_SUB_COLLECTED.some((sc) => sc.key === col.key);
-            const value = isSubCol
+            let value = isSubCol
               ? (pmt != null ? (pmt as any)[col.key] : null)
               : (contract as any)[col.key];
+            // Apply hiddenBadges: zero out fields whose badge is OFF in the UI
+            // Badge keys map to payment sub-column keys (principal, interest, fee, penalty, unlockFee, discount, overpaid, badDebt)
+            if (isSubCol && hiddenBadgesC.size > 0 && hiddenBadgesC.has(col.key) && col.type === "money") {
+              value = 0;
+            }
+            // Recalculate total when some badges are hidden
+            if (isSubCol && col.key === "total" && hiddenBadgesC.size > 0 && pmt != null) {
+              const fields = ["principal", "interest", "fee", "penalty", "unlockFee", "discount", "overpaid", "badDebt"];
+              value = fields.reduce((sum: number, f: string) => {
+                if (hiddenBadgesC.has(f)) return sum;
+                return sum + (Number((pmt as any)[f]) || 0);
+              }, 0);
+            }
             if (col.key === "seq") {
               cell.value = seq;
               cell.numFmt = INT_FORMAT;

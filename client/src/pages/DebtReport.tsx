@@ -899,6 +899,19 @@ export default function DebtReport() {
     if (dueDateFilter.size > 0) params.set("dueDateFilter", Array.from(dueDateFilter).join(","));
     if (approveDateFilter.size > 0) params.set("approveDate", Array.from(approveDateFilter).join(","));
     if (productTypeFilter.size > 0) params.set("productType", Array.from(productTypeFilter).join(","));
+    // Pass UI control states so export matches exactly what user sees
+    if (tab === "target") {
+      if (principalOnly) params.set("principalOnly", "1");
+      if (debtSetMode) params.set("debtSetMode", "1");
+    }
+    if (tab === "collected") {
+      // Send which badges are OFF (hidden) so server can zero out those fields
+      const hiddenBadges = Object.entries(badgeVisibility)
+        .filter(([, on]) => !on)
+        .map(([key]) => key);
+      if (hiddenBadges.length > 0) params.set("hiddenBadges", hiddenBadges.join(","));
+      if (updatedByFilter) params.set("updatedBy", updatedByFilter);
+    }
     const toastId = toast.loading("กำลังเตรียมไฟล์ Excel…");
     try {
       const resp = await fetch(`${endpoint}?${params.toString()}`, {
@@ -927,7 +940,7 @@ export default function DebtReport() {
     } catch (err) {
       toast.error((err as Error).message ?? "Export failed", { id: toastId });
     }
-   }, [section, tab, search, statusFilter, dueDateExact, dueDateFilter, approveDateFilter, productTypeFilter]);
+   }, [section, tab, search, statusFilter, dueDateExact, dueDateFilter, approveDateFilter, productTypeFilter, principalOnly, debtSetMode, badgeVisibility, updatedByFilter]);
 
   // Phase 88: Super Admin can force-clear server-side debt cache
   const [isInvalidating, setIsInvalidating] = useState(false);
