@@ -949,6 +949,8 @@ export default function BadDebtSummary() {
               <thead className="bg-red-700 text-white sticky top-0 z-10">
                 <tr>
                   <th className="px-2 py-2 text-center text-xs font-semibold w-10">#</th>
+                  <Th label="วันที่อนุมัติ" col="approveDate" />
+                  <th className="px-2 py-2 text-center text-xs font-semibold whitespace-nowrap">พาร์ทเนอร์</th>
                   <Th label="เลขที่สัญญา" col="contractNo" />
                   <th className="px-2 py-2 text-center text-xs font-semibold whitespace-nowrap">ชื่อ-นามสกุล</th>
                   <th className="px-2 py-2 text-center text-xs font-semibold whitespace-nowrap">เบอร์โทร</th>
@@ -963,8 +965,6 @@ export default function BadDebtSummary() {
                   <Th label="ยอดผ่อน" col="installmentPaid" />
                   <Th label="ยอดขายเครื่อง" col="deviceSaleAmount" />
                   <Th label="รวมรายรับ" col="totalRevenue" />
-                  <Th label="วันที่อนุมัติ" col="approveDate" />
-                  <th className="px-2 py-2 text-center text-xs font-semibold whitespace-nowrap">พาร์ทเนอร์</th>
                   <Th label="วันที่ขาย" col="saleDate" />
                   <Th label="กำไร/ขาดทุน" col="profitLoss" />
                 </tr>
@@ -976,6 +976,8 @@ export default function BadDebtSummary() {
                   filteredRows.map((r, idx) => (
                     <tr key={r.contractExternalId} className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}>
                       <td className="px-2 py-2 text-center text-gray-400 text-xs">{idx + 1}</td>
+                      <td className="px-2 py-2 text-center whitespace-nowrap text-xs">{fmtDate(r.approveDate)}</td>
+                      <td className="px-2 py-2 whitespace-nowrap text-xs text-gray-600">{r.partnerName ?? "-"}</td>
                       <td className="px-2 py-2 text-center whitespace-nowrap font-mono text-xs">{r.contractNo ?? "-"}</td>
                       <td className="px-2 py-2 whitespace-nowrap text-xs">{r.customerName ?? "-"}</td>
                       <td className="px-2 py-2 text-center whitespace-nowrap text-xs">{r.phone ?? "-"}</td>
@@ -992,8 +994,6 @@ export default function BadDebtSummary() {
                       <td className="px-2 py-2 text-right whitespace-nowrap text-xs">{fmtMoney(r.installmentPaid)}</td>
                       <td className="px-2 py-2 text-right whitespace-nowrap text-xs text-blue-700 font-medium">{fmtMoney(r.deviceSaleAmount)}</td>
                       <td className="px-2 py-2 text-right whitespace-nowrap text-xs font-medium">{fmtMoney(r.totalRevenue)}</td>
-                      <td className="px-2 py-2 text-center whitespace-nowrap text-xs">{fmtDate(r.approveDate)}</td>
-                      <td className="px-2 py-2 whitespace-nowrap text-xs text-gray-600">{r.partnerName ?? "-"}</td>
                       <td className="px-2 py-2 text-center whitespace-nowrap text-xs">{fmtDate(r.saleDate)}</td>
                       <td className="px-2 py-2 text-right whitespace-nowrap text-xs"><ProfitBadge value={r.profitLoss} /></td>
                     </tr>
@@ -1003,8 +1003,8 @@ export default function BadDebtSummary() {
               {filteredRows.length > 0 && (
                 <tfoot className="bg-red-50 border-t-2 border-red-200 font-semibold text-xs sticky bottom-0 z-10">
                   <tr>
-                    {/* colSpan=7: #(1) + สัญญา(2) + ชื่อ(3) + เบอร์(4) + รุ่น(5) + IMEI(6) + ราคา(7) */}
-                    <td colSpan={7} className="px-2 py-2 text-right text-gray-600">รวม {filteredRows.length} รายการ</td>
+                    {/* colSpan=9: #(1)+วันอนุ(2)+พาร์ท(3)+สัญญา(4)+ชื่อ(5)+เบอร์(6)+รุ่น(7)+IMEI(8)+ราคา(9) */}
+                    <td colSpan={9} className="px-2 py-2 text-right text-gray-600">รวม {filteredRows.length} รายการ</td>
                     <td className="px-2 py-2 text-right">{fmtMoney(filteredRows.reduce((s, r) => s + r.financeAmount, 0))}</td>
                     <td className="px-2 py-2 text-right">{fmtMoney(filteredRows.reduce((s, r) => s + r.commissionNet, 0))}</td>
                     <td className="px-2 py-2 text-right">{fmtMoney(filteredRows.reduce((s, r) => s + (r.incentive ?? 0), 0))}</td>
