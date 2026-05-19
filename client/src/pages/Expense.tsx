@@ -97,7 +97,7 @@ export default function Expense() {
   const [yearlyYear, setYearlyYear] = useState<string>("");
 
   // ── Monthly filter ──
-  const [monthlyYear, setMonthlyYear] = useState<string>(String(currentYear));
+  const [monthlyYear, setMonthlyYear] = useState<string>("");
   const [monthlyMonths, setMonthlyMonths] = useState<Set<number>>(new Set());
 
   // ── Debounce search ──
