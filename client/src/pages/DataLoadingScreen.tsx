@@ -87,7 +87,7 @@ function SyncWaitingScreen({
   const progress = info?.progress ?? 0;
   const currentStage = info?.currentStage ?? "";
   const stageIndex = info?.stageIndex ?? 0;
-  const totalStages = info?.totalStages ?? 5;
+  const totalStages = info?.totalStages ?? 9;
   const startedAt = info?.startedAt ? new Date(info.startedAt) : null;
 
   // คำนวณเวลาที่ใช้ไป

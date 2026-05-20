@@ -193,7 +193,7 @@ export async function getDbSyncStatus(section: SectionKey): Promise<{
       running: true,
       startedAt: row.startedAt,
       currentStage: row.currentStage ?? null,
-      progress: row.progress ?? 0,
+      progress: row.progress ?? null,
     };
   }
 

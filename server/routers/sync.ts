@@ -64,27 +64,39 @@ export const syncRouter = router({
       return idx >= 0 ? idx : null;
     };
 
-    const bpCurrentStage = bpMem?.currentStage ?? bpDb?.currentStage ?? null;
-    const ffCurrentStage = ffMem?.currentStage ?? ffDb?.currentStage ?? null;
+    // Prefer DB as primary source (cross-instance safe).
+    // Fall back to in-memory only when DB has no data (same-instance fast path).
+    const bpCurrentStage = bpDb?.currentStage ?? bpMem?.currentStage ?? null;
+    const ffCurrentStage = ffDb?.currentStage ?? ffMem?.currentStage ?? null;
+
+    // progress: DB is primary (written by setStage/setSubProgress via updateSyncLogStage).
+    // In-memory fallback only when DB progress is null (e.g. very start of sync before first DB write).
+    const bpProgress = bpDb?.progress ?? bpMem?.progress ?? null;
+    const ffProgress = ffDb?.progress ?? ffMem?.progress ?? null;
+
+    // stageIndex: derive from currentStage (works cross-instance).
+    // totalStages: always use SYNC_STAGES.length when running.
+    const bpStageIndex = bpMem?.stageIndex ?? deriveStageIndex(bpCurrentStage);
+    const ffStageIndex = ffMem?.stageIndex ?? deriveStageIndex(ffCurrentStage);
+    const bpTotalStages = bpRunning ? SYNC_STAGES.length : null;
+    const ffTotalStages = ffRunning ? SYNC_STAGES.length : null;
 
     return {
       Boonphone: {
         running: bpRunning,
-        // Prefer in-memory for progress/currentStage (updates more frequently via setSubProgress)
-        // Fall back to DB for cross-instance awareness
         startedAt: bpDb?.startedAt?.getTime() ?? bpMem?.startedAt ?? null,
-        progress: bpMem?.progress ?? bpDb?.progress ?? null,
+        progress: bpProgress,
         currentStage: bpCurrentStage,
-        stageIndex: bpMem?.stageIndex ?? deriveStageIndex(bpCurrentStage),
-        totalStages: bpMem?.totalStages ?? (bpCurrentStage != null ? SYNC_STAGES.length : null),
+        stageIndex: bpStageIndex,
+        totalStages: bpTotalStages,
       },
       Fastfone365: {
         running: ffRunning,
         startedAt: ffDb?.startedAt?.getTime() ?? ffMem?.startedAt ?? null,
-        progress: ffMem?.progress ?? ffDb?.progress ?? null,
+        progress: ffProgress,
         currentStage: ffCurrentStage,
-        stageIndex: ffMem?.stageIndex ?? deriveStageIndex(ffCurrentStage),
-        totalStages: ffMem?.totalStages ?? (ffCurrentStage != null ? SYNC_STAGES.length : null),
+        stageIndex: ffStageIndex,
+        totalStages: ffTotalStages,
       },
       active: await getRunningSyncs(),
     };
