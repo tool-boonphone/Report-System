@@ -420,8 +420,17 @@ async function doSync(
 
     // ── Finish sync log ───────────────────────────────────────────────────
     const partialFail = instFailed || payFailed;
+    // Set progress to 100% before finishing so UI shows completion
+    const logId = _overallLogId[section];
+    if (logId) {
+      await updateSyncLogStage({ id: logId, section, currentStage: "finishing", progress: 100 }).catch(() => {});
+    }
+    if (_locks[section]) {
+      _locks[section] = { ..._locks[section]!, progress: 100, currentStage: "finishing" };
+    }
     await finishSyncLog({
       id: overall.id,
+      section,
       status: partialFail ? "error" : "success",
       rowCount: overallRows,
       errorMessage: partialFail
@@ -447,6 +456,7 @@ async function doSync(
     }
     await finishSyncLog({
       id: overall.id,
+      section,
       status: "error",
       rowCount: overallRows,
       errorMessage: err?.message ?? String(err),

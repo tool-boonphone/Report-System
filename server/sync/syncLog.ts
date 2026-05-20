@@ -318,16 +318,15 @@ export async function getLastSyncedAt(params: {
 }): Promise<Date | null> {
   const db = await getDb(params.section);
   if (!db) return null;
-  const cond = params.entity
-    ? and(
-        eq(syncLogs.section, params.section),
-        eq(syncLogs.entity, params.entity),
-        eq(syncLogs.status, "success"),
-      )
-    : and(
-        eq(syncLogs.section, params.section),
-        eq(syncLogs.status, "success"),
-      );
+  // Always query entity='all' rows only — these represent a full sync cycle.
+  // This ensures the UI shows the time when the ENTIRE sync completed,
+  // not just when a sub-entity (e.g. partners) finished.
+  const entityFilter = params.entity ?? "all";
+  const cond = and(
+    eq(syncLogs.section, params.section),
+    eq(syncLogs.entity, entityFilter),
+    eq(syncLogs.status, "success"),
+  );
   const rows = await db
     .select({ finishedAt: syncLogs.finishedAt })
     .from(syncLogs)

@@ -6,24 +6,20 @@ import { useDebtCache } from "@/contexts/DebtCacheContext";
 import { useIncomeCache } from "@/contexts/IncomeCacheContext";
 import type { SectionKey } from "@shared/const";
 import { useAppAuth } from "@/hooks/useAppAuth";
-import { RefreshCw, Trash2, XCircle } from "lucide-react";
+import { RefreshCw, Trash2, XCircle, Info, CheckCircle2, AlertCircle, Clock } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
 
 /**
  * Injected into TopNav actions. Shows:
- *  - "ข้อมูล ณ <date>"
+ *  - "ข้อมูล ณ <date>" + ไอคอน i สำหรับดู sync log สรุป
  *  - ปุ่ม "Re-Sync API" — ดึงข้อมูลจาก API ภายนอกมาบันทึกลง DB ใหม่
  *  - ปุ่ม "Clear Cache" — ล้าง IndexedDB ใน browser แล้ว redirect ไปหน้า data-loading
  *
  * While a sync is running:
  *  - Hides both buttons
  *  - Shows a progress bar with % complete + elapsed/ETA
- *
- * Uses polling (trpc.sync.status) to track progress.
- * Sync is triggered via fire-and-forget tRPC mutation (returns immediately).
- * Cloud Run keeps the sync process alive as long as the scheduler is running.
  */
 
 /** Format seconds into "Xm Ys" or "Xs" */
@@ -32,6 +28,26 @@ function formatSecs(secs: number): string {
   const m = Math.floor(secs / 60);
   const s = Math.round(secs % 60);
   return s > 0 ? `${m}m ${s}s` : `${m}m`;
+}
+
+/** Format duration between two dates */
+function formatDuration(start: Date | string | null, end: Date | string | null): string {
+  if (!start || !end) return "-";
+  const ms = new Date(end).getTime() - new Date(start).getTime();
+  if (ms < 0) return "-";
+  return formatSecs(ms / 1000);
+}
+
+/** Format date to Thai locale short */
+function formatThaiShort(d: Date | string | null): string {
+  if (!d) return "-";
+  return new Date(d).toLocaleString("th-TH", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 /** Stage labels in Thai */
@@ -46,8 +62,153 @@ const STAGE_LABELS: Record<string, string> = {
   bad_debt: "คำนวณหนี้เสีย",
   populate: "สร้าง Cache รายงาน",
   finishing: "กำลังบันทึก",
+  all: "ภาพรวม",
   เริ่มต้น: "กำลังเริ่มต้น",
 };
+
+/** Entity labels in Thai */
+const ENTITY_LABELS: Record<string, string> = {
+  partners: "ตัวแทน",
+  customers: "ลูกค้า",
+  contracts: "สัญญา",
+  imei_enrich: "IMEI/SN",
+  installments: "งวด",
+  payments: "การชำระ",
+  commissions: "ค่าคอมมิชชัน",
+  bad_debt: "หนี้เสีย",
+  populate: "Cache",
+  all: "ภาพรวม",
+};
+
+/** Sync Log Popup Component */
+function SyncLogPopup({
+  section,
+  onClose,
+}: {
+  section: SectionKey;
+  onClose: () => void;
+}) {
+  const summary = trpc.sync.lastRunSummary.useQuery({ section });
+
+  const data = summary.data;
+  const overall = data?.overall;
+  const entities = data?.entities ?? [];
+
+  const isSuccess = overall?.status === "success";
+  const isError = overall?.status === "error";
+  const isInProgress = overall?.status === "in_progress";
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-end pt-14 pr-4" onClick={onClose}>
+      <div
+        className="bg-white rounded-xl shadow-2xl border border-gray-200 w-80 max-h-[80vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+          <span className="text-sm font-semibold text-gray-800">
+            Sync Log — {section}
+          </span>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 text-lg leading-none"
+          >
+            ×
+          </button>
+        </div>
+
+        {summary.isLoading ? (
+          <div className="px-4 py-6 text-center text-sm text-gray-400">กำลังโหลด...</div>
+        ) : !overall ? (
+          <div className="px-4 py-6 text-center text-sm text-gray-400">ยังไม่มีข้อมูล Sync</div>
+        ) : (
+          <div className="px-4 py-3 space-y-3">
+            {/* Overall status */}
+            <div className="flex items-start gap-2">
+              {isSuccess ? (
+                <CheckCircle2 className="w-4 h-4 text-green-500 mt-0.5 shrink-0" />
+              ) : isError ? (
+                <AlertCircle className="w-4 h-4 text-red-500 mt-0.5 shrink-0" />
+              ) : (
+                <Clock className="w-4 h-4 text-blue-500 mt-0.5 shrink-0 animate-pulse" />
+              )}
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium text-gray-800">
+                  {isSuccess ? "สำเร็จ" : isError ? "ล้มเหลว / ไม่สมบูรณ์" : "กำลังทำงาน"}
+                </div>
+                <div className="text-xs text-gray-500 mt-0.5">
+                  เริ่ม: {formatThaiShort(overall.startedAt)}
+                </div>
+                {overall.finishedAt && (
+                  <div className="text-xs text-gray-500">
+                    เสร็จ: {formatThaiShort(overall.finishedAt)}
+                    {" "}
+                    <span className="text-gray-400">
+                      ({formatDuration(overall.startedAt, overall.finishedAt)})
+                    </span>
+                  </div>
+                )}
+                {overall.rowCount != null && overall.rowCount > 0 && (
+                  <div className="text-xs text-gray-500">
+                    จำนวน: {overall.rowCount.toLocaleString()} rows
+                  </div>
+                )}
+                {overall.errorMessage && (
+                  <div className="text-xs text-red-500 mt-1 break-words">
+                    {overall.errorMessage}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Entity breakdown */}
+            {entities.length > 0 && (
+              <div>
+                <div className="text-xs font-medium text-gray-500 mb-1.5">รายละเอียดแต่ละขั้นตอน</div>
+                <div className="space-y-1">
+                  {entities.map((e) => (
+                    <div
+                      key={e.id}
+                      className="flex items-center justify-between text-xs py-1 px-2 rounded-lg bg-gray-50"
+                    >
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        {e.status === "success" ? (
+                          <CheckCircle2 className="w-3 h-3 text-green-500 shrink-0" />
+                        ) : e.status === "error" ? (
+                          <AlertCircle className="w-3 h-3 text-red-500 shrink-0" />
+                        ) : (
+                          <Clock className="w-3 h-3 text-blue-400 shrink-0" />
+                        )}
+                        <span className="text-gray-700 truncate">
+                          {ENTITY_LABELS[e.entity] ?? e.entity}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0 ml-2">
+                        {e.rowCount != null && e.rowCount > 0 && (
+                          <span className="text-gray-400">{e.rowCount.toLocaleString()}</span>
+                        )}
+                        <span className="text-gray-400">
+                          {formatDuration(e.startedAt, e.finishedAt)}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Triggered by */}
+            {overall.triggeredBy && (
+              <div className="text-xs text-gray-400 border-t border-gray-100 pt-2">
+                เรียกโดย: {overall.triggeredBy === "cron" ? "ระบบอัตโนมัติ (01:00)" : overall.triggeredBy === "manual" ? "ผู้ใช้" : overall.triggeredBy}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export function SyncStatusBar() {
   const { section } = useSection();
@@ -58,6 +219,7 @@ export function SyncStatusBar() {
   const [isClearing, setIsClearing] = useState(false);
   const { can } = useAppAuth();
   const canResync = can("sync_api", "sync");
+  const [showLogPopup, setShowLogPopup] = useState(false);
 
   // Last synced time for the active section.
   const last = trpc.sync.lastSyncedAt.useQuery(
@@ -66,14 +228,11 @@ export function SyncStatusBar() {
   );
 
   // Poll sync status from DB — fast poll when running, slow poll when idle.
-  // IMPORTANT: always keep polling (never return false) so we detect a new sync
-  // starting (e.g. cron at 01:00) without requiring a page reload.
   const status = trpc.sync.status.useQuery(undefined, {
     refetchInterval: (q) => {
       const d = q.state.data as any;
       if (!d) return 3000;
       const s = section ?? "Boonphone";
-      // Fast poll (2s) while running, slow poll (10s) when idle
       return d?.[s]?.running ? 2000 : 10000;
     },
   });
@@ -89,7 +248,7 @@ export function SyncStatusBar() {
     return () => clearInterval(id);
   }, [isRunning]);
 
-  // SSE stream ref — keeps Cloud Run alive during sync
+  // SSE stream ref — keeps Render/Cloud Run alive during sync
   const sseRef = useRef<EventSource | null>(null);
 
   const progress: number = sectionData?.progress ?? 0;
@@ -112,11 +271,10 @@ export function SyncStatusBar() {
       ? (elapsedSecs / progress) * (100 - progress)
       : null;
 
-  // isSyncingLocally = true ทันทีที่กด Re-Sync เพื่อแสดง progress bar โดยไม่ต้องรอ polling
+  // isSyncingLocally = true ทันทีที่กด Re-Sync
   const [isSyncingLocally, setIsSyncingLocally] = useState(false);
   const syncingLocallyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // helper: reset isSyncingLocally หลัง delay เล็กน้อย (minimum display time)
   const clearSyncingLocally = useCallback((delayMs = 1500) => {
     if (syncingLocallyTimerRef.current) clearTimeout(syncingLocallyTimerRef.current);
     syncingLocallyTimerRef.current = setTimeout(() => {
@@ -125,8 +283,6 @@ export function SyncStatusBar() {
     }, delayMs);
   }, []);
 
-  // Trigger via SSE stream — keeps Render/Cloud Run alive during sync
-  // ใช้ EventSource ตัวเดียว (ไม่ต้อง probe แยก) เพราะ server ส่ง SSE event แทน HTTP status codes
   const triggerSSE = useCallback(
     (sec: string, onDone: () => void) => {
       if (sseRef.current) {
@@ -134,12 +290,9 @@ export function SyncStatusBar() {
         sseRef.current = null;
       }
 
-      // เปิด EventSource ตรงๆ — server จะส่ง event แรกบอกสถานะ
-      // (started / already_running / error)
       const es = new EventSource(`/api/sync-stream/${sec}`, { withCredentials: true });
       sseRef.current = es;
 
-      // Timeout กรณี server ไม่ส่ง event ใดๆ ภายใน 30 วินาที
       const connectTimeout = setTimeout(() => {
         toast.error("Server ไม่ตอบสนอง กรุณาลองใหม่");
         onDone();
@@ -150,13 +303,11 @@ export function SyncStatusBar() {
       es.onmessage = (e) => {
         try {
           const msg = JSON.parse(e.data);
-
-          // ยกเลิก connect timeout เมื่อได้รับ event แรก
           clearTimeout(connectTimeout);
 
           if (msg.type === "started") {
             toast.info(`เริ่ม Re-Sync ${sec}...`);
-            onDone(); // ปุ่มกลับมา enable เมื่อ sync เริ่มแล้ว (progress bar จะแสดงแทน)
+            onDone();
             utils.sync.status.invalidate();
           } else if (msg.type === "already_running") {
             toast.info(`Sync ${sec} กำลังทำงานอยู่แล้ว`);
@@ -171,6 +322,7 @@ export function SyncStatusBar() {
             setIsSyncingLocally(false);
             utils.sync.status.invalidate();
             utils.sync.lastSyncedAt.invalidate();
+            utils.sync.lastRunSummary.invalidate();
             if (section) incomeCache.invalidateIncomeCache(section as SectionKey);
             es.close();
             sseRef.current = null;
@@ -179,6 +331,7 @@ export function SyncStatusBar() {
             onDone();
             setIsSyncingLocally(false);
             utils.sync.status.invalidate();
+            utils.sync.lastRunSummary.invalidate();
             es.close();
             sseRef.current = null;
           } else if (msg.type === "progress" || msg.type === "heartbeat") {
@@ -191,7 +344,6 @@ export function SyncStatusBar() {
 
       es.onerror = () => {
         clearTimeout(connectTimeout);
-        // SSE connection error (network drop, server restart, 401/403)
         onDone();
         setIsSyncingLocally(false);
         utils.sync.status.invalidate();
@@ -227,20 +379,16 @@ export function SyncStatusBar() {
 
   const [isTriggerPending, setIsTriggerPending] = useState(false);
 
-  // เมื่อ server confirm ว่า running แล้ว ให้ reset isSyncingLocally
   useEffect(() => {
     if (isRunning) setIsSyncingLocally(false);
   }, [isRunning]);
 
-  // isShowingProgress = true เมื่อ sync กำลังทำงาน (ทั้งจาก server หรือ local state)
   const isShowingProgress = isRunning || isSyncingLocally;
 
   const handleResync = useCallback(() => {
     if (!section || isShowingProgress || isTriggerPending) return;
     setIsTriggerPending(true);
-    setIsSyncingLocally(true); // แสดง progress bar ทันที
-    // isTriggerPending จะ reset เมื่อ SSE ตอบกลับ (started/error) ผ่าน onDone callback
-    // มี fallback timeout 15 วินาที กันกรณีที่ไม่มี response ใดๆ เลย
+    setIsSyncingLocally(true);
     const fallbackTimer = setTimeout(() => {
       setIsTriggerPending(false);
       setIsSyncingLocally(false);
@@ -248,12 +396,9 @@ export function SyncStatusBar() {
     triggerSSE(section, () => {
       clearTimeout(fallbackTimer);
       setIsTriggerPending(false);
-      // ไม่ reset isSyncingLocally ที่นี่ — รอ isRunning จาก server แทน
-      // (ถ้า sync เสร็จเร็วมาก done event จะมาก่อน isRunning เป็น true)
     });
   }, [section, isShowingProgress, isTriggerPending, triggerSSE]);
 
-  // Clear Cache handler
   const handleClearCache = async () => {
     if (isClearing) return;
     setIsClearing(true);
@@ -283,83 +428,94 @@ export function SyncStatusBar() {
     : "ยังไม่เคย Sync";
 
   return (
-    <div className="flex items-center gap-2">
-      {/* ข้อมูล ณ วันที่ */}
-      <span className="hidden sm:inline text-xs text-gray-500 whitespace-nowrap">
-        ข้อมูล ณ {lastLabel}
-      </span>
+    <>
+      <div className="flex items-center gap-2">
+        {/* ข้อมูล ณ วันที่ + ไอคอน i */}
+        <div className="hidden sm:flex items-center gap-1">
+          <span className="text-xs text-gray-500 whitespace-nowrap">
+            ข้อมูล ณ {lastLabel}
+          </span>
+          <button
+            onClick={() => setShowLogPopup((v) => !v)}
+            className="inline-flex items-center justify-center w-4 h-4 rounded-full text-gray-400 hover:text-blue-500 hover:bg-blue-50 transition-colors"
+            title="ดูรายละเอียด Sync ล่าสุด"
+          >
+            <Info className="w-3.5 h-3.5" />
+          </button>
+        </div>
 
-      {isShowingProgress && canResync ? (
-        /* ---- Progress bar (แสดงแทนปุ่มขณะ Sync กำลังทำงาน) ---- */
-        <div className="flex items-center gap-2">
-          <div className="min-w-[180px] max-w-[260px]">
-            {/* Stage label + sub-progress + % */}
-            <div className="flex items-center justify-between mb-0.5">
-              <span className="text-xs text-blue-600 font-medium truncate">
-                {stageLabel || "กำลัง Sync..."}
-                {subProgress && (
-                  <span className="ml-1 text-blue-400">{subProgress}</span>
-                )}
-              </span>
-              <span className="text-xs text-blue-600 font-semibold ml-1 shrink-0">
-                {progress}%
-              </span>
-            </div>
-            {/* Progress bar */}
-            <Progress value={progress} className="h-1.5" />
-            {/* Elapsed + ETA */}
-            <div className="flex items-center justify-between mt-0.5">
-              <span className="text-[10px] text-gray-400">
-                ใช้ไป {formatSecs(elapsedSecs)}
-              </span>
-              {etaSecs !== null && (
-                <span className="text-[10px] text-gray-400">
-                  เหลือ ~{formatSecs(etaSecs)}
+        {isShowingProgress && canResync ? (
+          /* ---- Progress bar ---- */
+          <div className="flex items-center gap-2">
+            <div className="min-w-[180px] max-w-[260px]">
+              <div className="flex items-center justify-between mb-0.5">
+                <span className="text-xs text-blue-600 font-medium truncate">
+                  {stageLabel || "กำลัง Sync..."}
+                  {subProgress && (
+                    <span className="ml-1 text-blue-400">{subProgress}</span>
+                  )}
                 </span>
-              )}
+                <span className="text-xs text-blue-600 font-semibold ml-1 shrink-0">
+                  {progress}%
+                </span>
+              </div>
+              <Progress value={progress} className="h-1.5" />
+              <div className="flex items-center justify-between mt-0.5">
+                <span className="text-[10px] text-gray-400">
+                  ใช้ไป {formatSecs(elapsedSecs)}
+                </span>
+                {etaSecs !== null && (
+                  <span className="text-[10px] text-gray-400">
+                    เหลือ ~{formatSecs(etaSecs)}
+                  </span>
+                )}
+              </div>
             </div>
+            {elapsedSecs > 600 && (
+              <button
+                onClick={() => clearStuck.mutate({ section })}
+                disabled={clearStuck.isPending}
+                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-red-200 hover:bg-red-50 text-xs text-red-600 disabled:opacity-50 transition-colors shrink-0"
+                title="ยกเลิก sync ที่ค้างอยู่"
+              >
+                <XCircle className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">ยกเลิก</span>
+              </button>
+            )}
           </div>
-          {/* Force Clear — แสดงเมื่อ sync ค้างนานกว่า 10 นาที */}
-          {elapsedSecs > 600 && (
+        ) : canResync ? (
+          /* ---- ปุ่ม Re-Sync API + Clear Cache ---- */
+          <div className="flex items-center gap-1.5">
             <button
-              onClick={() => clearStuck.mutate({ section })}
-              disabled={clearStuck.isPending}
-              className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-red-200 hover:bg-red-50 text-xs text-red-600 disabled:opacity-50 transition-colors shrink-0"
-              title="ยกเลิก sync ที่ค้างอยู่ เพื่อให้สามารถ Re-Sync ใหม่ได้"
+              onClick={handleResync}
+              disabled={isRunning || isClearing || isTriggerPending}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 text-sm text-gray-700 disabled:opacity-50 transition-colors"
+              title="ดึงข้อมูลใหม่จาก API ภายนอก (ใช้เวลาหลายนาที)"
             >
-              <XCircle className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">ยกเลิก</span>
+              <RefreshCw className={`w-4 h-4 ${isTriggerPending ? "animate-spin" : ""}`} />
+              <span className="hidden sm:inline">Re-Sync API</span>
             </button>
-          )}
-        </div>
-      ) : canResync ? (
-        /* ---- ปุ่ม Re-Sync API + Clear Cache (เฉพาะผู้มีสิทธิ์) ---- */
-        <div className="flex items-center gap-1.5">
-          {/* Re-Sync API */}
-          <button
-            onClick={handleResync}
-            disabled={isRunning || isClearing || isTriggerPending}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 text-sm text-gray-700 disabled:opacity-50 transition-colors"
-            title="ดึงข้อมูลใหม่จาก API ภายนอก (ใช้เวลาหลายนาที)"
-          >
-            <RefreshCw className={`w-4 h-4 ${isTriggerPending ? "animate-spin" : ""}`} />
-            <span className="hidden sm:inline">Re-Sync API</span>
-          </button>
 
-          {/* Clear Cache */}
-          <button
-            onClick={handleClearCache}
-            disabled={isRunning || isClearing}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-orange-200 hover:bg-orange-50 text-sm text-orange-600 disabled:opacity-50 transition-colors"
-            title="ล้างข้อมูลที่บันทึกไว้ในเบราเซอร์ แล้วโหลดข้อมูลใหม่จากระบบ"
-          >
-            <Trash2
-              className={`w-4 h-4 ${isClearing ? "animate-pulse" : ""}`}
-            />
-            <span className="hidden sm:inline">Clear Cache</span>
-          </button>
-        </div>
-      ) : null}
-    </div>
+            <button
+              onClick={handleClearCache}
+              disabled={isRunning || isClearing}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-orange-200 hover:bg-orange-50 text-sm text-orange-600 disabled:opacity-50 transition-colors"
+              title="ล้างข้อมูลที่บันทึกไว้ในเบราเซอร์ แล้วโหลดข้อมูลใหม่จากระบบ"
+            >
+              <Trash2 className={`w-4 h-4 ${isClearing ? "animate-pulse" : ""}`} />
+              <span className="hidden sm:inline">Clear Cache</span>
+            </button>
+          </div>
+        ) : null}
+      </div>
+
+      {/* Sync Log Popup */}
+      {showLogPopup && section && (
+        <SyncLogPopup
+          section={section as SectionKey}
+          onClose={() => setShowLogPopup(false)}
+        />
+      )}
+    </>
   );
 }

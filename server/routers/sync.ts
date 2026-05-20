@@ -9,6 +9,9 @@ import {
   getDbSyncStatus,
   clearStuckSyncLogs,
 } from "../sync/syncLog";
+import { desc, eq, and, gt, lt } from "drizzle-orm";
+import { syncLogs } from "../../drizzle/schema";
+import { getDb } from "../db";
 import { sectionSchema, type SectionKey } from "../../shared/const";
 
 // sectionSchema imported from shared/const — normalizes any case to canonical SectionKey
@@ -155,6 +158,51 @@ export const syncRouter = router({
       await clearStuckSyncLogs(section);
       console.log(`[sync.cancel] ${section}: cancel requested (wasRunning=${wasRunning})`);
       return { section, cancelled: true, wasRunning };
+    }),
+
+  /**
+   * Summary of the last sync run for a section.
+   * Returns the overall row (entity='all') plus all entity-level rows
+   * from the same sync run, so the UI can show a detailed breakdown.
+   */
+  lastRunSummary: appProcedure
+    .input(z.object({ section: sectionSchema }))
+    .query(async ({ input }) => {
+      const section = input.section as SectionKey;
+      const db = await getDb(section);
+      if (!db) return null;
+
+      // Find the most recent entity='all' row (any status)
+      const overallRows = await db
+        .select()
+        .from(syncLogs)
+        .where(and(eq(syncLogs.section, section), eq(syncLogs.entity, "all")))
+        .orderBy(desc(syncLogs.startedAt))
+        .limit(1);
+
+      const overall = overallRows[0];
+      if (!overall) return null;
+
+      // Get all entity-level rows from the same sync run
+      // (started within 30 seconds of the overall row)
+      const windowStart = new Date(overall.startedAt!.getTime() - 30_000);
+      const windowEnd = new Date(overall.startedAt!.getTime() + 30_000);
+      const entityRows = await db
+        .select()
+        .from(syncLogs)
+        .where(
+          and(
+            eq(syncLogs.section, section),
+            gt(syncLogs.startedAt, windowStart),
+            lt(syncLogs.startedAt, windowEnd),
+          ),
+        )
+        .orderBy(syncLogs.startedAt);
+
+      return {
+        overall,
+        entities: entityRows.filter((r) => r.entity !== "all"),
+      };
     }),
 
   /** Recent sync log entries. Default last 50. */
