@@ -401,3 +401,44 @@ export async function getLastErrorAt(params: {
   const last = rows[0];
   return last && last.status === "error" ? last.startedAt : null;
 }
+
+/**
+ * Set cancel_requested = true on all in_progress rows for a section.
+ * Written to DB so ALL instances (cross-instance) can detect the cancel flag.
+ * Returns number of rows updated.
+ */
+export async function setCancelRequestedInDb(section: SectionKey): Promise<number> {
+  const db = await getDb(section);
+  if (!db) return 0;
+  const rows = await db
+    .update(syncLogs)
+    .set({ cancelRequested: true })
+    .where(
+      and(
+        eq(syncLogs.section, section),
+        eq(syncLogs.status, "in_progress"),
+      ),
+    )
+    .returning({ id: syncLogs.id });
+  console.log(`[syncLog] setCancelRequested(${section}): flagged ${rows.length} row(s)`);
+  return rows.length;
+}
+
+/**
+ * Check if cancel has been requested for a given sync log row (by id).
+ * Reads from DB so it works across instances.
+ * Returns true if cancel_requested = true.
+ */
+export async function isCancelRequestedInDb(params: {
+  id: number;
+  section: SectionKey;
+}): Promise<boolean> {
+  const db = await getDb(params.section);
+  if (!db || !params.id) return false;
+  const rows = await db
+    .select({ cancelRequested: syncLogs.cancelRequested })
+    .from(syncLogs)
+    .where(eq(syncLogs.id, params.id))
+    .limit(1);
+  return rows[0]?.cancelRequested === true;
+}

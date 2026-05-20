@@ -118,6 +118,7 @@ export const syncLogs = pgTable(
     currentStage: varchar("current_stage", { length: 32 }),
     progress: integer("progress").default(0),
     resumePage: integer("resume_page").default(0),
+    cancelRequested: boolean("cancel_requested").default(false),
     startedAt: timestamp("started_at").defaultNow().notNull(),
     finishedAt: timestamp("finished_at"),
   },

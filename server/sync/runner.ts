@@ -45,6 +45,8 @@ import {
   updateSyncLogStage,
   getLastCustomersResumePage,
   getLastContractsResumePage,
+  setCancelRequestedInDb,
+  isCancelRequestedInDb,
 } from "./syncLog";
 import type { SectionKey, SyncTrigger } from "../../shared/const";
 
@@ -92,9 +94,11 @@ const _cancelRequested: Record<string, boolean> = { Boonphone: false, Fastfone36
 /* ─────────────────────────────────────────────────────────────────────────── */
 
 export function requestCancelSync(section: SectionKey): boolean {
-  if (!_locks[section]) return false;
+  // Set in-memory flag (same instance)
   _cancelRequested[section] = true;
-  return true;
+  // Also write to DB so other instances can detect it
+  setCancelRequestedInDb(section).catch(() => {});
+  return _locks[section] !== null;
 }
 
 export function isCancelRequested(section: SectionKey): boolean {
@@ -241,21 +245,37 @@ async function doSync(
     fetch(selfPingUrl).catch(() => {});
   }, 30_000);
 
-  const checkCancel = () => {
+  // checkCancel: ตรวจทั้ง in-memory (same instance) และ DB (cross-instance)
+  // DB check ทำทุก ~5 วินาที เพื่อไม่ให้ query DB บ่อยเกินไป
+  let _lastDbCancelCheck = 0;
+  const checkCancel = async () => {
     if (_cancelRequested[section]) throw new Error(`[${section}] sync cancelled by user`);
+    // DB check ทุก 5 วินาที
+    const now = Date.now();
+    if (now - _lastDbCancelCheck > 5_000) {
+      _lastDbCancelCheck = now;
+      const logId = _overallLogId[section];
+      if (logId) {
+        const dbCancel = await isCancelRequestedInDb({ id: logId, section }).catch(() => false);
+        if (dbCancel) {
+          _cancelRequested[section] = true;
+          throw new Error(`[${section}] sync cancelled by user (DB flag)`);
+        }
+      }
+    }
   };
 
   let overallRows = 0;
 
   try {
     // ── Stage 1: Partners ─────────────────────────────────────────────────
-    checkCancel();
+    await checkCancel();
     setStage(section, 0);
     const partnersById = await syncPartners(client, section);
     console.log(`[sync] ${section}: partners loaded — ${partnersById.size} entries`);
 
     // ── Stage 2: Customers ────────────────────────────────────────────────
-    checkCancel();
+    await checkCancel();
     setStage(section, 1);
     let customersById = new Map<string, CustomerListItem>();
     try {
@@ -296,7 +316,7 @@ async function doSync(
     }
 
     // ── Stage 3: Contracts ────────────────────────────────────────────────
-    checkCancel();
+    await checkCancel();
     setStage(section, 2);
     const contractsStartPage = await getLastContractsResumePage(section);
     const contractRows = await syncContracts(
@@ -310,7 +330,7 @@ async function doSync(
     console.log(`[sync] ${section}: contracts synced — ${contractRows} rows`);
 
     // ── Stage 3b: Enrich IMEI / Serial No (best-effort) ──────────────────
-    checkCancel();
+    await checkCancel();
     setStage(section, 3); // imei_enrich
     try {
       await enrichContractDeviceIds(client, section);
@@ -320,7 +340,7 @@ async function doSync(
     }
 
     // ── Stage 5: Installments (best-effort) ───────────────────────────────
-    checkCancel();
+    await checkCancel();
     setStage(section, 4);
     let instFailed = false;
     try {
@@ -334,7 +354,7 @@ async function doSync(
     }
 
     // ── Stage 5: Payments (best-effort) ──────────────────────────────────
-    checkCancel();
+    await checkCancel();
     setStage(section, 5);
     let payFailed = false;
     try {
@@ -366,7 +386,7 @@ async function doSync(
     }
 
     // ── Stage 6: Commissions ──────────────────────────────────────────────
-    checkCancel();
+    await checkCancel();
     setStage(section, 6);
     try {
       const commRows = await syncCommissions(client, section);
@@ -377,7 +397,7 @@ async function doSync(
     }
 
     // ── Stage 7: Bad-debt computation ─────────────────────────────────────
-    checkCancel();
+    await checkCancel();
     setStage(section, 7);
     try {
       await computeAndStoreBadDebt(section);
@@ -387,7 +407,7 @@ async function doSync(
     }
 
     // ── Stage 8: Populate debt cache ──────────────────────────────────────
-    checkCancel();
+    await checkCancel();
     setStage(section, 8);
     try {
       const cacheResult = await populateDebtCache(section, (phase, current, total) => {
