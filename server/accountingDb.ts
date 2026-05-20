@@ -146,13 +146,15 @@ const PT_INCOME_BASE_WHERE = `(pt.raw_json::jsonb->>'source') IS NULL`;
 
 /**
  * สร้าง CTE + CASE expression สำหรับ classify income_type
- * ใช้ single SQL query แทน 2-step approach เดิม
+ * ใช้ Logic 2 ระดับ (Two-Level Fallback) เพื่อระบุ "ขายเครื่อง" ให้ตรงกับระบบ Sync
  *
- * CTE: bad_debt_last — หา MAX(DATE(created_at)) ของแต่ละสัญญาหนี้เสีย
- * CASE:
- *   ปิดยอด     = receipt_no LIKE 'TXRTC%'
- *   ขายเครื่อง = c.status = 'หนี้เสีย' AND DATE(pt.created_at) = bdl.last_created_date
- *   ค่างวด     = อื่นๆ
+ * ระดับที่ 1 (Primary):
+ *   - ค้นหารายการจ่ายเงินที่ DATE(paid_at) และ updated_by ตรงกับวันสุดท้ายและคนสุดท้าย
+ *   - ถ้าผลรวมยอดเงิน >= 1,000 บาท ถือว่าเป็น "ขายเครื่อง"
+ *
+ * ระดับที่ 2 (Fallback):
+ *   - หากระดับ 1 ไม่ถึง 1,000 บาท ให้ขยายเงื่อนไขไปดู DATE(created_at) และ updated_by แทน
+ *   - เพื่อรองรับกรณีที่ paid_at ถูกแก้ย้อนหลัง แต่ created_at เป็นวันที่บันทึกจริง
  *
  * @param secEsc - section name (escaped)
  * @returns { cte, incomeTypeCase, joinClause }
@@ -165,9 +167,13 @@ function buildIncomeCTE(secEsc: string): {
   const sourceWhere = ptIncomeBaseWhere(secEsc);
   const cte = `
     bad_debt_last AS (
+      -- ระดับที่ 1 (Primary): ค้นหาวันสุดท้าย + คนสุดท้ายที่บันทึก (ดู paid_at)
       SELECT
         pt2.contract_no,
-        MAX(DATE(pt2.created_at)) AS last_created_date
+        MAX(DATE(pt2.paid_at)) AS last_paid_date,
+        MAX(DATE(pt2.created_at)) AS last_created_date,
+        (array_agg(pt2.updated_by ORDER BY pt2.created_at DESC, pt2.id DESC))[1] AS last_updated_by_paid,
+        (array_agg(pt2.updated_by ORDER BY pt2.created_at DESC, pt2.id DESC))[1] AS last_updated_by_created
       FROM payment_transactions pt2
       INNER JOIN contracts c2
         ON c2.contract_no = pt2.contract_no AND c2.section = pt2.section
@@ -175,6 +181,19 @@ function buildIncomeCTE(secEsc: string): {
         AND ${sourceWhere}
         AND c2.status = 'หนี้เสีย'
       GROUP BY pt2.contract_no
+    ),
+    bad_debt_level1 AS (
+      -- ระดับที่ 1: รวมยอดเงินของรายการที่ DATE(paid_at) + updated_by ตรงกับล่าสุด
+      SELECT
+        pt3.contract_no,
+        SUM(CAST(COALESCE(pt3.amount, 0) AS DECIMAL(18,2))) AS level1_total
+      FROM payment_transactions pt3
+      INNER JOIN bad_debt_last bdl ON bdl.contract_no = pt3.contract_no
+      WHERE pt3.section = '${secEsc}'
+        AND ${sourceWhere}
+        AND DATE(pt3.paid_at) = bdl.last_paid_date
+        AND pt3.updated_by = bdl.last_updated_by_paid
+      GROUP BY pt3.contract_no
     )
   `;
 
@@ -183,14 +202,27 @@ function buildIncomeCTE(secEsc: string): {
       WHEN pt.receipt_no LIKE 'TXRTC%'
         THEN 'ปิดยอด'
       WHEN c.status = 'หนี้เสีย'
-        AND bdl.last_created_date IS NOT NULL
-        AND DATE(pt.created_at) = bdl.last_created_date
+        AND bdl.last_paid_date IS NOT NULL
+        AND (
+          -- ระดับที่ 1: ถ้ายอดรวม >= 1000 ให้เช็ค paid_at + updated_by
+          (COALESCE(bdl1.level1_total, 0) >= 1000
+            AND DATE(pt.paid_at) = bdl.last_paid_date
+            AND pt.updated_by = bdl.last_updated_by_paid)
+          OR
+          -- ระดับที่ 2: ถ้าระดับ 1 < 1000 ให้เช็ค created_at + updated_by
+          (COALESCE(bdl1.level1_total, 0) < 1000
+            AND DATE(pt.created_at) = bdl.last_created_date
+            AND pt.updated_by = bdl.last_updated_by_created)
+        )
         THEN 'ขายเครื่อง'
       ELSE 'ค่างวด'
     END
   `;
 
-  const joinClause = `LEFT JOIN bad_debt_last bdl ON bdl.contract_no = pt.contract_no`;
+  const joinClause = `
+    LEFT JOIN bad_debt_last bdl ON bdl.contract_no = pt.contract_no
+    LEFT JOIN bad_debt_level1 bdl1 ON bdl1.contract_no = pt.contract_no
+  `;
 
   return { cte, incomeTypeCase, joinClause };
 }
@@ -261,7 +293,7 @@ export async function listIncome(params: IncomeParams): Promise<{
         c.status AS contract_status,
         ${incomeTypeCase} AS income_type,
         ${PT_ORIGINAL_INCOME_TYPE_CASE} AS original_income_type,
-        ${PT_AMOUNT_CASE} AS amount
+        CAST(COALESCE(pt.amount, 0) AS DECIMAL(18,2)) AS amount
       FROM payment_transactions pt
       LEFT JOIN contracts c ON c.contract_no = pt.contract_no AND c.section = pt.section
       ${joinClause}
@@ -512,7 +544,7 @@ export async function getIncomeSummary(
     FROM (
       SELECT
         ${incomeTypeCase} AS income_type,
-        ${PT_AMOUNT_CASE} AS amount
+        CAST(COALESCE(pt.amount, 0) AS DECIMAL(18,2)) AS amount
       FROM payment_transactions pt
       LEFT JOIN contracts c ON c.contract_no = pt.contract_no AND c.section = pt.section
       ${joinClause}
