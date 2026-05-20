@@ -1159,10 +1159,12 @@ export async function handleBadDebtExport(req: Request, res: Response) {
     ws.columns = [
       { key: "seq",              width: 6  },
       { key: "approveDate",      width: 14 },
+      { key: "partnerName",      width: 22 },
       { key: "contractNo",       width: 24 },
       { key: "customerName",     width: 24 },
       { key: "phone",            width: 14 },
       { key: "model",            width: 20 },
+      { key: "imei",             width: 18 },
       { key: "salePrice",        width: 14 },
       { key: "financeAmount",    width: 16 },
       { key: "commissionNet",    width: 14 },
@@ -1174,13 +1176,13 @@ export async function handleBadDebtExport(req: Request, res: Response) {
       { key: "saleDate",         width: 14 },
       { key: "profitLoss",       width: 14 },
     ];
-    const BAD_DEBT_COL_COUNT = 16;
+    const BAD_DEBT_COL_COUNT = 18;
 
     // ── Row 1: Header (red-700 background, mirrors BadDebtSummary.tsx UI) ──
     const hdr = ws.getRow(1);
     const headers = [
-      "#", "วันที่อนุมัติ", "เลขที่สัญญา", "ชื่อ-นามสกุล", "เบอร์โทร",
-      "รุ่น", "ราคา", "ยอดจัดไฟแนนซ์", "ค่าคอมมิชชั่น", "ต้นทุน",
+      "#", "วันที่อนุมัติ", "พาร์ทเนอร์", "เลขที่สัญญา", "ชื่อ-นามสกุล", "เบอร์โทร",
+      "รุ่น", "IMEI/SN", "ราคา", "ยอดจัดไฟแนนซ์", "ค่าคอมมิชชั่น", "ต้นทุน",
       "งวดที่ชำระ", "ยอดผ่อน", "ยอดขายเครื่อง", "รวมรายรับ", "วันที่ขาย",
       "กำไร/ขาดทุน",
     ];
@@ -1205,37 +1207,42 @@ export async function handleBadDebtExport(req: Request, res: Response) {
       c1.alignment = { horizontal: "center" };
       // วันที่อนุมัติ
       setDateCell(exRow.getCell(2), r.approveDate);
+      // พาร์ทเนอร์
+      exRow.getCell(3).value = r.partnerName ?? "-";
       // เลขที่สัญญา
-      exRow.getCell(3).value = r.contractNo ?? "";
+      exRow.getCell(4).value = r.contractNo ?? "";
       // ชื่อ-นามสกุล
-      exRow.getCell(4).value = r.customerName ?? "";
+      exRow.getCell(5).value = r.customerName ?? "";
       // เบอร์โทร
-      exRow.getCell(5).value = r.phone ?? "";
+      exRow.getCell(6).value = r.phone ?? "";
       // รุ่น
-      exRow.getCell(6).value = r.model ?? "-";
+      exRow.getCell(7).value = r.model ?? "-";
+      // IMEI/SN
+      exRow.getCell(8).value = r.imei ?? "-";
+      exRow.getCell(8).alignment = { horizontal: "center" };
       // ราคา
-      setMoneyCell(exRow.getCell(7), r.salePrice);
+      setMoneyCell(exRow.getCell(9), r.salePrice);
       // ยอดจัดไฟแนนซ์
-      setMoneyCell(exRow.getCell(8), r.financeAmount);
+      setMoneyCell(exRow.getCell(10), r.financeAmount);
       // ค่าคอมมิชชั่น
-      setMoneyCell(exRow.getCell(9), r.commissionNet);
+      setMoneyCell(exRow.getCell(11), r.commissionNet);
       // ต้นทุน
-      setMoneyCell(exRow.getCell(10), r.cost);
+      setMoneyCell(exRow.getCell(12), r.cost);
       // งวดที่ชำระ (text: "paid/total")
-      exRow.getCell(11).value = r.installmentCount != null
+      exRow.getCell(13).value = r.installmentCount != null
         ? `${r.paidInstallments}/${r.installmentCount}`
         : `${r.paidInstallments}`;
-      exRow.getCell(11).alignment = { horizontal: "center" };
+      exRow.getCell(13).alignment = { horizontal: "center" };
       // ยอดผ่อน
-      setMoneyCell(exRow.getCell(12), r.installmentPaid);
+      setMoneyCell(exRow.getCell(14), r.installmentPaid);
       // ยอดขายเครื่อง
-      setMoneyCell(exRow.getCell(13), r.deviceSaleAmount);
+      setMoneyCell(exRow.getCell(15), r.deviceSaleAmount);
       // รวมรายรับ
-      setMoneyCell(exRow.getCell(14), r.totalRevenue);
+      setMoneyCell(exRow.getCell(16), r.totalRevenue);
       // วันที่ขาย
-      setDateCell(exRow.getCell(15), r.saleDate);
+      setDateCell(exRow.getCell(17), r.saleDate);
       // กำไร/ขาดทุน
-      setMoneyCell(exRow.getCell(16), r.profitLoss);
+      setMoneyCell(exRow.getCell(18), r.profitLoss);
 
       exRow.commit();
     }

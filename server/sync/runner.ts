@@ -126,10 +126,9 @@ function setStage(section: SectionKey, stageIndex: number) {
   _locks[section] = { ...lock, progress, stageIndex, currentStage, totalStages };
   const logId = _overallLogId[section];
   if (logId) {
-    updateSyncLogStage({ id: logId, currentStage, progress }).catch(() => {});
+        updateSyncLogStage({ id: logId, section, currentStage, progress }).catch(() => {});
   }
 }
-
 function setSubProgress(section: SectionKey, stageName: string, current: number, total: number) {
   const lock = _locks[section];
   if (!lock) return;
@@ -144,10 +143,9 @@ function setSubProgress(section: SectionKey, stageName: string, current: number,
   // อัพเดต DB ด้วยเพื่อให้ frontend poll แล้วเห็น progress จริง
   const logId = _overallLogId[section];
   if (logId) {
-    updateSyncLogStage({ id: logId, currentStage, progress }).catch(() => {});
+        updateSyncLogStage({ id: logId, section, currentStage, progress }).catch(() => {});
   }
 }
-
 /* ─────────────────────────────────────────────────────────────────────────── */
 /* DB lock check (cross-process via sync_logs table)                          */
 /* ─────────────────────────────────────────────────────────────────────────── */
@@ -544,7 +542,7 @@ async function syncCustomers(
           const currentStage = `customers (${page}/${totalPages})`;
           const lock = _locks[section];
           if (lock) _locks[section] = { ...lock, progress, currentStage };
-          updateSyncLogStage({ id: logId, currentStage, progress, resumePage: page + 1 }).catch(() => {});
+          updateSyncLogStage({ id: logId, section, currentStage, progress, resumePage: page + 1 }).catch(() => {});
         }
       },
       500,
@@ -576,7 +574,7 @@ async function syncContracts(
   const log = await insertSyncLog({ section, entity: "contracts", triggeredBy: "on-demand" });
   if (startPage > 1) {
     console.log(`[sync] ${section}: resuming contracts from page ${startPage}`);
-    updateSyncLogStage({ id: log.id, currentStage: "contracts", progress: 0, resumePage: startPage }).catch(() => {});
+    updateSyncLogStage({ id: log.id, section, currentStage: "contracts", progress: 0, resumePage: startPage }).catch(() => {});
   }
 
   let rowCount = 0;
@@ -615,6 +613,7 @@ async function syncContracts(
         setSubProgress(section, "contracts", page * 200, totalContractRows);
         updateSyncLogStage({
           id: log.id,
+          section,
           currentStage: "contracts",
           progress: Math.round((page / totalPages) * 100),
           resumePage: page + 1,
