@@ -264,6 +264,7 @@ export const paymentTransactions = pgTable(
     updatedAt: varchar("updated_at", { length: 32 }),
     periodNo: integer("period_no"),
     subNo: integer("sub_no"),
+    incomeType: varchar("income_type", { length: 32 }),
   },
   (t) => ({
     sectionExternalIdx: uniqueIndex("payments_section_external_idx").on(

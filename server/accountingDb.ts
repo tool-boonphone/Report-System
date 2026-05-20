@@ -146,15 +146,12 @@ const PT_INCOME_BASE_WHERE = `(pt.raw_json::jsonb->>'source') IS NULL`;
 
 /**
  * สร้าง CTE + CASE expression สำหรับ classify income_type
- * ใช้ Logic 2 ระดับ (Two-Level Fallback) เพื่อระบุ "ขายเครื่อง" ให้ตรงกับระบบ Sync
  *
- * ระดับที่ 1 (Primary):
- *   - ค้นหารายการจ่ายเงินที่ DATE(paid_at) และ updated_by ตรงกับวันสุดท้ายและคนสุดท้าย
- *   - ถ้าผลรวมยอดเงิน >= 1,000 บาท ถือว่าเป็น "ขายเครื่อง"
+ * Fast path: ดึงจาก pt.income_type ที่ถูก Populate ไว้ตอน Sync แล้วโดยตรง
+ * ทำให้ Query เบาลงมากเพราะไม่ต้องคำนวณ Logic 2 ระดับซ้ำทุกครั้ง
  *
- * ระดับที่ 2 (Fallback):
- *   - หากระดับ 1 ไม่ถึง 1,000 บาท ให้ขยายเงื่อนไขไปดู DATE(created_at) และ updated_by แทน
- *   - เพื่อรองรับกรณีที่ paid_at ถูกแก้ย้อนหลัง แต่ created_at เป็นวันที่บันทึกจริง
+ * Fallback: ถ้า pt.income_type เป็น NULL (ยังไม่ถูก Populate) จะคำนวณสด
+ * ด้วย Logic 2 ระดับเหมือนเดิม เพื่อให้ระบบยังทำงานได้ถูกต้องระหว่างรอ Sync
  *
  * @param secEsc - section name (escaped)
  * @returns { cte, incomeTypeCase, joinClause }
@@ -165,12 +162,13 @@ function buildIncomeCTE(secEsc: string): {
   joinClause: string;
 } {
   const sourceWhere = ptIncomeBaseWhere(secEsc);
+
+  // CTE สำหรับ Fallback (ใช้เฉพาะแถวที่ income_type ยังเป็น NULL)
   const cte = `
     bad_debt_last AS (
-      -- ระดับที่ 1 (Primary): ค้นหาวันสุดท้าย + คนสุดท้ายที่บันทึก (ดู paid_at)
       SELECT
         pt2.contract_no,
-        MAX(DATE(pt2.paid_at)) AS last_paid_date,
+        MAX(DATE(pt2.paid_at))    AS last_paid_date,
         MAX(DATE(pt2.created_at)) AS last_created_date,
         (array_agg(pt2.updated_by ORDER BY pt2.created_at DESC, pt2.id DESC))[1] AS last_updated_by_paid,
         (array_agg(pt2.updated_by ORDER BY pt2.created_at DESC, pt2.id DESC))[1] AS last_updated_by_created
@@ -180,10 +178,10 @@ function buildIncomeCTE(secEsc: string): {
       WHERE pt2.section = '${secEsc}'
         AND ${sourceWhere}
         AND c2.status = 'หนี้เสีย'
+        AND pt2.income_type IS NULL
       GROUP BY pt2.contract_no
     ),
     bad_debt_level1 AS (
-      -- ระดับที่ 1: รวมยอดเงินของรายการที่ DATE(paid_at) + updated_by ตรงกับล่าสุด
       SELECT
         pt3.contract_no,
         SUM(CAST(COALESCE(pt3.amount, 0) AS DECIMAL(18,2))) AS level1_total
@@ -197,19 +195,21 @@ function buildIncomeCTE(secEsc: string): {
     )
   `;
 
+  // Fast path: ถ้า income_type ถูก Populate แล้ว ใช้ค่านั้นเลย
+  // Fallback: ถ้า income_type เป็น NULL ให้คำนวณสดด้วย Logic 2 ระดับ
   const incomeTypeCase = `
     CASE
+      WHEN pt.income_type IS NOT NULL
+        THEN pt.income_type
       WHEN pt.receipt_no LIKE 'TXRTC%'
         THEN 'ปิดยอด'
       WHEN c.status = 'หนี้เสีย'
         AND bdl.last_paid_date IS NOT NULL
         AND (
-          -- ระดับที่ 1: ถ้ายอดรวม >= 1000 ให้เช็ค paid_at + updated_by
           (COALESCE(bdl1.level1_total, 0) >= 1000
             AND DATE(pt.paid_at) = bdl.last_paid_date
             AND pt.updated_by = bdl.last_updated_by_paid)
           OR
-          -- ระดับที่ 2: ถ้าระดับ 1 < 1000 ให้เช็ค created_at + updated_by
           (COALESCE(bdl1.level1_total, 0) < 1000
             AND DATE(pt.created_at) = bdl.last_created_date
             AND pt.updated_by = bdl.last_updated_by_created)
@@ -1147,17 +1147,18 @@ export async function rebuildIncomeMonthlySummary(section: SectionKey): Promise<
   const esc = (v: string) => v.replace(/'/g, "''");
   const secEsc = esc(section);
 
-  // sourceWhere ใช้ alias pt2 ใน CTE และ pt ใน classified CTE
-  const sourceWherePt2 = secEsc === 'Fastfone365' ? 'TRUE' : `(pt2.raw_json::jsonb->>'source') IS NULL`;
-  const sourceWherePt  = secEsc === 'Fastfone365' ? 'TRUE' : `(pt.raw_json::jsonb->>'source') IS NULL`;
+  const sourceWherePt = secEsc === 'Fastfone365' ? 'TRUE' : `(pt.raw_json::jsonb->>'source') IS NULL`;
 
   // Step 1: DELETE existing rows for this section
   await db.execute(sql.raw(`DELETE FROM income_monthly_summary WHERE section = '${secEsc}'`));
 
   // Step 2: INSERT aggregated data
-  // ใช้ Logic 2 ระดับ (Two-Level Fallback) ให้ตรงกับ buildIncomeCTE
+  // Fast path: ดึงจาก pt.income_type ที่ populateIncomeType() Populate ไว้แล้วโดยตรง
+  // Fallback: ถ้า income_type ยังเป็น NULL ให้คำนวณสดด้วย Logic 2 ระดับ
+  const sourceWherePt2 = secEsc === 'Fastfone365' ? 'TRUE' : `(pt2.raw_json::jsonb->>'source') IS NULL`;
   const insertSql = `
     WITH bad_debt_last AS (
+      -- Fallback CTE: ใช้เฉพาะแถวที่ income_type ยังเป็น NULL
       SELECT
         pt2.contract_no,
         MAX(DATE(pt2.paid_at)) AS last_paid_date,
@@ -1170,6 +1171,7 @@ export async function rebuildIncomeMonthlySummary(section: SectionKey): Promise<
       WHERE pt2.section = '${secEsc}'
         AND ${sourceWherePt2}
         AND c2.status = 'หนี้เสีย'
+        AND pt2.income_type IS NULL
       GROUP BY pt2.contract_no
     ),
     bad_debt_level1 AS (
@@ -1190,6 +1192,8 @@ export async function rebuildIncomeMonthlySummary(section: SectionKey): Promise<
         EXTRACT(YEAR  FROM pt.paid_at::date)::integer AS year,
         EXTRACT(MONTH FROM pt.paid_at::date)::integer AS month,
         CASE
+          WHEN pt.income_type IS NOT NULL
+            THEN pt.income_type
           WHEN pt.receipt_no LIKE 'TXRTC%'
             THEN 'ปิดยอด'
           WHEN c.status = 'หนี้เสีย'
@@ -1236,5 +1240,100 @@ export async function rebuildIncomeMonthlySummary(section: SectionKey): Promise<
   const result = await db.execute(sql.raw(insertSql));
   const rowCount = (result as any)?.rowCount ?? (result as any)?.count ?? 0;
   console.log(`[rebuildIncomeMonthlySummary] ${section}: inserted/updated ${rowCount} rows`);
+  return Number(rowCount);
+}
+
+// ─── Populate income_type ─────────────────────────────────────────────────────
+
+/**
+ * populateIncomeType — Populate ค่า income_type ลงใน payment_transactions
+ *
+ * รันหลังจาก Sync เสร็จ (ไม่แตะ Logic Sync เดิม) เพื่อให้หน้ารายรับ
+ * mode รายการตามสลิป ดึงค่า income_type ตรงๆ จาก DB โดยไม่ต้องคำนวณ
+ * Logic 2 ระดับซ้ำทุกครั้งที่เปิดหน้าเว็บ
+ *
+ * Logic เดียวกับ rebuildIncomeMonthlySummary:
+ *   ระดับที่ 1: DATE(paid_at) + updated_by ของรายการสุดท้าย (ถ้ายอดรวม >= 1,000)
+ *   ระดับที่ 2: DATE(created_at) + updated_by (fallback ถ้าระดับ 1 < 1,000)
+ *
+ * @param section - section key
+ * @returns จำนวน rows ที่ถูก update
+ */
+export async function populateIncomeType(section: SectionKey): Promise<number> {
+  const db = await getDb(section);
+  if (!db) return 0;
+
+  const esc = (v: string) => v.replace(/'/g, "''");
+  const secEsc = esc(section);
+
+  const sourceWherePt2 = secEsc === 'Fastfone365' ? 'TRUE' : `(pt2.raw_json::jsonb->>'source') IS NULL`;
+  const sourceWherePt  = secEsc === 'Fastfone365' ? 'TRUE' : `(pt.raw_json::jsonb->>'source') IS NULL`;
+
+  // UPDATE income_type ใน payment_transactions โดยใช้ Logic 2 ระดับ
+  const updateSql = `
+    WITH bad_debt_last AS (
+      SELECT
+        pt2.contract_no,
+        MAX(DATE(pt2.paid_at)) AS last_paid_date,
+        MAX(DATE(pt2.created_at)) AS last_created_date,
+        (array_agg(pt2.updated_by ORDER BY pt2.created_at DESC, pt2.id DESC))[1] AS last_updated_by_paid,
+        (array_agg(pt2.updated_by ORDER BY pt2.created_at DESC, pt2.id DESC))[1] AS last_updated_by_created
+      FROM payment_transactions pt2
+      INNER JOIN contracts c2
+        ON c2.contract_no = pt2.contract_no AND c2.section = pt2.section
+      WHERE pt2.section = '${secEsc}'
+        AND ${sourceWherePt2}
+        AND c2.status = 'หนี้เสีย'
+      GROUP BY pt2.contract_no
+    ),
+    bad_debt_level1 AS (
+      SELECT
+        pt3.contract_no,
+        SUM(CAST(COALESCE(pt3.amount, 0) AS DECIMAL(18,2))) AS level1_total
+      FROM payment_transactions pt3
+      INNER JOIN bad_debt_last bdl ON bdl.contract_no = pt3.contract_no
+      WHERE pt3.section = '${secEsc}'
+        AND ${sourceWherePt2}
+        AND DATE(pt3.paid_at) = bdl.last_paid_date
+        AND pt3.updated_by = bdl.last_updated_by_paid
+      GROUP BY pt3.contract_no
+    ),
+    classified AS (
+      SELECT
+        pt.id,
+        CASE
+          WHEN pt.receipt_no LIKE 'TXRTC%'
+            THEN 'ปิดยอด'
+          WHEN c.status = 'หนี้เสีย'
+            AND bdl.last_paid_date IS NOT NULL
+            AND (
+              (COALESCE(bdl1.level1_total, 0) >= 1000
+                AND DATE(pt.paid_at) = bdl.last_paid_date
+                AND pt.updated_by = bdl.last_updated_by_paid)
+              OR
+              (COALESCE(bdl1.level1_total, 0) < 1000
+                AND DATE(pt.created_at) = bdl.last_created_date
+                AND pt.updated_by = bdl.last_updated_by_created)
+            )
+            THEN 'ขายเครื่อง'
+          ELSE 'ค่างวด'
+        END AS income_type
+      FROM payment_transactions pt
+      LEFT JOIN contracts c ON c.contract_no = pt.contract_no AND c.section = pt.section
+      LEFT JOIN bad_debt_last bdl ON bdl.contract_no = pt.contract_no
+      LEFT JOIN bad_debt_level1 bdl1 ON bdl1.contract_no = pt.contract_no
+      WHERE pt.section = '${secEsc}'
+        AND ${sourceWherePt}
+    )
+    UPDATE payment_transactions pt
+    SET income_type = classified.income_type
+    FROM classified
+    WHERE pt.id = classified.id
+      AND (pt.income_type IS DISTINCT FROM classified.income_type)
+  `;
+
+  const result = await db.execute(sql.raw(updateSql));
+  const rowCount = (result as any)?.rowCount ?? (result as any)?.count ?? 0;
+  console.log(`[populateIncomeType] ${section}: updated ${rowCount} rows`);
   return Number(rowCount);
 }

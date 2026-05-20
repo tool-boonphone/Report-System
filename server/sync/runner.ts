@@ -53,7 +53,7 @@ import type { SectionKey, SyncTrigger } from "../../shared/const";
 import { fillPeriodNosForSection } from "./fillPeriodNos";
 import { populateDebtCache } from "./populateCache";
 import { pgRows } from "../db";
-import { rebuildIncomeMonthlySummary } from "../accountingDb";
+import { rebuildIncomeMonthlySummary, populateIncomeType } from "../accountingDb";
 
 /* ─────────────────────────────────────────────────────────────────────────── */
 /* Constants & types                                                           */
@@ -416,6 +416,14 @@ async function doSync(
       console.log(`[sync] ${section}: cache populated — target=${cacheResult.targetRows}, collected=${cacheResult.collectedRows}`);
     } catch (cacheErr: any) {
       console.warn(`[sync] ${section}: cache populate failed (non-fatal):`, cacheErr?.message ?? cacheErr);
+    }
+
+    // ── Populate income_type ใน payment_transactions ────────────────────────
+    try {
+      const incomeTypeRows = await populateIncomeType(section);
+      console.log(`[sync] ${section}: income_type populated — ${incomeTypeRows} rows updated`);
+    } catch (incomeTypeErr: any) {
+      console.warn(`[sync] ${section}: populateIncomeType failed (non-fatal):`, incomeTypeErr?.message ?? incomeTypeErr);
     }
 
     // ── Finish sync log ───────────────────────────────────────────────────
