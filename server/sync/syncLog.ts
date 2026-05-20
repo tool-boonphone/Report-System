@@ -154,9 +154,8 @@ export async function getLastContractsResumePage(section: SectionKey): Promise<n
  * 185 min = OVERALL_TIMEOUT_MS (180 min) + 5 min buffer.
  * Used by sync.status tRPC procedure so ALL instances see the same state.
  *
- * Fix (2026-05-11): ตรวจสอบทั้ง entity='all' และ entity-level rows
- * เพื่อป้องกันกรณีที่ entity='all' log ถูก clear แต่ entity-level logs
- * ยังอยู่ใน in_progress (เช่น หลัง clearAllStuckSyncLogs ทำงานไม่ครบ)
+ * Fix (2026-05-11): ตรวจสอบเฉพาะ entity='all' เพื่อความถูกต้องของ progress
+ * ป้องกันกรณีที่ UI ไปหยิบเอา entity-level logs มาแสดงผลแทนตัวหลัก
  */
 export async function getDbSyncStatus(section: SectionKey): Promise<{
   running: boolean;
@@ -170,7 +169,7 @@ export async function getDbSyncStatus(section: SectionKey): Promise<{
   // (matches OVERALL_TIMEOUT_MS=180min + 5min buffer in runner.ts)
   const staleThreshold = new Date(Date.now() - 185 * 60 * 1000);
 
-  // 1) ลองหา entity='all' row ก่อน (มี currentStage + progress ที่อัพเดตต่อเนื่อง)
+  // ดึงเฉพาะ entity='all' row (มี currentStage + progress ที่อัพเดตต่อเนื่อง)
   const allRows = await db
     .select({
       id: syncLogs.id,
@@ -197,36 +196,6 @@ export async function getDbSyncStatus(section: SectionKey): Promise<{
       startedAt: row.startedAt,
       currentStage: row.currentStage ?? null,
       progress: row.progress ?? null,
-    };
-  }
-
-  // 2) Fallback: ตรวจสอบ entity-level rows (partners/customers/contracts/installments/payments)
-  // กรณีที่ entity='all' log ถูก clear ไปแล้ว แต่ entity-level logs ยังอยู่ใน in_progress
-  const entityRows = await db
-    .select({
-      id: syncLogs.id,
-      startedAt: syncLogs.startedAt,
-      entity: syncLogs.entity,
-    })
-    .from(syncLogs)
-    .where(
-      and(
-        eq(syncLogs.section, section),
-        ne(syncLogs.entity, "all"),
-        eq(syncLogs.status, "in_progress"),
-        gt(syncLogs.startedAt, staleThreshold),
-      ),
-    )
-    .orderBy(desc(syncLogs.startedAt))
-    .limit(1);
-
-  if (entityRows.length > 0) {
-    const row = entityRows[0];
-    return {
-      running: true,
-      startedAt: row.startedAt,
-      currentStage: row.entity ?? null, // ใช้ entity name เป็น stage name
-      progress: null, // ไม่มีข้อมูล progress ที่ละเอียด
     };
   }
 
@@ -271,9 +240,9 @@ export async function clearAllStuckSyncLogs(): Promise<number> {
   // Use 185-minute timeout to match OVERALL_TIMEOUT_MS (180 min) + 5 min buffer in runner.ts
   // Previously 15 min caused false-positive cleanup of long-running syncs (e.g. IMEI enrichment)
   const dbBoon = await getDb("Boonphone");
-  const dbFast = await getDb("Fastfone365");
+  const dbFastfone = await getDb("Fastfone365");
   let total = 0;
-  for (const db of [dbBoon, dbFast].filter(Boolean)) {
+  for (const db of [dbBoon, dbFastfone].filter(Boolean)) {
     if (!db) continue;
     const cutoff = new Date(Date.now() - 185 * 60 * 1000);
     const rows = await db
@@ -284,34 +253,6 @@ export async function clearAllStuckSyncLogs(): Promise<number> {
     total += rows.length;
   }
   return total;
-}
-// _clearAllStuckSyncLogsOld - kept for reference
-async function _clearAllStuckSyncLogsOld(): Promise<number> {
-  const db = await getDb("Boonphone");
-  if (!db) return 0;
-  // Only clear rows that have been in_progress for more than 15 minutes.
-  // 15 min is enough to avoid clearing a sync that just started on the same instance,
-  // while still catching syncs killed by Cloud Run restarts (which happen within seconds).
-  // Previously 95 min caused stuck locks when server restarted mid-sync.
-  const cutoff = new Date(Date.now() - 15 * 60 * 1000);
-  const result = await db
-    .update(syncLogs)
-    .set({
-      status: "error",
-      finishedAt: new Date(),
-      errorMessage: "Auto-cleared on startup: previous Cloud Run instance was killed during sync",
-    })
-    .where(
-      and(
-        eq(syncLogs.status, "in_progress"),
-        lt(syncLogs.startedAt, cutoff),
-      ),
-    ).returning({ id: syncLogs.id });
-  const affectedRows = result.length;
-  if (affectedRows > 0) {
-    console.log(`[syncLog] startup cleanup: cleared ${affectedRows} stuck in_progress row(s) older than 15 min`);
-  }
-  return affectedRows;
 }
 
 /** Most recent successful sync for a given (section, entity). */
