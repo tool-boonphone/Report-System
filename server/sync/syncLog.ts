@@ -47,6 +47,9 @@ export async function finishSyncLog(params: {
       rowCount: params.rowCount ?? 0,
       errorMessage: params.errorMessage?.slice(0, 2000) ?? null,
       finishedAt: new Date(),
+      // Always set progress=100 + currentStage='done' on success
+      // so UI shows 100% even if the last setSubProgress was < 100%
+      ...(params.status === "success" ? { progress: 100, currentStage: "done" } : {}),
     })
     .where(eq(syncLogs.id, params.id));
 }
