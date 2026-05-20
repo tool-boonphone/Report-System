@@ -18,7 +18,16 @@ export async function insertSyncLog(params: {
     status: "in_progress",
     startedAt: now,
   }).returning({ id: syncLogs.id });
-  const id = res?.id ?? 0;
+  const id = res?.id;
+  if (!id) {
+    // id เป็น null หมายความว่า sync_logs.id column ไม่มี auto-increment
+    // ให้ throw error เพื่อหยุด sync ทันที แทนที่จะรันต่อโดยไม่มี progress tracking
+    throw new Error(
+      `[syncLog] INSERT returned null id for ${params.section}/${params.entity}. ` +
+      `sync_logs.id column is missing auto-increment sequence. ` +
+      `Run DB migration: CREATE SEQUENCE sync_logs_id_seq; ALTER TABLE sync_logs ALTER COLUMN id SET DEFAULT nextval('sync_logs_id_seq');`
+    );
+  }
   return { id, startedAt: now };
 }
 
