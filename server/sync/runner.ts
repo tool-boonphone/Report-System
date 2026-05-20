@@ -815,9 +815,10 @@ async function syncCommissions(
         "commission",
         (d) => d?.commissions,
         { action: "all" },
-        async (items, _page, _totalPages) => {
+        async (items, page, totalPages) => {
           for (const it of items) buffer.push(mapCommission(section, it));
           if (buffer.length >= 500) rowCount += await upsertCommissions(buffer.splice(0, buffer.length), section);
+          setSubProgress(section, "commissions", page * 200, Math.max(totalPages * 200, page * 200));
         },
         200,
         60_000,
