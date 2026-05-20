@@ -1155,12 +1155,15 @@ export async function rebuildIncomeMonthlySummary(section: SectionKey): Promise<
   await db.execute(sql.raw(`DELETE FROM income_monthly_summary WHERE section = '${secEsc}'`));
 
   // Step 2: INSERT aggregated data
-  // สร้าง CTE เองแทนใช้ buildIncomeCTE เพื่อควบคุม alias ให้ถูกต้อง
+  // ใช้ Logic 2 ระดับ (Two-Level Fallback) ให้ตรงกับ buildIncomeCTE
   const insertSql = `
     WITH bad_debt_last AS (
       SELECT
         pt2.contract_no,
-        MAX(DATE(pt2.created_at)) AS last_created_date
+        MAX(DATE(pt2.paid_at)) AS last_paid_date,
+        MAX(DATE(pt2.created_at)) AS last_created_date,
+        (array_agg(pt2.updated_by ORDER BY pt2.created_at DESC, pt2.id DESC))[1] AS last_updated_by_paid,
+        (array_agg(pt2.updated_by ORDER BY pt2.created_at DESC, pt2.id DESC))[1] AS last_updated_by_created
       FROM payment_transactions pt2
       INNER JOIN contracts c2
         ON c2.contract_no = pt2.contract_no AND c2.section = pt2.section
@@ -1168,6 +1171,18 @@ export async function rebuildIncomeMonthlySummary(section: SectionKey): Promise<
         AND ${sourceWherePt2}
         AND c2.status = 'หนี้เสีย'
       GROUP BY pt2.contract_no
+    ),
+    bad_debt_level1 AS (
+      SELECT
+        pt3.contract_no,
+        SUM(CAST(COALESCE(pt3.amount, 0) AS DECIMAL(18,2))) AS level1_total
+      FROM payment_transactions pt3
+      INNER JOIN bad_debt_last bdl ON bdl.contract_no = pt3.contract_no
+      WHERE pt3.section = '${secEsc}'
+        AND ${sourceWherePt2}
+        AND DATE(pt3.paid_at) = bdl.last_paid_date
+        AND pt3.updated_by = bdl.last_updated_by_paid
+      GROUP BY pt3.contract_no
     ),
     classified AS (
       SELECT
@@ -1178,8 +1193,16 @@ export async function rebuildIncomeMonthlySummary(section: SectionKey): Promise<
           WHEN pt.receipt_no LIKE 'TXRTC%'
             THEN 'ปิดยอด'
           WHEN c.status = 'หนี้เสีย'
-            AND bdl.last_created_date IS NOT NULL
-            AND DATE(pt.created_at) = bdl.last_created_date
+            AND bdl.last_paid_date IS NOT NULL
+            AND (
+              (COALESCE(bdl1.level1_total, 0) >= 1000
+                AND DATE(pt.paid_at) = bdl.last_paid_date
+                AND pt.updated_by = bdl.last_updated_by_paid)
+              OR
+              (COALESCE(bdl1.level1_total, 0) < 1000
+                AND DATE(pt.created_at) = bdl.last_created_date
+                AND pt.updated_by = bdl.last_updated_by_created)
+            )
             THEN 'ขายเครื่อง'
           ELSE 'ค่างวด'
         END AS income_type,
@@ -1187,6 +1210,7 @@ export async function rebuildIncomeMonthlySummary(section: SectionKey): Promise<
       FROM payment_transactions pt
       LEFT JOIN contracts c ON c.contract_no = pt.contract_no AND c.section = pt.section
       LEFT JOIN bad_debt_last bdl ON bdl.contract_no = pt.contract_no
+      LEFT JOIN bad_debt_level1 bdl1 ON bdl1.contract_no = pt.contract_no
       WHERE pt.section = '${secEsc}'
         AND ${sourceWherePt}
         AND pt.paid_at IS NOT NULL
