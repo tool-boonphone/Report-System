@@ -431,7 +431,9 @@ async function doSync(
     // ── Populate monthly_summary_cache ──────────────────────────────────────
     setStage(section, SYNC_STAGES.indexOf("monthly_cache"));
     try {
-      const msCacheRows = await populateMonthlySummaryCache(section);
+      const msCacheRows = await populateMonthlySummaryCache(section, (current, total) => {
+        setSubProgress(section, "monthly_cache", current, total);
+      });
       console.log(`[sync] ${section}: monthly_summary_cache populated — ${msCacheRows} rows`);
     } catch (msCacheErr: any) {
       console.warn(`[sync] ${section}: populateMonthlySummaryCache failed (non-fatal):`, msCacheErr?.message ?? msCacheErr);

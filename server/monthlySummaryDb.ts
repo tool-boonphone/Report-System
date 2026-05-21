@@ -927,11 +927,34 @@ async function upsertMonthlySummaryRows(
  * รัน 6 queries สำหรับทุก combination ของ productType × deviceFamily × dateMonth
  * แล้วเขียนลง monthly_summary_cache
  */
-export async function populateMonthlySummaryCache(section: SectionKey): Promise<number> {
+export async function populateMonthlySummaryCache(
+  section: SectionKey,
+  onProgress?: (current: number, total: number) => void,
+): Promise<number> {
   const dims = await getFilterDimensions(section);
   let totalRows = 0;
 
-  // ── Query 1: count ────────────────────────────────────────────────────────
+  // คำนวณ total combinations เพื่อใช้ใน progress callback
+  const ptCount  = dims.productTypes.length;
+  const dfCount  = dims.deviceFamilies.length;
+  const paidMCnt = dims.paidAtMonths.length;
+  const dueMCnt  = dims.dueMonths.length;
+  // count: pt × df
+  // target: pt × df × dueM
+  // paid:   pt × df × paidM
+  // due:    pt × df × dueM
+  // notYetDue: pt × df × dueM
+  // installTotal: pt × df
+  const totalCombinations =
+    ptCount * dfCount +           // count
+    ptCount * dfCount * dueMCnt + // target
+    ptCount * dfCount * paidMCnt +// paid
+    ptCount * dfCount * dueMCnt + // due
+    ptCount * dfCount * dueMCnt + // notYetDue
+    ptCount * dfCount;            // installTotal
+  let doneCombinations = 0;
+
+  // ── Query 1: count ────────────────────────────────────────────
   for (const pt of dims.productTypes) {
     for (const df of dims.deviceFamilies) {
       const rows = await queryCount(section, { productType: pt ?? undefined, deviceFamily: df ?? undefined });
@@ -948,6 +971,8 @@ export async function populateMonthlySummaryCache(section: SectionKey): Promise<
       }));
       await upsertMonthlySummaryRows(section, "count", mapped);
       totalRows += mapped.length;
+      doneCombinations++;
+      onProgress?.(doneCombinations, totalCombinations);
     }
   }
 
@@ -975,6 +1000,8 @@ export async function populateMonthlySummaryCache(section: SectionKey): Promise<
         }));
         await upsertMonthlySummaryRows(section, "target", mapped);
         totalRows += mapped.length;
+        doneCombinations++;
+        onProgress?.(doneCombinations, totalCombinations);
       }
     }
   }
@@ -1004,6 +1031,8 @@ export async function populateMonthlySummaryCache(section: SectionKey): Promise<
         }));
         await upsertMonthlySummaryRows(section, "paid", mapped);
         totalRows += mapped.length;
+        doneCombinations++;
+        onProgress?.(doneCombinations, totalCombinations);
       }
     }
   }
@@ -1032,6 +1061,8 @@ export async function populateMonthlySummaryCache(section: SectionKey): Promise<
         }));
         await upsertMonthlySummaryRows(section, "due", mapped);
         totalRows += mapped.length;
+        doneCombinations++;
+        onProgress?.(doneCombinations, totalCombinations);
       }
     }
   }
@@ -1060,6 +1091,8 @@ export async function populateMonthlySummaryCache(section: SectionKey): Promise<
         }));
         await upsertMonthlySummaryRows(section, "notYetDue", mapped);
         totalRows += mapped.length;
+        doneCombinations++;
+        onProgress?.(doneCombinations, totalCombinations);
       }
     }
   }
@@ -1085,6 +1118,8 @@ export async function populateMonthlySummaryCache(section: SectionKey): Promise<
       }));
       await upsertMonthlySummaryRows(section, "installTotal", mapped);
       totalRows += mapped.length;
+      doneCombinations++;
+      onProgress?.(doneCombinations, totalCombinations);
     }
   }
 
