@@ -73,6 +73,7 @@ export const SYNC_STAGES = [
   "commissions",
   "bad_debt",
   "populate",
+  "monthly_cache",
 ] as const;
 export type SyncStage = (typeof SYNC_STAGES)[number];
 
@@ -428,6 +429,7 @@ async function doSync(
     }
 
     // ── Populate monthly_summary_cache ──────────────────────────────────────
+    setStage(section, SYNC_STAGES.indexOf("monthly_cache"));
     try {
       const msCacheRows = await populateMonthlySummaryCache(section);
       console.log(`[sync] ${section}: monthly_summary_cache populated — ${msCacheRows} rows`);
