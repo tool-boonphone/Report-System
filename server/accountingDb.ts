@@ -176,7 +176,7 @@ function buildIncomeCTE(secEsc: string): {
       INNER JOIN contracts c2
         ON c2.contract_no = pt2.contract_no AND c2.section = pt2.section
       WHERE pt2.section = '${secEsc}'
-        AND ${sourceWhere}
+        AND ${sourceWhere.replace(/pt\./g, "pt2.")}
         AND c2.status = 'หนี้เสีย'
         AND pt2.income_type IS NULL
       GROUP BY pt2.contract_no
@@ -187,8 +187,8 @@ function buildIncomeCTE(secEsc: string): {
         SUM(CAST(COALESCE(pt3.amount, 0) AS DECIMAL(18,2))) AS level1_total
       FROM payment_transactions pt3
       INNER JOIN bad_debt_last bdl ON bdl.contract_no = pt3.contract_no
-      WHERE pt3.section = '${secEsc}'
-        AND ${sourceWhere}
+      WHERE pt3.section = \'${secEsc}\'
+        AND ${sourceWhere.replace(/pt\./g, "pt3.")}
         AND DATE(pt3.paid_at) = bdl.last_paid_date
         AND pt3.updated_by = bdl.last_updated_by_paid
       GROUP BY pt3.contract_no

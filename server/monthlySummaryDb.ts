@@ -1137,13 +1137,6 @@ async function getMonthlySummaryFromCache(
   const db = await getDb(section);
   if (!db) return null;
 
-  // ตรวจว่า cache มีข้อมูลไหม
-  const checkRows = await db.execute(sql.raw(
-    `SELECT COUNT(*) AS cnt FROM monthly_summary_cache WHERE section = '${section}'`
-  ));
-  const cnt = parseInt(String((pgRows(checkRows)[0] as any)?.cnt ?? "0"), 10);
-  if (cnt === 0) return null; // cache ว่าง → fallback
-
   // Helper: แปลง filter param เป็น SQL condition สำหรับ date_month
   function dateMonthCond(months: string[] | undefined, singleDate: string | undefined): string {
     if (singleDate) {
@@ -1167,6 +1160,21 @@ async function getMonthlySummaryFromCache(
     if (df) return `device_family = '${df}'`;
     return `device_family IS NULL`;
   }
+
+  // ตรวจว่า cache มีข้อมูลสำหรับ query_type หลัก (count) ไหม
+  // และตรวจสอบเฉพาะเจาะจงตาม filter พื้นฐาน (productType, deviceFamily)
+  const checkSql = `
+    SELECT COUNT(*) AS cnt 
+    FROM monthly_summary_cache 
+    WHERE section = '${section}' 
+      AND query_type = 'count'
+      AND ${productTypeCond(params.countProductType)}
+      AND ${deviceFamilyCond(params.countDeviceFamily)}
+      AND date_month IS NULL
+  `;
+  const checkRows = await db.execute(sql.raw(checkSql));
+  const cnt = parseInt(String((pgRows(checkRows)[0] as any)?.cnt ?? "0"), 10);
+  if (cnt === 0) return null; // ไม่มีข้อมูลใน cache สำหรับ filter นี้ → fallback ไป live query
 
   // ดึงแต่ละ query_type พร้อมกัน
   const [countRows, targetRows, paidRows, dueRows, notYetDueRows, installTotalRows] = await Promise.all([
