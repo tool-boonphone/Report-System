@@ -739,12 +739,21 @@ async function queryInstallTotal(
 
 // ---------------------------------------------------------------------------
 // Main export: getMonthlySummary
+// Fast path: ดึงจาก monthly_summary_cache ถ้าไม่มี search
+// Fallback: รัน 6 queries สดถ้ามี search หรือ cache ว่าง
 // ---------------------------------------------------------------------------
 export async function getMonthlySummary(
   params: MonthlySummaryParams,
 ): Promise<MonthlySummaryRow[]> {
   const { section } = params;
 
+  // Fast path: ถ้าไม่มี search → ลองดึงจาก cache ก่อน
+  if (!params.search) {
+    const cacheResult = await getMonthlySummaryFromCache(params);
+    if (cacheResult !== null) return cacheResult;
+  }
+
+  // Fallback: รัน 6 queries สด (มี search หรือ cache ว่าง)
   // Run 6 queries in parallel
   const [countRows, targetRows, paidRows, dueRows, notYetDueRows, installTotalRows] = await Promise.all([
     queryCount(section, {
@@ -792,7 +801,440 @@ export async function getMonthlySummary(
     }),
   ]);
 
-  // Collect all approve_months
+  // Assemble MonthlySummaryRow[] โดยใช้ shared function
+  return assembleMonthlySummaryRows(
+    countRows as any[],
+    targetRows as any[],
+    paidRows as any[],
+    dueRows as any[],
+    notYetDueRows as any[],
+    installTotalRows as any[],
+  );
+}
+
+// ---------------------------------------------------------------------------
+// populateMonthlySummaryCache — เรียกตอน Sync (Stage 8+)
+// Pre-aggregate ทุก combination ของ productType × deviceFamily × dateMonth
+// แล้วเขียนลง monthly_summary_cache ด้วย INSERT ... ON CONFLICT DO UPDATE
+// ---------------------------------------------------------------------------
+
+/** Filter dimensions ที่จะ iterate */
+type FilterCombo = {
+  productType: string | null;
+  deviceFamily: "iOS" | "Android" | null;
+  dateMonth: string | null; // YYYY-MM ของ paidAtMonth / dueMonth / approveMonth (ขึ้นกับ queryType)
+};
+
+/**
+ * ดึง distinct values ของ productType, paidAtMonth, dueMonth จาก DB
+ * เพื่อสร้าง filter combinations ทั้งหมด
+ */
+async function getFilterDimensions(section: SectionKey): Promise<{
+  productTypes: Array<string | null>;
+  deviceFamilies: Array<"iOS" | "Android" | null>;
+  paidAtMonths: Array<string | null>;
+  dueMonths: Array<string | null>;
+  approveMonths: Array<string | null>;
+}> {
+  const db = await getDb(section);
+  if (!db) return { productTypes: [null], deviceFamilies: [null], paidAtMonths: [null], dueMonths: [null], approveMonths: [null] };
+
+  const [ptRows, paidRows, dueRows, approveRows] = await Promise.all([
+    db.execute(sql.raw(`SELECT DISTINCT product_type FROM debt_target_cache WHERE section = '${section}' AND product_type IS NOT NULL ORDER BY 1`)),
+    db.execute(sql.raw(`SELECT DISTINCT TO_CHAR(paid_at::date, 'YYYY-MM') AS m FROM debt_collected_cache WHERE section = '${section}' AND paid_at IS NOT NULL ORDER BY 1`)),
+    db.execute(sql.raw(`SELECT DISTINCT TO_CHAR(due_date::date, 'YYYY-MM') AS m FROM debt_target_cache WHERE section = '${section}' AND due_date IS NOT NULL ORDER BY 1`)),
+    db.execute(sql.raw(`SELECT DISTINCT TO_CHAR(approve_date::date, 'YYYY-MM') AS m FROM debt_target_cache WHERE section = '${section}' AND approve_date IS NOT NULL ORDER BY 1`)),
+  ]);
+
+  const productTypes: Array<string | null> = [null, ...pgRows(ptRows).map((r: any) => String(r.product_type))];
+  const deviceFamilies: Array<"iOS" | "Android" | null> = [null, "iOS", "Android"];
+  const paidAtMonths: Array<string | null> = [null, ...pgRows(paidRows).map((r: any) => String(r.m))];
+  const dueMonths: Array<string | null> = [null, ...pgRows(dueRows).map((r: any) => String(r.m))];
+  const approveMonths: Array<string | null> = [null, ...pgRows(approveRows).map((r: any) => String(r.m))];
+
+  return { productTypes, deviceFamilies, paidAtMonths, dueMonths, approveMonths };
+}
+
+/**
+ * Upsert rows เข้า monthly_summary_cache
+ * ใช้ INSERT ... ON CONFLICT DO UPDATE เพื่อ idempotent
+ */
+async function upsertMonthlySummaryRows(
+  section: SectionKey,
+  queryType: string,
+  rows: Array<{
+    approve_month: string;
+    bucket: string;
+    productType: string | null;
+    deviceFamily: string | null;
+    dateMonth: string | null;
+    contractCount: number;
+    principal: number;
+    interest: number;
+    fee: number;
+    penalty: number;
+    unlockFee: number;
+    discount: number;
+    overpaid: number;
+    badDebt: number;
+    badDebtInstallment: number;
+    totalAmount: number;
+  }>,
+): Promise<void> {
+  if (rows.length === 0) return;
+  const db = await getDb(section);
+  if (!db) return;
+
+  // Batch insert 500 rows ต่อครั้ง
+  const BATCH = 500;
+  for (let i = 0; i < rows.length; i += BATCH) {
+    const batch = rows.slice(i, i + BATCH);
+    const values = batch.map((r) => {
+      const pt = r.productType ? `'${r.productType.replace(/'/g, "''")}'` : "NULL";
+      const df = r.deviceFamily ? `'${r.deviceFamily}'` : "NULL";
+      const dm = r.dateMonth ? `'${r.dateMonth}'` : "NULL";
+      return `('${section}','${queryType}','${r.approve_month}','${r.bucket}',${pt},${df},${dm},${r.contractCount},${r.principal},${r.interest},${r.fee},${r.penalty},${r.unlockFee},${r.discount},${r.overpaid},${r.badDebt},${r.badDebtInstallment},${r.totalAmount},NOW())`;
+    }).join(",\n");
+
+    const upsertSql = `
+      INSERT INTO monthly_summary_cache
+        (section, query_type, approve_month, bucket, product_type, device_family, date_month,
+         contract_count, principal, interest, fee, penalty, unlock_fee, discount, overpaid,
+         bad_debt, bad_debt_installment, total_amount, updated_at)
+      VALUES ${values}
+      ON CONFLICT (section, query_type, approve_month, bucket,
+                   COALESCE(product_type,''), COALESCE(device_family,''), COALESCE(date_month,''))
+      DO UPDATE SET
+        contract_count       = EXCLUDED.contract_count,
+        principal            = EXCLUDED.principal,
+        interest             = EXCLUDED.interest,
+        fee                  = EXCLUDED.fee,
+        penalty              = EXCLUDED.penalty,
+        unlock_fee           = EXCLUDED.unlock_fee,
+        discount             = EXCLUDED.discount,
+        overpaid             = EXCLUDED.overpaid,
+        bad_debt             = EXCLUDED.bad_debt,
+        bad_debt_installment = EXCLUDED.bad_debt_installment,
+        total_amount         = EXCLUDED.total_amount,
+        updated_at           = NOW()
+    `;
+    await db.execute(sql.raw(upsertSql));
+  }
+}
+
+/**
+ * populateMonthlySummaryCache — เรียกตอน Sync หลัง populateDebtCache
+ * รัน 6 queries สำหรับทุก combination ของ productType × deviceFamily × dateMonth
+ * แล้วเขียนลง monthly_summary_cache
+ */
+export async function populateMonthlySummaryCache(section: SectionKey): Promise<number> {
+  const dims = await getFilterDimensions(section);
+  let totalRows = 0;
+
+  // ── Query 1: count ────────────────────────────────────────────────────────
+  for (const pt of dims.productTypes) {
+    for (const df of dims.deviceFamilies) {
+      const rows = await queryCount(section, { productType: pt ?? undefined, deviceFamily: df ?? undefined });
+      const mapped = rows.map((r) => ({
+        approve_month: r.approve_month,
+        bucket: r.bucket,
+        productType: pt,
+        deviceFamily: df,
+        dateMonth: null,
+        contractCount: r.contract_count,
+        principal: 0, interest: 0, fee: 0, penalty: 0, unlockFee: 0,
+        discount: 0, overpaid: 0, badDebt: 0, badDebtInstallment: 0,
+        totalAmount: 0,
+      }));
+      await upsertMonthlySummaryRows(section, "count", mapped);
+      totalRows += mapped.length;
+    }
+  }
+
+  // ── Query 2: target ───────────────────────────────────────────────────────
+  // dateMonth = dueMonth (filter ตาม due_date month)
+  for (const pt of dims.productTypes) {
+    for (const df of dims.deviceFamilies) {
+      for (const dm of dims.dueMonths) {
+        const rows = await queryTarget(section, {
+          productType: pt ?? undefined,
+          deviceFamily: df ?? undefined,
+          dueMonths: dm ? [dm] : undefined,
+        });
+        const mapped = rows.map((r) => ({
+          approve_month: r.approve_month,
+          bucket: r.bucket,
+          productType: pt,
+          deviceFamily: df,
+          dateMonth: dm,
+          contractCount: r.contract_count,
+          principal: r.principal_target, interest: r.interest_target, fee: r.fee_target,
+          penalty: r.penalty_target, unlockFee: r.unlock_fee_target,
+          discount: 0, overpaid: 0, badDebt: 0, badDebtInstallment: 0,
+          totalAmount: r.total_target,
+        }));
+        await upsertMonthlySummaryRows(section, "target", mapped);
+        totalRows += mapped.length;
+      }
+    }
+  }
+
+  // ── Query 3: paid ─────────────────────────────────────────────────────────
+  // dateMonth = paidAtMonth (filter ตาม paid_at month)
+  for (const pt of dims.productTypes) {
+    for (const df of dims.deviceFamilies) {
+      for (const dm of dims.paidAtMonths) {
+        const rows = await queryPaid(section, {
+          productType: pt ?? undefined,
+          deviceFamily: df ?? undefined,
+          paidAtMonths: dm ? [dm] : undefined,
+        });
+        const mapped = rows.map((r) => ({
+          approve_month: r.approve_month,
+          bucket: r.bucket,
+          productType: pt,
+          deviceFamily: df,
+          dateMonth: dm,
+          contractCount: r.contract_count,
+          principal: r.principal_paid, interest: r.interest_paid, fee: r.fee_paid,
+          penalty: r.penalty_paid, unlockFee: r.unlock_fee_paid,
+          discount: r.discount_amount, overpaid: r.overpaid_amount,
+          badDebt: r.device_sale_amount, badDebtInstallment: r.installment_paid,
+          totalAmount: r.total_paid,
+        }));
+        await upsertMonthlySummaryRows(section, "paid", mapped);
+        totalRows += mapped.length;
+      }
+    }
+  }
+
+  // ── Query 4: due ──────────────────────────────────────────────────────────
+  // dateMonth = dueAtMonth (filter ตาม due_date month)
+  for (const pt of dims.productTypes) {
+    for (const df of dims.deviceFamilies) {
+      for (const dm of dims.dueMonths) {
+        const rows = await queryDue(section, {
+          productType: pt ?? undefined,
+          deviceFamily: df ?? undefined,
+          dueAtMonths: dm ? [dm] : undefined,
+        });
+        const mapped = rows.map((r) => ({
+          approve_month: r.approve_month,
+          bucket: r.bucket,
+          productType: pt,
+          deviceFamily: df,
+          dateMonth: dm,
+          contractCount: r.contract_count,
+          principal: r.principal_due, interest: r.interest_due, fee: r.fee_due,
+          penalty: r.penalty_due, unlockFee: r.unlock_fee_due,
+          discount: 0, overpaid: 0, badDebt: 0, badDebtInstallment: 0,
+          totalAmount: r.total_due,
+        }));
+        await upsertMonthlySummaryRows(section, "due", mapped);
+        totalRows += mapped.length;
+      }
+    }
+  }
+
+  // ── Query 5: notYetDue ────────────────────────────────────────────────────
+  // dateMonth = dueMonth (filter ตาม due_date month)
+  for (const pt of dims.productTypes) {
+    for (const df of dims.deviceFamilies) {
+      for (const dm of dims.dueMonths) {
+        const rows = await queryNotYetDue(section, {
+          productType: pt ?? undefined,
+          deviceFamily: df ?? undefined,
+          dueMonths: dm ? [dm] : undefined,
+        });
+        const mapped = rows.map((r) => ({
+          approve_month: r.approve_month,
+          bucket: r.bucket,
+          productType: pt,
+          deviceFamily: df,
+          dateMonth: dm,
+          contractCount: r.contract_count,
+          principal: r.principal_notyet, interest: r.interest_notyet, fee: r.fee_notyet,
+          penalty: r.penalty_notyet, unlockFee: r.unlock_fee_notyet,
+          discount: 0, overpaid: 0, badDebt: 0, badDebtInstallment: 0,
+          totalAmount: r.total_notyet,
+        }));
+        await upsertMonthlySummaryRows(section, "notYetDue", mapped);
+        totalRows += mapped.length;
+      }
+    }
+  }
+
+  // ── Query 6: installTotal ─────────────────────────────────────────────────
+  // ไม่มี dateMonth filter (installTotal ไม่มี due/paid filter)
+  for (const pt of dims.productTypes) {
+    for (const df of dims.deviceFamilies) {
+      const rows = await queryInstallTotal(section, {
+        productType: pt ?? undefined,
+        deviceFamily: df ?? undefined,
+      });
+      const mapped = rows.map((r) => ({
+        approve_month: r.approve_month,
+        bucket: r.bucket,
+        productType: pt,
+        deviceFamily: df,
+        dateMonth: null,
+        contractCount: r.contract_count,
+        principal: r.principal_install, interest: r.interest_install, fee: r.fee_install,
+        penalty: 0, unlockFee: 0, discount: 0, overpaid: 0, badDebt: 0, badDebtInstallment: 0,
+        totalAmount: r.total_install,
+      }));
+      await upsertMonthlySummaryRows(section, "installTotal", mapped);
+      totalRows += mapped.length;
+    }
+  }
+
+  return totalRows;
+}
+
+// ---------------------------------------------------------------------------
+// getMonthlySummaryFromCache — Fast path: ดึงจาก monthly_summary_cache
+// ใช้เมื่อไม่มี search filter
+// ---------------------------------------------------------------------------
+async function getMonthlySummaryFromCache(
+  params: MonthlySummaryParams,
+): Promise<MonthlySummaryRow[] | null> {
+  const { section } = params;
+  const db = await getDb(section);
+  if (!db) return null;
+
+  // ตรวจว่า cache มีข้อมูลไหม
+  const checkRows = await db.execute(sql.raw(
+    `SELECT COUNT(*) AS cnt FROM monthly_summary_cache WHERE section = '${section}'`
+  ));
+  const cnt = parseInt(String((pgRows(checkRows)[0] as any)?.cnt ?? "0"), 10);
+  if (cnt === 0) return null; // cache ว่าง → fallback
+
+  // Helper: แปลง filter param เป็น SQL condition สำหรับ date_month
+  function dateMonthCond(months: string[] | undefined, singleDate: string | undefined): string {
+    if (singleDate) {
+      // exact date → ดึง YYYY-MM แล้วเทียบ
+      const m = singleDate.substring(0, 7);
+      return `date_month = '${m}'`;
+    }
+    if (months && months.length > 0) {
+      const list = months.map((m) => `'${m}'`).join(",");
+      return `date_month IN (${list})`;
+    }
+    return `date_month IS NULL`;
+  }
+
+  function productTypeCond(pt: string | undefined): string {
+    if (pt) return `product_type = '${pt.replace(/'/g, "''")}'`;
+    return `product_type IS NULL`;
+  }
+
+  function deviceFamilyCond(df: string | undefined): string {
+    if (df) return `device_family = '${df}'`;
+    return `device_family IS NULL`;
+  }
+
+  // ดึงแต่ละ query_type พร้อมกัน
+  const [countRows, targetRows, paidRows, dueRows, notYetDueRows, installTotalRows] = await Promise.all([
+    // count: ไม่มี dateMonth filter
+    db.execute(sql.raw(`
+      SELECT approve_month, bucket, contract_count
+      FROM monthly_summary_cache
+      WHERE section = '${section}' AND query_type = 'count'
+        AND ${productTypeCond(params.countProductType)}
+        AND ${deviceFamilyCond(params.countDeviceFamily)}
+        AND date_month IS NULL
+      ORDER BY approve_month DESC
+    `)),
+    // target: dueMonth filter
+    db.execute(sql.raw(`
+      SELECT approve_month, bucket, contract_count,
+             principal AS principal_target, interest AS interest_target,
+             fee AS fee_target, penalty AS penalty_target,
+             unlock_fee AS unlock_fee_target, total_amount AS total_target
+      FROM monthly_summary_cache
+      WHERE section = '${section}' AND query_type = 'target'
+        AND ${productTypeCond(params.targetProductType)}
+        AND ${deviceFamilyCond(params.targetDeviceFamily)}
+        AND ${dateMonthCond(params.targetDueMonths, params.targetDueDate)}
+      ORDER BY approve_month DESC
+    `)),
+    // paid: paidAtMonth filter
+    db.execute(sql.raw(`
+      SELECT approve_month, bucket, contract_count,
+             principal AS principal_paid, interest AS interest_paid,
+             fee AS fee_paid, penalty AS penalty_paid,
+             unlock_fee AS unlock_fee_paid, discount AS discount_amount,
+             overpaid AS overpaid_amount, bad_debt AS device_sale_amount,
+             bad_debt_installment AS installment_paid, total_amount AS total_paid
+      FROM monthly_summary_cache
+      WHERE section = '${section}' AND query_type = 'paid'
+        AND ${productTypeCond(params.paidProductType)}
+        AND ${deviceFamilyCond(params.paidDeviceFamily)}
+        AND ${dateMonthCond(params.paidAtMonths, params.paidAtDate)}
+      ORDER BY approve_month DESC
+    `)),
+    // due: dueAtMonth filter
+    db.execute(sql.raw(`
+      SELECT approve_month, bucket, contract_count,
+             principal AS principal_due, interest AS interest_due,
+             fee AS fee_due, penalty AS penalty_due,
+             unlock_fee AS unlock_fee_due, total_amount AS total_due
+      FROM monthly_summary_cache
+      WHERE section = '${section}' AND query_type = 'due'
+        AND ${productTypeCond(params.dueProductType)}
+        AND ${deviceFamilyCond(params.dueDeviceFamily)}
+        AND ${dateMonthCond(params.dueAtMonths, params.dueAtDate)}
+      ORDER BY approve_month DESC
+    `)),
+    // notYetDue: dueMonth filter
+    db.execute(sql.raw(`
+      SELECT approve_month, bucket, contract_count,
+             principal AS principal_notyet, interest AS interest_notyet,
+             fee AS fee_notyet, penalty AS penalty_notyet,
+             unlock_fee AS unlock_fee_notyet, total_amount AS total_notyet
+      FROM monthly_summary_cache
+      WHERE section = '${section}' AND query_type = 'notYetDue'
+        AND ${productTypeCond(params.notYetDueProductType)}
+        AND ${deviceFamilyCond(params.notYetDueDeviceFamily)}
+        AND ${dateMonthCond(params.notYetDueDueMonths, params.notYetDueDueDate)}
+      ORDER BY approve_month DESC
+    `)),
+    // installTotal: ไม่มี dateMonth filter
+    db.execute(sql.raw(`
+      SELECT approve_month, bucket, contract_count,
+             principal AS principal_install, interest AS interest_install,
+             fee AS fee_install, total_amount AS total_install
+      FROM monthly_summary_cache
+      WHERE section = '${section}' AND query_type = 'installTotal'
+        AND ${productTypeCond(params.installTotalProductType)}
+        AND ${deviceFamilyCond(params.installTotalDeviceFamily)}
+        AND date_month IS NULL
+      ORDER BY approve_month DESC
+    `)),
+  ]);
+
+  // Re-use assembly logic เหมือน getMonthlySummary เดิม
+  return assembleMonthlySummaryRows(
+    pgRows(countRows) as any[],
+    pgRows(targetRows) as any[],
+    pgRows(paidRows) as any[],
+    pgRows(dueRows) as any[],
+    pgRows(notYetDueRows) as any[],
+    pgRows(installTotalRows) as any[],
+  );
+}
+
+// ---------------------------------------------------------------------------
+// assembleMonthlySummaryRows — shared assembly logic
+// ---------------------------------------------------------------------------
+function assembleMonthlySummaryRows(
+  countRows: any[],
+  targetRows: any[],
+  paidRows: any[],
+  dueRows: any[],
+  notYetDueRows: any[],
+  installTotalRows: any[],
+): MonthlySummaryRow[] {
   const monthSet = new Set<string>();
   for (const r of countRows)     monthSet.add(r.approve_month);
   for (const r of targetRows)    monthSet.add(r.approve_month);
@@ -803,7 +1245,6 @@ export async function getMonthlySummary(
 
   const months = Array.from(monthSet).sort((a, b) => b.localeCompare(a));
 
-  // Build lookup maps
   type CellKey = string;
   const countMap = new Map<CellKey, number>();
   for (const r of countRows) {
@@ -813,39 +1254,23 @@ export async function getMonthlySummary(
   const targetMap = new Map<CellKey, MoneyBreakdown>();
   for (const r of targetRows) {
     targetMap.set(`${r.approve_month}|${r.bucket}`, {
-      principal:          n(r.principal_target),
-      interest:           n(r.interest_target),
-      fee:                n(r.fee_target),
-      penalty:            n(r.penalty_target),
-      unlockFee:          n(r.unlock_fee_target),
-      discount:           0,
-      overpaid:           0,
-      badDebt:            0,
-      badDebtInstallment: 0,
-      total:              n(r.total_target),
+      principal: n(r.principal_target), interest: n(r.interest_target),
+      fee: n(r.fee_target), penalty: n(r.penalty_target), unlockFee: n(r.unlock_fee_target),
+      discount: 0, overpaid: 0, badDebt: 0, badDebtInstallment: 0, total: n(r.total_target),
     });
   }
 
-  // Phase 141+ fix3: queryPaid มี bucket แล้ว (GROUP BY 1, 2)
-  // - ใช้ key ${month}|${bucket} สำหรับ per-bucket paid cell ในตาราง
-  // - สะสม __paid__ key เพื่อใช้เป็น totalPaid ของ badge (ยังคงถูกต้อง)
   const paidMap = new Map<CellKey, MoneyBreakdown>();
-  const paidTotalMap = new Map<string, MoneyBreakdown>(); // key = approve_month
+  const paidTotalMap = new Map<string, MoneyBreakdown>();
   for (const r of paidRows) {
     const cell: MoneyBreakdown = {
-      principal:          n(r.principal_paid),
-      interest:           n(r.interest_paid),
-      fee:                n(r.fee_paid),
-      penalty:            n(r.penalty_paid),
-      unlockFee:          n(r.unlock_fee_paid),
-      discount:           n(r.discount_amount),
-      overpaid:           n(r.overpaid_amount),
-      badDebt:            n(r.device_sale_amount),
-      badDebtInstallment: n(r.installment_paid),
-      total:              n(r.total_paid),
+      principal: n(r.principal_paid), interest: n(r.interest_paid),
+      fee: n(r.fee_paid), penalty: n(r.penalty_paid), unlockFee: n(r.unlock_fee_paid),
+      discount: n(r.discount_amount), overpaid: n(r.overpaid_amount),
+      badDebt: n(r.device_sale_amount), badDebtInstallment: n(r.installment_paid),
+      total: n(r.total_paid),
     };
     paidMap.set(`${r.approve_month}|${r.bucket}`, cell);
-    // สะสมยอดรวมทุก bucket เพื่อใช้เป็น totalPaid (badge)
     const acc = paidTotalMap.get(r.approve_month) ?? emptyMoney();
     for (const k of Object.keys(acc) as (keyof MoneyBreakdown)[]) {
       (acc as any)[k] += (cell as any)[k];
@@ -856,52 +1281,30 @@ export async function getMonthlySummary(
   const dueMap = new Map<CellKey, MoneyBreakdown>();
   for (const r of dueRows) {
     dueMap.set(`${r.approve_month}|${r.bucket}`, {
-      principal:          n(r.principal_due),
-      interest:           n(r.interest_due),
-      fee:                n(r.fee_due),
-      penalty:            n(r.penalty_due),
-      unlockFee:          n(r.unlock_fee_due),
-      discount:           0,
-      overpaid:           0,
-      badDebt:            0,
-      badDebtInstallment: 0,
-      total:              n(r.total_due),
+      principal: n(r.principal_due), interest: n(r.interest_due),
+      fee: n(r.fee_due), penalty: n(r.penalty_due), unlockFee: n(r.unlock_fee_due),
+      discount: 0, overpaid: 0, badDebt: 0, badDebtInstallment: 0, total: n(r.total_due),
     });
   }
 
   const notYetDueMap = new Map<CellKey, MoneyBreakdown>();
   for (const r of notYetDueRows) {
     notYetDueMap.set(`${r.approve_month}|${r.bucket}`, {
-      principal:          n(r.principal_notyet),
-      interest:           n(r.interest_notyet),
-      fee:                n(r.fee_notyet),
-      penalty:            n(r.penalty_notyet),
-      unlockFee:          n(r.unlock_fee_notyet),
-      discount:           0,
-      overpaid:           0,
-      badDebt:            0,
-      badDebtInstallment: 0,
-      total:              n(r.total_notyet),
+      principal: n(r.principal_notyet), interest: n(r.interest_notyet),
+      fee: n(r.fee_notyet), penalty: n(r.penalty_notyet), unlockFee: n(r.unlock_fee_notyet),
+      discount: 0, overpaid: 0, badDebt: 0, badDebtInstallment: 0, total: n(r.total_notyet),
     });
   }
 
   const installTotalMap = new Map<CellKey, MoneyBreakdown>();
   for (const r of installTotalRows) {
     installTotalMap.set(`${r.approve_month}|${r.bucket}`, {
-      principal:          n(r.principal_install),
-      interest:           n(r.interest_install),
-      fee:                n(r.fee_install),
-      penalty:            0,
-      unlockFee:          0,
-      discount:           0,
-      overpaid:           0,
-      badDebt:            0,
-      badDebtInstallment: 0,
-      total:              n(r.total_install),
+      principal: n(r.principal_install), interest: n(r.interest_install),
+      fee: n(r.fee_install), penalty: 0, unlockFee: 0,
+      discount: 0, overpaid: 0, badDebt: 0, badDebtInstallment: 0, total: n(r.total_install),
     });
   }
 
-  // Assemble MonthlySummaryRow[]
   return months.map((month) => {
     const buckets: Record<string, MonthlySummaryCell> = {};
     let totalCount = 0;
@@ -911,8 +1314,6 @@ export async function getMonthlySummary(
     const totalNotYetDue    = emptyMoney();
     const totalInstallTotal = emptyMoney();
 
-    // Phase 141+ fix3: totalPaid สะสมจาก paidTotalMap (ยอดรวมทุก bucket)
-    // per-bucket paid cell ดึงจาก paidMap ตาม bucket key
     const totalPaidDirect = paidTotalMap.get(month) ?? emptyMoney();
     for (const k of Object.keys(totalPaid) as (keyof MoneyBreakdown)[]) {
       (totalPaid as any)[k] = (totalPaidDirect as any)[k];
@@ -920,13 +1321,12 @@ export async function getMonthlySummary(
 
     for (const bucket of DEBT_BUCKETS) {
       const key = `${month}|${bucket}`;
-      const contractCount = countMap.get(key)      ?? 0;
-      // per-bucket paid cell ดึงจาก paidMap (ถ้าไม่มี → emptyMoney())
+      const contractCount = countMap.get(key) ?? 0;
       const paid          = paidMap.get(key) ?? emptyMoney();
-      const due           = dueMap.get(key)         ?? emptyMoney();
-      const target        = targetMap.get(key)      ?? emptyMoney();
-      const notYetDue     = notYetDueMap.get(key)    ?? emptyMoney();
-      const installTotal  = installTotalMap.get(key)  ?? emptyMoney();
+      const due           = dueMap.get(key) ?? emptyMoney();
+      const target        = targetMap.get(key) ?? emptyMoney();
+      const notYetDue     = notYetDueMap.get(key) ?? emptyMoney();
+      const installTotal  = installTotalMap.get(key) ?? emptyMoney();
 
       buckets[bucket] = { contractCount, paid, due, target, notYetDue, installTotal };
       totalCount += contractCount;

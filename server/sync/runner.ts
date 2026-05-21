@@ -54,6 +54,7 @@ import { fillPeriodNosForSection } from "./fillPeriodNos";
 import { populateDebtCache } from "./populateCache";
 import { pgRows } from "../db";
 import { rebuildIncomeMonthlySummary, populateIncomeType } from "../accountingDb";
+import { populateMonthlySummaryCache } from "../monthlySummaryDb";
 
 /* ─────────────────────────────────────────────────────────────────────────── */
 /* Constants & types                                                           */
@@ -424,6 +425,14 @@ async function doSync(
       console.log(`[sync] ${section}: income_type populated — ${incomeTypeRows} rows updated`);
     } catch (incomeTypeErr: any) {
       console.warn(`[sync] ${section}: populateIncomeType failed (non-fatal):`, incomeTypeErr?.message ?? incomeTypeErr);
+    }
+
+    // ── Populate monthly_summary_cache ──────────────────────────────────────
+    try {
+      const msCacheRows = await populateMonthlySummaryCache(section);
+      console.log(`[sync] ${section}: monthly_summary_cache populated — ${msCacheRows} rows`);
+    } catch (msCacheErr: any) {
+      console.warn(`[sync] ${section}: populateMonthlySummaryCache failed (non-fatal):`, msCacheErr?.message ?? msCacheErr);
     }
 
     // ── Finish sync log ───────────────────────────────────────────────────

@@ -506,3 +506,47 @@ export const incomeMonthlySummary = pgTable(
   }),
 );
 export type IncomeMonthlySummary = typeof incomeMonthlySummary.$inferSelect;
+
+// ─── Monthly Summary Cache (pre-aggregated per query_type + filter combo) ─────
+export const monthlySummaryCache = pgTable(
+  "monthly_summary_cache",
+  {
+    id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+    section: varchar("section", { length: 32 }).notNull(),
+    queryType: varchar("query_type", { length: 32 }).notNull(), // count | target | paid | due | notYetDue | installTotal
+    approveMonth: varchar("approve_month", { length: 7 }).notNull(), // YYYY-MM
+    bucket: varchar("bucket", { length: 32 }).notNull(),
+    // Filter dimensions (NULL = ทั้งหมด ไม่ได้ filter)
+    productType: varchar("product_type", { length: 64 }),
+    deviceFamily: varchar("device_family", { length: 16 }), // iOS | Android | NULL
+    dateMonth: varchar("date_month", { length: 7 }), // YYYY-MM ของ due_month หรือ paid_at_month (NULL = ทั้งหมด)
+    // Aggregated values
+    contractCount: integer("contract_count").notNull().default(0),
+    principal: decimal("principal", { precision: 18, scale: 2 }).notNull().default("0"),
+    interest: decimal("interest", { precision: 18, scale: 2 }).notNull().default("0"),
+    fee: decimal("fee", { precision: 18, scale: 2 }).notNull().default("0"),
+    penalty: decimal("penalty", { precision: 18, scale: 2 }).notNull().default("0"),
+    unlockFee: decimal("unlock_fee", { precision: 18, scale: 2 }).notNull().default("0"),
+    discount: decimal("discount", { precision: 18, scale: 2 }).notNull().default("0"),
+    overpaid: decimal("overpaid", { precision: 18, scale: 2 }).notNull().default("0"),
+    badDebt: decimal("bad_debt", { precision: 18, scale: 2 }).notNull().default("0"),
+    badDebtInstallment: decimal("bad_debt_installment", { precision: 18, scale: 2 }).notNull().default("0"),
+    totalAmount: decimal("total_amount", { precision: 18, scale: 2 }).notNull().default("0"),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => ({
+    // Unique key: section + queryType + approveMonth + bucket + all filter dims
+    mscUniqueIdx: uniqueIndex("msc_unique_idx").on(
+      t.section,
+      t.queryType,
+      t.approveMonth,
+      t.bucket,
+      t.productType,
+      t.deviceFamily,
+      t.dateMonth,
+    ),
+    mscSectionQueryIdx: index("msc_section_query_idx").on(t.section, t.queryType),
+    mscSectionMonthIdx: index("msc_section_month_idx").on(t.section, t.approveMonth),
+  }),
+);
+export type MonthlySummaryCache = typeof monthlySummaryCache.$inferSelect;
