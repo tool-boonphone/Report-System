@@ -225,6 +225,7 @@ export default function Expense() {
     // ถ้า toggle ปิด badge ใด ก็ไม่นับยอดนั้น
     if (!summaryData) return 0;
     let t = 0;
+    if (badgeVisible.financeAmount) t += summaryData.financeAmount;
     if (badgeVisible.commAmount) t += summaryData.commAmount;
     if (badgeVisible.incentive) t += summaryData.incentive;
     return t;
