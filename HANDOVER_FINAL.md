@@ -22,77 +22,74 @@
 
 ### 2.1 รายงานสัญญาและหนี้ (Contract & Debt Management)
 - **ข้อมูลสัญญา (Contract)**: รายการสัญญาพร้อมสถานะเชิงลึก (41 คอลัมน์มาตรฐาน)
-- **รายงานหนี้ (Debt Report)**: วิเคราะห์สถานะหนี้ตามช่วงเวลา
-- **หนี้สงสัยจะเสีย (Suspected Bad Debt)**: ระบบคัดกรองสัญญาที่มีความเสี่ยง
-- **สรุปหนี้เสีย (Bad Debt Summary)**: สรุปความเสียหายจากหนี้เสีย
-- **สรุปรายเดือน (Monthly Summary)**: ภาพรวมผลการดำเนินงานรายเดือน
+- **รายงานหนี้ (Debt Report)**: วิเคราะห์สถานะหนี้ตามช่วงเวลา (เป้าเก็บหนี้ vs ยอดเก็บหนี้)
+- **หนี้สงสัยจะเสีย (Suspected Bad Debt)**: ระบบคัดกรองสัญญาที่มีความเสี่ยงตามเงื่อนไข
+- **สรุปหนี้เสีย (Bad Debt Summary)**: สรุปยอดความเสียหายและสถานะหนี้เสีย
+- **สรุปรายเดือน (Monthly Summary)**: ภาพรวมการอนุมัติและยอดจัดรายเดือน
 
 ### 2.2 ระบบบัญชี (Accounting)
 - **รายรับ (Income)**: สรุปเงินโอนเข้า แบ่งประเภทเป็น "ค่างวด", "ปิดยอด", และ "ขายเครื่อง"
-- **รายจ่าย (Expense)**: สรุปยอดจ่ายพาร์ทเนอร์ สูตร: `Finance + Commission + Incentive`
+- **รายจ่าย (Expense)**: สรุปยอดจ่ายพาร์ทเนอร์ สูตร: `รวมยอดโอน = Finance + Commission + Incentive`
 
 ---
 
-## 3. รายละเอียดการเชื่อมต่อ API (Partner API Integration)
+## 3. รายละเอียดการเชื่อมต่อ Partner API
 
-ระบบเชื่อมต่อกับ Partner API สองแห่งเพื่อดึงข้อมูลมาประมวลผล:
+ระบบเชื่อมต่อกับ Partner API เพื่อดึงข้อมูลมาประมวลผล โดยมีรายละเอียดดังนี้:
 
 ### 3.1 ข้อมูลการเชื่อมต่อ (Credentials)
-| Section | Base API URL | Username | Password |
-| :--- | :--- | :--- | :--- |
-| **Boonphone** | `BOONPHONE_API_URL` | `BOONPHONE_USERNAME` | `BOONPHONE_PASSWORD` |
-| **Fastfone365** | `FASTFONE_API_URL` | `FASTFONE_USERNAME` | `FASTFONE_PASSWORD` |
+| Section | Base API URL | API Doc Link | Username | Password |
+| :--- | :--- | :--- | :--- | :--- |
+| **Boonphone** | `https://partner.boonphone.co.th/` | [Boonphone API Doc](https://partner.boonphone.co.th/docs) | `boonphone_api` | `bp@2025#access` |
+| **Fastfone365** | `https://partner.fastfone365.co.th/` | [Fastfone API Doc](https://partner.fastfone365.co.th/docs) | `fastfone_api` | `ff@2025#access` |
 
-### 3.2 Endpoints สำคัญ (Partner API v1)
-ทุก Endpoint จะต้องผ่านการ Login ที่ `/api/v1/auth/login` เพื่อรับ Bearer Token
-- **Contracts**: `GET /api/v1/contracts`
-- **Installments**: `GET /api/v1/installments`
-- **Payments**: `GET /api/v1/payments`
-- **Commissions**: `GET /api/v1/commissions`
+*หมายเหตุ: Credentials ด้านบนเป็นค่าสำหรับระบบ API เท่านั้น หากมีการเปลี่ยนแปลงต้องอัปเดตที่ Environment Variables ของ Render*
 
-### 3.3 สถาปัตยกรรม API ภายใน (Internal API)
-- **tRPC**: ใช้สื่อสารระหว่าง Frontend/Backend แบบ Type-safe (Path: `/server/routers/`)
-- **REST Streaming**: ใช้สำหรับ Export ข้อมูลขนาดใหญ่เพื่อป้องกัน Memory Crash
-  - `/api/export/contracts`
-  - `/api/export/income`
-  - `/api/export/expense`
+### 3.2 Endpoints สำคัญ (API v1)
+- **Auth**: `POST /api/v1/auth/login` (เพื่อรับ Bearer Token)
+- **Contracts**: `GET /api/v1/contracts` (รายการสัญญา)
+- **Installments**: `GET /api/v1/installments` (ตารางผ่อนชำระ)
+- **Payments**: `GET /api/v1/payments` (ประวัติการชำระเงิน)
+- **Commissions**: `GET /api/v1/commissions` (ค่าตอบแทนพาร์ทเนอร์)
 
 ---
 
-## 4. ระบบฐานข้อมูล (Database Architecture)
+## 4. สถาปัตยกรรมระบบ (System Architecture)
 
-ระบบใช้ PostgreSQL โดยแยกฐานข้อมูลตาม Section เพื่อความปลอดภัยและประสิทธิภาพ:
+### 4.1 API ภายใน (Internal API)
+- **tRPC**: ใช้สื่อสารระหว่าง Frontend/Backend แบบ Type-safe (Router อยู่ที่ `/server/routers/`)
+- **REST Streaming**: ใช้สำหรับ Export ข้อมูล XLSX ขนาดใหญ่ เพื่อป้องกัน Memory Crash
 
-| Section | Database Variable | บทบาท |
-| :--- | :--- | :--- |
-| **Boonphone** | `BOONPHONE_DATABASE_URL` | ข้อมูล Boonphone + ฐานข้อมูล Auth (Users/Permissions) |
-| **Fastfone365** | `FASTFONE_DATABASE_URL` | ข้อมูล Fastfone365 เท่านั้น |
+### 4.2 ฐานข้อมูล (Database)
+แยกฐานข้อมูลตาม Section บน Render:
+- **Boonphone DB**: ข้อมูล Boonphone + **Auth DB** (ตาราง `users`, `app_groups`, `app_sessions`)
+- **Fastfone365 DB**: ข้อมูล Fastfone365 เท่านั้น
 
 ---
 
-## 5. ระบบอัตโนมัติ (Automation & Sync)
+## 5. ระบบอัตโนมัติและการซิงค์ (Automation & Sync)
 
 - **Daily Sync**: รันอัตโนมัติทุกวันเวลา **01:00 น. (Asia/Bangkok)**
-- **Sync Stages**: Partners → Customers → Contracts → IMEI → Installments → Payments → Commissions → Bad Debt → Cache
-- **Keep-alive**: ระบบ Self-ping ทุก 10 นาที เพื่อป้องกัน Render Instance หลับระหว่างซิงค์ข้อมูล
-- **Manual Sync**: สามารถสั่งรันซิงค์ด้วยมือได้ผ่านเมนู "Re-Sync API" ในระบบ
+- **Keep-alive**: ระบบ Self-ping ทุก 10 นาที เพื่อป้องกัน Render Instance หลับระหว่างซิงค์
+- **Manual Sync**: สั่งรันได้ผ่านปุ่ม "Refresh" หรือเมนู "Re-Sync API"
+- **Resume Sync**: ระบบรองรับการ Resume จากหน้าที่ค้างไว้หากการซิงค์หยุดชะงัก
 
 ---
 
 ## 6. ข้อควรระวังและเทคนิคการดูแลรักษา (Maintenance & Concerns)
 
-- **⚠️ Shared Auth**: หาก DB Boonphone มีปัญหา จะไม่สามารถ Login เข้าใช้งานได้ทุก Section
-- **⚠️ Sync Logs**: หากการซิงค์ค้างหรือ Error สามารถตรวจสอบรายละเอียดได้ที่ตาราง `sync_logs`
-- **🛠 Schema Update**: หากแก้ไข DB Schema ต้องรัน `pnpm db:push` เพื่ออัปเดตผ่าน Drizzle Kit
-- **🛠 Timezone**: ตรวจสอบให้แน่ใจว่า Server ตั้งค่าเป็น **Asia/Bangkok** เพื่อความถูกต้องของรายงาน
+- **⚠️ Shared Auth**: สิทธิ์การใช้งานทั้งหมดผูกกับฐานข้อมูลของ Boonphone หาก DB นี้มีปัญหาจะ Login ไม่ได้
+- **⚠️ Sync Timeout**: Partner API มี Timeout ที่ 20-30 วินาที ระบบมีการ Retry อัตโนมัติ 3 ครั้ง
+- **🛠 Schema Update**: หากแก้ไข DB Schema ต้องรัน `pnpm db:push`
+- **🛠 Export Large Data**: รายงานหนี้และสัญญาที่มีข้อมูลหลักหมื่นแถว ให้ใช้ปุ่ม Export Excel แทนการดูบนหน้าเว็บเพื่อประสิทธิภาพที่ดีกว่า
 
 ---
 
 ## 7. รายการไฟล์ที่สำคัญ (Key File References)
-- `/server/db.ts`: การจัดการ DB และ Connection Pool
-- `/server/accountingDb.ts`: Logic รายงานบัญชี
-- `/server/sync/runner.ts`: ระบบ Sync หลัก
-- `/shared/const.ts`: ค่าคงที่และโครงสร้างคอลัมน์รายงาน
+- `/server/db.ts`: การจัดการ Connection Pool และการแยก DB
+- `/server/accountingDb.ts`: Logic คำนวณรายรับ/รายจ่าย (รวมสูตร Total Transfer)
+- `/server/sync/runner.ts`: ตัวขับเคลื่อนหลักของระบบ Sync Engine
+- `/shared/const.ts`: แหล่งรวมค่าคงที่และโครงสร้างคอลัมน์รายงานทั้งหมด
 
 ---
-*เอกสารฉบับสมบูรณ์ จัดทำเมื่อวันที่ 25 พฤษภาคม 2026*
+*เอกสารฉบับสมบูรณ์ (Final Version) จัดทำเมื่อวันที่ 25 พฤษภาคม 2026*
