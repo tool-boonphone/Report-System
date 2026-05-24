@@ -1066,7 +1066,7 @@ export async function getCommissionSummary(
       SUM(COALESCE(finance_amount, 0)) AS fin,
       SUM(COALESCE(comm_amount, 0)) AS comm,
       SUM(COALESCE(incentive, 0)) AS inc,
-      SUM(COALESCE(total_transfer, 0)) AS tot
+      SUM(COALESCE(finance_amount, 0) + COALESCE(comm_amount, 0) + COALESCE(incentive, 0)) AS tot
     FROM commissions
     WHERE ${whereStr}
   `));
@@ -1113,7 +1113,7 @@ export async function getCommissionSummaryByPeriod(
       SUM(COALESCE(finance_amount, 0)) AS fin,
       SUM(COALESCE(comm_amount, 0)) AS comm,
       SUM(COALESCE(incentive, 0)) AS inc,
-      SUM(COALESCE(total_transfer, 0)) AS tot
+      SUM(COALESCE(finance_amount, 0) + COALESCE(comm_amount, 0) + COALESCE(incentive, 0)) AS tot
     FROM commissions
     WHERE ${whereStr}
     GROUP BY ${periodExpr}
