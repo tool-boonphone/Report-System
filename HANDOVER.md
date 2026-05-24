@@ -4,20 +4,27 @@
 
 ---
 
-## 1. ภาพรวมระบบ (System Overview)
-ระบบนี้ทำหน้าที่รวบรวมข้อมูลจาก Partner API (Boonphone และ Fastfone365) มาประมวลผลและแสดงผลในรูปแบบรายงานทางบัญชี (รายรับ/รายจ่าย) และรายงานสถานะสัญญาต่างๆ โดยมีการแยกข้อมูลตาม **Section** อย่างชัดเจน
+## 1. ข้อมูลบัญชีและการเข้าถึง (Accounts & Access)
 
-### เทคโนโลยีที่ใช้ (Tech Stack)
-- **Frontend**: React, TypeScript, Vite, TailwindCSS, Lucide React, Shadcn UI
-- **Backend**: Node.js, TypeScript, Express, tRPC
-- **Database**: PostgreSQL (Managed on Render), Drizzle ORM
-- **Automation**: In-process Scheduler (node-cron)
+- **GitHub / Render Account**: `tool.boonphone@gmail.com`
+- **Password Reference**: `@Boonphone2025`
+- **Repository**: [https://github.com/tool-boonphone/Report-System](https://github.com/tool-boonphone/Report-System)
+- **Deployment Platform**: Render (Web Service + PostgreSQL)
 
 ---
 
-## 2. ข้อมูลการเชื่อมต่อ (Connectivity & Credentials)
+## 2. ภาพรวมระบบ (System Overview)
+ระบบนี้ทำหน้าที่รวบรวมข้อมูลจาก Partner API (Boonphone และ Fastfone365) มาประมวลผลและแสดงผลในรูปแบบรายงานทางบัญชี (รายรับ/รายจ่าย) และรายงานสถานะสัญญาต่างๆ โดยมีการแยกข้อมูลตาม **Section** อย่างชัดเจน
 
-ระบบใช้ Environment Variables ในการจัดการการเชื่อมต่อทั้งหมด โดยแบ่งตาม Section ดังนี้:
+### เทคโนโลยีที่ใช้ (Tech Stack)
+- **Frontend**: React, TypeScript, Vite, TailwindCSS, Shadcn UI
+- **Backend**: Node.js, TypeScript, Express, tRPC (Type-safe API)
+- **Database**: PostgreSQL (Managed on Render), Drizzle ORM
+- **Automation**: In-process Scheduler (node-cron) รันภายในตัวแอป
+
+---
+
+## 3. ข้อมูลการเชื่อมต่อ (Connectivity & Credentials)
 
 ### ฐานข้อมูล (Database Connections)
 | Section | Environment Variable | หมายเหตุ |
@@ -39,34 +46,35 @@
 
 ---
 
-## 3. สถาปัตยกรรมและการทำงานที่สำคัญ (Core Architecture)
+## 4. สถาปัตยกรรมและการทำงานที่สำคัญ (Core Architecture)
 
 ### ระบบการซิงค์ข้อมูล (Sync Engine)
 - **Scheduler**: ทำงานอัตโนมัติทุกวันเวลา **01:00 น. (Asia/Bangkok)**
-- **Pipeline**: เริ่มจากดึง Partners → Customers → Contracts → IMEI → Installments → Payments → Commissions → Bad Debt → Rebuild Cache
-- **Resilience**: มีระบบ Lock ป้องกันการรันซ้ำซ้อน และระบบ Keep-alive (Self-ping) เพื่อป้องกัน Instance หลับระหว่างประมวลผล
+- **Sync Stages**: Partners → Customers → Contracts → IMEI → Installments → Payments → Commissions → Bad Debt → Cache
+- **Keep-alive**: มีระบบ Self-ping ทุก 10 นาที เพื่อป้องกัน Render Instance หลับ (Spin down) ระหว่างที่กำลังซิงค์ข้อมูลขนาดใหญ่
 
 ### การคำนวณที่สำคัญ (Key Logic)
 - **Total Transfer (รวมยอดโอน)**: ในหน้า Expense (รายจ่าย) คำนวณจาก `Finance Amount + Commission + Incentive`
-- **Income Classification**: มีการแบ่งประเภทรายรับเป็น "ค่างวด", "ปิดยอด", และ "ขายเครื่อง" (สำหรับหนี้เสีย) โดยใช้ Logic 2 ระดับ (Paid Date และ Created Date)
+- **Income Classification**: แบ่งประเภทรายรับเป็น "ค่างวด", "ปิดยอด", และ "ขายเครื่อง" (สำหรับหนี้เสีย) โดยใช้ Logic 2 ระดับ (Paid Date และ Created Date)
 - **Cache System**: ใช้ตาราง `income_monthly_summary` เพื่อเพิ่มความเร็วในการโหลดรายงานสรุปรายเดือน/รายปี
 
 ---
 
-## 4. สิ่งที่ควรระวัง (Concerns & Critical Notes)
+## 5. สิ่งที่ควรระวังและคำแนะนำ (Critical Notes & Advice)
 
-> **[ข้อควรระวัง] การจัดการฐานข้อมูล**
-> - ปัจจุบันระบบแยกฐานข้อมูลระหว่าง Boonphone และ Fastfone365 อย่างเด็ดขาด แต่ **Auth DB (ผู้ใช้งาน/สิทธิ์)** จะถูกเก็บไว้ที่ฐานข้อมูลของ **Boonphone** เท่านั้น ดังนั้นหากฐานข้อมูล Boonphone มีปัญหา จะส่งผลต่อการ Login ทั้งระบบ
+### ⚠️ จุดเปราะบาง (Critical Concerns)
+- **Shared Auth DB**: ข้อมูลผู้ใช้งานและสิทธิ์ทั้งหมดถูกเก็บไว้ที่ DB ของ **Boonphone** เท่านั้น หาก DB นี้ล่ม จะไม่สามารถ Login เข้าใช้งาน Section อื่นได้
+- **Sync Timeout**: การซิงค์ข้อมูลปริมาณมากอาจใช้เวลานาน (เกิน 1 ชม.) หากเกิด Error กลางคัน ระบบมีกลไก `clearAllStuckSyncLogs` ตอน Startup เพื่อล้างสถานะที่ค้างอยู่
+- **Database Migration**: หากมีการเปลี่ยน Database URL บน Render ต้องอัปเดตทั้งใน Env และตรวจสอบว่า Firewall/Access Control ยอมรับการเชื่อมต่อจากภายนอก (ถ้ามี)
 
-> **[ข้อควรระวัง] ประสิทธิภาพการ Query**
-> - ข้อมูลในตาราง `payment_transactions` มีปริมาณมาก การ Query แบบ Live SQL อาจทำให้เกิด Timeout ได้ จึงควรใช้ระบบ **Fast Path** (ดึงจากคอลัมน์ `income_type` ที่ถูก Populate ไว้แล้ว) หรือดึงจาก **Monthly Cache** เสมอ
-
-> **[ข้อควรระวัง] สภาพแวดล้อม (Timezone)**
-> - ระบบยึดเวลา **Asia/Bangkok (UTC+7)** เป็นหลักในการทำงานของ Scheduler และการสรุปยอดรายงาน หากย้าย Server ต้องตรวจสอบการตั้งค่า Timezone ให้ถูกต้อง
+### 🛠 การ Debug และบำรุงรักษา
+- **Manual Sync**: สามารถสั่งรันซิงค์ด้วยมือได้ผ่านหน้า UI (เมนู Re-Sync API) หากต้องการอัปเดตข้อมูลทันที
+- **Logs**: ตรวจสอบ Log การซิงค์ได้จากตาราง `sync_logs` ในฐานข้อมูล เพื่อดูว่า Stage ไหนที่เกิด Error
+- **Database Schema**: หากมีการแก้ไขโครงสร้าง DB ต้องรัน `pnpm db:push` เพื่ออัปเดต Schema ผ่าน Drizzle Kit
 
 ---
 
-## 5. รายการไฟล์สำคัญ (Key File References)
+## 6. รายการไฟล์สำคัญ (Key File References)
 - `/server/db.ts`: การจัดการ Connection Pool และการแยก DB ตาม Section
 - `/server/accountingDb.ts`: Backend logic สำหรับรายงานรายรับ/รายจ่าย
 - `/server/sync/runner.ts`: ตัวขับเคลื่อนหลักของระบบ Sync
