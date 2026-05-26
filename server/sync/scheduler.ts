@@ -24,7 +24,7 @@ function isSectionConfigured(section: SectionKey): boolean {
   return Boolean(client && client.isConfigured());
 }
 
-const SYNC_HOUR = 1; // 01:00 daily (Asia/Bangkok)
+const SYNC_HOUR = -1; // TEMPORARILY DISABLED (was 1 = 01:00 daily Asia/Bangkok)
 const BANGKOK_TZ = "Asia/Bangkok";
 
 let _timer: NodeJS.Timeout | null = null;
