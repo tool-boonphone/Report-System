@@ -4388,6 +4388,8 @@ export async function listWatchGroup(params: {
     installmentCount: number | null;
     installmentAmount: number | null;
     totalInstallmentValue: number;  // installmentAmount × installmentCount
+    installmentTotal: number;        // alias ของ totalInstallmentValue (ใช้ใน client)
+    cost: number;                    // financeAmount + commissionNet + incentive
     daysOverdue: number;            // วันที่เกินกำหนด (นับจากงวดแรกที่ยังไม่ชำระ)
     arrearsCount: number;           // จำนวนงวดค้าง (0 หรือ 1)
   }>;
@@ -4523,6 +4525,8 @@ export async function listWatchGroup(params: {
     installmentCount: number | null;
     installmentAmount: number | null;
     totalInstallmentValue: number;
+    installmentTotal: number;        // alias ของ totalInstallmentValue
+    cost: number;                    // financeAmount + commissionNet + incentive
     daysOverdue: number;
     arrearsCount: number;
   }> = [];
@@ -4599,6 +4603,8 @@ export async function listWatchGroup(params: {
       installmentCount,
       installmentAmount,
       totalInstallmentValue,
+      installmentTotal: totalInstallmentValue,  // alias สำหรับ client
+      cost: (financeAmount ?? 0) + (cInfo?.commission_net != null ? Number(cInfo.commission_net) : 0) + incentive,
       daysOverdue,
       arrearsCount,
     });

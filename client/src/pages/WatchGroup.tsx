@@ -155,7 +155,6 @@ type Row = {
   installmentCount: number | null;
   installmentAmount: number | null;
   installmentTotal: number;
-  paidInstallments: number;
   daysOverdue: number;
   arrearsCount: number;
 };
