@@ -550,3 +550,46 @@ export const monthlySummaryCache = pgTable(
   }),
 );
 export type MonthlySummaryCache = typeof monthlySummaryCache.$inferSelect;
+
+// ─── Monthly Summary Due Month Cache (pre-aggregated per approve_month × due_month) ─
+// ใช้สำหรับ Mode "เดือนที่ต้องชำระ" ใน Combined Tab ของ /monthly-summary
+export const monthlySummaryDueMonthCache = pgTable(
+  "monthly_summary_due_month_cache",
+  {
+    id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+    section: varchar("section", { length: 32 }).notNull(),
+    queryType: varchar("query_type", { length: 32 }).notNull(), // count | target | due | notYetDue | installTotal
+    approveMonth: varchar("approve_month", { length: 7 }).notNull(), // YYYY-MM
+    dueMonth: varchar("due_month", { length: 7 }).notNull(),         // YYYY-MM ของ due_date
+    // Filter dimensions (NULL = ทั้งหมด ไม่ได้ filter)
+    productType: varchar("product_type", { length: 64 }),
+    deviceFamily: varchar("device_family", { length: 16 }), // iOS | Android | NULL
+    // Aggregated values
+    contractCount: integer("contract_count").notNull().default(0),
+    principal: decimal("principal", { precision: 18, scale: 2 }).notNull().default("0"),
+    interest: decimal("interest", { precision: 18, scale: 2 }).notNull().default("0"),
+    fee: decimal("fee", { precision: 18, scale: 2 }).notNull().default("0"),
+    penalty: decimal("penalty", { precision: 18, scale: 2 }).notNull().default("0"),
+    unlockFee: decimal("unlock_fee", { precision: 18, scale: 2 }).notNull().default("0"),
+    discount: decimal("discount", { precision: 18, scale: 2 }).notNull().default("0"),
+    overpaid: decimal("overpaid", { precision: 18, scale: 2 }).notNull().default("0"),
+    badDebt: decimal("bad_debt", { precision: 18, scale: 2 }).notNull().default("0"),
+    badDebtInstallment: decimal("bad_debt_installment", { precision: 18, scale: 2 }).notNull().default("0"),
+    totalAmount: decimal("total_amount", { precision: 18, scale: 2 }).notNull().default("0"),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => ({
+    msdmcUniqueIdx: uniqueIndex("msdmc_unique_idx").on(
+      t.section,
+      t.queryType,
+      t.approveMonth,
+      t.dueMonth,
+      t.productType,
+      t.deviceFamily,
+    ),
+    msdmcSectionQueryIdx: index("msdmc_section_query_idx").on(t.section, t.queryType),
+    msdmcSectionApproveIdx: index("msdmc_section_approve_idx").on(t.section, t.approveMonth),
+    msdmcSectionDueIdx: index("msdmc_section_due_idx").on(t.section, t.dueMonth),
+  }),
+);
+export type MonthlySummaryDueMonthCache = typeof monthlySummaryDueMonthCache.$inferSelect;

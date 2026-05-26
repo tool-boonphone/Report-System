@@ -1647,6 +1647,100 @@ async function queryDueMonthInstallTotal(
 }
 
 /**
+ * Query Paid แยกตาม approve_month × due_month
+ * JOIN debt_collected_cache กับ debt_target_cache ผ่าน contract_external_id + period
+ * เพื่อดึง due_date (due_month) ของงวดที่ชำระ
+ */
+async function queryDueMonthPaid(
+  section: SectionKey,
+  opts: { approveMonths?: string[]; productType?: string; deviceFamily?: string },
+): Promise<Array<{
+  approve_month: string; due_month: string; contract_count: number;
+  principal_paid: number; interest_paid: number; fee_paid: number;
+  penalty_paid: number; unlock_fee_paid: number; discount_amount: number;
+  overpaid_amount: number; bad_debt_amount: number; bad_debt_installment: number;
+  total_paid: number;
+}>> {
+  const db = await getDb(section);
+  if (!db) return [];
+
+  // Build WHERE clause สำหรับ dcc (ใช้ section + productType + deviceFamily + approveMonths)
+  let dccFilter = `dcc.section = '${section}' AND dcc.approve_date IS NOT NULL`;
+  if (opts.productType) {
+    dccFilter += `\n    AND dcc.product_type = '${opts.productType.replace(/'/g, "''")}'`;
+  }
+  if (opts.deviceFamily === "iOS") {
+    dccFilter += `\n    AND dcc.device IN ('iPhone', 'iPad')`;
+  } else if (opts.deviceFamily === "Android") {
+    dccFilter += `\n    AND dcc.device NOT IN ('iPhone', 'iPad') AND dcc.device IS NOT NULL AND dcc.device != ''`;
+  }
+  if (opts.approveMonths && opts.approveMonths.length > 0) {
+    const list = opts.approveMonths.map((m) => `'${m}'`).join(",");
+    dccFilter += `\n    AND TO_CHAR(dcc.approve_date, 'YYYY-MM') IN (${list})`;
+  }
+
+  // JOIN dcc กับ dtc เพื่อดึง due_date ของงวดที่ชำระ
+  // dcc.period = dtc.period AND dcc.contract_external_id = dtc.contract_external_id
+  const q = `
+    SELECT
+      TO_CHAR(dcc.approve_date, 'YYYY-MM') AS approve_month,
+      TO_CHAR(dtc.due_date, 'YYYY-MM') AS due_month,
+      COUNT(DISTINCT dcc.contract_external_id) AS contract_count,
+      -- breakdown fields: ข้าม isExtraPenalty rows (payment_tx_amount=0 AND penalty>0 AND is_bad_debt_row=false)
+      SUM(CASE WHEN dcc.is_bad_debt_row = false
+                    AND NOT (CAST(dcc.payment_tx_amount AS DECIMAL(18,2)) = 0
+                             AND CAST(dcc.penalty AS DECIMAL(18,2)) > 0)
+               THEN CAST(dcc.principal   AS DECIMAL(18,2)) ELSE 0 END) AS principal_paid,
+      SUM(CASE WHEN dcc.is_bad_debt_row = false
+                    AND NOT (CAST(dcc.payment_tx_amount AS DECIMAL(18,2)) = 0
+                             AND CAST(dcc.penalty AS DECIMAL(18,2)) > 0)
+               THEN CAST(dcc.interest    AS DECIMAL(18,2)) ELSE 0 END) AS interest_paid,
+      SUM(CASE WHEN dcc.is_bad_debt_row = false
+                    AND NOT (CAST(dcc.payment_tx_amount AS DECIMAL(18,2)) = 0
+                             AND CAST(dcc.penalty AS DECIMAL(18,2)) > 0)
+               THEN CAST(dcc.fee         AS DECIMAL(18,2)) ELSE 0 END) AS fee_paid,
+      SUM(CASE WHEN dcc.is_bad_debt_row = false
+                    AND NOT (CAST(dcc.payment_tx_amount AS DECIMAL(18,2)) = 0
+                             AND CAST(dcc.penalty AS DECIMAL(18,2)) > 0)
+               THEN CAST(dcc.penalty     AS DECIMAL(18,2)) ELSE 0 END) AS penalty_paid,
+      SUM(CASE WHEN dcc.is_bad_debt_row = false
+                    AND NOT (CAST(dcc.payment_tx_amount AS DECIMAL(18,2)) = 0
+                             AND CAST(dcc.penalty AS DECIMAL(18,2)) > 0)
+               THEN CAST(dcc.unlock_fee  AS DECIMAL(18,2)) ELSE 0 END) AS unlock_fee_paid,
+      SUM(CASE WHEN dcc.is_bad_debt_row = false
+                    AND NOT (CAST(dcc.payment_tx_amount AS DECIMAL(18,2)) = 0
+                             AND CAST(dcc.penalty AS DECIMAL(18,2)) > 0)
+               THEN CAST(dcc.discount    AS DECIMAL(18,2)) ELSE 0 END) AS discount_amount,
+      SUM(CASE WHEN dcc.is_bad_debt_row = false
+                    AND NOT (CAST(dcc.payment_tx_amount AS DECIMAL(18,2)) = 0
+                             AND CAST(dcc.penalty AS DECIMAL(18,2)) > 0)
+               THEN CAST(dcc.overpaid    AS DECIMAL(18,2)) ELSE 0 END) AS overpaid_amount,
+      SUM(CASE WHEN dcc.is_bad_debt_row = true THEN CAST(dcc.bad_debt AS DECIMAL(18,2)) ELSE 0 END) AS bad_debt_amount,
+      SUM(CASE WHEN dcc.is_bad_debt_row = false
+                    AND NOT (CAST(dcc.payment_tx_amount AS DECIMAL(18,2)) = 0
+                             AND CAST(dcc.penalty AS DECIMAL(18,2)) > 0)
+               THEN CAST(dcc.payment_tx_amount AS DECIMAL(18,2)) ELSE 0 END) AS bad_debt_installment,
+      -- total_paid = SUM(payment_tx_amount + bad_debt) ยกเว้น isExtraPenalty
+      SUM(CASE WHEN dcc.is_bad_debt_row = true THEN CAST(dcc.bad_debt AS DECIMAL(18,2))
+               WHEN CAST(dcc.payment_tx_amount AS DECIMAL(18,2)) = 0
+                    AND CAST(dcc.penalty AS DECIMAL(18,2)) > 0 THEN 0
+               ELSE CAST(dcc.payment_tx_amount AS DECIMAL(18,2))
+          END) AS total_paid
+    FROM debt_collected_cache dcc
+    JOIN debt_target_cache dtc
+      ON dtc.section = dcc.section
+     AND dtc.contract_external_id = dcc.contract_external_id
+     AND dtc.period = dcc.period
+    WHERE ${dccFilter}
+      AND dtc.due_date IS NOT NULL
+    GROUP BY 1, 2
+    ORDER BY 1 DESC, 2 ASC
+  `;
+  const rows = await db.execute(sql.raw(q));
+  return pgRows(rows) as any[];
+}
+
+/**
  * Main export: getDueMonthSummary
  * ดึงข้อมูล approve_month × due_month สำหรับ Combined Tab Mode "เดือนที่ต้องชำระ"
  */
@@ -1660,18 +1754,19 @@ export async function getDueMonthSummary(
     deviceFamily: params.deviceFamily,
   };
 
-  const [countRows, targetRows, dueRows, notYetDueRows, installTotalRows] = await Promise.all([
+  const [countRows, targetRows, dueRows, notYetDueRows, installTotalRows, paidRows] = await Promise.all([
     queryDueMonthCount(section, opts),
     queryDueMonthTarget(section, opts),
     queryDueMonthDue(section, opts),
     queryDueMonthNotYetDue(section, opts),
     queryDueMonthInstallTotal(section, opts),
+    queryDueMonthPaid(section, opts),
   ]);
 
   // รวบรวม approve_months และ due_months ทั้งหมด
   const monthSet = new Set<string>();
   const dueMonthSet = new Set<string>();
-  for (const r of [...countRows, ...targetRows, ...dueRows, ...notYetDueRows, ...installTotalRows]) {
+  for (const r of [...countRows, ...targetRows, ...dueRows, ...notYetDueRows, ...installTotalRows, ...paidRows]) {
     monthSet.add(r.approve_month);
     dueMonthSet.add(r.due_month);
   }
@@ -1719,6 +1814,17 @@ export async function getDueMonthSummary(
     });
   }
 
+  const paidMap = new Map<Key, MoneyBreakdown>();
+  for (const r of paidRows) {
+    paidMap.set(`${r.approve_month}|${r.due_month}`, {
+      principal: n(r.principal_paid), interest: n(r.interest_paid),
+      fee: n(r.fee_paid), penalty: n(r.penalty_paid), unlockFee: n(r.unlock_fee_paid),
+      discount: n(r.discount_amount), overpaid: n(r.overpaid_amount),
+      badDebt: n(r.bad_debt_amount), badDebtInstallment: n(r.bad_debt_installment),
+      total: n(r.total_paid),
+    });
+  }
+
   return approveMonths.map((approveMonth) => {
     const dueMonths: Record<string, DueMonthCell> = {};
     let totalCount = 0;
@@ -1731,18 +1837,19 @@ export async function getDueMonthSummary(
     for (const dueMonth of allDueMonths) {
       const key = `${approveMonth}|${dueMonth}`;
       const contractCount = countMap.get(key) ?? 0;
-      const paid          = emptyMoney(); // paid ไม่มี due_month dimension ใน dcc
+      const paid          = paidMap.get(key) ?? emptyMoney();
       const due           = dueMap.get(key) ?? emptyMoney();
       const target        = targetMap.get(key) ?? emptyMoney();
       const notYetDue     = notYetDueMap.get(key) ?? emptyMoney();
       const installTotal  = installTotalMap.get(key) ?? emptyMoney();
 
       // ข้ามเดือนที่ไม่มีข้อมูลเลย
-      if (contractCount === 0 && target.total === 0 && due.total === 0 && notYetDue.total === 0 && installTotal.total === 0) continue;
+      if (contractCount === 0 && target.total === 0 && due.total === 0 && notYetDue.total === 0 && installTotal.total === 0 && paid.total === 0) continue;
 
       dueMonths[dueMonth] = { contractCount, paid, due, target, notYetDue, installTotal };
       totalCount += contractCount;
       for (const k of Object.keys(totalDue) as (keyof MoneyBreakdown)[]) {
+        (totalPaid         as any)[k] += paid[k];
         (totalDue          as any)[k] += due[k];
         (totalTarget       as any)[k] += target[k];
         (totalNotYetDue    as any)[k] += notYetDue[k];
@@ -1752,4 +1859,378 @@ export async function getDueMonthSummary(
 
     return { approveMonth, dueMonths, totalCount, totalPaid, totalDue, totalTarget, totalNotYetDue, totalInstallTotal };
   });
+}
+
+// ---------------------------------------------------------------------------
+// populateDueMonthCache — เรียกตอน Sync หลัง populateMonthlySummaryCache
+// เขียนลง monthly_summary_due_month_cache
+// ---------------------------------------------------------------------------
+
+/** Upsert rows เข้า monthly_summary_due_month_cache */
+async function upsertDueMonthRows(
+  section: SectionKey,
+  queryType: string,
+  rows: Array<{
+    approve_month: string;
+    due_month: string;
+    productType: string | null;
+    deviceFamily: string | null;
+    contractCount: number;
+    principal: number;
+    interest: number;
+    fee: number;
+    penalty: number;
+    unlockFee: number;
+    discount: number;
+    overpaid: number;
+    badDebt: number;
+    badDebtInstallment: number;
+    totalAmount: number;
+  }>,
+): Promise<void> {
+  if (rows.length === 0) return;
+  const db = await getDb(section);
+  if (!db) return;
+  const BATCH = 500;
+  for (let i = 0; i < rows.length; i += BATCH) {
+    const batch = rows.slice(i, i + BATCH);
+    const values = batch.map((r) => {
+      const pt = r.productType ? `'${r.productType.replace(/'/g, "''")}'` : "NULL";
+      const df = r.deviceFamily ? `'${r.deviceFamily}'` : "NULL";
+      return `('${section}','${queryType}','${r.approve_month}','${r.due_month}',${pt},${df},${r.contractCount},${r.principal},${r.interest},${r.fee},${r.penalty},${r.unlockFee},${r.discount},${r.overpaid},${r.badDebt},${r.badDebtInstallment},${r.totalAmount},NOW())`;
+    }).join(",\n");
+    const upsertSql = `
+      INSERT INTO monthly_summary_due_month_cache
+        (section, query_type, approve_month, due_month, product_type, device_family,
+         contract_count, principal, interest, fee, penalty, unlock_fee, discount, overpaid,
+         bad_debt, bad_debt_installment, total_amount, updated_at)
+      VALUES ${values}
+      ON CONFLICT (section, query_type, approve_month, due_month,
+                   COALESCE(product_type,''), COALESCE(device_family,''))
+      DO UPDATE SET
+        contract_count       = EXCLUDED.contract_count,
+        principal            = EXCLUDED.principal,
+        interest             = EXCLUDED.interest,
+        fee                  = EXCLUDED.fee,
+        penalty              = EXCLUDED.penalty,
+        unlock_fee           = EXCLUDED.unlock_fee,
+        discount             = EXCLUDED.discount,
+        overpaid             = EXCLUDED.overpaid,
+        bad_debt             = EXCLUDED.bad_debt,
+        bad_debt_installment = EXCLUDED.bad_debt_installment,
+        total_amount         = EXCLUDED.total_amount,
+        updated_at           = NOW()
+    `;
+    await db.execute(sql.raw(upsertSql));
+  }
+}
+
+/**
+ * populateDueMonthCache — เรียกตอน Sync หลัง populateMonthlySummaryCache
+ * รัน 5 queries (count, target, due, notYetDue, installTotal) แยกตาม approve_month × due_month
+ * แล้วเขียนลง monthly_summary_due_month_cache
+ */
+export async function populateDueMonthCache(
+  section: SectionKey,
+  onProgress?: (current: number, total: number) => void,
+): Promise<number> {
+  const dims = await getFilterDimensions(section);
+  let totalRows = 0;
+  const ptCount = dims.productTypes.length;
+  const dfCount = dims.deviceFamilies.length;
+  // count, target, due, notYetDue, installTotal, paid — แต่ละ query: pt × df
+  const totalCombinations = ptCount * dfCount * 6;
+  let doneCombinations = 0;
+
+  // ── Query 1: count ────────────────────────────────────────────────────────
+  for (const pt of dims.productTypes) {
+    for (const df of dims.deviceFamilies) {
+      const rows = await queryDueMonthCount(section, {
+        productType: pt ?? undefined,
+        deviceFamily: df ?? undefined,
+      });
+      const mapped = rows.map((r) => ({
+        approve_month: r.approve_month,
+        due_month: r.due_month,
+        productType: pt,
+        deviceFamily: df,
+        contractCount: r.contract_count,
+        principal: 0, interest: 0, fee: 0, penalty: 0, unlockFee: 0,
+        discount: 0, overpaid: 0, badDebt: 0, badDebtInstallment: 0, totalAmount: 0,
+      }));
+      await upsertDueMonthRows(section, "count", mapped);
+      totalRows += mapped.length;
+      doneCombinations++;
+      onProgress?.(doneCombinations, totalCombinations);
+    }
+  }
+
+  // ── Query 2: target ───────────────────────────────────────────────────────
+  for (const pt of dims.productTypes) {
+    for (const df of dims.deviceFamilies) {
+      const rows = await queryDueMonthTarget(section, {
+        productType: pt ?? undefined,
+        deviceFamily: df ?? undefined,
+      });
+      const mapped = rows.map((r) => ({
+        approve_month: r.approve_month,
+        due_month: r.due_month,
+        productType: pt,
+        deviceFamily: df,
+        contractCount: r.contract_count,
+        principal: r.principal_target, interest: r.interest_target, fee: r.fee_target,
+        penalty: r.penalty_target, unlockFee: r.unlock_fee_target,
+        discount: 0, overpaid: 0, badDebt: 0, badDebtInstallment: 0,
+        totalAmount: r.total_target,
+      }));
+      await upsertDueMonthRows(section, "target", mapped);
+      totalRows += mapped.length;
+      doneCombinations++;
+      onProgress?.(doneCombinations, totalCombinations);
+    }
+  }
+
+  // ── Query 3: due ──────────────────────────────────────────────────────────
+  for (const pt of dims.productTypes) {
+    for (const df of dims.deviceFamilies) {
+      const rows = await queryDueMonthDue(section, {
+        productType: pt ?? undefined,
+        deviceFamily: df ?? undefined,
+      });
+      const mapped = rows.map((r) => ({
+        approve_month: r.approve_month,
+        due_month: r.due_month,
+        productType: pt,
+        deviceFamily: df,
+        contractCount: r.contract_count,
+        principal: r.principal_due, interest: r.interest_due, fee: r.fee_due,
+        penalty: r.penalty_due, unlockFee: r.unlock_fee_due,
+        discount: 0, overpaid: 0, badDebt: 0, badDebtInstallment: 0,
+        totalAmount: r.total_due,
+      }));
+      await upsertDueMonthRows(section, "due", mapped);
+      totalRows += mapped.length;
+      doneCombinations++;
+      onProgress?.(doneCombinations, totalCombinations);
+    }
+  }
+
+  // ── Query 4: notYetDue ────────────────────────────────────────────────────
+  for (const pt of dims.productTypes) {
+    for (const df of dims.deviceFamilies) {
+      const rows = await queryDueMonthNotYetDue(section, {
+        productType: pt ?? undefined,
+        deviceFamily: df ?? undefined,
+      });
+      const mapped = rows.map((r) => ({
+        approve_month: r.approve_month,
+        due_month: r.due_month,
+        productType: pt,
+        deviceFamily: df,
+        contractCount: r.contract_count,
+        principal: r.principal_notyet, interest: r.interest_notyet, fee: r.fee_notyet,
+        penalty: r.penalty_notyet, unlockFee: r.unlock_fee_notyet,
+        discount: 0, overpaid: 0, badDebt: 0, badDebtInstallment: 0,
+        totalAmount: r.total_notyet,
+      }));
+      await upsertDueMonthRows(section, "notYetDue", mapped);
+      totalRows += mapped.length;
+      doneCombinations++;
+      onProgress?.(doneCombinations, totalCombinations);
+    }
+  }
+
+  // ── Query 5: installTotal ─────────────────────────────────────────────────
+  for (const pt of dims.productTypes) {
+    for (const df of dims.deviceFamilies) {
+      const rows = await queryDueMonthInstallTotal(section, {
+        productType: pt ?? undefined,
+        deviceFamily: df ?? undefined,
+      });
+      const mapped = rows.map((r) => ({
+        approve_month: r.approve_month,
+        due_month: r.due_month,
+        productType: pt,
+        deviceFamily: df,
+        contractCount: r.contract_count,
+        principal: r.principal_install, interest: r.interest_install, fee: r.fee_install,
+        penalty: 0, unlockFee: 0, discount: 0, overpaid: 0, badDebt: 0, badDebtInstallment: 0,
+        totalAmount: r.total_install,
+      }));
+      await upsertDueMonthRows(section, "installTotal", mapped);
+      totalRows += mapped.length;
+      doneCombinations++;
+      onProgress?.(doneCombinations, totalCombinations);
+    }
+  }
+
+  // ── Query 6: paid (JOIN dcc + dtc เพื่อดึง due_date ของงวดที่ชำระ) ─────────────────────
+  for (const pt of dims.productTypes) {
+    for (const df of dims.deviceFamilies) {
+      const rows = await queryDueMonthPaid(section, {
+        productType: pt ?? undefined,
+        deviceFamily: df ?? undefined,
+      });
+      const mapped = rows.map((r) => ({
+        approve_month: r.approve_month,
+        due_month: r.due_month,
+        productType: pt,
+        deviceFamily: df,
+        contractCount: r.contract_count,
+        principal: r.principal_paid, interest: r.interest_paid, fee: r.fee_paid,
+        penalty: r.penalty_paid, unlockFee: r.unlock_fee_paid,
+        discount: r.discount_amount, overpaid: r.overpaid_amount,
+        badDebt: r.bad_debt_amount, badDebtInstallment: r.bad_debt_installment,
+        totalAmount: r.total_paid,
+      }));
+      await upsertDueMonthRows(section, "paid", mapped);
+      totalRows += mapped.length;
+      doneCombinations++;
+      onProgress?.(doneCombinations, totalCombinations);
+    }
+  }
+
+  return totalRows;
+}
+
+// ---------------------------------------------------------------------------
+// getDueMonthSummaryFromCache — Fast path: ดึงจาก monthly_summary_due_month_cache
+// ---------------------------------------------------------------------------
+export async function getDueMonthSummaryFromCache(
+  params: DueMonthParams,
+): Promise<{ rows: DueMonthRow[]; allDueMonths: string[] }> {
+  const { section } = params;
+  const db = await getDb(section);
+  if (!db) return { rows: [], allDueMonths: [] };
+
+  const ptFilter = params.productType
+    ? `AND product_type = '${params.productType.replace(/'/g, "''")}'`
+    : `AND product_type IS NULL`;
+  const dfFilter = params.deviceFamily
+    ? `AND device_family = '${params.deviceFamily}'`
+    : `AND device_family IS NULL`;
+
+  const baseQ = `
+    SELECT query_type, approve_month, due_month,
+           contract_count,
+           CAST(principal AS DECIMAL(18,2)) AS principal,
+           CAST(interest  AS DECIMAL(18,2)) AS interest,
+           CAST(fee       AS DECIMAL(18,2)) AS fee,
+           CAST(penalty   AS DECIMAL(18,2)) AS penalty,
+           CAST(unlock_fee AS DECIMAL(18,2)) AS unlock_fee,
+           CAST(discount  AS DECIMAL(18,2)) AS discount,
+           CAST(overpaid  AS DECIMAL(18,2)) AS overpaid,
+           CAST(bad_debt  AS DECIMAL(18,2)) AS bad_debt,
+           CAST(bad_debt_installment AS DECIMAL(18,2)) AS bad_debt_installment,
+           CAST(total_amount AS DECIMAL(18,2)) AS total_amount
+    FROM monthly_summary_due_month_cache
+    WHERE section = '${section}'
+      ${ptFilter}
+      ${dfFilter}
+    ORDER BY approve_month DESC, due_month ASC
+  `;
+  const allDbRows = pgRows(await db.execute(sql.raw(baseQ))) as any[];
+
+  // แยกตาม query_type
+  const countRows        = allDbRows.filter((r) => r.query_type === "count");
+  const targetRows       = allDbRows.filter((r) => r.query_type === "target");
+  const dueRows          = allDbRows.filter((r) => r.query_type === "due");
+  const notYetDueRows    = allDbRows.filter((r) => r.query_type === "notYetDue");
+  const installTotalRows = allDbRows.filter((r) => r.query_type === "installTotal");
+  const paidRows         = allDbRows.filter((r) => r.query_type === "paid");
+
+  // รวบรวม approve_months และ due_months ทั้งหมด
+  const monthSet    = new Set<string>();
+  const dueMonthSet = new Set<string>();
+  for (const r of allDbRows) {
+    monthSet.add(r.approve_month);
+    dueMonthSet.add(r.due_month);
+  }
+  const approveMonths = Array.from(monthSet).sort((a, b) => b.localeCompare(a));
+  const allDueMonths  = Array.from(dueMonthSet).sort((a, b) => a.localeCompare(b));
+
+  // Filter ตาม approveMonths param ถ้ามี
+  const filteredApproveMonths = params.approveMonths
+    ? approveMonths.filter((m) => params.approveMonths!.includes(m))
+    : approveMonths;
+
+  type Key = string;
+  const countMap = new Map<Key, number>();
+  for (const r of countRows) countMap.set(`${r.approve_month}|${r.due_month}`, n(r.contract_count));
+
+  const targetMap = new Map<Key, MoneyBreakdown>();
+  for (const r of targetRows) {
+    targetMap.set(`${r.approve_month}|${r.due_month}`, {
+      principal: n(r.principal), interest: n(r.interest), fee: n(r.fee),
+      penalty: n(r.penalty), unlockFee: n(r.unlock_fee),
+      discount: 0, overpaid: 0, badDebt: 0, badDebtInstallment: 0, total: n(r.total_amount),
+    });
+  }
+  const dueMap = new Map<Key, MoneyBreakdown>();
+  for (const r of dueRows) {
+    dueMap.set(`${r.approve_month}|${r.due_month}`, {
+      principal: n(r.principal), interest: n(r.interest), fee: n(r.fee),
+      penalty: n(r.penalty), unlockFee: n(r.unlock_fee),
+      discount: 0, overpaid: 0, badDebt: 0, badDebtInstallment: 0, total: n(r.total_amount),
+    });
+  }
+  const notYetDueMap = new Map<Key, MoneyBreakdown>();
+  for (const r of notYetDueRows) {
+    notYetDueMap.set(`${r.approve_month}|${r.due_month}`, {
+      principal: n(r.principal), interest: n(r.interest), fee: n(r.fee),
+      penalty: n(r.penalty), unlockFee: n(r.unlock_fee),
+      discount: 0, overpaid: 0, badDebt: 0, badDebtInstallment: 0, total: n(r.total_amount),
+    });
+  }
+  const installTotalMap = new Map<Key, MoneyBreakdown>();
+  for (const r of installTotalRows) {
+    installTotalMap.set(`${r.approve_month}|${r.due_month}`, {
+      principal: n(r.principal), interest: n(r.interest), fee: n(r.fee),
+      penalty: 0, unlockFee: 0, discount: 0, overpaid: 0, badDebt: 0, badDebtInstallment: 0,
+      total: n(r.total_amount),
+    });
+  }
+  const paidMap = new Map<Key, MoneyBreakdown>();
+  for (const r of paidRows) {
+    paidMap.set(`${r.approve_month}|${r.due_month}`, {
+      principal: n(r.principal), interest: n(r.interest), fee: n(r.fee),
+      penalty: n(r.penalty), unlockFee: n(r.unlock_fee),
+      discount: n(r.discount), overpaid: n(r.overpaid),
+      badDebt: n(r.bad_debt), badDebtInstallment: n(r.bad_debt_installment),
+      total: n(r.total_amount),
+    });
+  }
+
+  const rows = filteredApproveMonths.map((approveMonth) => {
+    const dueMonths: Record<string, DueMonthCell> = {};
+    let totalCount = 0;
+    const totalPaid         = emptyMoney();
+    const totalDue          = emptyMoney();
+    const totalTarget       = emptyMoney();
+    const totalNotYetDue    = emptyMoney();
+    const totalInstallTotal = emptyMoney();
+
+    for (const dueMonth of allDueMonths) {
+      const key           = `${approveMonth}|${dueMonth}`;
+      const contractCount = countMap.get(key) ?? 0;
+      const paid          = paidMap.get(key) ?? emptyMoney();
+      const due           = dueMap.get(key) ?? emptyMoney();
+      const target        = targetMap.get(key) ?? emptyMoney();
+      const notYetDue     = notYetDueMap.get(key) ?? emptyMoney();
+      const installTotal  = installTotalMap.get(key) ?? emptyMoney();
+      if (contractCount === 0 && target.total === 0 && due.total === 0 && notYetDue.total === 0 && installTotal.total === 0 && paid.total === 0) continue;
+      dueMonths[dueMonth] = { contractCount, paid, due, target, notYetDue, installTotal };
+      totalCount += contractCount;
+      for (const k of Object.keys(totalDue) as (keyof MoneyBreakdown)[]) {
+        (totalPaid         as any)[k] += paid[k];
+        (totalDue          as any)[k] += due[k];
+        (totalTarget       as any)[k] += target[k];
+        (totalNotYetDue    as any)[k] += notYetDue[k];
+        (totalInstallTotal as any)[k] += installTotal[k];
+      }
+    }
+    return { approveMonth, dueMonths, totalCount, totalPaid, totalDue, totalTarget, totalNotYetDue, totalInstallTotal };
+  });
+
+  return { rows, allDueMonths };
 }

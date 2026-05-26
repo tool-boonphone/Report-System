@@ -18,7 +18,7 @@
  */
 import { z } from "zod";
 import { requirePermission, router } from "../_core/trpc";
-import { getMonthlySummary, DEBT_BUCKETS, getDueMonthSummary } from "../monthlySummaryDb";
+import { getMonthlySummary, DEBT_BUCKETS, getDueMonthSummary, getDueMonthSummaryFromCache } from "../monthlySummaryDb";
 import { sectionSchema } from "../../shared/const";
 import { getDb } from "../db";
 import { sql } from "drizzle-orm";
@@ -220,25 +220,41 @@ export const monthlySummaryRouter = router({
       deviceFamily: z.enum(["iOS", "Android"]).optional(),
     }))
     .query(async ({ input }) => {
-      const summaryRows = await getDueMonthSummary({
+      // ใช้ Cache ก่อน ถ้า Cache ว่างค่อย fallback ไป Direct Query
+      let summaryRows: Awaited<ReturnType<typeof getDueMonthSummary>>;
+      let allDueMonths: string[];
+
+      const cached = await getDueMonthSummaryFromCache({
         section: input.section,
         approveMonths: input.approveMonths,
         productType: input.productType,
         deviceFamily: input.deviceFamily,
       });
 
-      // Collect all due_months across all rows (sorted ASC)
-      const dueMonthSet = new Set<string>();
-      for (const row of summaryRows) {
-        for (const dm of Object.keys(row.dueMonths)) dueMonthSet.add(dm);
+      if (cached.rows.length > 0) {
+        summaryRows = cached.rows;
+        allDueMonths = cached.allDueMonths;
+      } else {
+        // Fallback: Direct Query (ก่อน Cache ถูก Populate)
+        summaryRows = await getDueMonthSummary({
+          section: input.section,
+          approveMonths: input.approveMonths,
+          productType: input.productType,
+          deviceFamily: input.deviceFamily,
+        });
+        const dueMonthSet = new Set<string>();
+        for (const row of summaryRows) {
+          for (const dm of Object.keys(row.dueMonths)) dueMonthSet.add(dm);
+        }
+        allDueMonths = Array.from(dueMonthSet).sort((a, b) => a.localeCompare(b));
       }
-      const allDueMonths = Array.from(dueMonthSet).sort((a, b) => a.localeCompare(b));
 
       // Flatten to array of flat rows for JSON transport
       type FlatDueMonthRow = {
         approveMonth: string;
         dueMonth: string; // "__total__" for row totals
         contractCount: number;
+        paidTotal: number; paidPrincipal: number; paidInterest: number; paidFee: number; paidPenalty: number; paidUnlockFee: number; paidDiscount: number; paidOverpaid: number; paidBadDebt: number; paidBadDebtInstallment: number;
         targetTotal: number; targetPrincipal: number; targetInterest: number; targetFee: number; targetPenalty: number; targetUnlockFee: number;
         dueTotal: number; duePrincipal: number; dueInterest: number; dueFee: number; duePenalty: number; dueUnlockFee: number;
         notYetDueTotal: number; notYetDuePrincipal: number; notYetDueInterest: number; notYetDueFee: number; notYetDuePenalty: number; notYetDueUnlockFee: number;
@@ -254,6 +270,7 @@ export const monthlySummaryRouter = router({
             approveMonth: row.approveMonth,
             dueMonth,
             contractCount: cell.contractCount,
+            paidTotal: cell.paid.total, paidPrincipal: cell.paid.principal, paidInterest: cell.paid.interest, paidFee: cell.paid.fee, paidPenalty: cell.paid.penalty, paidUnlockFee: cell.paid.unlockFee, paidDiscount: cell.paid.discount, paidOverpaid: cell.paid.overpaid, paidBadDebt: cell.paid.badDebt, paidBadDebtInstallment: cell.paid.badDebtInstallment,
             targetTotal: cell.target.total, targetPrincipal: cell.target.principal, targetInterest: cell.target.interest, targetFee: cell.target.fee, targetPenalty: cell.target.penalty, targetUnlockFee: cell.target.unlockFee,
             dueTotal: cell.due.total, duePrincipal: cell.due.principal, dueInterest: cell.due.interest, dueFee: cell.due.fee, duePenalty: cell.due.penalty, dueUnlockFee: cell.due.unlockFee,
             notYetDueTotal: cell.notYetDue.total, notYetDuePrincipal: cell.notYetDue.principal, notYetDueInterest: cell.notYetDue.interest, notYetDueFee: cell.notYetDue.fee, notYetDuePenalty: cell.notYetDue.penalty, notYetDueUnlockFee: cell.notYetDue.unlockFee,
@@ -265,6 +282,7 @@ export const monthlySummaryRouter = router({
           approveMonth: row.approveMonth,
           dueMonth: "__total__",
           contractCount: row.totalCount,
+          paidTotal: row.totalPaid.total, paidPrincipal: row.totalPaid.principal, paidInterest: row.totalPaid.interest, paidFee: row.totalPaid.fee, paidPenalty: row.totalPaid.penalty, paidUnlockFee: row.totalPaid.unlockFee, paidDiscount: row.totalPaid.discount, paidOverpaid: row.totalPaid.overpaid, paidBadDebt: row.totalPaid.badDebt, paidBadDebtInstallment: row.totalPaid.badDebtInstallment,
           targetTotal: row.totalTarget.total, targetPrincipal: row.totalTarget.principal, targetInterest: row.totalTarget.interest, targetFee: row.totalTarget.fee, targetPenalty: row.totalTarget.penalty, targetUnlockFee: row.totalTarget.unlockFee,
           dueTotal: row.totalDue.total, duePrincipal: row.totalDue.principal, dueInterest: row.totalDue.interest, dueFee: row.totalDue.fee, duePenalty: row.totalDue.penalty, dueUnlockFee: row.totalDue.unlockFee,
           notYetDueTotal: row.totalNotYetDue.total, notYetDuePrincipal: row.totalNotYetDue.principal, notYetDueInterest: row.totalNotYetDue.interest, notYetDueFee: row.totalNotYetDue.fee, notYetDuePenalty: row.totalNotYetDue.penalty, notYetDueUnlockFee: row.totalNotYetDue.unlockFee,
