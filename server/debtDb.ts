@@ -4365,9 +4365,9 @@ export async function listSuspectedBadDebt(params: { section: SectionKey }): Pro
 export async function listWatchGroup(params: {
   section: SectionKey;
   gracePeriod?: number;       // N วัน (default 15)
-  arrearsFilter?: "0" | "1";  // undefined = ทั้งหมด
-  productTypes?: string[];     // ["มือ 1","มือ 2","Sure+"]
-  partnerSearch?: string;      // ค้นหา partner_code หรือ partner_name
+  arrearsFilter?: "0" | "1" | null;  // undefined/null = ทั้งหมด
+  productTypes?: string[] | null;     // ["มือ 1","มือ 2","Sure+"]
+  partnerSearch?: string | null;      // ค้นหา partner_code หรือ partner_name
 }): Promise<{
   rows: Array<{
     contractExternalId: string;
@@ -4402,7 +4402,7 @@ export async function listWatchGroup(params: {
   const todayStr = today.toISOString().slice(0, 10); // YYYY-MM-DD
 
   // --- Step 1: ดึงสัญญาที่ถึงกำหนดงวดที่ 1 แล้ว ---
-  // จาก debt_target_cache: หา due_date ของงวดที่ 1 และงวดที่ 2 (period_no=1,2)
+  // จาก debt_target_cache: หา due_date ของงวดที่ 1 และงวดที่ 2 (period=1,2)
   // ไม่กรอง is_arrears เพื่อให้ได้ข้อมูลครบ จะกรองสัญญาที่ไม่เคยชำระใน Step 2
   const rawContracts = await db.execute(sql.raw(`
     SELECT
@@ -4414,10 +4414,10 @@ export async function listWatchGroup(params: {
       dtc.device,
       dtc.finance_amount,
       dtc.installment_count,
-      -- due_date งวดที่ 1 (period_no=1)
-      MIN(CASE WHEN dtc.period_no = 1 THEN dtc.due_date END) AS due_date_1,
-      -- due_date งวดที่ 2 (period_no=2)
-      MIN(CASE WHEN dtc.period_no = 2 THEN dtc.due_date END) AS due_date_2,
+      -- due_date งวดที่ 1 (period=1)
+      MIN(CASE WHEN dtc.period = 1 THEN dtc.due_date END) AS due_date_1,
+      -- due_date งวดที่ 2 (period=2)
+      MIN(CASE WHEN dtc.period = 2 THEN dtc.due_date END) AS due_date_2,
       -- จำนวนงวดที่ถึงกำหนดแล้ว (due_date <= today)
       COUNT(CASE WHEN dtc.due_date <= '${todayStr}' THEN 1 END) AS due_count
     FROM debt_target_cache dtc
@@ -4433,8 +4433,8 @@ export async function listWatchGroup(params: {
       dtc.installment_count
     HAVING
       -- ต้องมีงวดที่ 1 ถึงกำหนดแล้ว
-      MIN(CASE WHEN dtc.period_no = 1 THEN dtc.due_date END) IS NOT NULL
-      AND MIN(CASE WHEN dtc.period_no = 1 THEN dtc.due_date END) <= '${todayStr}'
+      MIN(CASE WHEN dtc.period = 1 THEN dtc.due_date END) IS NOT NULL
+      AND MIN(CASE WHEN dtc.period = 1 THEN dtc.due_date END) <= '${todayStr}'
   `));
   let contractRows: Array<any> = pgRows(rawContracts);
   console.log(`[WatchGroup] ${section} Step1: contractRows=${contractRows.length}, today=${todayStr}`);
@@ -4570,7 +4570,7 @@ export async function listWatchGroup(params: {
     if (daysOverdue <= gracePeriod) continue;
 
     // กรอง arrearsFilter
-    if (arrearsFilter !== undefined) {
+    if (arrearsFilter !== undefined && arrearsFilter !== null) {
       if (arrearsFilter === "0" && arrearsCount !== 0) continue;
       if (arrearsFilter === "1" && arrearsCount !== 1) continue;
     }

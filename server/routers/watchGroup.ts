@@ -20,9 +20,9 @@ export const watchGroupRouter = router({
       z.object({
         section: sectionSchema,
         gracePeriod: z.number().int().min(0).max(365).optional(),
-        arrearsFilter: z.enum(["0", "1"]).optional(),
-        productTypes: z.array(z.string()).optional(),
-        partnerSearch: z.string().optional(),
+        arrearsFilter: z.enum(["0", "1"]).nullable().optional(),
+        productTypes: z.array(z.string()).nullable().optional(),
+        partnerSearch: z.string().nullable().optional(),
       })
     )
     .query(async ({ input }) => {
