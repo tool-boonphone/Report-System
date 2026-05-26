@@ -388,7 +388,7 @@ export default function WatchGroup() {
   const [osFilter, setOsFilter] = useState<Set<string>>(new Set());
   const [modelFilter, setModelFilter] = useState<Set<string>>(new Set());
   const [productTypeFilter, setProductTypeFilter] = useState<Set<string>>(new Set());
-  const [partnerSearch, setPartnerSearch] = useState("");
+  const [partnerFilter, setPartnerFilter] = useState<Set<string>>(new Set());
   // ช่วงผ่อนผัน N วัน (default 15)
   const [gracePeriod, setGracePeriod] = useState<string>("15");
   // ค้างชำระ: "" = ทั้งหมด, "0" = 0 งวด, "1" = 1 งวด
@@ -409,9 +409,8 @@ export default function WatchGroup() {
       gracePeriod: gracePeriod !== "" && !isNaN(Number(gracePeriod)) ? Number(gracePeriod) : 15,
       arrearsFilter: arrearsFilter !== "" ? (arrearsFilter as "0" | "1") : undefined,
       productTypes: productTypeFilter.size > 0 ? Array.from(productTypeFilter) : undefined,
-      partnerSearch: partnerSearch.trim() || undefined,
     };
-  }, [section, gracePeriod, arrearsFilter, productTypeFilter, partnerSearch]);
+  }, [section, gracePeriod, arrearsFilter, productTypeFilter]);
 
   const { data, isLoading } = trpc.watchGroup.list.useQuery(
     queryInput as any,
@@ -429,6 +428,19 @@ export default function WatchGroup() {
       }
     }
     return Array.from(set).sort().reverse();
+  }, [allRows]);
+
+  /* ── partner options ── */
+  const partnerOptions = useMemo(() => {
+    const map = new Map<string, string>(); // key: partnerCode, value: display label
+    for (const r of allRows) {
+      if (!r.partnerCode) continue;
+      const label = r.partnerName ? `${r.partnerCode} - ${r.partnerName}` : r.partnerCode;
+      map.set(r.partnerCode, label);
+    }
+    return Array.from(map.entries())
+      .sort((a, b) => a[0].localeCompare(b[0], "th"))
+      .map(([code, label]) => ({ code, label }));
   }, [allRows]);
 
   /* ── productType options (Sure+ only for Boonphone) ── */
@@ -508,6 +520,11 @@ export default function WatchGroup() {
       });
     }
 
+    // filter พาร์ทเนอร์ (client-side multi-select)
+    if (partnerFilter.size > 0) {
+      rows = rows.filter((r) => r.partnerCode && partnerFilter.has(r.partnerCode));
+    }
+
     rows = [...rows].sort((a, b) => {
       let av: any, bv: any;
       switch (sortKey) {
@@ -540,6 +557,7 @@ export default function WatchGroup() {
     approveMonthFilter,
     osFilter,
     modelFilter,
+    partnerFilter,
     sortKey,
     sortDir,
   ]);
@@ -590,7 +608,7 @@ export default function WatchGroup() {
     osFilter.size > 0 ||
     modelFilter.size > 0 ||
     productTypeFilter.size > 0 ||
-    !!partnerSearch ||
+    partnerFilter.size > 0 ||
     gracePeriod !== "15" ||
     arrearsFilter !== "";
 
@@ -600,7 +618,7 @@ export default function WatchGroup() {
     setOsFilter(new Set());
     setModelFilter(new Set());
     setProductTypeFilter(new Set());
-    setPartnerSearch("");
+    setPartnerFilter(new Set());
     setGracePeriod("15");
     setArrearsFilter("");
   };
@@ -797,21 +815,15 @@ export default function WatchGroup() {
                   formatOption={(k) => modelCanonicalMap.get(k) ?? k}
                 />
 
-                {/* พาร์ทเนอร์ */}
-                <div className="relative min-w-[160px]">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
-                  <Input
-                    placeholder="รหัส / ชื่อพาร์ทเนอร์"
-                    className={cn(
-                      "pl-8 h-9 text-xs",
-                      partnerSearch
-                        ? "border-teal-400 bg-teal-50 text-teal-800"
-                        : "bg-white",
-                    )}
-                    value={partnerSearch}
-                    onChange={(e) => setPartnerSearch(e.target.value)}
-                  />
-                </div>
+                {/* พาร์ทเนอร์ — Multi-Select with search */}
+                <MultiSelectFilter
+                  label="พาร์ทเนอร์"
+                  selected={partnerFilter}
+                  onChange={setPartnerFilter}
+                  options={partnerOptions.map((p) => p.code)}
+                  placeholder="ทุกพาร์ทเนอร์"
+                  formatOption={(code) => partnerOptions.find((p) => p.code === code)?.label ?? code}
+                />
 
                 {/* ช่วงผ่อนผัน N วัน */}
                 <div className="flex items-center gap-1.5">

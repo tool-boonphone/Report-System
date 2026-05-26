@@ -4401,9 +4401,9 @@ export async function listWatchGroup(params: {
   const today = new Date();
   const todayStr = today.toISOString().slice(0, 10); // YYYY-MM-DD
 
-  // --- Step 1: ดึงสัญญาที่ไม่เคยชำระเลย (paidInstallments = 0) ---
-  // จาก debt_target_cache: หา due_date ของงวดที่ 1 และงวดที่ 2 (is_arrears=true, period_no=1,2)
-  // เงื่อนไข: ไม่มีใน debt_collected_cache เลย (หรือ paidInstallments = 0)
+  // --- Step 1: ดึงสัญญาที่ถึงกำหนดงวดที่ 1 แล้ว ---
+  // จาก debt_target_cache: หา due_date ของงวดที่ 1 และงวดที่ 2 (period_no=1,2)
+  // ไม่กรอง is_arrears เพื่อให้ได้ข้อมูลครบ จะกรองสัญญาที่ไม่เคยชำระใน Step 2
   const rawContracts = await db.execute(sql`
     SELECT
       dtc.contract_external_id,
@@ -4414,15 +4414,14 @@ export async function listWatchGroup(params: {
       dtc.device,
       dtc.finance_amount,
       dtc.installment_count,
-      -- due_date งวดที่ 1 (period_no=1, is_arrears=true)
-      MIN(CASE WHEN dtc.period_no = 1 AND dtc.is_arrears = true THEN dtc.due_date END) AS due_date_1,
-      -- due_date งวดที่ 2 (period_no=2, is_arrears=true)
-      MIN(CASE WHEN dtc.period_no = 2 AND dtc.is_arrears = true THEN dtc.due_date END) AS due_date_2,
+      -- due_date งวดที่ 1 (period_no=1)
+      MIN(CASE WHEN dtc.period_no = 1 THEN dtc.due_date END) AS due_date_1,
+      -- due_date งวดที่ 2 (period_no=2)
+      MIN(CASE WHEN dtc.period_no = 2 THEN dtc.due_date END) AS due_date_2,
       -- จำนวนงวดที่ถึงกำหนดแล้ว (due_date <= today)
-      COUNT(CASE WHEN dtc.is_arrears = true AND dtc.due_date <= ${todayStr} THEN 1 END) AS due_count
+      COUNT(CASE WHEN dtc.due_date <= ${todayStr} THEN 1 END) AS due_count
     FROM debt_target_cache dtc
     WHERE dtc.section = ${params.section}
-      AND dtc.is_arrears = true
     GROUP BY
       dtc.contract_external_id,
       dtc.contract_no,
@@ -4434,8 +4433,8 @@ export async function listWatchGroup(params: {
       dtc.installment_count
     HAVING
       -- ต้องมีงวดที่ 1 ถึงกำหนดแล้ว
-      MIN(CASE WHEN dtc.period_no = 1 AND dtc.is_arrears = true THEN dtc.due_date END) IS NOT NULL
-      AND MIN(CASE WHEN dtc.period_no = 1 AND dtc.is_arrears = true THEN dtc.due_date END) <= ${todayStr}
+      MIN(CASE WHEN dtc.period_no = 1 THEN dtc.due_date END) IS NOT NULL
+      AND MIN(CASE WHEN dtc.period_no = 1 THEN dtc.due_date END) <= ${todayStr}
   `);
   let contractRows: Array<any> = pgRows(rawContracts);
 
