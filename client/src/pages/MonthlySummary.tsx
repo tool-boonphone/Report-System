@@ -502,9 +502,33 @@ function DeviceFamilyFilter({value,onChange}:{value:string;onChange:(v:string)=>
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function MonthlySummary() {
-  const{can}=useAppAuth();const{section}=useSection();const{setActions}=useNavActions();
+  const{can,isSuperAdmin}=useAppAuth();const{section}=useSection();const{setActions}=useNavActions();
   const canView=can("debt_report","view");const canExport=can("debt_report","export");
   const[tab,setTab]=useState<TabKey>("count");
+
+  // ── Repopulate Monthly Summary Cache (superAdmin only) ────────────────────
+  const[isRepopulating,setIsRepopulating]=useState(false);
+  const handleRepopulateMonthlySummary=useCallback(async()=>{
+    if(!section||isRepopulating)return;
+    setIsRepopulating(true);
+    try{
+      const res=await fetch("/api/internal/repopulate-monthly-summary",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({section,async:true}),
+      });
+      const data=await res.json();
+      if(data.ok){
+        toast.success(`เริ่ม Repopulate Monthly Summary (${section}) แล้ว — กำลังประมวลผลในพื้นหลัง`);
+      }else{
+        toast.error(`Repopulate ล้มเหลว: ${data.error??"Unknown error"}`);
+      }
+    }catch(err:any){
+      toast.error(`Repopulate ล้มเหลว: ${err?.message??"Network error"}`);
+    }finally{
+      setIsRepopulating(false);
+    }
+  },[section,isRepopulating]);
 
   // ── filter state ─────────────────────────────────────────────────────────
   // Tab 1: จำนวนสัญญา
@@ -1021,11 +1045,24 @@ export default function MonthlySummary() {
   useEffect(()=>{
     setActions(
       <div className="flex items-center gap-2">
+        {/* ปุ่ม Repopulate Monthly Summary — แสดงเฉพาะ superAdmin */}
+        {isSuperAdmin&&(
+          <button
+            type="button"
+            onClick={handleRepopulateMonthlySummary}
+            disabled={isRepopulating}
+            title="ประมวลผล Monthly Summary Cache ใหม่ (superAdmin only)"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-purple-200 hover:bg-purple-50 text-sm text-purple-700 disabled:opacity-50 transition-colors"
+          >
+            <TrendingUp className={`w-4 h-4 ${isRepopulating?"animate-pulse":""}`}/>
+            <span className="hidden sm:inline">{isRepopulating?"กำลังประมวลผล...":"Repopulate Summary"}</span>
+          </button>
+        )}
         <SyncStatusBar/>
       </div>
     );
     return()=>setActions(null);
-  },[setActions]);
+  },[setActions,isSuperAdmin,isRepopulating,handleRepopulateMonthlySummary]);
 
   // ── Tab config ────────────────────────────────────────────────────────────────────
   const TAB_CONFIG: Array<{key:TabKey;label:string;activeClass:string;filterCount:number}> = [

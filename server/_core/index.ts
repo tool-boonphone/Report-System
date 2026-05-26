@@ -77,6 +77,49 @@ async function startServer() {
       return res.status(500).json({ error: String(err?.message ?? err), cause: String(err?.cause?.message ?? '') });
     }
   });
+  // Internal endpoint: Repopulate Monthly Summary cache (both monthly_summary_cache + monthly_summary_due_month_cache)
+  // POST /api/internal/repopulate-monthly-summary
+  // Body: { section: 'Boonphone' | 'Fastfone365', async?: boolean }
+  // - async=true  → fire-and-forget, returns immediately with { started: true }
+  // - async=false → awaits both caches, returns { ok: true, msRows, dmRows }
+  app.post("/api/internal/repopulate-monthly-summary", async (req, res) => {
+    const { section, async: isAsync = true } = req.body as { section?: string; async?: boolean };
+    if (!section || !["Boonphone", "Fastfone365"].includes(section)) {
+      return res.status(400).json({ error: "Invalid section. Use Boonphone or Fastfone365" });
+    }
+    try {
+      const { populateMonthlySummaryCache, populateDueMonthCache } = await import("../monthlySummaryDb");
+      const sec = section as import("../../shared/const").SectionKey;
+      if (isAsync) {
+        // Fire and forget — return immediately
+        Promise.all([
+          populateMonthlySummaryCache(sec),
+          populateDueMonthCache(sec),
+        ]).then(([msRows, dmRows]) => {
+          console.log(`[repopulate-monthly-summary] ${sec} done — msRows=${msRows} dmRows=${dmRows}`);
+        }).catch((err: unknown) => {
+          console.error(`[repopulate-monthly-summary] ${sec} failed:`, (err as Error)?.message ?? err);
+        });
+        return res.json({ ok: true, section: sec, started: true, startedAt: new Date().toISOString() });
+      } else {
+        // Synchronous — await both caches
+        const [msRows, dmRows] = await Promise.all([
+          populateMonthlySummaryCache(sec),
+          populateDueMonthCache(sec),
+        ]);
+        return res.json({
+          ok: true,
+          section: sec,
+          msRows,
+          dmRows,
+          completedAt: new Date().toISOString(),
+        });
+      }
+    } catch (err: any) {
+      console.error("[repopulate-monthly-summary]", err);
+      return res.status(500).json({ error: String(err?.message ?? err) });
+    }
+  });
   // Internal backfill endpoint — no auth, only for local/admin use
   app.post("/api/internal/backfill-cache", async (req, res) => {
     const { section } = req.body as { section?: string };
