@@ -576,6 +576,11 @@ export default function MonthlySummary() {
   const[combinedProductType,setCombinedProductType]=useState<Set<string>>(new Set());
   const[combinedDeviceFamily,setCombinedDeviceFamily]=useState("");
 
+  // combined view mode: สถานะหนี้ (bucket) หรือ เดือนที่ต้องชำระ
+  const[combinedViewMode,setCombinedViewMode]=useState<"bucket"|"dueMonth">("bucket");
+  // combined sub-row toggle (เปิด/ปิดแต่ละแถบ ใน combined table)
+  const[hiddenSubRows,setHiddenSubRows]=useState<Set<TabKey>>(new Set());
+  const toggleSubRow=useCallback((key:TabKey)=>{setHiddenSubRows((p)=>{const n=new Set(p);if(n.has(key))n.delete(key);else n.add(key);return n;});},[]);
   // bucket eye toggle
   const[hiddenBuckets,setHiddenBuckets]=useState<Set<string>>(new Set());
   const toggleBucket=useCallback((b:string)=>{setHiddenBuckets((p)=>{const n=new Set(p);if(n.has(b))n.delete(b);else n.add(b);return n;});},[]);
@@ -645,6 +650,45 @@ export default function MonthlySummary() {
   ]);
 
   const query=trpc.monthlySummary.get.useQuery(queryInput as any,{enabled:canView&&!!queryInput});
+
+  // due month query — เรียกเมื่อ tab=combined และ viewMode=dueMonth
+  const dueMonthQueryInput=useMemo(()=>{
+    if(!section||tab!=="combined"||combinedViewMode!=="dueMonth")return null;
+    return{
+      section,
+      approveMonths:combinedApproveMonths.size>0?Array.from(combinedApproveMonths):undefined,
+      productType:combinedProductType.size===1?Array.from(combinedProductType)[0]:undefined,
+      deviceFamily:(combinedDeviceFamily as "iOS"|"Android"|undefined)||undefined,
+    };
+  },[section,tab,combinedViewMode,combinedApproveMonths,combinedProductType,combinedDeviceFamily]);
+  const dueMonthQuery=trpc.monthlySummary.getDueMonthSummary.useQuery(dueMonthQueryInput as any,{enabled:canView&&!!dueMonthQueryInput});
+  // parse dueMonth rows
+  type FlatDueMonthRow={approveMonth:string;dueMonth:string;contractCount:number;targetTotal:number;targetPrincipal:number;targetInterest:number;targetFee:number;targetPenalty:number;targetUnlockFee:number;dueTotal:number;duePrincipal:number;dueInterest:number;dueFee:number;duePenalty:number;dueUnlockFee:number;notYetDueTotal:number;notYetDuePrincipal:number;notYetDueInterest:number;notYetDueFee:number;notYetDuePenalty:number;notYetDueUnlockFee:number;installTotalTotal:number;installTotalPrincipal:number;installTotalInterest:number;installTotalFee:number;};
+  type DueMonthCell={contractCount:number;target:MoneyBreakdown;due:MoneyBreakdown;notYetDue:MoneyBreakdown;installTotal:MoneyBreakdown;};
+  type DueMonthRow={approveMonth:string;dueMonths:Record<string,DueMonthCell>;totalCount:number;totalTarget:MoneyBreakdown;totalDue:MoneyBreakdown;totalNotYetDue:MoneyBreakdown;totalInstallTotal:MoneyBreakdown;};
+  const allDueMonths:string[]=(dueMonthQuery.data?.allDueMonths??[]) as string[];
+  const dueMonthRows=useMemo(()=>{
+    try{
+      const flat:FlatDueMonthRow[]=JSON.parse((dueMonthQuery.data?.rowsJson??"[]") as string);
+      const monthMap=new Map<string,DueMonthRow>();
+      for(const fr of flat){
+        if(!fr||!fr.approveMonth)continue;
+        if(fr.dueMonth==="__total__"){
+          const row=monthMap.get(fr.approveMonth);if(!row)continue;
+          row.totalCount=fr.contractCount;
+          row.totalTarget={principal:fr.targetPrincipal,interest:fr.targetInterest,fee:fr.targetFee,penalty:fr.targetPenalty,unlockFee:fr.targetUnlockFee,discount:0,overpaid:0,badDebt:0,badDebtInstallment:0,total:fr.targetTotal};
+          row.totalDue={principal:fr.duePrincipal,interest:fr.dueInterest,fee:fr.dueFee,penalty:fr.duePenalty,unlockFee:fr.dueUnlockFee,discount:0,overpaid:0,badDebt:0,badDebtInstallment:0,total:fr.dueTotal};
+          row.totalNotYetDue={principal:fr.notYetDuePrincipal,interest:fr.notYetDueInterest,fee:fr.notYetDueFee,penalty:fr.notYetDuePenalty,unlockFee:fr.notYetDueUnlockFee,discount:0,overpaid:0,badDebt:0,badDebtInstallment:0,total:fr.notYetDueTotal};
+          row.totalInstallTotal={principal:fr.installTotalPrincipal,interest:fr.installTotalInterest,fee:fr.installTotalFee,penalty:0,unlockFee:0,discount:0,overpaid:0,badDebt:0,badDebtInstallment:0,total:fr.installTotalTotal};
+          continue;
+        }
+        if(!monthMap.has(fr.approveMonth))monthMap.set(fr.approveMonth,{approveMonth:fr.approveMonth,dueMonths:{},totalCount:0,totalTarget:emptyMoney(),totalDue:emptyMoney(),totalNotYetDue:emptyMoney(),totalInstallTotal:emptyMoney()});
+        const row=monthMap.get(fr.approveMonth)!;
+        row.dueMonths[fr.dueMonth]={contractCount:fr.contractCount,target:{principal:fr.targetPrincipal,interest:fr.targetInterest,fee:fr.targetFee,penalty:fr.targetPenalty,unlockFee:fr.targetUnlockFee,discount:0,overpaid:0,badDebt:0,badDebtInstallment:0,total:fr.targetTotal},due:{principal:fr.duePrincipal,interest:fr.dueInterest,fee:fr.dueFee,penalty:fr.duePenalty,unlockFee:fr.dueUnlockFee,discount:0,overpaid:0,badDebt:0,badDebtInstallment:0,total:fr.dueTotal},notYetDue:{principal:fr.notYetDuePrincipal,interest:fr.notYetDueInterest,fee:fr.notYetDueFee,penalty:fr.notYetDuePenalty,unlockFee:fr.notYetDueUnlockFee,discount:0,overpaid:0,badDebt:0,badDebtInstallment:0,total:fr.notYetDueTotal},installTotal:{principal:fr.installTotalPrincipal,interest:fr.installTotalInterest,fee:fr.installTotalFee,penalty:0,unlockFee:0,discount:0,overpaid:0,badDebt:0,badDebtInstallment:0,total:fr.installTotalTotal}};
+      }
+      return Array.from(monthMap.values()).sort((a,b)=>sortDir==="asc"?a.approveMonth.localeCompare(b.approveMonth):b.approveMonth.localeCompare(a.approveMonth));
+    }catch{return[];}
+  },[dueMonthQuery.data,sortDir]);
 
   const rowsJson:string=(query.data?.rowsJson??"[]") as string;
   const productTypes:string[]=(query.data?.productTypes??[]) as string[];
@@ -1189,6 +1233,38 @@ export default function MonthlySummary() {
                   </div>
                   <DeviceFamilyFilter value={combinedDeviceFamily} onChange={setCombinedDeviceFamily}/>
                   <MultiSelectFilter label="ประเภทสินค้า" selected={combinedProductType} onChange={setCombinedProductType} options={productTypes} placeholder="ทุกประเภทสินค้า"/>
+                  {/* Row Toggle — เปิด/ปิดแต่ละแถบ */}
+                  {([
+                    {key:"installTotal" as TabKey,label:"ยอดผ่อนรวม",color:"purple"},
+                    {key:"target"       as TabKey,label:"เป้าเก็บหนี้",color:"indigo"},
+                    {key:"paid"         as TabKey,label:"ยอดเก็บหนี้",color:"green"},
+                    {key:"due"          as TabKey,label:"หนี้ค้างชำระ",color:"orange"},
+                    {key:"notYetDue"    as TabKey,label:"ยังไม่ถึงกำหนด",color:"blue"},
+                  ] as Array<{key:TabKey;label:string;color:string}>).map(({key,label,color})=>{
+                    const isHidden=hiddenSubRows.has(key);
+                    return(
+                      <button key={key} type="button" onClick={()=>toggleSubRow(key)}
+                        className={["flex items-center gap-1 h-7 px-2.5 rounded-full border text-xs font-medium transition-colors",
+                          isHidden
+                            ?"bg-gray-100 border-gray-200 text-gray-400 line-through"
+                            :`bg-${color}-50 border-${color}-300 text-${color}-700 hover:bg-${color}-100`
+                        ].join(" ")}>
+                        {isHidden?<EyeOff className="w-3 h-3"/>:<Eye className="w-3 h-3"/>}
+                        {label}
+                      </button>
+                    );
+                  })}
+                  {/* Pill Tab: สถานะหนี้ / เดือนที่ต้องชำระ */}
+                  <div className="flex items-center gap-0.5 ml-1 bg-gray-100 rounded-full p-0.5">
+                    <button type="button" onClick={()=>setCombinedViewMode("bucket")}
+                      className={["h-7 px-3 rounded-full text-xs font-medium transition-colors",combinedViewMode==="bucket"?"bg-white text-teal-700 shadow-sm font-semibold":"text-gray-500 hover:text-gray-700"].join(" ")}>
+                      สถานะหนี้
+                    </button>
+                    <button type="button" onClick={()=>setCombinedViewMode("dueMonth")}
+                      className={["h-7 px-3 rounded-full text-xs font-medium transition-colors",combinedViewMode==="dueMonth"?"bg-white text-teal-700 shadow-sm font-semibold":"text-gray-500 hover:text-gray-700"].join(" ")}>
+                      เดือนที่ต้องชำระ
+                    </button>
+                  </div>
                   {[combinedApproveMonths.size>0,combinedApproveYears.size>0,combinedProductType.size>0,combinedDeviceFamily].filter(Boolean).length>0&&(
                     <button type="button" onClick={()=>{setSearchInput("");setSearch("");setCombinedApproveMonths(new Set());setCombinedApproveYears(new Set());setCombinedProductType(new Set());setCombinedDeviceFamily("");}}
                       className="flex items-center gap-1 h-9 px-2.5 rounded-md border border-red-200 bg-red-50 text-red-600 text-xs hover:bg-red-100 transition-colors">
@@ -1336,12 +1412,23 @@ export default function MonthlySummary() {
           :query.isLoading?(<div className="flex items-center justify-center h-full gap-2 text-gray-400"><Spinner className="w-5 h-5"/><span className="text-sm">กำลังโหลด...</span></div>)
           :query.error?(<div className="flex flex-col items-center justify-center h-full gap-3 text-red-500"><span className="text-sm">โหลดข้อมูลล้มเหลว: {query.error.message}</span><Button variant="outline" size="sm" onClick={()=>query.refetch()}>ลองใหม่</Button></div>)
           :rows.length===0?(<div className="flex items-center justify-center h-full text-gray-400 text-sm">ไม่มีข้อมูล</div>)
-          :tab==="combined"?(
+          :tab==="combined"&&combinedViewMode==="dueMonth"?(
+            dueMonthQuery.isLoading?(<div className="flex items-center justify-center h-full gap-2 text-gray-400"><Spinner className="w-5 h-5"/><span className="text-sm">กำลังโหลด...</span></div>)
+            :dueMonthQuery.error?(<div className="flex flex-col items-center justify-center h-full gap-3 text-red-500"><span className="text-sm">โหลดข้อมูลล้มเหลว: {dueMonthQuery.error.message}</span><Button variant="outline" size="sm" onClick={()=>dueMonthQuery.refetch()}>ลองใหม่</Button></div>)
+            :(<DueMonthTable
+              rows={dueMonthRows} allDueMonths={allDueMonths}
+              hiddenRows={hiddenRows} toggleRow={toggleRow}
+              hiddenSubRows={hiddenSubRows}
+              sortDir={sortDir} onToggleSort={()=>setSortDir((d)=>d==="asc"?"desc":"asc")}
+              stickyTop={0}
+            />)
+          ):tab==="combined"?(
             <CombinedTable
               rows={combinedRows} grandTotal={combinedGrandTotal}
               hiddenBuckets={hiddenBuckets} toggleBucket={toggleBucket}
               sortDir={sortDir} onToggleSort={()=>setSortDir((d)=>d==="asc"?"desc":"asc")}
               hiddenRows={hiddenRows} toggleRow={toggleRow}
+              hiddenSubRows={hiddenSubRows}
               paidVis={paidVis} setPaidVis={setPaidVis}
               targetVis={targetVis} setTargetVis={setTargetVis}
               dueVis={dueVis} setDueVis={setDueVis}
@@ -1996,7 +2083,7 @@ const BUCKET_GROUPS = [
 
 function CombinedTable({
   rows,grandTotal,hiddenBuckets,toggleBucket,
-  sortDir,onToggleSort,hiddenRows,toggleRow,
+  sortDir,onToggleSort,hiddenRows,toggleRow,hiddenSubRows,
   paidVis,setPaidVis,targetVis,setTargetVis,
   dueVis,setDueVis,notYetDueVis,setNotYetDueVis,
   installVis,setInstallVis,
@@ -2008,6 +2095,7 @@ function CombinedTable({
   toggleBucket:(b:string)=>void;
   sortDir:SortDir;onToggleSort:()=>void;
   hiddenRows:Set<string>;toggleRow:(month:string)=>void;
+  hiddenSubRows:Set<TabKey>;
   paidVis:Record<MoneyBadgeKey,boolean>;setPaidVis:React.Dispatch<React.SetStateAction<Record<MoneyBadgeKey,boolean>>>;
   targetVis:Record<MoneyBadgeKey,boolean>;setTargetVis:React.Dispatch<React.SetStateAction<Record<MoneyBadgeKey,boolean>>>;
   dueVis:Record<DueBadgeKey,boolean>;setDueVis:React.Dispatch<React.SetStateAction<Record<DueBadgeKey,boolean>>>;
@@ -2222,11 +2310,11 @@ function CombinedTable({
           const isHiddenRow=hiddenRows.has(row.approveMonth);
           return(
             <React.Fragment key={row.approveMonth}>
-              {COMBINED_SUB_ROWS.map((sr,srIdx)=>(
+              {COMBINED_SUB_ROWS.filter(sr=>sr.key==="count"||!hiddenSubRows.has(sr.key)).map((sr,srIdx,visArr)=>(
                 <tr key={sr.key} className={["border-b border-gray-100 transition-colors",srIdx===0?"border-t-2 border-t-gray-300":"",isHiddenRow?"opacity-40":"",sr.rowBg].join(" ")}>
                   {/* เดือน — rowSpan=6 */}
                   {srIdx===0&&(
-                    <td rowSpan={COMBINED_SUB_ROWS.length} className="sticky left-0 z-10 px-3 py-2 text-sm font-semibold whitespace-nowrap bg-white border-r border-gray-200 min-w-[130px] align-middle">
+                    <td rowSpan={visArr.length} className="sticky left-0 z-10 px-3 py-2 text-sm font-semibold whitespace-nowrap bg-white border-r border-gray-200 min-w-[130px] align-middle">
                       <div className="flex items-center gap-1.5">
                         <button type="button" onClick={()=>toggleRow(row.approveMonth)} title={isHiddenRow?"แสดงแถวนี้":"ซ่อนแถวนี้"} className="hover:opacity-70 transition-opacity">
                           {isHiddenRow?<EyeOff className="w-3.5 h-3.5 text-gray-400"/>:<Eye className="w-3.5 h-3.5 text-gray-400"/>}
@@ -2458,5 +2546,218 @@ function CombinedTable({
       </tfoot>
     </table>
     </>
+  );
+}
+
+// ─── DueMonthTable ────────────────────────────────────────────────────────────
+// แสดงข้อมูลสรุปรวมโดยกระจายตามเดือนที่ต้องชำระ
+const DUE_MONTH_SUB_ROWS: Array<{
+  key: "count"|"installTotal"|"target"|"due"|"notYetDue";
+  label: string;
+  rowBg: string;
+  textColor: string;
+  totalBg: string;
+}> = [
+  {key:"count",        label:"สัญญา",          rowBg:"bg-slate-50",   textColor:"text-slate-700",   totalBg:"bg-slate-100"},
+  {key:"installTotal", label:"ยอดผ่อนรวม",     rowBg:"bg-purple-50",  textColor:"text-purple-800",  totalBg:"bg-purple-100"},
+  {key:"target",       label:"เป้าเก็บหนี้",   rowBg:"bg-indigo-50",  textColor:"text-indigo-800",  totalBg:"bg-indigo-100"},
+  {key:"due",          label:"หนี้ค้างชำระ",   rowBg:"bg-orange-50",  textColor:"text-orange-800",  totalBg:"bg-orange-100"},
+  {key:"notYetDue",    label:"ยังไม่ถึงกำหนด", rowBg:"bg-blue-50",    textColor:"text-blue-800",    totalBg:"bg-blue-100"},
+];
+
+type DueMonthCellLocal={contractCount:number;target:MoneyBreakdown;due:MoneyBreakdown;notYetDue:MoneyBreakdown;installTotal:MoneyBreakdown;};
+type DueMonthRowLocal={approveMonth:string;dueMonths:Record<string,DueMonthCellLocal>;totalCount:number;totalTarget:MoneyBreakdown;totalDue:MoneyBreakdown;totalNotYetDue:MoneyBreakdown;totalInstallTotal:MoneyBreakdown;};
+
+function DueMonthTable({
+  rows, allDueMonths,
+  hiddenRows, toggleRow,
+  hiddenSubRows,
+  sortDir, onToggleSort,
+  stickyTop,
+}:{
+  rows: DueMonthRowLocal[];
+  allDueMonths: string[];
+  hiddenRows: Set<string>;
+  toggleRow: (month:string)=>void;
+  hiddenSubRows: Set<TabKey>;
+  sortDir: SortDir;
+  onToggleSort: ()=>void;
+  stickyTop: number;
+}) {
+  const SortIcon = sortDir==="asc"?ArrowUp:ArrowDown;
+
+  // คำนวณ cell value ตาม key
+  function cellVal(key: "count"|"installTotal"|"target"|"due"|"notYetDue", cell: DueMonthCellLocal|undefined): number {
+    if(!cell)return 0;
+    if(key==="count")return cell.contractCount;
+    if(key==="installTotal")return cell.installTotal.total;
+    if(key==="target")return cell.target.total;
+    if(key==="due")return cell.due.total;
+    if(key==="notYetDue")return cell.notYetDue.total;
+    return 0;
+  }
+
+  function totalVal(key: "count"|"installTotal"|"target"|"due"|"notYetDue", row: DueMonthRowLocal): number {
+    if(key==="count")return row.totalCount;
+    if(key==="installTotal")return row.totalInstallTotal.total;
+    if(key==="target")return row.totalTarget.total;
+    if(key==="due")return row.totalDue.total;
+    if(key==="notYetDue")return row.totalNotYetDue.total;
+    return 0;
+  }
+
+  function renderVal(key: "count"|"installTotal"|"target"|"due"|"notYetDue", val: number, textColor: string): React.ReactNode {
+    if(key==="count"){
+      if(val===0)return <span className="text-gray-300 text-xs">—</span>;
+      return <span className="inline-flex items-center justify-center bg-slate-100 text-slate-700 rounded-full px-2.5 py-0.5 text-xs font-bold">{val.toLocaleString()}</span>;
+    }
+    if(val===0)return <span className="text-gray-300 text-xs">—</span>;
+    return <span className={["text-xs font-medium",textColor].join(" ")}>{fmtMoney(val)}</span>;
+  }
+
+  // grand total per due month
+  const grandTotalByDueMonth = useMemo(()=>{
+    const result: Record<string, DueMonthCellLocal> = {};
+    for(const dm of allDueMonths){
+      result[dm]={contractCount:0,target:emptyMoney(),due:emptyMoney(),notYetDue:emptyMoney(),installTotal:emptyMoney()};
+    }
+    for(const row of rows){
+      if(hiddenRows.has(row.approveMonth))continue;
+      for(const dm of allDueMonths){
+        const cell=row.dueMonths[dm];
+        if(!cell)continue;
+        result[dm].contractCount+=cell.contractCount;
+        for(const k of Object.keys(emptyMoney()) as (keyof MoneyBreakdown)[]){
+          result[dm].target[k]+=cell.target[k];
+          result[dm].due[k]+=cell.due[k];
+          result[dm].notYetDue[k]+=cell.notYetDue[k];
+          result[dm].installTotal[k]+=cell.installTotal[k];
+        }
+      }
+    }
+    return result;
+  },[rows,allDueMonths,hiddenRows]);
+
+  const grandTotalOverall = useMemo(()=>{
+    let count=0;const target=emptyMoney();const due=emptyMoney();const notYetDue=emptyMoney();const installTotal=emptyMoney();
+    for(const row of rows){
+      if(hiddenRows.has(row.approveMonth))continue;
+      count+=row.totalCount;
+      for(const k of Object.keys(emptyMoney()) as (keyof MoneyBreakdown)[]){
+        target[k]+=row.totalTarget[k];due[k]+=row.totalDue[k];
+        notYetDue[k]+=row.totalNotYetDue[k];installTotal[k]+=row.totalInstallTotal[k];
+      }
+    }
+    return {totalCount:count,totalTarget:target,totalDue:due,totalNotYetDue:notYetDue,totalInstallTotal:installTotal};
+  },[rows,hiddenRows]);
+
+  const visSubRows = DUE_MONTH_SUB_ROWS.filter(sr=>sr.key==="count"||!hiddenSubRows.has(sr.key));
+  const minWidth = 130+90+90+(allDueMonths.length*110);
+
+  return(
+    <table className="w-full text-xs border-collapse" style={{minWidth:`${minWidth}px`}}>
+      <thead className="sticky z-20" style={{top:`${stickyTop}px`}}>
+        <tr>
+          <th rowSpan={2} className="sticky left-0 z-30 px-3 py-2 text-left font-semibold whitespace-nowrap bg-teal-800 text-white border-r border-teal-600 min-w-[130px]">
+            <button type="button" onClick={onToggleSort} className="flex items-center gap-1 hover:opacity-80 transition-opacity" title={sortDir==="asc"?"เรียงใหม่→เก่า":"เรียงเก่า→ใหม่"}>
+              เดือน-ปีที่อนุมัติ<SortIcon className="w-3.5 h-3.5 text-teal-300"/>
+            </button>
+          </th>
+          <th rowSpan={2} className="sticky left-[130px] z-30 px-3 py-2 text-center font-semibold whitespace-nowrap bg-teal-700 text-white border-r border-teal-500 min-w-[90px]">
+            หัวข้อ
+          </th>
+          <th rowSpan={2} className="sticky left-[220px] z-30 px-3 py-2 text-right font-semibold whitespace-nowrap bg-teal-700 text-white border-r border-teal-500 min-w-[90px]">
+            รวม
+          </th>
+          {/* เดือนที่ต้องชำระ header */}
+          <th colSpan={allDueMonths.length} className="px-2 py-1.5 text-center font-semibold text-white whitespace-nowrap bg-teal-600 border-r border-white/30">
+            เดือนที่ต้องชำระ
+          </th>
+        </tr>
+        <tr>
+          {allDueMonths.map((dm)=>(
+            <th key={dm} className="px-2 py-1.5 text-center font-semibold text-white whitespace-nowrap min-w-[110px] border-r border-white/20 bg-teal-600">
+              <span className="text-[10px]">{fmtMonthYear(dm)}</span>
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((row)=>{
+          const isHiddenRow=hiddenRows.has(row.approveMonth);
+          return(
+            <React.Fragment key={row.approveMonth}>
+              {visSubRows.map((sr,srIdx)=>(
+                <tr key={sr.key} className={["border-b border-gray-100 transition-colors",srIdx===0?"border-t-2 border-t-gray-300":"",isHiddenRow?"opacity-40":"",sr.rowBg].join(" ")}>
+                  {/* เดือน — rowSpan */}
+                  {srIdx===0&&(
+                    <td rowSpan={visSubRows.length} className="sticky left-0 z-10 px-3 py-2 text-sm font-semibold whitespace-nowrap bg-white border-r border-gray-200 min-w-[130px] align-middle">
+                      <div className="flex items-center gap-1.5">
+                        <button type="button" onClick={()=>toggleRow(row.approveMonth)} title={isHiddenRow?"แสดงแถวนี้":"ซ่อนแถวนี้"} className="hover:opacity-70 transition-opacity">
+                          {isHiddenRow?<EyeOff className="w-3.5 h-3.5 text-gray-400"/>:<Eye className="w-3.5 h-3.5 text-gray-400"/>}
+                        </button>
+                        <span className="text-gray-800">{fmtMonthYear(row.approveMonth)}</span>
+                      </div>
+                    </td>
+                  )}
+                  {/* หัวข้อ */}
+                  <td className={["sticky left-[130px] z-10 px-2 py-1.5 text-center whitespace-nowrap border-r border-gray-200 font-medium text-[11px] min-w-[90px]",sr.totalBg,sr.textColor].join(" ")}>
+                    {sr.label}
+                  </td>
+                  {/* รวม */}
+                  <td className={["sticky left-[220px] z-10 px-3 py-1.5 text-right border-r border-gray-200 min-w-[90px]",sr.totalBg].join(" ")}>
+                    {renderVal(sr.key, isHiddenRow?0:totalVal(sr.key,row), sr.textColor)}
+                  </td>
+                  {/* due month cells */}
+                  {allDueMonths.map((dm)=>{
+                    const cell=row.dueMonths[dm];
+                    const val=isHiddenRow?0:cellVal(sr.key,cell);
+                    const dmBg=dm===new Date().toISOString().slice(0,7)?"bg-yellow-50":"";
+                    return(
+                      <td key={dm} className={["px-3 py-1.5 text-right border-r border-gray-200",dmBg].join(" ")}>
+                        {renderVal(sr.key, val, sr.textColor)}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </React.Fragment>
+          );
+        })}
+      </tbody>
+      <tfoot>
+        {visSubRows.map((sr,srIdx)=>(
+          <tr key={sr.key} className={["border-b border-gray-200 font-bold",srIdx===0?"border-t-2 border-slate-400":"",sr.totalBg].join(" ")}>
+            {srIdx===0&&(
+              <td rowSpan={visSubRows.length} className="sticky left-0 z-10 px-3 py-2 text-sm font-bold text-slate-800 bg-slate-100 border-r border-slate-300 whitespace-nowrap align-middle">
+                รวมทั้งหมด
+              </td>
+            )}
+            <td className={["sticky left-[130px] z-10 px-2 py-1.5 text-center text-[11px] border-r border-slate-300",sr.totalBg,sr.textColor].join(" ")}>
+              {sr.label}
+            </td>
+            <td className={["sticky left-[220px] z-10 px-3 py-1.5 text-right border-r border-slate-300",sr.totalBg].join(" ")}>
+              {renderVal(sr.key,
+                sr.key==="count"?grandTotalOverall.totalCount:
+                sr.key==="installTotal"?grandTotalOverall.totalInstallTotal.total:
+                sr.key==="target"?grandTotalOverall.totalTarget.total:
+                sr.key==="due"?grandTotalOverall.totalDue.total:
+                grandTotalOverall.totalNotYetDue.total,
+                sr.textColor
+              )}
+            </td>
+            {allDueMonths.map((dm)=>{
+              const cell=grandTotalByDueMonth[dm];
+              const val=cellVal(sr.key,cell);
+              return(
+                <td key={dm} className={["px-3 py-1.5 text-right border-r border-slate-300 font-bold",sr.totalBg].join(" ")}>
+                  {renderVal(sr.key, val, sr.textColor)}
+                </td>
+              );
+            })}
+          </tr>
+        ))}
+      </tfoot>
+    </table>
   );
 }

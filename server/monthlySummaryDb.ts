@@ -1385,3 +1385,371 @@ function assembleMonthlySummaryRows(
     return { approveMonth: month, buckets, totalCount, totalPaid, totalDue, totalTarget, totalNotYetDue, totalInstallTotal };
   });
 }
+
+// ---------------------------------------------------------------------------
+// getDueMonthSummary — Mode "เดือนที่ต้องชำระ"
+// Query ข้อมูลแบบ approve_month × due_month แทน approve_month × bucket
+// ใช้สำหรับ Combined Tab เท่านั้น
+// ---------------------------------------------------------------------------
+
+/** โครงสร้างข้อมูลของแต่ละ Cell ใน DueMonth mode */
+export type DueMonthCell = {
+  contractCount: number;
+  paid: MoneyBreakdown;
+  due: MoneyBreakdown;
+  target: MoneyBreakdown;
+  notYetDue: MoneyBreakdown;
+  installTotal: MoneyBreakdown;
+};
+
+/** แต่ละแถว approve_month ใน DueMonth mode */
+export type DueMonthRow = {
+  approveMonth: string; // YYYY-MM
+  dueMonths: Record<string, DueMonthCell>; // key = YYYY-MM ของ due_date
+  totalCount: number;
+  totalPaid: MoneyBreakdown;
+  totalDue: MoneyBreakdown;
+  totalTarget: MoneyBreakdown;
+  totalNotYetDue: MoneyBreakdown;
+  totalInstallTotal: MoneyBreakdown;
+};
+
+export type DueMonthParams = {
+  section: SectionKey;
+  approveMonths?: string[];
+  productType?: string;
+  deviceFamily?: string;
+};
+
+/** Query Count แยกตาม approve_month × due_month */
+async function queryDueMonthCount(
+  section: SectionKey,
+  opts: { approveMonths?: string[]; productType?: string; deviceFamily?: string },
+): Promise<Array<{ approve_month: string; due_month: string; contract_count: number }>> {
+  const db = await getDb(section);
+  if (!db) return [];
+  const baseWhere = dtcWhere(section, {
+    productType: opts.productType,
+    deviceFamily: opts.deviceFamily,
+    approveMonths: opts.approveMonths,
+  });
+  const q = `
+    SELECT
+      TO_CHAR(dtc.approve_date, 'YYYY-MM') AS approve_month,
+      TO_CHAR(dtc.due_date, 'YYYY-MM') AS due_month,
+      COUNT(DISTINCT dtc.contract_external_id) AS contract_count
+    FROM debt_target_cache dtc
+    WHERE ${baseWhere}
+      AND dtc.due_date IS NOT NULL
+    GROUP BY 1, 2
+    ORDER BY 1 DESC, 2 ASC
+  `;
+  const rows = await db.execute(sql.raw(q));
+  return pgRows(rows) as any[];
+}
+
+/** Query Target แยกตาม approve_month × due_month */
+async function queryDueMonthTarget(
+  section: SectionKey,
+  opts: { approveMonths?: string[]; productType?: string; deviceFamily?: string },
+): Promise<Array<{
+  approve_month: string; due_month: string; contract_count: number;
+  principal_target: number; interest_target: number; fee_target: number;
+  penalty_target: number; unlock_fee_target: number; total_target: number;
+}>> {
+  const db = await getDb(section);
+  if (!db) return [];
+  const baseWhere = dtcWhere(section, {
+    productType: opts.productType,
+    deviceFamily: opts.deviceFamily,
+    approveMonths: opts.approveMonths,
+  });
+  const q = `
+    SELECT
+      TO_CHAR(base.approve_date, 'YYYY-MM') AS approve_month,
+      TO_CHAR(base.due_date, 'YYYY-MM') AS due_month,
+      COUNT(DISTINCT base.contract_external_id) AS contract_count,
+      SUM(CAST(base.principal    AS DECIMAL(18,2))) AS principal_target,
+      SUM(CAST(base.interest     AS DECIMAL(18,2))) AS interest_target,
+      SUM(CAST(base.fee          AS DECIMAL(18,2))) AS fee_target,
+      SUM(CASE WHEN base.period = latest.max_period
+               THEN CAST(base.penalty    AS DECIMAL(18,2)) ELSE 0 END) AS penalty_target,
+      SUM(CASE WHEN base.period = latest.max_period
+               THEN CAST(base.unlock_fee AS DECIMAL(18,2)) ELSE 0 END) AS unlock_fee_target,
+      SUM(CAST(base.principal AS DECIMAL(18,2)))
+        + SUM(CAST(base.interest  AS DECIMAL(18,2)))
+        + SUM(CAST(base.fee       AS DECIMAL(18,2)))
+        + SUM(CASE WHEN base.period = latest.max_period
+               THEN CAST(base.penalty    AS DECIMAL(18,2)) ELSE 0 END)
+        + SUM(CASE WHEN base.period = latest.max_period
+               THEN CAST(base.unlock_fee AS DECIMAL(18,2)) ELSE 0 END) AS total_target
+    FROM debt_target_cache base
+    JOIN (
+      SELECT dtc.section, dtc.contract_external_id,
+             TO_CHAR(dtc.due_date, 'YYYY-MM') AS due_month_grp,
+             MAX(dtc.period) AS max_period
+      FROM debt_target_cache dtc
+      WHERE ${baseWhere}
+        AND DATE(dtc.due_date) <= CURRENT_DATE
+        AND dtc.due_date IS NOT NULL
+      GROUP BY dtc.section, dtc.contract_external_id, TO_CHAR(dtc.due_date, 'YYYY-MM')
+    ) latest ON latest.section = base.section
+             AND latest.contract_external_id = base.contract_external_id
+             AND TO_CHAR(base.due_date, 'YYYY-MM') = latest.due_month_grp
+    WHERE base.section = '${section}'
+      AND DATE(base.due_date) <= CURRENT_DATE
+      AND base.due_date IS NOT NULL
+    GROUP BY 1, 2
+    ORDER BY 1 DESC, 2 ASC
+  `;
+  const rows = await db.execute(sql.raw(q));
+  return pgRows(rows) as any[];
+}
+
+/** Query Due แยกตาม approve_month × due_month */
+async function queryDueMonthDue(
+  section: SectionKey,
+  opts: { approveMonths?: string[]; productType?: string; deviceFamily?: string },
+): Promise<Array<{
+  approve_month: string; due_month: string; contract_count: number;
+  principal_due: number; interest_due: number; fee_due: number;
+  penalty_due: number; unlock_fee_due: number; total_due: number;
+}>> {
+  const db = await getDb(section);
+  if (!db) return [];
+  const baseWhere = dtcWhere(section, {
+    productType: opts.productType,
+    deviceFamily: opts.deviceFamily,
+    approveMonths: opts.approveMonths,
+  });
+  const q = `
+    SELECT
+      TO_CHAR(base.approve_date, 'YYYY-MM') AS approve_month,
+      TO_CHAR(base.due_date, 'YYYY-MM') AS due_month,
+      COUNT(DISTINCT base.contract_external_id) AS contract_count,
+      SUM(GREATEST(CAST(base.principal  AS DECIMAL(18,2)) - CAST(base.paid_amount AS DECIMAL(18,2)), 0)) AS principal_due,
+      SUM(CAST(base.interest  AS DECIMAL(18,2))) AS interest_due,
+      SUM(CAST(base.fee       AS DECIMAL(18,2))) AS fee_due,
+      SUM(CASE WHEN base.period = latest.max_period
+               THEN CAST(base.penalty    AS DECIMAL(18,2)) ELSE 0 END) AS penalty_due,
+      SUM(CASE WHEN base.period = latest.max_period
+               THEN CAST(base.unlock_fee AS DECIMAL(18,2)) ELSE 0 END) AS unlock_fee_due,
+      SUM(GREATEST(CAST(base.total_amount AS DECIMAL(18,2)) - CAST(base.paid_amount AS DECIMAL(18,2)), 0)) AS total_due
+    FROM debt_target_cache base
+    JOIN (
+      SELECT dtc.section, dtc.contract_external_id,
+             TO_CHAR(dtc.due_date, 'YYYY-MM') AS due_month_grp,
+             MAX(dtc.period) AS max_period
+      FROM debt_target_cache dtc
+      WHERE ${baseWhere}
+        AND dtc.is_arrears = true
+        AND dtc.due_date IS NOT NULL
+      GROUP BY dtc.section, dtc.contract_external_id, TO_CHAR(dtc.due_date, 'YYYY-MM')
+    ) latest ON latest.section = base.section
+             AND latest.contract_external_id = base.contract_external_id
+             AND TO_CHAR(base.due_date, 'YYYY-MM') = latest.due_month_grp
+    WHERE base.section = '${section}'
+      AND base.is_arrears = true
+      AND base.due_date IS NOT NULL
+    GROUP BY 1, 2
+    ORDER BY 1 DESC, 2 ASC
+  `;
+  const rows = await db.execute(sql.raw(q));
+  return pgRows(rows) as any[];
+}
+
+/** Query NotYetDue แยกตาม approve_month × due_month */
+async function queryDueMonthNotYetDue(
+  section: SectionKey,
+  opts: { approveMonths?: string[]; productType?: string; deviceFamily?: string },
+): Promise<Array<{
+  approve_month: string; due_month: string; contract_count: number;
+  principal_notyet: number; interest_notyet: number; fee_notyet: number;
+  penalty_notyet: number; unlock_fee_notyet: number; total_notyet: number;
+}>> {
+  const db = await getDb(section);
+  if (!db) return [];
+  const baseWhere = dtcWhere(section, {
+    productType: opts.productType,
+    deviceFamily: opts.deviceFamily,
+    approveMonths: opts.approveMonths,
+  });
+  const q = `
+    SELECT
+      TO_CHAR(base.approve_date, 'YYYY-MM') AS approve_month,
+      TO_CHAR(base.due_date, 'YYYY-MM') AS due_month,
+      COUNT(DISTINCT base.contract_external_id) AS contract_count,
+      SUM(CAST(base.principal    AS DECIMAL(18,2))) AS principal_notyet,
+      SUM(CAST(base.interest     AS DECIMAL(18,2))) AS interest_notyet,
+      SUM(CAST(base.fee          AS DECIMAL(18,2))) AS fee_notyet,
+      SUM(CASE WHEN base.period = latest.max_period
+               THEN CAST(base.penalty    AS DECIMAL(18,2)) ELSE 0 END) AS penalty_notyet,
+      SUM(CASE WHEN base.period = latest.max_period
+               THEN CAST(base.unlock_fee AS DECIMAL(18,2)) ELSE 0 END) AS unlock_fee_notyet,
+      SUM(CAST(base.total_amount AS DECIMAL(18,2))) AS total_notyet
+    FROM debt_target_cache base
+    JOIN (
+      SELECT dtc.section, dtc.contract_external_id,
+             TO_CHAR(dtc.due_date, 'YYYY-MM') AS due_month_grp,
+             MAX(dtc.period) AS max_period
+      FROM debt_target_cache dtc
+      WHERE ${baseWhere}
+        AND dtc.due_date > CURRENT_DATE
+        AND dtc.is_closed IS NOT TRUE
+        AND dtc.is_paid IS NOT TRUE
+      GROUP BY dtc.section, dtc.contract_external_id, TO_CHAR(dtc.due_date, 'YYYY-MM')
+    ) latest ON latest.section = base.section
+             AND latest.contract_external_id = base.contract_external_id
+             AND TO_CHAR(base.due_date, 'YYYY-MM') = latest.due_month_grp
+    WHERE base.section = '${section}'
+      AND base.due_date > CURRENT_DATE
+      AND base.is_closed IS NOT TRUE
+      AND base.is_paid IS NOT TRUE
+    GROUP BY 1, 2
+    ORDER BY 1 DESC, 2 ASC
+  `;
+  const rows = await db.execute(sql.raw(q));
+  return pgRows(rows) as any[];
+}
+
+/** Query InstallTotal แยกตาม approve_month × due_month (ใช้ due_date ของแต่ละงวด) */
+async function queryDueMonthInstallTotal(
+  section: SectionKey,
+  opts: { approveMonths?: string[]; productType?: string; deviceFamily?: string },
+): Promise<Array<{
+  approve_month: string; due_month: string; contract_count: number;
+  principal_install: number; interest_install: number; fee_install: number; total_install: number;
+}>> {
+  const db = await getDb(section);
+  if (!db) return [];
+  const baseWhere = dtcWhere(section, {
+    productType: opts.productType,
+    deviceFamily: opts.deviceFamily,
+    approveMonths: opts.approveMonths,
+  });
+  const q = `
+    SELECT
+      TO_CHAR(dtc.approve_date, 'YYYY-MM') AS approve_month,
+      TO_CHAR(dtc.due_date, 'YYYY-MM') AS due_month,
+      COUNT(DISTINCT dtc.contract_external_id) AS contract_count,
+      SUM(CAST(dtc.principal AS DECIMAL(18,2))) AS principal_install,
+      SUM(CAST(dtc.interest  AS DECIMAL(18,2))) AS interest_install,
+      SUM(CAST(dtc.fee       AS DECIMAL(18,2))) AS fee_install,
+      SUM(CAST(dtc.baseline_amount AS DECIMAL(18,2))) AS total_install
+    FROM debt_target_cache dtc
+    WHERE ${baseWhere}
+      AND dtc.due_date IS NOT NULL
+    GROUP BY 1, 2
+    ORDER BY 1 DESC, 2 ASC
+  `;
+  const rows = await db.execute(sql.raw(q));
+  return pgRows(rows) as any[];
+}
+
+/**
+ * Main export: getDueMonthSummary
+ * ดึงข้อมูล approve_month × due_month สำหรับ Combined Tab Mode "เดือนที่ต้องชำระ"
+ */
+export async function getDueMonthSummary(
+  params: DueMonthParams,
+): Promise<DueMonthRow[]> {
+  const { section } = params;
+  const opts = {
+    approveMonths: params.approveMonths,
+    productType: params.productType,
+    deviceFamily: params.deviceFamily,
+  };
+
+  const [countRows, targetRows, dueRows, notYetDueRows, installTotalRows] = await Promise.all([
+    queryDueMonthCount(section, opts),
+    queryDueMonthTarget(section, opts),
+    queryDueMonthDue(section, opts),
+    queryDueMonthNotYetDue(section, opts),
+    queryDueMonthInstallTotal(section, opts),
+  ]);
+
+  // รวบรวม approve_months และ due_months ทั้งหมด
+  const monthSet = new Set<string>();
+  const dueMonthSet = new Set<string>();
+  for (const r of [...countRows, ...targetRows, ...dueRows, ...notYetDueRows, ...installTotalRows]) {
+    monthSet.add(r.approve_month);
+    dueMonthSet.add(r.due_month);
+  }
+  const approveMonths = Array.from(monthSet).sort((a, b) => b.localeCompare(a));
+  const allDueMonths = Array.from(dueMonthSet).sort((a, b) => a.localeCompare(b));
+
+  // สร้าง Maps สำหรับ lookup
+  type Key = string; // "approve_month|due_month"
+  const countMap = new Map<Key, number>();
+  for (const r of countRows) countMap.set(`${r.approve_month}|${r.due_month}`, n(r.contract_count));
+
+  const targetMap = new Map<Key, MoneyBreakdown>();
+  for (const r of targetRows) {
+    targetMap.set(`${r.approve_month}|${r.due_month}`, {
+      principal: n(r.principal_target), interest: n(r.interest_target),
+      fee: n(r.fee_target), penalty: n(r.penalty_target), unlockFee: n(r.unlock_fee_target),
+      discount: 0, overpaid: 0, badDebt: 0, badDebtInstallment: 0, total: n(r.total_target),
+    });
+  }
+
+  const dueMap = new Map<Key, MoneyBreakdown>();
+  for (const r of dueRows) {
+    dueMap.set(`${r.approve_month}|${r.due_month}`, {
+      principal: n(r.principal_due), interest: n(r.interest_due),
+      fee: n(r.fee_due), penalty: n(r.penalty_due), unlockFee: n(r.unlock_fee_due),
+      discount: 0, overpaid: 0, badDebt: 0, badDebtInstallment: 0, total: n(r.total_due),
+    });
+  }
+
+  const notYetDueMap = new Map<Key, MoneyBreakdown>();
+  for (const r of notYetDueRows) {
+    notYetDueMap.set(`${r.approve_month}|${r.due_month}`, {
+      principal: n(r.principal_notyet), interest: n(r.interest_notyet),
+      fee: n(r.fee_notyet), penalty: n(r.penalty_notyet), unlockFee: n(r.unlock_fee_notyet),
+      discount: 0, overpaid: 0, badDebt: 0, badDebtInstallment: 0, total: n(r.total_notyet),
+    });
+  }
+
+  const installTotalMap = new Map<Key, MoneyBreakdown>();
+  for (const r of installTotalRows) {
+    installTotalMap.set(`${r.approve_month}|${r.due_month}`, {
+      principal: n(r.principal_install), interest: n(r.interest_install),
+      fee: n(r.fee_install), penalty: 0, unlockFee: 0,
+      discount: 0, overpaid: 0, badDebt: 0, badDebtInstallment: 0, total: n(r.total_install),
+    });
+  }
+
+  return approveMonths.map((approveMonth) => {
+    const dueMonths: Record<string, DueMonthCell> = {};
+    let totalCount = 0;
+    const totalPaid         = emptyMoney();
+    const totalDue          = emptyMoney();
+    const totalTarget       = emptyMoney();
+    const totalNotYetDue    = emptyMoney();
+    const totalInstallTotal = emptyMoney();
+
+    for (const dueMonth of allDueMonths) {
+      const key = `${approveMonth}|${dueMonth}`;
+      const contractCount = countMap.get(key) ?? 0;
+      const paid          = emptyMoney(); // paid ไม่มี due_month dimension ใน dcc
+      const due           = dueMap.get(key) ?? emptyMoney();
+      const target        = targetMap.get(key) ?? emptyMoney();
+      const notYetDue     = notYetDueMap.get(key) ?? emptyMoney();
+      const installTotal  = installTotalMap.get(key) ?? emptyMoney();
+
+      // ข้ามเดือนที่ไม่มีข้อมูลเลย
+      if (contractCount === 0 && target.total === 0 && due.total === 0 && notYetDue.total === 0 && installTotal.total === 0) continue;
+
+      dueMonths[dueMonth] = { contractCount, paid, due, target, notYetDue, installTotal };
+      totalCount += contractCount;
+      for (const k of Object.keys(totalDue) as (keyof MoneyBreakdown)[]) {
+        (totalDue          as any)[k] += due[k];
+        (totalTarget       as any)[k] += target[k];
+        (totalNotYetDue    as any)[k] += notYetDue[k];
+        (totalInstallTotal as any)[k] += installTotal[k];
+      }
+    }
+
+    return { approveMonth, dueMonths, totalCount, totalPaid, totalDue, totalTarget, totalNotYetDue, totalInstallTotal };
+  });
+}
