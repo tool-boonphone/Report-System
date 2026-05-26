@@ -1715,12 +1715,13 @@ async function queryDueMonthPaid(
     dccFilter += `\n    AND TO_CHAR(dcc.approve_date, 'YYYY-MM') IN (${list})`;
   }
 
-  // JOIN dcc กับ dtc เพื่อดึง due_date ของงวดที่ชำระ
-  // dcc.period = dtc.period AND dcc.contract_external_id = dtc.contract_external_id
+  // ยอดเก็บหนี้ลงตามเดือนที่ชำระจริง (paid_at) ไม่ใช่เดือนที่งวดถึงกำหนด (due_date)
+  // approve_month = เดือนที่อนุมัติสัญญา (จาก dcc.approve_date)
+  // due_month     = เดือนที่ชำระจริง (จาก dcc.paid_at) — ไม่สนใจว่างวดนั้น due เดือนไหน
   const q = `
     SELECT
-      TO_CHAR(dcc.paid_at, 'YYYY-MM') AS approve_month,
-      TO_CHAR(dtc.due_date, 'YYYY-MM') AS due_month,
+      TO_CHAR(dcc.approve_date, 'YYYY-MM') AS approve_month,
+      TO_CHAR(dcc.paid_at, 'YYYY-MM') AS due_month,
       COUNT(DISTINCT dcc.contract_external_id) AS contract_count,
       -- breakdown fields: ข้าม isExtraPenalty rows (payment_tx_amount=0 AND penalty>0 AND is_bad_debt_row=false)
       SUM(CASE WHEN dcc.is_bad_debt_row = false
@@ -1763,12 +1764,8 @@ async function queryDueMonthPaid(
                ELSE CAST(dcc.payment_tx_amount AS DECIMAL(18,2))
           END) AS total_paid
     FROM debt_collected_cache dcc
-    JOIN debt_target_cache dtc
-      ON dtc.section = dcc.section
-     AND dtc.contract_external_id = dcc.contract_external_id
-     AND dtc.period = dcc.period
     WHERE ${dccFilter}
-      AND dtc.due_date IS NOT NULL
+      AND dcc.paid_at IS NOT NULL
     GROUP BY 1, 2
     ORDER BY 1 DESC, 2 ASC
   `;
