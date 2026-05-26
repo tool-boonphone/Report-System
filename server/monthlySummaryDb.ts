@@ -1419,6 +1419,7 @@ export type DueMonthCell = {
   target: MoneyBreakdown;
   notYetDue: MoneyBreakdown;
   installTotal: MoneyBreakdown;
+  financeTotal: number;         // ยอดจัดฯ = SUM(finance_amount) ต่อสัญญา
 };
 
 /** แต่ละแถว approve_month ใน DueMonth mode */
@@ -1432,6 +1433,7 @@ export type DueMonthRow = {
   totalTarget: MoneyBreakdown;
   totalNotYetDue: MoneyBreakdown;
   totalInstallTotal: MoneyBreakdown;
+  totalFinanceTotal: number;         // ยอดจัดฯ รวมทุก due_month
 };
 
 export type DueMonthParams = {
@@ -1670,6 +1672,7 @@ async function queryDueMonthInstallTotal(
 ): Promise<Array<{
   approve_month: string; due_month: string; contract_count: number;
   principal_install: number; interest_install: number; fee_install: number; total_install: number;
+  finance_total: number;
 }>> {
   const db = await getDb(section);
   if (!db) return [];
@@ -1678,18 +1681,36 @@ async function queryDueMonthInstallTotal(
     deviceFamily: opts.deviceFamily,
     approveMonths: opts.approveMonths,
   });
+  // ใช้ subquery เพื่อดึง finance_amount ต่อสัญญา (1 ค่าต่อสัญญา ไม่ซ้ำตามงวด)
   const q = `
+    WITH per_contract AS (
+      SELECT
+        dtc.section,
+        dtc.contract_external_id,
+        TO_CHAR(dtc.approve_date, 'YYYY-MM') AS approve_month,
+        TO_CHAR(dtc.due_date, 'YYYY-MM') AS due_month,
+        MAX(CAST(COALESCE(dtc.finance_amount, '0') AS DECIMAL(18,2))) AS finance_amount,
+        SUM(CAST(dtc.principal AS DECIMAL(18,2))) AS principal_install,
+        SUM(CAST(dtc.interest  AS DECIMAL(18,2))) AS interest_install,
+        SUM(CAST(dtc.fee       AS DECIMAL(18,2))) AS fee_install,
+        SUM(CAST(dtc.baseline_amount AS DECIMAL(18,2))) AS total_install
+      FROM debt_target_cache dtc
+      WHERE ${baseWhere}
+        AND dtc.due_date IS NOT NULL
+      GROUP BY dtc.section, dtc.contract_external_id,
+               TO_CHAR(dtc.approve_date, 'YYYY-MM'),
+               TO_CHAR(dtc.due_date, 'YYYY-MM')
+    )
     SELECT
-      TO_CHAR(dtc.approve_date, 'YYYY-MM') AS approve_month,
-      TO_CHAR(dtc.due_date, 'YYYY-MM') AS due_month,
-      COUNT(DISTINCT dtc.contract_external_id) AS contract_count,
-      SUM(CAST(dtc.principal AS DECIMAL(18,2))) AS principal_install,
-      SUM(CAST(dtc.interest  AS DECIMAL(18,2))) AS interest_install,
-      SUM(CAST(dtc.fee       AS DECIMAL(18,2))) AS fee_install,
-      SUM(CAST(dtc.baseline_amount AS DECIMAL(18,2))) AS total_install
-    FROM debt_target_cache dtc
-    WHERE ${baseWhere}
-      AND dtc.due_date IS NOT NULL
+      approve_month,
+      due_month,
+      COUNT(DISTINCT contract_external_id) AS contract_count,
+      SUM(principal_install) AS principal_install,
+      SUM(interest_install)  AS interest_install,
+      SUM(fee_install)       AS fee_install,
+      SUM(total_install)     AS total_install,
+      SUM(finance_amount)    AS finance_total
+    FROM per_contract
     GROUP BY 1, 2
     ORDER BY 1 DESC, 2 ASC
   `;
@@ -1899,12 +1920,14 @@ export async function getDueMonthSummary(
   }
 
   const installTotalMap = new Map<Key, MoneyBreakdown>();
+  const financeTotalDueMap = new Map<Key, number>();
   for (const r of installTotalRows) {
     installTotalMap.set(`${r.approve_month}|${r.due_month}`, {
       principal: n(r.principal_install), interest: n(r.interest_install),
       fee: n(r.fee_install), penalty: 0, unlockFee: 0,
       discount: 0, overpaid: 0, badDebt: 0, badDebtInstallment: 0, total: n(r.total_install),
     });
+    financeTotalDueMap.set(`${r.approve_month}|${r.due_month}`, n(r.finance_total));
   }
 
   const paidMap = new Map<Key, MoneyBreakdown>();
@@ -1921,6 +1944,7 @@ export async function getDueMonthSummary(
   return approveMonths.map((approveMonth) => {
     const dueMonths: Record<string, DueMonthCell> = {};
     let totalCount = 0;
+    let totalFinanceTotal = 0;
     const totalPaid         = emptyMoney();
     const totalDue          = emptyMoney();
     const totalTarget       = emptyMoney();
@@ -1935,12 +1959,14 @@ export async function getDueMonthSummary(
       const target        = targetMap.get(key) ?? emptyMoney();
       const notYetDue     = notYetDueMap.get(key) ?? emptyMoney();
       const installTotal  = installTotalMap.get(key) ?? emptyMoney();
+      const financeTotal  = financeTotalDueMap.get(key) ?? 0;
 
       // ข้ามเดือนที่ไม่มีข้อมูลเลย
       if (contractCount === 0 && target.total === 0 && due.total === 0 && notYetDue.total === 0 && installTotal.total === 0 && paid.total === 0) continue;
 
-      dueMonths[dueMonth] = { contractCount, paid, due, target, notYetDue, installTotal };
+      dueMonths[dueMonth] = { contractCount, paid, due, target, notYetDue, installTotal, financeTotal };
       totalCount += contractCount;
+      totalFinanceTotal += financeTotal;
       for (const k of Object.keys(totalDue) as (keyof MoneyBreakdown)[]) {
         (totalPaid         as any)[k] += paid[k];
         (totalDue          as any)[k] += due[k];
@@ -1951,7 +1977,7 @@ export async function getDueMonthSummary(
     }
 
     const approvedCount = approvedCountMap.get(approveMonth) ?? 0;
-    return { approveMonth, dueMonths, totalCount, approvedCount, totalPaid, totalDue, totalTarget, totalNotYetDue, totalInstallTotal };
+    return { approveMonth, dueMonths, totalCount, approvedCount, totalPaid, totalDue, totalTarget, totalNotYetDue, totalInstallTotal, totalFinanceTotal };
   });
 }
 
@@ -2348,7 +2374,7 @@ export async function getDueMonthSummaryFromCache(
       const notYetDue     = notYetDueMap.get(key) ?? emptyMoney();
       const installTotal  = installTotalMap.get(key) ?? emptyMoney();
       if (contractCount === 0 && target.total === 0 && due.total === 0 && notYetDue.total === 0 && installTotal.total === 0 && paid.total === 0) continue;
-      dueMonths[dueMonth] = { contractCount, paid, due, target, notYetDue, installTotal };
+            dueMonths[dueMonth] = { contractCount, paid, due, target, notYetDue, installTotal, financeTotal: 0 };
       totalCount += contractCount;
       for (const k of Object.keys(totalDue) as (keyof MoneyBreakdown)[]) {
         (totalPaid         as any)[k] += paid[k];
@@ -2359,8 +2385,7 @@ export async function getDueMonthSummaryFromCache(
       }
     }
     const approvedCount = approvedCountMap.get(approveMonth) ?? 0;
-    return { approveMonth, dueMonths, totalCount, approvedCount, totalPaid, totalDue, totalTarget, totalNotYetDue, totalInstallTotal };
+    return { approveMonth, dueMonths, totalCount, approvedCount, totalPaid, totalDue, totalTarget, totalNotYetDue, totalInstallTotal, totalFinanceTotal: 0 };
   });
-
   return { rows, allDueMonths };
 }

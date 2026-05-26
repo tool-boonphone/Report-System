@@ -249,6 +249,7 @@ export const monthlySummaryRouter = router({
         dueTotal: number; duePrincipal: number; dueInterest: number; dueFee: number; duePenalty: number; dueUnlockFee: number;
         notYetDueTotal: number; notYetDuePrincipal: number; notYetDueInterest: number; notYetDueFee: number; notYetDuePenalty: number; notYetDueUnlockFee: number;
         installTotalTotal: number; installTotalPrincipal: number; installTotalInterest: number; installTotalFee: number;
+        financeTotal: number; // ยอดจัดฯ
       };
       const flatRows: FlatDueMonthRow[] = [];
 
@@ -265,6 +266,7 @@ export const monthlySummaryRouter = router({
             dueTotal: cell.due.total, duePrincipal: cell.due.principal, dueInterest: cell.due.interest, dueFee: cell.due.fee, duePenalty: cell.due.penalty, dueUnlockFee: cell.due.unlockFee,
             notYetDueTotal: cell.notYetDue.total, notYetDuePrincipal: cell.notYetDue.principal, notYetDueInterest: cell.notYetDue.interest, notYetDueFee: cell.notYetDue.fee, notYetDuePenalty: cell.notYetDue.penalty, notYetDueUnlockFee: cell.notYetDue.unlockFee,
             installTotalTotal: cell.installTotal.total, installTotalPrincipal: cell.installTotal.principal, installTotalInterest: cell.installTotal.interest, installTotalFee: cell.installTotal.fee,
+            financeTotal: cell.financeTotal ?? 0,
           });
         }
         // __total__ row — contractCount = approvedCount (จำนวนสัญญาที่อนุมัติในเดือนนั้น)
@@ -277,6 +279,7 @@ export const monthlySummaryRouter = router({
           dueTotal: row.totalDue.total, duePrincipal: row.totalDue.principal, dueInterest: row.totalDue.interest, dueFee: row.totalDue.fee, duePenalty: row.totalDue.penalty, dueUnlockFee: row.totalDue.unlockFee,
           notYetDueTotal: row.totalNotYetDue.total, notYetDuePrincipal: row.totalNotYetDue.principal, notYetDueInterest: row.totalNotYetDue.interest, notYetDueFee: row.totalNotYetDue.fee, notYetDuePenalty: row.totalNotYetDue.penalty, notYetDueUnlockFee: row.totalNotYetDue.unlockFee,
           installTotalTotal: row.totalInstallTotal.total, installTotalPrincipal: row.totalInstallTotal.principal, installTotalInterest: row.totalInstallTotal.interest, installTotalFee: row.totalInstallTotal.fee,
+          financeTotal: row.totalFinanceTotal ?? 0,
         });
       }
 
