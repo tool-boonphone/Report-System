@@ -4437,6 +4437,11 @@ export async function listWatchGroup(params: {
       AND MIN(CASE WHEN dtc.period_no = 1 THEN dtc.due_date END) <= ${todayStr}
   `);
   let contractRows: Array<any> = pgRows(rawContracts);
+  console.log(`[WatchGroup] ${section} Step1: contractRows=${contractRows.length}, today=${todayStr}`);
+  if (contractRows.length > 0) {
+    const sample = contractRows[0];
+    console.log(`[WatchGroup] sample: due_date_1=${sample.due_date_1}, due_date_2=${sample.due_date_2}, contract_no=${sample.contract_no}`);
+  }
 
   if (contractRows.length === 0) return { rows: [] };
 
@@ -4460,6 +4465,7 @@ export async function listWatchGroup(params: {
   }
   // ตัดสัญญาที่เคยชำระออก
   contractRows = contractRows.filter((r: any) => !paidSet.has(r.contract_external_id));
+  console.log(`[WatchGroup] ${section} Step2 after paid filter: contractRows=${contractRows.length}, paidSet=${paidSet.size}`);
 
   if (contractRows.length === 0) return { rows: [] };
 
@@ -4530,6 +4536,8 @@ export async function listWatchGroup(params: {
     arrearsCount: number;
   }> = [];
 
+  // debug: log ตัวอย่าง daysOverdue ของ 3 รายการแรก
+  let _debugCount = 0;
   for (const s of contractRows) {
     const extId: string = s.contract_external_id;
     const cInfo = contractInfoMap.get(extId);
@@ -4550,6 +4558,12 @@ export async function listWatchGroup(params: {
       daysOverdue = Math.max(0, Math.floor((today.getTime() - dueDate2.getTime()) / (1000 * 60 * 60 * 24)));
     } else if (dueDate1) {
       daysOverdue = Math.max(0, Math.floor((today.getTime() - dueDate1.getTime()) / (1000 * 60 * 60 * 24)));
+    }
+
+    // debug: log ตัวอย่าง 3 รายการแรก
+    if (_debugCount < 3) {
+      console.log(`[WatchGroup] sample[${_debugCount}] contract_no=${s.contract_no} due_date_1=${s.due_date_1} due_date_2=${s.due_date_2} daysOverdue=${daysOverdue} gracePeriod=${gracePeriod}`);
+      _debugCount++;
     }
 
     // กรอง: ต้องเกินช่วงผ่อนผัน N วัน
