@@ -1805,7 +1805,29 @@ export async function getDueMonthSummary(
     dueMonthSet.add(r.due_month);
   }
   const approveMonths = Array.from(monthSet).sort((a, b) => b.localeCompare(a));
-  const allDueMonths = Array.from(dueMonthSet).sort((a, b) => a.localeCompare(b));
+
+  // ── สร้าง allDueMonths เป็น continuous range ──────────────────────────────
+  // ปัญหา: บางเดือน (เช่น ก.ย.-พ.ย.) ไม่มีข้อมูลใน query ใดเลย
+  // เพราะ target/due ต้องการ due_date <= CURRENT_DATE และ notYetDue ต้องการ due_date > CURRENT_DATE
+  // แต่เดือนที่อยู่ใน "ปัจจุบัน" อาจไม่มีข้อมูลเพราะยังไม่ถึงกำหนดและไม่มีการชำระล่วงหน้า
+  // แก้ไข: ใช้ min/max ของ due_month ที่พบ แล้ว generate range ต่อเนื่อง
+  const observedDueMonths = Array.from(dueMonthSet).sort((a, b) => a.localeCompare(b));
+  let allDueMonths: string[];
+  if (observedDueMonths.length === 0) {
+    allDueMonths = [];
+  } else {
+    const minDm = observedDueMonths[0];
+    const maxDm = observedDueMonths[observedDueMonths.length - 1];
+    // Generate continuous range from minDm to maxDm
+    allDueMonths = [];
+    let [y, m] = minDm.split("-").map(Number);
+    const [maxY, maxM] = maxDm.split("-").map(Number);
+    while (y < maxY || (y === maxY && m <= maxM)) {
+      allDueMonths.push(`${y}-${String(m).padStart(2, "0")}`);
+      m++;
+      if (m > 12) { m = 1; y++; }
+    }
+  }
 
   // สร้าง Maps สำหรับ lookup
   type Key = string; // "approve_month|due_month"
