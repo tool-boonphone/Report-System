@@ -1410,7 +1410,8 @@ export type DueMonthCell = {
 export type DueMonthRow = {
   approveMonth: string; // YYYY-MM
   dueMonths: Record<string, DueMonthCell>; // key = YYYY-MM ของ due_date
-  totalCount: number;
+  totalCount: number;      // sum ของ contractCount จากทุก due_month cell (สัญญาที่ถึงกำหนด)
+  approvedCount: number;   // จำนวนสัญญาที่อนุมัติในเดือนนี้ (DISTINCT per approve_month)
   totalPaid: MoneyBreakdown;
   totalDue: MoneyBreakdown;
   totalTarget: MoneyBreakdown;
@@ -1447,6 +1448,31 @@ async function queryDueMonthCount(
       AND dtc.due_date IS NOT NULL
     GROUP BY 1, 2
     ORDER BY 1 DESC, 2 ASC
+  `;
+  const rows = await db.execute(sql.raw(q));
+  return pgRows(rows) as any[];
+}
+
+/** Query Approved Count แยกตาม approve_month เท่านั้น (DISTINCT contract per approve month) */
+async function queryDueMonthApprovedCount(
+  section: SectionKey,
+  opts: { approveMonths?: string[]; productType?: string; deviceFamily?: string },
+): Promise<Array<{ approve_month: string; approved_count: number }>> {
+  const db = await getDb(section);
+  if (!db) return [];
+  const baseWhere = dtcWhere(section, {
+    productType: opts.productType,
+    deviceFamily: opts.deviceFamily,
+    approveMonths: opts.approveMonths,
+  });
+  const q = `
+    SELECT
+      TO_CHAR(dtc.approve_date, 'YYYY-MM') AS approve_month,
+      COUNT(DISTINCT dtc.contract_external_id) AS approved_count
+    FROM debt_target_cache dtc
+    WHERE ${baseWhere}
+    GROUP BY 1
+    ORDER BY 1 DESC
   `;
   const rows = await db.execute(sql.raw(q));
   return pgRows(rows) as any[];
@@ -1764,13 +1790,14 @@ export async function getDueMonthSummary(
     deviceFamily: params.deviceFamily,
   };
 
-  const [countRows, targetRows, dueRows, notYetDueRows, installTotalRows, paidRows] = await Promise.all([
+  const [countRows, targetRows, dueRows, notYetDueRows, installTotalRows, paidRows, approvedCountRows] = await Promise.all([
     queryDueMonthCount(section, opts),
     queryDueMonthTarget(section, opts),
     queryDueMonthDue(section, opts),
     queryDueMonthNotYetDue(section, opts),
     queryDueMonthInstallTotal(section, opts),
     queryDueMonthPaid(section, opts),
+    queryDueMonthApprovedCount(section, opts),
   ]);
 
   // รวบรวม approve_months และ due_months ทั้งหมด
@@ -1787,6 +1814,10 @@ export async function getDueMonthSummary(
   type Key = string; // "approve_month|due_month"
   const countMap = new Map<Key, number>();
   for (const r of countRows) countMap.set(`${r.approve_month}|${r.due_month}`, n(r.contract_count));
+
+  // approvedCount per approve_month (ไม่แยกตาม due_month)
+  const approvedCountMap = new Map<string, number>();
+  for (const r of approvedCountRows) approvedCountMap.set(r.approve_month, n(r.approved_count));
 
   const targetMap = new Map<Key, MoneyBreakdown>();
   for (const r of targetRows) {
@@ -1867,7 +1898,8 @@ export async function getDueMonthSummary(
       }
     }
 
-    return { approveMonth, dueMonths, totalCount, totalPaid, totalDue, totalTarget, totalNotYetDue, totalInstallTotal };
+    const approvedCount = approvedCountMap.get(approveMonth) ?? 0;
+    return { approveMonth, dueMonths, totalCount, approvedCount, totalPaid, totalDue, totalTarget, totalNotYetDue, totalInstallTotal };
   });
 }
 
@@ -1948,8 +1980,8 @@ export async function populateDueMonthCache(
   let totalRows = 0;
   const ptCount = dims.productTypes.length;
   const dfCount = dims.deviceFamilies.length;
-  // count, target, due, notYetDue, installTotal, paid — แต่ละ query: pt × df
-  const totalCombinations = ptCount * dfCount * 6;
+  // count, target, due, notYetDue, installTotal, paid, approvedCount — แต่ละ query: pt × df
+  const totalCombinations = ptCount * dfCount * 7;
   let doneCombinations = 0;
 
   // ── Query 1: count ────────────────────────────────────────────────────────
@@ -2100,6 +2132,29 @@ export async function populateDueMonthCache(
     }
   }
 
+  // ── Query 7: approvedCount (DISTINCT per approve_month, ใช้ due_month = '__approved__') ────
+  for (const pt of dims.productTypes) {
+    for (const df of dims.deviceFamilies) {
+      const rows = await queryDueMonthApprovedCount(section, {
+        productType: pt ?? undefined,
+        deviceFamily: df ?? undefined,
+      });
+      const mapped = rows.map((r) => ({
+        approve_month: r.approve_month,
+        due_month: "__approved__",
+        productType: pt,
+        deviceFamily: df,
+        contractCount: r.approved_count,
+        principal: 0, interest: 0, fee: 0, penalty: 0, unlockFee: 0,
+        discount: 0, overpaid: 0, badDebt: 0, badDebtInstallment: 0, totalAmount: 0,
+      }));
+      await upsertDueMonthRows(section, "approvedCount", mapped);
+      totalRows += mapped.length;
+      doneCombinations++;
+      onProgress?.(doneCombinations, totalCombinations);
+    }
+  }
+
   return totalRows;
 }
 
@@ -2155,13 +2210,14 @@ export async function getDueMonthSummaryFromCache(
   const notYetDueRows    = allDbRows.filter((r) => r.query_type === "notYetDue");
   const installTotalRows = allDbRows.filter((r) => r.query_type === "installTotal");
   const paidRows         = allDbRows.filter((r) => r.query_type === "paid");
+  const approvedCountRows = allDbRows.filter((r) => r.query_type === "approvedCount");
 
   // รวบรวม approve_months และ due_months ทั้งหมด
   const monthSet    = new Set<string>();
   const dueMonthSet = new Set<string>();
   for (const r of allDbRows) {
     monthSet.add(r.approve_month);
-    dueMonthSet.add(r.due_month);
+    if (r.due_month !== "__approved__") dueMonthSet.add(r.due_month);
   }
   const approveMonths = Array.from(monthSet).sort((a, b) => b.localeCompare(a));
   const allDueMonths  = Array.from(dueMonthSet).sort((a, b) => a.localeCompare(b));
@@ -2174,6 +2230,10 @@ export async function getDueMonthSummaryFromCache(
   type Key = string;
   const countMap = new Map<Key, number>();
   for (const r of countRows) countMap.set(`${r.approve_month}|${r.due_month}`, n(r.contract_count));
+
+  // approvedCount per approve_month (ไม่แยกตาม due_month)
+  const approvedCountMap = new Map<string, number>();
+  for (const r of approvedCountRows) approvedCountMap.set(r.approve_month, n(r.contract_count));
 
   const targetMap = new Map<Key, MoneyBreakdown>();
   for (const r of targetRows) {
@@ -2246,7 +2306,8 @@ export async function getDueMonthSummaryFromCache(
         (totalInstallTotal as any)[k] += installTotal[k];
       }
     }
-    return { approveMonth, dueMonths, totalCount, totalPaid, totalDue, totalTarget, totalNotYetDue, totalInstallTotal };
+    const approvedCount = approvedCountMap.get(approveMonth) ?? 0;
+    return { approveMonth, dueMonths, totalCount, approvedCount, totalPaid, totalDue, totalTarget, totalNotYetDue, totalInstallTotal };
   });
 
   return { rows, allDueMonths };

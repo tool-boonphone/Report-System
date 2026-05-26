@@ -277,11 +277,11 @@ export const monthlySummaryRouter = router({
             installTotalTotal: cell.installTotal.total, installTotalPrincipal: cell.installTotal.principal, installTotalInterest: cell.installTotal.interest, installTotalFee: cell.installTotal.fee,
           });
         }
-        // __total__ row
+        // __total__ row — contractCount = approvedCount (จำนวนสัญญาที่อนุมัติในเดือนนั้น)
         flatRows.push({
           approveMonth: row.approveMonth,
           dueMonth: "__total__",
-          contractCount: row.totalCount,
+          contractCount: row.approvedCount,
           paidTotal: row.totalPaid.total, paidPrincipal: row.totalPaid.principal, paidInterest: row.totalPaid.interest, paidFee: row.totalPaid.fee, paidPenalty: row.totalPaid.penalty, paidUnlockFee: row.totalPaid.unlockFee, paidDiscount: row.totalPaid.discount, paidOverpaid: row.totalPaid.overpaid, paidBadDebt: row.totalPaid.badDebt, paidBadDebtInstallment: row.totalPaid.badDebtInstallment,
           targetTotal: row.totalTarget.total, targetPrincipal: row.totalTarget.principal, targetInterest: row.totalTarget.interest, targetFee: row.totalTarget.fee, targetPenalty: row.totalTarget.penalty, targetUnlockFee: row.totalTarget.unlockFee,
           dueTotal: row.totalDue.total, duePrincipal: row.totalDue.principal, dueInterest: row.totalDue.interest, dueFee: row.totalDue.fee, duePenalty: row.totalDue.penalty, dueUnlockFee: row.totalDue.unlockFee,
