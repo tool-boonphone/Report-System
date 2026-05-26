@@ -4347,3 +4347,265 @@ export async function listSuspectedBadDebt(params: { section: SectionKey }): Pro
 
   return { rows };
 }
+
+/* ============================================================================
+ * listWatchGroup — Phase 131
+ * กลุ่มเฝ้าระวัง: สัญญาที่ไม่เคยชำระเลย (0 งวด) และถึงกำหนดงวดแรก/งวดสอง
+ * แล้วเกินช่วงผ่อนผัน N วัน
+ *
+ * gracePeriod (N วัน) = ช่วงผ่อนผัน
+ * arrearsFilter:
+ *   "0" → ถึงกำหนดงวดที่ 1 แล้ว เกินกำหนด > N วัน และงวดที่ 2 ยังไม่ถึงกำหนด
+ *   "1" → ถึงกำหนดงวดที่ 2 แล้ว เกินกำหนดงวดที่ 2 > N วัน
+ *   undefined → ทั้งหมด (0 + 1)
+ *
+ * productType filter: "มือ 1" | "มือ 2" | "Sure+" (Sure+ เฉพาะ Boonphone)
+ * partnerSearch: ค้นหาจาก partner_code หรือ partner_name
+ * ============================================================================ */
+export async function listWatchGroup(params: {
+  section: SectionKey;
+  gracePeriod?: number;       // N วัน (default 15)
+  arrearsFilter?: "0" | "1";  // undefined = ทั้งหมด
+  productTypes?: string[];     // ["มือ 1","มือ 2","Sure+"]
+  partnerSearch?: string;      // ค้นหา partner_code หรือ partner_name
+}): Promise<{
+  rows: Array<{
+    contractExternalId: string;
+    contractNo: string | null;
+    approveDate: string | null;
+    customerName: string | null;
+    phone: string | null;
+    model: string | null;
+    device: string | null;
+    productType: string | null;
+    partnerCode: string | null;
+    partnerName: string | null;
+    sellPrice: number | null;
+    financeAmount: number | null;
+    multiplier: number | null;
+    commissionNet: number | null;
+    incentive: number;
+    installmentCount: number | null;
+    installmentAmount: number | null;
+    totalInstallmentValue: number;  // installmentAmount × installmentCount
+    daysOverdue: number;            // วันที่เกินกำหนด (นับจากงวดแรกที่ยังไม่ชำระ)
+    arrearsCount: number;           // จำนวนงวดค้าง (0 หรือ 1)
+  }>;
+}> {
+  const { section, gracePeriod = 15, arrearsFilter, productTypes, partnerSearch } = params;
+  const db = await getDb(section);
+  if (!db) return { rows: [] };
+
+  const today = new Date();
+  const todayStr = today.toISOString().slice(0, 10); // YYYY-MM-DD
+
+  // --- Step 1: ดึงสัญญาที่ไม่เคยชำระเลย (paidInstallments = 0) ---
+  // จาก debt_target_cache: หา due_date ของงวดที่ 1 และงวดที่ 2 (is_arrears=true, period_no=1,2)
+  // เงื่อนไข: ไม่มีใน debt_collected_cache เลย (หรือ paidInstallments = 0)
+  const rawContracts = await db.execute(sql`
+    SELECT
+      dtc.contract_external_id,
+      dtc.contract_no,
+      dtc.customer_name,
+      dtc.approve_date,
+      dtc.model,
+      dtc.device,
+      dtc.finance_amount,
+      dtc.installment_count,
+      -- due_date งวดที่ 1 (period_no=1, is_arrears=true)
+      MIN(CASE WHEN dtc.period_no = 1 AND dtc.is_arrears = true THEN dtc.due_date END) AS due_date_1,
+      -- due_date งวดที่ 2 (period_no=2, is_arrears=true)
+      MIN(CASE WHEN dtc.period_no = 2 AND dtc.is_arrears = true THEN dtc.due_date END) AS due_date_2,
+      -- จำนวนงวดที่ถึงกำหนดแล้ว (due_date <= today)
+      COUNT(CASE WHEN dtc.is_arrears = true AND dtc.due_date <= ${todayStr} THEN 1 END) AS due_count
+    FROM debt_target_cache dtc
+    WHERE dtc.section = ${params.section}
+      AND dtc.is_arrears = true
+    GROUP BY
+      dtc.contract_external_id,
+      dtc.contract_no,
+      dtc.customer_name,
+      dtc.approve_date,
+      dtc.model,
+      dtc.device,
+      dtc.finance_amount,
+      dtc.installment_count
+    HAVING
+      -- ต้องมีงวดที่ 1 ถึงกำหนดแล้ว
+      MIN(CASE WHEN dtc.period_no = 1 AND dtc.is_arrears = true THEN dtc.due_date END) IS NOT NULL
+      AND MIN(CASE WHEN dtc.period_no = 1 AND dtc.is_arrears = true THEN dtc.due_date END) <= ${todayStr}
+  `);
+  let contractRows: Array<any> = pgRows(rawContracts);
+
+  if (contractRows.length === 0) return { rows: [] };
+
+  const contractIds = contractRows.map((r: any) => r.contract_external_id as string);
+  const contractNos = contractRows.map((r: any) => r.contract_no as string).filter(Boolean);
+
+  // --- Step 2: กรองเฉพาะสัญญาที่ไม่เคยชำระเลย ---
+  const paidRaw = await db.execute(
+    sql.raw(`
+      SELECT contract_external_id, COUNT(*) AS paid_count
+      FROM debt_collected_cache
+      WHERE section = '${params.section}'
+        AND is_bad_debt_row = false
+        AND contract_external_id IN (${contractIds.map((id) => `'${id.replace(/'/g, "''")}'`).join(",")})
+      GROUP BY contract_external_id
+    `)
+  );
+  const paidSet = new Set<string>();
+  for (const r of (pgRows(paidRaw) as any[])) {
+    if (Number(r.paid_count) > 0) paidSet.add(r.contract_external_id);
+  }
+  // ตัดสัญญาที่เคยชำระออก
+  contractRows = contractRows.filter((r: any) => !paidSet.has(r.contract_external_id));
+
+  if (contractRows.length === 0) return { rows: [] };
+
+  // --- Step 3: JOIN contracts สำหรับ phone, sell_price, commission_net, partner, product_type, installment_amount ---
+  const filteredIds = contractRows.map((r: any) => r.contract_external_id as string);
+  const contractInfoRaw = await db.execute(
+    sql.raw(`
+      SELECT
+        external_id,
+        phone,
+        CAST(sell_price AS DECIMAL(18,2))        AS sell_price,
+        CAST(multiplier AS DECIMAL(18,4))         AS multiplier,
+        CAST(commission_net AS DECIMAL(18,2))     AS commission_net,
+        CAST(installment_amount AS DECIMAL(18,2)) AS installment_amount,
+        partner_code,
+        partner_name,
+        product_type
+      FROM contracts
+      WHERE section = '${params.section}'
+        AND external_id IN (${filteredIds.map((id) => `'${id.replace(/'/g, "''")}'`).join(",")})
+    `)
+  );
+  const contractInfoMap = new Map<string, any>();
+  for (const r of (pgRows(contractInfoRaw) as any[])) {
+    contractInfoMap.set(r.external_id, r);
+  }
+
+  // --- Step 4: incentive จาก commissions table ---
+  const incentiveMap = new Map<string, number>();
+  if (contractNos.length > 0) {
+    const incentiveRaw = await db.execute(
+      sql.raw(`
+        SELECT contract_no, SUM(COALESCE(incentive, 0)) AS inc
+        FROM commissions
+        WHERE section = '${params.section}'
+          AND contract_no IN (${contractNos.map((n) => `'${n.replace(/'/g, "''")}'`).join(",")})
+        GROUP BY contract_no
+      `)
+    );
+    for (const r of (pgRows(incentiveRaw) as any[])) {
+      if (r.contract_no) incentiveMap.set(r.contract_no, Number(r.inc ?? 0));
+    }
+  }
+
+  // --- Step 5: Assemble rows + apply filters ---
+  const rows: Array<{
+    contractExternalId: string;
+    contractNo: string | null;
+    approveDate: string | null;
+    customerName: string | null;
+    phone: string | null;
+    model: string | null;
+    device: string | null;
+    productType: string | null;
+    partnerCode: string | null;
+    partnerName: string | null;
+    sellPrice: number | null;
+    financeAmount: number | null;
+    multiplier: number | null;
+    commissionNet: number | null;
+    incentive: number;
+    installmentCount: number | null;
+    installmentAmount: number | null;
+    totalInstallmentValue: number;
+    daysOverdue: number;
+    arrearsCount: number;
+  }> = [];
+
+  for (const s of contractRows) {
+    const extId: string = s.contract_external_id;
+    const cInfo = contractInfoMap.get(extId);
+
+    // คำนวณ arrearsCount และ daysOverdue
+    const dueDate1 = s.due_date_1 ? new Date(`${s.due_date_1}T00:00:00`) : null;
+    const dueDate2 = s.due_date_2 ? new Date(`${s.due_date_2}T00:00:00`) : null;
+
+    // ตรวจสอบว่างวดที่ 2 ถึงกำหนดแล้วหรือยัง
+    const due2Reached = dueDate2 != null && dueDate2 <= today;
+
+    // arrearsCount: ถ้างวดที่ 2 ถึงกำหนดแล้ว = 1, ถ้ายังไม่ถึง = 0
+    const arrearsCount = due2Reached ? 1 : 0;
+
+    // daysOverdue: นับจาก due_date ของงวดที่ถึงกำหนดล่าสุด
+    let daysOverdue = 0;
+    if (arrearsCount === 1 && dueDate2) {
+      daysOverdue = Math.max(0, Math.floor((today.getTime() - dueDate2.getTime()) / (1000 * 60 * 60 * 24)));
+    } else if (dueDate1) {
+      daysOverdue = Math.max(0, Math.floor((today.getTime() - dueDate1.getTime()) / (1000 * 60 * 60 * 24)));
+    }
+
+    // กรอง: ต้องเกินช่วงผ่อนผัน N วัน
+    if (daysOverdue <= gracePeriod) continue;
+
+    // กรอง arrearsFilter
+    if (arrearsFilter !== undefined) {
+      if (arrearsFilter === "0" && arrearsCount !== 0) continue;
+      if (arrearsFilter === "1" && arrearsCount !== 1) continue;
+    }
+
+    // กรอง productType
+    const productType = cInfo?.product_type ?? null;
+    if (productTypes && productTypes.length > 0) {
+      if (!productType || !productTypes.includes(productType)) continue;
+    }
+
+    // กรอง partnerSearch
+    const partnerCode = cInfo?.partner_code ?? null;
+    const partnerName = cInfo?.partner_name ?? null;
+    if (partnerSearch && partnerSearch.trim()) {
+      const q = partnerSearch.trim().toLowerCase();
+      const matchCode = partnerCode?.toLowerCase().includes(q) ?? false;
+      const matchName = partnerName?.toLowerCase().includes(q) ?? false;
+      if (!matchCode && !matchName) continue;
+    }
+
+    const financeAmount = s.finance_amount != null ? Number(s.finance_amount) : null;
+    const installmentAmount = cInfo?.installment_amount != null ? Number(cInfo.installment_amount) : null;
+    const installmentCount = s.installment_count != null ? Number(s.installment_count) : null;
+    const totalInstallmentValue = (installmentAmount ?? 0) * (installmentCount ?? 0);
+    const incentive = incentiveMap.get(s.contract_no ?? "") ?? 0;
+
+    rows.push({
+      contractExternalId: extId,
+      contractNo: s.contract_no ?? null,
+      approveDate: s.approve_date ?? null,
+      customerName: s.customer_name ?? null,
+      phone: cInfo?.phone ?? null,
+      model: s.model ?? null,
+      device: s.device ?? null,
+      productType,
+      partnerCode,
+      partnerName,
+      sellPrice: cInfo?.sell_price != null ? Number(cInfo.sell_price) : null,
+      financeAmount,
+      multiplier: cInfo?.multiplier != null ? Number(cInfo.multiplier) : null,
+      commissionNet: cInfo?.commission_net != null ? Number(cInfo.commission_net) : null,
+      incentive,
+      installmentCount,
+      installmentAmount,
+      totalInstallmentValue,
+      daysOverdue,
+      arrearsCount,
+    });
+  }
+
+  // เรียงตาม daysOverdue มากสุดก่อน
+  rows.sort((a, b) => b.daysOverdue - a.daysOverdue);
+
+  return { rows };
+}

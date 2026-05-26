@@ -7,6 +7,7 @@ import { SECTIONS } from "@shared/const";
 import {
   AlertTriangle,
   Banknote,
+  Eye,
   BookOpen,
   CalendarDays,
   ChevronDown,
@@ -31,6 +32,7 @@ type MenuCode =
   | "contract"
   | "debt_overview"
   | "debt_report"
+  | "watch_group"
   | "suspected_bad_debt"
   | "bad_debt_summary"
   | "monthly_summary"
@@ -69,11 +71,12 @@ const MAIN_NAV: NavEntry[] = [
     kind: "group",
     label: "รายงานหนี้",
     icon: Banknote,
-    childCodes: ["debt_overview", "debt_report", "suspected_bad_debt", "bad_debt_summary", "monthly_summary"],
+    childCodes: ["debt_overview", "debt_report", "watch_group", "suspected_bad_debt", "bad_debt_summary", "monthly_summary"],
     children: [
       { kind: "leaf", label: "สรุปภาพรวม", path: "/debt-overview", icon: LayoutDashboard, menuCode: "debt_overview" },
       { kind: "leaf", label: "สรุปรายเดือน", path: "/monthly-summary", icon: CalendarDays, menuCode: "monthly_summary" },
       { kind: "leaf", label: "เป้า-ยอดเก็บ", path: "/debt-report", icon: Banknote, menuCode: "debt_report" },
+      { kind: "leaf", label: "กลุ่มเฝ้าระวัง", path: "/watch-group", icon: Eye, menuCode: "watch_group" },
       { kind: "leaf", label: "หนี้สงสัยจะเสีย", path: "/suspected-bad-debt", icon: AlertTriangle, menuCode: "suspected_bad_debt" },
       { kind: "leaf", label: "หนี้เสีย", path: "/bad-debt-summary", icon: TrendingDown, menuCode: "bad_debt_summary" },
     ],

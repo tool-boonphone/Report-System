@@ -18,6 +18,7 @@ import DebtSummary from "./pages/DebtSummary";
 import DebtOverview from "./pages/DebtOverview";
 import MonthlySummary from "./pages/MonthlySummary";
 import SuspectedBadDebt from "./pages/SuspectedBadDebt";
+import WatchGroup from "./pages/WatchGroup";
 import DataLoadingScreen from "./pages/DataLoadingScreen";
 import UsersSettings from "./pages/settings/Users";
 import GroupsSettings from "./pages/settings/Groups";
@@ -36,6 +37,7 @@ function Router() {
       <Route path="/debt-overview" component={DebtOverview} />
       <Route path="/debt-summary" component={DebtSummary} />
       <Route path="/debt-report" component={DebtReport} />
+      <Route path="/watch-group" component={WatchGroup} />
       <Route path="/suspected-bad-debt" component={SuspectedBadDebt} />
       <Route path="/bad-debt-summary" component={BadDebtSummary} />
       <Route path="/monthly-summary" component={MonthlySummary} />

@@ -9,6 +9,7 @@ import { syncRouter } from "./routers/sync";
 import { aiRouter } from "./routers/ai";
 import { monthlySummaryRouter } from "./routers/monthlySummary";
 import { suspectedBadDebtRouter } from "./routers/suspectedBadDebt";
+import { watchGroupRouter } from "./routers/watchGroup";
 import { cacheRouter } from "./routers/cache";
 import { accountingRouter } from "./routers/accounting";
 import { fillPeriodNosRouter } from "./routers/fillPeriodNosRouter";
@@ -23,6 +24,7 @@ export const appRouter = router({
   badDebt: badDebtRouter,
   ai: aiRouter,
   monthlySummary: monthlySummaryRouter,
+  watchGroup: watchGroupRouter,
   suspectedBadDebt: suspectedBadDebtRouter,
   cache: cacheRouter,
   accounting: accountingRouter,
