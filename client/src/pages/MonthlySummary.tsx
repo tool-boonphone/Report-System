@@ -1519,6 +1519,7 @@ export default function MonthlySummary() {
               paidVis={paidVis} targetVis={targetVis}
               dueVis={dueVis} notYetDueVis={notYetDueVis}
               installVis={installVis}
+              showStickyTotal={showStickyTotal}
             />)
           ):tab==="combined"?(
             <CombinedTable
@@ -1535,6 +1536,7 @@ export default function MonthlySummary() {
               showBadDebtInstall={showBadDebtInstall} setShowBadDebtInstall={setShowBadDebtInstall}
               showBadDebtSale={showBadDebtSale} setShowBadDebtSale={setShowBadDebtSale}
               stickyTop={0}
+              showStickyTotal={showStickyTotal}
             />
           ):(
             <SummaryTable
@@ -1571,152 +1573,7 @@ export default function MonthlySummary() {
             {showStickyTotal?<ChevronDown className="w-3.5 h-3.5"/>:<ChevronUp className="w-3.5 h-3.5"/>}
           </button>
 
-          {/* Sticky Total Panel */}
-          {showStickyTotal&&(
-            <div className="fixed bottom-0 left-0 right-0 z-40 bg-white border-t-2 border-teal-600 shadow-2xl">
-              {/* header bar */}
-              <div className="flex items-center justify-between px-4 py-1.5 bg-teal-700 text-white">
-                <span className="text-xs font-bold tracking-wide">รวมทั้งหมด</span>
-                <button type="button" onClick={()=>setShowStickyTotal(false)} className="hover:opacity-70 transition-opacity">
-                  <X className="w-4 h-4"/>
-                </button>
-              </div>
-              {/* content: แสดงตาม mode */}
-              {combinedViewMode==="dueMonth"?(
-                // ── DueMonth mode: แสดง grand total ของ DueMonthTable ──
-                <div className="overflow-x-auto max-h-[40vh] overflow-y-auto">
-                  <table className="text-xs border-collapse" style={{minWidth:`${130+90+90+(allDueMonths.length*110)}px`}}>
-                    <tbody>
-                      {(()=>{
-                        // คำนวณ grandTotalOverall inline (เหมือน DueMonthTable)
-                        let gtCount=0;
-                        const gtPaid=emptyMoney(),gtTarget=emptyMoney(),gtDue=emptyMoney(),gtNotYetDue=emptyMoney(),gtInstall=emptyMoney();
-                        const gtByDm:Record<string,DueMonthCellLocal>={}
-                        for(const dm of allDueMonths)gtByDm[dm]={contractCount:0,paid:emptyMoney(),target:emptyMoney(),due:emptyMoney(),notYetDue:emptyMoney(),installTotal:emptyMoney()};
-                        for(const row of dueMonthRows){
-                          if(hiddenRows.has(row.approveMonth))continue;
-                          gtCount+=row.approvedCount;
-                          for(const k of Object.keys(emptyMoney()) as (keyof MoneyBreakdown)[]){
-                            gtPaid[k]+=row.totalPaid[k];gtTarget[k]+=row.totalTarget[k];gtDue[k]+=row.totalDue[k];
-                            gtNotYetDue[k]+=row.totalNotYetDue[k];gtInstall[k]+=row.totalInstallTotal[k];
-                          }
-                          for(const dm of allDueMonths){
-                            const cell=row.dueMonths[dm];if(!cell)continue;
-                            gtByDm[dm].contractCount+=cell.contractCount;
-                            for(const k of Object.keys(emptyMoney()) as (keyof MoneyBreakdown)[]){
-                              gtByDm[dm].paid[k]+=cell.paid[k];gtByDm[dm].target[k]+=cell.target[k];
-                              gtByDm[dm].due[k]+=cell.due[k];gtByDm[dm].notYetDue[k]+=cell.notYetDue[k];
-                              gtByDm[dm].installTotal[k]+=cell.installTotal[k];
-                            }
-                          }
-                        }
-                        const gtInstallNum=(installVis.principal?gtInstall.principal:0)+(installVis.interest?gtInstall.interest:0)+(installVis.fee?gtInstall.fee:0);
-                        const gtTargetNum=computeMoneyTotal(gtTarget,{...targetVis,discount:false,overpaid:false});
-                        const stickyDmSubRows=DUE_MONTH_SUB_ROWS.filter(sr=>sr.key==="count"||!hiddenSubRows.has(sr.key as TabKey));
-                        return stickyDmSubRows.map((sr,srIdx)=>{
-                          const rowVal=
-                            sr.key==="count"?gtCount:
-                            sr.key==="installTotal"?gtInstallNum:
-                            sr.key==="target"?gtTargetNum:
-                            sr.key==="paid"?computeMoneyTotal(gtPaid,paidVis):
-                            sr.key==="due"?computeDueTotal(gtDue,dueVis):
-                            computeNotYetDueTotal(gtNotYetDue,notYetDueVis);
-                          return(
-                            <tr key={sr.key} className={["border-b border-gray-200 font-bold",srIdx===0?"border-t border-slate-300":"",sr.totalBg].join(" ")}>
-                              {srIdx===0&&(
-                                <td rowSpan={stickyDmSubRows.length} className="sticky left-0 z-10 px-3 py-1.5 text-xs font-bold text-slate-800 bg-slate-100 border-r border-slate-300 whitespace-nowrap align-middle min-w-[130px]">
-                                  รวมทั้งหมด
-                                </td>
-                              )}
-                              <td className={["sticky left-[130px] z-10 px-2 py-1.5 text-center text-[11px] border-r border-slate-300 min-w-[90px]",sr.totalBg,sr.textColor].join(" ")}>{sr.label}</td>
-                              <td className={["sticky left-[220px] z-10 px-3 py-1.5 text-right border-r border-slate-300 min-w-[90px]",sr.totalBg].join(" ")}>
-                                {sr.key==="count"?(
-                                  rowVal===0?<span className="text-gray-300">—</span>:<span className="inline-flex items-center justify-center bg-slate-100 text-slate-700 rounded-full px-2.5 py-0.5 text-xs font-bold">{rowVal.toLocaleString()}</span>
-                                ):(
-                                  rowVal===0?<span className="text-gray-300 text-xs">—</span>:<span className={["text-xs font-medium",sr.textColor].join(" ")}>{fmtMoney(rowVal)}</span>
-                                )}
-                              </td>
-                              {allDueMonths.map((dm)=>{
-                                const cell=gtByDm[dm];
-                                const val=
-                                  sr.key==="count"?cell.contractCount:
-                                  sr.key==="installTotal"?(installVis.principal?cell.installTotal.principal:0)+(installVis.interest?cell.installTotal.interest:0)+(installVis.fee?cell.installTotal.fee:0):
-                                  sr.key==="target"?computeMoneyTotal(cell.target,{...targetVis,discount:false,overpaid:false}):
-                                  sr.key==="paid"?computeMoneyTotal(cell.paid,paidVis):
-                                  sr.key==="due"?computeDueTotal(cell.due,dueVis):
-                                  computeNotYetDueTotal(cell.notYetDue,notYetDueVis);
-                                return(
-                                  <td key={dm} className={["px-3 py-1.5 text-right border-r border-slate-300",sr.totalBg].join(" ")}>
-                                    {sr.key==="count"?(
-                                      val===0?<span className="text-gray-300">—</span>:<span className="inline-flex items-center justify-center bg-slate-100 text-slate-700 rounded-full px-2.5 py-0.5 text-xs font-bold">{val.toLocaleString()}</span>
-                                    ):(
-                                      val===0?<span className="text-gray-300 text-xs">—</span>:<span className={["text-xs font-medium",sr.textColor].join(" ")}>{fmtMoney(val)}</span>
-                                    )}
-                                  </td>
-                                );
-                              })}
-                            </tr>
-                          );
-                        });
-                      })()}
-                    </tbody>
-                  </table>
-                </div>
-              ):(
-                // ── Bucket mode: แสดง grand total ของ CombinedTable ──
-                <div className="overflow-x-auto max-h-[40vh] overflow-y-auto">
-                  <table className="text-xs border-collapse" style={{minWidth:`${130+90+90+(DEBT_BUCKETS.length*110)+90+(2*110)}px`}}>
-                    <tbody>
-                      {COMBINED_SUB_ROWS.filter(sr=>sr.key==="count"||!hiddenSubRows.has(sr.key)).map((sr,srIdx,visArr)=>{
-                        const val=combinedGrandTotal.totalCount&&sr.key==="count"?combinedGrandTotal.totalCount:
-                          sr.key==="installTotal"?(installVis.principal?combinedGrandTotal.totalInstallTotal.principal:0)+(installVis.interest?combinedGrandTotal.totalInstallTotal.interest:0)+(installVis.fee?combinedGrandTotal.totalInstallTotal.fee:0):
-                          sr.key==="target"?computeMoneyTotal(combinedGrandTotal.totalTarget,{...targetVis,discount:false,overpaid:false}):
-                          sr.key==="paid"?computeMoneyTotal(combinedGrandTotal.totalPaid,paidVis)+(showBadDebtSale?(combinedGrandTotal.totalPaid.badDebt??0):0):
-                          sr.key==="due"?computeDueTotal(combinedGrandTotal.totalDue,dueVis):
-                          computeNotYetDueTotal(combinedGrandTotal.totalNotYetDue,notYetDueVis);
-                        return(
-                          <tr key={sr.key} className={["border-b border-gray-200 font-bold",srIdx===0?"border-t border-slate-300":"",sr.totalBg].join(" ")}>
-                            {srIdx===0&&(
-                              <td rowSpan={visArr.length} className="sticky left-0 z-10 px-3 py-1.5 text-xs font-bold text-slate-800 bg-slate-100 border-r border-slate-300 whitespace-nowrap align-middle min-w-[130px]">
-                                รวมทั้งหมด
-                              </td>
-                            )}
-                            <td className={["sticky left-[130px] z-10 px-2 py-1.5 text-center text-[11px] border-r border-slate-300 min-w-[90px]",sr.totalBg,sr.textColor].join(" ")}>{sr.label}</td>
-                            <td className={["sticky left-[220px] z-10 px-3 py-1.5 text-right border-r border-slate-300 min-w-[90px]",sr.totalBg].join(" ")}>
-                              {sr.key==="count"?(
-                                val===0?<span className="text-gray-300">—</span>:<span className="inline-flex items-center justify-center bg-slate-100 text-slate-700 rounded-full px-2.5 py-0.5 text-xs font-bold">{val.toLocaleString()}</span>
-                              ):(
-                                val===0?<span className="text-gray-300 text-xs">—</span>:<span className={["text-xs font-medium",sr.textColor].join(" ")}>{fmtMoney(val)}</span>
-                              )}
-                            </td>
-                            {DEBT_BUCKETS.filter(b=>!hiddenBuckets.has(b)).map((b)=>{
-                              const bt=combinedGrandTotal.bucketTotals[b];
-                              const bVal=!bt?0:
-                                sr.key==="count"?bt.count:
-                                sr.key==="installTotal"?(installVis.principal?bt.installTotal.principal:0)+(installVis.interest?bt.installTotal.interest:0)+(installVis.fee?bt.installTotal.fee:0):
-                                sr.key==="target"?computeMoneyTotal(bt.target,{...targetVis,discount:false,overpaid:false}):
-                                sr.key==="paid"?computeMoneyTotal(bt.paid,paidVis)+(showBadDebtSale?(bt.paid.badDebt??0):0):
-                                sr.key==="due"?computeDueTotal(bt.due,dueVis):
-                                computeNotYetDueTotal(bt.notYetDue,notYetDueVis);
-                              return(
-                                <td key={b} className={["px-3 py-1.5 text-right border-r border-slate-300",sr.totalBg].join(" ")}>
-                                  {sr.key==="count"?(
-                                    bVal===0?<span className="text-gray-300">—</span>:<span className="inline-flex items-center justify-center bg-slate-100 text-slate-700 rounded-full px-2.5 py-0.5 text-xs font-bold">{bVal.toLocaleString()}</span>
-                                  ):(
-                                    bVal===0?<span className="text-gray-300 text-xs">—</span>:<span className={["text-xs font-medium",sr.textColor].join(" ")}>{fmtMoney(bVal)}</span>
-                                  )}
-                                </td>
-                              );
-                            })}
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          )}
+
         </>
       )}
     </AppShell>
@@ -2356,7 +2213,7 @@ function CombinedTable({
   installVis,setInstallVis,
   showBadDebtInstall,setShowBadDebtInstall,
   showBadDebtSale,setShowBadDebtSale,
-  stickyTop,
+  stickyTop,showStickyTotal,
 }:{
   rows:SummaryRow[];grandTotal:GrandTotal;hiddenBuckets:Set<string>;
   toggleBucket:(b:string)=>void;
@@ -2371,6 +2228,7 @@ function CombinedTable({
   showBadDebtInstall:boolean;setShowBadDebtInstall:(v:boolean)=>void;
   showBadDebtSale:boolean;setShowBadDebtSale:(v:boolean)=>void;
   stickyTop:number;
+  showStickyTotal?:boolean;
 }) {
   const ArrowUp2=ArrowUp;const ArrowDown2=ArrowDown;
   const SortIconCombined=sortDir==="asc"?ArrowUp2:ArrowDown2;
@@ -2694,7 +2552,7 @@ function CombinedTable({
           );
         })}
       </tbody>
-      <tfoot>
+      <tfoot className={showStickyTotal?"sticky bottom-0 z-20 shadow-[0_-2px_8px_rgba(0,0,0,0.12)]":undefined}>
         <tr className="border-t-2 border-slate-400 bg-slate-50 font-bold">
           <td className="sticky left-0 z-10 px-3 py-2 text-sm font-bold text-slate-800 bg-slate-100 border-r border-slate-300 whitespace-nowrap">รวมทั้งหมด</td>
           <td className="sticky left-[130px] z-10 px-2 py-2 bg-slate-100 border-r border-slate-300"/>
@@ -2847,6 +2705,7 @@ function DueMonthTable({
   sortDir, onToggleSort,
   stickyTop,
   paidVis, targetVis, dueVis, notYetDueVis, installVis,
+  showStickyTotal,
 }:{
   rows: DueMonthRowLocal[];
   allDueMonths: string[];
@@ -2861,6 +2720,7 @@ function DueMonthTable({
   dueVis: Record<DueBadgeKey,boolean>;
   notYetDueVis: Record<NotYetDueBadgeKey,boolean>;
   installVis: Record<"principal"|"interest"|"fee",boolean>;
+  showStickyTotal?: boolean;
 }) {
   const SortIcon = sortDir==="asc"?ArrowUp:ArrowDown;
 
@@ -3036,7 +2896,7 @@ function DueMonthTable({
           );
         })}
       </tbody>
-      <tfoot>
+      <tfoot className={showStickyTotal?"sticky bottom-0 z-20 shadow-[0_-2px_8px_rgba(0,0,0,0.12)]":undefined}>
         {visSubRows.map((sr,srIdx)=>(
           <tr key={sr.key} className={["border-b border-gray-200 font-bold",srIdx===0?"border-t-2 border-slate-400":"",sr.totalBg].join(" ")}>
             {srIdx===0&&(
