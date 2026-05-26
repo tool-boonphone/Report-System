@@ -9,6 +9,7 @@ import { z } from "zod";
 import { sql } from "drizzle-orm";
 import { router, superAdminProcedure, appProcedure } from "../_core/trpc";
 import { populateDebtCache } from "../sync/populateCache";
+import { populateMonthlySummaryCache, populateDueMonthCache } from "../monthlySummaryDb";
 import { getDb } from "../db";
 import { SECTIONS, sectionSchema, type SectionKey } from "../../shared/const";
 import { pgRows } from "../db";
@@ -43,6 +44,23 @@ export const cacheRouter = router({
       // Fire and forget — do NOT await
       populateDebtCache(section).catch((err: unknown) =>
         console.error(`[cache.populateAsync] ${section} failed:`, err),
+      );
+      return { section, started: true, startedAt: new Date().toISOString() };
+    }),
+  /**
+   * Trigger populate for monthly summary cache (async, fire-and-forget).
+   * Admin-only.
+   */
+  populateMonthlySummaryAsync: superAdminProcedure
+    .input(z.object({ section: sectionSchema }))
+    .mutation(async ({ input }) => {
+      const section = input.section as SectionKey;
+      // Fire and forget — do NOT await
+      Promise.all([
+        populateMonthlySummaryCache(section),
+        populateDueMonthCache(section),
+      ]).catch((err: unknown) =>
+        console.error(`[cache.populateMonthlySummaryAsync] ${section} failed:`, err),
       );
       return { section, started: true, startedAt: new Date().toISOString() };
     }),
