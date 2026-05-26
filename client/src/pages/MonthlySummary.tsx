@@ -2584,6 +2584,11 @@ function CombinedTable({
                       const cellBg=bucketCellBg(b);
                       const isLast=bi===g.buckets.length-1;
                       const isBadDebtBucket=g.label==="หนี้เสีย";
+                      // คำนวณ denominator สำหรับ % ของ bucket นี้
+                      const bInstallVal=isDimmed?0:cellValue("installTotal",cell);
+                      const bTargetVal=isDimmed?0:cellValue("target",cell);
+                      const bPaidSaleAmt=isDimmed?0:(showBadDebtSale?(cell?.paid.badDebt??0):0);
+                      const bPaidNetVal=isDimmed?0:(cellValue("paid",cell)-bPaidSaleAmt);
                       return(
                         <React.Fragment key={b}>
                           {/* bucket หนี้เสีย: แสดงเป็น 3 sub-col (ค่างวด/ขายเครื่อง/รวม) */}
@@ -2619,7 +2624,13 @@ function CombinedTable({
                           ):(
                             <>
                               <td className={["px-3 py-1.5 text-right border-r border-gray-200",cellBg].join(" ")}>
-                                {renderCellVal(sr.key, val, sr.textColor)}
+                                <span className="inline-flex items-center justify-end flex-nowrap gap-0.5 whitespace-nowrap">
+                                  {renderCellVal(sr.key, val, sr.textColor)}
+                                  {!isDimmed&&sr.key==="target"&&<PctTag pct={fmtPct(val,bInstallVal)} color="bg-indigo-50 border-indigo-300 text-indigo-700" tooltip={`เป้าเก็บหนี้ ${fmtPct(val,bInstallVal)??""} ของยอดผ่อนรวม`}/>}
+                                  {!isDimmed&&sr.key==="paid"&&<>{!hiddenSubRows.has("installTotal")&&<PctTag pct={fmtPct(bPaidNetVal,bInstallVal)} color="bg-purple-50 border-purple-300 text-purple-700" tooltip={`ยอดเก็บหนี้ (หักขายเครื่อง) ${fmtPct(bPaidNetVal,bInstallVal)??""} ของยอดผ่อนรวม`}/>}{!hiddenSubRows.has("target")&&<PctTag pct={fmtPct(bPaidNetVal,bTargetVal)} color="bg-indigo-50 border-indigo-300 text-indigo-700" tooltip={`ยอดเก็บหนี้ (หักขายเครื่อง) ${fmtPct(bPaidNetVal,bTargetVal)??""} ของเป้าเก็บหนี้`}/>}</> }
+                                  {!isDimmed&&sr.key==="due"&&<PctTag pct={fmtPct(val,bTargetVal)} color="bg-orange-50 border-orange-300 text-orange-700" tooltip={`หนี้ค้างชำระ ${fmtPct(val,bTargetVal)??""} ของเป้าเก็บหนี้`}/>}
+                                  {!isDimmed&&sr.key==="notYetDue"&&<PctTag pct={fmtPct(val,bInstallVal)} color="bg-blue-50 border-blue-300 text-blue-700" tooltip={`ยังไม่ถึงกำหนด ${fmtPct(val,bInstallVal)??""} ของยอดผ่อนรวม`}/>}
+                                </span>
                               </td>
                               {/* subtotal col หลัง bucket สุดท้ายของกลุ่ม ปกติ/สงสัยจะเสีย */}
                               {isLast&&g.hasSubtotal&&(()=>{
@@ -2628,9 +2639,28 @@ function CombinedTable({
                                   if(isDimmed||hiddenBuckets.has(gb))return s;
                                   return s+cellValue(sr.key,row.buckets[gb]);
                                 },0);
+                                const stInstallVal=groupBuckets.reduce((s,gb)=>{
+                                  if(isDimmed||hiddenBuckets.has(gb))return s;
+                                  return s+cellValue("installTotal",row.buckets[gb]);
+                                },0);
+                                const stTargetVal=groupBuckets.reduce((s,gb)=>{
+                                  if(isDimmed||hiddenBuckets.has(gb))return s;
+                                  return s+cellValue("target",row.buckets[gb]);
+                                },0);
+                                const stPaidSaleAmt=groupBuckets.reduce((s,gb)=>{
+                                  if(isDimmed||hiddenBuckets.has(gb))return s;
+                                  return s+(showBadDebtSale?(row.buckets[gb]?.paid.badDebt??0):0);
+                                },0);
+                                const stPaidNetVal=subtotalVal-stPaidSaleAmt;
                                 return(
                                   <td className={["px-3 py-1.5 text-right font-bold border-r border-gray-300",g.subtotalBg].join(" ")}>
-                                    {renderCellVal(sr.key, subtotalVal, sr.textColor)}
+                                    <span className="inline-flex items-center justify-end flex-nowrap gap-0.5 whitespace-nowrap">
+                                      {renderCellVal(sr.key, subtotalVal, sr.textColor)}
+                                      {!isDimmed&&sr.key==="target"&&<PctTag pct={fmtPct(subtotalVal,stInstallVal)} color="bg-indigo-50 border-indigo-300 text-indigo-700" tooltip={`เป้าเก็บหนี้ ${fmtPct(subtotalVal,stInstallVal)??""} ของยอดผ่อนรวม`}/>}
+                                      {!isDimmed&&sr.key==="paid"&&<>{!hiddenSubRows.has("installTotal")&&<PctTag pct={fmtPct(stPaidNetVal,stInstallVal)} color="bg-purple-50 border-purple-300 text-purple-700" tooltip={`ยอดเก็บหนี้ (หักขายเครื่อง) ${fmtPct(stPaidNetVal,stInstallVal)??""} ของยอดผ่อนรวม`}/>}{!hiddenSubRows.has("target")&&<PctTag pct={fmtPct(stPaidNetVal,stTargetVal)} color="bg-indigo-50 border-indigo-300 text-indigo-700" tooltip={`ยอดเก็บหนี้ (หักขายเครื่อง) ${fmtPct(stPaidNetVal,stTargetVal)??""} ของเป้าเก็บหนี้`}/>}</> }
+                                      {!isDimmed&&sr.key==="due"&&<PctTag pct={fmtPct(subtotalVal,stTargetVal)} color="bg-orange-50 border-orange-300 text-orange-700" tooltip={`หนี้ค้างชำระ ${fmtPct(subtotalVal,stTargetVal)??""} ของเป้าเก็บหนี้`}/>}
+                                      {!isDimmed&&sr.key==="notYetDue"&&<PctTag pct={fmtPct(subtotalVal,stInstallVal)} color="bg-blue-50 border-blue-300 text-blue-700" tooltip={`ยังไม่ถึงกำหนด ${fmtPct(subtotalVal,stInstallVal)??""} ของยอดผ่อนรวม`}/>}
+                                    </span>
                                   </td>
                                 );
                               })()}
@@ -2743,7 +2773,21 @@ function CombinedTable({
                     ):(
                       <>
                         <td className={["px-3 py-1.5 text-right border-r border-gray-300",cellBg,"bg-slate-100"].join(" ")}>
-                          {renderCellVal(sr.key,val,sr.textColor)}
+                          {(()=>{
+                            const gtInstallVal=isBucketHidden?0:gtValue("installTotal",b);
+                            const gtTargetVal=isBucketHidden?0:gtValue("target",b);
+                            const gtBtPaidSaleAmt=isBucketHidden?0:(showBadDebtSale&&bt?(bt.paid.badDebt??0):0);
+                            const gtBtPaidNetVal=isBucketHidden?0:(gtValue("paid",b)-gtBtPaidSaleAmt);
+                            return(
+                              <span className="inline-flex items-center justify-end flex-nowrap gap-0.5 whitespace-nowrap">
+                                {renderCellVal(sr.key,val,sr.textColor)}
+                                {!isBucketHidden&&sr.key==="target"&&<PctTag pct={fmtPct(val,gtInstallVal)} color="bg-indigo-50 border-indigo-300 text-indigo-700" tooltip={`เป้าเก็บหนี้ ${fmtPct(val,gtInstallVal)??""} ของยอดผ่อนรวม`}/>}
+                                {!isBucketHidden&&sr.key==="paid"&&<>{!hiddenSubRows.has("installTotal")&&<PctTag pct={fmtPct(gtBtPaidNetVal,gtInstallVal)} color="bg-purple-50 border-purple-300 text-purple-700" tooltip={`ยอดเก็บหนี้ (หักขายเครื่อง) ${fmtPct(gtBtPaidNetVal,gtInstallVal)??""} ของยอดผ่อนรวม`}/>}{!hiddenSubRows.has("target")&&<PctTag pct={fmtPct(gtBtPaidNetVal,gtTargetVal)} color="bg-indigo-50 border-indigo-300 text-indigo-700" tooltip={`ยอดเก็บหนี้ (หักขายเครื่อง) ${fmtPct(gtBtPaidNetVal,gtTargetVal)??""} ของเป้าเก็บหนี้`}/>}</> }
+                                {!isBucketHidden&&sr.key==="due"&&<PctTag pct={fmtPct(val,gtTargetVal)} color="bg-orange-50 border-orange-300 text-orange-700" tooltip={`หนี้ค้างชำระ ${fmtPct(val,gtTargetVal)??""} ของเป้าเก็บหนี้`}/>}
+                                {!isBucketHidden&&sr.key==="notYetDue"&&<PctTag pct={fmtPct(val,gtInstallVal)} color="bg-blue-50 border-blue-300 text-blue-700" tooltip={`ยังไม่ถึงกำหนด ${fmtPct(val,gtInstallVal)??""} ของยอดผ่อนรวม`}/>}
+                              </span>
+                            );
+                          })()}
                         </td>
                         {/* subtotal col หลัง bucket สุดท้ายของกลุ่ม ปกติ/สงสัยจะเสีย */}
                         {isLast&&g.hasSubtotal&&(()=>{
@@ -2752,9 +2796,29 @@ function CombinedTable({
                             if(hiddenBuckets.has(gb))return s;
                             return s+gtValue(sr.key,gb);
                           },0);
+                          const gtStInstallVal=groupBuckets.reduce((s,gb)=>{
+                            if(hiddenBuckets.has(gb))return s;
+                            return s+gtValue("installTotal",gb);
+                          },0);
+                          const gtStTargetVal=groupBuckets.reduce((s,gb)=>{
+                            if(hiddenBuckets.has(gb))return s;
+                            return s+gtValue("target",gb);
+                          },0);
+                          const gtStPaidSaleAmt=groupBuckets.reduce((s,gb)=>{
+                            if(hiddenBuckets.has(gb))return s;
+                            const gbt=grandTotal.bucketTotals[gb];
+                            return s+(showBadDebtSale&&gbt?(gbt.paid.badDebt??0):0);
+                          },0);
+                          const gtStPaidNetVal=subtotalVal-gtStPaidSaleAmt;
                           return(
                             <td className={["px-3 py-1.5 text-right font-bold border-r border-gray-300",g.subtotalBg,"bg-opacity-80"].join(" ")}>
-                              {renderCellVal(sr.key, subtotalVal, sr.textColor)}
+                              <span className="inline-flex items-center justify-end flex-nowrap gap-0.5 whitespace-nowrap">
+                                {renderCellVal(sr.key, subtotalVal, sr.textColor)}
+                                {sr.key==="target"&&<PctTag pct={fmtPct(subtotalVal,gtStInstallVal)} color="bg-indigo-50 border-indigo-300 text-indigo-700" tooltip={`เป้าเก็บหนี้ ${fmtPct(subtotalVal,gtStInstallVal)??""} ของยอดผ่อนรวม`}/>}
+                                {sr.key==="paid"&&<>{!hiddenSubRows.has("installTotal")&&<PctTag pct={fmtPct(gtStPaidNetVal,gtStInstallVal)} color="bg-purple-50 border-purple-300 text-purple-700" tooltip={`ยอดเก็บหนี้ (หักขายเครื่อง) ${fmtPct(gtStPaidNetVal,gtStInstallVal)??""} ของยอดผ่อนรวม`}/>}{!hiddenSubRows.has("target")&&<PctTag pct={fmtPct(gtStPaidNetVal,gtStTargetVal)} color="bg-indigo-50 border-indigo-300 text-indigo-700" tooltip={`ยอดเก็บหนี้ (หักขายเครื่อง) ${fmtPct(gtStPaidNetVal,gtStTargetVal)??""} ของเป้าเก็บหนี้`}/>}</> }
+                                {sr.key==="due"&&<PctTag pct={fmtPct(subtotalVal,gtStTargetVal)} color="bg-orange-50 border-orange-300 text-orange-700" tooltip={`หนี้ค้างชำระ ${fmtPct(subtotalVal,gtStTargetVal)??""} ของเป้าเก็บหนี้`}/>}
+                                {sr.key==="notYetDue"&&<PctTag pct={fmtPct(subtotalVal,gtStInstallVal)} color="bg-blue-50 border-blue-300 text-blue-700" tooltip={`ยังไม่ถึงกำหนด ${fmtPct(subtotalVal,gtStInstallVal)??""} ของยอดผ่อนรวม`}/>}
+                              </span>
                             </td>
                           );
                         })()}
