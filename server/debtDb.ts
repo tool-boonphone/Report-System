@@ -4552,11 +4552,9 @@ export async function listWatchGroup(params: {
     // arrearsCount: ถ้างวดที่ 2 ถึงกำหนดแล้ว = 1, ถ้ายังไม่ถึง = 0
     const arrearsCount = due2Reached ? 1 : 0;
 
-    // daysOverdue: นับจาก due_date ของงวดที่ถึงกำหนดล่าสุด
+    // daysOverdue: นับจาก due_date_1 เสมอ (วันที่ลูกค้าเริ่มค้างครั้งแรก)
     let daysOverdue = 0;
-    if (arrearsCount === 1 && dueDate2) {
-      daysOverdue = Math.max(0, Math.floor((today.getTime() - dueDate2.getTime()) / (1000 * 60 * 60 * 24)));
-    } else if (dueDate1) {
+    if (dueDate1) {
       daysOverdue = Math.max(0, Math.floor((today.getTime() - dueDate1.getTime()) / (1000 * 60 * 60 * 24)));
     }
 
