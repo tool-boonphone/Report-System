@@ -108,6 +108,8 @@ export const monthlySummaryRouter = router({
         notYetDuePenalty: number; notYetDueUnlockFee: number; notYetDueTotal: number;
         // installTotal (ยอดหนี้รวม = net_amount ทุกงวด)
         installTotalPrincipal: number; installTotalInterest: number; installTotalFee: number; installTotalTotal: number;
+        // financeTotal (ยอดจัดฯ)
+        financeTotal: number;
       }[] = [];
 
       for (const row of summaryRows) {
@@ -155,6 +157,8 @@ export const monthlySummaryRouter = router({
             installTotalInterest:   cell.installTotal.interest,
             installTotalFee:        cell.installTotal.fee,
             installTotalTotal:      cell.installTotal.total,
+            // financeTotal
+            financeTotal:           cell.financeTotal ?? 0,
           });
         }
         // "__total__" row สำหรับแต่ละเดือน
@@ -199,6 +203,8 @@ export const monthlySummaryRouter = router({
           installTotalInterest:   row.totalInstallTotal.interest,
           installTotalFee:        row.totalInstallTotal.fee,
           installTotalTotal:      row.totalInstallTotal.total,
+          // financeTotal
+          financeTotal:           row.totalFinanceTotal ?? 0,
         });
       }
 

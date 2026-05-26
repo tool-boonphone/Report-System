@@ -49,6 +49,7 @@ export type MonthlySummaryCell = {
   target: MoneyBreakdown;
   notYetDue: MoneyBreakdown;
   installTotal: MoneyBreakdown; // ยอดผ่อนรวม = SUM(baseline_amount) ทุกงวด (principal+interest+fee ก่อนหักชำระเกิน ไม่มีค่าปรับ/ค่าปลดล็อก)
+  financeTotal: number;         // ยอดจัดฯ = SUM(finance_amount) ต่อสัญญา
 };
 
 export type MonthlySummaryRow = {
@@ -60,6 +61,7 @@ export type MonthlySummaryRow = {
   totalTarget: MoneyBreakdown;
   totalNotYetDue: MoneyBreakdown;
   totalInstallTotal: MoneyBreakdown; // ยอดผ่อนรวม
+  totalFinanceTotal: number;         // ยอดจัดฯ รวมทุก bucket
 };
 
 export type MonthlySummaryParams = {
@@ -124,7 +126,7 @@ function emptyMoney(): MoneyBreakdown {
   return { principal: 0, interest: 0, fee: 0, penalty: 0, unlockFee: 0, discount: 0, overpaid: 0, badDebt: 0, badDebtInstallment: 0, total: 0 };
 }
 function emptyCell(): MonthlySummaryCell {
-  return { contractCount: 0, paid: emptyMoney(), due: emptyMoney(), target: emptyMoney(), notYetDue: emptyMoney(), installTotal: emptyMoney() };
+  return { contractCount: 0, paid: emptyMoney(), due: emptyMoney(), target: emptyMoney(), notYetDue: emptyMoney(), installTotal: emptyMoney(), financeTotal: 0 };
 }
 function n(v: unknown): number {
   const x = parseFloat(String(v ?? 0));
@@ -651,6 +653,7 @@ async function queryInstallTotal(
   interest_install: number;
   fee_install: number;
   total_install: number;
+  finance_total: number;
 }>> {
   const db = await getDb(section);
   if (!db) return [];
@@ -730,7 +733,9 @@ async function queryInstallTotal(
         END
       ) AS fee_install,
       -- total = baseline_amount × installment_count
-      SUM(COALESCE(l.baseline_amount, 0) * COALESCE(l.installment_count, 0)) AS total_install
+      SUM(COALESCE(l.baseline_amount, 0) * COALESCE(l.installment_count, 0)) AS total_install,
+      -- finance_total = SUM(finance_amount) ต่อสัญญา (ยอดจัดฯ)
+      SUM(COALESCE(l.finance_amount, 0)) AS finance_total
     FROM latest l
     WHERE l.rn = 1
       ${opts.search ? `AND (l.contract_external_id LIKE '%${escapeLike(opts.search)}%')` : ''}
@@ -1344,12 +1349,14 @@ function assembleMonthlySummaryRows(
   }
 
   const installTotalMap = new Map<CellKey, MoneyBreakdown>();
+  const financeTotalMap = new Map<CellKey, number>();
   for (const r of installTotalRows) {
     installTotalMap.set(`${r.approve_month}|${r.bucket}`, {
       principal: n(r.principal_install), interest: n(r.interest_install),
       fee: n(r.fee_install), penalty: 0, unlockFee: 0,
       discount: 0, overpaid: 0, badDebt: 0, badDebtInstallment: 0, total: n(r.total_install),
     });
+    financeTotalMap.set(`${r.approve_month}|${r.bucket}`, n(r.finance_total));
   }
 
   return months.map((month) => {
@@ -1366,6 +1373,8 @@ function assembleMonthlySummaryRows(
       (totalPaid as any)[k] = (totalPaidDirect as any)[k];
     }
 
+    let totalFinanceTotal = 0;
+
     for (const bucket of DEBT_BUCKETS) {
       const key = `${month}|${bucket}`;
       const contractCount = countMap.get(key) ?? 0;
@@ -1374,9 +1383,11 @@ function assembleMonthlySummaryRows(
       const target        = targetMap.get(key) ?? emptyMoney();
       const notYetDue     = notYetDueMap.get(key) ?? emptyMoney();
       const installTotal  = installTotalMap.get(key) ?? emptyMoney();
+      const financeTotal  = financeTotalMap.get(key) ?? 0;
 
-      buckets[bucket] = { contractCount, paid, due, target, notYetDue, installTotal };
+      buckets[bucket] = { contractCount, paid, due, target, notYetDue, installTotal, financeTotal };
       totalCount += contractCount;
+      totalFinanceTotal += financeTotal;
 
       for (const k of Object.keys(totalPaid) as (keyof MoneyBreakdown)[]) {
         (totalDue          as any)[k] += due[k];
@@ -1386,7 +1397,7 @@ function assembleMonthlySummaryRows(
       }
     }
 
-    return { approveMonth: month, buckets, totalCount, totalPaid, totalDue, totalTarget, totalNotYetDue, totalInstallTotal };
+    return { approveMonth: month, buckets, totalCount, totalPaid, totalDue, totalTarget, totalNotYetDue, totalInstallTotal, totalFinanceTotal };
   });
 }
 
