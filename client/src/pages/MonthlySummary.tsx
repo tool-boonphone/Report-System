@@ -801,9 +801,9 @@ export default function MonthlySummary() {
   },[section,tab,combinedViewMode,combinedApproveMonths,combinedProductType,combinedDeviceFamily]);
   const dueMonthQuery=trpc.monthlySummary.getDueMonthSummary.useQuery(dueMonthQueryInput as any,{enabled:canView&&!!dueMonthQueryInput});
   // parse dueMonth rows
-  type FlatDueMonthRow={approveMonth:string;dueMonth:string;contractCount:number;paidTotal:number;paidPrincipal:number;paidInterest:number;paidFee:number;paidPenalty:number;paidUnlockFee:number;paidDiscount:number;paidOverpaid:number;paidBadDebt:number;paidBadDebtInstallment:number;targetTotal:number;targetPrincipal:number;targetInterest:number;targetFee:number;targetPenalty:number;targetUnlockFee:number;dueTotal:number;duePrincipal:number;dueInterest:number;dueFee:number;duePenalty:number;dueUnlockFee:number;notYetDueTotal:number;notYetDuePrincipal:number;notYetDueInterest:number;notYetDueFee:number;notYetDuePenalty:number;notYetDueUnlockFee:number;installTotalTotal:number;installTotalPrincipal:number;installTotalInterest:number;installTotalFee:number;};
-  type DueMonthCell={contractCount:number;paid:MoneyBreakdown;target:MoneyBreakdown;due:MoneyBreakdown;notYetDue:MoneyBreakdown;installTotal:MoneyBreakdown;};
-  type DueMonthRow={approveMonth:string;dueMonths:Record<string,DueMonthCell>;totalCount:number;approvedCount:number;totalPaid:MoneyBreakdown;totalTarget:MoneyBreakdown;totalDue:MoneyBreakdown;totalNotYetDue:MoneyBreakdown;totalInstallTotal:MoneyBreakdown;};
+  type FlatDueMonthRow={approveMonth:string;dueMonth:string;contractCount:number;financeTotal?:number;paidTotal:number;paidPrincipal:number;paidInterest:number;paidFee:number;paidPenalty:number;paidUnlockFee:number;paidDiscount:number;paidOverpaid:number;paidBadDebt:number;paidBadDebtInstallment:number;targetTotal:number;targetPrincipal:number;targetInterest:number;targetFee:number;targetPenalty:number;targetUnlockFee:number;dueTotal:number;duePrincipal:number;dueInterest:number;dueFee:number;duePenalty:number;dueUnlockFee:number;notYetDueTotal:number;notYetDuePrincipal:number;notYetDueInterest:number;notYetDueFee:number;notYetDuePenalty:number;notYetDueUnlockFee:number;installTotalTotal:number;installTotalPrincipal:number;installTotalInterest:number;installTotalFee:number;};
+  type DueMonthCell={contractCount:number;financeTotal:number;paid:MoneyBreakdown;target:MoneyBreakdown;due:MoneyBreakdown;notYetDue:MoneyBreakdown;installTotal:MoneyBreakdown;};
+  type DueMonthRow={approveMonth:string;dueMonths:Record<string,DueMonthCell>;totalCount:number;approvedCount:number;totalFinanceTotal:number;totalPaid:MoneyBreakdown;totalTarget:MoneyBreakdown;totalDue:MoneyBreakdown;totalNotYetDue:MoneyBreakdown;totalInstallTotal:MoneyBreakdown;};
   const allDueMonths:string[]=(dueMonthQuery.data?.allDueMonths??[]) as string[];
   const dueMonthRows=useMemo(()=>{
     try{
@@ -820,11 +820,12 @@ export default function MonthlySummary() {
           row.totalDue={principal:fr.duePrincipal,interest:fr.dueInterest,fee:fr.dueFee,penalty:fr.duePenalty,unlockFee:fr.dueUnlockFee,discount:0,overpaid:0,badDebt:0,badDebtInstallment:0,total:fr.dueTotal};
           row.totalNotYetDue={principal:fr.notYetDuePrincipal,interest:fr.notYetDueInterest,fee:fr.notYetDueFee,penalty:fr.notYetDuePenalty,unlockFee:fr.notYetDueUnlockFee,discount:0,overpaid:0,badDebt:0,badDebtInstallment:0,total:fr.notYetDueTotal};
           row.totalInstallTotal={principal:fr.installTotalPrincipal,interest:fr.installTotalInterest,fee:fr.installTotalFee,penalty:0,unlockFee:0,discount:0,overpaid:0,badDebt:0,badDebtInstallment:0,total:fr.installTotalTotal};
+          row.totalFinanceTotal=fr.financeTotal??0;
           continue;
         }
-        if(!monthMap.has(fr.approveMonth))monthMap.set(fr.approveMonth,{approveMonth:fr.approveMonth,dueMonths:{},totalCount:0,approvedCount:0,totalPaid:emptyMoney(),totalTarget:emptyMoney(),totalDue:emptyMoney(),totalNotYetDue:emptyMoney(),totalInstallTotal:emptyMoney()});
+        if(!monthMap.has(fr.approveMonth))monthMap.set(fr.approveMonth,{approveMonth:fr.approveMonth,dueMonths:{},totalCount:0,approvedCount:0,totalFinanceTotal:0,totalPaid:emptyMoney(),totalTarget:emptyMoney(),totalDue:emptyMoney(),totalNotYetDue:emptyMoney(),totalInstallTotal:emptyMoney()});
         const row=monthMap.get(fr.approveMonth)!;
-        row.dueMonths[fr.dueMonth]={contractCount:fr.contractCount,paid:{principal:fr.paidPrincipal??0,interest:fr.paidInterest??0,fee:fr.paidFee??0,penalty:fr.paidPenalty??0,unlockFee:fr.paidUnlockFee??0,discount:fr.paidDiscount??0,overpaid:fr.paidOverpaid??0,badDebt:fr.paidBadDebt??0,badDebtInstallment:fr.paidBadDebtInstallment??0,total:fr.paidTotal??0},target:{principal:fr.targetPrincipal,interest:fr.targetInterest,fee:fr.targetFee,penalty:fr.targetPenalty,unlockFee:fr.targetUnlockFee,discount:0,overpaid:0,badDebt:0,badDebtInstallment:0,total:fr.targetTotal},due:{principal:fr.duePrincipal,interest:fr.dueInterest,fee:fr.dueFee,penalty:fr.duePenalty,unlockFee:fr.dueUnlockFee,discount:0,overpaid:0,badDebt:0,badDebtInstallment:0,total:fr.dueTotal},notYetDue:{principal:fr.notYetDuePrincipal,interest:fr.notYetDueInterest,fee:fr.notYetDueFee,penalty:fr.notYetDuePenalty,unlockFee:fr.notYetDueUnlockFee,discount:0,overpaid:0,badDebt:0,badDebtInstallment:0,total:fr.notYetDueTotal},installTotal:{principal:fr.installTotalPrincipal,interest:fr.installTotalInterest,fee:fr.installTotalFee,penalty:0,unlockFee:0,discount:0,overpaid:0,badDebt:0,badDebtInstallment:0,total:fr.installTotalTotal}};
+        row.dueMonths[fr.dueMonth]={contractCount:fr.contractCount,financeTotal:fr.financeTotal??0,paid:{principal:fr.paidPrincipal??0,interest:fr.paidInterest??0,fee:fr.paidFee??0,penalty:fr.paidPenalty??0,unlockFee:fr.paidUnlockFee??0,discount:fr.paidDiscount??0,overpaid:fr.paidOverpaid??0,badDebt:fr.paidBadDebt??0,badDebtInstallment:fr.paidBadDebtInstallment??0,total:fr.paidTotal??0},target:{principal:fr.targetPrincipal,interest:fr.targetInterest,fee:fr.targetFee,penalty:fr.targetPenalty,unlockFee:fr.targetUnlockFee,discount:0,overpaid:0,badDebt:0,badDebtInstallment:0,total:fr.targetTotal},due:{principal:fr.duePrincipal,interest:fr.dueInterest,fee:fr.dueFee,penalty:fr.duePenalty,unlockFee:fr.dueUnlockFee,discount:0,overpaid:0,badDebt:0,badDebtInstallment:0,total:fr.dueTotal},notYetDue:{principal:fr.notYetDuePrincipal,interest:fr.notYetDueInterest,fee:fr.notYetDueFee,penalty:fr.notYetDuePenalty,unlockFee:fr.notYetDueUnlockFee,discount:0,overpaid:0,badDebt:0,badDebtInstallment:0,total:fr.notYetDueTotal},installTotal:{principal:fr.installTotalPrincipal,interest:fr.installTotalInterest,fee:fr.installTotalFee,penalty:0,unlockFee:0,discount:0,overpaid:0,badDebt:0,badDebtInstallment:0,total:fr.installTotalTotal}};
       }
       return Array.from(monthMap.values()).sort((a,b)=>sortDir==="asc"?a.approveMonth.localeCompare(b.approveMonth):b.approveMonth.localeCompare(a.approveMonth));
     }catch{return[];}
@@ -960,6 +961,7 @@ export default function MonthlySummary() {
       const getCellVal=(b:string, cell:SummaryCell|undefined, t:TabKey):number=>{
         if(hiddenBuckets.has(b)||!cell)return 0;
         if(t==="count")return cell.contractCount;
+        if(t==="financeTotal")return cell.financeTotal??0;
         if(t==="installTotal")return (installVis.principal?cell.installTotal.principal:0)+(installVis.interest?cell.installTotal.interest:0)+(installVis.fee?cell.installTotal.fee:0);
         if(t==="target")return computeMoneyTotal(cell.target,{...targetVis,discount:false,overpaid:false});
         if(t==="paid")return computeMoneyTotal(cell.paid,paidVis)+(showBadDebtSale?cell.paid.badDebt:0);
@@ -975,8 +977,8 @@ export default function MonthlySummary() {
       if(tab==="combined"&&combinedViewMode==="dueMonth"){
         // ── DueMonth sheet ────────────────────────────────────────────────────────────────────────────────
         // โครงสร้าง: เดือนอนุมัติ | หัวข้อ | รวม | due_month1 | due_month2 | ...
-        type DueSubKey="count"|"installTotal"|"target"|"paid"|"due"|"notYetDue";
-        const dueSubRows:[string,DueSubKey][]=[["สัญญา","count"],["ยอดผ่อนรวม","installTotal"],["เป้าเก็บหนี้","target"],["ยอดเก็บหนี้","paid"],["หนี้ค้างชำระ","due"],["ยังไม่ถึงกำหนด","notYetDue"]];
+        type DueSubKey="count"|"financeTotal"|"installTotal"|"target"|"paid"|"due"|"notYetDue";
+        const dueSubRows:[string,DueSubKey][]=[["สัญญา","count"],["ยอดจัดฯ","financeTotal"],["ยอดผ่อนรวม","installTotal"],["เป้าเก็บหนี้","target"],["ยอดเก็บหนี้","paid"],["หนี้ค้างชำระ","due"],["ยังไม่ถึงกำหนด","notYetDue"]];
         const visDueSubRows=dueSubRows.filter(([,k])=>!hiddenSubRows.has(k as TabKey));
         const visibleDueRows=dueMonthRows.filter(r=>!hiddenRows.has(r.approveMonth));
         const dueHdr:(string|number|null)[]=["เดือน-ปีที่อนุมัติ","หัวข้อ","รวม",...allDueMonths.map(dm=>fmtMonthYear(dm))];
@@ -985,6 +987,7 @@ export default function MonthlySummary() {
         const getDueCellVal=(key:DueSubKey,cell:DueCellType|undefined):number=>{
           if(!cell)return 0;
           if(key==="count")return cell.contractCount;
+          if(key==="financeTotal")return cell.financeTotal??0;
           if(key==="installTotal")return (installVis.principal?cell.installTotal.principal:0)+(installVis.interest?cell.installTotal.interest:0)+(installVis.fee?cell.installTotal.fee:0);
           if(key==="target")return computeMoneyTotal(cell.target,{...targetVis,discount:false,overpaid:false});
           if(key==="paid")return computeMoneyTotal(cell.paid,paidVis);
@@ -994,6 +997,7 @@ export default function MonthlySummary() {
         type DueRowType=DueMonthRowLocal;
         const getDueRowTotal=(key:DueSubKey,row:DueRowType):number=>{
           if(key==="count")return row.approvedCount; // จำนวนสัญญาที่อนุมัติ
+          if(key==="financeTotal")return row.totalFinanceTotal??0;
           if(key==="installTotal")return (installVis.principal?row.totalInstallTotal.principal:0)+(installVis.interest?row.totalInstallTotal.interest:0)+(installVis.fee?row.totalInstallTotal.fee:0);
           if(key==="target")return computeMoneyTotal(row.totalTarget,{...targetVis,discount:false,overpaid:false});
           if(key==="paid")return computeMoneyTotal(row.totalPaid,paidVis);
@@ -1008,8 +1012,8 @@ export default function MonthlySummary() {
           }
         }
         // grand total rows
-        const dueGtByDm:Record<string,Record<DueSubKey,number>>={};for(const dm of allDueMonths){dueGtByDm[dm]={count:0,installTotal:0,target:0,paid:0,due:0,notYetDue:0};}
-        const dueGtTotal:Record<DueSubKey,number>={count:0,installTotal:0,target:0,paid:0,due:0,notYetDue:0};
+        const dueGtByDm:Record<string,Record<DueSubKey,number>>={};for(const dm of allDueMonths){dueGtByDm[dm]={count:0,financeTotal:0,installTotal:0,target:0,paid:0,due:0,notYetDue:0};}
+        const dueGtTotal:Record<DueSubKey,number>={count:0,financeTotal:0,installTotal:0,target:0,paid:0,due:0,notYetDue:0};
         for(const row of visibleDueRows){
           for(const[,k] of visDueSubRows)dueGtTotal[k]+=getDueRowTotal(k,row);
           for(const dm of allDueMonths){const cell=row.dueMonths[dm];for(const[,k] of visDueSubRows)dueGtByDm[dm][k]+=getDueCellVal(k,cell);}
@@ -2784,13 +2788,14 @@ function CombinedTable({
 // ─── DueMonthTable ────────────────────────────────────────────────────────────
 // แสดงข้อมูลสรุปรวมโดยกระจายตามเดือนที่ต้องชำระ
 const DUE_MONTH_SUB_ROWS: Array<{
-  key: "count"|"installTotal"|"target"|"paid"|"due"|"notYetDue";
+  key: "count"|"financeTotal"|"installTotal"|"target"|"paid"|"due"|"notYetDue";
   label: string;
   rowBg: string;
   textColor: string;
   totalBg: string;
 }> = [
   {key:"count",        label:"สัญญา",          rowBg:"bg-slate-50",   textColor:"text-slate-700",   totalBg:"bg-slate-100"},
+  {key:"financeTotal", label:"ยอดจัดฯ",          rowBg:"bg-rose-50",    textColor:"text-rose-800",    totalBg:"bg-rose-100"},
   {key:"installTotal", label:"ยอดผ่อนรวม",     rowBg:"bg-purple-50",  textColor:"text-purple-800",  totalBg:"bg-purple-100"},
   {key:"target",       label:"เป้าเก็บหนี้",   rowBg:"bg-indigo-50",  textColor:"text-indigo-800",  totalBg:"bg-indigo-100"},
   {key:"paid",         label:"ยอดเก็บหนี้",    rowBg:"bg-green-50",   textColor:"text-green-800",   totalBg:"bg-green-100"},
@@ -2798,8 +2803,8 @@ const DUE_MONTH_SUB_ROWS: Array<{
   {key:"notYetDue",    label:"ยังไม่ถึงกำหนด", rowBg:"bg-blue-50",    textColor:"text-blue-800",    totalBg:"bg-blue-100"},
 ];
 
-type DueMonthCellLocal={contractCount:number;paid:MoneyBreakdown;target:MoneyBreakdown;due:MoneyBreakdown;notYetDue:MoneyBreakdown;installTotal:MoneyBreakdown;};
-type DueMonthRowLocal={approveMonth:string;dueMonths:Record<string,DueMonthCellLocal>;totalCount:number;approvedCount:number;totalPaid:MoneyBreakdown;totalTarget:MoneyBreakdown;totalDue:MoneyBreakdown;totalNotYetDue:MoneyBreakdown;totalInstallTotal:MoneyBreakdown;};
+type DueMonthCellLocal={contractCount:number;financeTotal:number;paid:MoneyBreakdown;target:MoneyBreakdown;due:MoneyBreakdown;notYetDue:MoneyBreakdown;installTotal:MoneyBreakdown;};
+type DueMonthRowLocal={approveMonth:string;dueMonths:Record<string,DueMonthCellLocal>;totalCount:number;approvedCount:number;totalFinanceTotal:number;totalPaid:MoneyBreakdown;totalTarget:MoneyBreakdown;totalDue:MoneyBreakdown;totalNotYetDue:MoneyBreakdown;totalInstallTotal:MoneyBreakdown;};
 
 function DueMonthTable({
   rows, allDueMonths,
@@ -2828,9 +2833,10 @@ function DueMonthTable({
   const SortIcon = sortDir==="asc"?ArrowUp:ArrowDown;
 
   // คำนวณ cell value ตาม key (badge-aware)
-  function cellVal(key: "count"|"installTotal"|"target"|"paid"|"due"|"notYetDue", cell: DueMonthCellLocal|undefined): number {
+  function cellVal(key: "count"|"financeTotal"|"installTotal"|"target"|"paid"|"due"|"notYetDue", cell: DueMonthCellLocal|undefined): number {
     if(!cell)return 0;
     if(key==="count")return cell.contractCount;
+    if(key==="financeTotal")return cell.financeTotal??0;
     if(key==="installTotal")return (installVis.principal?cell.installTotal.principal:0)+(installVis.interest?cell.installTotal.interest:0)+(installVis.fee?cell.installTotal.fee:0);
     if(key==="target")return computeMoneyTotal(cell.target,{...targetVis,discount:false,overpaid:false});
     if(key==="paid")return computeMoneyTotal(cell.paid,paidVis);
@@ -2839,8 +2845,9 @@ function DueMonthTable({
     return 0;
   }
 
-  function totalVal(key: "count"|"installTotal"|"target"|"paid"|"due"|"notYetDue", row: DueMonthRowLocal): number {
+  function totalVal(key: "count"|"financeTotal"|"installTotal"|"target"|"paid"|"due"|"notYetDue", row: DueMonthRowLocal): number {
     if(key==="count")return row.approvedCount; // จำนวนสัญญาที่อนุมัติในเดือนนั้น
+    if(key==="financeTotal")return row.totalFinanceTotal??0;
     if(key==="installTotal")return (installVis.principal?row.totalInstallTotal.principal:0)+(installVis.interest?row.totalInstallTotal.interest:0)+(installVis.fee?row.totalInstallTotal.fee:0);
     if(key==="target")return computeMoneyTotal(row.totalTarget,{...targetVis,discount:false,overpaid:false});
     if(key==="paid")return computeMoneyTotal(row.totalPaid,paidVis);
@@ -2866,7 +2873,7 @@ function DueMonthTable({
     );
   }
 
-  function renderVal(key: "count"|"installTotal"|"target"|"paid"|"due"|"notYetDue", val: number, textColor: string, installVal?:number, targetVal?:number): React.ReactNode {
+  function renderVal(key: "count"|"financeTotal"|"installTotal"|"target"|"paid"|"due"|"notYetDue", val: number, textColor: string, installVal?:number, targetVal?:number): React.ReactNode {
     if(key==="count"){
       if(val===0)return <span className="text-gray-300 text-xs">—</span>;
       return <span className="inline-flex items-center justify-center bg-slate-100 text-slate-700 rounded-full px-2.5 py-0.5 text-xs font-bold">{val.toLocaleString()}</span>;
@@ -2890,7 +2897,7 @@ function DueMonthTable({
   const grandTotalByDueMonth = useMemo(()=>{
     const result: Record<string, DueMonthCellLocal> = {};
     for(const dm of allDueMonths){
-      result[dm]={contractCount:0,paid:emptyMoney(),target:emptyMoney(),due:emptyMoney(),notYetDue:emptyMoney(),installTotal:emptyMoney()};
+      result[dm]={contractCount:0,financeTotal:0,paid:emptyMoney(),target:emptyMoney(),due:emptyMoney(),notYetDue:emptyMoney(),installTotal:emptyMoney()};
     }
     for(const row of rows){
       if(hiddenRows.has(row.approveMonth))continue;
@@ -2898,6 +2905,7 @@ function DueMonthTable({
         const cell=row.dueMonths[dm];
         if(!cell)continue;
         result[dm].contractCount+=cell.contractCount;
+        result[dm].financeTotal+=(cell.financeTotal??0);
         for(const k of Object.keys(emptyMoney()) as (keyof MoneyBreakdown)[]){
           result[dm].paid[k]+=cell.paid[k];
           result[dm].target[k]+=cell.target[k];
@@ -2911,16 +2919,17 @@ function DueMonthTable({
   },[rows,allDueMonths,hiddenRows]);
 
   const grandTotalOverall = useMemo(()=>{
-    let count=0;const paid=emptyMoney();const target=emptyMoney();const due=emptyMoney();const notYetDue=emptyMoney();const installTotal=emptyMoney();
+    let count=0;let financeTotal=0;const paid=emptyMoney();const target=emptyMoney();const due=emptyMoney();const notYetDue=emptyMoney();const installTotal=emptyMoney();
     for(const row of rows){
       if(hiddenRows.has(row.approveMonth))continue;
       count+=row.approvedCount; // สัญญาที่อนุมัติ (ไม่นับซ้ำ)
+      financeTotal+=(row.totalFinanceTotal??0);
       for(const k of Object.keys(emptyMoney()) as (keyof MoneyBreakdown)[]){
         paid[k]+=row.totalPaid[k];target[k]+=row.totalTarget[k];due[k]+=row.totalDue[k];
         notYetDue[k]+=row.totalNotYetDue[k];installTotal[k]+=row.totalInstallTotal[k];
       }
     }
-    return {totalCount:count,totalPaid:paid,totalTarget:target,totalDue:due,totalNotYetDue:notYetDue,totalInstallTotal:installTotal};
+    return {totalCount:count,totalFinanceTotal:financeTotal,totalPaid:paid,totalTarget:target,totalDue:due,totalNotYetDue:notYetDue,totalInstallTotal:installTotal};
   },[rows,hiddenRows]);
 
   const visSubRows = DUE_MONTH_SUB_ROWS.filter(sr=>!hiddenSubRows.has(sr.key));
