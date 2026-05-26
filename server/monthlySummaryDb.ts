@@ -888,6 +888,7 @@ async function upsertMonthlySummaryRows(
     badDebt: number;
     badDebtInstallment: number;
     totalAmount: number;
+    financeTotal?: number;
   }>,
 ): Promise<void> {
   if (rows.length === 0) return;
@@ -902,14 +903,14 @@ async function upsertMonthlySummaryRows(
       const pt = r.productType ? `'${r.productType.replace(/'/g, "''")}'` : "NULL";
       const df = r.deviceFamily ? `'${r.deviceFamily}'` : "NULL";
       const dm = r.dateMonth ? `'${r.dateMonth}'` : "NULL";
-      return `('${section}','${queryType}','${r.approve_month}','${r.bucket}',${pt},${df},${dm},${r.contractCount},${r.principal},${r.interest},${r.fee},${r.penalty},${r.unlockFee},${r.discount},${r.overpaid},${r.badDebt},${r.badDebtInstallment},${r.totalAmount},NOW())`;
+      return `('${section}','${queryType}','${r.approve_month}','${r.bucket}',${pt},${df},${dm},${r.contractCount},${r.principal},${r.interest},${r.fee},${r.penalty},${r.unlockFee},${r.discount},${r.overpaid},${r.badDebt},${r.badDebtInstallment},${r.totalAmount},${r.financeTotal ?? 0},NOW())`;
     }).join(",\n");
 
     const upsertSql = `
       INSERT INTO monthly_summary_cache
         (section, query_type, approve_month, bucket, product_type, device_family, date_month,
          contract_count, principal, interest, fee, penalty, unlock_fee, discount, overpaid,
-         bad_debt, bad_debt_installment, total_amount, updated_at)
+         bad_debt, bad_debt_installment, total_amount, finance_total, updated_at)
       VALUES ${values}
       ON CONFLICT (section, query_type, approve_month, bucket,
                    COALESCE(product_type,''), COALESCE(device_family,''), COALESCE(date_month,''))
@@ -925,6 +926,7 @@ async function upsertMonthlySummaryRows(
         bad_debt             = EXCLUDED.bad_debt,
         bad_debt_installment = EXCLUDED.bad_debt_installment,
         total_amount         = EXCLUDED.total_amount,
+        finance_total        = EXCLUDED.finance_total,
         updated_at           = NOW()
     `;
     await db.execute(sql.raw(upsertSql));
@@ -1124,6 +1126,7 @@ export async function populateMonthlySummaryCache(
         principal: r.principal_install, interest: r.interest_install, fee: r.fee_install,
         penalty: 0, unlockFee: 0, discount: 0, overpaid: 0, badDebt: 0, badDebtInstallment: 0,
         totalAmount: r.total_install,
+        financeTotal: r.finance_total,
       }));
       await upsertMonthlySummaryRows(section, "installTotal", mapped);
       totalRows += mapped.length;
@@ -1255,7 +1258,8 @@ async function getMonthlySummaryFromCache(
     db.execute(sql.raw(`
       SELECT approve_month, bucket, contract_count,
              principal AS principal_install, interest AS interest_install,
-             fee AS fee_install, total_amount AS total_install
+             fee AS fee_install, total_amount AS total_install,
+             finance_total
       FROM monthly_summary_cache
       WHERE section = '${section}' AND query_type = 'installTotal'
         AND ${productTypeCond(params.installTotalProductType)}

@@ -194,5 +194,15 @@ export async function runStartupMigrations(): Promise<void> {
     } catch (err: any) {
       console.error(`[migration] ${section}: monthly_summary_due_month_cache failed:`, err?.message ?? err);
     }
+    try {
+      // Migration 0007: เพิ่ม finance_total column ใน monthly_summary_cache (ยอดจัดฯ)
+      await db.execute(sql.raw(`
+        ALTER TABLE monthly_summary_cache
+        ADD COLUMN IF NOT EXISTS finance_total DECIMAL(18,2) NOT NULL DEFAULT 0
+      `));
+      console.log(`[migration] ${section}: monthly_summary_cache.finance_total — OK`);
+    } catch (err: any) {
+      console.error(`[migration] ${section}: monthly_summary_cache.finance_total failed:`, err?.message ?? err);
+    }
   }
 }
