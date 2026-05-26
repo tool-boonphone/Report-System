@@ -390,7 +390,7 @@ async function queryPaid(
   // - device_sale_amount = SUM(bad_debt) WHERE is_bad_debt_row = true
   const q = `
     SELECT
-      TO_CHAR(dcc.approve_date, 'YYYY-MM') AS approve_month,
+      TO_CHAR(dcc.paid_at, 'YYYY-MM') AS approve_month,
       CASE
         WHEN dcc.contract_status = 'หนี้เสีย'      THEN 'หนี้เสีย'
         WHEN dcc.contract_status = 'ระงับสัญญา'   THEN 'ระงับสัญญา'
@@ -1693,7 +1693,7 @@ async function queryDueMonthPaid(
   // dcc.period = dtc.period AND dcc.contract_external_id = dtc.contract_external_id
   const q = `
     SELECT
-      TO_CHAR(dcc.approve_date, 'YYYY-MM') AS approve_month,
+      TO_CHAR(dcc.paid_at, 'YYYY-MM') AS approve_month,
       TO_CHAR(dtc.due_date, 'YYYY-MM') AS due_month,
       COUNT(DISTINCT dcc.contract_external_id) AS contract_count,
       -- breakdown fields: ข้าม isExtraPenalty rows (payment_tx_amount=0 AND penalty>0 AND is_bad_debt_row=false)

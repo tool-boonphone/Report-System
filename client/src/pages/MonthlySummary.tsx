@@ -836,26 +836,26 @@ export default function MonthlySummary() {
         const visibleDueRows=dueMonthRows.filter(r=>!hiddenRows.has(r.approveMonth));
         const dueHdr:(string|number|null)[]=["เดือน-ปีที่อนุมัติ","หัวข้อ","รวม",...allDueMonths.map(dm=>fmtMonthYear(dm))];
         const dueWsData:(string|number|null)[][]=[dueHdr];
-        type DueCellType={contractCount:number;paid:{total:number};target:{total:number};due:{total:number};notYetDue:{total:number};installTotal:{total:number}};
+        type DueCellType=DueMonthCellLocal;
         const getDueCellVal=(key:DueSubKey,cell:DueCellType|undefined):number=>{
           if(!cell)return 0;
           if(key==="count")return cell.contractCount;
-          if(key==="installTotal")return cell.installTotal.total;
-          if(key==="target")return cell.target.total;
-          if(key==="paid")return cell.paid.total;
-          if(key==="due")return cell.due.total;
-          return cell.notYetDue.total;
+          if(key==="installTotal")return (installVis.principal?cell.installTotal.principal:0)+(installVis.interest?cell.installTotal.interest:0)+(installVis.fee?cell.installTotal.fee:0);
+          if(key==="target")return computeMoneyTotal(cell.target,{...targetVis,discount:false,overpaid:false});
+          if(key==="paid")return computeMoneyTotal(cell.paid,paidVis);
+          if(key==="due")return computeDueTotal(cell.due,dueVis);
+          return computeNotYetDueTotal(cell.notYetDue,notYetDueVis);
         };
-        type DueRowType={approveMonth:string;dueMonths:Record<string,DueCellType>;totalCount:number;totalPaid:{total:number};totalTarget:{total:number};totalDue:{total:number};totalNotYetDue:{total:number};totalInstallTotal:{total:number}};
+        type DueRowType=DueMonthRowLocal;
         const getDueRowTotal=(key:DueSubKey,row:DueRowType):number=>{
           if(key==="count")return row.totalCount;
-          if(key==="installTotal")return row.totalInstallTotal.total;
-          if(key==="target")return row.totalTarget.total;
-          if(key==="paid")return row.totalPaid.total;
-          if(key==="due")return row.totalDue.total;
-          return row.totalNotYetDue.total;
+          if(key==="installTotal")return (installVis.principal?row.totalInstallTotal.principal:0)+(installVis.interest?row.totalInstallTotal.interest:0)+(installVis.fee?row.totalInstallTotal.fee:0);
+          if(key==="target")return computeMoneyTotal(row.totalTarget,{...targetVis,discount:false,overpaid:false});
+          if(key==="paid")return computeMoneyTotal(row.totalPaid,paidVis);
+          if(key==="due")return computeDueTotal(row.totalDue,dueVis);
+          return computeNotYetDueTotal(row.totalNotYetDue,notYetDueVis);
         };
-        for(const row of (visibleDueRows as unknown as DueRowType[])){
+        for(const row of visibleDueRows){
           for(const[subLabel,subKey] of visDueSubRows){
             const vals:(string|number|null)[]=[fmtMonthYear(row.approveMonth),subLabel,getDueRowTotal(subKey,row)||null];
             for(const dm of allDueMonths){const v=getDueCellVal(subKey,row.dueMonths[dm]);vals.push(v===0?null:v);}
@@ -865,7 +865,7 @@ export default function MonthlySummary() {
         // grand total rows
         const dueGtByDm:Record<string,Record<DueSubKey,number>>={};for(const dm of allDueMonths){dueGtByDm[dm]={count:0,installTotal:0,target:0,paid:0,due:0,notYetDue:0};}
         const dueGtTotal:Record<DueSubKey,number>={count:0,installTotal:0,target:0,paid:0,due:0,notYetDue:0};
-        for(const row of (visibleDueRows as unknown as DueRowType[])){
+        for(const row of visibleDueRows){
           for(const[,k] of visDueSubRows)dueGtTotal[k]+=getDueRowTotal(k,row);
           for(const dm of allDueMonths){const cell=row.dueMonths[dm];for(const[,k] of visDueSubRows)dueGtByDm[dm][k]+=getDueCellVal(k,cell);}
         }
@@ -1471,6 +1471,9 @@ export default function MonthlySummary() {
               hiddenSubRows={hiddenSubRows}
               sortDir={sortDir} onToggleSort={()=>setSortDir((d)=>d==="asc"?"desc":"asc")}
               stickyTop={0}
+              paidVis={paidVis} targetVis={targetVis}
+              dueVis={dueVis} notYetDueVis={notYetDueVis}
+              installVis={installVis}
             />)
           ):tab==="combined"?(
             <CombinedTable
@@ -2625,6 +2628,7 @@ function DueMonthTable({
   hiddenSubRows,
   sortDir, onToggleSort,
   stickyTop,
+  paidVis, targetVis, dueVis, notYetDueVis, installVis,
 }:{
   rows: DueMonthRowLocal[];
   allDueMonths: string[];
@@ -2634,28 +2638,33 @@ function DueMonthTable({
   sortDir: SortDir;
   onToggleSort: ()=>void;
   stickyTop: number;
+  paidVis: Record<MoneyBadgeKey,boolean>;
+  targetVis: Record<MoneyBadgeKey,boolean>;
+  dueVis: Record<DueBadgeKey,boolean>;
+  notYetDueVis: Record<NotYetDueBadgeKey,boolean>;
+  installVis: Record<"principal"|"interest"|"fee",boolean>;
 }) {
   const SortIcon = sortDir==="asc"?ArrowUp:ArrowDown;
 
-  // คำนวณ cell value ตาม key
+  // คำนวณ cell value ตาม key (badge-aware)
   function cellVal(key: "count"|"installTotal"|"target"|"paid"|"due"|"notYetDue", cell: DueMonthCellLocal|undefined): number {
     if(!cell)return 0;
     if(key==="count")return cell.contractCount;
-    if(key==="installTotal")return cell.installTotal.total;
-    if(key==="target")return cell.target.total;
-    if(key==="paid")return cell.paid.total;
-    if(key==="due")return cell.due.total;
-    if(key==="notYetDue")return cell.notYetDue.total;
+    if(key==="installTotal")return (installVis.principal?cell.installTotal.principal:0)+(installVis.interest?cell.installTotal.interest:0)+(installVis.fee?cell.installTotal.fee:0);
+    if(key==="target")return computeMoneyTotal(cell.target,{...targetVis,discount:false,overpaid:false});
+    if(key==="paid")return computeMoneyTotal(cell.paid,paidVis);
+    if(key==="due")return computeDueTotal(cell.due,dueVis);
+    if(key==="notYetDue")return computeNotYetDueTotal(cell.notYetDue,notYetDueVis);
     return 0;
   }
 
   function totalVal(key: "count"|"installTotal"|"target"|"paid"|"due"|"notYetDue", row: DueMonthRowLocal): number {
     if(key==="count")return row.totalCount;
-    if(key==="installTotal")return row.totalInstallTotal.total;
-    if(key==="target")return row.totalTarget.total;
-    if(key==="paid")return row.totalPaid.total;
-    if(key==="due")return row.totalDue.total;
-    if(key==="notYetDue")return row.totalNotYetDue.total;
+    if(key==="installTotal")return (installVis.principal?row.totalInstallTotal.principal:0)+(installVis.interest?row.totalInstallTotal.interest:0)+(installVis.fee?row.totalInstallTotal.fee:0);
+    if(key==="target")return computeMoneyTotal(row.totalTarget,{...targetVis,discount:false,overpaid:false});
+    if(key==="paid")return computeMoneyTotal(row.totalPaid,paidVis);
+    if(key==="due")return computeDueTotal(row.totalDue,dueVis);
+    if(key==="notYetDue")return computeNotYetDueTotal(row.totalNotYetDue,notYetDueVis);
     return 0;
   }
 
@@ -2823,14 +2832,14 @@ function DueMonthTable({
             <td className={["sticky left-[220px] z-10 px-3 py-1.5 text-right border-r border-slate-300 min-w-[150px]",sr.totalBg].join(" ")}>
               {renderVal(sr.key,
                 sr.key==="count"?grandTotalOverall.totalCount:
-                sr.key==="installTotal"?grandTotalOverall.totalInstallTotal.total:
-                sr.key==="target"?grandTotalOverall.totalTarget.total:
-                sr.key==="paid"?grandTotalOverall.totalPaid.total:
-                sr.key==="due"?grandTotalOverall.totalDue.total:
-                grandTotalOverall.totalNotYetDue.total,
+                sr.key==="installTotal"?(installVis.principal?grandTotalOverall.totalInstallTotal.principal:0)+(installVis.interest?grandTotalOverall.totalInstallTotal.interest:0)+(installVis.fee?grandTotalOverall.totalInstallTotal.fee:0):
+                sr.key==="target"?computeMoneyTotal(grandTotalOverall.totalTarget,{...targetVis,discount:false,overpaid:false}):
+                sr.key==="paid"?computeMoneyTotal(grandTotalOverall.totalPaid,paidVis):
+                sr.key==="due"?computeDueTotal(grandTotalOverall.totalDue,dueVis):
+                computeNotYetDueTotal(grandTotalOverall.totalNotYetDue,notYetDueVis),
                 sr.textColor,
-                grandTotalOverall.totalInstallTotal.total,
-                grandTotalOverall.totalTarget.total
+                (installVis.principal?grandTotalOverall.totalInstallTotal.principal:0)+(installVis.interest?grandTotalOverall.totalInstallTotal.interest:0)+(installVis.fee?grandTotalOverall.totalInstallTotal.fee:0),
+                computeMoneyTotal(grandTotalOverall.totalTarget,{...targetVis,discount:false,overpaid:false})
               )}
             </td>
             {allDueMonths.map((dm)=>{
