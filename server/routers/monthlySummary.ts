@@ -224,6 +224,7 @@ export const monthlySummaryRouter = router({
       approveMonths: z.array(MonthStr).optional(),
       productType: z.string().optional(),
       deviceFamily: z.enum(["iOS", "Android"]).optional(),
+      search: z.string().max(100).optional(),
     }))
     .query(async ({ input }) => {
       // Direct Query จาก DB โดยตรง (ไม่ใช้ Cache จนกว่าจะ populate ถูกต้อง)
@@ -232,6 +233,7 @@ export const monthlySummaryRouter = router({
         approveMonths: input.approveMonths,
         productType: input.productType,
         deviceFamily: input.deviceFamily,
+        search: input.search || undefined,
       });
       const dueMonthSet = new Set<string>();
       for (const row of summaryRows) {

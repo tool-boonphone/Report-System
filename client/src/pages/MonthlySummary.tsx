@@ -614,7 +614,7 @@ function DeviceFamilyFilter({value,onChange}:{value:string;onChange:(v:string)=>
 export default function MonthlySummary() {
   const{can,isSuperAdmin}=useAppAuth();const{section}=useSection();const{setActions}=useNavActions();
   const canView=can("debt_report","view");const canExport=can("debt_report","export");
-  const[tab,setTab]=useState<TabKey>("count");
+  const[tab,setTab]=useState<TabKey>("combined");
 
   // ── Repopulate Monthly Summary Cache (superAdmin only) ────────────────────
   const[isRepopulating,setIsRepopulating]=useState(false);
@@ -789,16 +789,17 @@ export default function MonthlySummary() {
 
   const query=trpc.monthlySummary.get.useQuery(queryInput as any,{enabled:canView&&!!queryInput});
 
-  // due month query — เรียกเมื่อ tab=combined และ viewMode=dueMonth
+  // due month query — เรียกเมื่อ viewMode=dueMonth (ไม่ต้องตรวจ tab เพราะเหลือแค่ combined)
   const dueMonthQueryInput=useMemo(()=>{
-    if(!section||tab!=="combined"||combinedViewMode!=="dueMonth")return null;
+    if(!section||combinedViewMode!=="dueMonth")return null;
     return{
       section,
       approveMonths:combinedApproveMonths.size>0?Array.from(combinedApproveMonths):undefined,
       productType:combinedProductType.size===1?Array.from(combinedProductType)[0]:undefined,
       deviceFamily:(combinedDeviceFamily as "iOS"|"Android"|undefined)||undefined,
+      search:search||undefined,
     };
-  },[section,tab,combinedViewMode,combinedApproveMonths,combinedProductType,combinedDeviceFamily]);
+  },[section,combinedViewMode,combinedApproveMonths,combinedProductType,combinedDeviceFamily,search]);
   const dueMonthQuery=trpc.monthlySummary.getDueMonthSummary.useQuery(dueMonthQueryInput as any,{enabled:canView&&!!dueMonthQueryInput});
   // parse dueMonth rows
   type FlatDueMonthRow={approveMonth:string;dueMonth:string;contractCount:number;financeTotal?:number;paidTotal:number;paidPrincipal:number;paidInterest:number;paidFee:number;paidPenalty:number;paidUnlockFee:number;paidDiscount:number;paidOverpaid:number;paidBadDebt:number;paidBadDebtInstallment:number;targetTotal:number;targetPrincipal:number;targetInterest:number;targetFee:number;targetPenalty:number;targetUnlockFee:number;dueTotal:number;duePrincipal:number;dueInterest:number;dueFee:number;duePenalty:number;dueUnlockFee:number;notYetDueTotal:number;notYetDuePrincipal:number;notYetDueInterest:number;notYetDueFee:number;notYetDuePenalty:number;notYetDueUnlockFee:number;installTotalTotal:number;installTotalPrincipal:number;installTotalInterest:number;installTotalFee:number;};
@@ -1208,44 +1209,30 @@ export default function MonthlySummary() {
       <div className="flex flex-col h-full">
       {/* ── Header area ──────────────────────────────────────────────── */}
       <div className="flex-shrink-0 bg-white" ref={headerRef}>
-        {/* ── Tab switcher + Export ─────────────────────────────────── */}
-        <div className="bg-white border-b border-gray-200 px-4 flex items-center gap-0 overflow-x-auto">
-          <span className="text-sm font-semibold text-gray-700 whitespace-nowrap flex-shrink-0">สรุปรายเดือน</span>
-          <span className="mr-2"/>
-          {TAB_CONFIG.map((t)=>(
-            <button key={t.key} type="button" onClick={()=>setTab(t.key)}
-              className={["relative px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap flex-shrink-0",tab===t.key?t.activeClass:"border-transparent text-gray-400 hover:text-gray-600"].join(" ")}>
-              {t.label}{t.filterCount>0&&<span className="ml-1 inline-flex items-center justify-center bg-blue-500 text-white rounded-full w-4 h-4 text-[10px] font-bold">{t.filterCount}</span>}
-            </button>
-          ))}
-          {/* ปุ่ม i อธิบายความหมายแต่ละแถบ — วางหลัง tab สุดท้าย */}
-          <span className="flex items-center px-2 flex-shrink-0">
-            <TabInfoPopup/>
-          </span>
-
+        {/* ── Header bar (ไม่มี tab — เหลือแค่ Combined) ─────────────────────────────── */}
+        <div className="bg-white border-b border-gray-200 px-4 py-2.5 flex items-center gap-2">
+          <span className="text-sm font-semibold text-gray-700 whitespace-nowrap">สรุปรายเดือน</span>
         </div>
 
         {/* ── Filter bar ───────────────────────────────────────────── */}
         <div className="bg-white border-b border-gray-200 shadow-sm">
             <div className="px-4 pb-3 pt-2 flex flex-wrap items-center gap-2">
-              {/* Search box — แสดงทุก tab ยกเว้น combined */}
-              {tab!=="combined"&&(
-                <div className="relative flex items-center">
-                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none"/>
-                  <input
-                    type="text"
-                    value={searchInput}
-                    onChange={(e)=>setSearchInput(e.target.value)}
-                    placeholder="ค้นหา: สัญญา / ลูกค้า"
-                    className="h-9 pl-8 pr-7 rounded-md border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 w-[200px]"
-                  />
-                  {searchInput&&(
-                    <button type="button" onClick={()=>{setSearchInput("");setSearch("");}} className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center justify-center w-5 h-5 rounded-full bg-gray-100 hover:bg-red-100 text-gray-400 hover:text-red-500">
-                      <X className="w-3 h-3"/>
-                    </button>
-                  )}
-                </div>
-              )}
+              {/* Search box — ค้นหาเลขที่สัญญา / ชื่อลูกค้า */}
+              <div className="relative flex items-center">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none"/>
+                <input
+                  type="text"
+                  value={searchInput}
+                  onChange={(e)=>setSearchInput(e.target.value)}
+                  placeholder="ค้นหา: สัญญา / ลูกค้า"
+                  className="h-9 pl-8 pr-7 rounded-md border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 w-[200px]"
+                />
+                {searchInput&&(
+                  <button type="button" onClick={()=>{setSearchInput("");setSearch("");}} className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center justify-center w-5 h-5 rounded-full bg-gray-100 hover:bg-red-100 text-gray-400 hover:text-red-500">
+                    <X className="w-3 h-3"/>
+                  </button>
+                )}
+              </div>
               {/* Tab 1: จำนวนสัญญา */}
               {tab==="count"&&(
                 <>
@@ -1470,13 +1457,16 @@ export default function MonthlySummary() {
                   )}
                 </>
               )}
-              {/* Export Excel — แสดงท้าย filter bar ทุก tab */}
-              {canExport&&(
-                <button type="button" onClick={handleExport}
-                  className="ml-auto flex items-center gap-1.5 h-9 px-3 text-sm font-medium rounded-md bg-green-600 hover:bg-green-700 text-white transition-colors whitespace-nowrap">
-                  <Download className="w-4 h-4"/><span className="hidden sm:inline">Export Excel</span>
-                </button>
-              )}
+              {/* ไอคอน i + Export Excel — ท้าย filter bar */}
+              <div className="ml-auto flex items-center gap-2">
+                <TabInfoPopup/>
+                {canExport&&(
+                  <button type="button" onClick={handleExport}
+                    className="flex items-center gap-1.5 h-9 px-3 text-sm font-medium rounded-md bg-green-600 hover:bg-green-700 text-white transition-colors whitespace-nowrap">
+                    <Download className="w-4 h-4"/><span className="hidden sm:inline">Export Excel</span>
+                  </button>
+                )}
+              </div>
             </div>
         </div>
         {/* ── Badge: installTotalall ─────────────────────────────────────────────── */}

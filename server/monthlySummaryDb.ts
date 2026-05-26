@@ -1441,12 +1441,13 @@ export type DueMonthParams = {
   approveMonths?: string[];
   productType?: string;
   deviceFamily?: string;
+  search?: string;
 };
 
 /** Query Count แยกตาม approve_month × due_month */
 async function queryDueMonthCount(
   section: SectionKey,
-  opts: { approveMonths?: string[]; productType?: string; deviceFamily?: string },
+  opts: { approveMonths?: string[]; productType?: string; deviceFamily?: string; search?: string },
 ): Promise<Array<{ approve_month: string; due_month: string; contract_count: number }>> {
   const db = await getDb(section);
   if (!db) return [];
@@ -1454,6 +1455,7 @@ async function queryDueMonthCount(
     productType: opts.productType,
     deviceFamily: opts.deviceFamily,
     approveMonths: opts.approveMonths,
+    search: opts.search,
   });
   const q = `
     SELECT
@@ -1473,7 +1475,7 @@ async function queryDueMonthCount(
 /** Query Approved Count แยกตาม approve_month เท่านั้น (DISTINCT contract per approve month) */
 async function queryDueMonthApprovedCount(
   section: SectionKey,
-  opts: { approveMonths?: string[]; productType?: string; deviceFamily?: string },
+  opts: { approveMonths?: string[]; productType?: string; deviceFamily?: string; search?: string },
 ): Promise<Array<{ approve_month: string; approved_count: number }>> {
   const db = await getDb(section);
   if (!db) return [];
@@ -1481,6 +1483,7 @@ async function queryDueMonthApprovedCount(
     productType: opts.productType,
     deviceFamily: opts.deviceFamily,
     approveMonths: opts.approveMonths,
+    search: opts.search,
   });
   const q = `
     SELECT
@@ -1498,7 +1501,7 @@ async function queryDueMonthApprovedCount(
 /** Query Target แยกตาม approve_month × due_month */
 async function queryDueMonthTarget(
   section: SectionKey,
-  opts: { approveMonths?: string[]; productType?: string; deviceFamily?: string },
+  opts: { approveMonths?: string[]; productType?: string; deviceFamily?: string; search?: string },
 ): Promise<Array<{
   approve_month: string; due_month: string; contract_count: number;
   principal_target: number; interest_target: number; fee_target: number;
@@ -1510,6 +1513,7 @@ async function queryDueMonthTarget(
     productType: opts.productType,
     deviceFamily: opts.deviceFamily,
     approveMonths: opts.approveMonths,
+    search: opts.search,
   });
   // Bug fix: outer query ต้องใช้ filter เดียวกับ subquery
   const baseWhereForOuter = baseWhere.replace(/\bdtc\./g, "base.");
@@ -1558,7 +1562,7 @@ async function queryDueMonthTarget(
 /** Query Due แยกตาม approve_month × due_month */
 async function queryDueMonthDue(
   section: SectionKey,
-  opts: { approveMonths?: string[]; productType?: string; deviceFamily?: string },
+  opts: { approveMonths?: string[]; productType?: string; deviceFamily?: string; search?: string },
 ): Promise<Array<{
   approve_month: string; due_month: string; contract_count: number;
   principal_due: number; interest_due: number; fee_due: number;
@@ -1570,6 +1574,7 @@ async function queryDueMonthDue(
     productType: opts.productType,
     deviceFamily: opts.deviceFamily,
     approveMonths: opts.approveMonths,
+    search: opts.search,
   });
   // Bug fix: outer query ต้องใช้ filter เดียวกับ subquery
   const baseWhereForOuter = baseWhere.replace(/\bdtc\./g, "base.");
@@ -1612,7 +1617,7 @@ async function queryDueMonthDue(
 /** Query NotYetDue แยกตาม approve_month × due_month */
 async function queryDueMonthNotYetDue(
   section: SectionKey,
-  opts: { approveMonths?: string[]; productType?: string; deviceFamily?: string },
+  opts: { approveMonths?: string[]; productType?: string; deviceFamily?: string; search?: string },
 ): Promise<Array<{
   approve_month: string; due_month: string; contract_count: number;
   principal_notyet: number; interest_notyet: number; fee_notyet: number;
@@ -1624,6 +1629,7 @@ async function queryDueMonthNotYetDue(
     productType: opts.productType,
     deviceFamily: opts.deviceFamily,
     approveMonths: opts.approveMonths,
+    search: opts.search,
   });
   // Bug fix: outer query ต้องใช้ filter เดียวกับ subquery
   const baseWhereForOuter = baseWhere.replace(/\bdtc\./g, "base.");
@@ -1668,7 +1674,7 @@ async function queryDueMonthNotYetDue(
 /** Query InstallTotal แยกตาม approve_month × due_month (ใช้ due_date ของแต่ละงวด) */
 async function queryDueMonthInstallTotal(
   section: SectionKey,
-  opts: { approveMonths?: string[]; productType?: string; deviceFamily?: string },
+  opts: { approveMonths?: string[]; productType?: string; deviceFamily?: string; search?: string },
 ): Promise<Array<{
   approve_month: string; due_month: string; contract_count: number;
   principal_install: number; interest_install: number; fee_install: number; total_install: number;
@@ -1680,6 +1686,7 @@ async function queryDueMonthInstallTotal(
     productType: opts.productType,
     deviceFamily: opts.deviceFamily,
     approveMonths: opts.approveMonths,
+    search: opts.search,
   });
   // ใช้ subquery เพื่อดึง finance_amount ต่อสัญญา (1 ค่าต่อสัญญา ไม่ซ้ำตามงวด)
   const q = `
@@ -1725,7 +1732,7 @@ async function queryDueMonthInstallTotal(
  */
 async function queryDueMonthPaid(
   section: SectionKey,
-  opts: { approveMonths?: string[]; productType?: string; deviceFamily?: string },
+  opts: { approveMonths?: string[]; productType?: string; deviceFamily?: string; search?: string },
 ): Promise<Array<{
   approve_month: string; due_month: string; contract_count: number;
   principal_paid: number; interest_paid: number; fee_paid: number;
@@ -1736,7 +1743,7 @@ async function queryDueMonthPaid(
   const db = await getDb(section);
   if (!db) return [];
 
-  // Build WHERE clause สำหรับ dcc (ใช้ section + productType + deviceFamily + approveMonths)
+  // Build WHERE clause สำหรับ dcc (ใช้ section + productType + deviceFamily + approveMonths + search)
   let dccFilter = `dcc.section = '${section}' AND dcc.approve_date IS NOT NULL`;
   if (opts.productType) {
     dccFilter += `\n    AND dcc.product_type = '${opts.productType.replace(/'/g, "''")}'`;
@@ -1749,6 +1756,10 @@ async function queryDueMonthPaid(
   if (opts.approveMonths && opts.approveMonths.length > 0) {
     const list = opts.approveMonths.map((m) => `'${m}'`).join(",");
     dccFilter += `\n    AND TO_CHAR(dcc.approve_date, 'YYYY-MM') IN (${list})`;
+  }
+  if (opts.search) {
+    const s = escapeLike(opts.search);
+    dccFilter += `\n    AND (dcc.contract_no LIKE '%${s}%' OR dcc.customer_name LIKE '%${s}%')`;
   }
 
   // ยอดเก็บหนี้ลงตามเดือนที่ชำระจริง (paid_at) ไม่ใช่เดือนที่งวดถึงกำหนด (due_date)
@@ -1821,6 +1832,7 @@ export async function getDueMonthSummary(
     approveMonths: params.approveMonths,
     productType: params.productType,
     deviceFamily: params.deviceFamily,
+    search: params.search,
   };
 
   const [countRows, targetRows, dueRows, notYetDueRows, installTotalRows, paidRows, approvedCountRows] = await Promise.all([
