@@ -1209,10 +1209,7 @@ export default function MonthlySummary() {
       <div className="flex flex-col h-full">
       {/* ── Header area ──────────────────────────────────────────────── */}
       <div className="flex-shrink-0 bg-white" ref={headerRef}>
-        {/* ── Header bar (ไม่มี tab — เหลือแค่ Combined) ─────────────────────────────── */}
-        <div className="bg-white border-b border-gray-200 px-4 py-2.5 flex items-center gap-2">
-          <span className="text-sm font-semibold text-gray-700 whitespace-nowrap">สรุปรายเดือน</span>
-        </div>
+
 
         {/* ── Filter bar ───────────────────────────────────────────── */}
         <div className="bg-white border-b border-gray-200 shadow-sm">
