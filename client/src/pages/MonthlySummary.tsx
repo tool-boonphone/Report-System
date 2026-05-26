@@ -925,7 +925,11 @@ export default function MonthlySummary() {
         const wsData:(string|number|null)[][]=[hdr1.map(x=>x[0]),hdr2.map(x=>x[0])];
         // helper: คำนวณ subtotal ของ group
         const groupSubtotal=(row:SummaryRow,g:typeof visGroups[0],t:TabKey)=>g.buckets.reduce((s,b)=>s+getCellVal(b,row.buckets[b],t),0);
-        const rowTotal=(row:SummaryRow,t:TabKey)=>visBuckets.reduce((s,b)=>s+getCellVal(b,row.buckets[b],t),0);
+        const rowTotal=(row:SummaryRow,t:TabKey)=>{
+          // สัญญา: ใช้ totalCount จาก __total__ row (ไม่นับซ้ำตาม bucket)
+          if(t==="count")return row.totalCount;
+          return visBuckets.reduce((s,b)=>s+getCellVal(b,row.buckets[b],t),0);
+        };
         for(const row of combinedRows){
           const installTotal=rowTotal(row,"installTotal");
           const targetTotal=rowTotal(row,"target");
@@ -2230,6 +2234,8 @@ function CombinedTable({
   }
 
   function rowTotal(subKey:TabKey, row:SummaryRow):number {
+    // สัญญา: ใช้ totalCount จาก __total__ row (จำนวนสัญญาที่อนุมัติในเดือนนั้น ไม่นับซ้ำตาม bucket)
+    if(subKey==="count")return row.totalCount;
     return DEBT_BUCKETS.reduce((s,b)=>{
       if(hiddenBuckets.has(b))return s;
       const cell=row.buckets[b];
@@ -2258,6 +2264,8 @@ function CombinedTable({
     return bt.paid.badDebtInstallment??0;
   }
   function gtRowTotal(subKey:TabKey):number {
+    // สัญญา: ใช้ totalCount จาก grandTotal (ไม่นับซ้ำตาม bucket)
+    if(subKey==="count")return grandTotal.totalCount;
     return DEBT_BUCKETS.reduce((s,b)=>{
       if(hiddenBuckets.has(b))return s;
       if(subKey==="paid"&&b==="หนี้เสีย"){
