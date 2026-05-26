@@ -2129,7 +2129,14 @@ export async function getDueMonthSummaryFromCache(
       ${dfFilter}
     ORDER BY approve_month DESC, due_month ASC
   `;
-  const allDbRows = pgRows(await db.execute(sql.raw(baseQ))) as any[];
+  let allDbRows: any[];
+  try {
+    allDbRows = pgRows(await db.execute(sql.raw(baseQ))) as any[];
+  } catch (err: any) {
+    // ตาราง monthly_summary_due_month_cache ยังไม่ถูกสร้าง — fallback ไป direct query
+    console.warn(`[getDueMonthSummaryFromCache] Cache table not ready: ${err?.message ?? err}`);
+    return { rows: [], allDueMonths: [] };
+  }
 
   // แยกตาม query_type
   const countRows        = allDbRows.filter((r) => r.query_type === "count");

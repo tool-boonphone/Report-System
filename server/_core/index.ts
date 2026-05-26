@@ -8,6 +8,7 @@ import { registerOAuthRoutes } from "./oauth";
 import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
 import { seedSuperAdmin } from "../authDb";
+import { runStartupMigrations } from "../db";
 import { handleContractsExport, handleDebtTargetExport, handleDebtCollectedExport, handleBadDebtExport, handleMonthlySummaryExport, handleYearlySummaryExport, handleBadDebtSummaryExport, handleIncomeExport, handleExpenseExport } from "../routers/exportExcel";
 
 import { handleSyncStream } from "../routers/syncStream";
@@ -122,6 +123,11 @@ async function startServer() {
 
   server.listen(port, async () => {
     console.log(`Server running on http://localhost:${port}/`);
+    try {
+      await runStartupMigrations();
+    } catch (err) {
+      console.error("[startup] runStartupMigrations failed:", err);
+    }
     try {
       await seedSuperAdmin();
     } catch (err) {

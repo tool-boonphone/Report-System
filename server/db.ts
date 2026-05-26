@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
 import { InsertUser, users } from "../drizzle/schema";
@@ -144,4 +144,55 @@ export function pgRows(result: unknown): any[] {
     return result as any[];
   }
   return [];
+}
+
+/**
+ * runStartupMigrations — รัน DDL migrations ที่จำเป็นตอน startup
+ * ใช้ CREATE TABLE IF NOT EXISTS เพื่อให้ idempotent (รันซ้ำได้ปลอดภัย)
+ */
+export async function runStartupMigrations(): Promise<void> {
+  const sections: Array<"Boonphone" | "Fastfone365"> = ["Boonphone", "Fastfone365"];
+  for (const section of sections) {
+    const db = await getDb(section);
+    if (!db) continue;
+    try {
+      // Migration 0006: monthly_summary_due_month_cache
+      await db.execute(sql.raw(`
+        CREATE TABLE IF NOT EXISTS "monthly_summary_due_month_cache" (
+          "id"                   INTEGER          PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+          "section"              VARCHAR(32)      NOT NULL,
+          "query_type"           VARCHAR(32)      NOT NULL,
+          "approve_month"        VARCHAR(7)       NOT NULL,
+          "due_month"            VARCHAR(7)       NOT NULL,
+          "product_type"         VARCHAR(64),
+          "device_family"        VARCHAR(16),
+          "contract_count"       INTEGER          NOT NULL DEFAULT 0,
+          "principal"            DECIMAL(18,2)    NOT NULL DEFAULT '0',
+          "interest"             DECIMAL(18,2)    NOT NULL DEFAULT '0',
+          "fee"                  DECIMAL(18,2)    NOT NULL DEFAULT '0',
+          "penalty"              DECIMAL(18,2)    NOT NULL DEFAULT '0',
+          "unlock_fee"           DECIMAL(18,2)    NOT NULL DEFAULT '0',
+          "discount"             DECIMAL(18,2)    NOT NULL DEFAULT '0',
+          "overpaid"             DECIMAL(18,2)    NOT NULL DEFAULT '0',
+          "bad_debt"             DECIMAL(18,2)    NOT NULL DEFAULT '0',
+          "bad_debt_installment" DECIMAL(18,2)    NOT NULL DEFAULT '0',
+          "total_amount"         DECIMAL(18,2)    NOT NULL DEFAULT '0',
+          "updated_at"           TIMESTAMP        NOT NULL DEFAULT NOW()
+        )
+      `));
+      await db.execute(sql.raw(`
+        CREATE UNIQUE INDEX IF NOT EXISTS "msdmc_unique_idx"
+          ON "monthly_summary_due_month_cache" (
+            "section", "query_type", "approve_month", "due_month",
+            COALESCE("product_type", ''), COALESCE("device_family", '')
+          )
+      `));
+      await db.execute(sql.raw(`CREATE INDEX IF NOT EXISTS "msdmc_section_query_idx" ON "monthly_summary_due_month_cache" ("section", "query_type")`));
+      await db.execute(sql.raw(`CREATE INDEX IF NOT EXISTS "msdmc_section_approve_idx" ON "monthly_summary_due_month_cache" ("section", "approve_month")`));
+      await db.execute(sql.raw(`CREATE INDEX IF NOT EXISTS "msdmc_section_due_idx" ON "monthly_summary_due_month_cache" ("section", "due_month")`));
+      console.log(`[migration] ${section}: monthly_summary_due_month_cache — OK`);
+    } catch (err: any) {
+      console.error(`[migration] ${section}: monthly_summary_due_month_cache failed:`, err?.message ?? err);
+    }
+  }
 }
