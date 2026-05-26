@@ -282,6 +282,8 @@ async function queryTarget(
     approveMonths: opts.approveMonths,
     search: opts.search,
   });
+  // baseWhere ใช้ alias dtc. → แปลงเป็น base. สำหรับ outer query
+  const baseWhereForOuter = baseWhere.replace(/\bdtc\./g, "base.");
 
   // due_date filter
   let dueDateFilter = "";
@@ -296,6 +298,8 @@ async function queryTarget(
    * penalty และ unlock_fee ดึงจากงวดล่าสุดของแต่ละสัญญาเท่านั้น
    * ใช้ subquery หา MAX(period) per contract แล้ว JOIN กลับมา
    * สำหรับ total_amount, principal, interest, fee — SUM จากทุกงวดที่ถึงกำหนดแล้ว
+   * Bug fix: outer query ต้องใช้ baseWhereForOuter (มี filter productType/deviceFamily/approveMonths)
+   *          ไม่ใช่แค่ section filter เพียงอย่างเดียว
    */
   const q = `
     SELECT
@@ -332,7 +336,7 @@ async function queryTarget(
       GROUP BY dtc.section, dtc.contract_external_id
     ) latest ON latest.section = base.section
              AND latest.contract_external_id = base.contract_external_id
-    WHERE base.section = '${section}'
+    WHERE ${baseWhereForOuter}
       AND DATE(base.due_date) <= CURRENT_DATE
       ${dueDateFilter.replace(/dtc\./g, "base.")}
     GROUP BY 1, 2
@@ -1464,6 +1468,8 @@ async function queryDueMonthTarget(
     deviceFamily: opts.deviceFamily,
     approveMonths: opts.approveMonths,
   });
+  // Bug fix: outer query ต้องใช้ filter เดียวกับ subquery
+  const baseWhereForOuter = baseWhere.replace(/\bdtc\./g, "base.");
   const q = `
     SELECT
       TO_CHAR(base.approve_date, 'YYYY-MM') AS approve_month,
@@ -1496,7 +1502,7 @@ async function queryDueMonthTarget(
     ) latest ON latest.section = base.section
              AND latest.contract_external_id = base.contract_external_id
              AND TO_CHAR(base.due_date, 'YYYY-MM') = latest.due_month_grp
-    WHERE base.section = '${section}'
+    WHERE ${baseWhereForOuter}
       AND DATE(base.due_date) <= CURRENT_DATE
       AND base.due_date IS NOT NULL
     GROUP BY 1, 2
@@ -1522,6 +1528,8 @@ async function queryDueMonthDue(
     deviceFamily: opts.deviceFamily,
     approveMonths: opts.approveMonths,
   });
+  // Bug fix: outer query ต้องใช้ filter เดียวกับ subquery
+  const baseWhereForOuter = baseWhere.replace(/\bdtc\./g, "base.");
   const q = `
     SELECT
       TO_CHAR(base.approve_date, 'YYYY-MM') AS approve_month,
@@ -1548,7 +1556,7 @@ async function queryDueMonthDue(
     ) latest ON latest.section = base.section
              AND latest.contract_external_id = base.contract_external_id
              AND TO_CHAR(base.due_date, 'YYYY-MM') = latest.due_month_grp
-    WHERE base.section = '${section}'
+    WHERE ${baseWhereForOuter}
       AND base.is_arrears = true
       AND base.due_date IS NOT NULL
     GROUP BY 1, 2
@@ -1574,6 +1582,8 @@ async function queryDueMonthNotYetDue(
     deviceFamily: opts.deviceFamily,
     approveMonths: opts.approveMonths,
   });
+  // Bug fix: outer query ต้องใช้ filter เดียวกับ subquery
+  const baseWhereForOuter = baseWhere.replace(/\bdtc\./g, "base.");
   const q = `
     SELECT
       TO_CHAR(base.approve_date, 'YYYY-MM') AS approve_month,
@@ -1601,7 +1611,7 @@ async function queryDueMonthNotYetDue(
     ) latest ON latest.section = base.section
              AND latest.contract_external_id = base.contract_external_id
              AND TO_CHAR(base.due_date, 'YYYY-MM') = latest.due_month_grp
-    WHERE base.section = '${section}'
+    WHERE ${baseWhereForOuter}
       AND base.due_date > CURRENT_DATE
       AND base.is_closed IS NOT TRUE
       AND base.is_paid IS NOT TRUE
