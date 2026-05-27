@@ -4218,8 +4218,15 @@ export async function listSuspectedBadDebt(params: { section: SectionKey }): Pro
       dtc.finance_amount,
       dtc.installment_count,
       dtc.debt_range,
-      -- Earliest unpaid arrears due_date for daysOverdue calculation
-      MIN(CASE WHEN dtc.is_arrears = true AND dtc.is_paid = false AND dtc.total_amount > 0
+      -- Earliest overdue due_date for daysOverdue calculation
+      -- Logic mirrors rederiveDaysOverdue(): งวดที่ due_date <= today, ยังไม่ชำระ, ไม่ใช่งวดอนาคต, ไม่ closed/suspended
+      MIN(CASE WHEN dtc.is_future_period = false
+                    AND dtc.is_closed = false
+                    AND dtc.is_suspended = false
+                    AND dtc.is_paid = false
+                    AND dtc.total_amount > 0.001
+                    AND dtc.paid_amount < dtc.total_amount - 0.5
+                    AND dtc.due_date <= CURRENT_DATE
                THEN dtc.due_date END) AS earliest_arrears_due
     FROM debt_target_cache dtc
     WHERE dtc.section = ${params.section}
