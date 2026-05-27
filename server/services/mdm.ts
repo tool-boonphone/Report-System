@@ -32,13 +32,13 @@ function getApiKey(section: SectionKey): string {
   if (section === "Boonphone") {
     return (
       process.env.MDM_API_KEY_BOONPHONE ??
-      "SQVU3kreXni6vBwOVhmiRF7gEGsxteB2Ui5CJJyCZbnYy606jhuIqX2Qv5YuWjji"
+      "isvEwiE1cRWyEy5bFWEVX6QSmQHv5a4PMvQ6NlV2mmFYSn46df6jn7chbSVJCBPq"
     );
   }
   if (section === "Fastfone365") {
     return (
       process.env.MDM_API_KEY_FASTFONE365 ??
-      "16tyd01JeldHVEeHjyrLWxVEm0yPFnQfKwp0Qql9BL1LiXNdyfGDjdnvtR6ZCkhb"
+      "u66XGmwOYbAWj2xBJaP5Z9hs0iuijligqBvx2YtHeIAIDwx87wCoojJbwpKwqBeW"
     );
   }
   // fallback (ไม่ควรเกิดขึ้น)
@@ -72,30 +72,46 @@ async function fetchDeviceListMap(
     return new Map();
   }
 
-  const res = await fetch(`${MDM_BASE_URL}/devices`, {
-    headers: { "X-API-Key": apiKey },
-    signal: AbortSignal.timeout(15_000), // timeout 15 วินาที
-  });
-
-  if (!res.ok) {
-    throw new Error(
-      `MDM API error [${section}]: ${res.status} ${res.statusText}`,
-    );
-  }
-
-  const json = await res.json();
-
-  // response อาจเป็น array โดยตรง หรือ { data: [...] }
-  const devices: Array<{ sn?: string; lastTime?: string }> = Array.isArray(json)
-    ? json
-    : (json?.data ?? json?.devices ?? []);
-
+  // ดึงข้อมูลแบบ pagination จนครบทุก device
+  const PAGE_SIZE = 1000;
   const snMap = new Map<string, string>();
-  for (const d of devices) {
-    if (d.sn && d.lastTime) {
-      snMap.set(d.sn.trim().toUpperCase(), d.lastTime);
+  let pageNum = 1;
+  let total = 0;
+
+  do {
+    const url = `${MDM_BASE_URL}/devices?pageSize=${PAGE_SIZE}&pageNum=${pageNum}`;
+    const res = await fetch(url, {
+      headers: { "X-API-Key": apiKey },
+      signal: AbortSignal.timeout(20_000), // timeout 20 วินาที
+    });
+
+    if (!res.ok) {
+      throw new Error(
+        `MDM API error [${section}] page ${pageNum}: ${res.status} ${res.statusText}`,
+      );
     }
-  }
+
+    const json = await res.json();
+
+    // response format: { total: number, rows: [...], code: number }
+    const devices: Array<{ deviceId?: string; lastTime?: string }> =
+      Array.isArray(json) ? json : (json?.rows ?? json?.data ?? json?.devices ?? []);
+
+    if (pageNum === 1) {
+      total = json?.total ?? devices.length;
+    }
+
+    for (const d of devices) {
+      // MDM API ใช้ field ชื่อ "deviceId" สำหรับ Serial Number
+      if (d.deviceId && d.lastTime) {
+        snMap.set(d.deviceId.trim().toUpperCase(), d.lastTime);
+      }
+    }
+
+    pageNum++;
+  } while (snMap.size < total && total > 0);
+
+  console.log(`[MDM][${section}] Loaded ${snMap.size} devices (total: ${total})`);
 
   // บันทึก cache
   deviceListCacheMap.set(section, { data: snMap, fetchedAt: now });
@@ -175,6 +191,7 @@ export async function getBatchLastOnlineDays(
         result.set(serial, null);
         continue;
       }
+      // MDM ใช้ deviceId เป็น SN — normalize เป็น uppercase
       const key = serial.trim().toUpperCase();
       const lastTime = snMap.get(key);
       result.set(serial, lastTime ? calcDaysSince(lastTime) : null);

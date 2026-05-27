@@ -1093,10 +1093,10 @@ export default function WatchGroup() {
                                 <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-green-100 text-green-700">• วันนี้</span>
                               );
                               if (days <= 3) return (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-lime-100 text-lime-700">{days} วัน</span>
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-yellow-100 text-yellow-700">{days} วัน</span>
                               );
                               if (days <= 7) return (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-yellow-100 text-yellow-700">{days} วัน</span>
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-orange-100 text-orange-700">{days} วัน</span>
                               );
                               return (
                                 <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-100 text-red-700">{days} วัน</span>
