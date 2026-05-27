@@ -24,6 +24,10 @@ services:
         sync: false
       - key: BUILT_IN_FORGE_API_KEY
         sync: false
+      - key: MDM_API_KEY_BOONPHONE
+        sync: false
+      - key: MDM_API_KEY_FASTFONE365
+        sync: false
 
 databases:
   - name: report-db

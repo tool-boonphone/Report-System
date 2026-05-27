@@ -13,6 +13,7 @@ import { watchGroupRouter } from "./routers/watchGroup";
 import { cacheRouter } from "./routers/cache";
 import { accountingRouter } from "./routers/accounting";
 import { fillPeriodNosRouter } from "./routers/fillPeriodNosRouter";
+import { mdmRouter } from "./routers/mdm";
 
 export const appRouter = router({
   system: systemRouter,
@@ -29,6 +30,7 @@ export const appRouter = router({
   cache: cacheRouter,
   accounting: accountingRouter,
   fillPeriodNos: fillPeriodNosRouter,
+  mdm: mdmRouter,
 });
 
 export type AppRouter = typeof appRouter;

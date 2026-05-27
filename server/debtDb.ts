@@ -4182,6 +4182,7 @@ export async function listSuspectedBadDebt(params: { section: SectionKey }): Pro
     approveDate: string | null;
     customerName: string | null;
     phone: string | null;
+    serialNo: string | null;
     model: string | null;
     device: string | null;
     sellPrice: number | null;
@@ -4255,6 +4256,7 @@ export async function listSuspectedBadDebt(params: { section: SectionKey }): Pro
       SELECT
         external_id,
         phone,
+        serial_no,
         CAST(sell_price AS DECIMAL(18,2))     AS sell_price,
         CAST(multiplier AS DECIMAL(18,4))     AS multiplier,
         CAST(commission_net AS DECIMAL(18,2)) AS commission_net
@@ -4337,6 +4339,7 @@ export async function listSuspectedBadDebt(params: { section: SectionKey }): Pro
       approveDate: s.approve_date ?? null,
       customerName: s.customer_name ?? null,
       phone: cInfo?.phone ?? null,
+      serialNo: cInfo?.serial_no ?? null,
       model: s.model ?? null,
       device: s.device ?? null,
       sellPrice: cInfo?.sell_price != null ? Number(cInfo.sell_price) : null,
@@ -4387,6 +4390,7 @@ export async function listWatchGroup(params: {
     approveDate: string | null;
     customerName: string | null;
     phone: string | null;
+    serialNo: string | null;
     model: string | null;
     device: string | null;
     productType: string | null;
@@ -4490,6 +4494,7 @@ export async function listWatchGroup(params: {
       SELECT
         external_id,
         phone,
+        serial_no,
         CAST(sell_price AS DECIMAL(18,2))        AS sell_price,
         CAST(multiplier AS DECIMAL(18,4))         AS multiplier,
         CAST(commission_net AS DECIMAL(18,2))     AS commission_net,
@@ -4531,6 +4536,7 @@ export async function listWatchGroup(params: {
     approveDate: string | null;
     customerName: string | null;
     phone: string | null;
+    serialNo: string | null;
     model: string | null;
     device: string | null;
     productType: string | null;
@@ -4619,6 +4625,7 @@ export async function listWatchGroup(params: {
       approveDate: s.approve_date ?? null,
       customerName: s.customer_name ?? null,
       phone: cInfo?.phone ?? null,
+      serialNo: cInfo?.serial_no ?? null,
       model: s.model ?? null,
       device: s.device ?? null,
       productType,

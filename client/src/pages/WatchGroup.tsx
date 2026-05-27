@@ -141,6 +141,7 @@ type Row = {
   approveDate: string | null;
   customerName: string | null;
   phone: string | null;
+  serialNo: string | null;
   model: string | null;
   device: string | null;
   productType: string | null;
@@ -418,6 +419,17 @@ export default function WatchGroup() {
   );
   const allRows: Row[] = useMemo(() => (data?.rows ?? []) as unknown as Row[], [data?.rows]);
 
+  /* ── MDM online days ── */
+  const serialNos = useMemo(() =>
+    allRows.map((r) => r.serialNo ?? "").filter(Boolean),
+  [allRows]);
+  const { data: mdmData } = trpc.mdm.batchLastOnlineDays.useQuery(
+    section && serialNos.length > 0 ? { section, serials: serialNos } : (undefined as any),
+    { enabled: canView && !!section && serialNos.length > 0, staleTime: 5 * 60 * 1000 },
+  );
+  /** Map SN → lastOnlineDays (null = ไม่มีข้อมูล) */
+  const onlineDaysMap = useMemo(() => mdmData ?? {}, [mdmData]);
+
   /* ── approve month options ── */
   const approveMonthOptions = useMemo(() => {
     const set = new Set<string>();
@@ -637,33 +649,38 @@ export default function WatchGroup() {
         "#","วันที่อนุมัติ","เลขที่สัญญา","ชื่อ-นามสกุล","เบอร์โทร",
         "ประเภท","รุ่น","รหัสพาร์ทเนอร์","ชื่อพาร์ทเนอร์","ราคา","ยอดจัดไฟแนนซ์",
         "ค่าคอมมิชชั่น","Incentive","ต้นทุน","ยอดผ่อนรวม",
-        "เกินกำหนด(วัน)","ค้างชำระ(งวด)",
+        "เกินกำหนด(วัน)","ค้างชำระ(งวด)","Online (วันที่แล้ว)",
       ];
-      const dataRows = filteredRows.map((r, i) => [
-        i + 1,
-        r.approveDate ? r.approveDate.slice(0, 10) : "",
-        r.contractNo ?? "",
-        r.customerName ?? "",
-        r.phone ?? "",
-        r.productType ?? "",
-        r.model ?? "",
-        r.partnerCode ?? "",
-        r.partnerName ?? "",
-        r.sellPrice ?? 0,
-        r.financeAmount ?? 0,
-        r.commissionNet ?? 0,
-        r.incentive ?? 0,
-        r.cost ?? 0,
-        r.installmentTotal ?? 0,
-        r.daysOverdue ?? 0,
-        r.arrearsCount ?? 0,
-      ]);
+      const dataRows = filteredRows.map((r, i) => {
+        const onlineDays = r.serialNo ? (onlineDaysMap[r.serialNo] ?? null) : null;
+        const onlineLabel = onlineDays == null ? "" : onlineDays === 0 ? "วันนี้" : `${onlineDays} วันที่แล้ว`;
+        return [
+          i + 1,
+          r.approveDate ? r.approveDate.slice(0, 10) : "",
+          r.contractNo ?? "",
+          r.customerName ?? "",
+          r.phone ?? "",
+          r.productType ?? "",
+          r.model ?? "",
+          r.partnerCode ?? "",
+          r.partnerName ?? "",
+          r.sellPrice ?? 0,
+          r.financeAmount ?? 0,
+          r.commissionNet ?? 0,
+          r.incentive ?? 0,
+          r.cost ?? 0,
+          r.installmentTotal ?? 0,
+          r.daysOverdue ?? 0,
+          r.arrearsCount ?? 0,
+          onlineLabel,
+        ];
+      });
       const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
       ws["!cols"] = [
         { wch: 6 }, { wch: 14 }, { wch: 22 }, { wch: 22 }, { wch: 14 },
         { wch: 10 }, { wch: 24 }, { wch: 12 }, { wch: 24 }, { wch: 12 }, { wch: 14 },
         { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 14 },
-        { wch: 14 }, { wch: 14 },
+        { wch: 14 }, { wch: 14 }, { wch: 14 },
       ];
       // Style header row
       for (let C = 0; C < headers.length; C++) {
@@ -972,12 +989,15 @@ export default function WatchGroup() {
                       <Th col="arrearsCount" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="min-w-[110px] text-center">
                         ค้างชำระ(งวด)
                       </Th>
+                      <th className="px-3 py-2 text-center text-xs font-semibold whitespace-nowrap min-w-[90px]">
+                        Online
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
                     {paddingTop > 0 && (
                       <tr>
-                        <td colSpan={16} style={{ height: paddingTop }} />
+                        <td colSpan={17} style={{ height: paddingTop }} />
                       </tr>
                     )}
                     {virtualRows.map((vRow) => {
@@ -1063,12 +1083,32 @@ export default function WatchGroup() {
                               {r.arrearsCount} งวด
                             </span>
                           </td>
+                          {/* Online column: วันที่ออนไลน์ล่าสุดจาก MDM */}
+                          <td className="px-3 py-1.5 text-center whitespace-nowrap">
+                            {(() => {
+                              if (!r.serialNo) return <span className="text-gray-300 text-xs">-</span>;
+                              const days = onlineDaysMap[r.serialNo];
+                              if (days == null) return <span className="text-gray-400 text-xs">–</span>;
+                              if (days === 0) return (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-green-100 text-green-700">• วันนี้</span>
+                              );
+                              if (days <= 3) return (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-lime-100 text-lime-700">{days} วัน</span>
+                              );
+                              if (days <= 7) return (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-yellow-100 text-yellow-700">{days} วัน</span>
+                              );
+                              return (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-100 text-red-700">{days} วัน</span>
+                              );
+                            })()}
+                          </td>
                         </tr>
                       );
                     })}
                     {paddingBottom > 0 && (
                       <tr>
-                        <td colSpan={16} style={{ height: paddingBottom }} />
+                        <td colSpan={17} style={{ height: paddingBottom }} />
                       </tr>
                     )}
                   </tbody>
