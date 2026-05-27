@@ -84,8 +84,7 @@ function rederiveDaysOverdue(
     return { debtStatus: contractStatus, daysOverdue: 0 };
   }
   const todayMs = today.getTime();
-  let maxDays = 0;                        // ใช้กำหนด bucket (debtStatus) — งวดที่ค้างนานที่สุด
-  let minDays = Number.MAX_SAFE_INTEGER;  // ใช้แสดงในตาราง — งวดแรกที่เริ่มค้าง
+  let maxDays = 0; // ใช้ทั้ง bucket (debtStatus) และ daysOverdue — งวดที่ค้างนานที่สุด สัมพันธ์กับ debtStatus
   for (const it of instRows) {
     // isPaid=true means the API confirmed full payment even if paid_amount < total_amount
     // (e.g. discount applied, penalty waived, overpaid from prior period applied, etc.)
@@ -100,12 +99,10 @@ function rederiveDaysOverdue(
     if (dueMs > todayMs) continue; // future
     const days = Math.floor((todayMs - dueMs) / 86_400_000);
     if (days > maxDays) maxDays = days;
-    // minDays: เฉพาะงวดที่เกินกำหนดแล้ว (days > 0) เท่านั้น
-    if (days > 0 && days < minDays) minDays = days;
+
   }
-  // daysOverdue = วันที่เกินกำหนดนับจากงวดแรกที่เริ่มค้าง (ไม่ใช่งวดล่าสุด)
-  const daysOverdue = minDays === Number.MAX_SAFE_INTEGER ? 0 : minDays;
-  return { debtStatus: bucketFromDays(maxDays), daysOverdue };
+  // daysOverdue = maxDays (งวดที่ค้างนานที่สุด) สัมพันธ์กับ debtStatus bucket เสมอ
+  return { debtStatus: bucketFromDays(maxDays), daysOverdue: maxDays };
 }
 
 // ─── Target (เป้าเก็บหนี้) ────────────────────────────────────────────────────
@@ -247,8 +244,19 @@ export async function* streamTargetFromCache(params: {
       const debtStatus = TERMINAL_STATUSES.has(contractStatus ?? "")
         ? (contractStatus as string)
         : (cachedDebtRange ?? bucketFromDays(0));
-      // daysOverdue: derive approximate value from debtRange for display (exact value not stored in cache)
-      const daysOverdue = debtRangeToDays(debtStatus);
+      // daysOverdue: คำนวณจาก due_date จริง (maxDays = งวดที่ค้างนานที่สุด) สัมพันธ์กับ debtStatus
+      const { daysOverdue } = rederiveDaysOverdue(
+        contractStatus,
+        instRows.map((r: any) => ({
+          dueDate: r.due_date ?? null,
+          totalAmount: r.total_amount ?? "0",
+          paidAmount: r.paid_amount ?? "0",
+          isClosed: !!r.is_closed,
+          isSuspended: !!r.is_suspended,
+          isPaid: !!r.is_paid,
+        })),
+        today,
+      );
 
       const totalAmount = instRows.reduce((s: number, r: any) => s + Number(r.total_amount ?? 0), 0);
       const totalPaid = instRows.reduce((s: number, r: any) => s + Number(r.paid_amount ?? 0), 0);
