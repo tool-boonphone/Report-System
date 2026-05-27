@@ -14,7 +14,7 @@
  *   - Boonphone   : MDM_API_KEY_BOONPHONE  (env var)
  *   - Fastfone365 : MDM_API_KEY_FASTFONE365 (env var)
  *
- * Auth: Authorization: Bearer <API_KEY>
+ * Auth: X-API-Key: <API_KEY>
  * Endpoint: GET /api/mdm/devices?pageNum=1&pageSize=1000
  * Response: { total: number, rows: [{ deviceId, lastTime, contract, imei, ... }] }
  *
@@ -65,7 +65,7 @@ const deviceListCacheMap = new Map<
  *
  * MDM API:
  *   GET /api/mdm/devices?pageNum=1&pageSize=1000
- *   Authorization: Bearer <API_KEY>
+ *   X-API-Key: <API_KEY>
  *   Response: { total: number, rows: [{ deviceId, lastTime, ... }] }
  *   deviceId = Serial Number ของอุปกรณ์
  */
@@ -98,7 +98,7 @@ async function fetchDeviceListMap(
     const url = `${MDM_BASE_URL}/devices?pageNum=${pageNum}&pageSize=${PAGE_SIZE}`;
     const res = await fetch(url, {
       headers: {
-        "Authorization": `Bearer ${apiKey}`,
+        "X-API-Key": apiKey,
         "Accept": "application/json",
       },
       signal: AbortSignal.timeout(30_000), // timeout 30 วินาที
