@@ -921,7 +921,8 @@ function deriveDebtStatus(
   if (contractStatus && TERMINAL_STATUSES.has(contractStatus)) {
     return { label: contractStatus, daysOverdue: 0 };
   }
-  let maxDays = 0;
+  let maxDays = 0;                        // ใช้กำหนด bucket (debtStatus) — งวดที่ค้างนานที่สุด
+  let minDays = Number.MAX_SAFE_INTEGER;  // ใช้แสดงในตาราง — งวดแรกที่เริ่มค้าง
   for (const it of installmentsForContract) {
     if (!it.due_date) continue;
     const dueMs = Date.parse(`${it.due_date}T00:00:00`);
@@ -947,8 +948,12 @@ function deriveDebtStatus(
     if (outstanding <= 0.001) continue;
     const days = Math.floor((today.getTime() - dueMs) / (1000 * 60 * 60 * 24));
     if (days > maxDays) maxDays = days;
+    // minDays: เฉพาะงวดที่เกินกำหนดแล้ว (days > 0) เท่านั้น
+    if (days > 0 && days < minDays) minDays = days;
   }
-  return { label: bucketFromDays(maxDays), daysOverdue: maxDays };
+  // daysOverdue = วันที่เกินกำหนดนับจากงวดแรกที่เริ่มค้าง (ไม่ใช่งวดล่าสุด)
+  const daysOverdue = minDays === Number.MAX_SAFE_INTEGER ? 0 : minDays;
+  return { label: bucketFromDays(maxDays), daysOverdue };
 }
 
 /**

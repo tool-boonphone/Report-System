@@ -435,7 +435,7 @@ export default function WatchGroup() {
     const map = new Map<string, string>(); // key: partnerCode, value: display label
     for (const r of allRows) {
       if (!r.partnerCode) continue;
-      const label = r.partnerName ? `${r.partnerCode} - ${r.partnerName}` : r.partnerCode;
+      const label = r.partnerCode;
       map.set(r.partnerCode, label);
     }
     return Array.from(map.entries())
@@ -647,7 +647,7 @@ export default function WatchGroup() {
         r.phone ?? "",
         r.productType ?? "",
         r.model ?? "",
-        r.partnerCode ? `${r.partnerCode}${r.partnerName ? ` - ${r.partnerName}` : ""}` : "",
+        r.partnerCode ?? "",
         r.sellPrice ?? 0,
         r.financeAmount ?? 0,
         r.commissionNet ?? 0,
@@ -1026,11 +1026,7 @@ export default function WatchGroup() {
                             {fmtModelDisplay(r.model)}
                           </td>
                           <td className="px-3 py-1.5 whitespace-nowrap text-gray-600">
-                            {r.partnerCode
-                              ? r.partnerName
-                                ? `${r.partnerCode} - ${r.partnerName}`
-                                : r.partnerCode
-                              : "-"}
+                            {r.partnerCode ?? "-"}
                           </td>
                           <td className="px-3 py-1.5 text-right whitespace-nowrap">
                             {fmtMoney(r.sellPrice)}

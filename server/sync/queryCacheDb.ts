@@ -84,7 +84,8 @@ function rederiveDaysOverdue(
     return { debtStatus: contractStatus, daysOverdue: 0 };
   }
   const todayMs = today.getTime();
-  let maxDays = 0;
+  let maxDays = 0;                        // ใช้กำหนด bucket (debtStatus) — งวดที่ค้างนานที่สุด
+  let minDays = Number.MAX_SAFE_INTEGER;  // ใช้แสดงในตาราง — งวดแรกที่เริ่มค้าง
   for (const it of instRows) {
     // isPaid=true means the API confirmed full payment even if paid_amount < total_amount
     // (e.g. discount applied, penalty waived, overpaid from prior period applied, etc.)
@@ -99,8 +100,12 @@ function rederiveDaysOverdue(
     if (dueMs > todayMs) continue; // future
     const days = Math.floor((todayMs - dueMs) / 86_400_000);
     if (days > maxDays) maxDays = days;
+    // minDays: เฉพาะงวดที่เกินกำหนดแล้ว (days > 0) เท่านั้น
+    if (days > 0 && days < minDays) minDays = days;
   }
-  return { debtStatus: bucketFromDays(maxDays), daysOverdue: maxDays };
+  // daysOverdue = วันที่เกินกำหนดนับจากงวดแรกที่เริ่มค้าง (ไม่ใช่งวดล่าสุด)
+  const daysOverdue = minDays === Number.MAX_SAFE_INTEGER ? 0 : minDays;
+  return { debtStatus: bucketFromDays(maxDays), daysOverdue };
 }
 
 // ─── Target (เป้าเก็บหนี้) ────────────────────────────────────────────────────
