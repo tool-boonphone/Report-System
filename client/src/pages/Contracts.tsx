@@ -519,21 +519,19 @@ export default function Contracts() {
   };
 
   // ----- Virtualizer -----
+  // ใช้ transform-based approach แทน paddingTop/paddingBottom dummy rows
+  // เพื่อป้องกัน scroll กระโดดขึ้น/ลงสุดเมื่อ scroll เร็วๆ
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const ROW_HEIGHT = 36;
   const rowVirtualizer = useVirtualizer({
     count: filteredRows.length,
     getScrollElement: () => scrollRef.current,
     estimateSize: () => ROW_HEIGHT,
-    overscan: 12,
+    overscan: 5,
   });
 
   const virtualRows = rowVirtualizer.getVirtualItems();
   const totalSize = rowVirtualizer.getTotalSize();
-  const paddingTop = virtualRows.length ? virtualRows[0].start : 0;
-  const paddingBottom = virtualRows.length
-    ? totalSize - virtualRows[virtualRows.length - 1].end
-    : 0;
 
   const totalAllRows = allRows.length;
   const totalFilteredRows = filteredRows.length;
@@ -847,28 +845,24 @@ export default function Contracts() {
                   })}
                 </tr>
               </thead>
-              <tbody>
+              {/* tbody ใช้ position:relative + height=totalSize เพื่อให้ scroll container รู้ขนาดจริง */}
+              {/* แต่ละ row ใช้ position:absolute + translateY แทน paddingTop/paddingBottom dummy rows */}
+              {/* วิธีนี้ป้องกัน scroll กระโดดขึ้น/ลงสุดเมื่อ scroll เร็วๆ */}
+              <tbody style={{ height: `${totalSize}px`, position: "relative", display: "block" }}>
                 {listQuery.isLoading && (
-                  <tr>
+                  <tr style={{ position: "absolute", top: 0, left: 0, width: "100%", display: "table" }}>
                     <td colSpan={CONTRACT_COLUMNS.length} className="text-center py-10 text-gray-500">
                       <Spinner className="inline-block mr-2" /> กำลังโหลด…
                     </td>
                   </tr>
                 )}
                 {!listQuery.isLoading && filteredRows.length === 0 && (
-                  <tr>
+                  <tr style={{ position: "absolute", top: 0, left: 0, width: "100%", display: "table" }}>
                     <td colSpan={CONTRACT_COLUMNS.length} className="text-center py-10 text-gray-500">
                       ไม่พบข้อมูลที่ตรงเงื่อนไข
                     </td>
                   </tr>
                 )}
-
-                {paddingTop > 0 && (
-                  <tr style={{ height: paddingTop }} aria-hidden="true">
-                    <td colSpan={CONTRACT_COLUMNS.length} />
-                  </tr>
-                )}
-
                 {virtualRows.map((virtualRow) => {
                   const row: any = filteredRows[virtualRow.index];
                   const seq = virtualRow.index + 1;
@@ -881,7 +875,16 @@ export default function Contracts() {
                           ? "bg-blue-50 shadow-[inset_3px_0_0_0_#3b82f6] relative z-10"
                           : "hover:bg-blue-50/40"
                       }`}
-                      style={{ height: ROW_HEIGHT }}
+                      style={{
+                        position: "absolute",
+                        top: 0,
+                        left: 0,
+                        width: "100%",
+                        height: `${ROW_HEIGHT}px`,
+                        display: "table",
+                        tableLayout: "fixed",
+                        transform: `translateY(${virtualRow.start}px)`,
+                      }}
                       onMouseEnter={() => setHoveredRow(virtualRow.index)}
                       onMouseLeave={() => setHoveredRow(null)}
                     >
@@ -909,12 +912,6 @@ export default function Contracts() {
                     </tr>
                   );
                 })}
-
-                {paddingBottom > 0 && (
-                  <tr style={{ height: paddingBottom }} aria-hidden="true">
-                    <td colSpan={CONTRACT_COLUMNS.length} />
-                  </tr>
-                )}
               </tbody>
             </table>
           </div>
