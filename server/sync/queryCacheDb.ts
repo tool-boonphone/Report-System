@@ -237,15 +237,10 @@ export async function* streamTargetFromCache(params: {
       // เพื่อให้ actual rows ที่ส่งตรงกับ total ที่ประกาศใน meta line
       const first = instRows.length > 0 ? instRows[0] : null;
 
-      // Phase Fix: ใช้ debt_range ที่ populate ไว้ใน cache (มาจาก deriveDebtStatus ผ่าน listDebtTargetStream)
-      // แทนการ rederiveDaysOverdue จาก totalAmount/paidAmount ซึ่งไม่มี balance field จาก raw_json
-      const cachedDebtRange = first?.debt_range ?? null;
       const contractStatus = first?.contract_status ?? null;
-      const debtStatus = TERMINAL_STATUSES.has(contractStatus ?? "")
-        ? (contractStatus as string)
-        : (cachedDebtRange ?? bucketFromDays(0));
-      // daysOverdue: คำนวณจาก due_date จริง (maxDays = งวดที่ค้างนานที่สุด) สัมพันธ์กับ debtStatus
-      const { daysOverdue } = rederiveDaysOverdue(
+      // Fix: ใช้ debtStatus จาก rederiveDaysOverdue เพื่อให้ debtStatus กับ daysOverdue สัมพันธ์กันเสมอ
+      // (cachedDebtRange อาจเป็นค่าเก่าจาก cache ก่อน fix)
+      const { debtStatus, daysOverdue } = rederiveDaysOverdue(
         contractStatus,
         instRows.map((r: any) => ({
           dueDate: r.due_date ?? null,
@@ -482,13 +477,8 @@ export async function* streamCollectedFromCache(params: {
         : contractStatus === "ระงับสัญญา" ? "ระงับสัญญา"
         : contractStatus === "ยกเลิกสัญญา" ? "ยกเลิกสัญญา"
         : null;
-      // Phase Fix: ใช้ debt_range จาก cache แทน rederiveDaysOverdue
-      const cachedDebtRangeC = instRows[0]?.debt_range ?? null;
-      const debtStatus = TERMINAL_STATUSES.has(contractStatus ?? "")
-        ? (contractStatus as string)
-        : (cachedDebtRangeC ?? bucketFromDays(0));
-      // คำนวณ daysOverdue จาก due_date จริงของงวดแรกที่ค้าง (ไม่ใช้ค่ากลาง bucket)
-      const { daysOverdue } = rederiveDaysOverdue(
+      // Fix: ใช้ debtStatus จาก rederiveDaysOverdue เพื่อให้ debtStatus กับ daysOverdue สัมพันธ์กันเสมอ
+      const { debtStatus, daysOverdue } = rederiveDaysOverdue(
         contractStatus,
         instRows.map((r: any) => ({
           dueDate: r.due_date ?? null,
@@ -763,14 +753,9 @@ export async function getTargetChunk(params: {
     if (instRows.length === 0) continue;
     const first = instRows[0];
 
-    // Phase Fix: ใช้ debt_range จาก cache แทน rederiveDaysOverdue
     const contractStatus = first.contract_status ?? null;
-    const cachedDebtRangeT = first.debt_range ?? null;
-    const debtStatus = TERMINAL_STATUSES.has(contractStatus ?? "")
-      ? (contractStatus as string)
-      : (cachedDebtRangeT ?? bucketFromDays(0));
-    // คำนวณ daysOverdue จาก due_date จริงของงวดแรกที่ค้าง (ไม่ใช้ค่ากลาง bucket)
-    const { daysOverdue } = rederiveDaysOverdue(
+    // Fix: ใช้ debtStatus จาก rederiveDaysOverdue เพื่อให้ debtStatus กับ daysOverdue สัมพันธ์กันเสมอ
+    const { debtStatus, daysOverdue } = rederiveDaysOverdue(
       contractStatus,
       instRows.map((r: any) => ({
         dueDate: r.due_date ?? null,
@@ -986,13 +971,8 @@ export async function getCollectedChunk(params: {
       : contractStatus === "ยกเลิกสัญญา" ? "ยกเลิกสัญญา"
       : null;
 
-    // Phase Fix: ใช้ debt_range จาก cache แทน rederiveDaysOverdue
-    const cachedDebtRangeCC = instRows[0]?.debt_range ?? null;
-    const debtStatus = TERMINAL_STATUSES.has(contractStatus ?? "")
-      ? (contractStatus as string)
-      : (cachedDebtRangeCC ?? bucketFromDays(0));
-    // คำนวณ daysOverdue จาก due_date จริงของงวดแรกที่ค้าง (ไม่ใช้ค่ากลาง bucket)
-    const { daysOverdue } = rederiveDaysOverdue(
+    // Fix: ใช้ debtStatus จาก rederiveDaysOverdue เพื่อให้ debtStatus กับ daysOverdue สัมพันธ์กันเสมอ
+    const { debtStatus, daysOverdue } = rederiveDaysOverdue(
       contractStatus,
       instRows.map((r: any) => ({
         dueDate: r.due_date ?? null,
