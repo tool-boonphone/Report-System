@@ -227,19 +227,26 @@ export const monthlySummaryRouter = router({
       search: z.string().max(100).optional(),
     }))
     .query(async ({ input }) => {
-      // Direct Query จาก DB โดยตรง (ไม่ใช้ Cache จนกว่าจะ populate ถูกต้อง)
-      const summaryRows = await getDueMonthSummary({
+      // Fast path: ลอง cache ก่อน → ถ้า cache ว่าง fallback ไป direct query
+      const params = {
         section: input.section,
         approveMonths: input.approveMonths,
         productType: input.productType,
         deviceFamily: input.deviceFamily,
         search: input.search || undefined,
-      });
-      const dueMonthSet = new Set<string>();
-      for (const row of summaryRows) {
-        for (const dm of Object.keys(row.dueMonths)) dueMonthSet.add(dm);
+      };
+      const cacheResult = await getDueMonthSummaryFromCache(params);
+      let summaryRows = cacheResult.rows;
+      let allDueMonths = cacheResult.allDueMonths;
+      if (summaryRows.length === 0) {
+        // Cache ยังไม่พร้อม — fallback ไป direct query
+        summaryRows = await getDueMonthSummary(params);
+        const dueMonthSet = new Set<string>();
+        for (const row of summaryRows) {
+          for (const dm of Object.keys(row.dueMonths)) dueMonthSet.add(dm);
+        }
+        allDueMonths = Array.from(dueMonthSet).sort((a, b) => a.localeCompare(b));
       }
-      const allDueMonths = Array.from(dueMonthSet).sort((a, b) => a.localeCompare(b));
 
       // Flatten to array of flat rows for JSON transport
       type FlatDueMonthRow = {
