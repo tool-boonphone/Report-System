@@ -123,7 +123,8 @@ type SortKey =
   | "cost"
   | "paidInstallments"
   | "totalPaid"
-  | "debtValue";
+  | "debtValue"
+  | "daysOverdue";
 type SortDir = "asc" | "desc";
 
 type Row = {
@@ -547,7 +548,7 @@ export default function SuspectedBadDebt() {
       const headers = [
         "#","วันที่อนุมัติ","เลขที่สัญญา","ชื่อ-นามสกุล","เบอร์โทร",
         "รุ่น","ราคา","ยอดจัดไฟแนนซ์","ค่าคอมมิชชั่น","Incentive","ต้นทุน",
-        "งวดที่ชำระ","ยอดผ่อน","มูลค่าหนี้","สถานะหนี้",
+        "งวดที่ชำระ","ยอดชำระ","มูลค่าหนี้","เกินกำหนด (วัน)","สถานะหนี้",
       ];
       const dataRows = filteredRows.map((r, i) => [
         i + 1,
@@ -564,6 +565,7 @@ export default function SuspectedBadDebt() {
         `${r.paidInstallments}/${r.installmentCount ?? "-"}`,
         r.totalPaid ?? 0,
         r.debtValue ?? 0,
+        r.daysOverdue ?? 0,
         r.debtStatus ?? "",
       ]);
       const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
@@ -639,7 +641,7 @@ export default function SuspectedBadDebt() {
           />
           <SummaryCard
             icon={<AlertTriangle className="w-4 h-4 text-green-500" />}
-            label="ยอดผ่อนรวม"
+            label="ยอดชำระรวม"
             value={fmtMoney(summary.totalPaid)}
             colorClass="border-green-100"
           />
@@ -817,10 +819,13 @@ export default function SuspectedBadDebt() {
                         งวดที่ชำระ
                       </Th>
                       <Th col="totalPaid" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="min-w-[110px] text-right">
-                        ยอดผ่อน
+                        ยอดชำระ
                       </Th>
                       <Th col="debtValue" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="min-w-[100px] text-right">
                         มูลค่าหนี้
+                      </Th>
+                      <Th col="daysOverdue" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="min-w-[100px] text-right">
+                        เกินกำหนด
                       </Th>
                       <th className="px-3 py-2 text-left text-xs font-semibold whitespace-nowrap min-w-[110px]">
                         สถานะหนี้
@@ -831,7 +836,7 @@ export default function SuspectedBadDebt() {
                     {/* top padding for virtual scroll */}
                     {paddingTop > 0 && (
                       <tr>
-                        <td colSpan={15} style={{ height: paddingTop }} />
+                        <td colSpan={16} style={{ height: paddingTop }} />
                       </tr>
                     )}
                     {virtualRows.map((vRow) => {
@@ -894,6 +899,10 @@ export default function SuspectedBadDebt() {
                           >
                             {fmtMoney(r.debtValue)}
                           </td>
+                          {/* คอลัมน์เกินกำหนด: แสดงจำนวนวันที่เกินกำหนดชำระ */}
+                          <td className="px-3 py-1.5 text-right whitespace-nowrap text-orange-600 font-medium">
+                            {r.daysOverdue > 0 ? `${r.daysOverdue} วัน` : "-"}
+                          </td>
                           <td className="px-3 py-1.5 whitespace-nowrap">
                             <span
                               className={cn(
@@ -912,7 +921,7 @@ export default function SuspectedBadDebt() {
                     {/* bottom padding for virtual scroll */}
                     {paddingBottom > 0 && (
                       <tr>
-                        <td colSpan={15} style={{ height: paddingBottom }} />
+                        <td colSpan={16} style={{ height: paddingBottom }} />
                       </tr>
                     )}
                   </tbody>
