@@ -1,8 +1,8 @@
 /**
- * MDM Service — Phase 140
+ * MDM Service — Phase 140 (v3)
  *
  * ดึงข้อมูล last online จาก MDM API (PJ-Soft / mdm-th.com)
- * โดยใช้ Serial Number (SN) เป็น key
+ * โดยใช้ Serial Number (deviceId ใน MDM = serial_no ใน contracts table) เป็น key
  *
  * Design:
  *   - แต่ละ section (Boonphone / Fastfone365) ใช้ API Key แยกกัน
@@ -14,7 +14,13 @@
  *   - Boonphone   : MDM_API_KEY_BOONPHONE  (env var)
  *   - Fastfone365 : MDM_API_KEY_FASTFONE365 (env var)
  *
- * Phase 2 (อนาคต): sync รายวันแล้วบันทึกลง DB
+ * Auth: Authorization: Bearer <API_KEY>
+ * Endpoint: GET /api/mdm/devices?pageNum=1&pageSize=1000
+ * Response: { total: number, rows: [{ deviceId, lastTime, contract, imei, ... }] }
+ *
+ * MDM field mapping:
+ *   deviceId  = Serial Number (ตรงกับ serial_no ใน contracts table)
+ *   lastTime  = เวลาออนไลน์ล่าสุด "YYYY-MM-DD HH:mm:ss"
  */
 
 import type { SectionKey } from "../../shared/const";
@@ -26,7 +32,7 @@ const CACHE_TTL_MS = 5 * 60 * 1000;
 
 /**
  * ดึง API Key ตาม section
- * ใช้ environment variable เป็นหลัก — fallback ไปยัง hardcode key สำหรับ backward compat
+ * ใช้ environment variable เป็นหลัก — fallback ไปยัง hardcode key
  */
 function getApiKey(section: SectionKey): string {
   if (section === "Boonphone") {
@@ -41,19 +47,27 @@ function getApiKey(section: SectionKey): string {
       "u66XGmwOYbAWj2xBJaP5Z9hs0iuijligqBvx2YtHeIAIDwx87wCoojJbwpKwqBeW"
     );
   }
-  // fallback (ไม่ควรเกิดขึ้น)
   return process.env.MDM_API_KEY_BOONPHONE ?? "";
 }
 
-/** Cache สำหรับ device list แยกตาม section */
+/**
+ * Cache สำหรับ device list แยกตาม section
+ * Map<serialNo (uppercase), lastTime string>
+ */
 const deviceListCacheMap = new Map<
   SectionKey,
   { data: Map<string, string>; fetchedAt: number }
 >();
 
 /**
- * ดึง device list ทั้งหมดจาก MDM API แล้ว map SN → lastTime
+ * ดึง device list ทั้งหมดจาก MDM API แล้ว map serialNo → lastTime
  * ใช้ in-memory cache 5 นาที แยกต่างหากสำหรับแต่ละ section
+ *
+ * MDM API:
+ *   GET /api/mdm/devices?pageNum=1&pageSize=1000
+ *   Authorization: Bearer <API_KEY>
+ *   Response: { total: number, rows: [{ deviceId, lastTime, ... }] }
+ *   deviceId = Serial Number ของอุปกรณ์
  */
 async function fetchDeviceListMap(
   section: SectionKey,
@@ -74,15 +88,20 @@ async function fetchDeviceListMap(
 
   // ดึงข้อมูลแบบ pagination จนครบทุก device
   const PAGE_SIZE = 1000;
+  // Map<serialNo (uppercase), lastTime>
   const snMap = new Map<string, string>();
   let pageNum = 1;
   let total = 0;
+  let fetched = 0;
 
   do {
-    const url = `${MDM_BASE_URL}/devices?pageSize=${PAGE_SIZE}&pageNum=${pageNum}`;
+    const url = `${MDM_BASE_URL}/devices?pageNum=${pageNum}&pageSize=${PAGE_SIZE}`;
     const res = await fetch(url, {
-      headers: { "X-API-Key": apiKey },
-      signal: AbortSignal.timeout(20_000), // timeout 20 วินาที
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Accept": "application/json",
+      },
+      signal: AbortSignal.timeout(30_000), // timeout 30 วินาที
     });
 
     if (!res.ok) {
@@ -93,23 +112,29 @@ async function fetchDeviceListMap(
 
     const json = await res.json();
 
-    // response format: { total: number, rows: [...], code: number }
-    const devices: Array<{ deviceId?: string; lastTime?: string }> =
-      Array.isArray(json) ? json : (json?.rows ?? json?.data ?? json?.devices ?? []);
+    // response format: { total: number, rows: [...] }
+    const devices: Array<{
+      deviceId?: string;
+      lastTime?: string;
+    }> = Array.isArray(json)
+      ? json
+      : (json?.rows ?? json?.data ?? json?.devices ?? []);
 
     if (pageNum === 1) {
       total = json?.total ?? devices.length;
+      console.log(`[MDM][${section}] Total devices: ${total}`);
     }
 
     for (const d of devices) {
-      // MDM API ใช้ field ชื่อ "deviceId" สำหรับ Serial Number
+      // deviceId ใน MDM = Serial Number ของอุปกรณ์ (ตรงกับ serial_no ใน contracts table)
       if (d.deviceId && d.lastTime) {
         snMap.set(d.deviceId.trim().toUpperCase(), d.lastTime);
       }
     }
 
+    fetched += devices.length;
     pageNum++;
-  } while (snMap.size < total && total > 0);
+  } while (fetched < total && total > 0);
 
   console.log(`[MDM][${section}] Loaded ${snMap.size} devices (total: ${total})`);
 
@@ -149,7 +174,7 @@ function calcDaysSince(lastTime: string): number | null {
  * ดึง lastOnlineDays สำหรับ SN เดียว
  * ใช้ device list cache เพื่อลด API calls
  *
- * @param serial  - Serial Number ของอุปกรณ์
+ * @param serial  - Serial Number ของอุปกรณ์ (ตรงกับ serial_no ใน contracts table)
  * @param section - Section ที่ต้องการดึงข้อมูล (Boonphone / Fastfone365)
  * @returns จำนวนวัน (0, 1, 2, N) หรือ null ถ้าไม่เจอ SN หรือ error
  */
@@ -173,7 +198,7 @@ export async function getDeviceLastOnlineDays(
  * ดึง lastOnlineDays สำหรับ SN หลายตัวพร้อมกัน (batch)
  * ใช้ device list cache ร่วมกัน — เรียก API แค่ครั้งเดียวต่อ section
  *
- * @param serials - array ของ SN
+ * @param serials - array ของ Serial Number (ตรงกับ serial_no ใน contracts table)
  * @param section - Section ที่ต้องการดึงข้อมูล (Boonphone / Fastfone365)
  * @returns Map<SN, days | null>
  */
@@ -191,7 +216,7 @@ export async function getBatchLastOnlineDays(
         result.set(serial, null);
         continue;
       }
-      // MDM ใช้ deviceId เป็น SN — normalize เป็น uppercase
+      // normalize เป็น uppercase เพื่อ case-insensitive match
       const key = serial.trim().toUpperCase();
       const lastTime = snMap.get(key);
       result.set(serial, lastTime ? calcDaysSince(lastTime) : null);
