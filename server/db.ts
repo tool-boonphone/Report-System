@@ -214,5 +214,16 @@ export async function runStartupMigrations(): Promise<void> {
     } catch (err: any) {
       console.error(`[migration] ${section}: debt_target_cache.serial_no failed:`, err?.message ?? err);
     }
+    try {
+      // Migration 0009: เพิ่ม serial_no และ imei ใน contracts (เพื่อเก็บข้อมูลจาก detail API)
+      await db.execute(sql.raw(`
+        ALTER TABLE contracts
+        ADD COLUMN IF NOT EXISTS serial_no VARCHAR(64),
+        ADD COLUMN IF NOT EXISTS imei VARCHAR(64)
+      `));
+      console.log(`[migration] ${section}: contracts.serial_no, imei — OK`);
+    } catch (err: any) {
+      console.error(`[migration] ${section}: contracts.serial_no, imei failed:`, err?.message ?? err);
+    }
   }
 }

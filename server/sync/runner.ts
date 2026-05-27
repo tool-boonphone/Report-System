@@ -684,7 +684,7 @@ async function enrichContractDeviceIds(
 ): Promise<void> {
   const { getDb } = await import("../db");
   const { contracts } = await import("../../drizzle/schema");
-  const { eq, sql } = await import("drizzle-orm");
+  const { and, eq, sql } = await import("drizzle-orm");
   const db = await getDb(section);
   if (!db) return;
 
@@ -725,7 +725,10 @@ async function enrichContractDeviceIds(
             syncedAt: sql`CURRENT_TIMESTAMP`,
           })
           .where(
-            eq(contracts.externalId, contractId)
+            and(
+              eq(contracts.section, section),
+              eq(contracts.externalId, contractId)
+            )
           );
         enriched++;
       } catch {
