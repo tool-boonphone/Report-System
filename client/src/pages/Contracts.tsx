@@ -519,8 +519,6 @@ export default function Contracts() {
   };
 
   // ----- Virtualizer -----
-  // ใช้ transform-based approach แทน paddingTop/paddingBottom dummy rows
-  // เพื่อป้องกัน scroll กระโดดขึ้น/ลงสุดเมื่อ scroll เร็วๆ
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const ROW_HEIGHT = 36;
   const rowVirtualizer = useVirtualizer({
@@ -799,7 +797,7 @@ export default function Contracts() {
           <div
             ref={scrollRef}
             className="overflow-x-auto overflow-y-auto"
-            style={{ height: "calc(100vh - 230px)" }}
+            style={{ height: "calc(100vh - 230px)", overscrollBehavior: "contain", willChange: "transform" }}
           >
             <table className="min-w-full text-[13px]">
               <thead className="sticky top-0 z-30">
@@ -845,22 +843,25 @@ export default function Contracts() {
                   })}
                 </tr>
               </thead>
-              {/* tbody ใช้ position:relative + height=totalSize เพื่อให้ scroll container รู้ขนาดจริง */}
-              {/* แต่ละ row ใช้ position:absolute + translateY แทน paddingTop/paddingBottom dummy rows */}
-              {/* วิธีนี้ป้องกัน scroll กระโดดขึ้น/ลงสุดเมื่อ scroll เร็วๆ */}
-              <tbody style={{ height: `${totalSize}px`, position: "relative", display: "block" }}>
+              {/* tbody ใช้ paddingTop/paddingBottom dummy rows เพื่อให้ column widths sync กับ thead */}
+              <tbody>
                 {listQuery.isLoading && (
-                  <tr style={{ position: "absolute", top: 0, left: 0, width: "100%", display: "table" }}>
+                  <tr>
                     <td colSpan={CONTRACT_COLUMNS.length} className="text-center py-10 text-gray-500">
                       <Spinner className="inline-block mr-2" /> กำลังโหลด…
                     </td>
                   </tr>
                 )}
                 {!listQuery.isLoading && filteredRows.length === 0 && (
-                  <tr style={{ position: "absolute", top: 0, left: 0, width: "100%", display: "table" }}>
+                  <tr>
                     <td colSpan={CONTRACT_COLUMNS.length} className="text-center py-10 text-gray-500">
                       ไม่พบข้อมูลที่ตรงเงื่อนไข
                     </td>
+                  </tr>
+                )}
+                {virtualRows.length > 0 && (
+                  <tr style={{ height: `${virtualRows[0].start}px` }} aria-hidden="true">
+                    <td colSpan={CONTRACT_COLUMNS.length} />
                   </tr>
                 )}
                 {virtualRows.map((virtualRow) => {
@@ -875,16 +876,7 @@ export default function Contracts() {
                           ? "bg-blue-50 shadow-[inset_3px_0_0_0_#3b82f6] relative z-10"
                           : "hover:bg-blue-50/40"
                       }`}
-                      style={{
-                        position: "absolute",
-                        top: 0,
-                        left: 0,
-                        width: "100%",
-                        height: `${ROW_HEIGHT}px`,
-                        display: "table",
-                        tableLayout: "fixed",
-                        transform: `translateY(${virtualRow.start}px)`,
-                      }}
+                      style={{ height: `${ROW_HEIGHT}px` }}
                       onMouseEnter={() => setHoveredRow(virtualRow.index)}
                       onMouseLeave={() => setHoveredRow(null)}
                     >
@@ -912,6 +904,19 @@ export default function Contracts() {
                     </tr>
                   );
                 })}
+                {virtualRows.length > 0 && (
+                  <tr
+                    style={{
+                      height: `${
+                        rowVirtualizer.getTotalSize() -
+                        (virtualRows[virtualRows.length - 1]?.end ?? 0)
+                      }px`,
+                    }}
+                    aria-hidden="true"
+                  >
+                    <td colSpan={CONTRACT_COLUMNS.length} />
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
