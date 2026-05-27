@@ -576,6 +576,7 @@ export const monthlySummaryDueMonthCache = pgTable(
     badDebt: decimal("bad_debt", { precision: 18, scale: 2 }).notNull().default("0"),
     badDebtInstallment: decimal("bad_debt_installment", { precision: 18, scale: 2 }).notNull().default("0"),
     totalAmount: decimal("total_amount", { precision: 18, scale: 2 }).notNull().default("0"),
+    financeTotal: decimal("finance_total", { precision: 18, scale: 2 }).notNull().default("0"),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
   (t) => ({

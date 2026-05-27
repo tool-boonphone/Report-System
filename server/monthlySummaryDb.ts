@@ -2018,6 +2018,7 @@ async function upsertDueMonthRows(
     badDebt: number;
     badDebtInstallment: number;
     totalAmount: number;
+    financeTotal?: number;
   }>,
 ): Promise<void> {
   if (rows.length === 0) return;
@@ -2029,13 +2030,14 @@ async function upsertDueMonthRows(
     const values = batch.map((r) => {
       const pt = r.productType ? `'${r.productType.replace(/'/g, "''")}'` : "NULL";
       const df = r.deviceFamily ? `'${r.deviceFamily}'` : "NULL";
-      return `('${section}','${queryType}','${r.approve_month}','${r.due_month}',${pt},${df},${r.contractCount},${r.principal},${r.interest},${r.fee},${r.penalty},${r.unlockFee},${r.discount},${r.overpaid},${r.badDebt},${r.badDebtInstallment},${r.totalAmount},NOW())`;
+      const ft = r.financeTotal ?? 0;
+      return `('${section}','${queryType}','${r.approve_month}','${r.due_month}',${pt},${df},${r.contractCount},${r.principal},${r.interest},${r.fee},${r.penalty},${r.unlockFee},${r.discount},${r.overpaid},${r.badDebt},${r.badDebtInstallment},${r.totalAmount},${ft},NOW())`;
     }).join(",\n");
     const upsertSql = `
       INSERT INTO monthly_summary_due_month_cache
         (section, query_type, approve_month, due_month, product_type, device_family,
          contract_count, principal, interest, fee, penalty, unlock_fee, discount, overpaid,
-         bad_debt, bad_debt_installment, total_amount, updated_at)
+         bad_debt, bad_debt_installment, total_amount, finance_total, updated_at)
       VALUES ${values}
       ON CONFLICT (section, query_type, approve_month, due_month,
                    COALESCE(product_type,''), COALESCE(device_family,''))
@@ -2051,6 +2053,7 @@ async function upsertDueMonthRows(
         bad_debt             = EXCLUDED.bad_debt,
         bad_debt_installment = EXCLUDED.bad_debt_installment,
         total_amount         = EXCLUDED.total_amount,
+        finance_total        = EXCLUDED.finance_total,
         updated_at           = NOW()
     `;
     await db.execute(sql.raw(upsertSql));
@@ -2188,6 +2191,8 @@ export async function populateDueMonthCache(
         principal: r.principal_install, interest: r.interest_install, fee: r.fee_install,
         penalty: 0, unlockFee: 0, discount: 0, overpaid: 0, badDebt: 0, badDebtInstallment: 0,
         totalAmount: r.total_install,
+        // finance_total = ยอดจัดฯ ต่อสัญญา (populate ลง cache เพื่อให้ getDueMonthSummaryFromCache ใช้ได้)
+        financeTotal: r.finance_total,
       }));
       await upsertDueMonthRows(section, "installTotal", mapped);
       totalRows += mapped.length;
@@ -2277,7 +2282,8 @@ export async function getDueMonthSummaryFromCache(
            CAST(overpaid  AS DECIMAL(18,2)) AS overpaid,
            CAST(bad_debt  AS DECIMAL(18,2)) AS bad_debt,
            CAST(bad_debt_installment AS DECIMAL(18,2)) AS bad_debt_installment,
-           CAST(total_amount AS DECIMAL(18,2)) AS total_amount
+           CAST(total_amount AS DECIMAL(18,2)) AS total_amount,
+           CAST(COALESCE(finance_total, 0) AS DECIMAL(18,2)) AS finance_total
     FROM monthly_summary_due_month_cache
     WHERE section = '${section}'
       ${ptFilter}
@@ -2350,12 +2356,15 @@ export async function getDueMonthSummaryFromCache(
     });
   }
   const installTotalMap = new Map<Key, MoneyBreakdown>();
+  const financeTotalDueMap = new Map<Key, number>();
   for (const r of installTotalRows) {
     installTotalMap.set(`${r.approve_month}|${r.due_month}`, {
       principal: n(r.principal), interest: n(r.interest), fee: n(r.fee),
       penalty: 0, unlockFee: 0, discount: 0, overpaid: 0, badDebt: 0, badDebtInstallment: 0,
       total: n(r.total_amount),
     });
+    // finance_total ถูก populate ลง cache ใน Query 5 (installTotal) ของ populateDueMonthCache
+    financeTotalDueMap.set(`${r.approve_month}|${r.due_month}`, n(r.finance_total ?? 0));
   }
   const paidMap = new Map<Key, MoneyBreakdown>();
   for (const r of paidRows) {
@@ -2377,6 +2386,7 @@ export async function getDueMonthSummaryFromCache(
     const totalNotYetDue    = emptyMoney();
     const totalInstallTotal = emptyMoney();
 
+    let totalFinanceTotal = 0;
     for (const dueMonth of allDueMonths) {
       const key           = `${approveMonth}|${dueMonth}`;
       const contractCount = countMap.get(key) ?? 0;
@@ -2385,9 +2395,11 @@ export async function getDueMonthSummaryFromCache(
       const target        = targetMap.get(key) ?? emptyMoney();
       const notYetDue     = notYetDueMap.get(key) ?? emptyMoney();
       const installTotal  = installTotalMap.get(key) ?? emptyMoney();
+      const financeTotal  = financeTotalDueMap.get(key) ?? 0;
       if (contractCount === 0 && target.total === 0 && due.total === 0 && notYetDue.total === 0 && installTotal.total === 0 && paid.total === 0) continue;
-            dueMonths[dueMonth] = { contractCount, paid, due, target, notYetDue, installTotal, financeTotal: 0 };
+      dueMonths[dueMonth] = { contractCount, paid, due, target, notYetDue, installTotal, financeTotal };
       totalCount += contractCount;
+      totalFinanceTotal += financeTotal;
       for (const k of Object.keys(totalDue) as (keyof MoneyBreakdown)[]) {
         (totalPaid         as any)[k] += paid[k];
         (totalDue          as any)[k] += due[k];
@@ -2397,7 +2409,7 @@ export async function getDueMonthSummaryFromCache(
       }
     }
     const approvedCount = approvedCountMap.get(approveMonth) ?? 0;
-    return { approveMonth, dueMonths, totalCount, approvedCount, totalPaid, totalDue, totalTarget, totalNotYetDue, totalInstallTotal, totalFinanceTotal: 0 };
+    return { approveMonth, dueMonths, totalCount, approvedCount, totalPaid, totalDue, totalTarget, totalNotYetDue, totalInstallTotal, totalFinanceTotal };
   });
   return { rows, allDueMonths };
 }
