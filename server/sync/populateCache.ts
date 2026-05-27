@@ -100,7 +100,9 @@ export async function populateDebtCache(
 
       const meta = contractMeta.get(extId);
       const daysOverdue = Number((contract as any).daysOverdue ?? 0);
-      const debtRange = bucketFromDays(daysOverdue);
+      // Fix: ใช้ debtStatus จาก stream โดยตรง (stream ใช้ bucketFromDays(maxDays))
+      // ไม่ใช้ bucketFromDays(daysOverdue) เพราะ daysOverdue = minDays ซึ่งอาจทำให้ bucket ผิด
+      const debtRange = (contract as any).debtStatus ?? bucketFromDays(daysOverdue);
       const contractStatus = meta?.status ?? null;
 
       for (const inst of (contract as any).installments ?? []) {
