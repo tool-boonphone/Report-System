@@ -635,7 +635,7 @@ export default function WatchGroup() {
       const wb = XLSX.utils.book_new();
       const headers = [
         "#","วันที่อนุมัติ","เลขที่สัญญา","ชื่อ-นามสกุล","เบอร์โทร",
-        "ประเภท","รุ่น","พาร์ทเนอร์","ราคา","ยอดจัดไฟแนนซ์",
+        "ประเภท","รุ่น","รหัสพาร์ทเนอร์","ชื่อพาร์ทเนอร์","ราคา","ยอดจัดไฟแนนซ์",
         "ค่าคอมมิชชั่น","Incentive","ต้นทุน","ยอดผ่อนรวม",
         "เกินกำหนด(วัน)","ค้างชำระ(งวด)",
       ];
@@ -648,6 +648,7 @@ export default function WatchGroup() {
         r.productType ?? "",
         r.model ?? "",
         r.partnerCode ?? "",
+        r.partnerName ?? "",
         r.sellPrice ?? 0,
         r.financeAmount ?? 0,
         r.commissionNet ?? 0,
@@ -660,7 +661,7 @@ export default function WatchGroup() {
       const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
       ws["!cols"] = [
         { wch: 6 }, { wch: 14 }, { wch: 22 }, { wch: 22 }, { wch: 14 },
-        { wch: 10 }, { wch: 24 }, { wch: 28 }, { wch: 12 }, { wch: 14 },
+        { wch: 10 }, { wch: 24 }, { wch: 12 }, { wch: 24 }, { wch: 12 }, { wch: 14 },
         { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 14 },
         { wch: 14 }, { wch: 14 },
       ];
@@ -679,11 +680,11 @@ export default function WatchGroup() {
       for (let R = 1; R <= dataRows.length; R++) {
         const seqAddr = XLSX.utils.encode_cell({ r: R, c: 0 });
         if (ws[seqAddr]) { ws[seqAddr].t = "n"; ws[seqAddr].z = "#,##0"; }
-        for (const C of [8, 9, 10, 11, 12, 13]) {
+        for (const C of [9, 10, 11, 12, 13, 14]) {
           const addr = XLSX.utils.encode_cell({ r: R, c: C });
           if (ws[addr]) { ws[addr].t = "n"; ws[addr].z = "#,##0.00"; }
         }
-        for (const C of [14, 15]) {
+        for (const C of [15, 16]) {
           const addr = XLSX.utils.encode_cell({ r: R, c: C });
           if (ws[addr]) { ws[addr].t = "n"; ws[addr].z = "#,##0"; }
         }
