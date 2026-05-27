@@ -204,5 +204,15 @@ export async function runStartupMigrations(): Promise<void> {
     } catch (err: any) {
       console.error(`[migration] ${section}: monthly_summary_cache.finance_total failed:`, err?.message ?? err);
     }
+    try {
+      // Migration 0008: เพิ่ม serial_no column ใน debt_target_cache (เพื่อ match กับ MDM API)
+      await db.execute(sql.raw(`
+        ALTER TABLE debt_target_cache
+        ADD COLUMN IF NOT EXISTS serial_no VARCHAR(64)
+      `));
+      console.log(`[migration] ${section}: debt_target_cache.serial_no — OK`);
+    } catch (err: any) {
+      console.error(`[migration] ${section}: debt_target_cache.serial_no failed:`, err?.message ?? err);
+    }
   }
 }
