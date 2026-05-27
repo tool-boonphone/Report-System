@@ -4418,6 +4418,8 @@ export async function listWatchGroup(params: {
       MIN(CASE WHEN dtc.period = 1 THEN dtc.due_date END) AS due_date_1,
       -- due_date งวดที่ 2 (period=2)
       MIN(CASE WHEN dtc.period = 2 THEN dtc.due_date END) AS due_date_2,
+      -- due_date งวดที่ 3 (period=3) ใช้กรองออกถ้าค้างเกิน 2 งวดแล้ว
+      MIN(CASE WHEN dtc.period = 3 THEN dtc.due_date END) AS due_date_3,
       -- จำนวนงวดที่ถึงกำหนดแล้ว (due_date <= today)
       COUNT(CASE WHEN dtc.due_date <= '${todayStr}' THEN 1 END) AS due_count
     FROM debt_target_cache dtc
@@ -4545,6 +4547,10 @@ export async function listWatchGroup(params: {
     // คำนวณ arrearsCount และ daysOverdue
     const dueDate1 = s.due_date_1 ? new Date(`${s.due_date_1}T00:00:00`) : null;
     const dueDate2 = s.due_date_2 ? new Date(`${s.due_date_2}T00:00:00`) : null;
+    const dueDate3 = s.due_date_3 ? new Date(`${s.due_date_3}T00:00:00`) : null;
+
+    // กรองออก: ถ้างวดที่ 3 ถึงกำหนดแล้ว = ค้าง 2 งวดแล้ว ไม่แสดงในหน้านี้
+    if (dueDate3 != null && dueDate3 <= today) continue;
 
     // ตรวจสอบว่างวดที่ 2 ถึงกำหนดแล้วหรือยัง
     const due2Reached = dueDate2 != null && dueDate2 <= today;
