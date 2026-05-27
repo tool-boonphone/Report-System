@@ -481,12 +481,25 @@ export async function* streamCollectedFromCache(params: {
       const suspendLabel = contractStatus === "หนี้เสีย" ? "หนี้เสีย"
         : contractStatus === "ระงับสัญญา" ? "ระงับสัญญา"
         : contractStatus === "ยกเลิกสัญญา" ? "ยกเลิกสัญญา"
-        : null;      // Phase Fix: ใช้ debt_range จาก cache แทน rederiveDaysOverdue
+        : null;
+      // Phase Fix: ใช้ debt_range จาก cache แทน rederiveDaysOverdue
       const cachedDebtRangeC = instRows[0]?.debt_range ?? null;
       const debtStatus = TERMINAL_STATUSES.has(contractStatus ?? "")
         ? (contractStatus as string)
         : (cachedDebtRangeC ?? bucketFromDays(0));
-      const daysOverdue = debtRangeToDays(debtStatus);
+      // คำนวณ daysOverdue จาก due_date จริงของงวดแรกที่ค้าง (ไม่ใช้ค่ากลาง bucket)
+      const { daysOverdue } = rederiveDaysOverdue(
+        contractStatus,
+        instRows.map((r: any) => ({
+          dueDate: r.due_date ?? null,
+          totalAmount: r.total_amount ?? "0",
+          paidAmount: r.paid_amount ?? "0",
+          isClosed: !!r.is_closed,
+          isSuspended: !!r.is_suspended,
+          isPaid: !!r.is_paid,
+        })),
+        today,
+      );
 
       const totalAmount = instRows.reduce((s: number, r: any) => s + Number(r.total_amount ?? 0), 0);
       const totalPaid = instRows.reduce((s: number, r: any) => s + Number(r.paid_amount ?? 0), 0);
@@ -756,7 +769,19 @@ export async function getTargetChunk(params: {
     const debtStatus = TERMINAL_STATUSES.has(contractStatus ?? "")
       ? (contractStatus as string)
       : (cachedDebtRangeT ?? bucketFromDays(0));
-    const daysOverdue = debtRangeToDays(debtStatus);
+    // คำนวณ daysOverdue จาก due_date จริงของงวดแรกที่ค้าง (ไม่ใช้ค่ากลาง bucket)
+    const { daysOverdue } = rederiveDaysOverdue(
+      contractStatus,
+      instRows.map((r: any) => ({
+        dueDate: r.due_date ?? null,
+        totalAmount: r.total_amount ?? "0",
+        paidAmount: r.paid_amount ?? "0",
+        isClosed: !!r.is_closed,
+        isSuspended: !!r.is_suspended,
+        isPaid: !!r.is_paid,
+      })),
+      today,
+    );
 
     const totalAmount = instRows.reduce((s: number, r: any) => s + Number(r.total_amount ?? 0), 0);
     const totalPaid = instRows.reduce((s: number, r: any) => s + Number(r.paid_amount ?? 0), 0);
@@ -966,7 +991,19 @@ export async function getCollectedChunk(params: {
     const debtStatus = TERMINAL_STATUSES.has(contractStatus ?? "")
       ? (contractStatus as string)
       : (cachedDebtRangeCC ?? bucketFromDays(0));
-    const daysOverdue = debtRangeToDays(debtStatus);
+    // คำนวณ daysOverdue จาก due_date จริงของงวดแรกที่ค้าง (ไม่ใช้ค่ากลาง bucket)
+    const { daysOverdue } = rederiveDaysOverdue(
+      contractStatus,
+      instRows.map((r: any) => ({
+        dueDate: r.due_date ?? null,
+        totalAmount: r.total_amount ?? "0",
+        paidAmount: r.paid_amount ?? "0",
+        isClosed: !!r.is_closed,
+        isSuspended: !!r.is_suspended,
+        isPaid: !!r.is_paid,
+      })),
+      today,
+    );
 
     const totalAmount = instRows.reduce((s: number, r: any) => s + Number(r.total_amount ?? 0), 0);
     const totalPaid = instRows.reduce((s: number, r: any) => s + Number(r.paid_amount ?? 0), 0);
