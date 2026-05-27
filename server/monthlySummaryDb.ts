@@ -1688,15 +1688,17 @@ async function queryDueMonthInstallTotal(
     approveMonths: opts.approveMonths,
     search: opts.search,
   });
-  // ใช้ subquery เพื่อดึง finance_amount ต่อสัญญา (1 ค่าต่อสัญญา ไม่ซ้ำตามงวด)
+  // finance_total logic:
+  // - คอลัมน์รวม (__total__): แสดง finance_amount เต็ม (1 ครั้งต่อสัญญา)
+  // - แต่ละ due_month: กระจายหารตามจำนวน due_month ทั้งหมดของสัญญา (finance_amount / due_month_count)
   const q = `
-    WITH per_contract AS (
+    WITH per_contract_due AS (
+      -- ยอดผ่อน/งวด แยกตาม approve_month × due_month (ทุกงวด)
       SELECT
         dtc.section,
         dtc.contract_external_id,
         TO_CHAR(dtc.approve_date, 'YYYY-MM') AS approve_month,
         TO_CHAR(dtc.due_date, 'YYYY-MM') AS due_month,
-        MAX(CAST(COALESCE(dtc.finance_amount, '0') AS DECIMAL(18,2))) AS finance_amount,
         SUM(CAST(dtc.principal AS DECIMAL(18,2))) AS principal_install,
         SUM(CAST(dtc.interest  AS DECIMAL(18,2))) AS interest_install,
         SUM(CAST(dtc.fee       AS DECIMAL(18,2))) AS fee_install,
@@ -1707,17 +1709,41 @@ async function queryDueMonthInstallTotal(
       GROUP BY dtc.section, dtc.contract_external_id,
                TO_CHAR(dtc.approve_date, 'YYYY-MM'),
                TO_CHAR(dtc.due_date, 'YYYY-MM')
+    ),
+    finance_per_contract AS (
+      -- ยอดจัดฯ + จำนวน due_month ทั้งหมดของสัญญา (สำหรับหาร)
+      SELECT
+        dtc.section,
+        dtc.contract_external_id,
+        TO_CHAR(dtc.approve_date, 'YYYY-MM') AS approve_month,
+        MAX(CAST(COALESCE(dtc.finance_amount, '0') AS DECIMAL(18,2))) AS finance_amount,
+        COUNT(DISTINCT TO_CHAR(dtc.due_date, 'YYYY-MM')) AS due_month_count
+      FROM debt_target_cache dtc
+      WHERE ${baseWhere}
+        AND dtc.due_date IS NOT NULL
+      GROUP BY dtc.section, dtc.contract_external_id,
+               TO_CHAR(dtc.approve_date, 'YYYY-MM')
     )
     SELECT
-      approve_month,
-      due_month,
-      COUNT(DISTINCT contract_external_id) AS contract_count,
-      SUM(principal_install) AS principal_install,
-      SUM(interest_install)  AS interest_install,
-      SUM(fee_install)       AS fee_install,
-      SUM(total_install)     AS total_install,
-      SUM(finance_amount)    AS finance_total
-    FROM per_contract
+      pcd.approve_month,
+      pcd.due_month,
+      COUNT(DISTINCT pcd.contract_external_id) AS contract_count,
+      SUM(pcd.principal_install) AS principal_install,
+      SUM(pcd.interest_install)  AS interest_install,
+      SUM(pcd.fee_install)       AS fee_install,
+      SUM(pcd.total_install)     AS total_install,
+      -- finance_total: กระจาย finance_amount หารตามจำนวน due_month ของแต่ละสัญญา
+      SUM(
+        CASE WHEN fpc.due_month_count > 0
+             THEN ROUND(fpc.finance_amount / fpc.due_month_count, 2)
+             ELSE 0
+        END
+      ) AS finance_total
+    FROM per_contract_due pcd
+    LEFT JOIN finance_per_contract fpc
+           ON fpc.section = pcd.section
+          AND fpc.contract_external_id = pcd.contract_external_id
+          AND fpc.approve_month = pcd.approve_month
     GROUP BY 1, 2
     ORDER BY 1 DESC, 2 ASC
   `;
