@@ -303,6 +303,7 @@ export const debtTargetCache = pgTable(
     partnerName: varchar("partner_name", { length: 255 }),
     device: varchar("device", { length: 64 }),
     model: varchar("model", { length: 128 }),
+    serialNo: varchar("serial_no", { length: 64 }),
     financeAmount: decimal("finance_amount", { precision: 12, scale: 2 }),
     contractStatus: varchar("contract_status", { length: 32 }),
     debtRange: varchar("debt_range", { length: 32 }),

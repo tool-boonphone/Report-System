@@ -4219,6 +4219,8 @@ export async function listSuspectedBadDebt(params: { section: SectionKey }): Pro
       dtc.finance_amount,
       dtc.installment_count,
       dtc.debt_range,
+      -- serial_no จาก cache (เก็บไว้เพื่อ match กับ MDM API)
+      MAX(dtc.serial_no) AS serial_no,
       -- Earliest overdue due_date for daysOverdue calculation
       -- Logic mirrors rederiveDaysOverdue(): งวดที่ due_date <= today, ยังไม่ชำระ, ไม่ใช่งวดอนาคต, ไม่ closed/suspended
       MIN(CASE WHEN dtc.is_future_period = false
@@ -4339,7 +4341,8 @@ export async function listSuspectedBadDebt(params: { section: SectionKey }): Pro
       approveDate: s.approve_date ?? null,
       customerName: s.customer_name ?? null,
       phone: cInfo?.phone ?? null,
-      serialNo: cInfo?.serial_no ?? null,
+      // serialNo: ดึงจาก cache ก่อน (ถ้ายังไม่มีใน cache ให้ fallback ไปดึงจาก contracts)
+      serialNo: s.serial_no ?? cInfo?.serial_no ?? null,
       model: s.model ?? null,
       device: s.device ?? null,
       sellPrice: cInfo?.sell_price != null ? Number(cInfo.sell_price) : null,
@@ -4430,6 +4433,8 @@ export async function listWatchGroup(params: {
       dtc.device,
       dtc.finance_amount,
       dtc.installment_count,
+      -- serial_no จาก cache (เก็บไว้เพื่อ match กับ MDM API)
+      MAX(dtc.serial_no) AS serial_no,
       -- due_date งวดที่ 1 (period=1)
       MIN(CASE WHEN dtc.period = 1 THEN dtc.due_date END) AS due_date_1,
       -- due_date งวดที่ 2 (period=2)
@@ -4625,7 +4630,8 @@ export async function listWatchGroup(params: {
       approveDate: s.approve_date ?? null,
       customerName: s.customer_name ?? null,
       phone: cInfo?.phone ?? null,
-      serialNo: cInfo?.serial_no ?? null,
+      // serialNo: ดึงจาก cache ก่อน (ถ้ายังไม่มีใน cache ให้ fallback ไปดึงจาก contracts)
+      serialNo: s.serial_no ?? cInfo?.serial_no ?? null,
       model: s.model ?? null,
       device: s.device ?? null,
       productType,

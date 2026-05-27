@@ -41,6 +41,7 @@ interface ContractMeta {
   partnerName: string | null;
   device: string | null;
   model: string | null;
+  serialNo: string | null;
 }
 
 // ─── Main export ──────────────────────────────────────────────────────────────
@@ -65,7 +66,7 @@ export async function populateDebtCache(
 
   // ─── 0. Load extra contract metadata (not in stream output) ──────────────
   const metaRaw = await db.execute(sql`
-    SELECT external_id, status, partner_code, partner_name, device, model
+    SELECT external_id, status, partner_code, partner_name, device, model, serial_no
     FROM contracts
     WHERE section = ${section}
   `);
@@ -78,6 +79,7 @@ export async function populateDebtCache(
       partnerName: r.partner_name ?? null,
       device: r.device ?? null,
       model: r.model ?? null,
+      serialNo: r.serial_no ?? null,
     });
   }
   console.log(`[populateCache] ${section}: loaded ${contractMeta.size} contract metadata rows`);
@@ -120,6 +122,7 @@ export async function populateDebtCache(
           productType: (contract as any).productType ?? null,
           device: meta?.device ?? null,
           model: meta?.model ?? null,
+          serialNo: meta?.serialNo ?? null,
           financeAmount: (contract as any).financeAmount != null
             ? String(Number((contract as any).financeAmount))
             : null,

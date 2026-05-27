@@ -42,7 +42,7 @@ async function main() {
 
   // ─── 0. Load contract metadata ────────────────────────────────────────────
   const metaRaw = await db.execute(sql`
-    SELECT external_id, status, partner_code, partner_name, device, model
+    SELECT external_id, status, partner_code, partner_name, device, model, serial_no
     FROM contracts
     WHERE section = ${section} AND external_id = ${contractExternalId}
   `);
@@ -57,6 +57,7 @@ async function main() {
     partnerName: metaRows[0].partner_name ?? null,
     device: metaRows[0].device ?? null,
     model: metaRows[0].model ?? null,
+    serialNo: metaRows[0].serial_no ?? null,
   };
   console.log(`[SinglePopulate] Found contract: status=${meta.status}`);
 
@@ -103,6 +104,7 @@ async function main() {
           productType: contract.productType ?? null,
           device: meta.device,
           model: meta.model,
+          serialNo: meta.serialNo,
           financeAmount: contract.financeAmount != null ? String(Number(contract.financeAmount)) : null,
           installmentCount: contract.installmentCount != null ? Number(contract.installmentCount) : null,
           period: periodNo,
