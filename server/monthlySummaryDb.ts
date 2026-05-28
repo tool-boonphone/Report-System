@@ -2580,7 +2580,87 @@ export async function populateDueMonthCache(
     }));
     await upsertDueMonthRows(section, "approvedCount", mapped);
     totalRows += mapped.length;
-    onProgress?.(7, 7);
+    onProgress?.(7, 8);
+  }
+
+  // ── Query 8: installTotalSummary (batch) ──────────────────────────────────
+  // ยอดรวมต่อ approve_month (ไม่แยก due_month) ใช้ logic เดียวกับ Bucket mode
+  // เพื่อให้คอลัมน์ "รวม" ของ DueMonth mode เท่ากับ Bucket mode
+  {
+    const q = `
+      WITH latest AS (
+        SELECT
+          dtc.section,
+          dtc.contract_external_id,
+          ${ptSelect} AS product_type,
+          ${dfSelect} AS device_family,
+          TO_CHAR(dtc.approve_date, 'YYYY-MM') AS approve_month,
+          dtc.baseline_amount,
+          dtc.installment_count,
+          dtc.finance_amount,
+          ROW_NUMBER() OVER (
+            PARTITION BY dtc.section, dtc.contract_external_id
+            ORDER BY dtc.period DESC
+          ) AS rn
+        FROM debt_target_cache dtc
+        WHERE ${batchBaseWhere}
+      )
+      SELECT
+        l.product_type,
+        l.device_family,
+        l.approve_month,
+        COUNT(DISTINCT l.contract_external_id) AS contract_count,
+        SUM(
+          CASE
+            WHEN l.finance_amount > 0 AND l.installment_count > 0
+            THEN CEIL(CAST(l.finance_amount AS DECIMAL(18,2)) / l.installment_count) * l.installment_count
+            ELSE COALESCE(l.baseline_amount, 0) * COALESCE(l.installment_count, 0)
+          END
+        ) AS principal_install,
+        SUM(
+          CASE
+            WHEN l.finance_amount > 0 AND l.installment_count > 0
+              AND l.baseline_amount > 0
+            THEN GREATEST(0,
+              l.baseline_amount * l.installment_count
+              - CEIL(CAST(l.finance_amount AS DECIMAL(18,2)) / l.installment_count) * l.installment_count
+              - 100 * l.installment_count
+            )
+            ELSE 0
+          END
+        ) AS interest_install,
+        SUM(
+          CASE
+            WHEN l.finance_amount > 0 AND l.installment_count > 0
+            THEN 100 * l.installment_count
+            ELSE 0
+          END
+        ) AS fee_install,
+        SUM(COALESCE(l.baseline_amount, 0) * COALESCE(l.installment_count, 0)) AS total_install,
+        SUM(COALESCE(l.finance_amount, 0)) AS finance_total
+      FROM latest l
+      WHERE l.rn = 1
+      GROUP BY 1, 2, 3
+      ORDER BY 3 DESC
+    `;
+    const rawRows = await db.execute(sql.raw(q));
+    const rows = pgRows(rawRows) as any[];
+    const mapped = buildBatchCombinations(rows, (r) => ({
+      approve_month: r.approve_month,
+      due_month: "__summary__",  // special key สำหรับยอดรวมต่อ approve_month
+      productType: r.product_type ?? null,
+      deviceFamily: r.device_family ?? null,
+      contractCount: Number(r.contract_count),
+      principal: Number(r.principal_install),
+      interest: Number(r.interest_install),
+      fee: Number(r.fee_install),
+      penalty: 0, unlockFee: 0, discount: 0, overpaid: 0, badDebt: 0, badDebtInstallment: 0,
+      totalAmount: Number(r.total_install),
+      financeTotal: Number(r.finance_total),
+    }));
+    await upsertDueMonthRows(section, "installTotalSummary", mapped);
+    totalRows += mapped.length;
+    onProgress?.(8, 8);
   }
 
   return totalRows;
@@ -2640,13 +2720,16 @@ export async function getDueMonthSummaryFromCache(
   const installTotalRows = allDbRows.filter((r) => r.query_type === "installTotal");
   const paidRows         = allDbRows.filter((r) => r.query_type === "paid");
   const approvedCountRows = allDbRows.filter((r) => r.query_type === "approvedCount");
+  // installTotalSummary — ยอดรวมต่อ approve_month (ไม่แยก due_month) ใช้ logic เดียวกับ Bucket mode
+  const installTotalSummaryRows = allDbRows.filter((r) => r.query_type === "installTotalSummary");
 
   // รวบรวม approve_months และ due_months ทั้งหมด
   const monthSet    = new Set<string>();
   const dueMonthSet = new Set<string>();
   for (const r of allDbRows) {
     monthSet.add(r.approve_month);
-    if (r.due_month !== "__approved__") dueMonthSet.add(r.due_month);
+    // ไม่นับ __approved__ และ __summary__ เป็น due_month จริง
+    if (r.due_month !== "__approved__" && r.due_month !== "__summary__") dueMonthSet.add(r.due_month);
   }
   const approveMonths = Array.from(monthSet).sort((a, b) => b.localeCompare(a));
   const allDueMonths  = Array.from(dueMonthSet).sort((a, b) => a.localeCompare(b));
@@ -2699,6 +2782,18 @@ export async function getDueMonthSummaryFromCache(
     // finance_total ถูก populate ลง cache ใน Query 5 (installTotal) ของ populateDueMonthCache
     financeTotalDueMap.set(`${r.approve_month}|${r.due_month}`, n(r.finance_total ?? 0));
   }
+  // installTotalSummary — ยอดรวมต่อ approve_month ใช้ logic เดียวกับ Bucket mode
+  // key = approve_month (due_month = "__summary__" ใน cache แต่ map ด้วย approve_month เพียงอย่าง)
+  const installTotalSummaryMap = new Map<string, MoneyBreakdown>();
+  const financeTotalSummaryMap = new Map<string, number>();
+  for (const r of installTotalSummaryRows) {
+    installTotalSummaryMap.set(r.approve_month, {
+      principal: n(r.principal), interest: n(r.interest), fee: n(r.fee),
+      penalty: 0, unlockFee: 0, discount: 0, overpaid: 0, badDebt: 0, badDebtInstallment: 0,
+      total: n(r.total_amount),
+    });
+    financeTotalSummaryMap.set(r.approve_month, n(r.finance_total ?? 0));
+  }
   const paidMap = new Map<Key, MoneyBreakdown>();
   for (const r of paidRows) {
     paidMap.set(`${r.approve_month}|${r.due_month}`, {
@@ -2717,9 +2812,7 @@ export async function getDueMonthSummaryFromCache(
     const totalDue          = emptyMoney();
     const totalTarget       = emptyMoney();
     const totalNotYetDue    = emptyMoney();
-    const totalInstallTotal = emptyMoney();
 
-    let totalFinanceTotal = 0;
     for (const dueMonth of allDueMonths) {
       const key           = `${approveMonth}|${dueMonth}`;
       const contractCount = countMap.get(key) ?? 0;
@@ -2732,13 +2825,32 @@ export async function getDueMonthSummaryFromCache(
       if (contractCount === 0 && target.total === 0 && due.total === 0 && notYetDue.total === 0 && installTotal.total === 0 && paid.total === 0) continue;
       dueMonths[dueMonth] = { contractCount, paid, due, target, notYetDue, installTotal, financeTotal };
       totalCount += contractCount;
-      totalFinanceTotal += financeTotal;
       for (const k of Object.keys(totalDue) as (keyof MoneyBreakdown)[]) {
         (totalPaid         as any)[k] += paid[k];
         (totalDue          as any)[k] += due[k];
         (totalTarget       as any)[k] += target[k];
         (totalNotYetDue    as any)[k] += notYetDue[k];
-        (totalInstallTotal as any)[k] += installTotal[k];
+      }
+    }
+    // ใช้ installTotalSummary (ยอดรวมต่อ approve_month, logic เดียวกับ Bucket mode)
+    // แทนการ sum ข้ามทุก due_month เพื่อให้คอลัมน์ "รวม" เท่ากับ Bucket mode
+    // Fallback: ถ้ายังไม่มี installTotalSummary (เช่น cache เก่าก่อน repopulate) ใช้การ sum ข้าม due_month แทน
+    const summaryInstall = installTotalSummaryMap.get(approveMonth);
+    const summaryFinance = financeTotalSummaryMap.get(approveMonth);
+    let totalInstallTotal: MoneyBreakdown;
+    let totalFinanceTotal: number;
+    if (summaryInstall !== undefined) {
+      totalInstallTotal = summaryInstall;
+      totalFinanceTotal = summaryFinance ?? 0;
+    } else {
+      // Fallback: sum ข้าม due_month (เหมือน logic เดิม)
+      totalInstallTotal = emptyMoney();
+      totalFinanceTotal = 0;
+      for (const cell of Object.values(dueMonths)) {
+        totalFinanceTotal += cell.financeTotal;
+        for (const k of Object.keys(totalInstallTotal) as (keyof MoneyBreakdown)[]) {
+          (totalInstallTotal as any)[k] += cell.installTotal[k];
+        }
       }
     }
     const approvedCount = approvedCountMap.get(approveMonth) ?? 0;
