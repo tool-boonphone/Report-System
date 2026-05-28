@@ -72,6 +72,7 @@ export const SYNC_STAGES = [
   "payments",
   "commissions",
   "bad_debt",
+  "mdm_online",  // ดึง MDM device list และ bulk update last_online_days ใน contracts
   "populate",
   "monthly_cache",
 ] as const;
@@ -406,9 +407,21 @@ async function doSync(
       console.warn(`[sync] ${section}: bad-debt computation failed (non-fatal):`, bdErr?.message ?? bdErr);
     }
 
-    // ── Stage 8: Populate debt cache ──────────────────────────────────────
+    // ── Stage MDM Online: ดึง MDM device list และ bulk update last_online_days ────────────────
     await checkCancel();
-    setStage(section, 8);
+    setStage(section, SYNC_STAGES.indexOf("mdm_online"));
+    try {
+      const mdmCount = await syncMdmOnlineDays(section, (current, total) => {
+        setSubProgress(section, "mdm_online", current, total);
+      });
+      console.log(`[sync] ${section}: MDM online days updated — ${mdmCount} contracts`);
+    } catch (mdmErr: any) {
+      console.warn(`[sync] ${section}: MDM online sync failed (non-fatal):`, mdmErr?.message ?? mdmErr);
+    }
+
+    // ── Stage Populate: Populate debt cache ──────────────────────────────────────
+    await checkCancel();
+    setStage(section, SYNC_STAGES.indexOf("populate"));
     try {
       const cacheResult = await populateDebtCache(section, (phase, current, total) => {
         if (phase === "collected" && total > 0) {
@@ -672,6 +685,65 @@ async function syncContracts(
     await finishSyncLog({ id: log.id, status: "error", rowCount, errorMessage: err?.message ?? String(err) });
     throw err;
   }
+}
+
+/**
+ * Stage MDM Online: ดึง MDM device list ทั้งหมดครั้งเดียว แล้ว bulk update last_online_days ใน contracts
+ * ใช้ serial_no ใน contracts เป็น key match กับ deviceId ใน MDM API
+ * เงื่อนไขการแสดงผลเหมือนกับเมนูกลุ่มเฝ้าระวัง
+ */
+async function syncMdmOnlineDays(
+  section: SectionKey,
+  onProgress?: (current: number, total: number) => void,
+): Promise<number> {
+  const { getDb } = await import("../db");
+  const { contracts } = await import("../../drizzle/schema");
+  const { eq, isNotNull, sql } = await import("drizzle-orm");
+  const { getBatchLastOnlineDays } = await import("../services/mdm");
+
+  const db = await getDb(section);
+  if (!db) return 0;
+
+  // ดึง serial_no ทั้งหมดที่ไม่เป็น null
+  const rows = await db
+    .select({ externalId: contracts.externalId, serialNo: contracts.serialNo })
+    .from(contracts)
+    .where(eq(contracts.section, section));
+
+  const validRows = rows.filter((r: { externalId: string; serialNo: string | null }) => r.serialNo);
+  const total = validRows.length;
+  console.log(`[syncMdmOnlineDays] ${section}: ${total} contracts with serial_no (out of ${rows.length} total)`);
+
+  if (total === 0) return 0;
+
+  // ดึง MDM device list ครั้งเดียว แล้ว match ทั้งหมด
+  const serials = validRows.map((r: { externalId: string; serialNo: string | null }) => r.serialNo as string);
+  onProgress?.(0, total);
+  const snDaysMap = await getBatchLastOnlineDays(serials, section);
+
+  // Bulk update ทีละ 100 rows
+  let updated = 0;
+  const BATCH = 100;
+  for (let i = 0; i < validRows.length; i += BATCH) {
+    const batch = validRows.slice(i, i + BATCH);
+    await Promise.all(
+      batch.map(async (r: { externalId: string; serialNo: string | null }) => {
+        const days = snDaysMap.get(r.serialNo!) ?? null;
+        await db
+          .update(contracts)
+          .set({
+            lastOnlineDays: days,
+            lastOnlineAt: days !== null ? sql`CURRENT_TIMESTAMP` : null,
+          })
+          .where(eq(contracts.externalId, r.externalId));
+        if (days !== null) updated++;
+      })
+    );
+    onProgress?.(Math.min(i + BATCH, total), total);
+  }
+
+  console.log(`[syncMdmOnlineDays] ${section}: updated ${updated}/${total} contracts with online days`);
+  return updated;
 }
 
 /**

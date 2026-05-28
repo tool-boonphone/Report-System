@@ -225,5 +225,17 @@ export async function runStartupMigrations(): Promise<void> {
     } catch (err: any) {
       console.error(`[migration] ${section}: contracts.serial_no, imei failed:`, err?.message ?? err);
     }
+    try {
+      // Migration 0010: เพิ่ม last_online_days และ last_online_at ใน contracts
+      // เพื่อเก็บข้อมูล MDM online status โดยตรง (ไม่ต้องดึง detail API ทีละสัญญา)
+      await db.execute(sql.raw(`
+        ALTER TABLE contracts
+        ADD COLUMN IF NOT EXISTS last_online_days INTEGER,
+        ADD COLUMN IF NOT EXISTS last_online_at VARCHAR(32)
+      `));
+      console.log(`[migration] ${section}: contracts.last_online_days, last_online_at — OK`);
+    } catch (err: any) {
+      console.error(`[migration] ${section}: contracts.last_online_days, last_online_at failed:`, err?.message ?? err);
+    }
   }
 }

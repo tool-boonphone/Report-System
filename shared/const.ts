@@ -159,6 +159,7 @@ export type ContractColumnKey =
   | "serialNo"
   | "sellPrice"
   | "deviceStatus"
+  | "lastOnlineDays"
   | "downPayment"
   | "financeAmount"
   | "installmentCount"
@@ -209,6 +210,7 @@ export const CONTRACT_COLUMNS: Array<{
   { key: "serialNo", label: "Serial No", type: "text", width: 18 },
   { key: "sellPrice", label: "ราคาขาย", type: "money", width: 12 },
   { key: "deviceStatus", label: "สถานะอุปกรณ์", type: "text", width: 12 },
+  { key: "lastOnlineDays", label: "ออนไลน์ล่าสุด (วัน)", type: "number", width: 14 },
   { key: "downPayment", label: "ยอดดาวน์", type: "money", width: 12 },
   { key: "financeAmount", label: "ยอดจัดไฟแนนซ์", type: "money", width: 14 },
   { key: "installmentCount", label: "จำนวนงวดผ่อน", type: "number", width: 12 },
@@ -219,7 +221,7 @@ export const CONTRACT_COLUMNS: Array<{
   { key: "debtType", label: "ประเภทหนี้", type: "text", width: 12 },
 ];
 
-export const CONTRACT_COLUMN_COUNT = CONTRACT_COLUMNS.length; // must be 41
+export const CONTRACT_COLUMN_COUNT = CONTRACT_COLUMNS.length; // must be 42
 
 /** Columns exposed to the filter form (subset). */
 export const CONTRACT_FILTER_KEYS: ContractColumnKey[] = [

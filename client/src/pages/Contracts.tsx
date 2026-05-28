@@ -897,7 +897,25 @@ export default function Contracts() {
                             }`}
                             style={isSticky ? { left: 0 } : undefined}
                           >
-                            {formatCell(col.key, row, seq)}
+                            {col.key === "lastOnlineDays" ? (
+                              (() => {
+                                if (!row.serialNo) return <span className="text-gray-300 text-xs">-</span>;
+                                const days = row.lastOnlineDays;
+                                if (days == null) return <span className="text-gray-400 text-xs">–</span>;
+                                if (days === 0) return (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-green-100 text-green-700">• วันนี้</span>
+                                );
+                                if (days <= 3) return (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-yellow-100 text-yellow-700">{days} วัน</span>
+                                );
+                                if (days <= 7) return (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-orange-100 text-orange-700">{days} วัน</span>
+                                );
+                                return (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-100 text-red-700">{days} วัน</span>
+                                );
+                              })()
+                            ) : formatCell(col.key, row, seq)}
                           </td>
                         );
                       })}
