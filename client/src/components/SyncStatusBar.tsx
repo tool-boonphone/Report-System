@@ -6,7 +6,7 @@ import { useDebtCache } from "@/contexts/DebtCacheContext";
 import { useIncomeCache } from "@/contexts/IncomeCacheContext";
 import type { SectionKey } from "@shared/const";
 import { useAppAuth } from "@/hooks/useAppAuth";
-import { RefreshCw, Trash2, XCircle, Info, CheckCircle2, AlertCircle, Clock } from "lucide-react";
+import { RefreshCw, Trash2, XCircle, Info, CheckCircle2, AlertCircle, Clock, ChevronDown } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
@@ -207,6 +207,105 @@ function SyncLogPopup({
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/** Dropdown รวมปุ่ม Sync ทั้งหมด */
+function SyncDropdown({
+  isRunning,
+  isClearing,
+  isTriggerPending,
+  isMdmPending,
+  onResync,
+  onSyncMdm,
+  onClearCache,
+}: {
+  isRunning: boolean;
+  isClearing: boolean;
+  isTriggerPending: boolean;
+  isMdmPending: boolean;
+  onResync: () => void;
+  onSyncMdm: () => void;
+  onClearCache: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const dropRef = useRef<HTMLDivElement>(null);
+
+  // ปิด dropdown เมื่อคลิกนอก
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (dropRef.current && !dropRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const anyBusy = isRunning || isClearing || isTriggerPending || isMdmPending;
+
+  return (
+    <div ref={dropRef} className="relative">
+      {/* Trigger button */}
+      <button
+        onClick={() => setOpen((v) => !v)}
+        disabled={anyBusy}
+        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 text-sm text-gray-700 disabled:opacity-50 transition-colors"
+        title="ตัวเลือกการ Sync"
+      >
+        <RefreshCw className={`w-4 h-4 ${isTriggerPending || isMdmPending ? "animate-spin" : ""}`} />
+        <span className="hidden sm:inline">Sync</span>
+        <ChevronDown className={`w-3.5 h-3.5 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+
+      {/* Dropdown panel */}
+      {open && (
+        <div className="absolute right-0 top-full mt-1.5 w-52 bg-white rounded-xl shadow-lg border border-gray-200 py-1.5 z-50">
+          {/* Re-Sync API */}
+          <button
+            onClick={() => { onResync(); setOpen(false); }}
+            disabled={isRunning || isTriggerPending}
+            className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-40 transition-colors"
+          >
+            <RefreshCw className={`w-4 h-4 shrink-0 ${isTriggerPending ? "animate-spin" : ""}`} />
+            <div className="text-left">
+              <div className="font-medium">Re-Sync API</div>
+              <div className="text-xs text-gray-400">ดึงข้อมูลทั้งหมด (หลายนาที)</div>
+            </div>
+          </button>
+
+          {/* Sync MDM */}
+          <button
+            onClick={() => { onSyncMdm(); setOpen(false); }}
+            disabled={isRunning || isMdmPending}
+            className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-blue-600 hover:bg-blue-50 disabled:opacity-40 transition-colors"
+          >
+            <RefreshCw className={`w-4 h-4 shrink-0 ${isMdmPending ? "animate-spin" : ""}`} />
+            <div className="text-left">
+              <div className="font-medium">Sync MDM</div>
+              <div className="text-xs text-blue-400">อัปเดตสถานะออนไลน์ (~30วิ)</div>
+            </div>
+          </button>
+
+          {/* Divider */}
+          <div className="my-1 border-t border-gray-100" />
+
+          {/* Clear Cache */}
+          <button
+            onClick={() => { onClearCache(); setOpen(false); }}
+            disabled={isRunning || isClearing}
+            className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-orange-600 hover:bg-orange-50 disabled:opacity-40 transition-colors"
+          >
+            <Trash2 className={`w-4 h-4 shrink-0 ${isClearing ? "animate-pulse" : ""}`} />
+            <div className="text-left">
+              <div className="font-medium">Clear Cache</div>
+              <div className="text-xs text-orange-400">ล้างแคชเบราเซอร์</div>
+            </div>
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -497,38 +596,16 @@ export function SyncStatusBar() {
             )}
           </div>
         ) : canResync ? (
-          /* ---- ปุ่ม Re-Sync API + Clear Cache ---- */
-          <div className="flex items-center gap-1.5">
-            <button
-              onClick={handleResync}
-              disabled={isRunning || isClearing || isTriggerPending}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 text-sm text-gray-700 disabled:opacity-50 transition-colors"
-              title="ดึงข้อมูลใหม่จาก API ภายนอก (ใช้เวลาหลายนาที)"
-            >
-              <RefreshCw className={`w-4 h-4 ${isTriggerPending ? "animate-spin" : ""}`} />
-              <span className="hidden sm:inline">Re-Sync API</span>
-            </button>
-
-            <button
-              onClick={handleSyncMdm}
-              disabled={isRunning || syncMdmMutation.isPending}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-blue-200 hover:bg-blue-50 text-sm text-blue-600 disabled:opacity-50 transition-colors"
-              title="อัปเดตสถานะออนไลน์จาก MDM (เร็ว ~30 วินาที)"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${syncMdmMutation.isPending ? "animate-spin" : ""}`} />
-              <span className="hidden sm:inline">Sync MDM</span>
-            </button>
-
-            <button
-              onClick={handleClearCache}
-              disabled={isRunning || isClearing}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-orange-200 hover:bg-orange-50 text-sm text-orange-600 disabled:opacity-50 transition-colors"
-              title="ล้างข้อมูลที่บันทึกไว้ในเบราเซอร์ แล้วโหลดข้อมูลใหม่จากระบบ"
-            >
-              <Trash2 className={`w-4 h-4 ${isClearing ? "animate-pulse" : ""}`} />
-              <span className="hidden sm:inline">Clear Cache</span>
-            </button>
-          </div>
+          /* ---- Dropdown menu รวมปุ่ม Sync ทั้งหมด ---- */
+          <SyncDropdown
+            isRunning={isRunning}
+            isClearing={isClearing}
+            isTriggerPending={isTriggerPending}
+            isMdmPending={syncMdmMutation.isPending}
+            onResync={handleResync}
+            onSyncMdm={handleSyncMdm}
+            onClearCache={handleClearCache}
+          />
         ) : null}
       </div>
 
