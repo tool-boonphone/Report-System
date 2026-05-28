@@ -74,6 +74,11 @@ export async function upsertContracts(rows: AnyRow[], section: SectionKey): Prom
     const merged = mergeBatch(batch);
     const sample = unionKeys(merged);
     const setObj = buildUpsertSet(sample, contracts as any);
+    // Preserve lastOnlineDays / lastOnlineAt that were set by MDM stage.
+    // API does not return these fields, so EXCLUDED value will always be NULL.
+    // Use COALESCE to keep the existing DB value when the incoming value is NULL.
+    setObj.lastOnlineDays = sql.raw(`COALESCE(EXCLUDED."last_online_days", "contracts"."last_online_days")`);
+    setObj.lastOnlineAt = sql.raw(`COALESCE(EXCLUDED."last_online_at", "contracts"."last_online_at")`);
     await db
       .insert(contracts)
       .values(merged as any)
