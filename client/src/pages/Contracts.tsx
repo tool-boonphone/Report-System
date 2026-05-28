@@ -537,8 +537,6 @@ export default function Contracts() {
 
   // ----- Virtualizer -----
   const scrollRef = useRef<HTMLDivElement | null>(null);
-  // headerScrollRef ใช้ sync horizontal scroll ระหว่าง header table กับ body table
-  const headerScrollRef = useRef<HTMLDivElement | null>(null);
   const ROW_HEIGHT = 36;
   const rowVirtualizer = useVirtualizer({
     count: filteredRows.length,
@@ -855,19 +853,20 @@ export default function Contracts() {
 
         {/* Virtualized table — fills remaining viewport height */}
         <div className="relative bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm flex flex-col flex-1 min-h-0">
-          {/* ── Header table: ไม่ scroll ขึ้น-ลง, sync horizontal scroll กับ body ── */}
+          {/* ── Single scroll container: header sticky ใน thead, scroll ทั้ง x และ y พร้อมกัน ── */}
           <div
-            ref={headerScrollRef}
-            className="overflow-x-hidden flex-shrink-0"
+            ref={scrollRef}
+            className="overflow-x-auto overflow-y-auto flex-1 min-h-0"
+            style={{ overscrollBehavior: "contain" }}
           >
             <table className="min-w-full text-[13px] border-separate border-spacing-0">
-              {/* colgroup กำหนด pixel width ให้ตรงกับ body table */}
               <colgroup>
                 {CONTRACT_COLUMNS.map((col) => (
                   <col key={col.key} style={{ width: col.colWidth, minWidth: col.colWidth }} />
                 ))}
               </colgroup>
-              <thead>
+              {/* thead sticky — ติดด้านบนเมื่อ scroll ลง, scroll ซ้าย-ขวาพร้อมกับ body อัตโนมัติ */}
+              <thead className="sticky top-0 z-30">
                 {/* Group header row */}
                 <tr className="text-xs font-semibold text-center">
                   <th colSpan={6} className="px-3 py-1.5 bg-slate-600 text-white border-b border-slate-500 whitespace-nowrap">สินเชื่อ</th>
@@ -894,7 +893,7 @@ export default function Contracts() {
                       <th
                         key={col.key}
                         className={`px-3 py-2 text-left whitespace-nowrap font-medium border-b border-gray-200 ${groupBg} ${
-                          isSticky ? "sticky z-40 after:absolute after:inset-y-0 after:right-0 after:w-px after:bg-slate-200" : ""
+                          isSticky ? "sticky left-0 z-40 after:absolute after:inset-y-0 after:right-0 after:w-px after:bg-slate-200" : ""
                         } ${sortable ? "cursor-pointer hover:brightness-95" : ""}`}
                         style={isSticky ? { left: 0 } : undefined}
                         onClick={sortable ? () => toggleSort(col.key as SortField) : undefined}
@@ -910,28 +909,6 @@ export default function Contracts() {
                   })}
                 </tr>
               </thead>
-            </table>
-          </div>
-          {/* ── Body scroll container: scroll ได้ทั้ง x และ y, sync horizontal scroll ไป header ── */}
-          <div
-            ref={scrollRef}
-            className="overflow-x-auto overflow-y-auto flex-1 min-h-0"
-            style={{ overscrollBehavior: "contain", willChange: "transform" }}
-            onScroll={(e) => {
-              // sync horizontal scroll ไปยัง header
-              if (headerScrollRef.current) {
-                headerScrollRef.current.scrollLeft = (e.target as HTMLDivElement).scrollLeft;
-              }
-            }}
-          >
-            <table className="min-w-full text-[13px] border-separate border-spacing-0">
-              {/* colgroup เดียวกับ header table เพื่อ sync column widths */}
-              <colgroup>
-                {CONTRACT_COLUMNS.map((col) => (
-                  <col key={col.key} style={{ width: col.colWidth, minWidth: col.colWidth }} />
-                ))}
-              </colgroup>
-              {/* tbody ใช้ paddingTop/paddingBottom dummy rows เพื่อให้ column widths sync กับ header */}
               <tbody>
                 {listQuery.isLoading && (
                   <tr>
