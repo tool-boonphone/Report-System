@@ -800,7 +800,7 @@ export default function Contracts() {
             className="overflow-x-auto overflow-y-auto flex-1 min-h-0"
             style={{ overscrollBehavior: "contain", willChange: "transform" }}
           >
-            <table className="min-w-full text-[13px]">
+            <table className="min-w-full text-[13px] border-separate border-spacing-0">
               <thead className="sticky top-0 z-30">
                 {/* Group header row */}
                 <tr className="text-xs font-semibold text-center">
