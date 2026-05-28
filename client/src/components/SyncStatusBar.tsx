@@ -221,6 +221,8 @@ function SyncDropdown({
   onSyncMdm,
   onTestMdm,
   onClearCache,
+  onRepopulate,
+  isRepopulating,
 }: {
   isRunning: boolean;
   isClearing: boolean;
@@ -230,6 +232,9 @@ function SyncDropdown({
   onSyncMdm: () => void;
   onTestMdm: () => void;
   onClearCache: () => void;
+  /** callback สำหรับ Repopulate Summary — ถ้าไม่ส่งมา จะไม่แสดงปุ่ม */
+  onRepopulate?: () => void;
+  isRepopulating?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const dropRef = useRef<HTMLDivElement>(null);
@@ -303,6 +308,24 @@ function SyncDropdown({
             </div>
           </button>
 
+          {/* Repopulate Summary — แสดงเฉพาะเมื่อมี onRepopulate callback (superAdmin only) */}
+          {onRepopulate && (
+            <>
+              <div className="my-1 border-t border-gray-100" />
+              <button
+                onClick={() => { onRepopulate(); setOpen(false); }}
+                disabled={isRunning || isRepopulating}
+                className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-purple-600 hover:bg-purple-50 disabled:opacity-40 transition-colors"
+              >
+                <RefreshCw className={`w-4 h-4 shrink-0 ${isRepopulating ? "animate-pulse" : ""}`} />
+                <div className="text-left">
+                  <div className="font-medium">{isRepopulating ? "กำลังประมวลผล..." : "Repopulate Summary"}</div>
+                  <div className="text-xs text-purple-400">สร้าง Cache รายงานใหม่</div>
+                </div>
+              </button>
+            </>
+          )}
+
           {/* Divider */}
           <div className="my-1 border-t border-gray-100" />
 
@@ -324,7 +347,14 @@ function SyncDropdown({
   );
 }
 
-export function SyncStatusBar() {
+export function SyncStatusBar({
+  onRepopulate,
+  isRepopulating,
+}: {
+  /** callback สำหรับ Repopulate Summary — ถ้าไม่ส่งมา จะไม่แสดงปุ่มใน Dropdown */
+  onRepopulate?: () => void;
+  isRepopulating?: boolean;
+} = {}) {
   const { section } = useSection();
   const utils = trpc.useUtils();
   const debtCache = useDebtCache();
@@ -734,6 +764,8 @@ export function SyncStatusBar() {
             onSyncMdm={handleSyncMdm}
             onTestMdm={handleTestMdm}
             onClearCache={handleClearCache}
+            onRepopulate={onRepopulate}
+            isRepopulating={isRepopulating}
           />
         ) : null}
       </div>

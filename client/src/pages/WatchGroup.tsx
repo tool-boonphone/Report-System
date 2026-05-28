@@ -394,6 +394,8 @@ export default function WatchGroup() {
   const [gracePeriod, setGracePeriod] = useState<string>("15");
   // ค้างชำระ: "" = ทั้งหมด, "0" = 0 งวด, "1" = 1 งวด
   const [arrearsFilter, setArrearsFilter] = useState<"" | "0" | "1">("");
+  // ออนไลน์ล่าสุด multi-select
+  const [onlineFilter, setOnlineFilter] = useState<Set<string>>(new Set());
 
   /* ── sort ── */
   const [sortKey, setSortKey] = useState<SortKey>("daysOverdue");
@@ -537,6 +539,21 @@ export default function WatchGroup() {
       rows = rows.filter((r) => r.partnerCode && partnerFilter.has(r.partnerCode));
     }
 
+    // filter ออนไลน์ล่าสุด
+    if (onlineFilter.size > 0) {
+      rows = rows.filter((r) => {
+        if (!r.serialNo) return false;
+        const days = onlineDaysMap[r.serialNo];
+        if (days == null) return false;
+        let bucket: string;
+        if (days === 0) bucket = "today";
+        else if (days <= 3) bucket = "1-3";
+        else if (days <= 7) bucket = "4-7";
+        else bucket = "over7";
+        return onlineFilter.has(bucket);
+      });
+    }
+
     rows = [...rows].sort((a, b) => {
       let av: any, bv: any;
       switch (sortKey) {
@@ -570,6 +587,8 @@ export default function WatchGroup() {
     osFilter,
     modelFilter,
     partnerFilter,
+    onlineFilter,
+    onlineDaysMap,
     sortKey,
     sortDir,
   ]);
@@ -621,6 +640,7 @@ export default function WatchGroup() {
     modelFilter.size > 0 ||
     productTypeFilter.size > 0 ||
     partnerFilter.size > 0 ||
+    onlineFilter.size > 0 ||
     gracePeriod !== "15" ||
     arrearsFilter !== "";
 
@@ -633,6 +653,7 @@ export default function WatchGroup() {
     setPartnerFilter(new Set());
     setGracePeriod("15");
     setArrearsFilter("");
+    setOnlineFilter(new Set());
   };
 
   /* ── export XLSX ── */
@@ -783,7 +804,7 @@ export default function WatchGroup() {
             {/* row 1: search + filters */}
             <div className="flex flex-col md:flex-row md:items-center gap-2 flex-wrap">
               {/* search */}
-              <div className="relative flex-1 min-w-0 max-w-sm">
+              <div className="relative flex-1 min-w-0 max-w-[210px]">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <Input
                   placeholder="ค้นหา: เลขที่สัญญา / ชื่อ / เบอร์โทร"
@@ -878,6 +899,37 @@ export default function WatchGroup() {
                     ))}
                   </div>
                   <ArrearsInfoPopover />
+                </div>
+
+                {/* ออนไลน์ล่าสุด multi-select */}
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-gray-500 whitespace-nowrap">ออนไลน์:</span>
+                  {([
+                    { value: "today", label: "• วันนี้", activeClass: "bg-green-100 text-green-700 border-green-300" },
+                    { value: "1-3",   label: "1–3 วัน", activeClass: "bg-yellow-100 text-yellow-700 border-yellow-300" },
+                    { value: "4-7",   label: "4–7 วัน", activeClass: "bg-orange-100 text-orange-700 border-orange-300" },
+                    { value: "over7", label: ">7 วัน",  activeClass: "bg-red-100 text-red-700 border-red-300" },
+                  ] as { value: string; label: string; activeClass: string }[]).map((opt) => {
+                    const active = onlineFilter.has(opt.value);
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => {
+                          const next = new Set(onlineFilter);
+                          if (active) next.delete(opt.value); else next.add(opt.value);
+                          setOnlineFilter(next);
+                        }}
+                        className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${
+                          active
+                            ? opt.activeClass
+                            : "bg-gray-50 text-gray-500 border-gray-200 hover:border-gray-300"
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    );
+                  })}
                 </div>
 
                 {/* ล้างตัวกรอง */}

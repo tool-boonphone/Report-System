@@ -188,6 +188,15 @@ export async function handleContractsExport(req: Request, res: Response) {
             cell.value = seq;
             cell.numFmt = INT_FORMAT;
             cell.alignment = { horizontal: "center" };
+          } else if (col.key === "lastOnlineDays") {
+            // ถ้าไม่มี serialNo หรือ lastOnlineDays เป็น null ให้แสดง "-" (ไม่ใช่ 0 เพราะจะซ้ำกับคนที่ออนไลน์วันนี้)
+            const sn = (row as any)["serialNo"];
+            const days = (row as any)["lastOnlineDays"];
+            if (!sn || days == null) {
+              cell.value = "-";
+            } else {
+              setIntCell(cell, days);
+            }
           } else if (col.type === "money") {
             setMoneyCell(cell, (row as any)[col.key]);
           } else if (col.type === "number") {

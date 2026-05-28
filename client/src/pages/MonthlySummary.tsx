@@ -1174,23 +1174,14 @@ export default function MonthlySummary() {
   useEffect(()=>{
     setActions(
       <div className="flex items-center gap-2">
-        {/* ปุ่ม Repopulate Monthly Summary — แสดงเฉพาะ superAdmin */}
-        {isSuperAdmin&&(
-          <button
-            type="button"
-            onClick={handleRepopulateMonthlySummary}
-            disabled={isRepopulating}
-            title="ประมวลผล Monthly Summary Cache ใหม่ (superAdmin only)"
-            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-purple-200 hover:bg-purple-50 text-sm text-purple-700 disabled:opacity-50 transition-colors"
-          >
-            <TrendingUp className={`w-4 h-4 ${isRepopulating?"animate-pulse":""}`}/>
-            <span className="hidden sm:inline">{isRepopulating?"กำลังประมวลผล...":"Repopulate Summary"}</span>
-          </button>
-        )}
-        <SyncStatusBar/>
+        {/* Repopulate Summary ย้ายเข้าไปใน Dropdown Sync — แสดงเฉพาะ superAdmin */}
+        <SyncStatusBar
+          onRepopulate={isSuperAdmin ? handleRepopulateMonthlySummary : undefined}
+          isRepopulating={isRepopulating}
+        />
       </div>
     );
-    return()=>setActions(null);
+    return()⇒setActions(null);
   },[setActions,isSuperAdmin,isRepopulating,handleRepopulateMonthlySummary]);
 
   // ── Tab config ────────────────────────────────────────────────────────────────────

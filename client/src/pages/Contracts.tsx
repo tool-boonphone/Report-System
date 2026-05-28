@@ -56,6 +56,8 @@ type Filters = {
   productType: Set<string>;
   model: Set<string>;
   deviceStatus: Set<string>;
+  // online status filter
+  onlineFilter: Set<string>; // "today" | "1-3" | "4-7" | "over7"
   // date range
   dateField: "submitDate" | "approveDate";
   dateFrom: string;
@@ -81,6 +83,7 @@ const EMPTY_FILTERS: Filters = {
   productType: new Set(),
   model: new Set(),
   deviceStatus: new Set(),
+  onlineFilter: new Set(),
   dateField: "approveDate",
   dateFrom: "",
   dateTo: "",
@@ -391,6 +394,19 @@ export default function Contracts() {
           return false;
         }
       }
+      // online status filter
+      if (f.onlineFilter.size > 0) {
+        const sn = r.serialNo;
+        const days: number | null | undefined = r.lastOnlineDays;
+        // ถ้าไม่มี serialNo หรือ days เป็น null = ไม่รู้สถานะ → ไม่ผ่านฟิลเตอร์ใดๆ
+        if (!sn || days == null) return false;
+        let bucket: string;
+        if (days === 0) bucket = "today";
+        else if (days <= 3) bucket = "1-3";
+        else if (days <= 7) bucket = "4-7";
+        else bucket = "over7";
+        if (!f.onlineFilter.has(bucket)) return false;
+      }
       return true;
     });
 
@@ -443,6 +459,7 @@ export default function Contracts() {
       if ((filters[key as keyof Filters] as Set<string>).size > 0) n++;
     }
     if (filters.dateFrom || filters.dateTo) n++;
+    if (filters.onlineFilter.size > 0) n++;
     return n;
   }, [filters]);
 
@@ -653,6 +670,47 @@ export default function Contracts() {
                     options={dynamicOptions[key] ?? []}
                   />
                 ))}
+              </div>
+
+              {/* Online status filter */}
+              <div className="mt-3 pt-3 border-t border-dashed border-gray-200">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs text-gray-500 font-medium whitespace-nowrap">ออนไลน์ล่าสุด:</span>
+                  {([
+                    { value: "today", label: "• วันนี้", activeClass: "bg-green-100 text-green-700 border-green-300" },
+                    { value: "1-3",   label: "1–3 วัน", activeClass: "bg-yellow-100 text-yellow-700 border-yellow-300" },
+                    { value: "4-7",   label: "4–7 วัน", activeClass: "bg-orange-100 text-orange-700 border-orange-300" },
+                    { value: "over7", label: ">7 วัน",  activeClass: "bg-red-100 text-red-700 border-red-300" },
+                  ] as { value: string; label: string; activeClass: string }[]).map((opt) => {
+                    const active = filters.onlineFilter.has(opt.value);
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => {
+                          const next = new Set(filters.onlineFilter);
+                          if (active) next.delete(opt.value); else next.add(opt.value);
+                          setFilters((f) => ({ ...f, onlineFilter: next }));
+                        }}
+                        className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${
+                          active
+                            ? opt.activeClass
+                            : "bg-gray-50 text-gray-500 border-gray-200 hover:border-gray-300"
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                  {filters.onlineFilter.size > 0 && (
+                    <button
+                      onClick={() => setFilters((f) => ({ ...f, onlineFilter: new Set() }))}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs text-gray-400 hover:text-red-500 transition-colors"
+                    >
+                      <X className="w-3 h-3" />ล้าง
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Date field: pill/tab selector + date range inputs */}
