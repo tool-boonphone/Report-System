@@ -861,6 +861,12 @@ export default function Contracts() {
             className="overflow-x-hidden flex-shrink-0"
           >
             <table className="min-w-full text-[13px] border-separate border-spacing-0">
+              {/* colgroup กำหนด pixel width ให้ตรงกับ body table */}
+              <colgroup>
+                {CONTRACT_COLUMNS.map((col) => (
+                  <col key={col.key} style={{ width: col.colWidth, minWidth: col.colWidth }} />
+                ))}
+              </colgroup>
               <thead>
                 {/* Group header row */}
                 <tr className="text-xs font-semibold text-center">
@@ -919,6 +925,12 @@ export default function Contracts() {
             }}
           >
             <table className="min-w-full text-[13px] border-separate border-spacing-0">
+              {/* colgroup เดียวกับ header table เพื่อ sync column widths */}
+              <colgroup>
+                {CONTRACT_COLUMNS.map((col) => (
+                  <col key={col.key} style={{ width: col.colWidth, minWidth: col.colWidth }} />
+                ))}
+              </colgroup>
               {/* tbody ใช้ paddingTop/paddingBottom dummy rows เพื่อให้ column widths sync กับ header */}
               <tbody>
                 {listQuery.isLoading && (
