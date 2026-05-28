@@ -159,7 +159,8 @@ type Row = {
   installmentTotal: number;
   daysOverdue: number;
   arrearsCount: number;
-  paidAmount1: number;  // ยอดชำระงวดทีṂ1 (อาจเป็น 0 ถ้าไม่เคยชำระ)
+  paidAmount1: number;  // ยอดชำระงวดที่ 1 (อาจเป็น 0 ถ้าไม่เคยชำระ)
+  totalAmountDue: number; // ยอดค้างชำระรวมทุกงวดที่ถึงกำหนดแล้ว
 };
 
 /* ─── SummaryCard ─────────────────────────────────────────────────────────── */
@@ -1118,14 +1119,28 @@ export default function WatchGroup() {
                           <td className="px-3 py-1.5 text-right whitespace-nowrap text-green-700">
                             {fmtMoney(r.installmentTotal)}
                           </td>
-                          <td className="px-3 py-1.5 text-right whitespace-nowrap">
-                            {fmtMoney(r.installmentAmount)}
+                          {/* ค่างวด = ยอดค้างชำระรวมทุกงวดที่ถึงกำหนดแล้ว */}
+                          <td className="px-3 py-1.5 text-right whitespace-nowrap font-medium text-gray-800">
+                            {fmtMoney(r.totalAmountDue)}
                           </td>
-                          <td className={cn(
-                            "px-3 py-1.5 text-right whitespace-nowrap",
-                            r.paidAmount1 > 0 ? "text-blue-700 font-medium" : "text-gray-400",
-                          )}>
-                            {r.paidAmount1 > 0 ? fmtMoney(r.paidAmount1) : "-"}
+                          {/* ยอดชำระ = ยอดที่ชำระมาแล้วในงวดที่ 1 */}
+                          <td className="px-3 py-1.5 text-right whitespace-nowrap">
+                            <span className={cn(
+                              "font-medium",
+                              r.paidAmount1 > 0 ? "text-blue-700" : "text-red-600",
+                            )}>
+                              {fmtMoney(r.paidAmount1)}
+                            </span>
+                            {r.totalAmountDue > 0 && (
+                              <span className={cn(
+                                "ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full",
+                                r.paidAmount1 > 0
+                                  ? "bg-blue-50 text-blue-600"
+                                  : "bg-red-50 text-red-500",
+                              )}>
+                                {Math.round((r.paidAmount1 / r.totalAmountDue) * 100)}%
+                              </span>
+                            )}
                           </td>
                           <td className={cn(
                             "px-3 py-1.5 text-right whitespace-nowrap font-semibold",

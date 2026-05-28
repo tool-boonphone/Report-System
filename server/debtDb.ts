@@ -4484,11 +4484,17 @@ export async function listWatchGroup(params: {
     sql.raw(`
       SELECT
         contract_external_id,
-        COALESCE(SUM(paid_amount), 0)   AS paid_amount_1,
-        COALESCE(SUM(total_amount), 0)  AS total_amount_1
+        -- paid_amount งวดที่ 1 สำหรับแสดงในตาราง
+        COALESCE(SUM(CASE WHEN period = 1 THEN paid_amount ELSE 0 END), 0)   AS paid_amount_1,
+        COALESCE(SUM(CASE WHEN period = 1 THEN total_amount ELSE 0 END), 0)  AS total_amount_1,
+        -- ยอดค้างชำระรวมทุกงวดที่ถึงกำหนดแล้วและยังไม่ได้ชำระครบ
+        COALESCE(SUM(
+          CASE WHEN is_paid = false AND due_date <= '${todayStr}'
+          THEN (total_amount - COALESCE(paid_amount, 0))
+          ELSE 0 END
+        ), 0) AS total_amount_due
       FROM debt_target_cache
       WHERE section = '${params.section}'
-        AND period = 1
         AND contract_external_id IN (${contractIds.map((id) => `'${id.replace(/'/g, "''")}'`).join(",")})
       GROUP BY contract_external_id
     `)
@@ -4497,10 +4503,14 @@ export async function listWatchGroup(params: {
   const paidInst1Set = new Set<string>();
   // Map เก็บ paid_amount_1 สำหรับแสดงในตาราง
   const inst1Map = new Map<string, number>();
+  // Map เก็บ total_amount_due = ยอดค้างชำระรวมทุกงวดที่ถึงกำหนดแล้ว
+  const totalAmountDueMap = new Map<string, number>();
   for (const r of (pgRows(inst1Raw) as any[])) {
     const paid = Number(r.paid_amount_1 ?? 0);
     const total = Number(r.total_amount_1 ?? 0);
+    const totalDue = Number(r.total_amount_due ?? 0);
     inst1Map.set(r.contract_external_id, paid);
+    totalAmountDueMap.set(r.contract_external_id, totalDue);
     if (total > 0 && paid >= total - 0.5) paidInst1Set.add(r.contract_external_id);
   }
   // ตัดสัญญาที่ชำระงวดแรกครบแล้วออก (ยังชำระไม่ครบหรือไม่ชำระเลย ยังคงแสดง)
@@ -4579,6 +4589,7 @@ export async function listWatchGroup(params: {
     daysOverdue: number;
     arrearsCount: number;
     paidAmount1: number;   // ยอดชำระงวดที่ 1 (อาจเป็น 0 ถ้าไม่เคยชำระ)
+    totalAmountDue: number; // ยอดค้างชำระรวมทุกงวดที่ถึงกำหนดแล้ว
   }> = [];
 
   // debug: log ตัวอย่าง daysOverdue ของ 3 รายการแรก
@@ -4670,6 +4681,7 @@ export async function listWatchGroup(params: {
       daysOverdue,
       arrearsCount,
       paidAmount1: inst1Map.get(extId) ?? 0,
+      totalAmountDue: totalAmountDueMap.get(extId) ?? 0,  // ยอดค้างชำระรวมทุกงวดที่ถึงกำหนด
     });
   }
 
