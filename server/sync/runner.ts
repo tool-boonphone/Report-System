@@ -698,7 +698,7 @@ export async function syncMdmOnlineDays(
 ): Promise<number> {
   const { getDb } = await import("../db");
   const { contracts } = await import("../../drizzle/schema");
-  const { eq, isNotNull, sql } = await import("drizzle-orm");
+  const { eq, and, isNotNull, sql } = await import("drizzle-orm");
   const { getBatchLastOnlineDays } = await import("../services/mdm");
 
   const db = await getDb(section);
@@ -735,7 +735,7 @@ export async function syncMdmOnlineDays(
             lastOnlineDays: days,
             lastOnlineAt: days !== null ? sql`CURRENT_TIMESTAMP` : null,
           })
-          .where(eq(contracts.externalId, r.externalId));
+          .where(and(eq(contracts.section, section), eq(contracts.externalId, r.externalId)));
         if (days !== null) updated++;
       })
     );
