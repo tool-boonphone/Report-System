@@ -134,6 +134,7 @@ type Row = {
   customerName: string | null;
   phone: string | null;
   serialNo: string | null;
+  lastOnlineDays: number | null;
   model: string | null;
   device: string | null;
   sellPrice: number | null;
@@ -347,16 +348,7 @@ export default function SuspectedBadDebt() {
   );
   const allRows: Row[] = useMemo(() => (data?.rows ?? []) as Row[], [data?.rows]);
 
-  /* ── MDM online days ── */
-  const serialNos = useMemo(() =>
-    allRows.map((r) => r.serialNo ?? "").filter(Boolean),
-  [allRows]);
-  const { data: mdmData } = trpc.mdm.batchLastOnlineDays.useQuery(
-    section && serialNos.length > 0 ? { section, serials: serialNos } : (undefined as any),
-    { enabled: canView && !!section && serialNos.length > 0, staleTime: 5 * 60 * 1000 },
-  );
-  /** Map SN → lastOnlineDays (null = ไม่มีข้อมูล) */
-  const onlineDaysMap = useMemo(() => mdmData ?? {}, [mdmData]);
+  /* ── MDM online days: ดึงจาก row.lastOnlineDays (map จาก contracts table) ── */
 
   /* ── approve month options ── */
   const approveMonthOptions = useMemo(() => {
@@ -461,8 +453,7 @@ export default function SuspectedBadDebt() {
     // filter ออนไลน์ล่าสุด
     if (onlineFilter.size > 0) {
       rows = rows.filter((r) => {
-        if (!r.serialNo) return false;
-        const days = onlineDaysMap[r.serialNo];
+        const days = r.lastOnlineDays;
         if (days == null) return false;
         let bucket: string;
         if (days === 0) bucket = "today";
@@ -506,7 +497,6 @@ export default function SuspectedBadDebt() {
     modelFilter,
     debtValueMin,
     onlineFilter,
-    onlineDaysMap,
     sortKey,
     sortDir,
   ]);
@@ -584,8 +574,8 @@ export default function SuspectedBadDebt() {
         "งวดที่ชำระ","ยอดชำระ","มูลค่าหนี้","เกินกำหนด (วัน)","สถานะหนี้","Online (วันที่แล้ว)",
       ];
       const dataRows = filteredRows.map((r, i) => {
-        const onlineDays = r.serialNo ? (onlineDaysMap[r.serialNo] ?? null) : null;
-        const onlineLabel = onlineDays == null ? "" : onlineDays === 0 ? "วันนี้" : `${onlineDays} วันที่แล้ว`;
+        const onlineDays = r.lastOnlineDays;
+        const onlineLabel = onlineDays == null ? "-" : onlineDays === 0 ? "วันนี้" : `${onlineDays} วันที่แล้ว`;
         return [
           i + 1,
           r.approveDate ? r.approveDate.slice(0, 10) : "",
@@ -990,8 +980,7 @@ export default function SuspectedBadDebt() {
                           {/* Online column: วันที่ออนไลน์ล่าสุดจาก MDM */}
                           <td className="px-3 py-1.5 text-center whitespace-nowrap">
                             {(() => {
-                              if (!r.serialNo) return <span className="text-gray-300 text-xs">-</span>;
-                              const days = onlineDaysMap[r.serialNo];
+                              const days = r.lastOnlineDays;
                               if (days == null) return <span className="text-gray-400 text-xs">–</span>;
                               if (days === 0) return (
                                 <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-green-100 text-green-700">• วันนี้</span>
