@@ -1181,7 +1181,7 @@ export default function MonthlySummary() {
         />
       </div>
     );
-    return()⇒setActions(null);
+    return () => setActions(null);
   },[setActions,isSuperAdmin,isRepopulating,handleRepopulateMonthlySummary]);
 
   // ── Tab config ────────────────────────────────────────────────────────────────────
