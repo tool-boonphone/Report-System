@@ -794,7 +794,7 @@ export default function Contracts() {
         </div>
 
         {/* Virtualized table — fills remaining viewport height */}
-        <div className="relative bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm flex flex-col flex-1 min-h-0">
+        <div className="relative bg-white border border-gray-200 rounded-xl overflow-clip shadow-sm flex flex-col flex-1 min-h-0">
           <div
             ref={scrollRef}
             className="overflow-x-auto overflow-y-auto flex-1 min-h-0"
