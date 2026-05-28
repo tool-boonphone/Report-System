@@ -520,6 +520,8 @@ export default function Contracts() {
 
   // ----- Virtualizer -----
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  // headerScrollRef ใช้ sync horizontal scroll ระหว่าง header table กับ body table
+  const headerScrollRef = useRef<HTMLDivElement | null>(null);
   const ROW_HEIGHT = 36;
   const rowVirtualizer = useVirtualizer({
     count: filteredRows.length,
@@ -794,14 +796,14 @@ export default function Contracts() {
         </div>
 
         {/* Virtualized table — fills remaining viewport height */}
-        <div className="relative bg-white border border-gray-200 rounded-xl overflow-clip shadow-sm flex flex-col flex-1 min-h-0">
+        <div className="relative bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm flex flex-col flex-1 min-h-0">
+          {/* ── Header table: ไม่ scroll ขึ้น-ลง, sync horizontal scroll กับ body ── */}
           <div
-            ref={scrollRef}
-            className="overflow-x-auto overflow-y-auto flex-1 min-h-0"
-            style={{ overscrollBehavior: "contain", willChange: "transform" }}
+            ref={headerScrollRef}
+            className="overflow-x-hidden flex-shrink-0"
           >
             <table className="min-w-full text-[13px] border-separate border-spacing-0">
-              <thead className="sticky top-0 z-30">
+              <thead>
                 {/* Group header row */}
                 <tr className="text-xs font-semibold text-center">
                   <th colSpan={6} className="px-3 py-1.5 bg-slate-600 text-white border-b border-slate-500 whitespace-nowrap">สินเชื่อ</th>
@@ -844,7 +846,22 @@ export default function Contracts() {
                   })}
                 </tr>
               </thead>
-              {/* tbody ใช้ paddingTop/paddingBottom dummy rows เพื่อให้ column widths sync กับ thead */}
+            </table>
+          </div>
+          {/* ── Body scroll container: scroll ได้ทั้ง x และ y, sync horizontal scroll ไป header ── */}
+          <div
+            ref={scrollRef}
+            className="overflow-x-auto overflow-y-auto flex-1 min-h-0"
+            style={{ overscrollBehavior: "contain", willChange: "transform" }}
+            onScroll={(e) => {
+              // sync horizontal scroll ไปยัง header
+              if (headerScrollRef.current) {
+                headerScrollRef.current.scrollLeft = (e.target as HTMLDivElement).scrollLeft;
+              }
+            }}
+          >
+            <table className="min-w-full text-[13px] border-separate border-spacing-0">
+              {/* tbody ใช้ paddingTop/paddingBottom dummy rows เพื่อให้ column widths sync กับ header */}
               <tbody>
                 {listQuery.isLoading && (
                   <tr>
