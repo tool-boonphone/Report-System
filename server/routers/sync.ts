@@ -130,6 +130,54 @@ export const syncRouter = router({
       return { queued: true, section };
     }),
 
+  /**
+   * testMdm — Diagnostic endpoint: ทดสอบ MDM API connection โดยตรง
+   * คืน status, masked key, และ body preview เพื่อ debug 403 บน Render
+   */
+  testMdm: appProcedure
+    .input(z.object({ section: sectionSchema }))
+    .query(async ({ input }) => {
+      const section = input.section as SectionKey;
+      const rawKey =
+        section === "Boonphone"
+          ? (process.env.MDM_API_KEY_BOONPHONE ?? "")
+          : (process.env.MDM_API_KEY_FASTFONE365 ?? "");
+      const trimmedKey = rawKey.trim();
+      const maskedKey = trimmedKey
+        ? `${trimmedKey.slice(0, 6)}...${trimmedKey.slice(-4)} (len=${trimmedKey.length}, rawLen=${rawKey.length})`
+        : "(empty)";
+      const url = `https://mdm-th.com/api/mdm/devices?pageNum=1&pageSize=1`;
+      try {
+        const res = await fetch(url, {
+          headers: {
+            "X-API-Key": trimmedKey,
+            "Accept": "application/json",
+          },
+          signal: AbortSignal.timeout(15_000),
+        });
+        const body = await res.text();
+        return {
+          section,
+          maskedKey,
+          url,
+          status: res.status,
+          statusText: res.statusText,
+          bodyPreview: body.slice(0, 500),
+          ok: res.ok,
+        };
+      } catch (err: any) {
+        return {
+          section,
+          maskedKey,
+          url,
+          status: 0,
+          statusText: "fetch error",
+          bodyPreview: err?.message ?? String(err),
+          ok: false,
+        };
+      }
+    }),
+
   /** Last successful sync timestamp for a section. */
   lastSyncedAt: appProcedure
     .input(z.object({ section: sectionSchema }))

@@ -167,7 +167,7 @@ function SyncLogPopup({
               <div>
                 <div className="text-xs font-medium text-gray-500 mb-1.5">รายละเอียดแต่ละขั้นตอน</div>
                 <div className="space-y-1">
-                  {entities.map((e) => (
+                  {entities.map((e: any) => (
                     <div
                       key={e.id}
                       className="flex items-center justify-between text-xs py-1 px-2 rounded-lg bg-gray-50"
@@ -219,6 +219,7 @@ function SyncDropdown({
   isMdmPending,
   onResync,
   onSyncMdm,
+  onTestMdm,
   onClearCache,
 }: {
   isRunning: boolean;
@@ -227,6 +228,7 @@ function SyncDropdown({
   isMdmPending: boolean;
   onResync: () => void;
   onSyncMdm: () => void;
+  onTestMdm: () => void;
   onClearCache: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -286,6 +288,18 @@ function SyncDropdown({
             <div className="text-left">
               <div className="font-medium">Sync MDM</div>
               <div className="text-xs text-blue-400">อัปเดตสถานะออนไลน์ (~30วิ)</div>
+            </div>
+          </button>
+
+          {/* Test MDM — diagnostic */}
+          <button
+            onClick={() => { onTestMdm(); setOpen(false); }}
+            className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-purple-600 hover:bg-purple-50 transition-colors"
+          >
+            <Info className="w-4 h-4 shrink-0" />
+            <div className="text-left">
+              <div className="font-medium">Test MDM</div>
+              <div className="text-xs text-purple-400">ตรวจสอบการเชื่อมต่อ MDM API</div>
             </div>
           </button>
 
@@ -468,6 +482,37 @@ export function SyncStatusBar() {
     };
   }, []);
 
+  // MDM diagnostic query — ทดสอบ MDM API connection โดยตรง
+  const [testMdmSection, setTestMdmSection] = useState<SectionKey | null>(null);
+  const testMdmQuery = trpc.sync.testMdm.useQuery(
+    { section: testMdmSection ?? "Boonphone" },
+    {
+      enabled: !!testMdmSection,
+      retry: false,
+      refetchOnWindowFocus: false,
+    },
+  );
+  // แสดงผล testMdm เมื่อได้ข้อมูล
+  useEffect(() => {
+    if (!testMdmSection || testMdmQuery.isLoading) return;
+    if (testMdmQuery.data) {
+      const d = testMdmQuery.data;
+      if (d.ok) {
+        toast.success(`MDM OK [${d.section}] status=${d.status} key=${d.maskedKey}`);
+      } else {
+        toast.error(`MDM FAIL [${d.section}] status=${d.status} key=${d.maskedKey} — ${d.bodyPreview}`);
+      }
+      console.log("[testMdm]", d);
+    } else if (testMdmQuery.error) {
+      toast.error(`testMdm error: ${testMdmQuery.error.message}`);
+    }
+    setTestMdmSection(null);
+  }, [testMdmSection, testMdmQuery.data, testMdmQuery.error, testMdmQuery.isLoading]);
+  const handleTestMdm = useCallback(() => {
+    if (!section) return;
+    setTestMdmSection(section as SectionKey);
+  }, [section]);
+
   // MDM online days sync mutation (fast, ~30s)
   const syncMdmMutation = trpc.sync.syncMdm.useMutation({
     onSuccess: () => {
@@ -604,6 +649,7 @@ export function SyncStatusBar() {
             isMdmPending={syncMdmMutation.isPending}
             onResync={handleResync}
             onSyncMdm={handleSyncMdm}
+            onTestMdm={handleTestMdm}
             onClearCache={handleClearCache}
           />
         ) : null}
