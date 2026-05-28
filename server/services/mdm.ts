@@ -239,6 +239,41 @@ export async function getBatchLastOnlineDays(
 }
 
 /**
+ * ดึง lastOnlineDays + lastTime สำหรับ SN หลายตัวพร้อมกัน (batch)
+ * คืน Map<SN, { days: number | null; lastTime: string | null }>
+ * ใช้ใน syncMdmOnlineDays เพื่อให้ได้ lastTime จริงๆ (ไม่ใช่ CURRENT_TIMESTAMP)
+ *
+ * @param serials - array ของ Serial Number
+ * @param section - Section ที่ต้องการดึงข้อมูล
+ * @returns Map<SN, { days, lastTime }> — เฉพาะ SN ที่เจอใน MDM เท่านั้น (ไม่มี entry สำหรับ SN ที่ไม่เจอ)
+ */
+export async function getBatchMdmData(
+  serials: string[],
+  section: SectionKey,
+): Promise<Map<string, { days: number | null; lastTime: string | null }>> {
+  const result = new Map<string, { days: number | null; lastTime: string | null }>();
+  if (!serials.length) return result;
+
+  try {
+    const snMap = await fetchDeviceListMap(section);
+    for (const serial of serials) {
+      if (!serial || !serial.trim()) continue;
+      const key = serial.trim().toUpperCase();
+      const lastTime = snMap.get(key);
+      // เฉพาะ SN ที่เจอใน MDM เท่านั้น — SN ที่ไม่เจอจะไม่มี entry (ไม่ set null)
+      if (lastTime !== undefined) {
+        result.set(serial, { days: calcDaysSince(lastTime), lastTime });
+      }
+    }
+  } catch (err) {
+    console.error(`[MDM][${section}] getBatchMdmData error:`, err);
+    // error → คืน map ว่าง (ไม่ update อะไรเลย ดีกว่า set null ทั้งหมด)
+  }
+
+  return result;
+}
+
+/**
  * ล้าง device list cache ของ section ที่ระบุ หรือทั้งหมดถ้าไม่ระบุ
  * (ใช้สำหรับ testing หรือ force refresh)
  */

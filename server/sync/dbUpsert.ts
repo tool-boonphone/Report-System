@@ -74,11 +74,10 @@ export async function upsertContracts(rows: AnyRow[], section: SectionKey): Prom
     const merged = mergeBatch(batch);
     const sample = unionKeys(merged);
     const setObj = buildUpsertSet(sample, contracts as any);
-    // Preserve lastOnlineDays / lastOnlineAt that were set by MDM stage.
-    // API does not return these fields, so EXCLUDED value will always be NULL.
-    // Use COALESCE to keep the existing DB value when the incoming value is NULL.
-    setObj.lastOnlineDays = sql.raw(`COALESCE(EXCLUDED."last_online_days", "contracts"."last_online_days")`);
-    setObj.lastOnlineAt = sql.raw(`COALESCE(EXCLUDED."last_online_at", "contracts"."last_online_at")`);
+    // lastOnlineDays / lastOnlineAt ถูก set โดย MDM stage ซึ่งรันหลัง upsertContracts
+    // ดังนั้น upsert contracts จาก API จะ overwrite ด้วย null ก่อน แล้ว MDM stage จะ update ทับอีกครั้ง
+    // ไม่ต้องใช้ COALESCE เพราะ syncMdmOnlineDays ใหม่จะข้ามการ update ถ้า SN ไม่เจอใน MDM
+    // (ป้องกันการ set null เมื่อ Cloudflare block MDM API)
     await db
       .insert(contracts)
       .values(merged as any)

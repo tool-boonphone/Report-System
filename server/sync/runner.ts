@@ -698,8 +698,8 @@ export async function syncMdmOnlineDays(
 ): Promise<number> {
   const { getDb } = await import("../db");
   const { contracts } = await import("../../drizzle/schema");
-  const { eq, and, isNotNull, sql } = await import("drizzle-orm");
-  const { getBatchLastOnlineDays } = await import("../services/mdm");
+  const { eq, and } = await import("drizzle-orm");
+  const { getBatchMdmData } = await import("../services/mdm");
 
   const db = await getDb(section);
   if (!db) return 0;
@@ -717,26 +717,35 @@ export async function syncMdmOnlineDays(
   if (total === 0) return 0;
 
   // ดึง MDM device list ครั้งเดียว แล้ว match ทั้งหมด
+  // getBatchMdmData คืนเฉพาะ SN ที่เจอใน MDM (SN ที่ไม่เจอ = ไม่มี entry ใน map)
   const serials = validRows.map((r: { externalId: string; serialNo: string | null }) => r.serialNo as string);
   onProgress?.(0, total);
-  const snDaysMap = await getBatchLastOnlineDays(serials, section);
+  const snMdmMap = await getBatchMdmData(serials, section);
 
-  // Bulk update ทีละ 100 rows
+  console.log(`[syncMdmOnlineDays] ${section}: MDM returned ${snMdmMap.size} matched devices out of ${total} contracts`);
+
+  // Bulk update ทุก row เสมอ:
+  //   - SN เจอใน MDM → บันทึกค่าใหม่ (days + lastTime จริง)
+  //   - SN ไม่เจอใน MDM → set null (แสดงเป็น – ในตาราง)
+  //   - MDM API fail (ไม่มี device เลย) → set null ทั้งหมด (เหมือนกัน)
   let updated = 0;
   const BATCH = 100;
   for (let i = 0; i < validRows.length; i += BATCH) {
     const batch = validRows.slice(i, i + BATCH);
     await Promise.all(
       batch.map(async (r: { externalId: string; serialNo: string | null }) => {
-        const days = snDaysMap.get(r.serialNo!) ?? null;
+        const mdm = snMdmMap.get(r.serialNo!);
+        // mdm = undefined → SN ไม่เจอใน MDM → set null (แสดง –)
+        // mdm = { days, lastTime } → SN เจอ → บันทึกค่าจริง
         await db
           .update(contracts)
           .set({
-            lastOnlineDays: days,
-            lastOnlineAt: days !== null ? sql`CURRENT_TIMESTAMP` : null,
+            lastOnlineDays: mdm?.days ?? null,
+            // ใช้ lastTime จริงจาก MDM ("YYYY-MM-DD HH:mm:ss") แทน CURRENT_TIMESTAMP
+            lastOnlineAt: mdm?.lastTime ?? null,
           })
           .where(and(eq(contracts.section, section), eq(contracts.externalId, r.externalId)));
-        if (days !== null) updated++;
+        if (mdm?.days !== null && mdm?.days !== undefined) updated++;
       })
     );
     onProgress?.(Math.min(i + BATCH, total), total);
