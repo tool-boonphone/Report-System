@@ -99,7 +99,13 @@ async function fetchDeviceListMap(
     const res = await fetch(url, {
       headers: {
         "X-API-Key": apiKey,
-        "Accept": "application/json",
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "th-TH,th;q=0.9,en;q=0.8",
+        // User-Agent เหมือน browser จริง — จำเป็นเพื่อผ่าน Cloudflare Bot Protection บน mdm-th.com
+        // Cloudflare บล็อค datacenter IP (Render) ที่ไม่มี User-Agent เหมือน browser
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Referer": "https://mdm-th.com/",
+        "Origin": "https://mdm-th.com",
       },
       signal: AbortSignal.timeout(30_000), // timeout 30 วินาที
     });
