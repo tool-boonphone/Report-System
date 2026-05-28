@@ -565,6 +565,7 @@ export default function Contracts() {
       )}
       {/* Main content */}
       {!listQuery.isLoading && !listQuery.isError && (
+      <div className="flex flex-col h-full">
       <div className="w-full px-3 md:px-5 py-3 flex flex-col flex-1 min-h-0">
         {/* Toolbar: search + export */}
         <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-3 mb-3">
@@ -939,6 +940,7 @@ export default function Contracts() {
             </table>
           </div>
         </div>
+      </div>
       </div>
       )}
     </AppShell>
