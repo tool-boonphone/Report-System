@@ -725,8 +725,8 @@ export async function syncMdmOnlineDays(
   console.log(`[syncMdmOnlineDays] ${section}: MDM returned ${snMdmMap.size} matched devices out of ${total} contracts`);
 
   // Bulk update ทุก row เสมอ:
-  //   - SN เจอใน MDM → บันทึกค่าใหม่ (days + lastTime + deviceLock จริง)
-  //   - SN ไม่เจอใน MDM → set null ทั้งหมด (แสดงเป็น – ในตาราง)
+  //   - SN เจอใน MDM → บันทึกค่าใหม่ (days + lastTime จริง)
+  //   - SN ไม่เจอใน MDM → set null (แสดงเป็น – ในตาราง)
   //   - MDM API fail (ไม่มี device เลย) → set null ทั้งหมด (เหมือนกัน)
   let updated = 0;
   const BATCH = 100;
@@ -735,16 +735,14 @@ export async function syncMdmOnlineDays(
     await Promise.all(
       batch.map(async (r: { externalId: string; serialNo: string | null }) => {
         const mdm = snMdmMap.get(r.serialNo!);
-        // mdm = undefined → SN ไม่เจอใน MDM → set null ทั้งหมด (แสดง –)
-        // mdm = { days, lastTime, deviceLock } → SN เจอ → บันทึกค่าจริง
+        // mdm = undefined → SN ไม่เจอใน MDM → set null (แสดง –)
+        // mdm = { days, lastTime } → SN เจอ → บันทึกค่าจริง
         await db
           .update(contracts)
           .set({
             lastOnlineDays: mdm?.days ?? null,
             // ใช้ lastTime จริงจาก MDM ("YYYY-MM-DD HH:mm:ss") แทน CURRENT_TIMESTAMP
             lastOnlineAt: mdm?.lastTime ?? null,
-            // deviceLock: true=ล็อค, false=ปลดล็อค, null=ไม่พบใน MDM
-            deviceLock: mdm !== undefined ? (mdm.deviceLock ?? null) : null,
           })
           .where(and(eq(contracts.section, section), eq(contracts.externalId, r.externalId)));
         if (mdm?.days !== null && mdm?.days !== undefined) updated++;

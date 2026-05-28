@@ -17,8 +17,6 @@ import {
   ChevronUp,
   ChevronsUpDown,
   Download,
-  Lock,
-  LockOpen,
   Search,
   X,
 } from "lucide-react";
@@ -137,7 +135,6 @@ type Row = {
   phone: string | null;
   serialNo: string | null;
   lastOnlineDays: number | null;
-  deviceLock: boolean | null;
   model: string | null;
   device: string | null;
   sellPrice: number | null;
@@ -980,45 +977,22 @@ export default function SuspectedBadDebt() {
                               {r.debtStatus}
                             </span>
                           </td>
-                          {/* Online column: วันที่ออนไลน์ล่าสุดจาก MDM + ไอคอนกุญแจ */}
+                          {/* Online column: วันที่ออนไลน์ล่าสุดจาก MDM */}
                           <td className="px-3 py-1.5 text-center whitespace-nowrap">
                             {(() => {
                               const days = r.lastOnlineDays;
-                              // ไอคอนกุญแจ: true=ล็อค (สีแดง), false=ปลดล็อค (สีเขียว), null=ไม่แสดง
-                              const lockIcon = r.deviceLock === true ? (
-                                <Lock className="inline-block w-3 h-3 text-red-500 ml-1 flex-shrink-0" />
-                              ) : r.deviceLock === false ? (
-                                <LockOpen className="inline-block w-3 h-3 text-green-500 ml-1 flex-shrink-0" />
-                              ) : null;
-                              if (days == null) return (
-                                <span className="inline-flex items-center gap-0.5">
-                                  <span className="text-gray-400 text-xs">–</span>
-                                  {lockIcon}
-                                </span>
-                              );
+                              if (days == null) return <span className="text-gray-400 text-xs">–</span>;
                               if (days === 0) return (
-                                <span className="inline-flex items-center gap-0.5">
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-green-100 text-green-700">• วันนี้</span>
-                                  {lockIcon}
-                                </span>
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-green-100 text-green-700">• วันนี้</span>
                               );
                               if (days <= 3) return (
-                                <span className="inline-flex items-center gap-0.5">
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-yellow-100 text-yellow-700">{days} วัน</span>
-                                  {lockIcon}
-                                </span>
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-yellow-100 text-yellow-700">{days} วัน</span>
                               );
                               if (days <= 7) return (
-                                <span className="inline-flex items-center gap-0.5">
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-orange-100 text-orange-700">{days} วัน</span>
-                                  {lockIcon}
-                                </span>
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-orange-100 text-orange-700">{days} วัน</span>
                               );
                               return (
-                                <span className="inline-flex items-center gap-0.5">
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-100 text-red-700">{days} วัน</span>
-                                  {lockIcon}
-                                </span>
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-100 text-red-700">{days} วัน</span>
                               );
                             })()}
                           </td>

@@ -1,14 +1,14 @@
 /**
- * MDM Service — Phase 140 (v4)
+ * MDM Service — Phase 140 (v3)
  *
- * ดึงข้อมูล last online และ deviceLock จาก MDM API (PJ-Soft / mdm-th.com)
+ * ดึงข้อมูล last online จาก MDM API (PJ-Soft / mdm-th.com)
  * โดยใช้ Serial Number (deviceId ใน MDM = serial_no ใน contracts table) เป็น key
  *
  * Design:
  *   - แต่ละ section (Boonphone / Fastfone365) ใช้ API Key แยกกัน
  *   - ใช้ in-memory cache แยกต่างหากสำหรับแต่ละ section (TTL 5 นาที)
  *   - เรียก MDM API เพียงครั้งเดียวต่อ section ต่อ 5 นาที แล้ว cache device list
- *   - getBatchMdmData รับ serials + section แล้วคืน Map<SN, { days, lastTime, deviceLock }>
+ *   - getBatchLastOnlineDays รับ serials + section แล้วคืน Map<SN, days | null>
  *
  * API Keys:
  *   - Boonphone   : MDM_API_KEY_BOONPHONE  (env var)
@@ -16,12 +16,11 @@
  *
  * Auth: X-API-Key: <API_KEY>
  * Endpoint: GET /api/mdm/devices?pageNum=1&pageSize=1000
- * Response: { total: number, rows: [{ deviceId, lastTime, deviceLock, ... }] }
+ * Response: { total: number, rows: [{ deviceId, lastTime, contract, imei, ... }] }
  *
  * MDM field mapping:
- *   deviceId   = Serial Number (ตรงกับ serial_no ใน contracts table)
- *   lastTime   = เวลาออนไลน์ล่าสุด "YYYY-MM-DD HH:mm:ss"
- *   deviceLock = สถานะล็อคเครื่อง: 1 = ล็อค, 0 = ปลดล็อค (number หรือ string)
+ *   deviceId  = Serial Number (ตรงกับ serial_no ใน contracts table)
+ *   lastTime  = เวลาออนไลน์ล่าสุด "YYYY-MM-DD HH:mm:ss"
  */
 
 import type { SectionKey } from "../../shared/const";
@@ -52,37 +51,27 @@ function getApiKey(section: SectionKey): string {
 }
 
 /**
- * ข้อมูลที่เก็บต่อ device ใน cache
- * lastTime   = เวลาออนไลน์ล่าสุด (string)
- * deviceLock = สถานะล็อคเครื่อง (true=ล็อค, false=ปลดล็อค)
- */
-type DeviceInfo = {
-  lastTime: string;
-  deviceLock: boolean;
-};
-
-/**
  * Cache สำหรับ device list แยกตาม section
- * Map<serialNo (uppercase), DeviceInfo>
+ * Map<serialNo (uppercase), lastTime string>
  */
 const deviceListCacheMap = new Map<
   SectionKey,
-  { data: Map<string, DeviceInfo>; fetchedAt: number }
+  { data: Map<string, string>; fetchedAt: number }
 >();
 
 /**
- * ดึง device list ทั้งหมดจาก MDM API แล้ว map serialNo → DeviceInfo
+ * ดึง device list ทั้งหมดจาก MDM API แล้ว map serialNo → lastTime
  * ใช้ in-memory cache 5 นาที แยกต่างหากสำหรับแต่ละ section
  *
  * MDM API:
  *   GET /api/mdm/devices?pageNum=1&pageSize=1000
  *   X-API-Key: <API_KEY>
- *   Response: { total: number, rows: [{ deviceId, lastTime, deviceLock, ... }] }
+ *   Response: { total: number, rows: [{ deviceId, lastTime, ... }] }
  *   deviceId = Serial Number ของอุปกรณ์
  */
 async function fetchDeviceListMap(
   section: SectionKey,
-): Promise<Map<string, DeviceInfo>> {
+): Promise<Map<string, string>> {
   const now = Date.now();
   const cached = deviceListCacheMap.get(section);
 
@@ -99,8 +88,8 @@ async function fetchDeviceListMap(
 
   // ดึงข้อมูลแบบ pagination จนครบทุก device
   const PAGE_SIZE = 1000;
-  // Map<serialNo (uppercase), DeviceInfo>
-  const snMap = new Map<string, DeviceInfo>();
+  // Map<serialNo (uppercase), lastTime>
+  const snMap = new Map<string, string>();
   let pageNum = 1;
   let total = 0;
   let fetched = 0;
@@ -133,7 +122,6 @@ async function fetchDeviceListMap(
     const devices: Array<{
       deviceId?: string;
       lastTime?: string;
-      deviceLock?: number | string | boolean;
     }> = Array.isArray(json)
       ? json
       : (json?.rows ?? json?.data ?? json?.devices ?? []);
@@ -146,14 +134,7 @@ async function fetchDeviceListMap(
     for (const d of devices) {
       // deviceId ใน MDM = Serial Number ของอุปกรณ์ (ตรงกับ serial_no ใน contracts table)
       if (d.deviceId && d.lastTime) {
-        // deviceLock: MDM ส่งมาเป็น number 1/0 หรือ string "1"/"0" หรือ boolean
-        // normalize เป็น boolean: true = ล็อค, false = ปลดล็อค
-        const lockVal = d.deviceLock;
-        const isLocked = lockVal === 1 || lockVal === "1" || lockVal === true;
-        snMap.set(d.deviceId.trim().toUpperCase(), {
-          lastTime: d.lastTime,
-          deviceLock: isLocked,
-        });
+        snMap.set(d.deviceId.trim().toUpperCase(), d.lastTime);
       }
     }
 
@@ -210,9 +191,9 @@ export async function getDeviceLastOnlineDays(
   if (!serial || !serial.trim()) return null;
   try {
     const snMap = await fetchDeviceListMap(section);
-    const info = snMap.get(serial.trim().toUpperCase());
-    if (!info) return null;
-    return calcDaysSince(info.lastTime);
+    const lastTime = snMap.get(serial.trim().toUpperCase());
+    if (!lastTime) return null;
+    return calcDaysSince(lastTime);
   } catch (err) {
     console.error(`[MDM][${section}] getDeviceLastOnlineDays error:`, err);
     return null;
@@ -243,8 +224,8 @@ export async function getBatchLastOnlineDays(
       }
       // normalize เป็น uppercase เพื่อ case-insensitive match
       const key = serial.trim().toUpperCase();
-      const info = snMap.get(key);
-      result.set(serial, info ? calcDaysSince(info.lastTime) : null);
+      const lastTime = snMap.get(key);
+      result.set(serial, lastTime ? calcDaysSince(lastTime) : null);
     }
   } catch (err) {
     console.error(`[MDM][${section}] getBatchLastOnlineDays error:`, err);
@@ -258,19 +239,19 @@ export async function getBatchLastOnlineDays(
 }
 
 /**
- * ดึง lastOnlineDays + lastTime + deviceLock สำหรับ SN หลายตัวพร้อมกัน (batch)
- * คืน Map<SN, { days: number | null; lastTime: string | null; deviceLock: boolean | null }>
- * ใช้ใน syncMdmOnlineDays เพื่อให้ได้ lastTime และ deviceLock จริงๆ
+ * ดึง lastOnlineDays + lastTime สำหรับ SN หลายตัวพร้อมกัน (batch)
+ * คืน Map<SN, { days: number | null; lastTime: string | null }>
+ * ใช้ใน syncMdmOnlineDays เพื่อให้ได้ lastTime จริงๆ (ไม่ใช่ CURRENT_TIMESTAMP)
  *
  * @param serials - array ของ Serial Number
  * @param section - Section ที่ต้องการดึงข้อมูล
- * @returns Map<SN, { days, lastTime, deviceLock }> — เฉพาะ SN ที่เจอใน MDM เท่านั้น (ไม่มี entry สำหรับ SN ที่ไม่เจอ)
+ * @returns Map<SN, { days, lastTime }> — เฉพาะ SN ที่เจอใน MDM เท่านั้น (ไม่มี entry สำหรับ SN ที่ไม่เจอ)
  */
 export async function getBatchMdmData(
   serials: string[],
   section: SectionKey,
-): Promise<Map<string, { days: number | null; lastTime: string | null; deviceLock: boolean | null }>> {
-  const result = new Map<string, { days: number | null; lastTime: string | null; deviceLock: boolean | null }>();
+): Promise<Map<string, { days: number | null; lastTime: string | null }>> {
+  const result = new Map<string, { days: number | null; lastTime: string | null }>();
   if (!serials.length) return result;
 
   try {
@@ -278,14 +259,10 @@ export async function getBatchMdmData(
     for (const serial of serials) {
       if (!serial || !serial.trim()) continue;
       const key = serial.trim().toUpperCase();
-      const info = snMap.get(key);
+      const lastTime = snMap.get(key);
       // เฉพาะ SN ที่เจอใน MDM เท่านั้น — SN ที่ไม่เจอจะไม่มี entry (ไม่ set null)
-      if (info !== undefined) {
-        result.set(serial, {
-          days: calcDaysSince(info.lastTime),
-          lastTime: info.lastTime,
-          deviceLock: info.deviceLock,
-        });
+      if (lastTime !== undefined) {
+        result.set(serial, { days: calcDaysSince(lastTime), lastTime });
       }
     }
   } catch (err) {
