@@ -513,17 +513,98 @@ export function SyncStatusBar() {
     setTestMdmSection(section as SectionKey);
   }, [section]);
 
-  // MDM online days sync mutation (fast, ~30s)
-  const syncMdmMutation = trpc.sync.syncMdm.useMutation({
-    onSuccess: () => {
-      toast.info("กำลังดึงข้อมูล MDM Online Days... รอสักครู่");
+  // MDM online days sync — client fetches MDM directly (bypasses Cloudflare IP block on Render)
+  const getMdmApiKeyQuery = trpc.sync.getMdmApiKey.useQuery(
+    { section: (section ?? "Boonphone") as SectionKey },
+    { enabled: false, retry: false, refetchOnWindowFocus: false }
+  );
+  const saveMdmDataMutation = trpc.sync.saveMdmData.useMutation({
+    onSuccess: (data) => {
+      toast.success(`อัปเดต MDM Online Days เรียบร้อย! (${data.updated}/${data.total} สัญญา)`);
     },
-    onError: (err) => toast.error(`MDM Sync ผิดพลาด: ${err.message}`),
+    onError: (err) => toast.error(`MDM Save ผิดพลาด: ${err.message}`),
   });
-  const handleSyncMdm = useCallback(() => {
-    if (!section || syncMdmMutation.isPending) return;
-    syncMdmMutation.mutate({ section: section as SectionKey });
-  }, [section, syncMdmMutation]);
+  const [isMdmSyncing, setIsMdmSyncing] = useState(false);
+
+  /**
+   * handleSyncMdm — Client-side MDM sync
+   * 1. ขอ API key จาก server
+   * 2. Client fetch MDM API โดยตรง (ผ่าน residential IP ไม่ถูก Cloudflare block)
+   * 3. คำนวณ lastOnlineDays จาก lastTime
+   * 4. ส่ง device data กลับ server เพื่อบันทึกลง DB
+   */
+  const handleSyncMdm = useCallback(async () => {
+    if (!section || isMdmSyncing || saveMdmDataMutation.isPending) return;
+    setIsMdmSyncing(true);
+    const toastId = toast.loading("กำลังดึงข้อมูล MDM...");
+    try {
+      // Step 1: ขอ API key จาก server
+      const keyResult = await getMdmApiKeyQuery.refetch();
+      const apiKey = keyResult.data?.apiKey;
+      if (!apiKey) throw new Error("ไม่พบ MDM API Key");
+
+      // Step 2: Fetch MDM devices ทั้งหมด (pagination)
+      const PAGE_SIZE = 1000;
+      const allDevices: Array<{ deviceId: string; lastTime: string }> = [];
+      let pageNum = 1;
+      let total = 0;
+      let fetched = 0;
+      toast.loading("กำลังดึงข้อมูล MDM (0 devices)...", { id: toastId });
+      do {
+        const url = `https://mdm-th.com/api/mdm/devices?pageNum=${pageNum}&pageSize=${PAGE_SIZE}`;
+        const res = await fetch(url, {
+          headers: {
+            "X-API-Key": apiKey,
+            "Accept": "application/json, text/plain, */*",
+          },
+        });
+        if (!res.ok) {
+          const body = await res.text();
+          throw new Error(`MDM API ตอบกลับ ${res.status}: ${body.slice(0, 200)}`);
+        }
+        const json = await res.json();
+        const devices: Array<{ deviceId?: string; lastTime?: string }> =
+          Array.isArray(json) ? json : (json?.rows ?? json?.data ?? json?.devices ?? []);
+        if (pageNum === 1) total = json?.total ?? devices.length;
+        for (const d of devices) {
+          if (d.deviceId && d.lastTime) allDevices.push({ deviceId: d.deviceId, lastTime: d.lastTime });
+        }
+        fetched += devices.length;
+        pageNum++;
+        toast.loading(`กำลังดึงข้อมูล MDM (${fetched}/${total} devices)...`, { id: toastId });
+      } while (fetched < total && total > 0);
+
+      // Step 3: คำนวณ lastOnlineDays จาก lastTime
+      const today = new Date();
+      const todayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      const calcDays = (lastTime: string): number | null => {
+        const datePart = lastTime.split(" ")[0];
+        if (!datePart || !/^\d{4}-\d{2}-\d{2}$/.test(datePart)) return null;
+        const lastDate = new Date(`${datePart}T00:00:00`);
+        if (isNaN(lastDate.getTime())) return null;
+        const diffMs = todayDate.getTime() - lastDate.getTime();
+        return Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
+      };
+
+      const devicePayload = allDevices.map((d) => ({
+        serialNo: d.deviceId,
+        lastOnlineDays: calcDays(d.lastTime),
+        lastOnlineAt: d.lastTime,
+      }));
+
+      // Step 4: ส่งผลกลับ server เพื่อบันทึกลง DB
+      toast.loading(`บันทึกข้อมูล MDM ${devicePayload.length} devices...`, { id: toastId });
+      await saveMdmDataMutation.mutateAsync({
+        section: section as SectionKey,
+        devices: devicePayload,
+      });
+      toast.dismiss(toastId);
+    } catch (err: any) {
+      toast.error(`MDM Sync ผิดพลาด: ${err?.message ?? String(err)}`, { id: toastId });
+    } finally {
+      setIsMdmSyncing(false);
+    }
+  }, [section, isMdmSyncing, saveMdmDataMutation, getMdmApiKeyQuery]);
 
   // Force-clear stuck sync mutation
   const clearStuck = trpc.sync.clearStuck.useMutation({
@@ -646,7 +727,7 @@ export function SyncStatusBar() {
             isRunning={isRunning}
             isClearing={isClearing}
             isTriggerPending={isTriggerPending}
-            isMdmPending={syncMdmMutation.isPending}
+            isMdmPending={isMdmSyncing || saveMdmDataMutation.isPending}
             onResync={handleResync}
             onSyncMdm={handleSyncMdm}
             onTestMdm={handleTestMdm}

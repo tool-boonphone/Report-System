@@ -9,8 +9,8 @@ import {
   getDbSyncStatus,
   clearStuckSyncLogs,
 } from "../sync/syncLog";
-import { desc, eq, and, gt, lt } from "drizzle-orm";
-import { syncLogs } from "../../drizzle/schema";
+import { desc, eq, and, gt, lt, sql } from "drizzle-orm";
+import { syncLogs, contracts } from "../../drizzle/schema";
 import { getDb } from "../db";
 import { sectionSchema, type SectionKey } from "../../shared/const";
 
@@ -182,6 +182,105 @@ export const syncRouter = router({
       }
     }),
 
+  /**
+   * getMdmApiKey — ส่ง MDM API key ไปยัง client เพื่อให้ client fetch MDM โดยตรง
+   * จำเป็นเพราะ Cloudflare block IP ของ Render server (datacenter IP)
+   * แต่ไม่ block IP ของ browser (residential/mobile IP)
+   * Requires: login + sync permission
+   */
+  getMdmApiKey: appProcedure
+    .input(z.object({ section: sectionSchema }))
+    .query(async ({ input, ctx }) => {
+      // Permission check — เฉพาะ user ที่มีสิทธิ์ sync เท่านั้น
+      const { checkPermission } = await import("../authDb");
+      if (ctx.appUser) {
+        const allowed = checkPermission(ctx.appUser, "sync_api", "sync");
+        if (!allowed) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "ไม่มีสิทธิ์ใช้งาน Sync" });
+        }
+      }
+      const section = input.section as SectionKey;
+      const apiKey =
+        section === "Boonphone"
+          ? (process.env.MDM_API_KEY_BOONPHONE ?? "isvEwiE1cRWyEy5bFWEVX6QSmQHv5a4PMvQ6NlV2mmFYSn46df6jn7chbSVJCBPq").trim()
+          : (process.env.MDM_API_KEY_FASTFONE365 ?? "u66XGmwOYbAWj2xBJaP5Z9hs0iuijligqBvx2YtHeIAIDwx87wCoojJbwpKwqBeW").trim();
+      return { section, apiKey };
+    }),
+
+  /**
+   * saveMdmData — รับ MDM device data จาก client แล้ว bulk update last_online_days ใน contracts
+   * Client fetch MDM โดยตรง (ผ่าน residential IP ไม่ถูก Cloudflare block)
+   * แล้วส่ง { serialNo, lastOnlineDays, lastOnlineAt }[] มาให้ server บันทึกลง DB
+   * Requires: login + sync permission
+   */
+  saveMdmData: appProcedure
+    .input(
+      z.object({
+        section: sectionSchema,
+        devices: z.array(
+          z.object({
+            serialNo: z.string(),
+            lastOnlineDays: z.number().int().nullable(),
+            lastOnlineAt: z.string().nullable(), // "YYYY-MM-DD HH:mm:ss"
+          })
+        ).max(10000), // จำกัดไม่เกิน 10,000 devices ต่อ request
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      // Permission check
+      const { checkPermission } = await import("../authDb");
+      if (ctx.appUser) {
+        const allowed = checkPermission(ctx.appUser, "sync_api", "sync");
+        if (!allowed) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "ไม่มีสิทธิ์ใช้งาน Sync" });
+        }
+      }
+      const section = input.section as SectionKey;
+      const db = await getDb(section);
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB not available" });
+
+      // สร้าง Map<serialNo (uppercase), { days, lastOnlineAt }> จาก input
+      const snMap = new Map<string, { days: number | null; lastOnlineAt: string | null }>();
+      for (const d of input.devices) {
+        if (d.serialNo) snMap.set(d.serialNo.trim().toUpperCase(), { days: d.lastOnlineDays, lastOnlineAt: d.lastOnlineAt });
+      }
+
+      // ดึง externalId + serialNo ทั้งหมดของ section
+      const rows = await db
+        .select({ externalId: contracts.externalId, serialNo: contracts.serialNo })
+        .from(contracts)
+        .where(eq(contracts.section, section));
+
+      const validRows = rows.filter((r: { externalId: string; serialNo: string | null }) => r.serialNo);
+      console.log(`[saveMdmData] ${section}: ${validRows.length} contracts with serial_no, ${snMap.size} MDM devices`);
+
+      // Bulk update ทีละ 100 rows
+      let updated = 0;
+      const BATCH = 100;
+      for (let i = 0; i < validRows.length; i += BATCH) {
+        const batch = validRows.slice(i, i + BATCH);
+        await Promise.all(
+          batch.map(async (r: { externalId: string; serialNo: string | null }) => {
+            const key = r.serialNo!.trim().toUpperCase();
+            const mdm = snMap.get(key);
+            const days = mdm?.days ?? null;
+            const lastOnlineAt = mdm?.lastOnlineAt ?? null;
+            await db
+              .update(contracts)
+              .set({
+                lastOnlineDays: days,
+                lastOnlineAt: lastOnlineAt,
+              })
+              .where(and(eq(contracts.section, section), eq(contracts.externalId, r.externalId)));
+            if (days !== null) updated++;
+          })
+        );
+      }
+
+      console.log(`[saveMdmData] ${section}: updated ${updated}/${validRows.length} contracts`);
+      return { section, updated, total: validRows.length };
+    }),
+
   /** Last successful sync timestamp for a section. */
   lastSyncedAt: appProcedure
     .input(z.object({ section: sectionSchema }))
@@ -278,7 +377,7 @@ export const syncRouter = router({
 
       return {
         overall,
-        entities: entityRows.filter((r) => r.entity !== "all"),
+        entities: entityRows.filter((r: typeof entityRows[number]) => r.entity !== "all"),
       };
     }),
 
