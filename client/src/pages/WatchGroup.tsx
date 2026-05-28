@@ -549,16 +549,17 @@ export default function WatchGroup() {
       });
     }
 
-    // filter ออนไลน์ล่าสุด
+    // filter ออนไลน์ล่าสุด (5 bucket)
     if (onlineFilter.size > 0) {
       rows = rows.filter((r) => {
         const days = r.lastOnlineDays;
         if (days == null) return false;
         let bucket: string;
-        if (days === 0) bucket = "today";
-        else if (days <= 3) bucket = "1-3";
-        else if (days <= 7) bucket = "4-7";
-        else bucket = "over7";
+        if (days === 0)       bucket = "today";
+        else if (days <= 3)   bucket = "1-3";
+        else if (days <= 7)   bucket = "4-7";
+        else if (days <= 15)  bucket = "8-15";
+        else                  bucket = "over15";
         return onlineFilter.has(bucket);
       });
     }
@@ -911,36 +912,21 @@ export default function WatchGroup() {
                   formatOption={(v) => v === "none" ? "ไม่ชำระเลย" : "ชำระบางส่วน"}
                 />
 
-                {/* ออนไลน์ล่าสุด multi-select */}
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs text-gray-500 whitespace-nowrap">ออนไลน์:</span>
-                  {([
-                    { value: "today", label: "• วันนี้", activeClass: "bg-green-100 text-green-700 border-green-300" },
-                    { value: "1-3",   label: "1–3 วัน", activeClass: "bg-yellow-100 text-yellow-700 border-yellow-300" },
-                    { value: "4-7",   label: "4–7 วัน", activeClass: "bg-orange-100 text-orange-700 border-orange-300" },
-                    { value: "over7", label: ">7 วัน",  activeClass: "bg-red-100 text-red-700 border-red-300" },
-                  ] as { value: string; label: string; activeClass: string }[]).map((opt) => {
-                    const active = onlineFilter.has(opt.value);
-                    return (
-                      <button
-                        key={opt.value}
-                        type="button"
-                        onClick={() => {
-                          const next = new Set(onlineFilter);
-                          if (active) next.delete(opt.value); else next.add(opt.value);
-                          setOnlineFilter(next);
-                        }}
-                        className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${
-                          active
-                            ? opt.activeClass
-                            : "bg-gray-50 text-gray-500 border-gray-200 hover:border-gray-300"
-                        }`}
-                      >
-                        {opt.label}
-                      </button>
-                    );
-                  })}
-                </div>
+                {/* ออนไลน์ล่าสุด — Multi-Select (5 ตัวเลือก) */}
+                <MultiSelectFilter
+                  label="ออนไลน์ล่าสุด"
+                  selected={onlineFilter}
+                  onChange={setOnlineFilter}
+                  options={["today", "1-3", "4-7", "8-15", "over15"]}
+                  placeholder="ออนไลน์: ทั้งหมด"
+                  formatOption={(v) => {
+                    if (v === "today")  return "• วันนี้";
+                    if (v === "1-3")    return "1–3 วันที่แล้ว";
+                    if (v === "4-7")    return "4–7 วันที่แล้ว";
+                    if (v === "8-15")   return "8–15 วันที่แล้ว";
+                    return "> 15 วันที่แล้ว";
+                  }}
+                />
 
                 {/* ล้างตัวกรอง */}
                 {hasFilter && (
