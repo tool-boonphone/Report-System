@@ -536,7 +536,7 @@ export default function Contracts() {
 
   // ----- Render -----
   return (
-    <AppShell>
+    <AppShell fullHeight>
       {/* Loading skeleton */}
       {listQuery.isLoading && (
         <div className="flex flex-col gap-4 p-6 animate-pulse">
@@ -565,7 +565,7 @@ export default function Contracts() {
       )}
       {/* Main content */}
       {!listQuery.isLoading && !listQuery.isError && (
-      <div className="w-full px-3 md:px-5 py-3">
+      <div className="w-full px-3 md:px-5 py-3 flex flex-col flex-1 min-h-0">
         {/* Toolbar: search + export */}
         <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-3 mb-3">
           <div className="relative flex-1 min-w-0">
@@ -793,11 +793,11 @@ export default function Contracts() {
         </div>
 
         {/* Virtualized table — fills remaining viewport height */}
-        <div className="relative bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+        <div className="relative bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm flex flex-col flex-1 min-h-0">
           <div
             ref={scrollRef}
-            className="overflow-x-auto overflow-y-auto"
-            style={{ height: "calc(100vh - 230px)", overscrollBehavior: "contain", willChange: "transform" }}
+            className="overflow-x-auto overflow-y-auto flex-1 min-h-0"
+            style={{ overscrollBehavior: "contain", willChange: "transform" }}
           >
             <table className="min-w-full text-[13px]">
               <thead className="sticky top-0 z-30">
