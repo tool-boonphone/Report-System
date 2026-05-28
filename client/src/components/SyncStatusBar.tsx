@@ -482,42 +482,44 @@ export function SyncStatusBar() {
     };
   }, []);
 
-  // MDM diagnostic query — ทดสอบ MDM API connection โดยตรง
-  const [testMdmSection, setTestMdmSection] = useState<SectionKey | null>(null);
-  const testMdmQuery = trpc.sync.testMdm.useQuery(
-    { section: testMdmSection ?? "Boonphone" },
-    {
-      enabled: !!testMdmSection,
-      retry: false,
-      refetchOnWindowFocus: false,
-    },
-  );
-  // แสดงผล testMdm เมื่อได้ข้อมูล
-  useEffect(() => {
-    if (!testMdmSection || testMdmQuery.isLoading) return;
-    if (testMdmQuery.data) {
-      const d = testMdmQuery.data;
-      if (d.ok) {
-        toast.success(`MDM OK [${d.section}] status=${d.status} key=${d.maskedKey}`);
-      } else {
-        toast.error(`MDM FAIL [${d.section}] status=${d.status} key=${d.maskedKey} — ${d.bodyPreview}`);
-      }
-      console.log("[testMdm]", d);
-    } else if (testMdmQuery.error) {
-      toast.error(`testMdm error: ${testMdmQuery.error.message}`);
-    }
-    setTestMdmSection(null);
-  }, [testMdmSection, testMdmQuery.data, testMdmQuery.error, testMdmQuery.isLoading]);
-  const handleTestMdm = useCallback(() => {
-    if (!section) return;
-    setTestMdmSection(section as SectionKey);
-  }, [section]);
-
   // MDM online days sync — client fetches MDM directly (bypasses Cloudflare IP block on Render)
   const getMdmApiKeyQuery = trpc.sync.getMdmApiKey.useQuery(
     { section: (section ?? "Boonphone") as SectionKey },
     { enabled: false, retry: false, refetchOnWindowFocus: false }
   );
+
+  /**
+   * handleTestMdm — ทดสอบ MDM API จาก client browser โดยตรง
+   * (ไม่ผ่าน Render server เพื่อหลีกเลี่ยง Cloudflare IP block)
+   */
+  const handleTestMdm = useCallback(async () => {
+    if (!section) return;
+    const toastId = toast.loading("กำลังทดสอบ MDM API จาก browser...");
+    try {
+      // ขอ API key จาก server
+      const keyResult = await getMdmApiKeyQuery.refetch();
+      const apiKey = keyResult.data?.apiKey;
+      if (!apiKey) throw new Error("ไม่พบ MDM API Key");
+      const maskedKey = `${apiKey.slice(0, 6)}...${apiKey.slice(-4)} (len=${apiKey.length})`;
+      // ทดสอบ fetch MDM API โดยตรงจาก browser (ไม่ผ่าน Render server ที่ถูก Cloudflare block)
+      const url = `https://mdm-th.com/api/mdm/devices?pageNum=1&pageSize=1`;
+      const res = await fetch(url, {
+        headers: {
+          "X-API-Key": apiKey,
+          "Accept": "application/json, text/plain, */*",
+        },
+      });
+      const body = await res.text();
+      if (res.ok) {
+        toast.success(`MDM OK [${section}] status=${res.status} key=${maskedKey}`, { id: toastId });
+      } else {
+        toast.error(`MDM FAIL [${section}] status=${res.status} key=${maskedKey} — ${body.slice(0, 200)}`, { id: toastId });
+      }
+    } catch (err: any) {
+      toast.error(`MDM Error: ${err?.message ?? String(err)}`, { id: toastId });
+    }
+  }, [section, getMdmApiKeyQuery]);
+
   const saveMdmDataMutation = trpc.sync.saveMdmData.useMutation({
     onSuccess: (data) => {
       toast.success(`อัปเดต MDM Online Days เรียบร้อย! (${data.updated}/${data.total} สัญญา)`);
