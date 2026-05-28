@@ -151,7 +151,11 @@ export const syncRouter = router({
         const res = await fetch(url, {
           headers: {
             "X-API-Key": trimmedKey,
-            "Accept": "application/json",
+            "Accept": "application/json, text/plain, */*",
+            "Accept-Language": "th-TH,th;q=0.9,en;q=0.8",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "Referer": "https://mdm-th.com/",
+            "Origin": "https://mdm-th.com",
           },
           signal: AbortSignal.timeout(15_000),
         });
