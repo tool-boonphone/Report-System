@@ -395,8 +395,10 @@ export default function WatchGroup() {
   const [partnerFilter, setPartnerFilter] = useState<Set<string>>(new Set());
   // ช่วงผ่อนผัน N วัน (default 15)
   const [gracePeriod, setGracePeriod] = useState<string>("15");
-  // ค้างชำระ: "" = ทั้งหมด, "0" = 0 งวด, "1" = 1 งวด
-  const [arrearsFilter, setArrearsFilter] = useState<"" | "0" | "1">("");
+  // ค้างชำระ multi-select: Set ของ "0" | "1" (ว่าง = ทั้งหมด)
+  const [arrearsFilter, setArrearsFilter] = useState<Set<string>>(new Set());
+  // ยอดชำระ: "" = ทั้งหมด, "none" = ไม่ชำระเลย, "partial" = ชำระบางส่วน
+  const [paymentFilter, setPaymentFilter] = useState<Set<string>>(new Set());
   // ออนไลน์ล่าสุด multi-select
   const [onlineFilter, setOnlineFilter] = useState<Set<string>>(new Set());
 
@@ -413,7 +415,11 @@ export default function WatchGroup() {
     return {
       section,
       gracePeriod: gracePeriod !== "" && !isNaN(Number(gracePeriod)) ? Number(gracePeriod) : 15,
-      arrearsFilter: arrearsFilter !== "" ? (arrearsFilter as "0" | "1") : undefined,
+      // ส่ง arrearsFilter เป็น scalar เฉพาะเมื่อเลือกค่าเดียว (server รับ "0"|"1"|undefined)
+      arrearsFilter:
+        arrearsFilter.size === 1
+          ? (Array.from(arrearsFilter)[0] as "0" | "1")
+          : undefined,
       productTypes: productTypeFilter.size > 0 ? Array.from(productTypeFilter) : undefined,
     };
   }, [section, gracePeriod, arrearsFilter, productTypeFilter]);
@@ -533,6 +539,16 @@ export default function WatchGroup() {
       rows = rows.filter((r) => r.partnerCode && partnerFilter.has(r.partnerCode));
     }
 
+    // filter ยอดชำระ (client-side)
+    if (paymentFilter.size > 0) {
+      rows = rows.filter((r) => {
+        const paid = r.paidAmount1 ?? 0;
+        if (paymentFilter.has("none") && paid === 0) return true;
+        if (paymentFilter.has("partial") && paid > 0) return true;
+        return false;
+      });
+    }
+
     // filter ออนไลน์ล่าสุด
     if (onlineFilter.size > 0) {
       rows = rows.filter((r) => {
@@ -580,6 +596,7 @@ export default function WatchGroup() {
     osFilter,
     modelFilter,
     partnerFilter,
+    paymentFilter,
     onlineFilter,
     sortKey,
     sortDir,
@@ -633,8 +650,9 @@ export default function WatchGroup() {
     productTypeFilter.size > 0 ||
     partnerFilter.size > 0 ||
     onlineFilter.size > 0 ||
+    paymentFilter.size > 0 ||
     gracePeriod !== "15" ||
-    arrearsFilter !== "";
+    arrearsFilter.size > 0;
 
   const clearFilters = () => {
     setSearch("");
@@ -644,7 +662,8 @@ export default function WatchGroup() {
     setProductTypeFilter(new Set());
     setPartnerFilter(new Set());
     setGracePeriod("15");
-    setArrearsFilter("");
+    setArrearsFilter(new Set());
+    setPaymentFilter(new Set());
     setOnlineFilter(new Set());
   };
 
@@ -797,8 +816,8 @@ export default function WatchGroup() {
           <div className="flex flex-col gap-2">
             {/* row 1: search + filters */}
             <div className="flex flex-col md:flex-row md:items-center gap-2 flex-wrap">
-              {/* search */}
-              <div className="relative flex-1 min-w-0 max-w-[210px]">
+              {/* search — ขยาย 10% จาก 210px → 231px */}
+              <div className="relative flex-1 min-w-0 max-w-[231px]">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <Input
                   placeholder="ค้นหา: เลขที่สัญญา / ชื่อ / เบอร์โทร"
@@ -872,28 +891,25 @@ export default function WatchGroup() {
                   <span className="text-xs text-gray-500">วัน</span>
                 </div>
 
-                {/* ค้างชำระ */}
-                <div className="flex items-center gap-1">
-                  <span className="text-xs text-gray-500 whitespace-nowrap">ค้างชำระ</span>
-                  <div className="flex rounded-md border border-gray-200 overflow-hidden">
-                    {(["", "0", "1"] as const).map((v) => (
-                      <button
-                        key={v}
-                        type="button"
-                        onClick={() => setArrearsFilter(v)}
-                        className={cn(
-                          "px-3 h-9 text-xs transition-colors whitespace-nowrap",
-                          arrearsFilter === v
-                            ? "bg-teal-600 text-white font-medium"
-                            : "bg-white text-gray-600 hover:bg-gray-50",
-                        )}
-                      >
-                        {v === "" ? "ทั้งหมด" : `${v} งวด`}
-                      </button>
-                    ))}
-                  </div>
-                  <ArrearsInfoPopover />
-                </div>
+                {/* ค้างชำระ — Multi-Select */}
+                <MultiSelectFilter
+                  label="ค้างชำระ"
+                  selected={arrearsFilter}
+                  onChange={setArrearsFilter}
+                  options={["0", "1"]}
+                  placeholder="ค้างชำระ: ทั้งหมด"
+                  formatOption={(v) => `${v} งวด`}
+                />
+
+                {/* ยอดชำระ — Multi-Select */}
+                <MultiSelectFilter
+                  label="ยอดชำระ"
+                  selected={paymentFilter}
+                  onChange={setPaymentFilter}
+                  options={["none", "partial"]}
+                  placeholder="ยอดชำระ: ทั้งหมด"
+                  formatOption={(v) => v === "none" ? "ไม่ชำระเลย" : "ชำระบางส่วน"}
+                />
 
                 {/* ออนไลน์ล่าสุด multi-select */}
                 <div className="flex items-center gap-1.5">
@@ -937,17 +953,20 @@ export default function WatchGroup() {
                   </button>
                 )}
 
-                {/* Export Excel */}
-                {canExport && (
-                  <button
-                    type="button"
-                    onClick={handleExport}
-                    className="ml-auto flex items-center gap-1.5 h-9 px-3 text-sm font-medium rounded-md bg-green-600 hover:bg-green-700 text-white transition-colors whitespace-nowrap"
-                  >
-                    <Download className="w-4 h-4" />
-                    <span className="hidden sm:inline">Export Excel</span>
-                  </button>
-                )}
+                {/* Info popover + Export Excel */}
+                <div className="ml-auto flex items-center gap-2">
+                  <ArrearsInfoPopover />
+                  {canExport && (
+                    <button
+                      type="button"
+                      onClick={handleExport}
+                      className="flex items-center gap-1.5 h-9 px-3 text-sm font-medium rounded-md bg-green-600 hover:bg-green-700 text-white transition-colors whitespace-nowrap"
+                    >
+                      <Download className="w-4 h-4" />
+                      <span className="hidden sm:inline">Export Excel</span>
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
 
