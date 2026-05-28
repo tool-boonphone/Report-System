@@ -4477,24 +4477,32 @@ export async function listWatchGroup(params: {
   const contractIds = contractRows.map((r: any) => r.contract_external_id as string);
   const contractNos = contractRows.map((r: any) => r.contract_no as string).filter(Boolean);
 
-  // --- Step 2: กรองเฉพาะสัญญาที่ไม่เคยชำระเลย ---
-  const paidRaw = await db.execute(
+  // --- Step 2: กรองเฉพาะสัญญาที่งวดแรกยังไม่ชำระครบ ---
+  // ดึง paid_amount และ total_amount ของ period=1 จาก debt_target_cache โดยตรง
+  // เพื่อตรวจว่าชำระครบงวดแรกแล้วหรือยัง (ชำระบางส่วนยังคงแสดงใน WatchGroup)
+  const inst1Raw = await db.execute(
     sql.raw(`
-      SELECT contract_external_id, COUNT(*) AS paid_count
-      FROM debt_collected_cache
+      SELECT
+        contract_external_id,
+        COALESCE(SUM(paid_amount), 0)   AS paid_amount_1,
+        COALESCE(SUM(total_amount), 0)  AS total_amount_1
+      FROM debt_target_cache
       WHERE section = '${params.section}'
-        AND is_bad_debt_row = false
+        AND period = 1
         AND contract_external_id IN (${contractIds.map((id) => `'${id.replace(/'/g, "''")}'`).join(",")})
       GROUP BY contract_external_id
     `)
   );
-  const paidSet = new Set<string>();
-  for (const r of (pgRows(paidRaw) as any[])) {
-    if (Number(r.paid_count) > 0) paidSet.add(r.contract_external_id);
+  // สัญญาที่ชำระงวดแรกครบแล้ว (paid_amount >= total_amount - 0.5) ให้ตัดออก
+  const paidInst1Set = new Set<string>();
+  for (const r of (pgRows(inst1Raw) as any[])) {
+    const paid = Number(r.paid_amount_1 ?? 0);
+    const total = Number(r.total_amount_1 ?? 0);
+    if (total > 0 && paid >= total - 0.5) paidInst1Set.add(r.contract_external_id);
   }
-  // ตัดสัญญาที่เคยชำระออก
-  contractRows = contractRows.filter((r: any) => !paidSet.has(r.contract_external_id));
-  console.log(`[WatchGroup] ${section} Step2 after paid filter: contractRows=${contractRows.length}, paidSet=${paidSet.size}`);
+  // ตัดสัญญาที่ชำระงวดแรกครบแล้วออก (ยังชำระไม่ครบหรือไม่ชำระเลย ยังคงแสดง)
+  contractRows = contractRows.filter((r: any) => !paidInst1Set.has(r.contract_external_id));
+  console.log(`[WatchGroup] ${section} Step2 after inst1 filter: contractRows=${contractRows.length}, paidInst1Set=${paidInst1Set.size}`);
 
   if (contractRows.length === 0) return { rows: [] };
 
