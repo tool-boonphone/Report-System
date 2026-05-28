@@ -159,6 +159,7 @@ type Row = {
   installmentTotal: number;
   daysOverdue: number;
   arrearsCount: number;
+  paidAmount1: number;  // ยอดชำระงวดทีṂ1 (อาจเป็น 0 ถ้าไม่เคยชำระ)
 };
 
 /* ─── SummaryCard ─────────────────────────────────────────────────────────── */
@@ -659,7 +660,7 @@ export default function WatchGroup() {
       const headers = [
         "#","วันที่อนุมัติ","เลขที่สัญญา","ชื่อ-นามสกุล","เบอร์โทร",
         "ประเภท","รุ่น","รหัสพาร์ทเนอร์","ชื่อพาร์ทเนอร์","ราคา","ยอดจัดไฟแนนซ์",
-        "ค่าคอมมิชชั่น","Incentive","ต้นทุน","ยอดผ่อนรวม",
+        "ค่าคอมมิชชั่น","Incentive","ต้นทุน","ยอดผ่อนรวม","ค่างวด","ยอดชำระ",
         "เกินกำหนด(วัน)","ค้างชำระ(งวด)","Online (วันที่แล้ว)",
       ];
       const dataRows = filteredRows.map((r, i) => {
@@ -681,6 +682,8 @@ export default function WatchGroup() {
           r.incentive ?? 0,
           r.cost ?? 0,
           r.installmentTotal ?? 0,
+          r.installmentAmount ?? 0,
+          r.paidAmount1 ?? 0,
           r.daysOverdue ?? 0,
           r.arrearsCount ?? 0,
           onlineLabel,
@@ -690,7 +693,7 @@ export default function WatchGroup() {
       ws["!cols"] = [
         { wch: 6 }, { wch: 14 }, { wch: 22 }, { wch: 22 }, { wch: 14 },
         { wch: 10 }, { wch: 24 }, { wch: 12 }, { wch: 24 }, { wch: 12 }, { wch: 14 },
-        { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 14 },
+        { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 12 },
         { wch: 14 }, { wch: 14 }, { wch: 14 },
       ];
       // Style header row
@@ -1025,6 +1028,12 @@ export default function WatchGroup() {
                       <Th col="installmentTotal" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="min-w-[110px] text-right">
                         ยอดผ่อนรวม
                       </Th>
+                      <th className="px-3 py-2 text-right text-xs font-semibold whitespace-nowrap min-w-[100px]">
+                        ค่างวด
+                      </th>
+                      <th className="px-3 py-2 text-right text-xs font-semibold whitespace-nowrap min-w-[100px]">
+                        ยอดชำระ
+                      </th>
                       <Th col="daysOverdue" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="min-w-[110px] text-right">
                         เกินกำหนด(วัน)
                       </Th>
@@ -1039,7 +1048,7 @@ export default function WatchGroup() {
                   <tbody>
                     {paddingTop > 0 && (
                       <tr>
-                        <td colSpan={17} style={{ height: paddingTop }} />
+                        <td colSpan={19} style={{ height: paddingTop }} />
                       </tr>
                     )}
                     {virtualRows.map((vRow) => {
@@ -1109,6 +1118,15 @@ export default function WatchGroup() {
                           <td className="px-3 py-1.5 text-right whitespace-nowrap text-green-700">
                             {fmtMoney(r.installmentTotal)}
                           </td>
+                          <td className="px-3 py-1.5 text-right whitespace-nowrap">
+                            {fmtMoney(r.installmentAmount)}
+                          </td>
+                          <td className={cn(
+                            "px-3 py-1.5 text-right whitespace-nowrap",
+                            r.paidAmount1 > 0 ? "text-blue-700 font-medium" : "text-gray-400",
+                          )}>
+                            {r.paidAmount1 > 0 ? fmtMoney(r.paidAmount1) : "-"}
+                          </td>
                           <td className={cn(
                             "px-3 py-1.5 text-right whitespace-nowrap font-semibold",
                             r.daysOverdue > 30 ? "text-red-600" : "text-amber-600",
@@ -1149,7 +1167,7 @@ export default function WatchGroup() {
                     })}
                     {paddingBottom > 0 && (
                       <tr>
-                        <td colSpan={17} style={{ height: paddingBottom }} />
+                        <td colSpan={19} style={{ height: paddingBottom }} />
                       </tr>
                     )}
                   </tbody>

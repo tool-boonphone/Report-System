@@ -4495,9 +4495,12 @@ export async function listWatchGroup(params: {
   );
   // สัญญาที่ชำระงวดแรกครบแล้ว (paid_amount >= total_amount - 0.5) ให้ตัดออก
   const paidInst1Set = new Set<string>();
+  // Map เก็บ paid_amount_1 สำหรับแสดงในตาราง
+  const inst1Map = new Map<string, number>();
   for (const r of (pgRows(inst1Raw) as any[])) {
     const paid = Number(r.paid_amount_1 ?? 0);
     const total = Number(r.total_amount_1 ?? 0);
+    inst1Map.set(r.contract_external_id, paid);
     if (total > 0 && paid >= total - 0.5) paidInst1Set.add(r.contract_external_id);
   }
   // ตัดสัญญาที่ชำระงวดแรกครบแล้วออก (ยังชำระไม่ครบหรือไม่ชำระเลย ยังคงแสดง)
@@ -4575,6 +4578,7 @@ export async function listWatchGroup(params: {
     cost: number;                    // financeAmount + commissionNet + incentive
     daysOverdue: number;
     arrearsCount: number;
+    paidAmount1: number;   // ยอดชำระงวดที่ 1 (อาจเป็น 0 ถ้าไม่เคยชำระ)
   }> = [];
 
   // debug: log ตัวอย่าง daysOverdue ของ 3 รายการแรก
@@ -4665,6 +4669,7 @@ export async function listWatchGroup(params: {
       cost: (financeAmount ?? 0) + (cInfo?.commission_net != null ? Number(cInfo.commission_net) : 0) + incentive,
       daysOverdue,
       arrearsCount,
+      paidAmount1: inst1Map.get(extId) ?? 0,
     });
   }
 
