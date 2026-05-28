@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { router, appProcedure } from "../_core/trpc";
-import { runSectionSync, isSyncRunning, getSyncStatus, requestCancelSync, SYNC_STAGES } from "../sync/runner";
+import { runSectionSync, isSyncRunning, getSyncStatus, requestCancelSync, SYNC_STAGES, syncMdmOnlineDays } from "../sync/runner";
 import {
   getLastSyncedAt,
   listSyncLogs,
@@ -104,6 +104,31 @@ export const syncRouter = router({
       active: await getRunningSyncs(),
     };
   }),
+
+  /**
+   * Trigger MDM online days sync only (fast, ~30s).
+   * ดึง MDM device list ครั้งเดียว แล้ว bulk update last_online_days ใน contracts
+   * ไม่ต้องรอ Full Sync — ใช้ได้ทันทีหลัง deploy
+   */
+  syncMdm: appProcedure
+    .input(z.object({ section: sectionSchema }))
+    .mutation(async ({ input, ctx }) => {
+      const { checkPermission } = await import("../authDb");
+      if (ctx.appUser) {
+        const allowed = checkPermission(ctx.appUser, "sync_api", "sync");
+        if (!allowed) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "ไม่มีสิทธิ์ใช้งาน Sync" });
+        }
+      }
+      const section = input.section as SectionKey;
+      // Fire-and-forget — รัน background ไม่ต้องรอ
+      syncMdmOnlineDays(section).then((count) => {
+        console.log(`[sync.syncMdm] ${section}: updated ${count} contracts`);
+      }).catch((err) => {
+        console.error(`[sync.syncMdm] ${section} failed:`, err?.message ?? err);
+      });
+      return { queued: true, section };
+    }),
 
   /** Last successful sync timestamp for a section. */
   lastSyncedAt: appProcedure

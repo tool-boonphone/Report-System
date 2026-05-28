@@ -692,7 +692,7 @@ async function syncContracts(
  * ใช้ serial_no ใน contracts เป็น key match กับ deviceId ใน MDM API
  * เงื่อนไขการแสดงผลเหมือนกับเมนูกลุ่มเฝ้าระวัง
  */
-async function syncMdmOnlineDays(
+export async function syncMdmOnlineDays(
   section: SectionKey,
   onProgress?: (current: number, total: number) => void,
 ): Promise<number> {

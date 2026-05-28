@@ -60,6 +60,7 @@ const STAGE_LABELS: Record<string, string> = {
   payments: "ดึงข้อมูลการชำระ",
   commissions: "ดึงข้อมูลค่าคอมมิชชัน",
   bad_debt: "คำนวณหนี้เสีย",
+  mdm_online: "อัปเดตสถานะ MDM Online",
   populate: "สร้าง Cache รายงาน",
   finishing: "กำลังบันทึก",
   all: "ภาพรวม",
@@ -368,6 +369,18 @@ export function SyncStatusBar() {
     };
   }, []);
 
+  // MDM online days sync mutation (fast, ~30s)
+  const syncMdmMutation = trpc.sync.syncMdm.useMutation({
+    onSuccess: () => {
+      toast.info("กำลังดึงข้อมูล MDM Online Days... รอสักครู่");
+    },
+    onError: (err) => toast.error(`MDM Sync ผิดพลาด: ${err.message}`),
+  });
+  const handleSyncMdm = useCallback(() => {
+    if (!section || syncMdmMutation.isPending) return;
+    syncMdmMutation.mutate({ section: section as SectionKey });
+  }, [section, syncMdmMutation]);
+
   // Force-clear stuck sync mutation
   const clearStuck = trpc.sync.clearStuck.useMutation({
     onSuccess: (data) => {
@@ -494,6 +507,16 @@ export function SyncStatusBar() {
             >
               <RefreshCw className={`w-4 h-4 ${isTriggerPending ? "animate-spin" : ""}`} />
               <span className="hidden sm:inline">Re-Sync API</span>
+            </button>
+
+            <button
+              onClick={handleSyncMdm}
+              disabled={isRunning || syncMdmMutation.isPending}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-blue-200 hover:bg-blue-50 text-sm text-blue-600 disabled:opacity-50 transition-colors"
+              title="อัปเดตสถานะออนไลน์จาก MDM (เร็ว ~30 วินาที)"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${syncMdmMutation.isPending ? "animate-spin" : ""}`} />
+              <span className="hidden sm:inline">Sync MDM</span>
             </button>
 
             <button
