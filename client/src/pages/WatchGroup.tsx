@@ -849,15 +849,6 @@ export default function WatchGroup() {
                   placeholder="ทุกประเภท"
                 />
 
-                {/* iOS/Android */}
-                <MultiSelectFilter
-                  label="ประเภทเครื่อง"
-                  selected={osFilter}
-                  onChange={setOsFilter}
-                  options={["iOS", "Android"]}
-                  placeholder="ทุกประเภทเครื่อง"
-                />
-
                 {/* รุ่นเครื่อง */}
                 <MultiSelectFilter
                   label="รุ่นเครื่อง"
@@ -877,20 +868,6 @@ export default function WatchGroup() {
                   placeholder="ทุกพาร์ทเนอร์"
                   formatOption={(code) => partnerOptions.find((p) => p.code === code)?.label ?? code}
                 />
-
-                {/* ช่วงผ่อนผัน N วัน */}
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs text-gray-500 whitespace-nowrap">ช่วงผ่อนผัน</span>
-                  <Input
-                    type="number"
-                    min={0}
-                    max={365}
-                    value={gracePeriod}
-                    onChange={(e) => setGracePeriod(e.target.value)}
-                    className="h-9 text-xs w-16 text-center"
-                  />
-                  <span className="text-xs text-gray-500">วัน</span>
-                </div>
 
                 {/* ค้างชำระ — Multi-Select */}
                 <MultiSelectFilter
@@ -927,6 +904,20 @@ export default function WatchGroup() {
                     return "> 15 วันที่แล้ว";
                   }}
                 />
+
+                {/* ช่วงผ่อนผัน N วัน — หลังสุด */}
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-gray-500 whitespace-nowrap">ช่วงผ่อนผัน</span>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={365}
+                    value={gracePeriod}
+                    onChange={(e) => setGracePeriod(e.target.value)}
+                    className="h-9 text-xs w-16 text-center"
+                  />
+                  <span className="text-xs text-gray-500">วัน</span>
+                </div>
 
                 {/* ล้างตัวกรอง */}
                 {hasFilter && (
