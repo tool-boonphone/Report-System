@@ -852,11 +852,12 @@ export default function Contracts() {
         </div>
 
         {/* Virtualized table — fills remaining viewport height */}
-        <div className="relative bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm flex flex-col flex-1 min-h-0">
+        {/* หุ้มตาราง: ใช้ ring+rounded แทน overflow-hidden เพื่อไม่บล็อก sticky thead */}
+        <div className="relative bg-white border border-gray-200 rounded-xl shadow-sm flex flex-col flex-1 min-h-0" style={{ overflow: 'clip' }}>
           {/* ── Single scroll container: header sticky ใน thead, scroll ทั้ง x และ y พร้อมกัน ── */}
           <div
             ref={scrollRef}
-            className="overflow-x-auto overflow-y-auto flex-1 min-h-0"
+            className="overflow-x-auto overflow-y-auto flex-1 min-h-0 rounded-xl"
             style={{ overscrollBehavior: "contain" }}
           >
             <table className="min-w-full text-[13px] border-separate border-spacing-0">
