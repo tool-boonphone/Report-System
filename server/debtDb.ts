@@ -4426,7 +4426,8 @@ export async function listWatchGroup(params: {
 
   // --- Step 1: ดึงสัญญาที่ถึงกำหนดงวดที่ 1 แล้ว ---
   // จาก debt_target_cache: หา due_date ของงวดที่ 1 และงวดที่ 2 (period=1,2)
-  // ไม่กรอง is_arrears เพื่อให้ได้ข้อมูลครบ จะกรองสัญญาที่ไม่เคยชำระใน Step 2
+  // ดึงงวดที่ยังค้างชำระจริง (is_paid=false) เพื่อคำนวณ daysOverdue ที่แม่นยำ
+  // due_date_first_unpaid = due_date ของงวดแรกที่ยังไม่ได้ชำระและถึงกำหนดแล้ว
   const rawContracts = await db.execute(sql.raw(`
     SELECT
       dtc.contract_external_id,
@@ -4437,16 +4438,15 @@ export async function listWatchGroup(params: {
       dtc.device,
       dtc.finance_amount,
       dtc.installment_count,
-      -- serial_no จาก cache (เก็บไว้เพื่อ match กับ MDM API)
       MAX(dtc.serial_no) AS serial_no,
-      -- due_date งวดที่ 1 (period=1)
+      -- due_date งวดที่ 1 (period=1) ใช้กรอง HAVING
       MIN(CASE WHEN dtc.period = 1 THEN dtc.due_date END) AS due_date_1,
       -- due_date งวดที่ 2 (period=2)
       MIN(CASE WHEN dtc.period = 2 THEN dtc.due_date END) AS due_date_2,
       -- due_date งวดที่ 3 (period=3) ใช้กรองออกถ้าค้างเกิน 2 งวดแล้ว
       MIN(CASE WHEN dtc.period = 3 THEN dtc.due_date END) AS due_date_3,
-      -- จำนวนงวดที่ถึงกำหนดแล้ว (due_date <= today)
-      COUNT(CASE WHEN dtc.due_date <= '${todayStr}' THEN 1 END) AS due_count
+      -- due_date ของงวดแรกที่ยังไม่ได้ชำระและถึงกำหนดแล้ว (ใช้คำนวณ daysOverdue)
+      MIN(CASE WHEN dtc.is_paid = false AND dtc.due_date <= '${todayStr}' THEN dtc.due_date END) AS due_date_first_unpaid
     FROM debt_target_cache dtc
     WHERE dtc.section = '${section}'
     GROUP BY
@@ -4462,6 +4462,8 @@ export async function listWatchGroup(params: {
       -- ต้องมีงวดที่ 1 ถึงกำหนดแล้ว
       MIN(CASE WHEN dtc.period = 1 THEN dtc.due_date END) IS NOT NULL
       AND MIN(CASE WHEN dtc.period = 1 THEN dtc.due_date END) <= '${todayStr}'
+      -- ต้องมีงวดที่ยังไม่ได้ชำระและถึงกำหนดแล้ว (ถ้าชำระครบแล้วจะไม่แสดง)
+      AND MIN(CASE WHEN dtc.is_paid = false AND dtc.due_date <= '${todayStr}' THEN dtc.due_date END) IS NOT NULL
   `));
   let contractRows: Array<any> = pgRows(rawContracts);
   console.log(`[WatchGroup] ${section} Step1: contractRows=${contractRows.length}, today=${todayStr}`);
@@ -4573,24 +4575,23 @@ export async function listWatchGroup(params: {
     const extId: string = s.contract_external_id;
     const cInfo = contractInfoMap.get(extId);
 
-    // คำนวณ arrearsCount และ daysOverdue
+        // คำนวณ arrearsCount และ daysOverdue
     const dueDate1 = s.due_date_1 ? new Date(`${s.due_date_1}T00:00:00`) : null;
     const dueDate2 = s.due_date_2 ? new Date(`${s.due_date_2}T00:00:00`) : null;
     const dueDate3 = s.due_date_3 ? new Date(`${s.due_date_3}T00:00:00`) : null;
-
+    // due_date_first_unpaid = งวดแรกที่ยังไม่ได้ชำระและถึงกำหนดแล้ว (แม่นยำกว่า due_date_1)
+    const dueDateFirstUnpaid = s.due_date_first_unpaid ? new Date(`${s.due_date_first_unpaid}T00:00:00`) : null;
     // กรองออก: ถ้างวดที่ 3 ถึงกำหนดแล้ว = ค้าง 2 งวดแล้ว ไม่แสดงในหน้านี้
     if (dueDate3 != null && dueDate3 <= today) continue;
-
     // ตรวจสอบว่างวดที่ 2 ถึงกำหนดแล้วหรือยัง
     const due2Reached = dueDate2 != null && dueDate2 <= today;
-
     // arrearsCount: ถ้างวดที่ 2 ถึงกำหนดแล้ว = 1, ถ้ายังไม่ถึง = 0
     const arrearsCount = due2Reached ? 1 : 0;
-
-    // daysOverdue: นับจาก due_date_1 เสมอ (วันที่ลูกค้าเริ่มค้างครั้งแรก)
+    // daysOverdue: นับจาก due_date_first_unpaid (งวดแรกที่ยังค้างชำระจริง)
+    // ถ้าชำระครบแล้ว due_date_first_unpaid จะเป็น null → daysOverdue = 0 → กรองออกโดย HAVING
     let daysOverdue = 0;
-    if (dueDate1) {
-      daysOverdue = Math.max(0, Math.floor((today.getTime() - dueDate1.getTime()) / (1000 * 60 * 60 * 24)));
+    if (dueDateFirstUnpaid) {
+      daysOverdue = Math.max(0, Math.floor((today.getTime() - dueDateFirstUnpaid.getTime()) / (1000 * 60 * 60 * 24)));
     }
 
     // debug: log ตัวอย่าง 3 รายการแรก
