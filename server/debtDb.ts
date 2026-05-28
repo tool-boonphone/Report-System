@@ -4449,6 +4449,8 @@ export async function listWatchGroup(params: {
       MIN(CASE WHEN dtc.is_paid = false AND dtc.due_date <= '${todayStr}' THEN dtc.due_date END) AS due_date_first_unpaid
     FROM debt_target_cache dtc
     WHERE dtc.section = '${section}'
+      -- กรองสถานะสัญญาที่ไม่ควรแสดงในกลุ่มเฝ้าระวัง
+      AND COALESCE(dtc.contract_status, '') NOT IN ('หนี้เสีย', 'ระงับสัญญา', 'ยกเลิกสัญญา', 'สิ้นสุดสัญญา')
     GROUP BY
       dtc.contract_external_id,
       dtc.contract_no,
