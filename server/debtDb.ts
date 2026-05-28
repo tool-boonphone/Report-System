@@ -4184,6 +4184,7 @@ export async function listSuspectedBadDebt(params: { section: SectionKey }): Pro
     phone: string | null;
     serialNo: string | null;
     lastOnlineDays: number | null;
+    deviceLock: boolean | null;
     model: string | null;
     device: string | null;
     sellPrice: number | null;
@@ -4261,6 +4262,7 @@ export async function listSuspectedBadDebt(params: { section: SectionKey }): Pro
         phone,
         serial_no,
         last_online_days,
+        device_lock,
         CAST(sell_price AS DECIMAL(18,2))     AS sell_price,
         CAST(multiplier AS DECIMAL(18,4))     AS multiplier,
         CAST(commission_net AS DECIMAL(18,2)) AS commission_net
@@ -4346,6 +4348,8 @@ export async function listSuspectedBadDebt(params: { section: SectionKey }): Pro
       // serialNo: ดึงจาก cache ก่อน (ถ้ายังไม่มีใน cache ให้ fallback ไปดึงจาก contracts)
       serialNo: s.serial_no ?? cInfo?.serial_no ?? null,
       lastOnlineDays: cInfo?.last_online_days != null ? Number(cInfo.last_online_days) : null,
+      // deviceLock: true=ล็อค, false=ปลดล็อค, null=ไม่พบใน MDM
+      deviceLock: cInfo?.device_lock != null ? Boolean(cInfo.device_lock) : null,
       model: s.model ?? null,
       device: s.device ?? null,
       sellPrice: cInfo?.sell_price != null ? Number(cInfo.sell_price) : null,
@@ -4398,6 +4402,7 @@ export async function listWatchGroup(params: {
     phone: string | null;
     serialNo: string | null;
     lastOnlineDays: number | null;
+    deviceLock: boolean | null;
     model: string | null;
     device: string | null;
     productType: string | null;
@@ -4530,6 +4535,7 @@ export async function listWatchGroup(params: {
         phone,
         serial_no,
         last_online_days,
+        device_lock,
         CAST(sell_price AS DECIMAL(18,2))        AS sell_price,
         CAST(multiplier AS DECIMAL(18,4))         AS multiplier,
         CAST(commission_net AS DECIMAL(18,2))     AS commission_net,
@@ -4573,6 +4579,7 @@ export async function listWatchGroup(params: {
     phone: string | null;
     serialNo: string | null;
     lastOnlineDays: number | null;
+    deviceLock: boolean | null;
     model: string | null;
     device: string | null;
     productType: string | null;
@@ -4665,6 +4672,8 @@ export async function listWatchGroup(params: {
       // serialNo: ดึงจาก cache ก่อน (ถ้ายังไม่มีใน cache ให้ fallback ไปดึงจาก contracts)
       serialNo: s.serial_no ?? cInfo?.serial_no ?? null,
       lastOnlineDays: cInfo?.last_online_days != null ? Number(cInfo.last_online_days) : null,
+      // deviceLock: true=ล็อค, false=ปลดล็อค, null=ไม่พบใน MDM
+      deviceLock: cInfo?.device_lock != null ? Boolean(cInfo.device_lock) : null,
       model: s.model ?? null,
       device: s.device ?? null,
       productType,
