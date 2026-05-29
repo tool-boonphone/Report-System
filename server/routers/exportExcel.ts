@@ -197,6 +197,18 @@ export async function handleContractsExport(req: Request, res: Response) {
             } else {
               setIntCell(cell, days);
             }
+          } else if (col.key === "deviceLock") {
+            // true = ล็อกเครื่อง, false = ปลดล็อก, null = ไม่พบใน MDM
+            const dl = (row as any)["deviceLock"];
+            if (dl === true) {
+              cell.value = "ล็อกเครื่อง";
+              cell.font = { color: { argb: "FFDC2626" } }; // red-600
+            } else if (dl === false) {
+              cell.value = "ปลดล็อก";
+              cell.font = { color: { argb: "FF16A34A" } }; // green-600
+            } else {
+              cell.value = "-";
+            }
           } else if (col.type === "money") {
             setMoneyCell(cell, (row as any)[col.key]);
           } else if (col.type === "number") {
