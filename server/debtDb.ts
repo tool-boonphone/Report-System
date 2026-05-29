@@ -4236,6 +4236,8 @@ export async function listSuspectedBadDebt(params: { section: SectionKey }): Pro
     FROM debt_target_cache dtc
     WHERE dtc.section = ${params.section}
       AND dtc.debt_range IN ('เกิน 61-90', 'เกิน >90')
+      -- กรองสถานะสัญญาที่ไม่ควรแสดงในกลุ่มหนี้สงสัยจะเสีย
+      AND COALESCE(dtc.contract_status, '') NOT IN ('หนี้เสีย', 'ระงับสัญญา', 'ยกเลิกสัญญา', 'สิ้นสุดสัญญา')
     GROUP BY
       dtc.contract_external_id,
       dtc.contract_no,
