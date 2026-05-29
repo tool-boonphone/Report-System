@@ -177,6 +177,7 @@ export async function runStartupMigrations(): Promise<void> {
           "bad_debt"             DECIMAL(18,2)    NOT NULL DEFAULT '0',
           "bad_debt_installment" DECIMAL(18,2)    NOT NULL DEFAULT '0',
           "total_amount"         DECIMAL(18,2)    NOT NULL DEFAULT '0',
+          "finance_total"        DECIMAL(18,2)    NOT NULL DEFAULT '0',
           "updated_at"           TIMESTAMP        NOT NULL DEFAULT NOW()
         )
       `));
@@ -246,6 +247,17 @@ export async function runStartupMigrations(): Promise<void> {
       console.log(`[migration] ${section}: contracts.device_lock — OK`);
     } catch (err: any) {
       console.error(`[migration] ${section}: contracts.device_lock failed:`, err?.message ?? err);
+    }
+    try {
+      // Migration 0012: เพิ่ม finance_total column ใน monthly_summary_due_month_cache
+      // (ยอดจัดฯ ต่อ approve_month × due_month — ใช้ใน getDueMonthSummaryFromCache)
+      await db.execute(sql.raw(`
+        ALTER TABLE monthly_summary_due_month_cache
+        ADD COLUMN IF NOT EXISTS finance_total DECIMAL(18,2) NOT NULL DEFAULT 0
+      `));
+      console.log(`[migration] ${section}: monthly_summary_due_month_cache.finance_total — OK`);
+    } catch (err: any) {
+      console.error(`[migration] ${section}: monthly_summary_due_month_cache.finance_total failed:`, err?.message ?? err);
     }
   }
 }
