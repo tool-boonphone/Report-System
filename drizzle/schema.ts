@@ -185,6 +185,7 @@ export const contracts = pgTable(
     badDebtUpdatedAt: varchar("bad_debt_updated_at", { length: 32 }),
     lastOnlineDays: integer("last_online_days"),            // จำนวนวันที่ออนไลน์ล่าสุดจาก MDM (0=วันนี้, null=ไม่พบ)
     lastOnlineAt: varchar("last_online_at", { length: 32 }), // "YYYY-MM-DD HH:mm:ss" จาก MDM lastTime
+    deviceLock: boolean("device_lock"),                       // สถานะล็อคเครื่องจาก MDM (true=ล็อค, false=ปลดล็อค, null=ไม่พบ)
   },
   (t) => ({
     sectionExternalIdx: uniqueIndex("contracts_section_external_idx").on(
