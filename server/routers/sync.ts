@@ -210,7 +210,7 @@ export const syncRouter = router({
   /**
    * saveMdmData — รับ MDM device data จาก client แล้ว bulk update last_online_days ใน contracts
    * Client fetch MDM โดยตรง (ผ่าน residential IP ไม่ถูก Cloudflare block)
-   * แล้วส่ง { serialNo, lastOnlineDays, lastOnlineAt }[] มาให้ server บันทึกลง DB
+   * แล้วส่ง { serialNo, lastOnlineDays, lastOnlineAt, deviceLock }[] มาให้ server บันทึกลง DB
    * Requires: login + sync permission
    */
   saveMdmData: appProcedure
@@ -222,8 +222,9 @@ export const syncRouter = router({
             serialNo: z.string(),
             lastOnlineDays: z.number().int().nullable(),
             lastOnlineAt: z.string().nullable(), // "YYYY-MM-DD HH:mm:ss"
+            deviceLock: z.boolean().nullable().optional(), // true=ล็อค, false=ปลดล็อค, null/undefined=ไม่มีข้อมูล
           })
-        ).max(10000), // จำกัดไม่เกิน 10,000 devices ต่อ request
+        ).max(20000), // เพิ่มจาก 10,000 เป็น 20,000 รองรับ dataset ขนาดใหญ่
       })
     )
     .mutation(async ({ input, ctx }) => {
@@ -239,10 +240,16 @@ export const syncRouter = router({
       const db = await getDb(section);
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB not available" });
 
-      // สร้าง Map<serialNo (uppercase), { days, lastOnlineAt }> จาก input
-      const snMap = new Map<string, { days: number | null; lastOnlineAt: string | null }>();
+      // สร้าง Map<serialNo (uppercase), { days, lastOnlineAt, deviceLock }> จาก input
+      const snMap = new Map<string, { days: number | null; lastOnlineAt: string | null; deviceLock: boolean | null }>();
       for (const d of input.devices) {
-        if (d.serialNo) snMap.set(d.serialNo.trim().toUpperCase(), { days: d.lastOnlineDays, lastOnlineAt: d.lastOnlineAt });
+        if (d.serialNo) {
+          snMap.set(d.serialNo.trim().toUpperCase(), {
+            days: d.lastOnlineDays,
+            lastOnlineAt: d.lastOnlineAt,
+            deviceLock: d.deviceLock ?? null,
+          });
+        }
       }
 
       // ดึง externalId + serialNo ทั้งหมดของ section
@@ -254,9 +261,9 @@ export const syncRouter = router({
       const validRows = rows.filter((r: { externalId: string; serialNo: string | null }) => r.serialNo);
       console.log(`[saveMdmData] ${section}: ${validRows.length} contracts with serial_no, ${snMap.size} MDM devices`);
 
-      // Bulk update ทีละ 100 rows
+      // Bulk update ทีละ 200 rows (เพิ่มจาก 100 เพื่อลดจำนวน round-trips)
       let updated = 0;
-      const BATCH = 100;
+      const BATCH = 200;
       for (let i = 0; i < validRows.length; i += BATCH) {
         const batch = validRows.slice(i, i + BATCH);
         await Promise.all(
@@ -265,11 +272,14 @@ export const syncRouter = router({
             const mdm = snMap.get(key);
             const days = mdm?.days ?? null;
             const lastOnlineAt = mdm?.lastOnlineAt ?? null;
+            // deviceLock: ถ้า SN เจอใน MDM ให้ใช้ค่าจริง, ถ้าไม่เจอให้ set null
+            const deviceLock = mdm !== undefined ? (mdm.deviceLock ?? null) : null;
             await db
               .update(contracts)
               .set({
                 lastOnlineDays: days,
                 lastOnlineAt: lastOnlineAt,
+                deviceLock: deviceLock,
               })
               .where(and(eq(contracts.section, section), eq(contracts.externalId, r.externalId)));
             if (days !== null) updated++;
@@ -277,7 +287,7 @@ export const syncRouter = router({
         );
       }
 
-      console.log(`[saveMdmData] ${section}: updated ${updated}/${validRows.length} contracts`);
+      console.log(`[saveMdmData] ${section}: updated ${updated}/${validRows.length} contracts (with deviceLock)`);
       return { section, updated, total: validRows.length };
     }),
 

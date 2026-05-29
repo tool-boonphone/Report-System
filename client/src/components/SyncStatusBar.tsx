@@ -577,29 +577,39 @@ export function SyncStatusBar({
 
       // Step 2: Fetch MDM devices ทั้งหมด (pagination)
       const PAGE_SIZE = 1000;
-      const allDevices: Array<{ deviceId: string; lastTime: string }> = [];
+      // เพิ่ม deviceLock ใน type
+      const allDevices: Array<{ deviceId: string; lastTime: string; deviceLock: boolean | null }> = [];
       let pageNum = 1;
       let total = 0;
       let fetched = 0;
       toast.loading("กำลังดึงข้อมูล MDM (0 devices)...", { id: toastId });
       do {
         const url = `https://mdm-th.com/api/mdm/devices?pageNum=${pageNum}&pageSize=${PAGE_SIZE}`;
+        // timeout 60 วินาทีต่อ page เพื่อป้องกัน Fetch is aborted บนมือถือ
         const res = await fetch(url, {
           headers: {
             "X-API-Key": apiKey,
             "Accept": "application/json, text/plain, */*",
           },
+          signal: AbortSignal.timeout(60_000),
         });
         if (!res.ok) {
           const body = await res.text();
           throw new Error(`MDM API ตอบกลับ ${res.status}: ${body.slice(0, 200)}`);
         }
         const json = await res.json();
-        const devices: Array<{ deviceId?: string; lastTime?: string }> =
+        const devices: Array<{ deviceId?: string; lastTime?: string; deviceLock?: number | string | boolean }> =
           Array.isArray(json) ? json : (json?.rows ?? json?.data ?? json?.devices ?? []);
         if (pageNum === 1) total = json?.total ?? devices.length;
         for (const d of devices) {
-          if (d.deviceId && d.lastTime) allDevices.push({ deviceId: d.deviceId, lastTime: d.lastTime });
+          if (d.deviceId && d.lastTime) {
+            // normalize deviceLock: 1/"1"/true = ล็อค, 0/"0"/false = ปลดล็อค
+            const lockVal = d.deviceLock;
+            const isLocked = lockVal === 1 || lockVal === "1" || lockVal === true ? true
+              : lockVal === 0 || lockVal === "0" || lockVal === false ? false
+              : null;
+            allDevices.push({ deviceId: d.deviceId, lastTime: d.lastTime, deviceLock: isLocked });
+          }
         }
         fetched += devices.length;
         pageNum++;
@@ -618,14 +628,16 @@ export function SyncStatusBar({
         return Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
       };
 
+      // เพิ่ม deviceLock ใน payload
       const devicePayload = allDevices.map((d) => ({
         serialNo: d.deviceId,
         lastOnlineDays: calcDays(d.lastTime),
         lastOnlineAt: d.lastTime,
+        deviceLock: d.deviceLock,
       }));
 
       // Step 4: ส่งผลกลับ server เพื่อบันทึกลง DB
-      toast.loading(`บันทึกข้อมูล MDM ${devicePayload.length} devices...`, { id: toastId });
+      toast.loading(`บันทึกข้อมูล MDM ${devicePayload.length} devices (รวม deviceLock)...`, { id: toastId });
       await saveMdmDataMutation.mutateAsync({
         section: section as SectionKey,
         devices: devicePayload,
