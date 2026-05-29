@@ -237,5 +237,15 @@ export async function runStartupMigrations(): Promise<void> {
     } catch (err: any) {
       console.error(`[migration] ${section}: contracts.last_online_days, last_online_at failed:`, err?.message ?? err);
     }
+    try {
+      // Migration 0011: เพิ่ม device_lock ใน contracts (สถานะล็อกเครื่องจาก MDM)
+      await db.execute(sql.raw(`
+        ALTER TABLE contracts
+        ADD COLUMN IF NOT EXISTS device_lock BOOLEAN
+      `));
+      console.log(`[migration] ${section}: contracts.device_lock — OK`);
+    } catch (err: any) {
+      console.error(`[migration] ${section}: contracts.device_lock failed:`, err?.message ?? err);
+    }
   }
 }
