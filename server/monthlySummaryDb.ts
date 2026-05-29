@@ -1847,6 +1847,50 @@ async function queryDueMonthPaid(
 }
 
 /**
+ * Query ยอดจัดฯ รวมต่อ approve_month (ไม่กระจายตาม due_month)
+ * ใช้สำหรับ totalFinanceTotal ใน getDueMonthSummary เพื่อให้ตรงกับ mode สถานะหนี้
+ * ดึง finance_amount 1 ครั้งต่อสัญญา (MAX per contract) แล้ว SUM ต่อ approve_month
+ */
+async function queryDueMonthFinanceTotal(
+  section: SectionKey,
+  opts: { approveMonths?: string[]; productType?: string; deviceFamily?: string; search?: string },
+): Promise<Array<{ approve_month: string; finance_total: number }>> {
+  const db = await getDb(section);
+  if (!db) return [];
+  const baseWhere = dtcWhere(section, {
+    productType: opts.productType,
+    deviceFamily: opts.deviceFamily,
+    approveMonths: opts.approveMonths,
+    search: opts.search,
+  });
+  // ดึง finance_amount 1 ครั้งต่อสัญญา (MAX เพื่อ DISTINCT per contract)
+  // แล้ว SUM รวมต่อ approve_month — เหมือน queryInstallTotal ใน mode สถานะหนี้
+  const q = `
+    WITH per_contract AS (
+      SELECT
+        TO_CHAR(dtc.approve_date, 'YYYY-MM') AS approve_month,
+        dtc.contract_external_id,
+        MAX(CAST(COALESCE(dtc.finance_amount, '0') AS DECIMAL(18,2))) AS finance_amount
+      FROM debt_target_cache dtc
+      WHERE ${baseWhere}
+        AND dtc.due_date IS NOT NULL
+      GROUP BY TO_CHAR(dtc.approve_date, 'YYYY-MM'), dtc.contract_external_id
+    )
+    SELECT
+      approve_month,
+      SUM(finance_amount) AS finance_total
+    FROM per_contract
+    GROUP BY 1
+    ORDER BY 1 DESC
+  `;
+  const rows = await db.execute(sql.raw(q));
+  return (pgRows(rows) as any[]).map((r: any) => ({
+    approve_month: r.approve_month as string,
+    finance_total: n(r.finance_total),
+  }));
+}
+
+/**
  * Main export: getDueMonthSummary
  * ดึงข้อมูล approve_month × due_month สำหรับ Combined Tab Mode "เดือนที่ต้องชำระ"
  */
@@ -1861,7 +1905,7 @@ export async function getDueMonthSummary(
     search: params.search,
   };
 
-  const [countRows, targetRows, dueRows, notYetDueRows, installTotalRows, paidRows, approvedCountRows] = await Promise.all([
+  const [countRows, targetRows, dueRows, notYetDueRows, installTotalRows, paidRows, approvedCountRows, financeTotalRows] = await Promise.all([
     queryDueMonthCount(section, opts),
     queryDueMonthTarget(section, opts),
     queryDueMonthDue(section, opts),
@@ -1869,6 +1913,7 @@ export async function getDueMonthSummary(
     queryDueMonthInstallTotal(section, opts),
     queryDueMonthPaid(section, opts),
     queryDueMonthApprovedCount(section, opts),
+    queryDueMonthFinanceTotal(section, opts), // ยอดจัดฯรวมต่อ approve_month (ไม่กระจาย) เพื่อให้ตรงกับ mode สถานะหนี้
   ]);
 
   // รวบรวม approve_months และ due_months ทั้งหมด
@@ -1968,6 +2013,10 @@ export async function getDueMonthSummary(
     financeTotalDueMap.set(`${r.approve_month}|${r.due_month}`, n(r.finance_total));
   }
 
+  // Map ยอดจัดฯรวมต่อ approve_month (ไม่กระจาย) — ใช้แทน totalFinanceTotal จาก cell loop
+  const financeTotalPerMonthMap = new Map<string, number>();
+  for (const r of financeTotalRows) financeTotalPerMonthMap.set(r.approve_month, r.finance_total);
+
   const paidMap = new Map<Key, MoneyBreakdown>();
   for (const r of paidRows) {
     paidMap.set(`${r.approve_month}|${r.due_month}`, {
@@ -1982,7 +2031,8 @@ export async function getDueMonthSummary(
   return approveMonths.map((approveMonth) => {
     const dueMonths: Record<string, DueMonthCell> = {};
     let totalCount = 0;
-    let totalFinanceTotal = 0;
+    // ใช้ยอดจัดฯจาก query แยกโดยตรง ไม่บวกจาก cell loop — เพื่อให้ตรงกับ mode สถานะหนี้
+    const totalFinanceTotal = financeTotalPerMonthMap.get(approveMonth) ?? 0;
     const totalPaid         = emptyMoney();
     const totalDue          = emptyMoney();
     const totalTarget       = emptyMoney();
@@ -2004,7 +2054,7 @@ export async function getDueMonthSummary(
 
       dueMonths[dueMonth] = { contractCount, paid, due, target, notYetDue, installTotal, financeTotal };
       totalCount += contractCount;
-      totalFinanceTotal += financeTotal;
+      // totalFinanceTotal ใช้จาก financeTotalPerMonthMap แล้ว ไม่บวกจาก cell loop
       for (const k of Object.keys(totalDue) as (keyof MoneyBreakdown)[]) {
         (totalPaid         as any)[k] += paid[k];
         (totalDue          as any)[k] += due[k];
