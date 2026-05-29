@@ -1,12 +1,13 @@
 /**
- * Simple in-process scheduler — runs once a day at 01:00 Asia/Bangkok time.
- * The process checks once a minute; when hour matches 1 (Bangkok time) and we
+ * Simple in-process scheduler — runs once a day at 02:00 Asia/Bangkok time.
+ * The process checks once a minute; when hour matches 2 (Bangkok time) and we
  * haven't already synced today, it kicks off a run for each configured section.
  *
  * NOTE: Changed from 22:00 → 01:00 per business requirement (2026-05-19).
+ * NOTE: Changed from 01:00 → 02:00 per business requirement (2026-05-30).
  * Sync is idempotent (upsert-only) — no data is deleted after sync.
  *
- * No missed-sync recovery on startup — sync runs ONLY at 01:00 daily.
+ * No missed-sync recovery on startup — sync runs ONLY at 02:00 daily.
  *
  * IMPORTANT: Server may run in UTC or other timezones. All time comparisons
  * MUST use Asia/Bangkok (UTC+7) to match business requirements.
@@ -24,7 +25,7 @@ function isSectionConfigured(section: SectionKey): boolean {
   return Boolean(client && client.isConfigured());
 }
 
-const SYNC_HOUR = 1; // 01:00 daily Asia/Bangkok (re-enabled 2026-05-28)
+const SYNC_HOUR = 2; // 02:00 daily Asia/Bangkok (changed 2026-05-30)
 const BANGKOK_TZ = "Asia/Bangkok";
 
 let _timer: NodeJS.Timeout | null = null;
@@ -70,7 +71,7 @@ async function tick() {
     if (_lastTick[section] === slot) continue;
     if (isSyncRunning(section)) continue;
     _lastTick[section] = slot;
-    console.log(`[scheduler] ${tag} triggering daily cron sync at 01:00 (Bangkok time: ${hour}:${String(minute).padStart(2,"0")})`);
+    console.log(`[scheduler] ${tag} triggering daily cron sync at 02:00 (Bangkok time: ${hour}:${String(minute).padStart(2,"0")})`);
     runSectionSync(section, "cron").catch((err) =>
       console.error(`[scheduler] ${tag} failed:`, err),
     );
@@ -79,7 +80,7 @@ async function tick() {
 
 /**
  * Start the scheduler.
- * Only sets up the 01:00 daily cron — no missed-sync recovery on startup.
+ * Only sets up the 02:00 daily cron — no missed-sync recovery on startup.
  */
 export async function startScheduler() {
   if (_timer) return;
@@ -89,7 +90,7 @@ export async function startScheduler() {
   }
   const now = new Date();
   const { hour: bangkokHour, daySlot } = getBangkokTimeParts(now);
-    console.log(`[scheduler] started (daily at 01:00 Asia/Bangkok) — current Bangkok time: ${bangkokHour}:xx, slot: ${daySlot}`);
+  console.log(`[scheduler] started (daily at 02:00 Asia/Bangkok) — current Bangkok time: ${bangkokHour}:xx, slot: ${daySlot}`);
 
   // On startup: clear any orphaned in_progress rows left by a previous
   // Cloud Run instance that was killed mid-sync.
