@@ -8,9 +8,10 @@ services:
         value: production
       - key: PORT
         value: 3000
+      # DATABASE_URL ชี้ไปที่ boonphone-db (ใช้เป็น fallback และ auth DB)
       - key: DATABASE_URL
         fromDatabase:
-          name: report-db
+          name: boonphone-db
           property: connectionString
       - key: JWT_SECRET
         generateValue: true
@@ -28,10 +29,7 @@ services:
         sync: false
       - key: MDM_API_KEY_FASTFONE365
         sync: false
-
-databases:
-  - name: report-db
-    plan: free
-    databaseName: report_system
-    user: report_user
-    ipAllowList: [] # Allow all internal connections
+      - key: BOONPHONE_DATABASE_URL
+        sync: false
+      - key: FASTFONE_DATABASE_URL
+        sync: false
