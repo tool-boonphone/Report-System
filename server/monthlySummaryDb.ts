@@ -2718,17 +2718,51 @@ export async function getDueMonthSummaryFromCache(
   const paidRows         = allDbRows.filter((r) => r.query_type === "paid");
 
   // รวบรวม approve_months และ due_months ทั้งหมด
-  const monthSet    = new Set<string>();
-  const dueMonthSet = new Set<string>();
-  for (const r of allDbRows) {
+  // แยก due_date-based queries ออกจาก paid_at query เหมือน getDueMonthSummary (direct query)
+  // เพื่อป้องกันเดือนอนาคตจาก paid_at ล่วงหน้าขยาย allDueMonths range
+  const monthSet        = new Set<string>();
+  const dueDateMonthSet = new Set<string>(); // due_month จาก due_date-based queries
+  const paidMonthSet    = new Set<string>(); // due_month จาก paid_at
+  for (const r of [...countRows, ...targetRows, ...dueRows, ...notYetDueRows, ...installTotalRows]) {
     monthSet.add(r.approve_month);
-    dueMonthSet.add(r.due_month);
+    dueDateMonthSet.add(r.due_month);
+  }
+  for (const r of paidRows) {
+    monthSet.add(r.approve_month);
+    paidMonthSet.add(r.due_month);
   }
   // เพิ่ม approve_months จาก monthly_summary_cache ด้วย (กรณีที่ due_month cache ยังว่าง)
   for (const r of summaryCountRows) monthSet.add(r.approve_month);
 
   const approveMonths = Array.from(monthSet).sort((a, b) => b.localeCompare(a));
-  const allDueMonths  = Array.from(dueMonthSet).sort((a, b) => a.localeCompare(b));
+
+  // สร้าง allDueMonths เป็น continuous range โดยยึด max จาก due_date-based queries
+  // ไม่ใช้ paid_at เป็น max เพราะอาจชำระล่วงหน้าทำให้ range ยาวเกินจริง (มีเดือนอนาคต)
+  let allDueMonths: string[];
+  const sortedDueDateMonths = Array.from(dueDateMonthSet).sort((a, b) => a.localeCompare(b));
+  if (sortedDueDateMonths.length === 0) {
+    // ไม่มี due_date data เลย — ใช้ paid months แทน
+    allDueMonths = Array.from(paidMonthSet).sort((a, b) => a.localeCompare(b));
+  } else {
+    const minDm = sortedDueDateMonths[0];
+    const maxDm = sortedDueDateMonths[sortedDueDateMonths.length - 1];
+    // Generate continuous range from minDm to maxDm (anchor ที่ due_date range)
+    allDueMonths = [];
+    let [y, m] = minDm.split("-").map(Number);
+    const [maxY, maxM] = maxDm.split("-").map(Number);
+    while (y < maxY || (y === maxY && m <= maxM)) {
+      allDueMonths.push(`${y}-${String(m).padStart(2, "0")}`);
+      m++;
+      if (m > 12) { m = 1; y++; }
+    }
+    // เพิ่ม paid months ที่อยู่นอก range เฉพาะที่ไม่เกิน max ของ due_date range
+    // (paid ก่อน due_date min สามารถเพิ่มได้ แต่ paid หลัง max ไม่เพิ่ม เพราะเป็นอนาคต)
+    const allDueMonthSet = new Set(allDueMonths);
+    for (const pm of Array.from(paidMonthSet)) {
+      if (!allDueMonthSet.has(pm) && pm <= maxDm) allDueMonths.push(pm);
+    }
+    allDueMonths.sort((a, b) => a.localeCompare(b));
+  }
 
   // Filter ตาม approveMonths param ถ้ามี
   const filteredApproveMonths = params.approveMonths
