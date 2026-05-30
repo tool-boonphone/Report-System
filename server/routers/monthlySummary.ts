@@ -18,7 +18,7 @@
  */
 import { z } from "zod";
 import { requirePermission, router } from "../_core/trpc";
-import { getMonthlySummary, DEBT_BUCKETS, getDueMonthSummary, getDueMonthSummaryFromCache } from "../monthlySummaryDb";
+import { getMonthlySummary, DEBT_BUCKETS, getDueMonthSummary, getDueMonthSummaryFromCache, getMonthlySummaryTotalsOnly } from "../monthlySummaryDb";
 import { sectionSchema } from "../../shared/const";
 import { getDb } from "../db";
 import { sql } from "drizzle-orm";
@@ -71,7 +71,7 @@ export const monthlySummaryRouter = router({
       }),
     )
     .query(async ({ input }) => {
-      const [summaryRows, productTypesResult] = await Promise.all([
+      const [summaryRows, productTypesResult, totalsRows] = await Promise.all([
         getMonthlySummary(input),
         getDb(input.section).then(async (db) => {
           if (!db) return [] as string[];
@@ -86,7 +86,18 @@ export const monthlySummaryRouter = router({
           const rows: any[] = pgRows(r);
           return rows.map((x: any) => String(x.product_type ?? "")).filter(Boolean);
         }),
+        // คอลัมน์รวมที่ถูกต้อง — group by approve_date ทุก query
+        getMonthlySummaryTotalsOnly(input.section, {
+          productType:    input.countProductType,
+          deviceFamily:   input.countDeviceFamily,
+          approveMonths:  input.countApproveMonths,
+          search:         input.search || undefined,
+        }),
       ]);
+
+      // สร้าง map สำหรับ totals ที่ถูกต้อง
+      const totalsMap = new Map<string, typeof totalsRows[0]>();
+      for (const t of totalsRows) totalsMap.set(t.approveMonth, t);
 
       // Flatten nested MonthlySummaryRow[] → flat rows
       const flatRows: {
@@ -161,50 +172,51 @@ export const monthlySummaryRouter = router({
             financeTotal:           cell.financeTotal ?? 0,
           });
         }
-        // "__total__" row สำหรับแต่ละเดือน
+        // "__total__" row — ใช้ totalsMap (getMonthlySummaryTotalsOnly) เพื่อความถูกต้อง
+        const t = totalsMap.get(row.approveMonth);
         flatRows.push({
           approveMonth: row.approveMonth,
           bucket: "__total__",
-          contractCount: row.totalCount,
-          // paid
-          paidPrincipal:          row.totalPaid.principal,
-          paidInterest:           row.totalPaid.interest,
-          paidFee:                row.totalPaid.fee,
-          paidPenalty:            row.totalPaid.penalty,
-          paidUnlockFee:          row.totalPaid.unlockFee,
-          paidDiscount:           row.totalPaid.discount,
-          paidOverpaid:           row.totalPaid.overpaid,
-          paidBadDebt:            row.totalPaid.badDebt,
-          paidBadDebtInstallment: row.totalPaid.badDebtInstallment,
-          paidTotal:              row.totalPaid.total,
+          contractCount:          t?.contractCount   ?? row.totalCount,
+          // paid — group by approve_date (ถูกต้อง)
+          paidPrincipal:          0,
+          paidInterest:           0,
+          paidFee:                0,
+          paidPenalty:            0,
+          paidUnlockFee:          0,
+          paidDiscount:           0,
+          paidOverpaid:           0,
+          paidBadDebt:            0,
+          paidBadDebtInstallment: 0,
+          paidTotal:              t?.paidTotal       ?? row.totalPaid.total,
           // due
-          duePrincipal:           row.totalDue.principal,
-          dueInterest:            row.totalDue.interest,
-          dueFee:                 row.totalDue.fee,
-          duePenalty:             row.totalDue.penalty,
-          dueUnlockFee:           row.totalDue.unlockFee,
-          dueTotal:               row.totalDue.total,
+          duePrincipal:           0,
+          dueInterest:            0,
+          dueFee:                 0,
+          duePenalty:             0,
+          dueUnlockFee:           0,
+          dueTotal:               t?.dueTotal        ?? row.totalDue.total,
           // target
-          targetPrincipal:        row.totalTarget.principal,
-          targetInterest:         row.totalTarget.interest,
-          targetFee:              row.totalTarget.fee,
-          targetPenalty:          row.totalTarget.penalty,
-          targetUnlockFee:        row.totalTarget.unlockFee,
-          targetTotal:            row.totalTarget.total,
+          targetPrincipal:        0,
+          targetInterest:         0,
+          targetFee:              0,
+          targetPenalty:          0,
+          targetUnlockFee:        0,
+          targetTotal:            t?.targetTotal     ?? row.totalTarget.total,
           // notYetDue
-          notYetDuePrincipal:     row.totalNotYetDue.principal,
-          notYetDueInterest:      row.totalNotYetDue.interest,
-          notYetDueFee:           row.totalNotYetDue.fee,
-          notYetDuePenalty:       row.totalNotYetDue.penalty,
-          notYetDueUnlockFee:     row.totalNotYetDue.unlockFee,
-          notYetDueTotal:         row.totalNotYetDue.total,
+          notYetDuePrincipal:     0,
+          notYetDueInterest:      0,
+          notYetDueFee:           0,
+          notYetDuePenalty:       0,
+          notYetDueUnlockFee:     0,
+          notYetDueTotal:         t?.notYetDueTotal  ?? row.totalNotYetDue.total,
           // installTotal
-          installTotalPrincipal:  row.totalInstallTotal.principal,
-          installTotalInterest:   row.totalInstallTotal.interest,
-          installTotalFee:        row.totalInstallTotal.fee,
-          installTotalTotal:      row.totalInstallTotal.total,
+          installTotalPrincipal:  0,
+          installTotalInterest:   0,
+          installTotalFee:        0,
+          installTotalTotal:      t?.installTotal    ?? row.totalInstallTotal.total,
           // financeTotal
-          financeTotal:           row.totalFinanceTotal ?? 0,
+          financeTotal:           t?.financeTotal    ?? row.totalFinanceTotal ?? 0,
         });
       }
 
@@ -235,7 +247,19 @@ export const monthlySummaryRouter = router({
         deviceFamily: input.deviceFamily,
         search: input.search || undefined,
       };
-      const cacheResult = await getDueMonthSummaryFromCache(params);
+      // ดึง totals ที่ถูกต้อง (group by approve_date) พร้อมกัน
+      const [cacheResult, totalsRows] = await Promise.all([
+        getDueMonthSummaryFromCache(params),
+        getMonthlySummaryTotalsOnly(input.section, {
+          productType:   input.productType,
+          deviceFamily:  input.deviceFamily,
+          approveMonths: input.approveMonths,
+          search:        input.search || undefined,
+        }),
+      ]);
+      const totalsMap = new Map<string, typeof totalsRows[0]>();
+      for (const t of totalsRows) totalsMap.set(t.approveMonth, t);
+
       let summaryRows = cacheResult.rows;
       let allDueMonths = cacheResult.allDueMonths;
       const usedCache = summaryRows.length > 0;
@@ -282,17 +306,23 @@ export const monthlySummaryRouter = router({
             financeTotal: cell.financeTotal ?? 0,
           });
         }
-        // __total__ row — contractCount = approvedCount (จำนวนสัญญาที่อนุมัติในเดือนนั้น)
+        // __total__ row — ใช้ totalsMap (getMonthlySummaryTotalsOnly) เพื่อความถูกต้อง
+        const t = totalsMap.get(row.approveMonth);
         flatRows.push({
           approveMonth: row.approveMonth,
           dueMonth: "__total__",
-          contractCount: row.approvedCount,
-          paidTotal: row.totalPaid.total, paidPrincipal: row.totalPaid.principal, paidInterest: row.totalPaid.interest, paidFee: row.totalPaid.fee, paidPenalty: row.totalPaid.penalty, paidUnlockFee: row.totalPaid.unlockFee, paidDiscount: row.totalPaid.discount, paidOverpaid: row.totalPaid.overpaid, paidBadDebt: row.totalPaid.badDebt, paidBadDebtInstallment: row.totalPaid.badDebtInstallment,
-          targetTotal: row.totalTarget.total, targetPrincipal: row.totalTarget.principal, targetInterest: row.totalTarget.interest, targetFee: row.totalTarget.fee, targetPenalty: row.totalTarget.penalty, targetUnlockFee: row.totalTarget.unlockFee,
-          dueTotal: row.totalDue.total, duePrincipal: row.totalDue.principal, dueInterest: row.totalDue.interest, dueFee: row.totalDue.fee, duePenalty: row.totalDue.penalty, dueUnlockFee: row.totalDue.unlockFee,
-          notYetDueTotal: row.totalNotYetDue.total, notYetDuePrincipal: row.totalNotYetDue.principal, notYetDueInterest: row.totalNotYetDue.interest, notYetDueFee: row.totalNotYetDue.fee, notYetDuePenalty: row.totalNotYetDue.penalty, notYetDueUnlockFee: row.totalNotYetDue.unlockFee,
-          installTotalTotal: row.totalInstallTotal.total, installTotalPrincipal: row.totalInstallTotal.principal, installTotalInterest: row.totalInstallTotal.interest, installTotalFee: row.totalInstallTotal.fee,
-          financeTotal: row.totalFinanceTotal ?? 0,
+          contractCount:          t?.contractCount  ?? row.approvedCount,
+          paidTotal:              t?.paidTotal      ?? row.totalPaid.total,
+          paidPrincipal: 0, paidInterest: 0, paidFee: 0, paidPenalty: 0, paidUnlockFee: 0, paidDiscount: 0, paidOverpaid: 0, paidBadDebt: 0, paidBadDebtInstallment: 0,
+          targetTotal:            t?.targetTotal    ?? row.totalTarget.total,
+          targetPrincipal: 0, targetInterest: 0, targetFee: 0, targetPenalty: 0, targetUnlockFee: 0,
+          dueTotal:               t?.dueTotal       ?? row.totalDue.total,
+          duePrincipal: 0, dueInterest: 0, dueFee: 0, duePenalty: 0, dueUnlockFee: 0,
+          notYetDueTotal:         t?.notYetDueTotal ?? row.totalNotYetDue.total,
+          notYetDuePrincipal: 0, notYetDueInterest: 0, notYetDueFee: 0, notYetDuePenalty: 0, notYetDueUnlockFee: 0,
+          installTotalTotal:      t?.installTotal   ?? row.totalInstallTotal.total,
+          installTotalPrincipal: 0, installTotalInterest: 0, installTotalFee: 0,
+          financeTotal:           t?.financeTotal   ?? row.totalFinanceTotal ?? 0,
         });
       }
 

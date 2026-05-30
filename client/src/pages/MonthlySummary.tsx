@@ -30,6 +30,10 @@ import * as XLSX from "xlsx";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
+// HIDE_BUCKET_COLS: ซ่อน bucket columns ชั่วคราว — แสดงเฉพาะคอลัมน์รวม
+// ตั้งค่าเป็น false เพื่อเปิด bucket columns กลับมา
+const HIDE_BUCKET_COLS = true;
+
 const DEBT_BUCKETS = [
   "ปกติ","เกิน 1-7","เกิน 8-14","เกิน 15-30","เกิน 31-60",
   "เกิน 61-90","เกิน >90","ระงับสัญญา","สิ้นสุดสัญญา","หนี้เสีย","ยกเลิกสัญญา",
@@ -1842,7 +1846,7 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
           <th rowSpan={3} className={`sticky left-[130px] z-30 px-3 py-2 text-right font-semibold whitespace-nowrap ${col2Color} text-white border-r border-white/20 min-w-[110px]`}>
             {col2Label}
           </th>
-          {visibleGroups.map((g)=>{
+          {!HIDE_BUCKET_COLS && visibleGroups.map((g)=>{
             const bucketSpan=g.buckets.reduce((a,b)=>a+bucketColSpan(b),0);
             const span=bucketSpan+(g.hasSubtotal?1:0);
             if(!g.label){
@@ -1900,7 +1904,7 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
         </tr>
         {/* ── Row 2: bucket headers (for groups with subtotal) ──────── */}
         <tr>
-          {visibleGroups.map((g)=>{
+          {!HIDE_BUCKET_COLS && visibleGroups.map((g)=>{
             if(!g.label)return null;
             return(
               <React.Fragment key={g.key}>
@@ -1935,17 +1939,17 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
                   <span className="text-gray-800">{fmtMonthYear(row.approveMonth)}</span>
                 </div>
               </td>
-              {/* รวมคอลัมน์ 2 */}
+              {/* รวมคอลัมน์ 2 — ใช้ totalXxx จาก getMonthlySummaryTotalsOnly */}
               <td className="sticky left-[130px] z-10 px-3 py-2.5 text-right bg-white border-r border-gray-200 min-w-[110px]">
-                {tab==="count"?renderCount(isHiddenRow?0:rowContractTotal(row))
-                :tab==="installTotal"?renderMoney(isHiddenRow?0:rowInstallTotal(row),"text-purple-800 font-semibold")
-                :tab==="target"?renderMoney(isHiddenRow?0:rowTargetTotal(row),"text-indigo-800 font-semibold")
-                :tab==="paid"?renderMoney(isHiddenRow?0:rowPaidTotal(row),"text-green-800 font-semibold")
-                :tab==="due"?renderMoney(isHiddenRow?0:rowDueTotal(row),"text-orange-800 font-semibold")
-                :renderMoney(isHiddenRow?0:rowNotYetDueTotal(row),"text-blue-800 font-semibold")}
+                {tab==="count"?renderCount(isHiddenRow?0:row.totalCount)
+                :tab==="installTotal"?renderMoney(isHiddenRow?0:row.totalInstallTotal.total,"text-purple-800 font-semibold")
+                :tab==="target"?renderMoney(isHiddenRow?0:row.totalTarget.total,"text-indigo-800 font-semibold")
+                :tab==="paid"?renderMoney(isHiddenRow?0:row.totalPaid.total,"text-green-800 font-semibold")
+                :tab==="due"?renderMoney(isHiddenRow?0:row.totalDue.total,"text-orange-800 font-semibold")
+                :renderMoney(isHiddenRow?0:row.totalNotYetDue.total,"text-blue-800 font-semibold")}
               </td>
-              {/* Bucket cells */}
-              {visibleGroups.map((g,gi)=>(
+              {/* Bucket cells — ซ่อนชั่วคราวเมื่อ HIDE_BUCKET_COLS=true */}
+              {!HIDE_BUCKET_COLS && visibleGroups.map((g,gi)=>(
                 <React.Fragment key={g.key}>
                   {g.buckets.map((b)=>{
                     const cell=row.buckets[b];const cellBg=bucketCellBg(b);
@@ -2071,14 +2075,14 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
           <tr>
             <td className="sticky left-0 z-20 px-3 py-2.5 text-slate-800 whitespace-nowrap border-r border-slate-300 bg-slate-200 min-w-[130px]">รวมทั้งหมด</td>
             <td className="sticky left-[130px] z-20 px-3 py-2.5 text-right border-r border-slate-300 bg-slate-200 min-w-[110px]">
-              {tab==="count"?(<span className="inline-flex items-center justify-center bg-slate-400 text-white rounded-full px-2.5 py-0.5 text-xs font-bold">{gtContractTotal.toLocaleString()}</span>)
-              :tab==="installTotal"?renderMoney(gtInstallTotal,"text-purple-900")
-              :tab==="target"?renderMoney(gtTargetTotal,"text-indigo-900")
-              :tab==="paid"?renderMoney(gtPaidTotal,"text-green-900")
-              :tab==="due"?renderMoney(gtDueTotal,"text-orange-900")
-              :renderMoney(gtNotYetDueTotal,"text-blue-900")}
+              {tab==="count"?(<span className="inline-flex items-center justify-center bg-slate-400 text-white rounded-full px-2.5 py-0.5 text-xs font-bold">{grandTotal.totalCount.toLocaleString()}</span>)
+              :tab==="installTotal"?renderMoney(grandTotal.totalInstallTotal.total,"text-purple-900")
+              :tab==="target"?renderMoney(grandTotal.totalTarget.total,"text-indigo-900")
+              :tab==="paid"?renderMoney(grandTotal.totalPaid.total,"text-green-900")
+              :tab==="due"?renderMoney(grandTotal.totalDue.total,"text-orange-900")
+              :renderMoney(grandTotal.totalNotYetDue.total,"text-blue-900")}
             </td>
-            {visibleGroups.map((g,gi)=>(
+            {!HIDE_BUCKET_COLS && visibleGroups.map((g,gi)=>(
               <React.Fragment key={g.key}>
                 {g.buckets.map((b)=>{
                   const cellBg=bucketCellBg(b);
@@ -2992,18 +2996,18 @@ function DueMonthTable({
           <th rowSpan={2} className="sticky left-[220px] z-30 px-3 py-2 text-right font-semibold whitespace-nowrap bg-teal-700 text-white border-r border-teal-500 min-w-[90px]">
             รวม
           </th>
-          {/* เดือนที่ต้องชำระ header */}
-          <th colSpan={allDueMonths.length} className="px-2 py-1.5 text-center font-semibold text-white whitespace-nowrap bg-teal-600 border-r border-white/30">
+          {/* เดือนที่ต้องชำระ header — ซ่อนชั่วคราวเมื่อ HIDE_BUCKET_COLS=true */}
+          {!HIDE_BUCKET_COLS && <th colSpan={allDueMonths.length} className="px-2 py-1.5 text-center font-semibold text-white whitespace-nowrap bg-teal-600 border-r border-white/30">
             เดือนที่ต้องชำระ
-          </th>
+          </th>}
         </tr>
-        <tr>
+        {!HIDE_BUCKET_COLS && <tr>
           {allDueMonths.map((dm)=>(
             <th key={dm} className="px-2 py-1.5 text-center font-semibold text-white whitespace-nowrap min-w-[110px] border-r border-white/20 bg-teal-600">
               <span className="text-[10px]">{fmtMonthYear(dm)}</span>
             </th>
           ))}
-        </tr>
+        </tr>}
       </thead>
       <tbody>
         {rows.map((row)=>{
@@ -3031,8 +3035,8 @@ function DueMonthTable({
                   <td className={["sticky left-[220px] z-10 px-3 py-1.5 text-right border-r border-gray-200 min-w-[150px]",sr.totalBg].join(" ")}>
                     {renderVal(sr.key, isHiddenRow?0:totalVal(sr.key,row), sr.textColor, isHiddenRow?0:totalVal("installTotal",row), isHiddenRow?0:totalVal("target",row))}
                   </td>
-                  {/* due month cells */}
-                  {allDueMonths.map((dm)=>{
+                  {/* due month cells — ซ่อนชั่วคราวเมื่อ HIDE_BUCKET_COLS=true */}
+                  {!HIDE_BUCKET_COLS && allDueMonths.map((dm)=>{
                     const cell=row.dueMonths[dm];
                     const val=isHiddenRow?0:cellVal(sr.key,cell);
                     const installCellVal=isHiddenRow?0:cellVal("installTotal",cell);
@@ -3075,7 +3079,8 @@ function DueMonthTable({
                 computeMoneyTotal(grandTotalOverall.totalTarget,{...targetVis,discount:false,overpaid:false})
               )}
             </td>
-            {allDueMonths.map((dm)=>{
+            {/* per-dueMonth grand total — ซ่อนชั่วคราวเมื่อ HIDE_BUCKET_COLS=true */}
+            {!HIDE_BUCKET_COLS && allDueMonths.map((dm)=>{
               const cell=grandTotalByDueMonth[dm];
               const val=cellVal(sr.key,cell);
               const installGtVal=cellVal("installTotal",cell);

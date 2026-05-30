@@ -120,6 +120,29 @@ async function startServer() {
       return res.status(500).json({ error: String(err?.message ?? err) });
     }
   });
+  // Internal endpoint: Clear Monthly Summary cache (TRUNCATE both tables for a section)
+  // POST /api/internal/clear-monthly-summary-cache
+  // Body: { section: 'Boonphone' | 'Fastfone365' }
+  app.post("/api/internal/clear-monthly-summary-cache", async (req, res) => {
+    const { section } = req.body as { section?: string };
+    if (!section || !["Boonphone", "Fastfone365"].includes(section)) {
+      return res.status(400).json({ error: "Invalid section. Use Boonphone or Fastfone365" });
+    }
+    try {
+      const { getDb } = await import("../db");
+      const { sql } = await import("drizzle-orm");
+      const sec = section as import("../../shared/const").SectionKey;
+      const db = await getDb(sec);
+      if (!db) return res.status(500).json({ error: "DB not found" });
+      await db.execute(sql.raw(`DELETE FROM monthly_summary_cache WHERE section = '${sec}'`));
+      await db.execute(sql.raw(`DELETE FROM monthly_summary_due_month_cache WHERE section = '${sec}'`));
+      console.log(`[clear-monthly-summary-cache] ${sec} — both tables cleared`);
+      return res.json({ ok: true, section: sec, clearedAt: new Date().toISOString() });
+    } catch (err: any) {
+      console.error("[clear-monthly-summary-cache]", err);
+      return res.status(500).json({ error: String(err?.message ?? err) });
+    }
+  });
   // Internal backfill endpoint — no auth, only for local/admin use
   app.post("/api/internal/backfill-cache", async (req, res) => {
     const { section } = req.body as { section?: string };
