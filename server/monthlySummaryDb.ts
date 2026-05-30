@@ -3016,12 +3016,14 @@ export async function getMonthlySummaryTotalsOnly(
       FROM debt_target_cache dtc
       WHERE ${dtcWhere}
         AND DATE(dtc.due_date) <= CURRENT_DATE
+        AND COALESCE(dtc.contract_status, '') NOT IN ('ยกเลิกสัญญา', 'ระงับสัญญา', 'สิ้นสุดสัญญา', 'หนี้เสีย')
       GROUP BY dtc.section, dtc.contract_external_id
     ) latest ON latest.section = base.section
              AND latest.contract_external_id = base.contract_external_id
     WHERE base.section = '${section}'
       AND base.approve_date IS NOT NULL
       AND DATE(base.due_date) <= CURRENT_DATE
+      AND COALESCE(base.contract_status, '') NOT IN ('ยกเลิกสัญญา', 'ระงับสัญญา', 'สิ้นสุดสัญญา', 'หนี้เสีย')
     GROUP BY 1
     ORDER BY 1 DESC
   `;

@@ -2894,11 +2894,12 @@ function DueMonthTable({
   function totalVal(key: "count"|"financeTotal"|"installTotal"|"target"|"paid"|"due"|"notYetDue", row: DueMonthRowLocal): number {
     if(key==="count")return row.approvedCount; // จำนวนสัญญาที่อนุมัติในเดือนนั้น
     if(key==="financeTotal")return row.totalFinanceTotal??0;
-    if(key==="installTotal")return (installVis.principal?row.totalInstallTotal.principal:0)+(installVis.interest?row.totalInstallTotal.interest:0)+(installVis.fee?row.totalInstallTotal.fee:0);
-    if(key==="target")return computeMoneyTotal(row.totalTarget,{...targetVis,discount:false,overpaid:false});
-    if(key==="paid")return computeMoneyTotal(row.totalPaid,paidVis);
-    if(key==="due")return computeDueTotal(row.totalDue,dueVis);
-    if(key==="notYetDue")return computeNotYetDueTotal(row.totalNotYetDue,notYetDueVis);
+    // คอลัมน์รวม: ใช้ .total โดยตรง ไม่ขึ้นกับ badge visibility
+    if(key==="installTotal")return row.totalInstallTotal.total;
+    if(key==="target")return row.totalTarget.total;
+    if(key==="paid")return row.totalPaid.total;
+    if(key==="due")return row.totalDue.total;
+    if(key==="notYetDue")return row.totalNotYetDue.total;
     return 0;
   }
 
