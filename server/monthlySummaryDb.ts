@@ -179,7 +179,10 @@ function dtcWhere(section: string, opts: {
   }
   if (opts.search) {
     const s = escapeLike(opts.search);
-    w += `\n    AND (dtc.contract_no LIKE '%${s}%' OR dtc.customer_name LIKE '%${s}%')`;
+    // เพิ่มค้นหาเบอร์โทรศัพท์ (ค้นหาจากตาราง contracts ผ่าน subquery หรือ join)
+    // แต่เนื่องจากเรา query จาก debt_target_cache (dtc) ซึ่งอาจจะไม่มีเบอร์โทรใน cache
+    // เราสามารถ join กับ contracts เพื่อค้นหาเบอร์โทรได้
+    w += `\n    AND (dtc.contract_no LIKE '%${s}%' OR dtc.customer_name LIKE '%${s}%' OR dtc.contract_external_id IN (SELECT c.external_id FROM contracts c WHERE c.phone LIKE '%${s}%'))`;
   }
   return w;
 }
@@ -190,6 +193,7 @@ function dccWhere(section: string, opts: {
   deviceFamily?: string;
   paidAtDate?: string;
   paidAtMonths?: string[];
+  approveMonths?: string[];
   search?: string;
 }): string {
   // หมายเหตุ: ไม่ filter ยกเลิกสัญญา ออก เพราะสัญญายกเลิกอาจมียอดชำระเข้ามาก่อนยกเลิก ซึ่งต้องนับรวมในยอดเก็บหนี้
@@ -210,9 +214,13 @@ function dccWhere(section: string, opts: {
     const list = opts.paidAtMonths.map((m) => `'${m}'`).join(",");
     w += `\n    AND TO_CHAR(dcc.paid_at, 'YYYY-MM') IN (${list})`;
   }
+  if (opts.approveMonths && opts.approveMonths.length > 0) {
+    const list = opts.approveMonths.map((m) => `'${m}'`).join(",");
+    w += `\n    AND TO_CHAR(dcc.approve_date, 'YYYY-MM') IN (${list})`;
+  }
   if (opts.search) {
     const s = escapeLike(opts.search);
-    w += `\n    AND (dcc.contract_no LIKE '%${s}%' OR dcc.customer_name LIKE '%${s}%')`;
+    w += `\n    AND (dcc.contract_no LIKE '%${s}%' OR dcc.customer_name LIKE '%${s}%' OR dcc.contract_external_id IN (SELECT c.external_id FROM contracts c WHERE c.phone LIKE '%${s}%'))`;
   }
   return w;
 }
@@ -356,6 +364,7 @@ async function queryPaid(
   opts: {
     paidAtDate?: string;
     paidAtMonths?: string[];
+    approveMonths?: string[];
     productType?: string;
     deviceFamily?: string;
     search?: string;
@@ -445,7 +454,7 @@ async function queryPaid(
                ELSE CAST(dcc.payment_tx_amount AS DECIMAL(18,2))
           END) AS total_paid
     FROM debt_collected_cache dcc
-    WHERE ${dccWhere(section, { paidAtDate: opts.paidAtDate, paidAtMonths: opts.paidAtMonths, productType: opts.productType, deviceFamily: opts.deviceFamily, search: opts.search })}
+    WHERE ${dccWhere(section, { paidAtDate: opts.paidAtDate, paidAtMonths: opts.paidAtMonths, approveMonths: opts.approveMonths, productType: opts.productType, deviceFamily: opts.deviceFamily, search: opts.search })}
     GROUP BY 1, 2
     ORDER BY 1 DESC
   `;
@@ -739,7 +748,7 @@ async function queryInstallTotal(
       SUM(COALESCE(l.finance_amount, 0)) AS finance_total
     FROM latest l
     WHERE l.rn = 1
-      ${opts.search ? `AND (l.contract_external_id LIKE '%${escapeLike(opts.search)}%')` : ''}
+      ${opts.search ? `AND (l.contract_external_id IN (SELECT c.external_id FROM contracts c WHERE c.contract_no LIKE '%${escapeLike(opts.search)}%' OR c.customer_name LIKE '%${escapeLike(opts.search)}%' OR c.phone LIKE '%${escapeLike(opts.search)}%'))` : ''}
     GROUP BY 1, 2
     ORDER BY 1 DESC
   `;
@@ -957,10 +966,11 @@ export async function populateMonthlySummaryCache(
   // due:    pt × df × dueM
   // notYetDue: pt × df × dueM
   // installTotal: pt × df
+  const approveMCnt = dims.approveMonths.length;
   const totalCombinations =
     ptCount * dfCount +           // count
     ptCount * dfCount * dueMCnt + // target
-    ptCount * dfCount * paidMCnt +// paid
+    ptCount * dfCount * approveMCnt +// paid (เปลี่ยนเป็น approveMonths)
     ptCount * dfCount * dueMCnt + // due
     ptCount * dfCount * dueMCnt + // notYetDue
     ptCount * dfCount;            // installTotal
@@ -1019,14 +1029,14 @@ export async function populateMonthlySummaryCache(
   }
 
   // ── Query 3: paid ─────────────────────────────────────────────────────────
-  // dateMonth = paidAtMonth (filter ตาม paid_at month)
+  // dateMonth = approveMonth (filter ตาม approve_date month เพื่อให้ตรงกับ approve_month grouping)
   for (const pt of dims.productTypes) {
     for (const df of dims.deviceFamilies) {
-      for (const dm of dims.paidAtMonths) {
+      for (const dm of dims.approveMonths) {
         const rows = await queryPaid(section, {
           productType: pt ?? undefined,
           deviceFamily: df ?? undefined,
-          paidAtMonths: dm ? [dm] : undefined,
+          approveMonths: dm ? [dm] : undefined,
         });
         const mapped = rows.map((r) => ({
           approve_month: r.approve_month,
@@ -2971,6 +2981,15 @@ export async function getMonthlySummaryTotalsOnly(
     }
     return `1=1`; // ไม่มี filter → ดึงทุก date_month
   }
+  // dateMonthCondPaid: ใช้สำหรับ paid tab ที่รองรับทั้ง paidAtMonths และ approveMonths
+  function dateMonthCondPaid(paidAtMonths: string[] | undefined, approveMonths: string[] | undefined, singleDate: string | undefined): string {
+    // ถ้ามี approveMonths filter (เพราะ paid group ตาม approve_month แล้วใน cache)
+    if (approveMonths && approveMonths.length > 0) {
+      const list = approveMonths.map((m) => `'${m}'`).join(",");
+      return `date_month IN (${list})`;
+    }
+    return dateMonthCondAll(paidAtMonths, singleDate);
+  }
   function productTypeCond(pt: string | undefined): string {
     if (pt) return `product_type = '${pt.replace(/'/g, "''")}'`;
     return `product_type IS NULL`;
@@ -3021,7 +3040,7 @@ export async function getMonthlySummaryTotalsOnly(
       WHERE section = '${section}' AND query_type = 'paid'
         AND ${productTypeCond(params.paidProductType)}
         AND ${deviceFamilyCond(params.paidDeviceFamily)}
-        AND ${dateMonthCondAll(params.paidAtMonths, params.paidAtDate)}
+        AND ${dateMonthCondPaid(params.paidAtMonths, params.approveMonths, params.paidAtDate)}
     `)),
     // due: dueAtMonth filter — SUM ทั้งหมดเป็น grand total
     db.execute(sql.raw(`

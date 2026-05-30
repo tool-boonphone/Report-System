@@ -32,7 +32,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 // ─── Constants ───────────────────────────────────────────────────────────────
 // HIDE_BUCKET_COLS: ซ่อน bucket columns ชั่วคราว — แสดงเฉพาะคอลัมน์รวม
 // ตั้งค่าเป็น false เพื่อเปิด bucket columns กลับมา
-const HIDE_BUCKET_COLS = true;
+const HIDE_BUCKET_COLS = false;
 
 const DEBT_BUCKETS = [
   "ปกติ","เกิน 1-7","เกิน 8-14","เกิน 15-30","เกิน 31-60",
@@ -2084,12 +2084,12 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
           <tr>
             <td className="sticky left-0 z-20 px-3 py-2.5 text-slate-800 whitespace-nowrap border-r border-slate-300 bg-slate-200 min-w-[130px]">รวมทั้งหมด</td>
             <td className="sticky left-[130px] z-20 px-3 py-2.5 text-right border-r border-slate-300 bg-slate-200 min-w-[110px]">
-              {tab==="count"?(<span className="inline-flex items-center justify-center bg-slate-400 text-white rounded-full px-2.5 py-0.5 text-xs font-bold">{grandTotal.totalCount.toLocaleString()}</span>)
-              :tab==="installTotal"?renderMoney((installVis.principal?grandTotal.totalInstallTotal.principal:0)+(installVis.interest?grandTotal.totalInstallTotal.interest:0)+(installVis.fee?grandTotal.totalInstallTotal.fee:0),"text-purple-900")
-              :tab==="target"?renderMoney(computeMoneyTotal(grandTotal.totalTarget,{...targetVis,discount:false,overpaid:false}),"text-indigo-900")
-              :tab==="paid"?renderMoney(computeMoneyTotal(grandTotal.totalPaid,paidVis)+(showBadDebtSale?(grandTotal.totalPaid.badDebt??0):0),"text-green-900")
-              :tab==="due"?renderMoney(computeDueTotal(grandTotal.totalDue,dueVis),"text-orange-900")
-              :renderMoney(computeNotYetDueTotal(grandTotal.totalNotYetDue,notYetDueVis),"text-blue-900")}
+              {tab==="count"?(<span className="inline-flex items-center justify-center bg-slate-400 text-white rounded-full px-2.5 py-0.5 text-xs font-bold">{DEBT_BUCKETS.reduce((s,b)=>s+(hiddenBuckets.has(b)?0:(grandTotal.bucketTotals[b]?.count??0)),0).toLocaleString()}</span>)
+              :tab==="installTotal"?renderMoney(gtInstallTotal,"text-purple-900")
+              :tab==="target"?renderMoney(gtTargetTotal,"text-indigo-900")
+              :tab==="paid"?renderMoney(gtPaidTotal,"text-green-900")
+              :tab==="due"?renderMoney(gtDueTotal,"text-orange-900")
+              :renderMoney(gtNotYetDueTotal,"text-blue-900")}
             </td>
             {!HIDE_BUCKET_COLS && visibleGroups.map((g,gi)=>(
               <React.Fragment key={g.key}>
@@ -2367,9 +2367,18 @@ function CombinedTable({
   }
 
   function rowTotal(subKey:TabKey, row:SummaryRow):number {
-    // สัญญา: ใช้ totalCount จาก __total__ row (จำนวนสัญญาที่อนุมัติในเดือนนั้น ไม่นับซ้ำตาม bucket)
-    if(subKey==="count")return row.totalCount;
-    if(subKey==="financeTotal")return row.totalFinanceTotal??0;
+    if(subKey==="count"){
+      return DEBT_BUCKETS.reduce((s,b)=>{
+        if(hiddenBuckets.has(b))return s;
+        return s+(row.buckets[b]?.contractCount??0);
+      },0);
+    }
+    if(subKey==="financeTotal"){
+      return DEBT_BUCKETS.reduce((s,b)=>{
+        if(hiddenBuckets.has(b))return s;
+        return s+(row.buckets[b]?.financeTotal??0);
+      },0);
+    }
     return DEBT_BUCKETS.reduce((s,b)=>{
       if(hiddenBuckets.has(b))return s;
       const cell=row.buckets[b];
@@ -2399,9 +2408,18 @@ function CombinedTable({
     return bt.paid.badDebtInstallment??0;
   }
   function gtRowTotal(subKey:TabKey):number {
-    // สัญญา: ใช้ totalCount จาก grandTotal (ไม่นับซ้ำตาม bucket)
-    if(subKey==="count")return grandTotal.totalCount;
-    if(subKey==="financeTotal")return grandTotal.totalFinanceTotal??0;
+    if(subKey==="count"){
+      return DEBT_BUCKETS.reduce((s,b)=>{
+        if(hiddenBuckets.has(b))return s;
+        return s+(grandTotal.bucketTotals[b]?.count??0);
+      },0);
+    }
+    if(subKey==="financeTotal"){
+      return DEBT_BUCKETS.reduce((s,b)=>{
+        if(hiddenBuckets.has(b))return s;
+        return s+(grandTotal.bucketTotals[b]?.financeTotal??0);
+      },0);
+    }
     return DEBT_BUCKETS.reduce((s,b)=>{
       if(hiddenBuckets.has(b))return s;
       if(subKey==="paid"&&b==="หนี้เสีย"){
