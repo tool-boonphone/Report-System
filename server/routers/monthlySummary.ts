@@ -201,52 +201,52 @@ export const monthlySummaryRouter = router({
             financeTotal:           cell.financeTotal ?? 0,
           });
         }
-        // "__total__" row — ใช้ grand total (getMonthlySummaryTotalsOnly) เพื่อความถูกต้อง
-        // ส่ง breakdown fields ครบเพื่อให้ badge toggle ทำงานได้ถูกต้อง
+        // "__total__" row — contractCount/financeTotal/installTotal/target ใช้ค่าจาก row (per-approveMonth)
+        // paid/due/notYetDue ใช้ grand total (getMonthlySummaryTotalsOnly) เพื่อความถูกต้อง
         const t = gt;
         flatRows.push({
           approveMonth: row.approveMonth,
           bucket: "__total__",
-          contractCount:          t?.contractCount   ?? row.totalCount,
-          // paid — ใช้ breakdown จาก totalsMap (getMonthlySummaryTotalsOnly) เพื่อ badge toggle ทำงานถูกต้อง
-          paidPrincipal:          t?.paidPrincipal          ?? row.totalPaid.principal,
-          paidInterest:           t?.paidInterest           ?? row.totalPaid.interest,
-          paidFee:                t?.paidFee                ?? row.totalPaid.fee,
-          paidPenalty:            t?.paidPenalty            ?? row.totalPaid.penalty,
-          paidUnlockFee:          t?.paidUnlockFee          ?? row.totalPaid.unlockFee,
-          paidDiscount:           t?.paidDiscount           ?? row.totalPaid.discount,
-          paidOverpaid:           t?.paidOverpaid           ?? row.totalPaid.overpaid,
-          paidBadDebt:            t?.paidBadDebt            ?? row.totalPaid.badDebt,
-          paidBadDebtInstallment: t?.paidBadDebtInstallment ?? row.totalPaid.badDebtInstallment,
-          paidTotal:              t?.paidTotal              ?? row.totalPaid.total,
-          // due — ส่ง breakdown เพื่อ badge toggle
-          duePrincipal:           t?.duePrincipal    ?? 0,
-          dueInterest:            t?.dueInterest     ?? 0,
-          dueFee:                 t?.dueFee          ?? 0,
-          duePenalty:             t?.duePenalty      ?? 0,
-          dueUnlockFee:           t?.dueUnlockFee    ?? 0,
-          dueTotal:               t?.dueTotal        ?? row.totalDue.total,
-          // target — ส่ง breakdown เพื่อ badge toggle
-          targetPrincipal:        t?.targetPrincipal ?? 0,
-          targetInterest:         t?.targetInterest  ?? 0,
-          targetFee:              t?.targetFee       ?? 0,
-          targetPenalty:          t?.targetPenalty   ?? 0,
-          targetUnlockFee:        t?.targetUnlockFee ?? 0,
-          targetTotal:            t?.targetTotal     ?? row.totalTarget.total,
-          // notYetDue — ส่ง breakdown เพื่อ badge toggle
-          notYetDuePrincipal:     t?.notYetDuePrincipal ?? 0,
-          notYetDueInterest:      t?.notYetDueInterest  ?? 0,
-          notYetDueFee:           t?.notYetDueFee        ?? 0,
-          notYetDuePenalty:       t?.notYetDuePenalty    ?? 0,
-          notYetDueUnlockFee:     t?.notYetDueUnlockFee  ?? 0,
-          notYetDueTotal:         t?.notYetDueTotal  ?? row.totalNotYetDue.total,
+          contractCount:          row.totalCount,
+          // paid — ใช้ค่าจาก row (per-approveMonth) เพื่อให้ badge toggle ทำงานถูกต้อง
+          paidPrincipal:          row.totalPaid.principal,
+          paidInterest:           row.totalPaid.interest,
+          paidFee:                row.totalPaid.fee,
+          paidPenalty:            row.totalPaid.penalty,
+          paidUnlockFee:          row.totalPaid.unlockFee,
+          paidDiscount:           row.totalPaid.discount,
+          paidOverpaid:           row.totalPaid.overpaid,
+          paidBadDebt:            row.totalPaid.badDebt,
+          paidBadDebtInstallment: row.totalPaid.badDebtInstallment,
+          paidTotal:              row.totalPaid.total,
+          // due — ใช้ค่าจาก row (per-approveMonth)
+          duePrincipal:           row.totalDue.principal,
+          dueInterest:            row.totalDue.interest,
+          dueFee:                 row.totalDue.fee,
+          duePenalty:             row.totalDue.penalty,
+          dueUnlockFee:           row.totalDue.unlockFee,
+          dueTotal:               row.totalDue.total,
+          // target — ใช้ค่าจาก row (per-approveMonth) เพื่อให้ตรงกับแต่ละเดือน
+          targetPrincipal:        row.totalTarget.principal,
+          targetInterest:         row.totalTarget.interest,
+          targetFee:              row.totalTarget.fee,
+          targetPenalty:          row.totalTarget.penalty,
+          targetUnlockFee:        row.totalTarget.unlockFee,
+          targetTotal:            row.totalTarget.total,
+          // notYetDue — ใช้ค่าจาก row (per-approveMonth)
+          notYetDuePrincipal:     row.totalNotYetDue.principal,
+          notYetDueInterest:      row.totalNotYetDue.interest,
+          notYetDueFee:           row.totalNotYetDue.fee,
+          notYetDuePenalty:       row.totalNotYetDue.penalty,
+          notYetDueUnlockFee:     row.totalNotYetDue.unlockFee,
+          notYetDueTotal:         row.totalNotYetDue.total,
           // installTotal — ส่ง breakdown เพื่อ badge toggle
-          installTotalPrincipal:  t?.installPrincipal ?? 0,
-          installTotalInterest:   t?.installInterest  ?? 0,
-          installTotalFee:        t?.installFee       ?? 0,
-          installTotalTotal:      t?.installTotal    ?? row.totalInstallTotal.total,
-          // financeTotal
-          financeTotal:           t?.financeTotal    ?? row.totalFinanceTotal ?? 0,
+          installTotalPrincipal:  row.totalInstallTotal.principal,
+          installTotalInterest:   row.totalInstallTotal.interest,
+          installTotalFee:        row.totalInstallTotal.fee,
+          installTotalTotal:      row.totalInstallTotal.total,
+          // financeTotal — ใช้ค่าจาก row (per-approveMonth)
+          financeTotal:           row.totalFinanceTotal ?? 0,
         });
       }
 
