@@ -2232,7 +2232,7 @@ export async function populateDueMonthCache(
   await db.execute(sql.raw(`
     DELETE FROM monthly_summary_due_month_cache
     WHERE section = '${section}'
-      AND due_month IN ('__approved__', '__summary__')
+      AND due_month IN ('__approved__', '__summary__', '__appr__')
   `));
 
   let totalRows = 0;
@@ -2632,7 +2632,7 @@ export async function populateDueMonthCache(
     const rows = pgRows(rawRows) as any[];
     const mapped = buildBatchCombinations(rows, (r) => ({
       approve_month: r.approve_month,
-      due_month: "__appr__",
+      due_month: "_appr_",
       productType: r.product_type ?? null,
       deviceFamily: r.device_family ?? null,
       contractCount: Number(r.approved_count),
@@ -2781,7 +2781,7 @@ export async function getDueMonthSummaryFromCache(
   const installTotalRows = allDbRows.filter((r) => r.query_type === "installTotal");
   const paidRows         = allDbRows.filter((r) => r.query_type === "paid");
   const approvedCountRows = allDbRows.filter((r) => r.query_type === "approvedCount");
-  // approvedCount rows มี due_month = "__appr__" (7 ตัว) — ใช้ได้กับ VARCHAR(7)
+  // approvedCount rows มี due_month = "_appr_" (6 ตัว) — ใช้ได้กับ VARCHAR(7)
   // installTotalSummary — ยอดรวมต่อ approve_month (ไม่แยก due_month) ใช้ logic เดียวกับ Bucket mode
   const installTotalSummaryRows = allDbRows.filter((r) => r.query_type === "installTotalSummary");
 
@@ -2791,7 +2791,7 @@ export async function getDueMonthSummaryFromCache(
   for (const r of allDbRows) {
     monthSet.add(r.approve_month);
     // ไม่นับ __approved__ และ __summary__ เป็น due_month จริง
-    if (r.due_month !== "__appr__" && r.due_month !== "__sum__") dueMonthSet.add(r.due_month);
+    if (r.due_month !== "_appr_" && r.due_month !== "__sum__") dueMonthSet.add(r.due_month);
   }
   const approveMonths = Array.from(monthSet).sort((a, b) => b.localeCompare(a));
   const allDueMonths  = Array.from(dueMonthSet).sort((a, b) => a.localeCompare(b));
