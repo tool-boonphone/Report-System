@@ -3005,10 +3005,6 @@ export async function getMonthlySummaryTotalsOnly(
       SUM(CAST(base.principal AS DECIMAL(18,2)))
         + SUM(CAST(base.interest AS DECIMAL(18,2)))
         + SUM(CAST(base.fee AS DECIMAL(18,2)))
-        + SUM(CASE WHEN base.period = latest.max_period
-                   THEN CAST(base.penalty AS DECIMAL(18,2)) ELSE 0 END)
-        + SUM(CASE WHEN base.period = latest.max_period
-                   THEN CAST(base.unlock_fee AS DECIMAL(18,2)) ELSE 0 END)
         AS target_total
     FROM debt_target_cache base
     JOIN (
@@ -3093,6 +3089,7 @@ export async function getMonthlySummaryTotalsOnly(
         AND dtc.due_date > CURRENT_DATE
         AND dtc.is_closed IS NOT TRUE
         AND dtc.is_paid IS NOT TRUE
+        AND COALESCE(dtc.contract_status, '') NOT IN ('ยกเลิกสัญญา', 'ระงับสัญญา', 'สิ้นสุดสัญญา', 'หนี้เสีย')
       GROUP BY dtc.section, dtc.contract_external_id
     ) latest ON latest.section = base.section
              AND latest.contract_external_id = base.contract_external_id
@@ -3101,6 +3098,7 @@ export async function getMonthlySummaryTotalsOnly(
       AND base.due_date > CURRENT_DATE
       AND base.is_closed IS NOT TRUE
       AND base.is_paid IS NOT TRUE
+      AND COALESCE(base.contract_status, '') NOT IN ('ยกเลิกสัญญา', 'ระงับสัญญา', 'สิ้นสุดสัญญา', 'หนี้เสีย')
     GROUP BY 1
     ORDER BY 1 DESC
   `;
