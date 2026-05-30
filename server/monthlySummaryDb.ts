@@ -392,7 +392,7 @@ async function queryPaid(
   // - device_sale_amount = SUM(bad_debt) WHERE is_bad_debt_row = true
   const q = `
     SELECT
-      TO_CHAR(dcc.paid_at, 'YYYY-MM') AS approve_month,
+      TO_CHAR(dcc.approve_date, 'YYYY-MM') AS approve_month,
       CASE
         WHEN dcc.contract_status = 'หนี้เสีย'      THEN 'หนี้เสีย'
         WHEN dcc.contract_status = 'ระงับสัญญา'   THEN 'ระงับสัญญา'
@@ -621,7 +621,7 @@ async function queryNotYetDue(
       GROUP BY dtc.section, dtc.contract_external_id
         ) latest ON latest.section = base.section
              AND latest.contract_external_id = base.contract_external_id
-    WHERE base.section = '${section}'
+    WHERE ${baseWhere.replace(/dtc\./g, "base.")}
       AND base.due_date > CURRENT_DATE
       AND base.is_closed IS NOT TRUE
       AND base.is_paid IS NOT TRUE

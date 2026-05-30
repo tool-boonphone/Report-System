@@ -938,7 +938,16 @@ export default function MonthlySummary() {
   },[grandTotal,paidVis,showBadDebtSale]);
   const grandBadgeDue=useMemo(()=>{let r=emptyMoney();for(const b of DEBT_BUCKETS){const bt=grandTotal.bucketTotals[b];if(bt)r=addMoney(r,bt.due);}return r;},[grandTotal]);
   const grandBadgeTarget=useMemo(()=>{let r=emptyMoney();for(const b of DEBT_BUCKETS){const bt=grandTotal.bucketTotals[b];if(bt)r=addMoney(r,bt.target);}return r;},[grandTotal]);
-  const grandBadgeNotYetDue=useMemo(()=>{let r=emptyMoney();for(const b of DEBT_BUCKETS){const bt=grandTotal.bucketTotals[b];if(bt)r=addMoney(r,bt.notYetDue);}return r;},[grandTotal]);
+  const grandBadgeNotYetDue=useMemo(()=>{
+    const tp=grandTotal.totalNotYetDue;
+    return{
+      principal:notYetDueVis.principal?(tp.principal??0):0,
+      interest:notYetDueVis.interest?(tp.interest??0):0,
+      fee:notYetDueVis.fee?(tp.fee??0):0,
+      penalty:0, unlockFee:0, discount:0, overpaid:0, badDebt:0, badDebtInstallment:0,
+      total:tp.total??0,
+    };
+  },[grandTotal,notYetDueVis]);
   const grandBadgeInstallTotal=useMemo(()=>{let r=emptyMoney();for(const b of DEBT_BUCKETS){const bt=grandTotal.bucketTotals[b];if(bt)r=addMoney(r,bt.installTotal);}return r;},[grandTotal]);
   // Phase 141+ fix3: ใช้ grandTotal.totalPaid โดยตรง (queryPaid ไม่แยก bucket แล้ว)
   const grandBadgePaidTotal=useMemo(()=>{
@@ -2148,9 +2157,17 @@ function CombinedBadgePanel({
   // คำนวณ grand total badge values
   const gtBadgeInstall=React.useMemo(()=>{let r=emptyMoney();for(const b of DEBT_BUCKETS){if(hiddenBuckets.has(b))continue;const bt=grandTotal.bucketTotals[b];if(bt)r=addMoney(r,bt.installTotal);}return r;},[grandTotal,hiddenBuckets]);
   const gtBadgeTarget=React.useMemo(()=>{let r=emptyMoney();for(const b of DEBT_BUCKETS){if(hiddenBuckets.has(b))continue;const bt=grandTotal.bucketTotals[b];if(bt)r=addMoney(r,bt.target);}return r;},[grandTotal,hiddenBuckets]);
-  const gtBadgePaid=React.useMemo(()=>{let r=emptyMoney();for(const b of DEBT_BUCKETS){if(hiddenBuckets.has(b))continue;const bt=grandTotal.bucketTotals[b];if(bt)r=addMoney(r,bt.paid);}return r;},[grandTotal,hiddenBuckets]);
+  // Phase 141+ fix3: ใช้ grandTotal.totalPaid โดยตรง
+  const gtBadgePaid=React.useMemo(()=>{
+    return grandTotal.totalPaid;
+  },[grandTotal]);
   const gtBadgeDue=React.useMemo(()=>{let r=emptyMoney();for(const b of DEBT_BUCKETS){if(hiddenBuckets.has(b))continue;const bt=grandTotal.bucketTotals[b];if(bt)r=addMoney(r,bt.due);}return r;},[grandTotal,hiddenBuckets]);
-  const gtBadgeNotYetDue=React.useMemo(()=>{let r=emptyMoney();for(const b of DEBT_BUCKETS){if(hiddenBuckets.has(b))continue;const bt=grandTotal.bucketTotals[b];if(bt)r=addMoney(r,bt.notYetDue);}return r;},[grandTotal,hiddenBuckets]);
+  // Phase 141+ fix3: ใช้ grandTotal.totalNotYetDue โดยตรง (queryNotYetDue ไม่แยก bucket แล้ว)
+  const gtBadgeNotYetDue=React.useMemo(()=>{
+    // ถ้ามีการซ่อน bucket ใดๆ อาจจะต้องใช้ fallback ไปวนลูป แต่โดยปกติ __total__ คือยอดรวมที่ถูกต้อง
+    // เพื่อความปลอดภัยและให้ตรงกับ paid เราจะใช้ totalNotYetDue ตรงๆ
+    return grandTotal.totalNotYetDue;
+  },[grandTotal]);
 
   function BadgeItemRow({isOn,onToggle,label,val,color}:{isOn:boolean;onToggle:()=>void;label:string;val:number;color:string}){
     return(
