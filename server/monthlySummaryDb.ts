@@ -2226,6 +2226,15 @@ export async function populateDueMonthCache(
                         WHEN dtc.device IS NOT NULL AND dtc.device != '' THEN 'Android'
                         ELSE NULL END`;
 
+  // ── ลบ rows เก่าที่ใช้ sentinel values ยาวเกิน VARCHAR(7) ──────────────────
+  // rows เหล่านี้เกิดจาก bug เก่าที่ใช้ '__approved__' และ '__summary__' (ยาวเกิน)
+  // ต้องลบออกก่อน populate ใหม่ เพราะ ON CONFLICT ไม่ลบ rows เก่าให้
+  await db.execute(sql.raw(`
+    DELETE FROM monthly_summary_due_month_cache
+    WHERE section = '${section}'
+      AND due_month IN ('__approved__', '__summary__')
+  `));
+
   let totalRows = 0;
   onProgress?.(0, 8);
 
@@ -2258,7 +2267,7 @@ export async function populateDueMonthCache(
     }));
     await upsertDueMonthRows(section, "count", mapped);
     totalRows += mapped.length;
-    onProgress?.(1, 7);
+    onProgress?.(1, 8);
   }
 
   // ── Query 2: target (batch) ───────────────────────────────────────────────
@@ -2321,7 +2330,7 @@ export async function populateDueMonthCache(
     }));
     await upsertDueMonthRows(section, "target", mapped);
     totalRows += mapped.length;
-    onProgress?.(2, 7);
+    onProgress?.(2, 8);
   }
 
   // ── Query 3: due (batch) ──────────────────────────────────────────────────
@@ -2378,7 +2387,7 @@ export async function populateDueMonthCache(
     }));
     await upsertDueMonthRows(section, "due", mapped);
     totalRows += mapped.length;
-    onProgress?.(3, 7);
+    onProgress?.(3, 8);
   }
 
   // ── Query 4: notYetDue (batch) ────────────────────────────────────────────
@@ -2437,7 +2446,7 @@ export async function populateDueMonthCache(
     }));
     await upsertDueMonthRows(section, "notYetDue", mapped);
     totalRows += mapped.length;
-    onProgress?.(4, 7);
+    onProgress?.(4, 8);
   }
 
   // ── Query 5: installTotal (batch) ─────────────────────────────────────────
@@ -2526,7 +2535,7 @@ export async function populateDueMonthCache(
     }));
     await upsertDueMonthRows(section, "installTotal", mapped);
     totalRows += mapped.length;
-    onProgress?.(5, 7);
+    onProgress?.(5, 8);
   }
 
   // ── Query 6: paid (batch) ─────────────────────────────────────────────────
@@ -2603,7 +2612,7 @@ export async function populateDueMonthCache(
     }));
     await upsertDueMonthRows(section, "paid", mapped);
     totalRows += mapped.length;
-    onProgress?.(6, 7);
+    onProgress?.(6, 8);
   }
 
   // ── Query 7: approvedCount (batch) ────────────────────────────────────────
