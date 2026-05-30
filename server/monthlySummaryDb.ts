@@ -2227,7 +2227,7 @@ export async function populateDueMonthCache(
                         ELSE NULL END`;
 
   let totalRows = 0;
-  onProgress?.(0, 7);
+  onProgress?.(0, 8);
 
   // ── Query 1: count (batch) ────────────────────────────────────────────────
   {
