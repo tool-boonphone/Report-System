@@ -238,14 +238,18 @@ export const monthlySummaryRouter = router({
       const cacheResult = await getDueMonthSummaryFromCache(params);
       let summaryRows = cacheResult.rows;
       let allDueMonths = cacheResult.allDueMonths;
+      const usedCache = summaryRows.length > 0;
       if (summaryRows.length === 0) {
         // Cache ยังไม่พร้อม — fallback ไป direct query
+        console.log(`[getDueMonthSummary] FALLBACK to direct query — section=${params.section} pt=${params.productType??'null'} df=${params.deviceFamily??'null'}`);
         summaryRows = await getDueMonthSummary(params);
         const dueMonthSet = new Set<string>();
         for (const row of summaryRows) {
           for (const dm of Object.keys(row.dueMonths)) dueMonthSet.add(dm);
         }
         allDueMonths = Array.from(dueMonthSet).sort((a, b) => a.localeCompare(b));
+      } else {
+        console.log(`[getDueMonthSummary] CACHE HIT — section=${params.section} rows=${summaryRows.length} pt=${params.productType??'null'} df=${params.deviceFamily??'null'}`);
       }
 
       // Flatten to array of flat rows for JSON transport
@@ -291,6 +295,10 @@ export const monthlySummaryRouter = router({
           financeTotal: row.totalFinanceTotal ?? 0,
         });
       }
+
+      // Debug: log totalFinanceTotal per approveMonth
+      const financeSummary = summaryRows.map((r) => `${r.approveMonth}=${r.totalFinanceTotal?.toFixed(0)}`);
+      console.log(`[getDueMonthSummary] source=${usedCache?'cache':'direct'} financeTotal=[${financeSummary.join(',')}]`);
 
       return {
         rowsJson: JSON.stringify(flatRows),
