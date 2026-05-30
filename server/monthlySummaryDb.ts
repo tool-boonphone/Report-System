@@ -2958,6 +2958,19 @@ export async function getMonthlySummaryTotalsOnly(
     }
     return `date_month IS NULL`;
   }
+  // dateMonthCondAll: เหมือน dateMonthCond แต่เมื่อไม่มี filter จะดึงทุก date_month (1=1)
+  // ใช้กับ paid/due/notYetDue ซึ่ง date_month มีค่าเสมอ (ไม่เคย NULL)
+  function dateMonthCondAll(months: string[] | undefined, singleDate: string | undefined): string {
+    if (singleDate) {
+      const m = singleDate.substring(0, 7);
+      return `date_month = '${m}'`;
+    }
+    if (months && months.length > 0) {
+      const list = months.map((m) => `'${m}'`).join(",");
+      return `date_month IN (${list})`;
+    }
+    return `1=1`; // ไม่มี filter → ดึงทุก date_month
+  }
   function productTypeCond(pt: string | undefined): string {
     if (pt) return `product_type = '${pt.replace(/'/g, "''")}'`;
     return `product_type IS NULL`;
@@ -3015,7 +3028,7 @@ export async function getMonthlySummaryTotalsOnly(
       WHERE section = '${section}' AND query_type = 'paid'
         AND ${productTypeCond(params.paidProductType)}
         AND ${deviceFamilyCond(params.paidDeviceFamily)}
-        AND ${dateMonthCond(params.paidAtMonths, params.paidAtDate)}
+        AND ${dateMonthCondAll(params.paidAtMonths, params.paidAtDate)}
       GROUP BY approve_month
       ORDER BY approve_month DESC
     `)),
@@ -3032,7 +3045,7 @@ export async function getMonthlySummaryTotalsOnly(
       WHERE section = '${section}' AND query_type = 'due'
         AND ${productTypeCond(params.dueProductType)}
         AND ${deviceFamilyCond(params.dueDeviceFamily)}
-        AND ${dateMonthCond(params.dueAtMonths, params.dueAtDate)}
+        AND ${dateMonthCondAll(params.dueAtMonths, params.dueAtDate)}
       GROUP BY approve_month
       ORDER BY approve_month DESC
     `)),
@@ -3049,7 +3062,7 @@ export async function getMonthlySummaryTotalsOnly(
       WHERE section = '${section}' AND query_type = 'notYetDue'
         AND ${productTypeCond(params.notYetDueProductType)}
         AND ${deviceFamilyCond(params.notYetDueDeviceFamily)}
-        AND ${dateMonthCond(params.notYetDueDueMonths, params.notYetDueDueDate)}
+        AND ${dateMonthCondAll(params.notYetDueDueMonths, params.notYetDueDueDate)}
       GROUP BY approve_month
       ORDER BY approve_month DESC
     `)),
