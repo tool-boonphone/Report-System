@@ -2931,267 +2931,137 @@ export type MonthlySummaryTotalsRow = {
 
 export async function getMonthlySummaryTotalsOnly(
   section: SectionKey,
-  opts: {
-    productType?: string;
-    deviceFamily?: string;
-    approveMonths?: string[];
-    search?: string;
-  } = {},
+  params: MonthlySummaryParams,
 ): Promise<MonthlySummaryTotalsRow[]> {
   const db = await getDb(section);
   if (!db) return [];
 
-  // ── WHERE helpers ──────────────────────────────────────────────────────────
-  // สร้าง WHERE clause สำหรับ debt_target_cache (alias dtc)
-  const buildDtcWhere = (alias = "dtc"): string => {
-    let w = `${alias}.section = '${section}' AND ${alias}.approve_date IS NOT NULL`;
-    if (opts.productType) {
-      w += ` AND ${alias}.product_type = '${opts.productType.replace(/'/g, "''")}'`;
+  // ── Helper functions (เหมือน getMonthlySummaryFromCache) ──────────────────
+  function dateMonthCond(months: string[] | undefined, singleDate: string | undefined): string {
+    if (singleDate) {
+      const m = singleDate.substring(0, 7);
+      return `date_month = '${m}'`;
     }
-    if (opts.deviceFamily === "iOS") {
-      w += ` AND ${alias}.device IN ('iPhone', 'iPad')`;
-    } else if (opts.deviceFamily === "Android") {
-      w += ` AND ${alias}.device NOT IN ('iPhone', 'iPad') AND ${alias}.device IS NOT NULL AND ${alias}.device != ''`;
+    if (months && months.length > 0) {
+      const list = months.map((m) => `'${m}'`).join(",");
+      return `date_month IN (${list})`;
     }
-    if (opts.approveMonths && opts.approveMonths.length > 0) {
-      const list = opts.approveMonths.map((m) => `'${m}'`).join(",");
-      w += ` AND TO_CHAR(${alias}.approve_date, 'YYYY-MM') IN (${list})`;
-    }
-    if (opts.search) {
-      const s = opts.search.replace(/'/g, "''").replace(/%/g, "\\%").replace(/_/g, "\\_");
-      w += ` AND (${alias}.contract_no LIKE '%${s}%' OR ${alias}.customer_name LIKE '%${s}%')`;
-    }
-    return w;
-  };
+    return `date_month IS NULL`;
+  }
+  function productTypeCond(pt: string | undefined): string {
+    if (pt) return `product_type = '${pt.replace(/'/g, "''")}'`;
+    return `product_type IS NULL`;
+  }
+  function deviceFamilyCond(df: string | undefined): string {
+    if (df) return `device_family = '${df}'`;
+    return `device_family IS NULL`;
+  }
 
-  // สร้าง WHERE clause สำหรับ debt_collected_cache (alias dcc)
-  const buildDccWhere = (alias = "dcc"): string => {
-    let w = `${alias}.section = '${section}' AND ${alias}.approve_date IS NOT NULL`;
-    if (opts.productType) {
-      w += ` AND ${alias}.product_type = '${opts.productType.replace(/'/g, "''")}'`;
-    }
-    if (opts.deviceFamily === "iOS") {
-      w += ` AND ${alias}.device IN ('iPhone', 'iPad')`;
-    } else if (opts.deviceFamily === "Android") {
-      w += ` AND ${alias}.device NOT IN ('iPhone', 'iPad') AND ${alias}.device IS NOT NULL AND ${alias}.device != ''`;
-    }
-    if (opts.approveMonths && opts.approveMonths.length > 0) {
-      const list = opts.approveMonths.map((m) => `'${m}'`).join(",");
-      w += ` AND TO_CHAR(${alias}.approve_date, 'YYYY-MM') IN (${list})`;
-    }
-    if (opts.search) {
-      const s = opts.search.replace(/'/g, "''").replace(/%/g, "\\%").replace(/_/g, "\\_");
-      w += ` AND (${alias}.contract_no LIKE '%${s}%' OR ${alias}.customer_name LIKE '%${s}%')`;
-    }
-    return w;
-  };
-
-  const dtcWhere = buildDtcWhere("dtc");
-  const dccWhere = buildDccWhere("dcc");
-
-  // ── Query 1: สัญญา + ยอดจัดฯ + ยอดผ่อนรวม ────────────────────────────────
-  // ใช้ latest period per contract (ROW_NUMBER DESC) เพื่อดึงค่าล่าสุดของแต่ละสัญญา
-  const qCountFinanceInstall = `
-    WITH latest AS (
-      SELECT
-        dtc.section,
-        dtc.contract_external_id,
-        dtc.approve_date,
-        dtc.finance_amount,
-        dtc.baseline_amount,
-        dtc.installment_count,
-        ROW_NUMBER() OVER (
-          PARTITION BY dtc.section, dtc.contract_external_id
-          ORDER BY dtc.period DESC
-        ) AS rn
-      FROM debt_target_cache dtc
-      WHERE ${dtcWhere}
-    )
-    SELECT
-      TO_CHAR(l.approve_date, 'YYYY-MM') AS approve_month,
-      COUNT(DISTINCT l.contract_external_id) AS contract_count,
-      SUM(COALESCE(CAST(l.finance_amount AS DECIMAL(18,2)), 0)) AS finance_total,
-      -- ยอดผ่อนรวม = baseline_amount × installment_count
-      SUM(
-        COALESCE(l.baseline_amount, 0) * COALESCE(l.installment_count, 0)
-      ) AS install_total,
-      -- principal = CEIL(finance_amount / installment_count) × installment_count
-      SUM(
-        CASE
-          WHEN l.finance_amount > 0 AND l.installment_count > 0
-          THEN CEIL(CAST(l.finance_amount AS DECIMAL(18,2)) / l.installment_count) * l.installment_count
-          ELSE COALESCE(l.baseline_amount, 0) * COALESCE(l.installment_count, 0)
-        END
-      ) AS install_principal,
-      -- interest = total - principal - fee
-      SUM(
-        CASE
-          WHEN l.finance_amount > 0 AND l.installment_count > 0 AND l.baseline_amount > 0
-          THEN GREATEST(0,
-            l.baseline_amount * l.installment_count
-            - CEIL(CAST(l.finance_amount AS DECIMAL(18,2)) / l.installment_count) * l.installment_count
-            - 100 * l.installment_count
-          )
-          ELSE 0
-        END
-      ) AS install_interest,
-      -- fee = 100 × installment_count
-      SUM(
-        CASE
-          WHEN l.finance_amount > 0 AND l.installment_count > 0
-          THEN 100 * l.installment_count
-          ELSE 0
-        END
-      ) AS install_fee
-    FROM latest l
-    WHERE l.rn = 1
-    GROUP BY 1
-    ORDER BY 1 DESC
-  `;
-
-  // ── Query 2: เป้าเก็บหนี้ = SUM(total_amount WHERE due_date ≤ today) ────────
-  // เป้าเก็บหนี้ = SUM(principal+interest+fee WHERE due_date ≤ today)
-  // ตัดสัญญาที่สิ้นสภาพออก (ยกเลิก/ระงับ/สิ้นสุด/หนี้เสีย)
-  // ตัด penalty/unlockFee ออก (ตรงกับ DebtOverview ที่ใช้ principal+interest+fee เท่านั้น)
-  const qTarget = `
-    SELECT
-      TO_CHAR(base.approve_date, 'YYYY-MM') AS approve_month,
-      SUM(CAST(base.principal AS DECIMAL(18,2))) AS target_principal,
-      SUM(CAST(base.interest  AS DECIMAL(18,2))) AS target_interest,
-      SUM(CAST(base.fee       AS DECIMAL(18,2))) AS target_fee,
-      SUM(CAST(base.principal AS DECIMAL(18,2)))
-        + SUM(CAST(base.interest AS DECIMAL(18,2)))
-        + SUM(CAST(base.fee     AS DECIMAL(18,2)))
-        AS target_total
-    FROM debt_target_cache base
-    JOIN (
-      SELECT dtc.section, dtc.contract_external_id, MAX(dtc.period) AS max_period
-      FROM debt_target_cache dtc
-      WHERE ${dtcWhere}
-        AND DATE(dtc.due_date) <= CURRENT_DATE
-        AND COALESCE(dtc.contract_status, '') NOT IN ('ยกเลิกสัญญา', 'ระงับสัญญา', 'สิ้นสุดสัญญา', 'หนี้เสีย')
-      GROUP BY dtc.section, dtc.contract_external_id
-    ) latest ON latest.section = base.section
-             AND latest.contract_external_id = base.contract_external_id
-    WHERE base.section = '${section}'
-      AND base.approve_date IS NOT NULL
-      AND DATE(base.due_date) <= CURRENT_DATE
-      AND COALESCE(base.contract_status, '') NOT IN ('ยกเลิกสัญญา', 'ระงับสัญญา', 'สิ้นสุดสัญญา', 'หนี้เสีย')
-    GROUP BY 1
-    ORDER BY 1 DESC
-  `;
-
-  // ── Query 3: ยอดเก็บหนี้ = SUM(total_paid) group by approve_date ────────────
-  // JOIN dcc กับ dtc ผ่าน contract_external_id เพื่อได้ approve_date ของสัญญา
-  // ไม่ใช้ paid_at เป็น approve_month
-  const qPaid = `
-    WITH contract_approve AS (
-      SELECT DISTINCT
-        dtc.section,
-        dtc.contract_external_id,
-        TO_CHAR(dtc.approve_date, 'YYYY-MM') AS approve_month
-      FROM debt_target_cache dtc
-      WHERE ${dtcWhere}
-    )
-    SELECT
-      ca.approve_month,
-      SUM(
-        CASE WHEN dcc.is_bad_debt_row = true THEN CAST(dcc.bad_debt AS DECIMAL(18,2))
-             WHEN CAST(dcc.payment_tx_amount AS DECIMAL(18,2)) = 0
-                  AND CAST(dcc.penalty AS DECIMAL(18,2)) > 0 THEN 0
-             ELSE CAST(dcc.payment_tx_amount AS DECIMAL(18,2))
-        END
-      ) AS paid_total
-    FROM debt_collected_cache dcc
-    JOIN contract_approve ca
-      ON ca.section = dcc.section
-      AND ca.contract_external_id = dcc.contract_external_id
-    WHERE dcc.section = '${section}'
-      AND dcc.approve_date IS NOT NULL
-    GROUP BY 1
-    ORDER BY 1 DESC
-  `;
-
-  // ── Query 4: หนี้ค้างชำระ = SUM(total_amount - paid_amount WHERE is_arrears) ─
-  const qDue = `
-    SELECT
-      TO_CHAR(base.approve_date, 'YYYY-MM') AS approve_month,
-      SUM(GREATEST(CAST(base.principal  AS DECIMAL(18,2)) - CAST(base.paid_amount AS DECIMAL(18,2)), 0)) AS due_principal,
-      SUM(CAST(base.interest  AS DECIMAL(18,2))) AS due_interest,
-      SUM(CAST(base.fee       AS DECIMAL(18,2))) AS due_fee,
-      SUM(CASE WHEN base.period = latest.max_period
-               THEN CAST(base.penalty    AS DECIMAL(18,2)) ELSE 0 END) AS due_penalty,
-      SUM(CASE WHEN base.period = latest.max_period
-               THEN CAST(base.unlock_fee AS DECIMAL(18,2)) ELSE 0 END) AS due_unlock_fee,
-      SUM(GREATEST(CAST(base.total_amount AS DECIMAL(18,2)) - CAST(base.paid_amount AS DECIMAL(18,2)), 0)) AS due_total
-    FROM debt_target_cache base
-    JOIN (
-      SELECT dtc.section, dtc.contract_external_id, MAX(dtc.period) AS max_period
-      FROM debt_target_cache dtc
-      WHERE ${dtcWhere}
-        AND dtc.is_arrears = true
-      GROUP BY dtc.section, dtc.contract_external_id
-    ) latest ON latest.section = base.section
-             AND latest.contract_external_id = base.contract_external_id
-    WHERE base.section = '${section}'
-      AND base.approve_date IS NOT NULL
-      AND base.is_arrears = true
-    GROUP BY 1
-    ORDER BY 1 DESC
-  `;
-
-  // ── Query 5: ยังไม่ถึงกำหนด = SUM(total_amount WHERE due_date > today) ───────
-  const qNotYetDue = `
-    SELECT
-      TO_CHAR(base.approve_date, 'YYYY-MM') AS approve_month,
-      SUM(CAST(base.principal    AS DECIMAL(18,2))) AS not_yet_due_principal,
-      SUM(CAST(base.interest     AS DECIMAL(18,2))) AS not_yet_due_interest,
-      SUM(CAST(base.fee          AS DECIMAL(18,2))) AS not_yet_due_fee,
-      SUM(CASE WHEN base.period = latest.max_period
-               THEN CAST(base.penalty    AS DECIMAL(18,2)) ELSE 0 END) AS not_yet_due_penalty,
-      SUM(CASE WHEN base.period = latest.max_period
-               THEN CAST(base.unlock_fee AS DECIMAL(18,2)) ELSE 0 END) AS not_yet_due_unlock_fee,
-      SUM(CAST(base.total_amount AS DECIMAL(18,2))) AS not_yet_due_total
-    FROM debt_target_cache base
-    JOIN (
-      SELECT dtc.section, dtc.contract_external_id, MAX(dtc.period) AS max_period
-      FROM debt_target_cache dtc
-      WHERE ${dtcWhere}
-        AND dtc.due_date > CURRENT_DATE
-        AND dtc.is_closed IS NOT TRUE
-        AND dtc.is_paid IS NOT TRUE
-        AND COALESCE(dtc.contract_status, '') NOT IN ('ยกเลิกสัญญา', 'ระงับสัญญา', 'สิ้นสุดสัญญา', 'หนี้เสีย')
-      GROUP BY dtc.section, dtc.contract_external_id
-    ) latest ON latest.section = base.section
-             AND latest.contract_external_id = base.contract_external_id
-    WHERE base.section = '${section}'
-      AND base.approve_date IS NOT NULL
-      AND base.due_date > CURRENT_DATE
-      AND base.is_closed IS NOT TRUE
-      AND base.is_paid IS NOT TRUE
-      AND COALESCE(base.contract_status, '') NOT IN ('ยกเลิกสัญญา', 'ระงับสัญญา', 'สิ้นสุดสัญญา', 'หนี้เสีย')
-    GROUP BY 1
-    ORDER BY 1 DESC
-  `;
-
-  // ── รัน queries ทั้งหมดพร้อมกัน ───────────────────────────────────────────
-  const [r1, r2, r3, r4, r5] = await Promise.all([
-    db.execute(sql.raw(qCountFinanceInstall)),
-    db.execute(sql.raw(qTarget)),
-    db.execute(sql.raw(qPaid)),
-    db.execute(sql.raw(qDue)),
-    db.execute(sql.raw(qNotYetDue)),
+  // ── ดึงข้อมูลจาก monthly_summary_cache (SUM across all buckets) ──────────
+  const [countRows, targetRows, paidRows, dueRows, notYetDueRows, installTotalRows] = await Promise.all([
+    // count: ไม่มี dateMonth filter
+    db.execute(sql.raw(`
+      SELECT approve_month,
+             SUM(contract_count) AS contract_count
+      FROM monthly_summary_cache
+      WHERE section = '${section}' AND query_type = 'count'
+        AND ${productTypeCond(params.countProductType)}
+        AND ${deviceFamilyCond(params.countDeviceFamily)}
+        AND date_month IS NULL
+      GROUP BY approve_month
+      ORDER BY approve_month DESC
+    `)),
+    // target: dueMonth filter
+    db.execute(sql.raw(`
+      SELECT approve_month,
+             SUM(principal) AS target_principal,
+             SUM(interest)  AS target_interest,
+             SUM(fee)       AS target_fee,
+             SUM(penalty)   AS target_penalty,
+             SUM(unlock_fee) AS target_unlock_fee,
+             SUM(total_amount) AS target_total
+      FROM monthly_summary_cache
+      WHERE section = '${section}' AND query_type = 'target'
+        AND ${productTypeCond(params.targetProductType)}
+        AND ${deviceFamilyCond(params.targetDeviceFamily)}
+        AND ${dateMonthCond(params.targetDueMonths, params.targetDueDate)}
+      GROUP BY approve_month
+      ORDER BY approve_month DESC
+    `)),
+    // paid: paidAtMonth filter
+    db.execute(sql.raw(`
+      SELECT approve_month,
+             SUM(total_amount) AS paid_total
+      FROM monthly_summary_cache
+      WHERE section = '${section}' AND query_type = 'paid'
+        AND ${productTypeCond(params.paidProductType)}
+        AND ${deviceFamilyCond(params.paidDeviceFamily)}
+        AND ${dateMonthCond(params.paidAtMonths, params.paidAtDate)}
+      GROUP BY approve_month
+      ORDER BY approve_month DESC
+    `)),
+    // due: dueAtMonth filter
+    db.execute(sql.raw(`
+      SELECT approve_month,
+             SUM(principal) AS due_principal,
+             SUM(interest)  AS due_interest,
+             SUM(fee)       AS due_fee,
+             SUM(penalty)   AS due_penalty,
+             SUM(unlock_fee) AS due_unlock_fee,
+             SUM(total_amount) AS due_total
+      FROM monthly_summary_cache
+      WHERE section = '${section}' AND query_type = 'due'
+        AND ${productTypeCond(params.dueProductType)}
+        AND ${deviceFamilyCond(params.dueDeviceFamily)}
+        AND ${dateMonthCond(params.dueAtMonths, params.dueAtDate)}
+      GROUP BY approve_month
+      ORDER BY approve_month DESC
+    `)),
+    // notYetDue: dueMonth filter
+    db.execute(sql.raw(`
+      SELECT approve_month,
+             SUM(principal) AS not_yet_due_principal,
+             SUM(interest)  AS not_yet_due_interest,
+             SUM(fee)       AS not_yet_due_fee,
+             SUM(penalty)   AS not_yet_due_penalty,
+             SUM(unlock_fee) AS not_yet_due_unlock_fee,
+             SUM(total_amount) AS not_yet_due_total
+      FROM monthly_summary_cache
+      WHERE section = '${section}' AND query_type = 'notYetDue'
+        AND ${productTypeCond(params.notYetDueProductType)}
+        AND ${deviceFamilyCond(params.notYetDueDeviceFamily)}
+        AND ${dateMonthCond(params.notYetDueDueMonths, params.notYetDueDueDate)}
+      GROUP BY approve_month
+      ORDER BY approve_month DESC
+    `)),
+    // installTotal: ไม่มี dateMonth filter
+    db.execute(sql.raw(`
+      SELECT approve_month,
+             SUM(principal)    AS install_principal,
+             SUM(interest)     AS install_interest,
+             SUM(fee)          AS install_fee,
+             SUM(total_amount) AS install_total,
+             SUM(finance_total) AS finance_total
+      FROM monthly_summary_cache
+      WHERE section = '${section}' AND query_type = 'installTotal'
+        AND ${productTypeCond(params.installTotalProductType)}
+        AND ${deviceFamilyCond(params.installTotalDeviceFamily)}
+        AND date_month IS NULL
+      GROUP BY approve_month
+      ORDER BY approve_month DESC
+    `)),
   ]);
 
-  const rows1 = pgRows(r1) as any[];
-  const rows2 = pgRows(r2) as any[];
-  const rows3 = pgRows(r3) as any[];
-  const rows4 = pgRows(r4) as any[];
-  const rows5 = pgRows(r5) as any[];
+  const rows1 = pgRows(countRows) as any[];
+  const rows2 = pgRows(targetRows) as any[];
+  const rows3 = pgRows(paidRows) as any[];
+  const rows4 = pgRows(dueRows) as any[];
+  const rows5 = pgRows(notYetDueRows) as any[];
+  const rows6 = pgRows(installTotalRows) as any[];
 
   // ── Assemble ───────────────────────────────────────────────────────────────
   const monthSet = new Set<string>();
-  for (const r of [...rows1, ...rows2, ...rows3, ...rows4, ...rows5]) {
+  for (const r of [...rows1, ...rows2, ...rows3, ...rows4, ...rows5, ...rows6]) {
     if (r.approve_month) monthSet.add(r.approve_month);
   }
   const months = Array.from(monthSet).sort((a, b) => b.localeCompare(a));
@@ -3201,11 +3071,13 @@ export async function getMonthlySummaryTotalsOnly(
   const map3 = new Map<string, any>();
   const map4 = new Map<string, any>();
   const map5 = new Map<string, any>();
+  const map6 = new Map<string, any>();
   for (const r of rows1) map1.set(r.approve_month, r);
   for (const r of rows2) map2.set(r.approve_month, r);
   for (const r of rows3) map3.set(r.approve_month, r);
   for (const r of rows4) map4.set(r.approve_month, r);
   for (const r of rows5) map5.set(r.approve_month, r);
+  for (const r of rows6) map6.set(r.approve_month, r);
 
   return months.map((month) => {
     const r1 = map1.get(month);
@@ -3213,22 +3085,23 @@ export async function getMonthlySummaryTotalsOnly(
     const r3 = map3.get(month);
     const r4 = map4.get(month);
     const r5 = map5.get(month);
+    const r6 = map6.get(month);
     return {
       approveMonth:       month,
       contractCount:      n(r1?.contract_count ?? 0),
-      financeTotal:       n(r1?.finance_total ?? 0),
+      financeTotal:       n(r6?.finance_total ?? 0),
       // ยอดผ่อนรวม breakdown
-      installTotal:       n(r1?.install_total ?? 0),
-      installPrincipal:   n(r1?.install_principal ?? 0),
-      installInterest:    n(r1?.install_interest ?? 0),
-      installFee:         n(r1?.install_fee ?? 0),
-      // เป้าเก็บหนี้ breakdown
+      installTotal:       n(r6?.install_total ?? 0),
+      installPrincipal:   n(r6?.install_principal ?? 0),
+      installInterest:    n(r6?.install_interest ?? 0),
+      installFee:         n(r6?.install_fee ?? 0),
+      // เป้าเก็บหนี้ breakdown (ตัด penalty/unlockFee ออก ตรงกับ DebtOverview)
       targetTotal:        n(r2?.target_total ?? 0),
       targetPrincipal:    n(r2?.target_principal ?? 0),
       targetInterest:     n(r2?.target_interest ?? 0),
       targetFee:          n(r2?.target_fee ?? 0),
-      targetPenalty:      0,  // ตัด penalty ออก เพื่อให้ตรงกับ DebtOverview
-      targetUnlockFee:    0,  // ตัด unlockFee ออก เพื่อให้ตรงกับ DebtOverview
+      targetPenalty:      0,  // ตัด penalty ออก
+      targetUnlockFee:    0,  // ตัด unlockFee ออก
       // ยอดเก็บหนี้
       paidTotal:          n(r3?.paid_total ?? 0),
       // หนี้ค้างชำระ breakdown

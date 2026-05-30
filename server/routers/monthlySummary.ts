@@ -86,12 +86,42 @@ export const monthlySummaryRouter = router({
           const rows: any[] = pgRows(r);
           return rows.map((x: any) => String(x.product_type ?? "")).filter(Boolean);
         }),
-        // คอลัมน์รวมที่ถูกต้อง — group by approve_date ทุก query
+        // คอลัมน์รวมที่ถูกต้อง — ใช้ filter เดียวกับแต่ละ tab
         getMonthlySummaryTotalsOnly(input.section, {
-          productType:    input.countProductType,
-          deviceFamily:   input.countDeviceFamily,
-          approveMonths:  input.countApproveMonths,
-          search:         input.search || undefined,
+          section: input.section,
+          // count
+          countApproveDate:    input.countApproveDate,
+          countApproveMonths:  input.countApproveMonths,
+          countProductType:    input.countProductType,
+          countDeviceFamily:   input.countDeviceFamily,
+          // target
+          targetDueDate:       input.targetDueDate,
+          targetDueMonths:     input.targetDueMonths,
+          targetApproveMonths: input.targetApproveMonths,
+          targetProductType:   input.targetProductType,
+          targetDeviceFamily:  input.targetDeviceFamily,
+          // paid
+          paidAtDate:          input.paidAtDate,
+          paidAtMonths:        input.paidAtMonths,
+          paidProductType:     input.paidProductType,
+          paidDeviceFamily:    input.paidDeviceFamily,
+          // due
+          dueAtDate:           input.dueAtDate,
+          dueAtMonths:         input.dueAtMonths,
+          dueProductType:      input.dueProductType,
+          dueDeviceFamily:     input.dueDeviceFamily,
+          // notYetDue
+          notYetDueDueDate:    input.notYetDueDueDate,
+          notYetDueDueMonths:  input.notYetDueDueMonths,
+          notYetDueApproveMonths: input.notYetDueApproveMonths,
+          notYetDueProductType: input.notYetDueProductType,
+          notYetDueDeviceFamily: input.notYetDueDeviceFamily,
+          // installTotal
+          installTotalApproveMonths: input.installTotalApproveMonths,
+          installTotalProductType:   input.installTotalProductType,
+          installTotalDeviceFamily:  input.installTotalDeviceFamily,
+          // search
+          search: input.search || undefined,
         }),
       ]);
 
@@ -252,10 +282,23 @@ export const monthlySummaryRouter = router({
       const [cacheResult, totalsRows] = await Promise.all([
         getDueMonthSummaryFromCache(params),
         getMonthlySummaryTotalsOnly(input.section, {
-          productType:   input.productType,
-          deviceFamily:  input.deviceFamily,
-          approveMonths: input.approveMonths,
-          search:        input.search || undefined,
+          section: input.section,
+          // ใน DueMonthSummary ไม่มี per-tab filter — ใช้ productType/deviceFamily/approveMonths ร่วมกัน
+          countProductType:    input.productType,
+          countDeviceFamily:   input.deviceFamily,
+          countApproveMonths:  input.approveMonths,
+          targetProductType:   input.productType,
+          targetDeviceFamily:  input.deviceFamily,
+          paidProductType:     input.productType,
+          paidDeviceFamily:    input.deviceFamily,
+          dueProductType:      input.productType,
+          dueDeviceFamily:     input.deviceFamily,
+          notYetDueProductType:  input.productType,
+          notYetDueDeviceFamily: input.deviceFamily,
+          installTotalProductType:  input.productType,
+          installTotalDeviceFamily: input.deviceFamily,
+          installTotalApproveMonths: input.approveMonths,
+          search: input.search || undefined,
         }),
       ]);
       const totalsMap = new Map<string, typeof totalsRows[0]>();
