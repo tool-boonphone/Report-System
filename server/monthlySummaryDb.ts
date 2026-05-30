@@ -616,14 +616,16 @@ async function queryNotYetDue(
         AND dtc.due_date > CURRENT_DATE
         AND dtc.is_closed IS NOT TRUE
         AND dtc.is_paid IS NOT TRUE
+        AND COALESCE(dtc.contract_status, '') NOT IN ('ยกเลิกสัญญา', 'ระงับสัญญา', 'สิ้นสุดสัญญา', 'หนี้เสีย')
         ${dueDateFilter}
       GROUP BY dtc.section, dtc.contract_external_id
-    ) latest ON latest.section = base.section
+        ) latest ON latest.section = base.section
              AND latest.contract_external_id = base.contract_external_id
     WHERE base.section = '${section}'
       AND base.due_date > CURRENT_DATE
       AND base.is_closed IS NOT TRUE
       AND base.is_paid IS NOT TRUE
+      AND COALESCE(base.contract_status, '') NOT IN ('ยกเลิกสัญญา', 'ระงับสัญญา', 'สิ้นสุดสัญญา', 'หนี้เสีย')
       ${dueDateFilter.replace(/dtc\./g, "base.")}
     GROUP BY 1, 2
     ORDER BY 1 DESC
@@ -631,7 +633,6 @@ async function queryNotYetDue(
   const rows = await db.execute(sql.raw(q));
   return pgRows(rows);
 }
-
 // ---------------------------------------------------------------------------
 // Query 6: InstallTotal tab — ยอดผ่อนรวม
 // SUM(baseline_amount) ทุกงวด (principal+interest+fee ก่อนหักชำระเกิน ไม่มีค่าปรับ/ค่าปลดล็อก)
@@ -2911,8 +2912,17 @@ export type MonthlySummaryTotalsRow = {
   targetFee: number;
   targetPenalty: number;
   targetUnlockFee: number;
-  // ยอดเก็บหนี้
-  paidTotal: number;              // ยอดเก็บหนี้ = SUM(total_paid) จาก dcc group by approve_date
+  // ยอดเก็บหนี้ breakdown
+  paidTotal: number;              // ยอดเก็บหนี้ = SUM(bad_debt_installment) = ptTotal ไม่รวมยอดขายเครื่อง
+  paidPrincipal: number;
+  paidInterest: number;
+  paidFee: number;
+  paidPenalty: number;
+  paidUnlockFee: number;
+  paidDiscount: number;
+  paidOverpaid: number;
+  paidBadDebt: number;
+  paidBadDebtInstallment: number;
   // หนี้ค้างชำระ breakdown
   dueTotal: number;               // หนี้ค้างชำระ = SUM(total_amount - paid_amount WHERE is_arrears)
   duePrincipal: number;
@@ -2988,10 +2998,19 @@ export async function getMonthlySummaryTotalsOnly(
       GROUP BY approve_month
       ORDER BY approve_month DESC
     `)),
-    // paid: paidAtMonth filter
+    // paid: paidAtMonth filter — ใช้ bad_debt_installment เป็น paid_total (= ptTotal ไม่รวมยอดขายเครื่อง)
     db.execute(sql.raw(`
       SELECT approve_month,
-             SUM(total_amount) AS paid_total
+             SUM(principal)            AS paid_principal,
+             SUM(interest)             AS paid_interest,
+             SUM(fee)                  AS paid_fee,
+             SUM(penalty)              AS paid_penalty,
+             SUM(unlock_fee)           AS paid_unlock_fee,
+             SUM(discount)             AS paid_discount,
+             SUM(overpaid)             AS paid_overpaid,
+             SUM(bad_debt)             AS paid_bad_debt,
+             SUM(bad_debt_installment) AS paid_bad_debt_installment,
+             SUM(bad_debt_installment) AS paid_total
       FROM monthly_summary_cache
       WHERE section = '${section}' AND query_type = 'paid'
         AND ${productTypeCond(params.paidProductType)}
@@ -3102,8 +3121,17 @@ export async function getMonthlySummaryTotalsOnly(
       targetFee:          n(r2?.target_fee ?? 0),
       targetPenalty:      0,  // ตัด penalty ออก
       targetUnlockFee:    0,  // ตัด unlockFee ออก
-      // ยอดเก็บหนี้
-      paidTotal:          n(r3?.paid_total ?? 0),
+      // ยอดเก็บหนี้ breakdown
+      paidTotal:              n(r3?.paid_total ?? 0),
+      paidPrincipal:          n(r3?.paid_principal ?? 0),
+      paidInterest:           n(r3?.paid_interest ?? 0),
+      paidFee:                n(r3?.paid_fee ?? 0),
+      paidPenalty:            n(r3?.paid_penalty ?? 0),
+      paidUnlockFee:          n(r3?.paid_unlock_fee ?? 0),
+      paidDiscount:           n(r3?.paid_discount ?? 0),
+      paidOverpaid:           n(r3?.paid_overpaid ?? 0),
+      paidBadDebt:            n(r3?.paid_bad_debt ?? 0),
+      paidBadDebtInstallment: n(r3?.paid_bad_debt_installment ?? 0),
       // หนี้ค้างชำระ breakdown
       dueTotal:           n(r4?.due_total ?? 0),
       duePrincipal:       n(r4?.due_principal ?? 0),
