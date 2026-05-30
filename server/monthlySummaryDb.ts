@@ -2541,9 +2541,9 @@ export async function populateDueMonthCache(
   // ── Query 6: paid (batch) ─────────────────────────────────────────────────
   // approve_month = approve_date (เดือนอนุมัติสัญญา) — เพื่อ join กับแถวอื่นในตาราง
   // due_month     = paid_at (เดือนที่เก็บเงินได้จริง) — แสดงในคอลัมน์เดือนที่ถูกต้อง
-  // ยอดเก็บหนี้ในเดือนอนาคตจะไม่มี เพราะ paid_at ไม่มีค่าในอนาคต
+  // filter paid_at <= CURRENT_DATE เพื่อป้องกันการชำระล่วงหน้าทำให้มียอดเก็บหนี้ในเดือนอนาคต
   {
-    let dccFilter = `dcc.section = '${section}' AND dcc.paid_at IS NOT NULL`;
+    let dccFilter = `dcc.section = '${section}' AND dcc.paid_at IS NOT NULL AND dcc.paid_at <= CURRENT_DATE`;
     const q = `
       SELECT
         dcc.product_type,
