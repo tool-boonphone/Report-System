@@ -2942,9 +2942,9 @@ export type MonthlySummaryTotalsRow = {
 export async function getMonthlySummaryTotalsOnly(
   section: SectionKey,
   params: MonthlySummaryParams,
-): Promise<MonthlySummaryTotalsRow[]> {
+): Promise<MonthlySummaryTotalsRow | null> {
   const db = await getDb(section);
-  if (!db) return [];
+  if (!db) return null;
 
   // ── Helper functions (เหมือน getMonthlySummaryFromCache) ──────────────────
   function dateMonthCond(months: string[] | undefined, singleDate: string | undefined): string {
@@ -2982,22 +2982,18 @@ export async function getMonthlySummaryTotalsOnly(
 
   // ── ดึงข้อมูลจาก monthly_summary_cache (SUM across all buckets) ──────────
   const [countRows, targetRows, paidRows, dueRows, notYetDueRows, installTotalRows] = await Promise.all([
-    // count: ไม่มี dateMonth filter
+    // count: ไม่มี dateMonth filter — SUM ทั้งหมดเป็น grand total
     db.execute(sql.raw(`
-      SELECT approve_month,
-             SUM(contract_count) AS contract_count
+      SELECT SUM(contract_count) AS contract_count
       FROM monthly_summary_cache
       WHERE section = '${section}' AND query_type = 'count'
         AND ${productTypeCond(params.countProductType)}
         AND ${deviceFamilyCond(params.countDeviceFamily)}
         AND date_month IS NULL
-      GROUP BY approve_month
-      ORDER BY approve_month DESC
     `)),
-    // target: dueMonth filter
+    // target: dueMonth filter — SUM ทั้งหมดเป็น grand total
     db.execute(sql.raw(`
-      SELECT approve_month,
-             SUM(principal) AS target_principal,
+      SELECT SUM(principal) AS target_principal,
              SUM(interest)  AS target_interest,
              SUM(fee)       AS target_fee,
              SUM(penalty)   AS target_penalty,
@@ -3008,13 +3004,10 @@ export async function getMonthlySummaryTotalsOnly(
         AND ${productTypeCond(params.targetProductType)}
         AND ${deviceFamilyCond(params.targetDeviceFamily)}
         AND ${dateMonthCond(params.targetDueMonths, params.targetDueDate)}
-      GROUP BY approve_month
-      ORDER BY approve_month DESC
     `)),
-    // paid: paidAtMonth filter — ใช้ bad_debt_installment เป็น paid_total (= ptTotal ไม่รวมยอดขายเครื่อง)
+    // paid: paidAtMonth filter — SUM ทั้งหมดเป็น grand total (ไม่แยก approve_month เพราะ paid.approve_month = paid_at month)
     db.execute(sql.raw(`
-      SELECT approve_month,
-             SUM(principal)            AS paid_principal,
+      SELECT SUM(principal)            AS paid_principal,
              SUM(interest)             AS paid_interest,
              SUM(fee)                  AS paid_fee,
              SUM(penalty)              AS paid_penalty,
@@ -3029,13 +3022,10 @@ export async function getMonthlySummaryTotalsOnly(
         AND ${productTypeCond(params.paidProductType)}
         AND ${deviceFamilyCond(params.paidDeviceFamily)}
         AND ${dateMonthCondAll(params.paidAtMonths, params.paidAtDate)}
-      GROUP BY approve_month
-      ORDER BY approve_month DESC
     `)),
-    // due: dueAtMonth filter
+    // due: dueAtMonth filter — SUM ทั้งหมดเป็น grand total
     db.execute(sql.raw(`
-      SELECT approve_month,
-             SUM(principal) AS due_principal,
+      SELECT SUM(principal) AS due_principal,
              SUM(interest)  AS due_interest,
              SUM(fee)       AS due_fee,
              SUM(penalty)   AS due_penalty,
@@ -3046,13 +3036,10 @@ export async function getMonthlySummaryTotalsOnly(
         AND ${productTypeCond(params.dueProductType)}
         AND ${deviceFamilyCond(params.dueDeviceFamily)}
         AND ${dateMonthCondAll(params.dueAtMonths, params.dueAtDate)}
-      GROUP BY approve_month
-      ORDER BY approve_month DESC
     `)),
-    // notYetDue: dueMonth filter
+    // notYetDue: dueMonth filter — SUM ทั้งหมดเป็น grand total
     db.execute(sql.raw(`
-      SELECT approve_month,
-             SUM(principal) AS not_yet_due_principal,
+      SELECT SUM(principal) AS not_yet_due_principal,
              SUM(interest)  AS not_yet_due_interest,
              SUM(fee)       AS not_yet_due_fee,
              SUM(penalty)   AS not_yet_due_penalty,
@@ -3063,13 +3050,10 @@ export async function getMonthlySummaryTotalsOnly(
         AND ${productTypeCond(params.notYetDueProductType)}
         AND ${deviceFamilyCond(params.notYetDueDeviceFamily)}
         AND ${dateMonthCondAll(params.notYetDueDueMonths, params.notYetDueDueDate)}
-      GROUP BY approve_month
-      ORDER BY approve_month DESC
     `)),
-    // installTotal: ไม่มี dateMonth filter
+    // installTotal: ไม่มี dateMonth filter — SUM ทั้งหมดเป็น grand total
     db.execute(sql.raw(`
-      SELECT approve_month,
-             SUM(principal)    AS install_principal,
+      SELECT SUM(principal)    AS install_principal,
              SUM(interest)     AS install_interest,
              SUM(fee)          AS install_fee,
              SUM(total_amount) AS install_total,
@@ -3079,86 +3063,58 @@ export async function getMonthlySummaryTotalsOnly(
         AND ${productTypeCond(params.installTotalProductType)}
         AND ${deviceFamilyCond(params.installTotalDeviceFamily)}
         AND date_month IS NULL
-      GROUP BY approve_month
-      ORDER BY approve_month DESC
     `)),
   ]);
 
-  const rows1 = pgRows(countRows) as any[];
-  const rows2 = pgRows(targetRows) as any[];
-  const rows3 = pgRows(paidRows) as any[];
-  const rows4 = pgRows(dueRows) as any[];
-  const rows5 = pgRows(notYetDueRows) as any[];
-  const rows6 = pgRows(installTotalRows) as any[];
+  // ── Assemble grand total (single row) ──────────────────────────────────────
+  // ไม่แยกตาม approve_month เพราะ paid.approve_month = paid_at month (ไม่ใช่ approve_date)
+  const r1 = pgRows(countRows)[0] as any;
+  const r2 = pgRows(targetRows)[0] as any;
+  const r3 = pgRows(paidRows)[0] as any;
+  const r4 = pgRows(dueRows)[0] as any;
+  const r5 = pgRows(notYetDueRows)[0] as any;
+  const r6 = pgRows(installTotalRows)[0] as any;
 
-  // ── Assemble ───────────────────────────────────────────────────────────────
-  const monthSet = new Set<string>();
-  for (const r of [...rows1, ...rows2, ...rows3, ...rows4, ...rows5, ...rows6]) {
-    if (r.approve_month) monthSet.add(r.approve_month);
-  }
-  const months = Array.from(monthSet).sort((a, b) => b.localeCompare(a));
-
-  const map1 = new Map<string, any>();
-  const map2 = new Map<string, any>();
-  const map3 = new Map<string, any>();
-  const map4 = new Map<string, any>();
-  const map5 = new Map<string, any>();
-  const map6 = new Map<string, any>();
-  for (const r of rows1) map1.set(r.approve_month, r);
-  for (const r of rows2) map2.set(r.approve_month, r);
-  for (const r of rows3) map3.set(r.approve_month, r);
-  for (const r of rows4) map4.set(r.approve_month, r);
-  for (const r of rows5) map5.set(r.approve_month, r);
-  for (const r of rows6) map6.set(r.approve_month, r);
-
-  return months.map((month) => {
-    const r1 = map1.get(month);
-    const r2 = map2.get(month);
-    const r3 = map3.get(month);
-    const r4 = map4.get(month);
-    const r5 = map5.get(month);
-    const r6 = map6.get(month);
-    return {
-      approveMonth:       month,
-      contractCount:      n(r1?.contract_count ?? 0),
-      financeTotal:       n(r6?.finance_total ?? 0),
-      // ยอดผ่อนรวม breakdown
-      installTotal:       n(r6?.install_total ?? 0),
-      installPrincipal:   n(r6?.install_principal ?? 0),
-      installInterest:    n(r6?.install_interest ?? 0),
-      installFee:         n(r6?.install_fee ?? 0),
-      // เป้าเก็บหนี้ breakdown (ตัด penalty/unlockFee ออก ตรงกับ DebtOverview)
-      targetTotal:        n(r2?.target_total ?? 0),
-      targetPrincipal:    n(r2?.target_principal ?? 0),
-      targetInterest:     n(r2?.target_interest ?? 0),
-      targetFee:          n(r2?.target_fee ?? 0),
-      targetPenalty:      0,  // ตัด penalty ออก
-      targetUnlockFee:    0,  // ตัด unlockFee ออก
-      // ยอดเก็บหนี้ breakdown
-      paidTotal:              n(r3?.paid_total ?? 0),
-      paidPrincipal:          n(r3?.paid_principal ?? 0),
-      paidInterest:           n(r3?.paid_interest ?? 0),
-      paidFee:                n(r3?.paid_fee ?? 0),
-      paidPenalty:            n(r3?.paid_penalty ?? 0),
-      paidUnlockFee:          n(r3?.paid_unlock_fee ?? 0),
-      paidDiscount:           n(r3?.paid_discount ?? 0),
-      paidOverpaid:           n(r3?.paid_overpaid ?? 0),
-      paidBadDebt:            n(r3?.paid_bad_debt ?? 0),
-      paidBadDebtInstallment: n(r3?.paid_bad_debt_installment ?? 0),
-      // หนี้ค้างชำระ breakdown
-      dueTotal:           n(r4?.due_total ?? 0),
-      duePrincipal:       n(r4?.due_principal ?? 0),
-      dueInterest:        n(r4?.due_interest ?? 0),
-      dueFee:             n(r4?.due_fee ?? 0),
-      duePenalty:         n(r4?.due_penalty ?? 0),
-      dueUnlockFee:       n(r4?.due_unlock_fee ?? 0),
-      // ยังไม่ถึงกำหนด breakdown
-      notYetDueTotal:     n(r5?.not_yet_due_total ?? 0),
-      notYetDuePrincipal: n(r5?.not_yet_due_principal ?? 0),
-      notYetDueInterest:  n(r5?.not_yet_due_interest ?? 0),
-      notYetDueFee:       n(r5?.not_yet_due_fee ?? 0),
-      notYetDuePenalty:   n(r5?.not_yet_due_penalty ?? 0),
-      notYetDueUnlockFee: n(r5?.not_yet_due_unlock_fee ?? 0),
-    };
-  });
+  return {
+    approveMonth:       '__grand__',
+    contractCount:      n(r1?.contract_count ?? 0),
+    financeTotal:       n(r6?.finance_total ?? 0),
+    // ยอดผ่อนรวม breakdown
+    installTotal:       n(r6?.install_total ?? 0),
+    installPrincipal:   n(r6?.install_principal ?? 0),
+    installInterest:    n(r6?.install_interest ?? 0),
+    installFee:         n(r6?.install_fee ?? 0),
+    // เป้าเก็บหนี้ breakdown (ตัด penalty/unlockFee ออก ตรงกับ DebtOverview)
+    targetTotal:        n(r2?.target_total ?? 0),
+    targetPrincipal:    n(r2?.target_principal ?? 0),
+    targetInterest:     n(r2?.target_interest ?? 0),
+    targetFee:          n(r2?.target_fee ?? 0),
+    targetPenalty:      0,  // ตัด penalty ออก
+    targetUnlockFee:    0,  // ตัด unlockFee ออก
+    // ยอดเก็บหนี้ breakdown
+    paidTotal:              n(r3?.paid_total ?? 0),
+    paidPrincipal:          n(r3?.paid_principal ?? 0),
+    paidInterest:           n(r3?.paid_interest ?? 0),
+    paidFee:                n(r3?.paid_fee ?? 0),
+    paidPenalty:            n(r3?.paid_penalty ?? 0),
+    paidUnlockFee:          n(r3?.paid_unlock_fee ?? 0),
+    paidDiscount:           n(r3?.paid_discount ?? 0),
+    paidOverpaid:           n(r3?.paid_overpaid ?? 0),
+    paidBadDebt:            n(r3?.paid_bad_debt ?? 0),
+    paidBadDebtInstallment: n(r3?.paid_bad_debt_installment ?? 0),
+    // หนี้ค้างชำระ breakdown
+    dueTotal:           n(r4?.due_total ?? 0),
+    duePrincipal:       n(r4?.due_principal ?? 0),
+    dueInterest:        n(r4?.due_interest ?? 0),
+    dueFee:             n(r4?.due_fee ?? 0),
+    duePenalty:         n(r4?.due_penalty ?? 0),
+    dueUnlockFee:       n(r4?.due_unlock_fee ?? 0),
+    // ยังไม่ถึงกำหนด breakdown
+    notYetDueTotal:     n(r5?.not_yet_due_total ?? 0),
+    notYetDuePrincipal: n(r5?.not_yet_due_principal ?? 0),
+    notYetDueInterest:  n(r5?.not_yet_due_interest ?? 0),
+    notYetDueFee:       n(r5?.not_yet_due_fee ?? 0),
+    notYetDuePenalty:   n(r5?.not_yet_due_penalty ?? 0),
+    notYetDueUnlockFee: n(r5?.not_yet_due_unlock_fee ?? 0),
+  };
 }

@@ -125,9 +125,8 @@ export const monthlySummaryRouter = router({
         }),
       ]);
 
-      // สร้าง map สำหรับ totals ที่ถูกต้อง
-      const totalsMap = new Map<string, typeof totalsRows[0]>();
-      for (const t of totalsRows) totalsMap.set(t.approveMonth, t);
+      // totalsRows = grand total single object (ไม่แยก approve_month)
+      const gt = totalsRows;
 
       // Flatten nested MonthlySummaryRow[] → flat rows
       const flatRows: {
@@ -202,9 +201,9 @@ export const monthlySummaryRouter = router({
             financeTotal:           cell.financeTotal ?? 0,
           });
         }
-        // "__total__" row — ใช้ totalsMap (getMonthlySummaryTotalsOnly) เพื่อความถูกต้อง
+        // "__total__" row — ใช้ grand total (getMonthlySummaryTotalsOnly) เพื่อความถูกต้อง
         // ส่ง breakdown fields ครบเพื่อให้ badge toggle ทำงานได้ถูกต้อง
-        const t = totalsMap.get(row.approveMonth);
+        const t = gt;
         flatRows.push({
           approveMonth: row.approveMonth,
           bucket: "__total__",
@@ -301,8 +300,8 @@ export const monthlySummaryRouter = router({
           search: input.search || undefined,
         }),
       ]);
-      const totalsMap = new Map<string, typeof totalsRows[0]>();
-      for (const t of totalsRows) totalsMap.set(t.approveMonth, t);
+      // totalsRows = grand total single object (ไม่แยก approve_month)
+      const gt = totalsRows;
 
       let summaryRows = cacheResult.rows;
       let allDueMonths = cacheResult.allDueMonths;
@@ -350,23 +349,45 @@ export const monthlySummaryRouter = router({
             financeTotal: cell.financeTotal ?? 0,
           });
         }
-        // __total__ row — ใช้ totalsMap (getMonthlySummaryTotalsOnly) เพื่อความถูกต้อง
-        const t = totalsMap.get(row.approveMonth);
+        // __total__ row — ใช้ grand total (getMonthlySummaryTotalsOnly) เพื่อความถูกต้อง
+        const t = gt;
         flatRows.push({
           approveMonth: row.approveMonth,
           dueMonth: "__total__",
           contractCount:          t?.contractCount  ?? row.approvedCount,
-          paidTotal:              t?.paidTotal      ?? row.totalPaid.total,
-          paidPrincipal: 0, paidInterest: 0, paidFee: 0, paidPenalty: 0, paidUnlockFee: 0, paidDiscount: 0, paidOverpaid: 0, paidBadDebt: 0, paidBadDebtInstallment: 0,
+          paidTotal:              t?.paidTotal              ?? row.totalPaid.total,
+          paidPrincipal:          t?.paidPrincipal          ?? 0,
+          paidInterest:           t?.paidInterest           ?? 0,
+          paidFee:                t?.paidFee                ?? 0,
+          paidPenalty:            t?.paidPenalty            ?? 0,
+          paidUnlockFee:          t?.paidUnlockFee          ?? 0,
+          paidDiscount:           t?.paidDiscount           ?? 0,
+          paidOverpaid:           t?.paidOverpaid           ?? 0,
+          paidBadDebt:            t?.paidBadDebt            ?? 0,
+          paidBadDebtInstallment: t?.paidBadDebtInstallment ?? 0,
           targetTotal:            t?.targetTotal    ?? row.totalTarget.total,
-          targetPrincipal: 0, targetInterest: 0, targetFee: 0, targetPenalty: 0, targetUnlockFee: 0,
-          dueTotal:               t?.dueTotal       ?? row.totalDue.total,
-          duePrincipal: 0, dueInterest: 0, dueFee: 0, duePenalty: 0, dueUnlockFee: 0,
-          notYetDueTotal:         t?.notYetDueTotal ?? row.totalNotYetDue.total,
-          notYetDuePrincipal: 0, notYetDueInterest: 0, notYetDueFee: 0, notYetDuePenalty: 0, notYetDueUnlockFee: 0,
-          installTotalTotal:      t?.installTotal   ?? row.totalInstallTotal.total,
-          installTotalPrincipal: 0, installTotalInterest: 0, installTotalFee: 0,
-          financeTotal:           t?.financeTotal   ?? row.totalFinanceTotal ?? 0,
+          targetPrincipal:        t?.targetPrincipal ?? 0,
+          targetInterest:         t?.targetInterest  ?? 0,
+          targetFee:              t?.targetFee       ?? 0,
+          targetPenalty:          t?.targetPenalty   ?? 0,
+          targetUnlockFee:        t?.targetUnlockFee ?? 0,
+          dueTotal:               t?.dueTotal        ?? row.totalDue.total,
+          duePrincipal:           t?.duePrincipal    ?? 0,
+          dueInterest:            t?.dueInterest     ?? 0,
+          dueFee:                 t?.dueFee          ?? 0,
+          duePenalty:             t?.duePenalty      ?? 0,
+          dueUnlockFee:           t?.dueUnlockFee    ?? 0,
+          notYetDueTotal:         t?.notYetDueTotal  ?? row.totalNotYetDue.total,
+          notYetDuePrincipal:     t?.notYetDuePrincipal ?? 0,
+          notYetDueInterest:      t?.notYetDueInterest  ?? 0,
+          notYetDueFee:           t?.notYetDueFee        ?? 0,
+          notYetDuePenalty:       t?.notYetDuePenalty    ?? 0,
+          notYetDueUnlockFee:     t?.notYetDueUnlockFee  ?? 0,
+          installTotalTotal:      t?.installTotal    ?? row.totalInstallTotal.total,
+          installTotalPrincipal:  t?.installPrincipal ?? 0,
+          installTotalInterest:   t?.installInterest  ?? 0,
+          installTotalFee:        t?.installFee       ?? 0,
+          financeTotal:           t?.financeTotal    ?? row.totalFinanceTotal ?? 0,
         });
       }
 
