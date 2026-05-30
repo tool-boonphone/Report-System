@@ -2530,9 +2530,9 @@ export async function populateDueMonthCache(
   }
 
   // ── Query 6: paid (batch) ─────────────────────────────────────────────────
-  // approve_month = paid_at (เดือนที่ชำระเงินจริง) — เหมือน Bucket mode
-  // due_month     = approve_date (เดือนที่อนุมัติสัญญา) — ใช้เป็น dimension แยกย่อย
-  // ทำให้ totalPaid ในคอลัมน์รวมตรงกับ Bucket mode ทุกแถว
+  // approve_month = approve_date (เดือนอนุมัติสัญญา) — เพื่อ join กับแถวอื่นในตาราง
+  // due_month     = paid_at (เดือนที่เก็บเงินได้จริง) — แสดงในคอลัมน์เดือนที่ถูกต้อง
+  // ยอดเก็บหนี้ในเดือนอนาคตจะไม่มี เพราะ paid_at ไม่มีค่าในอนาคต
   {
     let dccFilter = `dcc.section = '${section}' AND dcc.paid_at IS NOT NULL`;
     const q = `
@@ -2541,8 +2541,8 @@ export async function populateDueMonthCache(
         CASE WHEN dcc.device IN ('iPhone','iPad') THEN 'iOS'
              WHEN dcc.device IS NOT NULL AND dcc.device != '' THEN 'Android'
              ELSE NULL END AS device_family,
-        TO_CHAR(dcc.paid_at, 'YYYY-MM') AS approve_month,
-        TO_CHAR(dcc.approve_date, 'YYYY-MM') AS due_month,
+        TO_CHAR(dcc.approve_date, 'YYYY-MM') AS approve_month,
+        TO_CHAR(dcc.paid_at, 'YYYY-MM') AS due_month,
         COUNT(DISTINCT dcc.contract_external_id) AS contract_count,
         SUM(CASE WHEN dcc.is_bad_debt_row = false
                       AND NOT (CAST(dcc.payment_tx_amount AS DECIMAL(18,2)) = 0
@@ -2623,7 +2623,7 @@ export async function populateDueMonthCache(
     const rows = pgRows(rawRows) as any[];
     const mapped = buildBatchCombinations(rows, (r) => ({
       approve_month: r.approve_month,
-      due_month: "__approved__",
+      due_month: "__appr__",
       productType: r.product_type ?? null,
       deviceFamily: r.device_family ?? null,
       contractCount: Number(r.approved_count),
@@ -2699,7 +2699,7 @@ export async function populateDueMonthCache(
     const rows = pgRows(rawRows) as any[];
     const mapped = buildBatchCombinations(rows, (r) => ({
       approve_month: r.approve_month,
-      due_month: "__summary__",  // special key สำหรับยอดรวมต่อ approve_month
+      due_month: "__sum__",  // special key สำหรับยอดรวมต่อ approve_month
       productType: r.product_type ?? null,
       deviceFamily: r.device_family ?? null,
       contractCount: Number(r.contract_count),
@@ -2772,6 +2772,7 @@ export async function getDueMonthSummaryFromCache(
   const installTotalRows = allDbRows.filter((r) => r.query_type === "installTotal");
   const paidRows         = allDbRows.filter((r) => r.query_type === "paid");
   const approvedCountRows = allDbRows.filter((r) => r.query_type === "approvedCount");
+  // approvedCount rows มี due_month = "__appr__" (7 ตัว) — ใช้ได้กับ VARCHAR(7)
   // installTotalSummary — ยอดรวมต่อ approve_month (ไม่แยก due_month) ใช้ logic เดียวกับ Bucket mode
   const installTotalSummaryRows = allDbRows.filter((r) => r.query_type === "installTotalSummary");
 
@@ -2781,7 +2782,7 @@ export async function getDueMonthSummaryFromCache(
   for (const r of allDbRows) {
     monthSet.add(r.approve_month);
     // ไม่นับ __approved__ และ __summary__ เป็น due_month จริง
-    if (r.due_month !== "__approved__" && r.due_month !== "__summary__") dueMonthSet.add(r.due_month);
+    if (r.due_month !== "__appr__" && r.due_month !== "__sum__") dueMonthSet.add(r.due_month);
   }
   const approveMonths = Array.from(monthSet).sort((a, b) => b.localeCompare(a));
   const allDueMonths  = Array.from(dueMonthSet).sort((a, b) => a.localeCompare(b));
@@ -2835,7 +2836,7 @@ export async function getDueMonthSummaryFromCache(
     financeTotalDueMap.set(`${r.approve_month}|${r.due_month}`, n(r.finance_total ?? 0));
   }
   // installTotalSummary — ยอดรวมต่อ approve_month ใช้ logic เดียวกับ Bucket mode
-  // key = approve_month (due_month = "__summary__" ใน cache แต่ map ด้วย approve_month เพียงอย่าง)
+  // key = approve_month (due_month = "__sum__" ใน cache แต่ map ด้วย approve_month เพียงอย่าง)
   const installTotalSummaryMap = new Map<string, MoneyBreakdown>();
   const financeTotalSummaryMap = new Map<string, number>();
   for (const r of installTotalSummaryRows) {

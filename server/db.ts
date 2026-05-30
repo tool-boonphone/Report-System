@@ -260,7 +260,7 @@ export async function runStartupMigrations(): Promise<void> {
       console.error(`[migration] ${section}: monthly_summary_due_month_cache.finance_total failed:`, err?.message ?? err);
     }
     try {
-      // Migration 0013: ขยาย due_month เป็น VARCHAR(16) เพื่อรองรับ "__approved__" และ "__summary__"
+      // Migration 0013: ขยาย due_month เป็น VARCHAR(16) (backup migration สำหรับค่า sentinel เก่า "__approved__" และ "__summary__" ที่ยาวเกิน 7 ตัว)
       await db.execute(sql.raw(`
         ALTER TABLE monthly_summary_due_month_cache
         ALTER COLUMN due_month TYPE VARCHAR(16)
