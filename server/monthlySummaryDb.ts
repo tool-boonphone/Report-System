@@ -2530,16 +2530,19 @@ export async function populateDueMonthCache(
   }
 
   // ── Query 6: paid (batch) ─────────────────────────────────────────────────
+  // approve_month = paid_at (เดือนที่ชำระเงินจริง) — เหมือน Bucket mode
+  // due_month     = approve_date (เดือนที่อนุมัติสัญญา) — ใช้เป็น dimension แยกย่อย
+  // ทำให้ totalPaid ในคอลัมน์รวมตรงกับ Bucket mode ทุกแถว
   {
-    let dccFilter = `dcc.section = '${section}' AND dcc.approve_date IS NOT NULL`;
+    let dccFilter = `dcc.section = '${section}' AND dcc.paid_at IS NOT NULL`;
     const q = `
       SELECT
         dcc.product_type,
         CASE WHEN dcc.device IN ('iPhone','iPad') THEN 'iOS'
              WHEN dcc.device IS NOT NULL AND dcc.device != '' THEN 'Android'
              ELSE NULL END AS device_family,
-        TO_CHAR(dcc.approve_date, 'YYYY-MM') AS approve_month,
-        TO_CHAR(dcc.paid_at, 'YYYY-MM') AS due_month,
+        TO_CHAR(dcc.paid_at, 'YYYY-MM') AS approve_month,
+        TO_CHAR(dcc.approve_date, 'YYYY-MM') AS due_month,
         COUNT(DISTINCT dcc.contract_external_id) AS contract_count,
         SUM(CASE WHEN dcc.is_bad_debt_row = false
                       AND NOT (CAST(dcc.payment_tx_amount AS DECIMAL(18,2)) = 0
@@ -2581,7 +2584,6 @@ export async function populateDueMonthCache(
             END) AS total_paid
       FROM debt_collected_cache dcc
       WHERE ${dccFilter}
-        AND dcc.paid_at IS NOT NULL
       GROUP BY 1, 2, 3, 4
       ORDER BY 3 DESC, 4 ASC
     `;
