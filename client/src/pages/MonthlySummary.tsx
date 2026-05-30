@@ -699,7 +699,7 @@ export default function MonthlySummary() {
   const[installVis,setInstallVis]=useState<Record<"principal"|"interest"|"fee",boolean>>({principal:true,interest:true,fee:true});
   const[paidVis,setPaidVis]=useState<Record<MoneyBadgeKey,boolean>>({principal:true,interest:true,fee:true,penalty:true,unlockFee:true,discount:false,overpaid:true,badDebtInstallment:true});
   const[targetVis,setTargetVis]=useState<Record<MoneyBadgeKey,boolean>>({principal:true,interest:true,fee:true,penalty:false,unlockFee:false,discount:false,overpaid:false,badDebtInstallment:false});
-  const[dueVis,setDueVis]=useState<Record<DueBadgeKey,boolean>>({principal:true,interest:true,fee:true,penalty:true,unlockFee:true});
+  const[dueVis,setDueVis]=useState<Record<DueBadgeKey,boolean>>({principal:true,interest:true,fee:true,penalty:false,unlockFee:false});
   const[notYetDueVis,setNotYetDueVis]=useState<Record<NotYetDueBadgeKey,boolean>>({principal:true,interest:true,fee:true});
 
   // bad debt sub-col toggles
