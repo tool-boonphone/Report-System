@@ -1939,14 +1939,14 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
                   <span className="text-gray-800">{fmtMonthYear(row.approveMonth)}</span>
                 </div>
               </td>
-              {/* รวมคอลัมน์ 2 — ใช้ totalXxx จาก getMonthlySummaryTotalsOnly */}
+              {/* รวมคอลัมน์ 2 — ใช้ totalXxx จาก getMonthlySummaryTotalsOnly ผ่าน badge-aware formula */}
               <td className="sticky left-[130px] z-10 px-3 py-2.5 text-right bg-white border-r border-gray-200 min-w-[110px]">
                 {tab==="count"?renderCount(isHiddenRow?0:row.totalCount)
-                :tab==="installTotal"?renderMoney(isHiddenRow?0:row.totalInstallTotal.total,"text-purple-800 font-semibold")
-                :tab==="target"?renderMoney(isHiddenRow?0:row.totalTarget.total,"text-indigo-800 font-semibold")
-                :tab==="paid"?renderMoney(isHiddenRow?0:row.totalPaid.total,"text-green-800 font-semibold")
-                :tab==="due"?renderMoney(isHiddenRow?0:row.totalDue.total,"text-orange-800 font-semibold")
-                :renderMoney(isHiddenRow?0:row.totalNotYetDue.total,"text-blue-800 font-semibold")}
+                :tab==="installTotal"?renderMoney(isHiddenRow?0:((installVis.principal?row.totalInstallTotal.principal:0)+(installVis.interest?row.totalInstallTotal.interest:0)+(installVis.fee?row.totalInstallTotal.fee:0)),"text-purple-800 font-semibold")
+                :tab==="target"?renderMoney(isHiddenRow?0:computeMoneyTotal(row.totalTarget,{...targetVis,discount:false,overpaid:false}),"text-indigo-800 font-semibold")
+                :tab==="paid"?renderMoney(isHiddenRow?0:(computeMoneyTotal(row.totalPaid,paidVis)+(showBadDebtSale?(row.totalPaid.badDebt??0):0)),"text-green-800 font-semibold")
+                :tab==="due"?renderMoney(isHiddenRow?0:computeDueTotal(row.totalDue,dueVis),"text-orange-800 font-semibold")
+                :renderMoney(isHiddenRow?0:computeNotYetDueTotal(row.totalNotYetDue,notYetDueVis),"text-blue-800 font-semibold")}
               </td>
               {/* Bucket cells — ซ่อนชั่วคราวเมื่อ HIDE_BUCKET_COLS=true */}
               {!HIDE_BUCKET_COLS && visibleGroups.map((g,gi)=>(
@@ -2076,11 +2076,11 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
             <td className="sticky left-0 z-20 px-3 py-2.5 text-slate-800 whitespace-nowrap border-r border-slate-300 bg-slate-200 min-w-[130px]">รวมทั้งหมด</td>
             <td className="sticky left-[130px] z-20 px-3 py-2.5 text-right border-r border-slate-300 bg-slate-200 min-w-[110px]">
               {tab==="count"?(<span className="inline-flex items-center justify-center bg-slate-400 text-white rounded-full px-2.5 py-0.5 text-xs font-bold">{grandTotal.totalCount.toLocaleString()}</span>)
-              :tab==="installTotal"?renderMoney(grandTotal.totalInstallTotal.total,"text-purple-900")
-              :tab==="target"?renderMoney(grandTotal.totalTarget.total,"text-indigo-900")
-              :tab==="paid"?renderMoney(grandTotal.totalPaid.total,"text-green-900")
-              :tab==="due"?renderMoney(grandTotal.totalDue.total,"text-orange-900")
-              :renderMoney(grandTotal.totalNotYetDue.total,"text-blue-900")}
+              :tab==="installTotal"?renderMoney((installVis.principal?grandTotal.totalInstallTotal.principal:0)+(installVis.interest?grandTotal.totalInstallTotal.interest:0)+(installVis.fee?grandTotal.totalInstallTotal.fee:0),"text-purple-900")
+              :tab==="target"?renderMoney(computeMoneyTotal(grandTotal.totalTarget,{...targetVis,discount:false,overpaid:false}),"text-indigo-900")
+              :tab==="paid"?renderMoney(computeMoneyTotal(grandTotal.totalPaid,paidVis)+(showBadDebtSale?(grandTotal.totalPaid.badDebt??0):0),"text-green-900")
+              :tab==="due"?renderMoney(computeDueTotal(grandTotal.totalDue,dueVis),"text-orange-900")
+              :renderMoney(computeNotYetDueTotal(grandTotal.totalNotYetDue,notYetDueVis),"text-blue-900")}
             </td>
             {!HIDE_BUCKET_COLS && visibleGroups.map((g,gi)=>(
               <React.Fragment key={g.key}>

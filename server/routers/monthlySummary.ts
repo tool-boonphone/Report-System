@@ -173,6 +173,7 @@ export const monthlySummaryRouter = router({
           });
         }
         // "__total__" row — ใช้ totalsMap (getMonthlySummaryTotalsOnly) เพื่อความถูกต้อง
+        // ส่ง breakdown fields ครบเพื่อให้ badge toggle ทำงานได้ถูกต้อง
         const t = totalsMap.get(row.approveMonth);
         flatRows.push({
           approveMonth: row.approveMonth,
@@ -189,31 +190,31 @@ export const monthlySummaryRouter = router({
           paidBadDebt:            0,
           paidBadDebtInstallment: 0,
           paidTotal:              t?.paidTotal       ?? row.totalPaid.total,
-          // due
-          duePrincipal:           0,
-          dueInterest:            0,
-          dueFee:                 0,
-          duePenalty:             0,
-          dueUnlockFee:           0,
+          // due — ส่ง breakdown เพื่อ badge toggle
+          duePrincipal:           t?.duePrincipal    ?? 0,
+          dueInterest:            t?.dueInterest     ?? 0,
+          dueFee:                 t?.dueFee          ?? 0,
+          duePenalty:             t?.duePenalty      ?? 0,
+          dueUnlockFee:           t?.dueUnlockFee    ?? 0,
           dueTotal:               t?.dueTotal        ?? row.totalDue.total,
-          // target
-          targetPrincipal:        0,
-          targetInterest:         0,
-          targetFee:              0,
-          targetPenalty:          0,
-          targetUnlockFee:        0,
+          // target — ส่ง breakdown เพื่อ badge toggle
+          targetPrincipal:        t?.targetPrincipal ?? 0,
+          targetInterest:         t?.targetInterest  ?? 0,
+          targetFee:              t?.targetFee       ?? 0,
+          targetPenalty:          t?.targetPenalty   ?? 0,
+          targetUnlockFee:        t?.targetUnlockFee ?? 0,
           targetTotal:            t?.targetTotal     ?? row.totalTarget.total,
-          // notYetDue
-          notYetDuePrincipal:     0,
-          notYetDueInterest:      0,
-          notYetDueFee:           0,
-          notYetDuePenalty:       0,
-          notYetDueUnlockFee:     0,
+          // notYetDue — ส่ง breakdown เพื่อ badge toggle
+          notYetDuePrincipal:     t?.notYetDuePrincipal ?? 0,
+          notYetDueInterest:      t?.notYetDueInterest  ?? 0,
+          notYetDueFee:           t?.notYetDueFee        ?? 0,
+          notYetDuePenalty:       t?.notYetDuePenalty    ?? 0,
+          notYetDueUnlockFee:     t?.notYetDueUnlockFee  ?? 0,
           notYetDueTotal:         t?.notYetDueTotal  ?? row.totalNotYetDue.total,
-          // installTotal
-          installTotalPrincipal:  0,
-          installTotalInterest:   0,
-          installTotalFee:        0,
+          // installTotal — ส่ง breakdown เพื่อ badge toggle
+          installTotalPrincipal:  t?.installPrincipal ?? 0,
+          installTotalInterest:   t?.installInterest  ?? 0,
+          installTotalFee:        t?.installFee       ?? 0,
           installTotalTotal:      t?.installTotal    ?? row.totalInstallTotal.total,
           // financeTotal
           financeTotal:           t?.financeTotal    ?? row.totalFinanceTotal ?? 0,

@@ -2899,11 +2899,34 @@ export type MonthlySummaryTotalsRow = {
   approveMonth: string;           // YYYY-MM
   contractCount: number;          // จำนวนสัญญาทั้งหมดที่อนุมัติในเดือนนั้น
   financeTotal: number;           // ยอดจัดฯ = SUM(finance_amount) ต่อสัญญา
+  // ยอดผ่อนรวม breakdown
   installTotal: number;           // ยอดผ่อนรวม = SUM(baseline_amount × installment_count)
-  targetTotal: number;            // เป้าเก็บหนี้ = SUM(total_amount WHERE due_date ≤ today)
+  installPrincipal: number;       // เงินต้นรวม
+  installInterest: number;        // ดอกเบี้ยรวม
+  installFee: number;             // ค่าดำเนินการรวม
+  // เป้าเก็บหนี้ breakdown
+  targetTotal: number;            // เป้าเก็บหนี้ = SUM(principal+interest+fee WHERE due_date ≤ today)
+  targetPrincipal: number;
+  targetInterest: number;
+  targetFee: number;
+  targetPenalty: number;
+  targetUnlockFee: number;
+  // ยอดเก็บหนี้
   paidTotal: number;              // ยอดเก็บหนี้ = SUM(total_paid) จาก dcc group by approve_date
+  // หนี้ค้างชำระ breakdown
   dueTotal: number;               // หนี้ค้างชำระ = SUM(total_amount - paid_amount WHERE is_arrears)
+  duePrincipal: number;
+  dueInterest: number;
+  dueFee: number;
+  duePenalty: number;
+  dueUnlockFee: number;
+  // ยังไม่ถึงกำหนด breakdown
   notYetDueTotal: number;         // ยังไม่ถึงกำหนด = SUM(total_amount WHERE due_date > today)
+  notYetDuePrincipal: number;
+  notYetDueInterest: number;
+  notYetDueFee: number;
+  notYetDuePenalty: number;
+  notYetDueUnlockFee: number;
 };
 
 export async function getMonthlySummaryTotalsOnly(
@@ -2988,9 +3011,38 @@ export async function getMonthlySummaryTotalsOnly(
       TO_CHAR(l.approve_date, 'YYYY-MM') AS approve_month,
       COUNT(DISTINCT l.contract_external_id) AS contract_count,
       SUM(COALESCE(CAST(l.finance_amount AS DECIMAL(18,2)), 0)) AS finance_total,
+      -- ยอดผ่อนรวม = baseline_amount × installment_count
       SUM(
         COALESCE(l.baseline_amount, 0) * COALESCE(l.installment_count, 0)
-      ) AS install_total
+      ) AS install_total,
+      -- principal = CEIL(finance_amount / installment_count) × installment_count
+      SUM(
+        CASE
+          WHEN l.finance_amount > 0 AND l.installment_count > 0
+          THEN CEIL(CAST(l.finance_amount AS DECIMAL(18,2)) / l.installment_count) * l.installment_count
+          ELSE COALESCE(l.baseline_amount, 0) * COALESCE(l.installment_count, 0)
+        END
+      ) AS install_principal,
+      -- interest = total - principal - fee
+      SUM(
+        CASE
+          WHEN l.finance_amount > 0 AND l.installment_count > 0 AND l.baseline_amount > 0
+          THEN GREATEST(0,
+            l.baseline_amount * l.installment_count
+            - CEIL(CAST(l.finance_amount AS DECIMAL(18,2)) / l.installment_count) * l.installment_count
+            - 100 * l.installment_count
+          )
+          ELSE 0
+        END
+      ) AS install_interest,
+      -- fee = 100 × installment_count
+      SUM(
+        CASE
+          WHEN l.finance_amount > 0 AND l.installment_count > 0
+          THEN 100 * l.installment_count
+          ELSE 0
+        END
+      ) AS install_fee
     FROM latest l
     WHERE l.rn = 1
     GROUP BY 1
@@ -2998,13 +3050,18 @@ export async function getMonthlySummaryTotalsOnly(
   `;
 
   // ── Query 2: เป้าเก็บหนี้ = SUM(total_amount WHERE due_date ≤ today) ────────
-  // รวม penalty/unlockFee จากงวดล่าสุดที่ถึงกำหนดแล้วเท่านั้น
+  // เป้าเก็บหนี้ = SUM(principal+interest+fee WHERE due_date ≤ today)
+  // ตัดสัญญาที่สิ้นสภาพออก (ยกเลิก/ระงับ/สิ้นสุด/หนี้เสีย)
+  // ตัด penalty/unlockFee ออก (ตรงกับ DebtOverview ที่ใช้ principal+interest+fee เท่านั้น)
   const qTarget = `
     SELECT
       TO_CHAR(base.approve_date, 'YYYY-MM') AS approve_month,
+      SUM(CAST(base.principal AS DECIMAL(18,2))) AS target_principal,
+      SUM(CAST(base.interest  AS DECIMAL(18,2))) AS target_interest,
+      SUM(CAST(base.fee       AS DECIMAL(18,2))) AS target_fee,
       SUM(CAST(base.principal AS DECIMAL(18,2)))
         + SUM(CAST(base.interest AS DECIMAL(18,2)))
-        + SUM(CAST(base.fee AS DECIMAL(18,2)))
+        + SUM(CAST(base.fee     AS DECIMAL(18,2)))
         AS target_total
     FROM debt_target_cache base
     JOIN (
@@ -3059,6 +3116,13 @@ export async function getMonthlySummaryTotalsOnly(
   const qDue = `
     SELECT
       TO_CHAR(base.approve_date, 'YYYY-MM') AS approve_month,
+      SUM(GREATEST(CAST(base.principal  AS DECIMAL(18,2)) - CAST(base.paid_amount AS DECIMAL(18,2)), 0)) AS due_principal,
+      SUM(CAST(base.interest  AS DECIMAL(18,2))) AS due_interest,
+      SUM(CAST(base.fee       AS DECIMAL(18,2))) AS due_fee,
+      SUM(CASE WHEN base.period = latest.max_period
+               THEN CAST(base.penalty    AS DECIMAL(18,2)) ELSE 0 END) AS due_penalty,
+      SUM(CASE WHEN base.period = latest.max_period
+               THEN CAST(base.unlock_fee AS DECIMAL(18,2)) ELSE 0 END) AS due_unlock_fee,
       SUM(GREATEST(CAST(base.total_amount AS DECIMAL(18,2)) - CAST(base.paid_amount AS DECIMAL(18,2)), 0)) AS due_total
     FROM debt_target_cache base
     JOIN (
@@ -3080,6 +3144,13 @@ export async function getMonthlySummaryTotalsOnly(
   const qNotYetDue = `
     SELECT
       TO_CHAR(base.approve_date, 'YYYY-MM') AS approve_month,
+      SUM(CAST(base.principal    AS DECIMAL(18,2))) AS not_yet_due_principal,
+      SUM(CAST(base.interest     AS DECIMAL(18,2))) AS not_yet_due_interest,
+      SUM(CAST(base.fee          AS DECIMAL(18,2))) AS not_yet_due_fee,
+      SUM(CASE WHEN base.period = latest.max_period
+               THEN CAST(base.penalty    AS DECIMAL(18,2)) ELSE 0 END) AS not_yet_due_penalty,
+      SUM(CASE WHEN base.period = latest.max_period
+               THEN CAST(base.unlock_fee AS DECIMAL(18,2)) ELSE 0 END) AS not_yet_due_unlock_fee,
       SUM(CAST(base.total_amount AS DECIMAL(18,2))) AS not_yet_due_total
     FROM debt_target_cache base
     JOIN (
@@ -3143,14 +3214,37 @@ export async function getMonthlySummaryTotalsOnly(
     const r4 = map4.get(month);
     const r5 = map5.get(month);
     return {
-      approveMonth:    month,
-      contractCount:   n(r1?.contract_count ?? 0),
-      financeTotal:    n(r1?.finance_total ?? 0),
-      installTotal:    n(r1?.install_total ?? 0),
-      targetTotal:     n(r2?.target_total ?? 0),
-      paidTotal:       n(r3?.paid_total ?? 0),
-      dueTotal:        n(r4?.due_total ?? 0),
-      notYetDueTotal:  n(r5?.not_yet_due_total ?? 0),
+      approveMonth:       month,
+      contractCount:      n(r1?.contract_count ?? 0),
+      financeTotal:       n(r1?.finance_total ?? 0),
+      // ยอดผ่อนรวม breakdown
+      installTotal:       n(r1?.install_total ?? 0),
+      installPrincipal:   n(r1?.install_principal ?? 0),
+      installInterest:    n(r1?.install_interest ?? 0),
+      installFee:         n(r1?.install_fee ?? 0),
+      // เป้าเก็บหนี้ breakdown
+      targetTotal:        n(r2?.target_total ?? 0),
+      targetPrincipal:    n(r2?.target_principal ?? 0),
+      targetInterest:     n(r2?.target_interest ?? 0),
+      targetFee:          n(r2?.target_fee ?? 0),
+      targetPenalty:      0,  // ตัด penalty ออก เพื่อให้ตรงกับ DebtOverview
+      targetUnlockFee:    0,  // ตัด unlockFee ออก เพื่อให้ตรงกับ DebtOverview
+      // ยอดเก็บหนี้
+      paidTotal:          n(r3?.paid_total ?? 0),
+      // หนี้ค้างชำระ breakdown
+      dueTotal:           n(r4?.due_total ?? 0),
+      duePrincipal:       n(r4?.due_principal ?? 0),
+      dueInterest:        n(r4?.due_interest ?? 0),
+      dueFee:             n(r4?.due_fee ?? 0),
+      duePenalty:         n(r4?.due_penalty ?? 0),
+      dueUnlockFee:       n(r4?.due_unlock_fee ?? 0),
+      // ยังไม่ถึงกำหนด breakdown
+      notYetDueTotal:     n(r5?.not_yet_due_total ?? 0),
+      notYetDuePrincipal: n(r5?.not_yet_due_principal ?? 0),
+      notYetDueInterest:  n(r5?.not_yet_due_interest ?? 0),
+      notYetDueFee:       n(r5?.not_yet_due_fee ?? 0),
+      notYetDuePenalty:   n(r5?.not_yet_due_penalty ?? 0),
+      notYetDueUnlockFee: n(r5?.not_yet_due_unlock_fee ?? 0),
     };
   });
 }
