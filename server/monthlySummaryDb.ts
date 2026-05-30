@@ -2836,7 +2836,6 @@ export async function getDueMonthSummaryFromCache(
   }
   // installTotalSummary — ยอดรวมต่อ approve_month ใช้ logic เดียวกับ Bucket mode
   // key = approve_month (due_month = "__summary__" ใน cache แต่ map ด้วย approve_month เพียงอย่าง)
-  console.log(`[getDueMonthSummaryFromCache] allDbRows=${allDbRows.length} installTotalSummaryRows=${installTotalSummaryRows.length} section=${section} ptFilter=${ptFilter} dfFilter=${dfFilter}`);
   const installTotalSummaryMap = new Map<string, MoneyBreakdown>();
   const financeTotalSummaryMap = new Map<string, number>();
   for (const r of installTotalSummaryRows) {

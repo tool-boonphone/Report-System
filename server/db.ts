@@ -163,7 +163,7 @@ export async function runStartupMigrations(): Promise<void> {
           "section"              VARCHAR(32)      NOT NULL,
           "query_type"           VARCHAR(32)      NOT NULL,
           "approve_month"        VARCHAR(7)       NOT NULL,
-          "due_month"            VARCHAR(7)       NOT NULL,
+          "due_month"            VARCHAR(16)      NOT NULL,
           "product_type"         VARCHAR(64),
           "device_family"        VARCHAR(16),
           "contract_count"       INTEGER          NOT NULL DEFAULT 0,
@@ -258,6 +258,16 @@ export async function runStartupMigrations(): Promise<void> {
       console.log(`[migration] ${section}: monthly_summary_due_month_cache.finance_total — OK`);
     } catch (err: any) {
       console.error(`[migration] ${section}: monthly_summary_due_month_cache.finance_total failed:`, err?.message ?? err);
+    }
+    try {
+      // Migration 0013: ขยาย due_month เป็น VARCHAR(16) เพื่อรองรับ "__approved__" และ "__summary__"
+      await db.execute(sql.raw(`
+        ALTER TABLE monthly_summary_due_month_cache
+        ALTER COLUMN due_month TYPE VARCHAR(16)
+      `));
+      console.log(`[migration] ${section}: monthly_summary_due_month_cache.due_month -> VARCHAR(16) — OK`);
+    } catch (err: any) {
+      console.error(`[migration] ${section}: monthly_summary_due_month_cache.due_month -> VARCHAR(16) failed:`, err?.message ?? err);
     }
   }
 }
