@@ -3064,6 +3064,7 @@ function DueMonthTable({
             <td className={["sticky left-[220px] z-10 px-3 py-1.5 text-right border-r border-slate-300 min-w-[150px]",sr.totalBg].join(" ")}>
               {renderVal(sr.key,
                 sr.key==="count"?grandTotalOverall.totalCount:
+                sr.key==="financeTotal"?grandTotalOverall.totalFinanceTotal:
                 sr.key==="installTotal"?(installVis.principal?grandTotalOverall.totalInstallTotal.principal:0)+(installVis.interest?grandTotalOverall.totalInstallTotal.interest:0)+(installVis.fee?grandTotalOverall.totalInstallTotal.fee:0):
                 sr.key==="target"?computeMoneyTotal(grandTotalOverall.totalTarget,{...targetVis,discount:false,overpaid:false}):
                 sr.key==="paid"?computeMoneyTotal(grandTotalOverall.totalPaid,paidVis):
