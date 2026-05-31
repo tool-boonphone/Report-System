@@ -776,13 +776,10 @@ export async function getMonthlySummary(
 ): Promise<MonthlySummaryRow[]> {
   const { section } = params;
 
-  // Fast path: ถ้าไม่มี search → ลองดึงจาก cache ก่อน
-  if (!params.search) {
-    const cacheResult = await getMonthlySummaryFromCache(params);
-    if (cacheResult !== null) return cacheResult;
-  }
+  // NOTE: Cache ถูก bypass ชั่วคราว — ดึงตรงจาก DB เสมอเพื่อให้ยอดถูกต้อง
+  // TODO: เปิด cache กลับเมื่อ logic ตรงกับ DebtOverview แล้ว
 
-  // Fallback: รัน 6 queries สด (มี search หรือ cache ว่าง)
+  // รัน 6 queries สด
   // Run 6 queries in parallel
   const [countRows, targetRows, paidRows, dueRows, notYetDueRows, installTotalRows] = await Promise.all([
     queryCount(section, {
@@ -803,6 +800,7 @@ export async function getMonthlySummary(
     queryPaid(section, {
       paidAtDate:    params.paidAtDate,
       paidAtMonths:  params.paidAtMonths,
+      approveMonths: params.paidApproveMonths,
       productType:   params.paidProductType,
       deviceFamily:  params.paidDeviceFamily,
       search:        params.search,
@@ -2979,6 +2977,96 @@ export async function getMonthlySummaryTotalsOnly(
   section: SectionKey,
   params: MonthlySummaryParams,
 ): Promise<MonthlySummaryTotalsRow | null> {
+  // NOTE: ดึงตรงจาก DB โดยเรียก getMonthlySummary แล้ว SUM ผลลัพธ์
+  // วิธีนี้รับประกันว่าใช้ logic เดียวกับ live query 100% — ไม่ผ่าน cache
+  const rows = await getMonthlySummary(params);
+  if (!rows || rows.length === 0) return null;
+
+  // SUM ทุก row เป็น grand total
+  let contractCount = 0;
+  let financeTotal = 0;
+  const installTotal = { total: 0, principal: 0, interest: 0, fee: 0 };
+  const target = { total: 0, principal: 0, interest: 0, fee: 0, penalty: 0, unlockFee: 0 };
+  const paid = { total: 0, principal: 0, interest: 0, fee: 0, penalty: 0, unlockFee: 0, discount: 0, overpaid: 0, badDebt: 0, badDebtInstallment: 0 };
+  const due = { total: 0, principal: 0, interest: 0, fee: 0, penalty: 0, unlockFee: 0 };
+  const notYetDue = { total: 0, principal: 0, interest: 0, fee: 0, penalty: 0, unlockFee: 0 };
+
+  for (const row of rows) {
+    contractCount      += row.totalCount;
+    financeTotal       += row.totalFinanceTotal;
+    installTotal.total     += row.totalInstallTotal.total;
+    installTotal.principal += row.totalInstallTotal.principal;
+    installTotal.interest  += row.totalInstallTotal.interest;
+    installTotal.fee       += row.totalInstallTotal.fee;
+    target.total     += row.totalTarget.total;
+    target.principal += row.totalTarget.principal;
+    target.interest  += row.totalTarget.interest;
+    target.fee       += row.totalTarget.fee;
+    target.penalty   += row.totalTarget.penalty;
+    target.unlockFee += row.totalTarget.unlockFee;
+    paid.total              += row.totalPaid.total;
+    paid.principal          += row.totalPaid.principal;
+    paid.interest           += row.totalPaid.interest;
+    paid.fee                += row.totalPaid.fee;
+    paid.penalty            += row.totalPaid.penalty;
+    paid.unlockFee          += row.totalPaid.unlockFee;
+    paid.discount           += row.totalPaid.discount;
+    paid.overpaid           += row.totalPaid.overpaid;
+    paid.badDebt            += row.totalPaid.badDebt;
+    paid.badDebtInstallment += row.totalPaid.badDebtInstallment;
+    due.total     += row.totalDue.total;
+    due.principal += row.totalDue.principal;
+    due.interest  += row.totalDue.interest;
+    due.fee       += row.totalDue.fee;
+    due.penalty   += row.totalDue.penalty;
+    due.unlockFee += row.totalDue.unlockFee;
+    notYetDue.total     += row.totalNotYetDue.total;
+    notYetDue.principal += row.totalNotYetDue.principal;
+    notYetDue.interest  += row.totalNotYetDue.interest;
+    notYetDue.fee       += row.totalNotYetDue.fee;
+    notYetDue.penalty   += row.totalNotYetDue.penalty;
+    notYetDue.unlockFee += row.totalNotYetDue.unlockFee;
+  }
+
+  return {
+    approveMonth:           '__grand__',
+    contractCount,
+    financeTotal,
+    installTotal:           installTotal.total,
+    installPrincipal:       installTotal.principal,
+    installInterest:        installTotal.interest,
+    installFee:             installTotal.fee,
+    targetTotal:            target.total,
+    targetPrincipal:        target.principal,
+    targetInterest:         target.interest,
+    targetFee:              target.fee,
+    targetPenalty:          0,  // ตัด penalty ออก ตรงกับ DebtOverview
+    targetUnlockFee:        0,  // ตัด unlockFee ออก ตรงกับ DebtOverview
+    paidTotal:              paid.total,
+    paidPrincipal:          paid.principal,
+    paidInterest:           paid.interest,
+    paidFee:                paid.fee,
+    paidPenalty:            paid.penalty,
+    paidUnlockFee:          paid.unlockFee,
+    paidDiscount:           paid.discount,
+    paidOverpaid:           paid.overpaid,
+    paidBadDebt:            paid.badDebt,
+    paidBadDebtInstallment: paid.badDebtInstallment,
+    dueTotal:               due.total,
+    duePrincipal:           due.principal,
+    dueInterest:            due.interest,
+    dueFee:                 due.fee,
+    duePenalty:             due.penalty,
+    dueUnlockFee:           due.unlockFee,
+    notYetDueTotal:         notYetDue.total,
+    notYetDuePrincipal:     notYetDue.principal,
+    notYetDueInterest:      notYetDue.interest,
+    notYetDueFee:           notYetDue.fee,
+    notYetDuePenalty:       notYetDue.penalty,
+    notYetDueUnlockFee:     notYetDue.unlockFee,
+  };
+
+  // ── DEAD CODE BELOW (cache path — ถูก bypass แล้ว) ──────────────────────────
   const db = await getDb(section);
   if (!db) return null;
 
