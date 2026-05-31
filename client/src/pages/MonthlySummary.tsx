@@ -805,6 +805,13 @@ export default function MonthlySummary() {
 
   const query=trpc.monthlySummary.get.useQuery(queryInput as any,{enabled:canView&&!!queryInput});
 
+  // parse rawRows ก่อน dueMonthQueryInput เพื่อให้ใช้ rawRows ใน useMemo ได้
+  const rowsJson:string=(query.data?.rowsJson??"[]") as string;
+  const productTypes:string[]=(query.data?.productTypes??[]) as string[];
+  const rawRows:SummaryRow[]=useMemo(()=>{
+    try{const flat:FlatRow[]=JSON.parse(rowsJson);return groupFlatRows(flat);}catch{return[];}
+  },[rowsJson]);
+
   // due month query — เรียกเมื่อ viewMode=dueMonth (ไม่ต้องตรวจ tab เพราะเหลือแค่ combined)
   const dueMonthQueryInput=useMemo(()=>{
     if(!section||combinedViewMode!=="dueMonth")return null;
@@ -814,10 +821,10 @@ export default function MonthlySummary() {
       const monthSet=new Set<string>();
       // เพิ่มเดือนที่เลือกโดยตรง
       for(const m of combinedApproveMonths) monthSet.add(m);
-      // expand ปีที่เลือก → เดือนทั้งหมดในปีนั้นที่มีข้อมูล
+      // expand ปีที่เลือก → เดือนทั้งหมดในปีนั้นที่มีข้อมูล (ใช้ rawRows แทน availableMonths เพราะ availableMonths define ทีหลัง)
       if(combinedApproveYears.size>0){
-        for(const m of availableMonths){
-          if(combinedApproveYears.has(m.slice(0,4))) monthSet.add(m);
+        for(const r of rawRows){
+          if(combinedApproveYears.has(r.approveMonth.slice(0,4))) monthSet.add(r.approveMonth);
         }
       }
       effectiveMonths=Array.from(monthSet);
@@ -829,7 +836,7 @@ export default function MonthlySummary() {
       deviceFamily:(combinedDeviceFamily as "iOS"|"Android"|undefined)||undefined,
       search:search||undefined,
     };
-  },[section,combinedViewMode,combinedApproveMonths,combinedApproveYears,combinedProductType,combinedDeviceFamily,search,availableMonths]);
+  },[section,combinedViewMode,combinedApproveMonths,combinedApproveYears,combinedProductType,combinedDeviceFamily,search,rawRows]);
   const dueMonthQuery=trpc.monthlySummary.getDueMonthSummary.useQuery(dueMonthQueryInput as any,{enabled:canView&&!!dueMonthQueryInput});
   // parse dueMonth rows
   type FlatDueMonthRow={approveMonth:string;dueMonth:string;contractCount:number;financeTotal?:number;paidTotal:number;paidPrincipal:number;paidInterest:number;paidFee:number;paidPenalty:number;paidUnlockFee:number;paidDiscount:number;paidOverpaid:number;paidBadDebt:number;paidBadDebtInstallment:number;targetTotal:number;targetPrincipal:number;targetInterest:number;targetFee:number;targetPenalty:number;targetUnlockFee:number;dueTotal:number;duePrincipal:number;dueInterest:number;dueFee:number;duePenalty:number;dueUnlockFee:number;notYetDueTotal:number;notYetDuePrincipal:number;notYetDueInterest:number;notYetDueFee:number;notYetDuePenalty:number;notYetDueUnlockFee:number;installTotalTotal:number;installTotalPrincipal:number;installTotalInterest:number;installTotalFee:number;};
@@ -861,12 +868,6 @@ export default function MonthlySummary() {
       return Array.from(monthMap.values()).sort((a,b)=>sortDir==="asc"?a.approveMonth.localeCompare(b.approveMonth):b.approveMonth.localeCompare(a.approveMonth));
     }catch{return[];}
   },[dueMonthQuery.data,sortDir]);
-
-  const rowsJson:string=(query.data?.rowsJson??"[]") as string;
-  const productTypes:string[]=(query.data?.productTypes??[]) as string[];
-  const rawRows:SummaryRow[]=useMemo(()=>{
-    try{const flat:FlatRow[]=JSON.parse(rowsJson);return groupFlatRows(flat);}catch{return[];}
-  },[rowsJson]);
 
   const rows=useMemo(()=>{
     return [...rawRows].sort((a,b)=>sortDir==="asc"?a.approveMonth.localeCompare(b.approveMonth):b.approveMonth.localeCompare(a.approveMonth));
