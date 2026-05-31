@@ -173,13 +173,15 @@ function computeMoneyTotal(m:MoneyBreakdown, v:Record<MoneyBadgeKey,boolean>):nu
   // ดังนั้น m.total ไม่รวม discount → ไม่ต้องหัก m.discount ซ้ำอีก
   // ต้องหักแค่ m.badDebt เพราะ badDebt จัดการแยกโดย caller (bucket หนี้เสีย)
   const installmentBase = m.total - m.badDebt;
-  return installmentBase
+  const result = installmentBase
     - (!v.principal ? m.principal : 0)
     - (!v.interest  ? m.interest  : 0)
     - (!v.fee       ? m.fee       : 0)
     - (!v.penalty   ? m.penalty   : 0)
     - (!v.unlockFee ? m.unlockFee : 0)
     - (!v.overpaid  ? m.overpaid  : 0);
+  // clamp ไม่ให้ติดลบ (เกิดเมื่อ overpaid > total หรือปิด badge ทั้งหมด)
+  return Math.max(0, result);
 }
 function computeDueTotal(m:MoneyBreakdown, v:Record<DueBadgeKey,boolean>):number {
   return (v.principal?m.principal:0)+(v.interest?m.interest:0)+(v.fee?m.fee:0)+(v.penalty?m.penalty:0)+(v.unlockFee?m.unlockFee:0);
