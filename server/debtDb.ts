@@ -4486,16 +4486,20 @@ export async function listWatchGroup(params: {
   const contractIds = contractRows.map((r: any) => r.contract_external_id as string);
   const contractNos = contractRows.map((r: any) => r.contract_no as string).filter(Boolean);
 
-  // --- Step 2: กรองเฉพาะสัญญาที่งวดแรกยังไม่ชำระครบ ---
-  // ดึง paid_amount และ total_amount ของ period=1 จาก debt_target_cache โดยตรง
-  // เพื่อตรวจว่าชำระครบงวดแรกแล้วหรือยัง (ชำระบางส่วนยังคงแสดงใน WatchGroup)
+  // --- Step 2: ดึง paid/total ของงวด 1 และงวด 2 เพื่อคำนวณ arrearsCount ใหม่ ---
+  // เงื่อนไขใหม่:
+  //   0 งวด = งวด 2 ยังไม่ถึงกำหนด + งวด 1 ยังไม่ครบ (ไม่ชำระเลยหรือชำระบางส่วน)
+  //   1 งวด = ชำระงวด 1 ครบแล้ว + งวด 2 ยังไม่ครบ (ไม่สนใจว่าถึงกำหนดงวดไหนแล้ว)
   const inst1Raw = await db.execute(
     sql.raw(`
       SELECT
         contract_external_id,
-        -- paid_amount งวดที่ 1 สำหรับแสดงในตาราง
+        -- งวดที่ 1
         COALESCE(SUM(CASE WHEN period = 1 THEN paid_amount ELSE 0 END), 0)   AS paid_amount_1,
         COALESCE(SUM(CASE WHEN period = 1 THEN total_amount ELSE 0 END), 0)  AS total_amount_1,
+        -- งวดที่ 2
+        COALESCE(SUM(CASE WHEN period = 2 THEN paid_amount ELSE 0 END), 0)   AS paid_amount_2,
+        COALESCE(SUM(CASE WHEN period = 2 THEN total_amount ELSE 0 END), 0)  AS total_amount_2,
         -- ยอดค้างชำระรวมทุกงวดที่ถึงกำหนดแล้วและยังไม่ได้ชำระครบ
         COALESCE(SUM(
           CASE WHEN is_paid = false AND due_date <= '${todayStr}'
@@ -4508,23 +4512,30 @@ export async function listWatchGroup(params: {
       GROUP BY contract_external_id
     `)
   );
-  // สัญญาที่ชำระงวดแรกครบแล้ว (paid_amount >= total_amount - 0.5) ให้ตัดออก
-  const paidInst1Set = new Set<string>();
   // Map เก็บ paid_amount_1 สำหรับแสดงในตาราง
   const inst1Map = new Map<string, number>();
   // Map เก็บ total_amount_due = ยอดค้างชำระรวมทุกงวดที่ถึงกำหนดแล้ว
   const totalAmountDueMap = new Map<string, number>();
+  // Map เก็บ paid/total ของงวด 1 และ 2 สำหรับคำนวณ arrearsCount
+  const inst1PaidMap  = new Map<string, number>(); // paid_amount_1
+  const inst1TotalMap = new Map<string, number>(); // total_amount_1
+  const inst2PaidMap  = new Map<string, number>(); // paid_amount_2
+  const inst2TotalMap = new Map<string, number>(); // total_amount_2
   for (const r of (pgRows(inst1Raw) as any[])) {
-    const paid = Number(r.paid_amount_1 ?? 0);
-    const total = Number(r.total_amount_1 ?? 0);
+    const paid1  = Number(r.paid_amount_1  ?? 0);
+    const total1 = Number(r.total_amount_1 ?? 0);
+    const paid2  = Number(r.paid_amount_2  ?? 0);
+    const total2 = Number(r.total_amount_2 ?? 0);
     const totalDue = Number(r.total_amount_due ?? 0);
-    inst1Map.set(r.contract_external_id, paid);
+    inst1Map.set(r.contract_external_id, paid1);
     totalAmountDueMap.set(r.contract_external_id, totalDue);
-    if (total > 0 && paid >= total - 0.5) paidInst1Set.add(r.contract_external_id);
+    inst1PaidMap.set(r.contract_external_id,  paid1);
+    inst1TotalMap.set(r.contract_external_id, total1);
+    inst2PaidMap.set(r.contract_external_id,  paid2);
+    inst2TotalMap.set(r.contract_external_id, total2);
   }
-  // ตัดสัญญาที่ชำระงวดแรกครบแล้วออก (ยังชำระไม่ครบหรือไม่ชำระเลย ยังคงแสดง)
-  contractRows = contractRows.filter((r: any) => !paidInst1Set.has(r.contract_external_id));
-  console.log(`[WatchGroup] ${section} Step2 after inst1 filter: contractRows=${contractRows.length}, paidInst1Set=${paidInst1Set.size}`);
+  // ไม่ตัดสัญญาที่ชำระงวดแรกครบออก เพราะ arrearsCount ใหม่ใช้ข้อมูลนี้แยกแยะ 0/1 งวด
+  console.log(`[WatchGroup] ${section} Step2 inst data loaded: contractRows=${contractRows.length}`);
 
   if (contractRows.length === 0) return { rows: [] };
 
@@ -4619,8 +4630,19 @@ export async function listWatchGroup(params: {
     if (dueDate3 != null && dueDate3 <= today) continue;
     // ตรวจสอบว่างวดที่ 2 ถึงกำหนดแล้วหรือยัง
     const due2Reached = dueDate2 != null && dueDate2 <= today;
-    // arrearsCount: ถ้างวดที่ 2 ถึงกำหนดแล้ว = 1, ถ้ายังไม่ถึง = 0
-    const arrearsCount = due2Reached ? 1 : 0;
+    // arrearsCount (เงื่อนไขใหม่):
+    //   1 งวด = ชำระงวด 1 ครบแล้ว + งวด 2 ถึงกำหนดแล้ว (due2Reached=true) + งวด 2 ยังไม่ครบ
+    //   0 งวด = งวด 2 ยังไม่ถึงกำหนด (due2Reached=false) + (ไม่ชำระเลย หรือ งวด 1 ยังไม่ครบ)
+    const paid1  = inst1PaidMap.get(extId)  ?? 0;
+    const total1 = inst1TotalMap.get(extId) ?? 0;
+    const paid2  = inst2PaidMap.get(extId)  ?? 0;
+    const total2 = inst2TotalMap.get(extId) ?? 0;
+    const inst1Done    = total1 > 0 && paid1 >= total1 - 0.5;   // ชำระงวด 1 ครบแล้ว
+    const inst2NotDone = total2 <= 0 || paid2 < total2 - 0.5;  // งวด 2 ยังไม่ครบ
+    // 1 งวด: ชำระงวด 1 ครบ + ถึงกำหนดงวด 2 แล้ว + งวด 2 ยังไม่ครบ
+    // 0 งวด: งวด 2 ยังไม่ถึงกำหนด + (ไม่ชำระเลย หรือ งวด 1 ยังไม่ครบ)
+    // สัญญาที่ไม่ตรงเงื่อนไขทั้ง  2 ข้อ (เช่น ชำระงวด 1 ครบ + งวด 2 ยังไม่ถึงกำหนด) จะถูกกรองออกโดยเงื่อนไขข้ออื่น (daysOverdue > gracePeriod)
+    const arrearsCount = (inst1Done && due2Reached && inst2NotDone) ? 1 : 0;
     // daysOverdue: นับจาก due_date_first_unpaid (งวดแรกที่ยังค้างชำระจริง)
     // ถ้าชำระครบแล้ว due_date_first_unpaid จะเป็น null → daysOverdue = 0 → กรองออกโดย HAVING
     let daysOverdue = 0;
