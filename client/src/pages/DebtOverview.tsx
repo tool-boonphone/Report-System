@@ -850,13 +850,17 @@ export default function DebtOverview() {
       }
 
       // ยังไม่ถึงกำหนด: ยอดค่างวด (principal+interest+fee) ของงวดที่ยังไม่ถึง dueDate
-      for (const inst of r.installments) {
-        if (inst.isSuspended) continue;
-        if (!inst.isClosed) {
-          const dueStr = inst.dueDate ? inst.dueDate.slice(0, 10) : null;
-          const isFuture = dueStr ? dueStr > todayStr : false;
-          if (isFuture) {
-            row.notYetDue += (inst.principal ?? 0) + (inst.interest ?? 0) + (inst.fee ?? 0);
+      // ตัดสัญญาที่ระงับ/สิ้นสุด/หนี้เสีย/ยกเลิกออก เพราะไม่มีงวดอนาคตอีกแล้ว
+      const EXCLUDED_STATUSES_NOTYET = ['ระงับสัญญา', 'สิ้นสุดสัญญา', 'หนี้เสีย', 'ยกเลิกสัญญา'];
+      if (!EXCLUDED_STATUSES_NOTYET.includes(r.debtStatus)) {
+        for (const inst of r.installments) {
+          if (inst.isSuspended) continue;
+          if (!inst.isClosed) {
+            const dueStr = inst.dueDate ? inst.dueDate.slice(0, 10) : null;
+            const isFuture = dueStr ? dueStr > todayStr : false;
+            if (isFuture) {
+              row.notYetDue += (inst.principal ?? 0) + (inst.interest ?? 0) + (inst.fee ?? 0);
+            }
           }
         }
       }
