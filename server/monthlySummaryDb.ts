@@ -973,202 +973,522 @@ async function upsertMonthlySummaryRows(
  * รัน 6 queries สำหรับทุก combination ของ productType × deviceFamily × dateMonth
  * แล้วเขียนลง monthly_summary_cache
  */
+/**
+ * buildMscBatchCombinations — แปลง batch query rows (มี product_type + device_family + date_month)
+ * ให้เป็น upsert rows ที่ครอบคลุมทุก combination:
+ * 1. (productType=actual, deviceFamily=actual) — ตรงตาม row จริง
+ * 2. (productType=actual, deviceFamily=null) — รวม df ทุกตัวของ pt นั้น
+ * 3. (productType=null, deviceFamily=actual) — รวม pt ทุกตัวของ df นั้น
+ * 4. (productType=null, deviceFamily=null) — รวมทั้งหมด
+ * โดย aggregate ด้วย SUM ของ contractCount และ numeric fields
+ */
+function buildMscBatchCombinations(
+  rawRows: Array<{
+    approve_month: string;
+    bucket: string;
+    productType: string | null;
+    deviceFamily: string | null;
+    dateMonth: string | null;
+    contractCount: number;
+    principal: number;
+    interest: number;
+    fee: number;
+    penalty: number;
+    unlockFee: number;
+    discount: number;
+    overpaid: number;
+    badDebt: number;
+    badDebtInstallment: number;
+    totalAmount: number;
+    financeTotal?: number;
+  }>,
+): typeof rawRows {
+  type Row = (typeof rawRows)[0];
+  const agg = new Map<string, Row>();
+
+  function addToMap(key: string, row: Row) {
+    const existing = agg.get(key);
+    if (!existing) {
+      agg.set(key, { ...row });
+    } else {
+      existing.contractCount += row.contractCount;
+      existing.principal += row.principal;
+      existing.interest += row.interest;
+      existing.fee += row.fee;
+      existing.penalty += row.penalty;
+      existing.unlockFee += row.unlockFee;
+      existing.discount += row.discount;
+      existing.overpaid += row.overpaid;
+      existing.badDebt += row.badDebt;
+      existing.badDebtInstallment += row.badDebtInstallment;
+      existing.totalAmount += row.totalAmount;
+      if (row.financeTotal !== undefined) {
+        existing.financeTotal = (existing.financeTotal ?? 0) + row.financeTotal;
+      }
+    }
+  }
+
+  for (const row of rawRows) {
+    const am = row.approve_month;
+    const bk = row.bucket;
+    const dm = row.dateMonth ?? "null";
+    const pt = row.productType ?? "null";
+    const df = row.deviceFamily ?? "null";
+
+    // Combination 1: actual pt + actual df
+    addToMap(`${am}|${bk}|${dm}|${pt}|${df}`, { ...row, productType: row.productType, deviceFamily: row.deviceFamily });
+    // Combination 2: actual pt + null df
+    addToMap(`${am}|${bk}|${dm}|${pt}|null`, { ...row, productType: row.productType, deviceFamily: null });
+    // Combination 3: null pt + actual df
+    addToMap(`${am}|${bk}|${dm}|null|${df}`, { ...row, productType: null, deviceFamily: row.deviceFamily });
+    // Combination 4: null pt + null df
+    addToMap(`${am}|${bk}|${dm}|null|null`, { ...row, productType: null, deviceFamily: null });
+  }
+
+  return Array.from(agg.values());
+}
+
+/**
+ * populateMonthlySummaryCache — เรียกตอน Sync หลัง populateDebtCache
+ * BATCH version: ใช้ 6 queries แทน N×M×6 sequential queries
+ * แต่ละ query เพิ่ม product_type + device + date_month เข้า GROUP BY
+ * แล้ว aggregate combinations ใน JavaScript ด้วย buildMscBatchCombinations
+ */
 export async function populateMonthlySummaryCache(
   section: SectionKey,
   onProgress?: (current: number, total: number) => void,
 ): Promise<number> {
-  const dims = await getFilterDimensions(section);
+  const db = await getDb(section);
+  if (!db) return 0;
   let totalRows = 0;
+  const TOTAL_STEPS = 6;
+  let doneSteps = 0;
 
-  // คำนวณ total combinations เพื่อใช้ใน progress callback
-  const ptCount  = dims.productTypes.length;
-  const dfCount  = dims.deviceFamilies.length;
-  const paidMCnt = dims.paidAtMonths.length;
-  const dueMCnt  = dims.dueMonths.length;
-  // count: pt × df
-  // target: pt × df × dueM
-  // paid:   pt × df × paidM
-  // due:    pt × df × dueM
-  // notYetDue: pt × df × dueM
-  // installTotal: pt × df
-  const approveMCnt = dims.approveMonths.length;
-  const totalCombinations =
-    ptCount * dfCount +           // count
-    ptCount * dfCount * dueMCnt + // target
-    ptCount * dfCount * approveMCnt +// paid (เปลี่ยนเป็น approveMonths)
-    ptCount * dfCount * dueMCnt + // due
-    ptCount * dfCount * dueMCnt + // notYetDue
-    ptCount * dfCount;            // installTotal
-  let doneCombinations = 0;
-
-  // ── Query 1: count ────────────────────────────────────────────
-  for (const pt of dims.productTypes) {
-    for (const df of dims.deviceFamilies) {
-      const rows = await queryCount(section, { productType: pt ?? undefined, deviceFamily: df ?? undefined });
-      const mapped = rows.map((r) => ({
-        approve_month: r.approve_month,
-        bucket: r.bucket,
-        productType: pt,
-        deviceFamily: df,
-        dateMonth: null,
-        contractCount: r.contract_count,
-        principal: 0, interest: 0, fee: 0, penalty: 0, unlockFee: 0,
-        discount: 0, overpaid: 0, badDebt: 0, badDebtInstallment: 0,
-        totalAmount: 0,
-      }));
-      await upsertMonthlySummaryRows(section, "count", mapped);
-      totalRows += mapped.length;
-      doneCombinations++;
-      onProgress?.(doneCombinations, totalCombinations);
-    }
+  // ── Helper: map deviceFamily string to iOS/Android/null ──────────────────
+  function toDeviceFamily(device: string | null): "iOS" | "Android" | null {
+    if (!device) return null;
+    if (device === "iOS") return "iOS";
+    if (device === "Android") return "Android";
+    return null;
   }
 
-  // ── Query 2: target ───────────────────────────────────────────────────────
-  // dateMonth = dueMonth (filter ตาม due_date month)
-  for (const pt of dims.productTypes) {
-    for (const df of dims.deviceFamilies) {
-      for (const dm of dims.dueMonths) {
-        const rows = await queryTarget(section, {
-          productType: pt ?? undefined,
-          deviceFamily: df ?? undefined,
-          dueMonths: dm ? [dm] : undefined,
-        });
-        const mapped = rows.map((r) => ({
-          approve_month: r.approve_month,
-          bucket: r.bucket,
-          productType: pt,
-          deviceFamily: df,
-          dateMonth: dm,
-          contractCount: r.contract_count,
-          principal: r.principal_target, interest: r.interest_target, fee: r.fee_target,
-          penalty: r.penalty_target, unlockFee: r.unlock_fee_target,
-          discount: 0, overpaid: 0, badDebt: 0, badDebtInstallment: 0,
-          totalAmount: r.total_target,
-        }));
-        await upsertMonthlySummaryRows(section, "target", mapped);
-        totalRows += mapped.length;
-        doneCombinations++;
-        onProgress?.(doneCombinations, totalCombinations);
-      }
-    }
+  // ── Query 1: count (BATCH) ────────────────────────────────────────────────
+  {
+    const baseWhere = `dtc.section = '${section}' AND dtc.approve_date IS NOT NULL`;
+    const q = `
+      SELECT
+        TO_CHAR(dtc.approve_date, 'YYYY-MM') AS approve_month,
+        ${BUCKET_CASE_DTC} AS bucket,
+        dtc.product_type,
+        CASE
+          WHEN dtc.device IN ('iPhone', 'iPad') THEN 'iOS'
+          WHEN dtc.device IS NOT NULL AND dtc.device != '' THEN 'Android'
+          ELSE NULL
+        END AS device_family,
+        COUNT(DISTINCT dtc.contract_external_id) AS contract_count
+      FROM debt_target_cache dtc
+      WHERE ${baseWhere}
+      GROUP BY 1, 2, 3, 4
+      ORDER BY 1 DESC
+    `;
+    const rawRows = pgRows(await db.execute(sql.raw(q)));
+    const mapped = rawRows.map((r: any) => ({
+      approve_month: String(r.approve_month),
+      bucket: String(r.bucket),
+      productType: r.product_type ? String(r.product_type) : null,
+      deviceFamily: toDeviceFamily(r.device_family),
+      dateMonth: null as string | null,
+      contractCount: Number(r.contract_count),
+      principal: 0, interest: 0, fee: 0, penalty: 0, unlockFee: 0,
+      discount: 0, overpaid: 0, badDebt: 0, badDebtInstallment: 0,
+      totalAmount: 0,
+    }));
+    const combined = buildMscBatchCombinations(mapped);
+    await upsertMonthlySummaryRows(section, "count", combined);
+    totalRows += combined.length;
+    doneSteps++;
+    onProgress?.(doneSteps, TOTAL_STEPS);
   }
 
-  // ── Query 3: paid ─────────────────────────────────────────────────────────
-  // dateMonth = approveMonth (filter ตาม approve_date month เพื่อให้ตรงกับ approve_month grouping)
-  for (const pt of dims.productTypes) {
-    for (const df of dims.deviceFamilies) {
-      for (const dm of dims.approveMonths) {
-        const rows = await queryPaid(section, {
-          productType: pt ?? undefined,
-          deviceFamily: df ?? undefined,
-          approveMonths: dm ? [dm] : undefined,
-        });
-        const mapped = rows.map((r) => ({
-          approve_month: r.approve_month,
-          bucket: r.bucket,
-          productType: pt,
-          deviceFamily: df,
-          dateMonth: dm,
-          contractCount: r.contract_count,
-          principal: r.principal_paid, interest: r.interest_paid, fee: r.fee_paid,
-          penalty: r.penalty_paid, unlockFee: r.unlock_fee_paid,
-          discount: r.discount_amount, overpaid: r.overpaid_amount,
-          badDebt: r.device_sale_amount, badDebtInstallment: r.installment_paid,
-          totalAmount: r.total_paid,
-        }));
-        await upsertMonthlySummaryRows(section, "paid", mapped);
-        totalRows += mapped.length;
-        doneCombinations++;
-        onProgress?.(doneCombinations, totalCombinations);
-      }
-    }
+  // ── Query 2: target (BATCH) ───────────────────────────────────────────────
+  {
+    const baseWhere = `dtc.section = '${section}' AND dtc.approve_date IS NOT NULL`;
+    const q = `
+      SELECT
+        TO_CHAR(base.approve_date, 'YYYY-MM') AS approve_month,
+        TO_CHAR(base.due_date, 'YYYY-MM') AS due_month,
+        CASE
+          WHEN base.contract_status = 'หนี้เสีย'      THEN 'หนี้เสีย'
+          WHEN base.contract_status = 'ระงับสัญญา'   THEN 'ระงับสัญญา'
+          WHEN base.contract_status = 'สิ้นสุดสัญญา' THEN 'สิ้นสุดสัญญา'
+          WHEN base.contract_status = 'ยกเลิกสัญญา' THEN 'ยกเลิกสัญญา'
+          ELSE COALESCE(base.debt_range, 'ปกติ')
+        END AS bucket,
+        base.product_type,
+        CASE
+          WHEN base.device IN ('iPhone', 'iPad') THEN 'iOS'
+          WHEN base.device IS NOT NULL AND base.device != '' THEN 'Android'
+          ELSE NULL
+        END AS device_family,
+        COUNT(DISTINCT base.contract_external_id) AS contract_count,
+        SUM(CAST(base.principal    AS DECIMAL(18,2))) AS principal_target,
+        SUM(CAST(base.interest     AS DECIMAL(18,2))) AS interest_target,
+        SUM(CAST(base.fee          AS DECIMAL(18,2))) AS fee_target,
+        SUM(CASE WHEN base.period = latest.max_period
+                 THEN CAST(base.penalty    AS DECIMAL(18,2)) ELSE 0 END) AS penalty_target,
+        SUM(CASE WHEN base.period = latest.max_period
+                 THEN CAST(base.unlock_fee AS DECIMAL(18,2)) ELSE 0 END) AS unlock_fee_target,
+        SUM(CAST(base.principal AS DECIMAL(18,2)))
+          + SUM(CAST(base.interest  AS DECIMAL(18,2)))
+          + SUM(CAST(base.fee       AS DECIMAL(18,2)))
+          + SUM(CASE WHEN base.period = latest.max_period
+                 THEN CAST(base.penalty    AS DECIMAL(18,2)) ELSE 0 END)
+          + SUM(CASE WHEN base.period = latest.max_period
+                 THEN CAST(base.unlock_fee AS DECIMAL(18,2)) ELSE 0 END) AS total_target
+      FROM debt_target_cache base
+      JOIN (
+        SELECT dtc.section, dtc.contract_external_id, MAX(dtc.period) AS max_period
+        FROM debt_target_cache dtc
+        WHERE ${baseWhere}
+          AND DATE(dtc.due_date) <= CURRENT_DATE
+        GROUP BY dtc.section, dtc.contract_external_id
+      ) latest ON latest.section = base.section
+               AND latest.contract_external_id = base.contract_external_id
+      WHERE base.section = '${section}'
+        AND base.approve_date IS NOT NULL
+        AND DATE(base.due_date) <= CURRENT_DATE
+      GROUP BY 1, 2, 3, 4, 5
+      ORDER BY 1 DESC
+    `;
+    const rawRows = pgRows(await db.execute(sql.raw(q)));
+    const mapped = rawRows.map((r: any) => ({
+      approve_month: String(r.approve_month),
+      bucket: String(r.bucket),
+      productType: r.product_type ? String(r.product_type) : null,
+      deviceFamily: toDeviceFamily(r.device_family),
+      dateMonth: r.due_month ? String(r.due_month) : null,
+      contractCount: Number(r.contract_count),
+      principal: Number(r.principal_target), interest: Number(r.interest_target), fee: Number(r.fee_target),
+      penalty: Number(r.penalty_target), unlockFee: Number(r.unlock_fee_target),
+      discount: 0, overpaid: 0, badDebt: 0, badDebtInstallment: 0,
+      totalAmount: Number(r.total_target),
+    }));
+    const combined = buildMscBatchCombinations(mapped);
+    await upsertMonthlySummaryRows(section, "target", combined);
+    totalRows += combined.length;
+    doneSteps++;
+    onProgress?.(doneSteps, TOTAL_STEPS);
   }
 
-  // ── Query 4: due ──────────────────────────────────────────────────────────
-  // dateMonth = dueAtMonth (filter ตาม due_date month)
-  for (const pt of dims.productTypes) {
-    for (const df of dims.deviceFamilies) {
-      for (const dm of dims.dueMonths) {
-        const rows = await queryDue(section, {
-          productType: pt ?? undefined,
-          deviceFamily: df ?? undefined,
-          dueAtMonths: dm ? [dm] : undefined,
-        });
-        const mapped = rows.map((r) => ({
-          approve_month: r.approve_month,
-          bucket: r.bucket,
-          productType: pt,
-          deviceFamily: df,
-          dateMonth: dm,
-          contractCount: r.contract_count,
-          principal: r.principal_due, interest: r.interest_due, fee: r.fee_due,
-          penalty: r.penalty_due, unlockFee: r.unlock_fee_due,
-          discount: 0, overpaid: 0, badDebt: 0, badDebtInstallment: 0,
-          totalAmount: r.total_due,
-        }));
-        await upsertMonthlySummaryRows(section, "due", mapped);
-        totalRows += mapped.length;
-        doneCombinations++;
-        onProgress?.(doneCombinations, totalCombinations);
-      }
-    }
+  // ── Query 3: paid (BATCH) ─────────────────────────────────────────────────
+  {
+    const baseWhere = `dcc.section = '${section}' AND dcc.approve_date IS NOT NULL`;
+    const q = `
+      SELECT
+        TO_CHAR(dcc.approve_date, 'YYYY-MM') AS approve_month,
+        TO_CHAR(dcc.approve_date, 'YYYY-MM') AS approve_month_key,
+        CASE
+          WHEN dcc.contract_status = 'หนี้เสีย'      THEN 'หนี้เสีย'
+          WHEN dcc.contract_status = 'ระงับสัญญา'   THEN 'ระงับสัญญา'
+          WHEN dcc.contract_status = 'สิ้นสุดสัญญา' THEN 'สิ้นสุดสัญญา'
+          WHEN dcc.contract_status = 'ยกเลิกสัญญา' THEN 'ยกเลิกสัญญา'
+          ELSE COALESCE(dcc.debt_range, 'ปกติ')
+        END AS bucket,
+        dcc.product_type,
+        CASE
+          WHEN dcc.device IN ('iPhone', 'iPad') THEN 'iOS'
+          WHEN dcc.device IS NOT NULL AND dcc.device != '' THEN 'Android'
+          ELSE NULL
+        END AS device_family,
+        COUNT(DISTINCT dcc.contract_external_id) AS contract_count,
+        SUM(CASE WHEN dcc.is_bad_debt_row = false
+                      AND NOT (CAST(dcc.payment_tx_amount AS DECIMAL(18,2)) = 0
+                               AND CAST(dcc.penalty AS DECIMAL(18,2)) > 0)
+                 THEN CAST(dcc.principal   AS DECIMAL(18,2)) ELSE 0 END) AS principal_paid,
+        SUM(CASE WHEN dcc.is_bad_debt_row = false
+                      AND NOT (CAST(dcc.payment_tx_amount AS DECIMAL(18,2)) = 0
+                               AND CAST(dcc.penalty AS DECIMAL(18,2)) > 0)
+                 THEN CAST(dcc.interest    AS DECIMAL(18,2)) ELSE 0 END) AS interest_paid,
+        SUM(CASE WHEN dcc.is_bad_debt_row = false
+                      AND NOT (CAST(dcc.payment_tx_amount AS DECIMAL(18,2)) = 0
+                               AND CAST(dcc.penalty AS DECIMAL(18,2)) > 0)
+                 THEN CAST(dcc.fee         AS DECIMAL(18,2)) ELSE 0 END) AS fee_paid,
+        SUM(CASE WHEN dcc.is_bad_debt_row = false
+                      AND NOT (CAST(dcc.payment_tx_amount AS DECIMAL(18,2)) = 0
+                               AND CAST(dcc.penalty AS DECIMAL(18,2)) > 0)
+                 THEN CAST(dcc.penalty     AS DECIMAL(18,2)) ELSE 0 END) AS penalty_paid,
+        SUM(CASE WHEN dcc.is_bad_debt_row = false
+                      AND NOT (CAST(dcc.payment_tx_amount AS DECIMAL(18,2)) = 0
+                               AND CAST(dcc.penalty AS DECIMAL(18,2)) > 0)
+                 THEN CAST(dcc.unlock_fee  AS DECIMAL(18,2)) ELSE 0 END) AS unlock_fee_paid,
+        SUM(CASE WHEN dcc.is_bad_debt_row = false
+                      AND NOT (CAST(dcc.payment_tx_amount AS DECIMAL(18,2)) = 0
+                               AND CAST(dcc.penalty AS DECIMAL(18,2)) > 0)
+                 THEN CAST(dcc.discount    AS DECIMAL(18,2)) ELSE 0 END) AS discount_amount,
+        SUM(CASE WHEN dcc.is_bad_debt_row = false
+                      AND NOT (CAST(dcc.payment_tx_amount AS DECIMAL(18,2)) = 0
+                               AND CAST(dcc.penalty AS DECIMAL(18,2)) > 0)
+                 THEN CAST(dcc.overpaid    AS DECIMAL(18,2)) ELSE 0 END) AS overpaid_amount,
+        SUM(CASE WHEN dcc.is_bad_debt_row = false
+                      AND NOT (CAST(dcc.payment_tx_amount AS DECIMAL(18,2)) = 0
+                               AND CAST(dcc.penalty AS DECIMAL(18,2)) > 0)
+                 THEN CAST(dcc.payment_tx_amount AS DECIMAL(18,2)) ELSE 0 END) AS installment_paid,
+        SUM(CASE WHEN dcc.is_bad_debt_row = true THEN CAST(dcc.bad_debt AS DECIMAL(18,2)) ELSE 0 END) AS device_sale_amount,
+        SUM(CASE WHEN dcc.is_bad_debt_row = true THEN CAST(dcc.bad_debt AS DECIMAL(18,2))
+                 WHEN CAST(dcc.payment_tx_amount AS DECIMAL(18,2)) = 0
+                      AND CAST(dcc.penalty AS DECIMAL(18,2)) > 0 THEN 0
+                 ELSE CAST(dcc.payment_tx_amount AS DECIMAL(18,2))
+            END) AS total_paid
+      FROM debt_collected_cache dcc
+      WHERE ${baseWhere}
+      GROUP BY 1, 2, 3, 4, 5
+      ORDER BY 1 DESC
+    `;
+    const rawRows = pgRows(await db.execute(sql.raw(q)));
+    const mapped = rawRows.map((r: any) => ({
+      approve_month: String(r.approve_month),
+      bucket: String(r.bucket),
+      productType: r.product_type ? String(r.product_type) : null,
+      deviceFamily: toDeviceFamily(r.device_family),
+      dateMonth: r.approve_month_key ? String(r.approve_month_key) : null,
+      contractCount: Number(r.contract_count),
+      principal: Number(r.principal_paid), interest: Number(r.interest_paid), fee: Number(r.fee_paid),
+      penalty: Number(r.penalty_paid), unlockFee: Number(r.unlock_fee_paid),
+      discount: Number(r.discount_amount), overpaid: Number(r.overpaid_amount),
+      badDebt: Number(r.device_sale_amount), badDebtInstallment: Number(r.installment_paid),
+      totalAmount: Number(r.total_paid),
+    }));
+    const combined = buildMscBatchCombinations(mapped);
+    await upsertMonthlySummaryRows(section, "paid", combined);
+    totalRows += combined.length;
+    doneSteps++;
+    onProgress?.(doneSteps, TOTAL_STEPS);
   }
 
-  // ── Query 5: notYetDue ────────────────────────────────────────────────────
-  // dateMonth = dueMonth (filter ตาม due_date month)
-  for (const pt of dims.productTypes) {
-    for (const df of dims.deviceFamilies) {
-      for (const dm of dims.dueMonths) {
-        const rows = await queryNotYetDue(section, {
-          productType: pt ?? undefined,
-          deviceFamily: df ?? undefined,
-          dueMonths: dm ? [dm] : undefined,
-        });
-        const mapped = rows.map((r) => ({
-          approve_month: r.approve_month,
-          bucket: r.bucket,
-          productType: pt,
-          deviceFamily: df,
-          dateMonth: dm,
-          contractCount: r.contract_count,
-          principal: r.principal_notyet, interest: r.interest_notyet, fee: r.fee_notyet,
-          penalty: r.penalty_notyet, unlockFee: r.unlock_fee_notyet,
-          discount: 0, overpaid: 0, badDebt: 0, badDebtInstallment: 0,
-          totalAmount: r.total_notyet,
-        }));
-        await upsertMonthlySummaryRows(section, "notYetDue", mapped);
-        totalRows += mapped.length;
-        doneCombinations++;
-        onProgress?.(doneCombinations, totalCombinations);
-      }
-    }
+  // ── Query 4: due (BATCH) ──────────────────────────────────────────────────
+  {
+    const baseWhere = `dtc.section = '${section}' AND dtc.approve_date IS NOT NULL`;
+    const q = `
+      SELECT
+        TO_CHAR(base.approve_date, 'YYYY-MM') AS approve_month,
+        TO_CHAR(base.due_date, 'YYYY-MM') AS due_month,
+        CASE
+          WHEN base.contract_status = 'หนี้เสีย'      THEN 'หนี้เสีย'
+          WHEN base.contract_status = 'ระงับสัญญา'   THEN 'ระงับสัญญา'
+          WHEN base.contract_status = 'สิ้นสุดสัญญา' THEN 'สิ้นสุดสัญญา'
+          WHEN base.contract_status = 'ยกเลิกสัญญา' THEN 'ยกเลิกสัญญา'
+          ELSE COALESCE(base.debt_range, 'ปกติ')
+        END AS bucket,
+        base.product_type,
+        CASE
+          WHEN base.device IN ('iPhone', 'iPad') THEN 'iOS'
+          WHEN base.device IS NOT NULL AND base.device != '' THEN 'Android'
+          ELSE NULL
+        END AS device_family,
+        COUNT(DISTINCT base.contract_external_id) AS contract_count,
+        SUM(GREATEST(CAST(base.principal  AS DECIMAL(18,2)) - CAST(base.paid_amount AS DECIMAL(18,2)), 0)) AS principal_due,
+        SUM(CAST(base.interest  AS DECIMAL(18,2))) AS interest_due,
+        SUM(CAST(base.fee       AS DECIMAL(18,2))) AS fee_due,
+        SUM(CASE WHEN base.period = latest.max_period
+                 THEN CAST(base.penalty    AS DECIMAL(18,2)) ELSE 0 END) AS penalty_due,
+        SUM(CASE WHEN base.period = latest.max_period
+                 THEN CAST(base.unlock_fee AS DECIMAL(18,2)) ELSE 0 END) AS unlock_fee_due,
+        SUM(GREATEST(CAST(base.total_amount AS DECIMAL(18,2)) - CAST(base.paid_amount AS DECIMAL(18,2)), 0)) AS total_due
+      FROM debt_target_cache base
+      JOIN (
+        SELECT dtc.section, dtc.contract_external_id, MAX(dtc.period) AS max_period
+        FROM debt_target_cache dtc
+        WHERE ${baseWhere}
+          AND dtc.is_arrears = true
+        GROUP BY dtc.section, dtc.contract_external_id
+      ) latest ON latest.section = base.section
+               AND latest.contract_external_id = base.contract_external_id
+      WHERE base.section = '${section}'
+        AND base.approve_date IS NOT NULL
+        AND base.is_arrears = true
+      GROUP BY 1, 2, 3, 4, 5
+      ORDER BY 1 DESC
+    `;
+    const rawRows = pgRows(await db.execute(sql.raw(q)));
+    const mapped = rawRows.map((r: any) => ({
+      approve_month: String(r.approve_month),
+      bucket: String(r.bucket),
+      productType: r.product_type ? String(r.product_type) : null,
+      deviceFamily: toDeviceFamily(r.device_family),
+      dateMonth: r.due_month ? String(r.due_month) : null,
+      contractCount: Number(r.contract_count),
+      principal: Number(r.principal_due), interest: Number(r.interest_due), fee: Number(r.fee_due),
+      penalty: Number(r.penalty_due), unlockFee: Number(r.unlock_fee_due),
+      discount: 0, overpaid: 0, badDebt: 0, badDebtInstallment: 0,
+      totalAmount: Number(r.total_due),
+    }));
+    const combined = buildMscBatchCombinations(mapped);
+    await upsertMonthlySummaryRows(section, "due", combined);
+    totalRows += combined.length;
+    doneSteps++;
+    onProgress?.(doneSteps, TOTAL_STEPS);
   }
 
-  // ── Query 6: installTotal ─────────────────────────────────────────────────
-  // ไม่มี dateMonth filter (installTotal ไม่มี due/paid filter)
-  for (const pt of dims.productTypes) {
-    for (const df of dims.deviceFamilies) {
-      const rows = await queryInstallTotal(section, {
-        productType: pt ?? undefined,
-        deviceFamily: df ?? undefined,
-      });
-      const mapped = rows.map((r) => ({
-        approve_month: r.approve_month,
-        bucket: r.bucket,
-        productType: pt,
-        deviceFamily: df,
-        dateMonth: null,
-        contractCount: r.contract_count,
-        principal: r.principal_install, interest: r.interest_install, fee: r.fee_install,
-        penalty: 0, unlockFee: 0, discount: 0, overpaid: 0, badDebt: 0, badDebtInstallment: 0,
-        totalAmount: r.total_install,
-        financeTotal: r.finance_total,
-      }));
-      await upsertMonthlySummaryRows(section, "installTotal", mapped);
-      totalRows += mapped.length;
-      doneCombinations++;
-      onProgress?.(doneCombinations, totalCombinations);
-    }
+  // ── Query 5: notYetDue (BATCH) ────────────────────────────────────────────
+  {
+    const baseWhere = `dtc.section = '${section}' AND dtc.approve_date IS NOT NULL`;
+    const q = `
+      SELECT
+        TO_CHAR(base.approve_date, 'YYYY-MM') AS approve_month,
+        TO_CHAR(base.due_date, 'YYYY-MM') AS due_month,
+        CASE
+          WHEN base.contract_status = 'หนี้เสีย'      THEN 'หนี้เสีย'
+          WHEN base.contract_status = 'ระงับสัญญา'   THEN 'ระงับสัญญา'
+          WHEN base.contract_status = 'สิ้นสุดสัญญา' THEN 'สิ้นสุดสัญญา'
+          WHEN base.contract_status = 'ยกเลิกสัญญา' THEN 'ยกเลิกสัญญา'
+          ELSE COALESCE(base.debt_range, 'ปกติ')
+        END AS bucket,
+        base.product_type,
+        CASE
+          WHEN base.device IN ('iPhone', 'iPad') THEN 'iOS'
+          WHEN base.device IS NOT NULL AND base.device != '' THEN 'Android'
+          ELSE NULL
+        END AS device_family,
+        COUNT(DISTINCT base.contract_external_id) AS contract_count,
+        SUM(CAST(base.principal    AS DECIMAL(18,2))) AS principal_notyet,
+        SUM(CAST(base.interest     AS DECIMAL(18,2))) AS interest_notyet,
+        SUM(CAST(base.fee          AS DECIMAL(18,2))) AS fee_notyet,
+        SUM(CASE WHEN base.period = latest.max_period
+                 THEN CAST(base.penalty    AS DECIMAL(18,2)) ELSE 0 END) AS penalty_notyet,
+        SUM(CASE WHEN base.period = latest.max_period
+                 THEN CAST(base.unlock_fee AS DECIMAL(18,2)) ELSE 0 END) AS unlock_fee_notyet,
+        SUM(CAST(base.total_amount AS DECIMAL(18,2))) AS total_notyet
+      FROM debt_target_cache base
+      JOIN (
+        SELECT dtc.section, dtc.contract_external_id, MAX(dtc.period) AS max_period
+        FROM debt_target_cache dtc
+        WHERE ${baseWhere}
+          AND dtc.due_date > CURRENT_DATE
+          AND dtc.is_closed IS NOT TRUE
+          AND COALESCE(dtc.is_suspended, false) IS NOT TRUE
+          AND COALESCE(dtc.contract_status, '') NOT IN ('ระงับสัญญา', 'สิ้นสุดสัญญา', 'หนี้เสีย', 'ยกเลิกสัญญา')
+        GROUP BY dtc.section, dtc.contract_external_id
+      ) latest ON latest.section = base.section
+               AND latest.contract_external_id = base.contract_external_id
+      WHERE base.section = '${section}'
+        AND base.approve_date IS NOT NULL
+        AND base.due_date > CURRENT_DATE
+        AND base.is_closed IS NOT TRUE
+        AND COALESCE(base.is_suspended, false) IS NOT TRUE
+        AND COALESCE(base.contract_status, '') NOT IN ('ระงับสัญญา', 'สิ้นสุดสัญญา', 'หนี้เสีย', 'ยกเลิกสัญญา')
+      GROUP BY 1, 2, 3, 4, 5
+      ORDER BY 1 DESC
+    `;
+    const rawRows = pgRows(await db.execute(sql.raw(q)));
+    const mapped = rawRows.map((r: any) => ({
+      approve_month: String(r.approve_month),
+      bucket: String(r.bucket),
+      productType: r.product_type ? String(r.product_type) : null,
+      deviceFamily: toDeviceFamily(r.device_family),
+      dateMonth: r.due_month ? String(r.due_month) : null,
+      contractCount: Number(r.contract_count),
+      principal: Number(r.principal_notyet), interest: Number(r.interest_notyet), fee: Number(r.fee_notyet),
+      penalty: Number(r.penalty_notyet), unlockFee: Number(r.unlock_fee_notyet),
+      discount: 0, overpaid: 0, badDebt: 0, badDebtInstallment: 0,
+      totalAmount: Number(r.total_notyet),
+    }));
+    const combined = buildMscBatchCombinations(mapped);
+    await upsertMonthlySummaryRows(section, "notYetDue", combined);
+    totalRows += combined.length;
+    doneSteps++;
+    onProgress?.(doneSteps, TOTAL_STEPS);
+  }
+
+  // ── Query 6: installTotal (BATCH) ─────────────────────────────────────────
+  {
+    const baseWhere = `dtc.section = '${section}' AND dtc.approve_date IS NOT NULL`;
+    const q = `
+      WITH latest AS (
+        SELECT
+          dtc.section,
+          dtc.contract_external_id,
+          dtc.contract_status,
+          dtc.debt_range,
+          dtc.approve_date,
+          dtc.baseline_amount,
+          dtc.installment_count,
+          dtc.finance_amount,
+          dtc.product_type,
+          dtc.device,
+          ROW_NUMBER() OVER (
+            PARTITION BY dtc.section, dtc.contract_external_id
+            ORDER BY dtc.period DESC
+          ) AS rn
+        FROM debt_target_cache dtc
+        WHERE ${baseWhere}
+      )
+      SELECT
+        TO_CHAR(l.approve_date, 'YYYY-MM') AS approve_month,
+        CASE
+          WHEN l.contract_status = 'หนี้เสีย'      THEN 'หนี้เสีย'
+          WHEN l.contract_status = 'ระงับสัญญา'   THEN 'ระงับสัญญา'
+          WHEN l.contract_status = 'สิ้นสุดสัญญา' THEN 'สิ้นสุดสัญญา'
+          WHEN l.contract_status = 'ยกเลิกสัญญา' THEN 'ยกเลิกสัญญา'
+          ELSE COALESCE(l.debt_range, 'ปกติ')
+        END AS bucket,
+        l.product_type,
+        CASE
+          WHEN l.device IN ('iPhone', 'iPad') THEN 'iOS'
+          WHEN l.device IS NOT NULL AND l.device != '' THEN 'Android'
+          ELSE NULL
+        END AS device_family,
+        COUNT(DISTINCT l.contract_external_id) AS contract_count,
+        SUM(
+          CASE
+            WHEN l.finance_amount > 0 AND l.installment_count > 0
+            THEN CEIL(CAST(l.finance_amount AS DECIMAL(18,2)) / l.installment_count) * l.installment_count
+            ELSE COALESCE(l.baseline_amount, 0) * COALESCE(l.installment_count, 0)
+          END
+        ) AS principal_install,
+        SUM(
+          CASE
+            WHEN l.finance_amount > 0 AND l.installment_count > 0
+              AND l.baseline_amount > 0
+            THEN GREATEST(0,
+              l.baseline_amount * l.installment_count
+              - CEIL(CAST(l.finance_amount AS DECIMAL(18,2)) / l.installment_count) * l.installment_count
+              - 100 * l.installment_count
+            )
+            ELSE 0
+          END
+        ) AS interest_install,
+        SUM(
+          CASE
+            WHEN l.finance_amount > 0 AND l.installment_count > 0
+            THEN 100 * l.installment_count
+            ELSE 0
+          END
+        ) AS fee_install,
+        SUM(COALESCE(l.baseline_amount, 0) * COALESCE(l.installment_count, 0)) AS total_install,
+        SUM(COALESCE(l.finance_amount, 0)) AS finance_total
+      FROM latest l
+      WHERE l.rn = 1
+      GROUP BY 1, 2, 3, 4
+      ORDER BY 1 DESC
+    `;
+    const rawRows = pgRows(await db.execute(sql.raw(q)));
+    const mapped = rawRows.map((r: any) => ({
+      approve_month: String(r.approve_month),
+      bucket: String(r.bucket),
+      productType: r.product_type ? String(r.product_type) : null,
+      deviceFamily: toDeviceFamily(r.device_family),
+      dateMonth: null as string | null,
+      contractCount: Number(r.contract_count),
+      principal: Number(r.principal_install), interest: Number(r.interest_install), fee: Number(r.fee_install),
+      penalty: 0, unlockFee: 0, discount: 0, overpaid: 0, badDebt: 0, badDebtInstallment: 0,
+      totalAmount: Number(r.total_install),
+      financeTotal: Number(r.finance_total),
+    }));
+    const combined = buildMscBatchCombinations(mapped);
+    await upsertMonthlySummaryRows(section, "installTotal", combined);
+    totalRows += combined.length;
+    doneSteps++;
+    onProgress?.(doneSteps, TOTAL_STEPS);
   }
 
   return totalRows;
