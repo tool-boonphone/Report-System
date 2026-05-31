@@ -632,9 +632,7 @@ async function queryNotYetDue(
       WHERE ${baseWhere}
         AND dtc.due_date > CURRENT_DATE
         AND dtc.is_closed IS NOT TRUE
-        AND dtc.is_paid IS NOT TRUE
         AND COALESCE(dtc.is_suspended, false) IS NOT TRUE
-        AND COALESCE(dtc.contract_status, '') NOT IN ('ยกเลิกสัญญา')
         ${dueDateFilter}
       GROUP BY dtc.section, dtc.contract_external_id
         ) latest ON latest.section = base.section
@@ -642,9 +640,7 @@ async function queryNotYetDue(
     WHERE ${baseWhere.replace(/dtc\./g, "base.")}
       AND base.due_date > CURRENT_DATE
       AND base.is_closed IS NOT TRUE
-      AND base.is_paid IS NOT TRUE
       AND COALESCE(base.is_suspended, false) IS NOT TRUE
-      AND COALESCE(base.contract_status, '') NOT IN ('ยกเลิกสัญญา')
       ${dueDateFilter.replace(/dtc\./g, "base.")}
     GROUP BY 1, 2
     ORDER BY 1 DESC
