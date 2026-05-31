@@ -2638,7 +2638,7 @@ function CombinedTable({
                       const isBucketHidden=hiddenBuckets.has(b);
                       const isDimmed=isHiddenRow||isBucketHidden;
                       const val=isDimmed?0:cellValue(sr.key,cell);
-                      const cellBg=bucketCellBg(b);
+                      const cellBg=sr.rowBg; // ใช้สีตาม row ไม่ใช้สีตาม column
                       const isLast=bi===g.buckets.length-1;
                       const isBadDebtBucket=g.label==="หนี้เสีย";
                       // คำนวณ denominator สำหรับ % ของ bucket นี้
@@ -2768,7 +2768,7 @@ function CombinedTable({
               g.buckets.map((b,bi)=>{
                 const isBucketHidden=hiddenBuckets.has(b);
                 const val=isBucketHidden?0:gtValue(sr.key,b);
-                const cellBg=bucketCellBg(b);
+                const cellBg=sr.rowBg; // ใช้สีตาม row ไม่ใช้สีตาม column
                 const isLast=bi===g.buckets.length-1;
                 const isBadDebtBucket=g.label==="หนี้เสีย";
                 const bt=grandTotal.bucketTotals[b];
