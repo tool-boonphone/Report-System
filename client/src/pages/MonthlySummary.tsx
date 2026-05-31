@@ -223,9 +223,16 @@ function bucketHeaderBg(b:string):string {
 }
 function bucketCellBg(b:string):string {
   const m:Record<string,string>={
-    "ปกติ":"bg-green-50/40","เกิน 1-7":"bg-yellow-50/40","เกิน 8-14":"bg-amber-50/40",
-    "เกิน 15-30":"bg-orange-50/40","เกิน 31-60":"bg-red-50/40","เกิน 61-90":"bg-red-100/40",
-    "เกิน >90":"bg-rose-100/40","ระงับสัญญา":"bg-gray-100/40","สิ้นสุดสัญญา":"bg-blue-50/40","หนี้เสีย":"bg-gray-200/40","ยกเลิกสัญญา":"bg-red-50/40",
+    // กลุ่มปกติ — เขียวอ่อน
+    "ปกติ":"bg-green-50","เกิน 1-7":"bg-yellow-50","เกิน 8-14":"bg-amber-50",
+    "เกิน 15-30":"bg-orange-50","เกิน 31-60":"bg-red-50",
+    // กลุ่มสงสัยจะเสีย — แดง/ส้มอ่อน
+    "เกิน 61-90":"bg-red-100","เกิน >90":"bg-rose-100",
+    // standalone — ใช้สีที่ match กับ group header
+    "ระงับสัญญา":"bg-red-50",       // header: bg-red-700
+    "สิ้นสุดสัญญา":"bg-slate-100",  // header: bg-gray-600
+    "หนี้เสีย":"bg-slate-200",      // header: bg-gray-900
+    "ยกเลิกสัญญา":"bg-red-50",     // header: bg-red-700
   };
   return m[b]??"";
 }
@@ -2727,36 +2734,12 @@ function CombinedTable({
         })}
       </tbody>
       <tfoot className={showStickyTotal?"sticky bottom-0 z-20 shadow-[0_-2px_8px_rgba(0,0,0,0.12)]":undefined}>
-        <tr className="border-t-2 border-slate-400 bg-slate-50 font-bold">
-          <td className="sticky left-0 z-10 px-3 py-2 text-sm font-bold text-slate-800 bg-slate-100 border-r border-slate-300 whitespace-nowrap">รวมทั้งหมด</td>
-          <td className="sticky left-[130px] z-10 px-2 py-2 bg-slate-100 border-r border-slate-300"/>
-          <td className="sticky left-[220px] z-10 px-3 py-2 bg-slate-100 border-r border-slate-300"/>
-          {BUCKET_GROUPS.map((g)=>
-            g.buckets.map((b,bi)=>{
-              const isLast=bi===g.buckets.length-1;
-              const isBadDebtBucket=g.label==="หนี้เสีย";
-              return(
-                <React.Fragment key={b}>
-                  {isBadDebtBucket?(
-                    <>
-                      <td className={["px-3 py-2",bucketCellBg(b),"bg-slate-100"].join(" ")}/>
-                      <td className={["px-3 py-2",bucketCellBg(b),"bg-slate-100"].join(" ")}/>
-                      <td className={["px-3 py-2",bucketCellBg(b),"bg-slate-100"].join(" ")}/>
-                    </>
-                  ):(
-                    <>
-                      <td className={["px-3 py-2",bucketCellBg(b),"bg-slate-100"].join(" ")}/>
-                      {isLast&&g.hasSubtotal&&<td className={["px-3 py-2",g.subtotalBg,"bg-opacity-80"].join(" ")}/>}
-                    </>
-                  )}
-                </React.Fragment>
-              );
-            })
-          )}
-        </tr>
-        {COMBINED_SUB_ROWS.filter(sr=>!hiddenSubRows.has(sr.key)).map((sr)=>(
-          <tr key={sr.key} className={["border-b border-gray-200",sr.totalBg].join(" ")}>
-            <td className={["sticky left-0 z-10 px-3 py-1.5 text-xs font-semibold whitespace-nowrap border-r border-gray-300",sr.totalBg].join(" ")}/>
+        {COMBINED_SUB_ROWS.filter(sr=>!hiddenSubRows.has(sr.key)).map((sr,srIdx)=>(
+          <tr key={sr.key} className={["border-b border-gray-200",srIdx===0?"border-t-2 border-slate-400 font-bold":"",sr.totalBg].join(" ")}>
+            {/* column เดือน: แสดง "รวมทั้งหมด" เฉพาะ row แรก (count) */}
+            <td className={["sticky left-0 z-10 px-3 py-1.5 text-xs font-semibold whitespace-nowrap border-r border-gray-300",sr.totalBg].join(" ")}>
+              {srIdx===0&&<span className="text-slate-800 font-bold">รวมทั้งหมด</span>}
+            </td>
             <td className={["sticky left-[130px] z-10 px-2 py-1.5 text-center text-[11px] font-semibold border-r border-gray-300",sr.totalBg,sr.textColor].join(" ")}>{sr.label}</td>
             <td className={["sticky left-[220px] z-10 px-3 py-1.5 text-right border-r border-gray-300 min-w-[200px]",sr.totalBg].join(" ")}>
               {(()=>{
@@ -2794,7 +2777,7 @@ function CombinedTable({
                     {isBadDebtBucket?(
                       <>
                         {/* ค่างวด: ใช้ gtPaidInstall (computeMoneyTotal) เพื่อให้ badge toggle มีผล */}
-                        <td className={["px-3 py-1.5 text-right border-r border-gray-300",cellBg,"bg-slate-100"].join(" ")}>
+                        <td className={["px-3 py-1.5 text-right border-r border-gray-300",cellBg].join(" ")}>
                           {sr.key==="paid"&&!isBucketHidden
                             ? (()=>{
                                 const visAmt=gtPaidInstall(b);
@@ -2804,13 +2787,13 @@ function CombinedTable({
                             : <span className="text-gray-200 text-xs">—</span>}
                         </td>
                         {/* ขายเครื่อง */}
-                        <td className={["px-3 py-1.5 text-right border-r border-gray-300",cellBg,"bg-slate-100"].join(" ")}>
+                        <td className={["px-3 py-1.5 text-right border-r border-gray-300",cellBg].join(" ")}>
                           {sr.key==="paid"&&!isBucketHidden
                             ? renderMoney(showBadDebtSale&&bt?(bt.paid.badDebt??0):0, "text-red-700")
                             : <span className="text-gray-200 text-xs">—</span>}
                         </td>
                         {/* รวม: ค่างวด (visible) + ขายเครื่อง */}
-                        <td className={["px-3 py-1.5 text-right border-r border-gray-300",cellBg,"bg-slate-100"].join(" ")}>
+                        <td className={["px-3 py-1.5 text-right border-r border-gray-300",cellBg].join(" ")}>
                           {sr.key==="paid"&&!isBucketHidden
                             ? renderMoney(
                                 gtPaidInstall(b)
@@ -2822,7 +2805,7 @@ function CombinedTable({
                       </>
                     ):(
                       <>
-                        <td className={["px-3 py-1.5 text-right border-r border-gray-300",cellBg,"bg-slate-100"].join(" ")}>
+                        <td className={["px-3 py-1.5 text-right border-r border-gray-300",cellBg].join(" ")}>
                           {(()=>{
                             const gtInstallVal=isBucketHidden?0:gtValue("installTotal",b);
                             const gtTargetVal=isBucketHidden?0:gtValue("target",b);
