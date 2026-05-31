@@ -462,7 +462,39 @@ function MonthlyTabContent({
 
   const snapshots = snapshotsQuery.data ?? [];
 
-  // ── Export handlers ──────────────────────────────────────────────────────────
+  // ── On-demand rebuild mutation ───────────────────────────────────────────
+  // เก็บสถานะว่า server ตอบกลับมาว่าไม่มี cache data (ยังไม่เคย sync เลย)
+  const [noCacheData, setNoCacheData] = React.useState(false);
+
+  const rebuildMutation = trpc.debt.rebuildMonthlySnapshot.useMutation({
+    onSuccess: (data) => {
+      if (!data.hasCacheData) {
+        // ยังไม่มีข้อมูลใดๆ เลย — รอ Sync Auto
+        setNoCacheData(true);
+        return;
+      }
+      snapshotsQuery.refetch();
+    },
+    onError: (err) => {
+      toast.error(err.message ?? "สร้างข้อมูลไม่สำเร็จ");
+    },
+  });
+
+  // ── Auto-trigger rebuild เมื่อ query สำเร็จและไม่มี snapshot ──────────────────────
+  React.useEffect(() => {
+    if (
+      !section ||
+      snapshotsQuery.isLoading ||
+      snapshotsQuery.isFetching ||
+      rebuildMutation.isPending ||
+      rebuildMutation.isSuccess ||
+      snapshots.length > 0
+    ) return;
+    // ไม่มี snapshot — สร้างอัตโนมัติจาก cache ที่มีอยู่ใน DB
+    rebuildMutation.mutate({ section: sectionKey });
+  }, [section, sectionKey, snapshotsQuery.isLoading, snapshotsQuery.isFetching, snapshots.length, rebuildMutation.isPending, rebuildMutation.isSuccess]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Export handlers ────────────────────────────────────────────
   const handleLightboxExport = React.useCallback(async () => {
     if (!section || !lightbox) return;
     const endpoint = lightbox.type === "target"
@@ -535,7 +567,21 @@ function MonthlyTabContent({
       ) : snapshotsQuery.isError ? (
         <div className="text-center py-12 text-red-500 text-sm">โหลดข้อมูลไม่สำเร็จ</div>
       ) : snapshots.length === 0 ? (
-        <div className="text-center py-12 text-gray-400 text-sm">ยังไม่มีข้อมูล snapshot รายเดือน — รอการ Sync Auto เพื่อสร้างข้อมูล</div>
+        <div className="flex flex-col items-center justify-center py-16 gap-3">
+          {noCacheData ? (
+            <>
+              <div className="text-slate-400 text-sm text-center">ยังไม่มีข้อมูล</div>
+              <div className="text-slate-300 text-xs text-center">รอการ Sync Auto เพื่อดึงข้อมูลจาก API ก่อน</div>
+            </>
+          ) : (
+            <>
+              <Spinner className="w-6 h-6 text-blue-500" />
+              <div className="text-slate-400 text-sm">
+                {rebuildMutation.isPending ? "กำลังสร้างข้อมูลรายเดือน…" : "กำลังตรวจสอบข้อมูล…"}
+              </div>
+            </>
+          )}
+        </div>
       ) : (
         <div className="border rounded-lg bg-white overflow-auto" style={{ maxHeight: "calc(100vh - 240px)" }}>
           <table className="w-full text-xs border-collapse">

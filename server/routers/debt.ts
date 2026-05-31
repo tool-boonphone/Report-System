@@ -19,12 +19,14 @@ import {
 import {
   getTargetChunk,
   getCollectedChunk,
+  getTargetContractCount,
 } from "../sync/queryCacheDb";
 import { sectionSchema } from "../../shared/const";
 import {
   getMonthlyCollectionSnapshots,
   getMonthlyTargetDetail,
   getMonthlyCollectedDetail,
+  populateMonthlyCollectionSnapshot,
 } from "../monthlyCollectionSnapshotDb";
 
 const debtViewProcedure = requirePermission("debt_report", "view");
@@ -137,5 +139,22 @@ export const debtRouter = router({
     }))
     .query(async ({ input }) => {
       return getMonthlyCollectedDetail(input);
+    }),
+
+  /**
+   * On-demand: สร้าง/อัพเดท monthly_collection_snapshot จาก cache ที่มีอยู่ใน DB
+   * ตรวจสอบว่ามีข้อมูล cache ก่อน ถ้าไม่มีข้อมูลใดๆ เลย (hasCacheData: false) จะไม่สร้าง
+   */
+  rebuildMonthlySnapshot: debtViewProcedure
+    .input(z.object({ section: SectionEnum }))
+    .mutation(async ({ input }) => {
+      // ตรวจสอบว่ามีข้อมูลใน cache ก่อนสร้าง snapshot
+      const cacheCount = await getTargetContractCount(input.section);
+      if (cacheCount === 0) {
+        // ยังไม่มีข้อมูลใดๆ เลย — รอ Sync Auto
+        return { success: false, hasCacheData: false, monthsUpdated: 0 };
+      }
+      const count = await populateMonthlyCollectionSnapshot(input.section);
+      return { success: true, hasCacheData: true, monthsUpdated: count };
     }),
 });
