@@ -1689,6 +1689,8 @@ async function queryDueMonthNotYetDue(
         AND dtc.due_date > CURRENT_DATE
         AND dtc.is_closed IS NOT TRUE
         AND dtc.is_paid IS NOT TRUE
+        AND COALESCE(dtc.is_suspended, false) IS NOT TRUE
+        AND COALESCE(dtc.contract_status, '') NOT IN ('ระงับสัญญา', 'สิ้นสุดสัญญา', 'หนี้เสีย', 'ยกเลิกสัญญา')
       GROUP BY dtc.section, dtc.contract_external_id, TO_CHAR(dtc.due_date, 'YYYY-MM')
     ) latest ON latest.section = base.section
              AND latest.contract_external_id = base.contract_external_id
@@ -1697,6 +1699,8 @@ async function queryDueMonthNotYetDue(
       AND base.due_date > CURRENT_DATE
       AND base.is_closed IS NOT TRUE
       AND base.is_paid IS NOT TRUE
+      AND COALESCE(base.is_suspended, false) IS NOT TRUE
+      AND COALESCE(base.contract_status, '') NOT IN ('ระงับสัญญา', 'สิ้นสุดสัญญา', 'หนี้เสีย', 'ยกเลิกสัญญา')
     GROUP BY 1, 2
     ORDER BY 1 DESC, 2 ASC
   `;
@@ -1938,7 +1942,30 @@ export async function getDueMonthSummary(
     search: params.search,
   };
 
-  const [countRows, targetRows, dueRows, notYetDueRows, installTotalRows, paidRows, approvedCountRows, financeTotalRows] = await Promise.all([
+  // เรียก getMonthlySummary ด้วยเพื่อดึง totalInstallTotal และ totalNotYetDue ที่ถูกต้อง
+  // (ใช้ logic เดียวกับ mode สถานะหนี้ — baseline_amount × installment_count)
+  const monthlySummaryParams: MonthlySummaryParams = {
+    section,
+    countApproveMonths:          opts.approveMonths,
+    countProductType:            opts.productType,
+    countDeviceFamily:           opts.deviceFamily,
+    targetApproveMonths:         opts.approveMonths,
+    targetProductType:           opts.productType,
+    targetDeviceFamily:          opts.deviceFamily,
+    paidApproveMonths:           opts.approveMonths,
+    paidProductType:             opts.productType,
+    paidDeviceFamily:            opts.deviceFamily,
+    dueProductType:              opts.productType,
+    dueDeviceFamily:             opts.deviceFamily,
+    notYetDueApproveMonths:      opts.approveMonths,
+    notYetDueProductType:        opts.productType,
+    notYetDueDeviceFamily:       opts.deviceFamily,
+    installTotalApproveMonths:   opts.approveMonths,
+    installTotalProductType:     opts.productType,
+    installTotalDeviceFamily:    opts.deviceFamily,
+    search:                      opts.search,
+  };
+  const [countRows, targetRows, dueRows, notYetDueRows, installTotalRows, paidRows, approvedCountRows, financeTotalRows, monthlySummaryRows] = await Promise.all([
     queryDueMonthCount(section, opts),
     queryDueMonthTarget(section, opts),
     queryDueMonthDue(section, opts),
@@ -1947,7 +1974,15 @@ export async function getDueMonthSummary(
     queryDueMonthPaid(section, opts),
     queryDueMonthApprovedCount(section, opts),
     queryDueMonthFinanceTotal(section, opts), // ยอดจัดฯรวมต่อ approve_month (ไม่กระจาย) เพื่อให้ตรงกับ mode สถานะหนี้
+    getMonthlySummary(monthlySummaryParams),  // ดึง totalInstallTotal/totalNotYetDue ที่ถูกต้อง
   ]);
+  // สร้าง Map จาก getMonthlySummary เพื่อ lookup ต่อ approveMonth
+  const msInstallTotalMap = new Map<string, MoneyBreakdown>();
+  const msNotYetDueMap    = new Map<string, MoneyBreakdown>();
+  for (const r of monthlySummaryRows) {
+    msInstallTotalMap.set(r.approveMonth, r.totalInstallTotal);
+    msNotYetDueMap.set(r.approveMonth, r.totalNotYetDue);
+  }
 
   // รวบรวม approve_months และ due_months ทั้งหมด
   const monthSet = new Set<string>();
@@ -2098,7 +2133,11 @@ export async function getDueMonthSummary(
     }
 
     const approvedCount = approvedCountMap.get(approveMonth) ?? 0;
-    return { approveMonth, dueMonths, totalCount, approvedCount, totalPaid, totalDue, totalTarget, totalNotYetDue, totalInstallTotal, totalFinanceTotal };
+    // Override totalInstallTotal และ totalNotYetDue ด้วยค่าจาก getMonthlySummary
+    // เพื่อให้ใช้ logic เดียวกับ mode สถานะหนี้ (baseline_amount × installment_count)
+    const correctInstallTotal = msInstallTotalMap.get(approveMonth) ?? totalInstallTotal;
+    const correctNotYetDue    = msNotYetDueMap.get(approveMonth) ?? totalNotYetDue;
+    return { approveMonth, dueMonths, totalCount, approvedCount, totalPaid, totalDue, totalTarget, totalNotYetDue: correctNotYetDue, totalInstallTotal: correctInstallTotal, totalFinanceTotal };
   });
 }
 
