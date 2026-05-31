@@ -2324,6 +2324,7 @@ const BUCKET_GROUPS = [
   {label:"ระงับสัญญา",  bg:"bg-red-700",     buckets:["ระงับสัญญา"],                                              hasSubtotal:false, subtotalBg:""},
   {label:"สิ้นสุดสัญญา",bg:"bg-gray-600",    buckets:["สิ้นสุดสัญญา"],                                            hasSubtotal:false, subtotalBg:""},
   {label:"หนี้เสีย",    bg:"bg-gray-900",    buckets:["หนี้เสีย"],                                                hasSubtotal:false, subtotalBg:""},
+  {label:"ยกเลิกสัญญา",bg:"bg-red-700",     buckets:["ยกเลิกสัญญา"],                                            hasSubtotal:false, subtotalBg:""},
 ];
 
 function CombinedTable({
