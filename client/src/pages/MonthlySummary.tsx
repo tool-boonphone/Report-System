@@ -808,14 +808,28 @@ export default function MonthlySummary() {
   // due month query — เรียกเมื่อ viewMode=dueMonth (ไม่ต้องตรวจ tab เพราะเหลือแค่ combined)
   const dueMonthQueryInput=useMemo(()=>{
     if(!section||combinedViewMode!=="dueMonth")return null;
+    // รวม approveMonths และ approveYears เข้าด้วยกัน
+    let effectiveMonths: string[]|undefined = undefined;
+    if(combinedApproveMonths.size>0||combinedApproveYears.size>0){
+      const monthSet=new Set<string>();
+      // เพิ่มเดือนที่เลือกโดยตรง
+      for(const m of combinedApproveMonths) monthSet.add(m);
+      // expand ปีที่เลือก → เดือนทั้งหมดในปีนั้นที่มีข้อมูล
+      if(combinedApproveYears.size>0){
+        for(const m of availableMonths){
+          if(combinedApproveYears.has(m.slice(0,4))) monthSet.add(m);
+        }
+      }
+      effectiveMonths=Array.from(monthSet);
+    }
     return{
       section,
-      approveMonths:combinedApproveMonths.size>0?Array.from(combinedApproveMonths):undefined,
+      approveMonths:effectiveMonths,
       productType:combinedProductType.size===1?Array.from(combinedProductType)[0]:undefined,
       deviceFamily:(combinedDeviceFamily as "iOS"|"Android"|undefined)||undefined,
       search:search||undefined,
     };
-  },[section,combinedViewMode,combinedApproveMonths,combinedProductType,combinedDeviceFamily,search]);
+  },[section,combinedViewMode,combinedApproveMonths,combinedApproveYears,combinedProductType,combinedDeviceFamily,search,availableMonths]);
   const dueMonthQuery=trpc.monthlySummary.getDueMonthSummary.useQuery(dueMonthQueryInput as any,{enabled:canView&&!!dueMonthQueryInput});
   // parse dueMonth rows
   type FlatDueMonthRow={approveMonth:string;dueMonth:string;contractCount:number;financeTotal?:number;paidTotal:number;paidPrincipal:number;paidInterest:number;paidFee:number;paidPenalty:number;paidUnlockFee:number;paidDiscount:number;paidOverpaid:number;paidBadDebt:number;paidBadDebtInstallment:number;targetTotal:number;targetPrincipal:number;targetInterest:number;targetFee:number;targetPenalty:number;targetUnlockFee:number;dueTotal:number;duePrincipal:number;dueInterest:number;dueFee:number;duePenalty:number;dueUnlockFee:number;notYetDueTotal:number;notYetDuePrincipal:number;notYetDueInterest:number;notYetDueFee:number;notYetDuePenalty:number;notYetDueUnlockFee:number;installTotalTotal:number;installTotalPrincipal:number;installTotalInterest:number;installTotalFee:number;};
