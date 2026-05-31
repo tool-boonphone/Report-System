@@ -594,9 +594,13 @@ async function queryNotYetDue(
   }
 
   /*
+   * Phase 141-fix3: เปลี่ยน logic ให้ตรงกับ DebtOverview
+   * DebtOverview ข้ามเฉพาะ installment ที่ isSuspended = true (ระดับงวด)
+   * ไม่ตัดทั้งสัญญาออกเพราะ contract_status = ระงับ/สิ้นสุด/หนี้เสีย
+   * เพราะสัญญาที่ระงับอาจยังมีงวดอนาคตที่ is_suspended = false อยู่
+   *
    * penalty/unlockFee ดึงจากงวดล่าสุดของแต่ละสัญญา (MAX period WHERE due_date > CURRENT_DATE)
-   * หมายเหตุ: ใช้ due_date > CURRENT_DATE แทน is_future_period เพราะ is_future_period ถูก populate
-   * ณ เวลา sync และอาจล้าสมัย ส่วน due_date > CURRENT_DATE คำนวณ real-time เสมอ
+   * ยกเว้น ยกเลิกสัญญา ซึ่งไม่มีงวดอนาคตจริง
    */
   const q = `
     SELECT
@@ -619,13 +623,17 @@ async function queryNotYetDue(
       SUM(CAST(base.total_amount AS DECIMAL(18,2))) AS total_notyet
     FROM debt_target_cache base
     JOIN (
+      -- ดึง max_period สำหรับ penalty/unlockFee
+      -- ข้ามเฉพาะ installment ที่ is_suspended = true (ระดับงวด) เหมือน DebtOverview
+      -- ไม่ตัดทั้งสัญญาออกเพราะ contract_status
       SELECT dtc.section, dtc.contract_external_id, MAX(dtc.period) AS max_period
       FROM debt_target_cache dtc
       WHERE ${baseWhere}
         AND dtc.due_date > CURRENT_DATE
         AND dtc.is_closed IS NOT TRUE
         AND dtc.is_paid IS NOT TRUE
-        AND COALESCE(dtc.contract_status, '') NOT IN ('ยกเลิกสัญญา', 'ระงับสัญญา', 'สิ้นสุดสัญญา', 'หนี้เสีย')
+        AND COALESCE(dtc.is_suspended, false) IS NOT TRUE
+        AND COALESCE(dtc.contract_status, '') NOT IN ('ยกเลิกสัญญา')
         ${dueDateFilter}
       GROUP BY dtc.section, dtc.contract_external_id
         ) latest ON latest.section = base.section
@@ -634,7 +642,8 @@ async function queryNotYetDue(
       AND base.due_date > CURRENT_DATE
       AND base.is_closed IS NOT TRUE
       AND base.is_paid IS NOT TRUE
-      AND COALESCE(base.contract_status, '') NOT IN ('ยกเลิกสัญญา', 'ระงับสัญญา', 'สิ้นสุดสัญญา', 'หนี้เสีย')
+      AND COALESCE(base.is_suspended, false) IS NOT TRUE
+      AND COALESCE(base.contract_status, '') NOT IN ('ยกเลิกสัญญา')
       ${dueDateFilter.replace(/dtc\./g, "base.")}
     GROUP BY 1, 2
     ORDER BY 1 DESC
