@@ -49,6 +49,7 @@ export const monthlySummaryRouter = router({
         // Tab 3: ยอดชำระแล้ว
         paidAtDate:             DateStr,
         paidAtMonths:           z.array(MonthStr).optional(),
+        paidApproveMonths:      z.array(MonthStr).optional(),
         paidProductType:        z.string().optional(),
         paidDeviceFamily:       DeviceFamily,
         // Tab 4: หนี้ค้างชำระ (เดิม: ยอดค้างชำระ)
@@ -103,6 +104,7 @@ export const monthlySummaryRouter = router({
           // paid
           paidAtDate:          input.paidAtDate,
           paidAtMonths:        input.paidAtMonths,
+          paidApproveMonths:   input.paidApproveMonths,
           paidProductType:     input.paidProductType,
           paidDeviceFamily:    input.paidDeviceFamily,
           // due

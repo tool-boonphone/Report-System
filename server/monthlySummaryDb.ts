@@ -79,7 +79,8 @@ export type MonthlySummaryParams = {
   targetDeviceFamily?: string;
   // Tab 3: ยอดชำระแล้ว
   paidAtDate?: string;             // exact date YYYY-MM-DD (paid_at)
-  paidAtMonths?: string[];         // multi YYYY-MM
+  paidAtMonths?: string[];         // multi YYYY-MM (paid_at) — ใช้ใน live query fallback เท่านั้น
+  paidApproveMonths?: string[];    // multi YYYY-MM (approve_date) — ใช้ใน cache query
   paidProductType?: string;
   paidDeviceFamily?: string;
   // Tab 4: ยอดค้างชำระ
@@ -1233,7 +1234,7 @@ async function getMonthlySummaryFromCache(
         AND ${dateMonthCond(params.targetDueMonths, params.targetDueDate)}
       ORDER BY approve_month DESC
     `)),
-    // paid: paidAtMonth filter
+    // paid: approveMonth filter (populate เก็บ dateMonth = approveMonth ตั้งแต่ Phase 141-fix2)
     db.execute(sql.raw(`
       SELECT approve_month, bucket, contract_count,
              principal AS principal_paid, interest AS interest_paid,
@@ -1245,7 +1246,7 @@ async function getMonthlySummaryFromCache(
       WHERE section = '${section}' AND query_type = 'paid'
         AND ${productTypeCond(params.paidProductType)}
         AND ${deviceFamilyCond(params.paidDeviceFamily)}
-        AND ${dateMonthCond(params.paidAtMonths, params.paidAtDate)}
+        AND ${dateMonthCond(params.paidApproveMonths, undefined)}
       ORDER BY approve_month DESC
     `)),
     // due: dueAtMonth filter
@@ -3049,7 +3050,7 @@ export async function getMonthlySummaryTotalsOnly(
       WHERE section = '${section}' AND query_type = 'paid'
         AND ${productTypeCond(params.paidProductType)}
         AND ${deviceFamilyCond(params.paidDeviceFamily)}
-        AND ${dateMonthCondPaid(params.paidAtMonths, params.approveMonths, params.paidAtDate)}
+        AND ${dateMonthCondPaid(params.paidAtMonths, params.paidApproveMonths, params.paidAtDate)}
     `)),
     // due: dueAtMonth filter — SUM ทั้งหมดเป็น grand total
     db.execute(sql.raw(`

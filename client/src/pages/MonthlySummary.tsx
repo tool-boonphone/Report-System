@@ -669,6 +669,8 @@ export default function MonthlySummary() {
   // Tab 3: ยอดชำระแล้ว
   const[paidAtDate,setPaidAtDate]=useState("");
   const[paidAtMonths,setPaidAtMonths]=useState<Set<string>>(new Set());
+  const[paidApproveMonths,setPaidApproveMonths]=useState<Set<string>>(new Set());
+  const[paidApproveYears,setPaidApproveYears]=useState<Set<string>>(new Set());
   const[paidProductType,setPaidProductType]=useState<Set<string>>(new Set());
   const[paidDeviceFamily,setPaidDeviceFamily]=useState("");
 
@@ -765,6 +767,7 @@ export default function MonthlySummary() {
       // paid
       paidAtDate:paidAtDate||undefined,
       paidAtMonths:paidAtMonths.size>0?Array.from(paidAtMonths):undefined,
+      paidApproveMonths:paidApproveMonths.size>0?Array.from(paidApproveMonths):undefined,
       paidProductType:paidProductType.size===1?Array.from(paidProductType)[0]:undefined,
       paidDeviceFamily:(paidDeviceFamily as "iOS"|"Android"|undefined)||undefined,
       // due
@@ -785,7 +788,7 @@ export default function MonthlySummary() {
     countApproveDate,countApproveMonths,countProductType,countDeviceFamily,
     installApproveMonths,installProductType,installDeviceFamily,
     targetDueDate,targetDueMonths,targetApproveMonths,targetProductType,targetDeviceFamily,
-    paidAtDate,paidAtMonths,paidProductType,paidDeviceFamily,
+    paidAtDate,paidAtMonths,paidApproveMonths,paidApproveYears,paidProductType,paidDeviceFamily,
     dueAtDate,dueAtMonths,dueProductType,dueDeviceFamily,
     notYetDueDueDate,notYetDueDueMonths,notYetDueApproveMonths,notYetDueProductType,notYetDueDeviceFamily,
     search,
@@ -958,7 +961,7 @@ export default function MonthlySummary() {
   // filter counts
   const countFilterCount=[search,countApproveDate,countApproveMonths.size>0,countApproveYears.size>0,countProductType.size>0,countDeviceFamily].filter(Boolean).length;
   const targetFilterCount=[search,targetDueDate,targetDueMonths.size>0,targetApproveMonths.size>0,targetApproveYears.size>0,targetProductType.size>0,targetDeviceFamily].filter(Boolean).length;
-  const paidFilterCount=[search,paidAtDate,paidAtMonths.size>0,paidProductType.size>0,paidDeviceFamily].filter(Boolean).length;
+  const paidFilterCount=[search,paidAtDate,paidAtMonths.size>0,paidApproveMonths.size>0,paidApproveYears.size>0,paidProductType.size>0,paidDeviceFamily].filter(Boolean).length;
   const dueFilterCount=[search,dueAtDate,dueAtMonths.size>0,dueProductType.size>0,dueDeviceFamily].filter(Boolean).length;
   const notYetDueFilterCount=[search,notYetDueDueDate,notYetDueDueMonths.size>0,notYetDueApproveMonths.size>0,notYetDueApproveYears.size>0,notYetDueProductType.size>0,notYetDueDeviceFamily].filter(Boolean).length;
   const installFilterCount=[search,installApproveMonths.size>0,installApproveYears.size>0,installProductType.size>0,installDeviceFamily].filter(Boolean).length;
@@ -1342,14 +1345,24 @@ export default function MonthlySummary() {
                     </div>
                   </div>
                   <div className="flex items-center gap-1.5">
-                    <span className="text-xs text-gray-500 whitespace-nowrap">เดือน-ปี:</span>
+                    <span className="text-xs text-gray-500 whitespace-nowrap">เดือน-ปีที่ชำระ:</span>
                     <MonthMultiSelect selected={paidAtMonths} onChange={(v)=>{setPaidAtMonths(v);if(v.size>0)setPaidAtDate("");}} options={availableMonths}/>
                     {paidAtMonths.size>0&&<button type="button" onClick={()=>setPaidAtMonths(new Set())} className="flex items-center justify-center w-6 h-6 rounded-full bg-gray-100 hover:bg-red-100 text-gray-400 hover:text-red-500"><X className="w-3.5 h-3.5"/></button>}
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs text-gray-500 whitespace-nowrap">เดือน-ปีที่อนุมัติ:</span>
+                    <MonthMultiSelect selected={paidApproveMonths} onChange={setPaidApproveMonths} options={availableMonths}/>
+                    {paidApproveMonths.size>0&&<button type="button" onClick={()=>setPaidApproveMonths(new Set())} className="flex items-center justify-center w-6 h-6 rounded-full bg-gray-100 hover:bg-red-100 text-gray-400 hover:text-red-500"><X className="w-3.5 h-3.5"/></button>}
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs text-gray-500 whitespace-nowrap">ปีที่อนุมัติ:</span>
+                    <YearMultiSelect selected={paidApproveYears} onChange={setPaidApproveYears} options={availableYears}/>
+                    {paidApproveYears.size>0&&<button type="button" onClick={()=>setPaidApproveYears(new Set())} className="flex items-center justify-center w-6 h-6 rounded-full bg-gray-100 hover:bg-red-100 text-gray-400 hover:text-red-500"><X className="w-3.5 h-3.5"/></button>}
                   </div>
                   <DeviceFamilyFilter value={paidDeviceFamily} onChange={setPaidDeviceFamily}/>
                   <MultiSelectFilter label="ประเภทสินค้า" selected={paidProductType} onChange={setPaidProductType} options={productTypes} placeholder="ทุกประเภทสินค้า"/>
                   {paidFilterCount>0&&(
-                    <button type="button" onClick={()=>{setSearchInput("");setSearch("");setPaidAtDate("");setPaidAtMonths(new Set());setPaidProductType(new Set());setPaidDeviceFamily("");}}
+                    <button type="button" onClick={()=>{setSearchInput("");setSearch("");setPaidAtDate("");setPaidAtMonths(new Set());setPaidApproveMonths(new Set());setPaidApproveYears(new Set());setPaidProductType(new Set());setPaidDeviceFamily("");}}
                       className="flex items-center gap-1 h-9 px-2.5 rounded-md border border-red-200 bg-red-50 text-red-600 text-xs hover:bg-red-100 transition-colors">
                       <X className="w-3.5 h-3.5"/>ล้างทั้งหมด
                     </button>
