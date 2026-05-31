@@ -271,7 +271,7 @@ export const monthlySummaryRouter = router({
       search: z.string().max(100).optional(),
     }))
     .query(async ({ input }) => {
-      // Fast path: ลอง cache ก่อน → ถ้า cache ว่าง fallback ไป direct query
+      // Direct query — ดึงจาก DB โดยตรงเสมอ (ไม่ใช้ cache เป็น primary)
       const params = {
         section: input.section,
         approveMonths: input.approveMonths,
@@ -280,8 +280,8 @@ export const monthlySummaryRouter = router({
         search: input.search || undefined,
       };
       // ดึง totals ที่ถูกต้อง (group by approve_date) พร้อมกัน
-      const [cacheResult, totalsRows] = await Promise.all([
-        getDueMonthSummaryFromCache(params),
+      const [summaryRowsDirect, totalsRows] = await Promise.all([
+        getDueMonthSummary(params),  // ← ดึงจาก DB โดยตรงเสมอ
         getMonthlySummaryTotalsOnly(input.section, {
           section: input.section,
           // ใน DueMonthSummary ไม่มี per-tab filter — ใช้ productType/deviceFamily/approveMonths ร่วมกัน
@@ -305,21 +305,14 @@ export const monthlySummaryRouter = router({
       // totalsRows = grand total single object (ไม่แยก approve_month)
       const gt = totalsRows;
 
-      let summaryRows = cacheResult.rows;
-      let allDueMonths = cacheResult.allDueMonths;
-      const usedCache = summaryRows.length > 0;
-      if (summaryRows.length === 0) {
-        // Cache ยังไม่พร้อม — fallback ไป direct query
-        console.log(`[getDueMonthSummary] FALLBACK to direct query — section=${params.section} pt=${params.productType??'null'} df=${params.deviceFamily??'null'}`);
-        summaryRows = await getDueMonthSummary(params);
-        const dueMonthSet = new Set<string>();
-        for (const row of summaryRows) {
-          for (const dm of Object.keys(row.dueMonths)) dueMonthSet.add(dm);
-        }
-        allDueMonths = Array.from(dueMonthSet).sort((a, b) => a.localeCompare(b));
-      } else {
-        console.log(`[getDueMonthSummary] CACHE HIT — section=${params.section} rows=${summaryRows.length} pt=${params.productType??'null'} df=${params.deviceFamily??'null'}`);
+      let summaryRows = summaryRowsDirect;
+      const dueMonthSet = new Set<string>();
+      for (const row of summaryRows) {
+        for (const dm of Object.keys(row.dueMonths)) dueMonthSet.add(dm);
       }
+      let allDueMonths = Array.from(dueMonthSet).sort((a, b) => a.localeCompare(b));
+      const usedCache = false;
+      console.log(`[getDueMonthSummary] DIRECT DB — section=${params.section} rows=${summaryRows.length} pt=${params.productType??'null'} df=${params.deviceFamily??'null'}`);
 
       // Flatten to array of flat rows for JSON transport
       type FlatDueMonthRow = {
