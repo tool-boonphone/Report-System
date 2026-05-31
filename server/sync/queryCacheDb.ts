@@ -648,7 +648,7 @@ export async function getTargetChunk(params: {
   section: SectionKey;
   offset: number;
   limit: number;
-}): Promise<{ rows: any[]; totalContracts: number }> {
+}): Promise<{ rows: any[]; totalContracts: number; hasMore: boolean }> {
   const { section, offset, limit } = params;
   const db = await getDb(section);
   if (!db) return { rows: [], totalContracts: 0, hasMore: false };
@@ -836,7 +836,7 @@ export async function getCollectedChunk(params: {
   section: SectionKey;
   offset: number;
   limit: number;
-}): Promise<{ rows: any[]; totalContracts: number; hasPrincipalBreakdown: boolean }> {
+}): Promise<{ rows: any[]; totalContracts: number; hasPrincipalBreakdown: boolean; hasMore: boolean }> {
   const { section, offset, limit } = params;
   const db = await getDb(section);
   if (!db) return { rows: [], totalContracts: 0, hasPrincipalBreakdown: true, hasMore: false };

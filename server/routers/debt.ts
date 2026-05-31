@@ -21,6 +21,11 @@ import {
   getCollectedChunk,
 } from "../sync/queryCacheDb";
 import { sectionSchema } from "../../shared/const";
+import {
+  getMonthlyCollectionSnapshots,
+  getMonthlyTargetDetail,
+  getMonthlyCollectedDetail,
+} from "../monthlyCollectionSnapshotDb";
 
 const debtViewProcedure = requirePermission("debt_report", "view");
 const SectionEnum = sectionSchema;
@@ -94,5 +99,43 @@ export const debtRouter = router({
     .query(async () => {
       // Legacy export entry info removed.
       return null;
+    }),
+
+  // ── Monthly Collection Snapshot ──────────────────────────────────────────
+  /** ดึง monthly_collection_snapshot ทั้งหมดของ section (สำหรับแถบ รายเดือน) */
+  getMonthlySnapshots: debtViewProcedure
+    .input(z.object({ section: SectionEnum }))
+    .query(async ({ input }) => {
+      return getMonthlyCollectionSnapshots(input.section);
+    }),
+
+  /** ดึง detail rows สำหรับ lightbox เป้าเก็บหนี้ */
+  getMonthlyTargetDetail: debtViewProcedure
+    .input(z.object({
+      section: SectionEnum,
+      collectionMonth: z.string().regex(/^\d{4}-\d{2}$/, "must be YYYY-MM"),
+      search: z.string().optional(),
+      productType: z.string().optional(),
+      debtRange: z.string().optional(),
+      offset: z.number().int().min(0).default(0),
+      limit: z.number().int().min(1).max(1000).default(100),
+    }))
+    .query(async ({ input }) => {
+      return getMonthlyTargetDetail(input);
+    }),
+
+  /** ดึง detail rows สำหรับ lightbox ยอดเก็บหนี้ */
+  getMonthlyCollectedDetail: debtViewProcedure
+    .input(z.object({
+      section: SectionEnum,
+      collectionMonth: z.string().regex(/^\d{4}-\d{2}$/, "must be YYYY-MM"),
+      search: z.string().optional(),
+      productType: z.string().optional(),
+      debtRange: z.string().optional(),
+      offset: z.number().int().min(0).default(0),
+      limit: z.number().int().min(1).max(1000).default(100),
+    }))
+    .query(async ({ input }) => {
+      return getMonthlyCollectedDetail(input);
     }),
 });

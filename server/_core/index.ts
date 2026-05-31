@@ -9,7 +9,7 @@ import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
 import { seedSuperAdmin } from "../authDb";
 import { runStartupMigrations } from "../db";
-import { handleContractsExport, handleDebtTargetExport, handleDebtCollectedExport, handleBadDebtExport, handleMonthlySummaryExport, handleYearlySummaryExport, handleBadDebtSummaryExport, handleIncomeExport, handleExpenseExport } from "../routers/exportExcel";
+import { handleContractsExport, handleDebtTargetExport, handleDebtCollectedExport, handleBadDebtExport, handleMonthlySummaryExport, handleYearlySummaryExport, handleBadDebtSummaryExport, handleIncomeExport, handleExpenseExport, handleMonthlyTargetDetailExport, handleMonthlyCollectedDetailExport } from "../routers/exportExcel";
 
 import { handleSyncStream } from "../routers/syncStream";
 import { startScheduler } from "../sync/scheduler";
@@ -57,6 +57,9 @@ async function startServer() {
   app.get("/api/export/bad-debt-summary", handleBadDebtSummaryExport);
   app.get("/api/export/income", handleIncomeExport);
   app.get("/api/export/expense", handleExpenseExport);
+  // Monthly collection snapshot lightbox exports
+  app.get("/api/export/monthly-target-detail", handleMonthlyTargetDetailExport);
+  app.get("/api/export/monthly-collected-detail", handleMonthlyCollectedDetailExport);
   // Phase 33: Streaming debt data endpoints — bypass tRPC buffering to avoid proxy 503 timeout
 
   // SSE sync stream — keeps Cloud Run connection alive during long sync

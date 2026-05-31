@@ -598,3 +598,58 @@ export const monthlySummaryDueMonthCache = pgTable(
   }),
 );
 export type MonthlySummaryDueMonthCache = typeof monthlySummaryDueMonthCache.$inferSelect;
+
+// ─── Monthly Collection Snapshot ─────────────────────────────────────────────
+// เก็บ snapshot รายเดือนสำหรับฟีเจอร์ "รายเดือน" ใน DebtReport (เป้า-ยอดเก็บหนี้)
+// - target_amount: เป้าเก็บหนี้ (freeze วันที่ 1 ของเดือน)
+// - collected_amount: ยอดเก็บหนี้ (freeze หลังสิ้นเดือน)
+// - install_total: ยอดผ่อนรวมทั้งสัญญา (สำหรับคำนวณ %)
+export const monthlyCollectionSnapshot = pgTable(
+  "monthly_collection_snapshot",
+  {
+    id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+    section: varchar("section", { length: 32 }).notNull(),
+    collectionMonth: varchar("collection_month", { length: 7 }).notNull(), // YYYY-MM
+
+    // เป้าเก็บหนี้ (frozen วันที่ 1 ของ collection_month)
+    targetAmount: decimal("target_amount", { precision: 18, scale: 2 }).notNull().default("0"),
+    targetContractCount: integer("target_contract_count").notNull().default(0),
+    targetFrozenAt: timestamp("target_frozen_at"),
+
+    // ยอดเก็บหนี้ (frozen หลังสิ้นเดือน)
+    collectedAmount: decimal("collected_amount", { precision: 18, scale: 2 }).notNull().default("0"),
+    collectedContractCount: integer("collected_contract_count").notNull().default(0),
+    collectedFrozenAt: timestamp("collected_frozen_at"),
+    collectedIsFrozen: boolean("collected_is_frozen").notNull().default(false),
+
+    // ยอดผ่อนรวมทั้งสัญญา (สำหรับคำนวณ % เทียบ)
+    installTotal: decimal("install_total", { precision: 18, scale: 2 }).notNull().default("0"),
+
+    // Breakdown เป้าเก็บหนี้
+    targetPrincipal: decimal("target_principal", { precision: 18, scale: 2 }).notNull().default("0"),
+    targetInterest: decimal("target_interest", { precision: 18, scale: 2 }).notNull().default("0"),
+    targetFee: decimal("target_fee", { precision: 18, scale: 2 }).notNull().default("0"),
+    targetPenalty: decimal("target_penalty", { precision: 18, scale: 2 }).notNull().default("0"),
+    targetUnlockFee: decimal("target_unlock_fee", { precision: 18, scale: 2 }).notNull().default("0"),
+
+    // Breakdown ยอดเก็บหนี้
+    collectedPrincipal: decimal("collected_principal", { precision: 18, scale: 2 }).notNull().default("0"),
+    collectedInterest: decimal("collected_interest", { precision: 18, scale: 2 }).notNull().default("0"),
+    collectedFee: decimal("collected_fee", { precision: 18, scale: 2 }).notNull().default("0"),
+    collectedPenalty: decimal("collected_penalty", { precision: 18, scale: 2 }).notNull().default("0"),
+    collectedUnlockFee: decimal("collected_unlock_fee", { precision: 18, scale: 2 }).notNull().default("0"),
+    collectedDiscount: decimal("collected_discount", { precision: 18, scale: 2 }).notNull().default("0"),
+    collectedOverpaid: decimal("collected_overpaid", { precision: 18, scale: 2 }).notNull().default("0"),
+    collectedBadDebt: decimal("collected_bad_debt", { precision: 18, scale: 2 }).notNull().default("0"),
+
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => ({
+    // Unique: 1 row per section per collection_month
+    mcsSectionMonthIdx: uniqueIndex("mcs_section_month_idx").on(t.section, t.collectionMonth),
+    mcsSectionIdx: index("mcs_section_idx").on(t.section),
+    mcsCollectionMonthIdx: index("mcs_collection_month_idx").on(t.collectionMonth),
+  }),
+);
+export type MonthlyCollectionSnapshot = typeof monthlyCollectionSnapshot.$inferSelect;

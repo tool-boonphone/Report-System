@@ -55,6 +55,7 @@ import { populateDebtCache } from "./populateCache";
 import { pgRows } from "../db";
 import { rebuildIncomeMonthlySummary, populateIncomeType } from "../accountingDb";
 import { populateMonthlySummaryCache, populateDueMonthCache } from "../monthlySummaryDb";
+import { populateMonthlyCollectionSnapshot } from "../monthlyCollectionSnapshotDb";
 
 /* ─────────────────────────────────────────────────────────────────────────── */
 /* Constants & types                                                           */
@@ -459,6 +460,16 @@ async function doSync(
       console.log(`[sync] ${section}: monthly_summary_due_month_cache populated — ${dmCacheRows} rows`);
     } catch (dmCacheErr: any) {
       console.warn(`[sync] ${section}: populateDueMonthCache failed (non-fatal):`, dmCacheErr?.message ?? dmCacheErr);
+    }
+
+    // ── Populate monthly_collection_snapshot ─────────────────────────────────
+    try {
+      const snapshotRows = await populateMonthlyCollectionSnapshot(section, (current, total) => {
+        setSubProgress(section, "monthly_cache", current, total);
+      });
+      console.log(`[sync] ${section}: monthly_collection_snapshot populated — ${snapshotRows} months`);
+    } catch (snapshotErr: any) {
+      console.warn(`[sync] ${section}: populateMonthlyCollectionSnapshot failed (non-fatal):`, snapshotErr?.message ?? snapshotErr);
     }
 
     // ── Finish sync log ───────────────────────────────────────────────────

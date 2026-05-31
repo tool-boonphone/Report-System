@@ -28,8 +28,11 @@ import {
   BadgeDollarSign,
   Banknote,
   CalendarDays,
+  CalendarRange,
   Check,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   Eye,
   EyeOff,
   ChevronsUpDown,
@@ -386,6 +389,447 @@ function MultiSelectFilter({
   );
 }
 
+// ─── MonthlyTabContent ───────────────────────────────────────────────────────
+// Component สำหรับแถบ "รายเดือน" ใน DebtReport
+// แสดงตารางสรุปรายเดือน + lightbox เป้าเก็บหนี้ / ยอดเก็บหนี้ พร้อมปุ่ม Export Excel
+
+type MonthlyLightboxState = { type: "target" | "collected"; month: string } | null;
+
+function MonthlyTabContent({
+  section,
+  canExport,
+  lightbox,
+  setLightbox,
+  lightboxSearch,
+  setLightboxSearch,
+  lightboxProductType,
+  setLightboxProductType,
+  lightboxDebtRange,
+  setLightboxDebtRange,
+  lightboxPage,
+  setLightboxPage,
+  pageSize,
+}: {
+  section: string | null;
+  canExport: boolean;
+  lightbox: MonthlyLightboxState;
+  setLightbox: (v: MonthlyLightboxState) => void;
+  lightboxSearch: string;
+  setLightboxSearch: (v: string) => void;
+  lightboxProductType: string | undefined;
+  setLightboxProductType: (v: string | undefined) => void;
+  lightboxDebtRange: string | undefined;
+  setLightboxDebtRange: (v: string | undefined) => void;
+  lightboxPage: number;
+  setLightboxPage: (v: number) => void;
+  pageSize: number;
+}) {
+  const sectionKey = (section ?? "") as any;
+
+  // ── ดึงข้อมูลตารางหลัก ──────────────────────────────────────────────────────
+  const snapshotsQuery = trpc.debt.getMonthlySnapshots.useQuery(
+    { section: sectionKey },
+    { enabled: !!section, staleTime: 5 * 60 * 1000 },
+  );
+
+  // ── ดึงข้อมูล lightbox (เป้าเก็บหนี้) ──────────────────────────────────────
+  const targetDetailQuery = trpc.debt.getMonthlyTargetDetail.useQuery(
+    {
+      section: sectionKey,
+      collectionMonth: lightbox?.month ?? "",
+      search: lightboxSearch || undefined,
+      productType: lightboxProductType,
+      debtRange: lightboxDebtRange,
+      offset: lightboxPage * pageSize,
+      limit: pageSize,
+    },
+    { enabled: !!section && lightbox?.type === "target" && !!lightbox?.month, staleTime: 2 * 60 * 1000 },
+  );
+
+  // ── ดึงข้อมูล lightbox (ยอดเก็บหนี้) ──────────────────────────────────────
+  const collectedDetailQuery = trpc.debt.getMonthlyCollectedDetail.useQuery(
+    {
+      section: sectionKey,
+      collectionMonth: lightbox?.month ?? "",
+      search: lightboxSearch || undefined,
+      productType: lightboxProductType,
+      debtRange: lightboxDebtRange,
+      offset: lightboxPage * pageSize,
+      limit: pageSize,
+    },
+    { enabled: !!section && lightbox?.type === "collected" && !!lightbox?.month, staleTime: 2 * 60 * 1000 },
+  );
+
+  const snapshots = snapshotsQuery.data ?? [];
+
+  // ── Export handlers ──────────────────────────────────────────────────────────
+  const handleLightboxExport = React.useCallback(async () => {
+    if (!section || !lightbox) return;
+    const endpoint = lightbox.type === "target"
+      ? "/api/export/monthly-target-detail"
+      : "/api/export/monthly-collected-detail";
+    const params = new URLSearchParams({ section, collectionMonth: lightbox.month });
+    if (lightboxSearch) params.set("search", lightboxSearch);
+    if (lightboxProductType) params.set("productType", lightboxProductType);
+    if (lightboxDebtRange) params.set("debtRange", lightboxDebtRange);
+    const toastId = toast.loading("กำลังเตรียมไฟล์ Excel…");
+    try {
+      const resp = await fetch(`${endpoint}?${params.toString()}`, { credentials: "include" });
+      if (!resp.ok) {
+        const { message } = await resp.json().catch(() => ({ message: "Export failed" }));
+        toast.error(message, { id: toastId });
+        return;
+      }
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `monthly_${lightbox.type}_${lightbox.month}_${section}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast.success("ดาวน์โหลดสำเร็จ", { id: toastId });
+    } catch (err) {
+      toast.error((err as Error).message ?? "Export failed", { id: toastId });
+    }
+  }, [section, lightbox, lightboxSearch, lightboxProductType, lightboxDebtRange]);
+
+  // ── Helpers ──────────────────────────────────────────────────────────────────
+  function fmtMonth(m: string) {
+    // YYYY-MM → เดือน/ปี พ.ศ.
+    const [y, mo] = m.split("-");
+    const thMonths = ["","ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."];
+    const moNum = parseInt(mo, 10);
+    const bYear = parseInt(y, 10) + 543;
+    return `${thMonths[moNum] ?? mo}${bYear}`;
+  }
+
+  const DEBT_RANGES = [
+    "ปกติ","เกิน 1-7","เกิน 8-14","เกิน 15-30","เกิน 31-60","เกิน 61-90","เกิน >90","ระงับสัญญา","สิ้นสุดสัญญา","หนี้เสีย",
+  ];
+
+  // ── Reset lightbox filters when lightbox changes ──────────────────────────────
+  React.useEffect(() => {
+    setLightboxSearch("");
+    setLightboxProductType(undefined);
+    setLightboxDebtRange(undefined);
+    setLightboxPage(0);
+  }, [lightbox?.month, lightbox?.type]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Reset page when filters change ───────────────────────────────────────────
+  React.useEffect(() => {
+    setLightboxPage(0);
+  }, [lightboxSearch, lightboxProductType, lightboxDebtRange]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const activeDetail = lightbox?.type === "target" ? targetDetailQuery : collectedDetailQuery;
+  const detailRows = activeDetail?.data?.rows ?? [];
+  const detailTotal = activeDetail?.data?.total ?? 0;
+  const totalPages = Math.ceil(detailTotal / pageSize);
+
+  return (
+    <div className="space-y-4">
+      {/* ตารางหลัก: สรุปรายเดือน */}
+      {snapshotsQuery.isLoading ? (
+        <div className="flex items-center justify-center py-16"><Spinner /></div>
+      ) : snapshotsQuery.isError ? (
+        <div className="text-center py-12 text-red-500 text-sm">โหลดข้อมูลไม่สำเร็จ</div>
+      ) : snapshots.length === 0 ? (
+        <div className="text-center py-12 text-gray-400 text-sm">ยังไม่มีข้อมูล snapshot รายเดือน — รอการ Sync Auto เพื่อสร้างข้อมูล</div>
+      ) : (
+        <div className="border rounded-lg bg-white overflow-auto" style={{ maxHeight: "calc(100vh - 240px)" }}>
+          <table className="w-full text-xs border-collapse">
+            <thead className="sticky top-0 z-10">
+              <tr className="bg-slate-700 text-white">
+                <th className="px-3 py-2 text-left font-semibold border-r border-slate-600 whitespace-nowrap">เดือน</th>
+                <th className="px-3 py-2 text-center font-semibold border-r border-slate-600 whitespace-nowrap" colSpan={2}>เป้าเก็บหนี้</th>
+                <th className="px-3 py-2 text-center font-semibold border-r border-slate-600 whitespace-nowrap" colSpan={2}>ยอดเก็บหนี้</th>
+                <th className="px-3 py-2 text-center font-semibold whitespace-nowrap">อัปเดต</th>
+              </tr>
+              <tr className="bg-slate-100 text-slate-700 border-b">
+                <th className="px-3 py-1.5 text-left font-medium border-r border-slate-200"></th>
+                <th className="px-3 py-1.5 text-right font-medium border-r border-slate-200 text-amber-700">ยอดเป้า</th>
+                <th className="px-3 py-1.5 text-right font-medium border-r border-slate-200 text-amber-700">สัญญา</th>
+                <th className="px-3 py-1.5 text-right font-medium border-r border-slate-200 text-emerald-700">ยอดเก็บ</th>
+                <th className="px-3 py-1.5 text-right font-medium border-r border-slate-200 text-emerald-700">สัญญา</th>
+                <th className="px-3 py-1.5 text-center font-medium"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {snapshots.map((row, idx) => {
+                const achievePct = row.targetAmount > 0 ? Math.round((row.collectedAmount / row.targetAmount) * 100) : null;
+                return (
+                  <tr key={row.collectionMonth} className={`border-b hover:bg-blue-50 transition-colors ${idx % 2 === 0 ? "bg-white" : "bg-gray-50"}`}>
+                    <td className="px-3 py-2 font-medium text-slate-700 border-r border-slate-100 whitespace-nowrap">
+                      {fmtMonth(row.collectionMonth)}
+                      {row.collectedIsFrozen && <span className="ml-1.5 text-[10px] text-slate-400">❄️</span>}
+                    </td>
+                    {/* เป้าเก็บหนี้ */}
+                    <td className="px-3 py-2 text-right tabular-nums border-r border-slate-100">
+                      <button
+                        type="button"
+                        onClick={() => setLightbox({ type: "target", month: row.collectionMonth })}
+                        className="text-amber-700 font-medium hover:underline cursor-pointer"
+                        title={`ดูรายละเอียดเป้าเก็บหนี้ ${fmtMonth(row.collectionMonth)}`}
+                      >
+                        {fmtMoney(row.targetAmount)}
+                      </button>
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums border-r border-slate-100 text-slate-500">
+                      {row.targetContractCount.toLocaleString("th-TH")}
+                    </td>
+                    {/* ยอดเก็บหนี้ */}
+                    <td className="px-3 py-2 text-right tabular-nums border-r border-slate-100">
+                      <button
+                        type="button"
+                        onClick={() => setLightbox({ type: "collected", month: row.collectionMonth })}
+                        className="text-emerald-700 font-medium hover:underline cursor-pointer"
+                        title={`ดูรายละเอียดยอดเก็บหนี้ ${fmtMonth(row.collectionMonth)}`}
+                      >
+                        {fmtMoney(row.collectedAmount)}
+                      </button>
+                      {achievePct !== null && (
+                        <span className={`ml-1.5 text-[10px] font-semibold px-1 py-0.5 rounded ${
+                          achievePct >= 100 ? "bg-emerald-100 text-emerald-700" :
+                          achievePct >= 80 ? "bg-yellow-100 text-yellow-700" :
+                          "bg-red-100 text-red-600"
+                        }`}>{achievePct}%</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums border-r border-slate-100 text-slate-500">
+                      {row.collectedContractCount.toLocaleString("th-TH")}
+                    </td>
+                    <td className="px-3 py-2 text-center text-slate-400 text-[10px]">
+                      {row.updatedAt ? row.updatedAt.slice(0, 16).replace("T", " ") : "-"}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Lightbox Dialog */}
+      <Dialog open={!!lightbox} onOpenChange={(open) => { if (!open) setLightbox(null); }}>
+        <DialogContent className="max-w-5xl w-[96vw] max-h-[90vh] flex flex-col p-0 gap-0">
+          <DialogHeader className="px-4 pt-4 pb-2 border-b flex-shrink-0">
+            <div className="flex items-center justify-between gap-2">
+              <DialogTitle className="flex items-center gap-2 text-base">
+                {lightbox?.type === "target" ? (
+                  <><Target className="w-4 h-4 text-amber-600" />
+                  <span className="text-amber-700">เป้าเก็บหนี้</span></>
+                ) : (
+                  <><Coins className="w-4 h-4 text-emerald-600" />
+                  <span className="text-emerald-700">ยอดเก็บหนี้</span></>
+                )}
+                <span className="text-slate-600 font-normal">เดือน {lightbox ? fmtMonth(lightbox.month) : ""}</span>
+                <span className="text-slate-400 text-xs font-normal">({detailTotal.toLocaleString("th-TH")} รายการ)</span>
+              </DialogTitle>
+              {canExport && (
+                <Button
+                  size="sm"
+                  className="bg-green-600 hover:bg-green-700 text-white flex-shrink-0"
+                  onClick={handleLightboxExport}
+                >
+                  <Download className="w-3.5 h-3.5 mr-1.5" />
+                  Export Excel
+                </Button>
+              )}
+            </div>
+          </DialogHeader>
+
+          {/* Lightbox filters */}
+          <div className="px-4 py-2 border-b flex-shrink-0 flex flex-wrap items-center gap-2">
+            <div className="relative flex-1 min-w-[180px]">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+              <Input
+                placeholder="ค้นหา: เลขที่สัญญา / ชื่อลูกค้า"
+                className="pl-8 h-8 text-sm bg-white"
+                value={lightboxSearch}
+                onChange={(e) => setLightboxSearch(e.target.value)}
+              />
+            </div>
+            <select
+              value={lightboxDebtRange ?? ""}
+              onChange={(e) => setLightboxDebtRange(e.target.value || undefined)}
+              className="h-8 pl-2 pr-6 rounded-md border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">ทุกสถานะหนี้</option>
+              {DEBT_RANGES.map((r) => <option key={r} value={r}>{r}</option>)}
+            </select>
+            {(lightboxSearch || lightboxProductType || lightboxDebtRange) && (
+              <button
+                type="button"
+                onClick={() => { setLightboxSearch(""); setLightboxProductType(undefined); setLightboxDebtRange(undefined); }}
+                className="text-xs text-gray-400 hover:text-red-500 underline"
+              >
+                ล้างฟิลเตอร์
+              </button>
+            )}
+          </div>
+
+          {/* Lightbox table */}
+          <div className="flex-1 overflow-auto px-0">
+            {activeDetail?.isLoading ? (
+              <div className="flex items-center justify-center py-12"><Spinner /></div>
+            ) : detailRows.length === 0 ? (
+              <div className="text-center py-12 text-gray-400 text-sm">ไม่พบข้อมูล</div>
+            ) : lightbox?.type === "target" ? (
+              <table className="w-full text-xs border-collapse">
+                <thead className="sticky top-0 z-10">
+                  <tr className="bg-amber-700 text-white">
+                    <th className="px-2 py-2 text-center border-r border-amber-600 whitespace-nowrap">#</th>
+                    <th className="px-2 py-2 text-left border-r border-amber-600 whitespace-nowrap">วันที่อนุมัติ</th>
+                    <th className="px-2 py-2 text-left border-r border-amber-600 whitespace-nowrap">เลขที่สัญญา</th>
+                    <th className="px-2 py-2 text-left border-r border-amber-600 whitespace-nowrap">ชื่อ-นามสกุล</th>
+                    <th className="px-2 py-2 text-left border-r border-amber-600 whitespace-nowrap">ประเภทเครื่อง</th>
+                    <th className="px-2 py-2 text-left border-r border-amber-600 whitespace-nowrap">สถานะหนี้</th>
+                    <th className="px-2 py-2 text-center border-r border-amber-600 whitespace-nowrap">งวดที่</th>
+                    <th className="px-2 py-2 text-left border-r border-amber-600 whitespace-nowrap">วันที่ต้องชำระ</th>
+                    <th className="px-2 py-2 text-right border-r border-amber-600 whitespace-nowrap">เงินต้น</th>
+                    <th className="px-2 py-2 text-right border-r border-amber-600 whitespace-nowrap">ดอกเบี้ย</th>
+                    <th className="px-2 py-2 text-right border-r border-amber-600 whitespace-nowrap">ค่าดำเนินการ</th>
+                    <th className="px-2 py-2 text-right border-r border-amber-600 whitespace-nowrap">ค่าปรับ</th>
+                    <th className="px-2 py-2 text-right border-r border-amber-600 whitespace-nowrap">ค่าปลดล็อก</th>
+                    <th className="px-2 py-2 text-right border-r border-amber-600 whitespace-nowrap">ยอดหนี้คงเหลือ</th>
+                    <th className="px-2 py-2 text-right whitespace-nowrap">ชำระแล้ว</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {detailRows.map((row: any, idx: number) => (
+                    <tr key={`${row.contract_no}-${row.period}-${idx}`} className={`border-b hover:bg-amber-50 transition-colors ${idx % 2 === 0 ? "bg-white" : "bg-amber-50/30"}`}>
+                      <td className="px-2 py-1.5 text-center text-slate-400 border-r">{lightboxPage * pageSize + idx + 1}</td>
+                      <td className="px-2 py-1.5 border-r whitespace-nowrap">{fmtDate(row.approve_date)}</td>
+                      <td className="px-2 py-1.5 border-r font-mono text-xs whitespace-nowrap">{row.contract_no}</td>
+                      <td className="px-2 py-1.5 border-r whitespace-nowrap">{row.customer_name}</td>
+                      <td className="px-2 py-1.5 border-r whitespace-nowrap">{row.product_type}</td>
+                      <td className="px-2 py-1.5 border-r whitespace-nowrap">
+                        <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                          row.debt_range === "ปกติ" ? "bg-green-100 text-green-700" :
+                          row.debt_range?.startsWith("เกิน 6") || row.debt_range?.startsWith("เกิน >") ? "bg-red-100 text-red-700" :
+                          row.debt_range?.startsWith("เกิน") ? "bg-orange-100 text-orange-700" :
+                          "bg-gray-100 text-gray-600"
+                        }`}>{row.debt_range ?? "-"}</span>
+                      </td>
+                      <td className="px-2 py-1.5 text-center border-r">{row.period}</td>
+                      <td className="px-2 py-1.5 border-r whitespace-nowrap">{fmtDate(row.due_date)}</td>
+                      <td className="px-2 py-1.5 text-right tabular-nums border-r">{fmtMoney(row.principal)}</td>
+                      <td className="px-2 py-1.5 text-right tabular-nums border-r">{fmtMoney(row.interest)}</td>
+                      <td className="px-2 py-1.5 text-right tabular-nums border-r">{fmtMoney(row.fee)}</td>
+                      <td className="px-2 py-1.5 text-right tabular-nums border-r">{fmtMoney(row.penalty)}</td>
+                      <td className="px-2 py-1.5 text-right tabular-nums border-r">{fmtMoney(row.unlock_fee)}</td>
+                      <td className="px-2 py-1.5 text-right tabular-nums border-r font-semibold text-amber-700">{fmtMoney(row.net_amount)}</td>
+                      <td className="px-2 py-1.5 text-right tabular-nums">{fmtMoney(row.paid_amount)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <table className="w-full text-xs border-collapse">
+                <thead className="sticky top-0 z-10">
+                  <tr className="bg-emerald-700 text-white">
+                    <th className="px-2 py-2 text-center border-r border-emerald-600 whitespace-nowrap">#</th>
+                    <th className="px-2 py-2 text-left border-r border-emerald-600 whitespace-nowrap">วันที่อนุมัติ</th>
+                    <th className="px-2 py-2 text-left border-r border-emerald-600 whitespace-nowrap">เลขที่สัญญา</th>
+                    <th className="px-2 py-2 text-left border-r border-emerald-600 whitespace-nowrap">ชื่อ-นามสกุล</th>
+                    <th className="px-2 py-2 text-left border-r border-emerald-600 whitespace-nowrap">ประเภทเครื่อง</th>
+                    <th className="px-2 py-2 text-left border-r border-emerald-600 whitespace-nowrap">สถานะหนี้</th>
+                    <th className="px-2 py-2 text-center border-r border-emerald-600 whitespace-nowrap">รายการ</th>
+                    <th className="px-2 py-2 text-left border-r border-emerald-600 whitespace-nowrap">วันที่ชำระ</th>
+                    <th className="px-2 py-2 text-right border-r border-emerald-600 whitespace-nowrap">เงินต้น</th>
+                    <th className="px-2 py-2 text-right border-r border-emerald-600 whitespace-nowrap">ดอกเบี้ย</th>
+                    <th className="px-2 py-2 text-right border-r border-emerald-600 whitespace-nowrap">ค่าดำเนินการ</th>
+                    <th className="px-2 py-2 text-right border-r border-emerald-600 whitespace-nowrap">ค่าปรับ</th>
+                    <th className="px-2 py-2 text-right border-r border-emerald-600 whitespace-nowrap">ค่าปลดล็อก</th>
+                    <th className="px-2 py-2 text-right border-r border-emerald-600 whitespace-nowrap">ส่วนลด</th>
+                    <th className="px-2 py-2 text-right border-r border-emerald-600 whitespace-nowrap">ชำระเกิน</th>
+                    <th className="px-2 py-2 text-right whitespace-nowrap">ยอดชำระรวม</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {detailRows.map((row: any, idx: number) => (
+                    <tr key={`${row.contract_no}-${row.payment_external_id}-${idx}`} className={`border-b hover:bg-emerald-50 transition-colors ${idx % 2 === 0 ? "bg-white" : "bg-emerald-50/30"}`}>
+                      <td className="px-2 py-1.5 text-center text-slate-400 border-r">{lightboxPage * pageSize + idx + 1}</td>
+                      <td className="px-2 py-1.5 border-r whitespace-nowrap">{fmtDate(row.approve_date)}</td>
+                      <td className="px-2 py-1.5 border-r font-mono text-xs whitespace-nowrap">{row.contract_no}</td>
+                      <td className="px-2 py-1.5 border-r whitespace-nowrap">{row.customer_name}</td>
+                      <td className="px-2 py-1.5 border-r whitespace-nowrap">{row.product_type}</td>
+                      <td className="px-2 py-1.5 border-r whitespace-nowrap">
+                        <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                          row.debt_range === "ปกติ" ? "bg-green-100 text-green-700" :
+                          row.debt_range?.startsWith("เกิน 6") || row.debt_range?.startsWith("เกิน >") ? "bg-red-100 text-red-700" :
+                          row.debt_range?.startsWith("เกิน") ? "bg-orange-100 text-orange-700" :
+                          "bg-gray-100 text-gray-600"
+                        }`}>{row.debt_range ?? "-"}</span>
+                      </td>
+                      <td className="px-2 py-1.5 text-center border-r">{row.period_no}</td>
+                      <td className="px-2 py-1.5 border-r whitespace-nowrap">{fmtDate(row.paid_at)}</td>
+                      <td className="px-2 py-1.5 text-right tabular-nums border-r">{fmtMoney(row.principal)}</td>
+                      <td className="px-2 py-1.5 text-right tabular-nums border-r">{fmtMoney(row.interest)}</td>
+                      <td className="px-2 py-1.5 text-right tabular-nums border-r">{fmtMoney(row.fee)}</td>
+                      <td className="px-2 py-1.5 text-right tabular-nums border-r">{fmtMoney(row.penalty)}</td>
+                      <td className="px-2 py-1.5 text-right tabular-nums border-r">{fmtMoney(row.unlock_fee)}</td>
+                      <td className="px-2 py-1.5 text-right tabular-nums border-r text-teal-600">{fmtMoney(row.discount)}</td>
+                      <td className="px-2 py-1.5 text-right tabular-nums border-r text-emerald-600">{fmtMoney(row.overpaid)}</td>
+                      <td className="px-2 py-1.5 text-right tabular-nums font-semibold text-emerald-700">{fmtMoney(row.total_amount)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="px-4 py-2 border-t flex-shrink-0 flex items-center justify-between gap-2">
+              <span className="text-xs text-slate-500">
+                หน้า {lightboxPage + 1} / {totalPages} ({detailTotal.toLocaleString("th-TH")} รายการ)
+              </span>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  disabled={lightboxPage === 0}
+                  onClick={() => setLightboxPage(Math.max(0, lightboxPage - 1))}
+                  className="px-2 py-1 text-xs rounded border border-gray-200 bg-white hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  ← ก่อนหน้า
+                </button>
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  const start = Math.max(0, Math.min(lightboxPage - 2, totalPages - 5));
+                  const page = start + i;
+                  return (
+                    <button
+                      key={page}
+                      type="button"
+                      onClick={() => setLightboxPage(page)}
+                      className={`px-2 py-1 text-xs rounded border ${
+                        page === lightboxPage
+                          ? "bg-blue-600 text-white border-blue-600"
+                          : "border-gray-200 bg-white hover:bg-gray-50"
+                      }`}
+                    >
+                      {page + 1}
+                    </button>
+                  );
+                })}
+                <button
+                  type="button"
+                  disabled={lightboxPage >= totalPages - 1}
+                  onClick={() => setLightboxPage(Math.min(totalPages - 1, lightboxPage + 1))}
+                  className="px-2 py-1 text-xs rounded border border-gray-200 bg-white hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  ถัดไป →
+                </button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
 export default function DebtReport() {
   const { can, isSuperAdmin, isLoading: isAuthLoading } = useAppAuth();
   const { section } = useSection();
@@ -393,7 +837,19 @@ export default function DebtReport() {
   const canView = can("debt_report", "view");
   const canExport = can("debt_report", "export");
 
-  const [tab, setTab] = useState<"target" | "collected">("target");
+  const [tab, setTab] = useState<"target" | "collected" | "monthly">("target");
+
+  // ── Monthly tab state ────────────────────────────────────────────────────────
+  // lightbox state: เปิด lightbox เป้าเก็บหนี้ หรือ ยอดเก็บหนี้ ของเดือนที่เลือก
+  const [monthlyLightbox, setMonthlyLightbox] = useState<{
+    type: "target" | "collected";
+    month: string; // YYYY-MM
+  } | null>(null);
+  const [monthlyLightboxSearch, setMonthlyLightboxSearch] = useState("");
+  const [monthlyLightboxProductType, setMonthlyLightboxProductType] = useState<string | undefined>(undefined);
+  const [monthlyLightboxDebtRange, setMonthlyLightboxDebtRange] = useState<string | undefined>(undefined);
+  const [monthlyLightboxPage, setMonthlyLightboxPage] = useState(0);
+  const MONTHLY_LIGHTBOX_PAGE_SIZE = 100;
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
@@ -560,10 +1016,10 @@ export default function DebtReport() {
     }
   }, [tab, section, canView, isAuthLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const isLoading = tab === "target" ? streamLoading.target : streamLoading.collected;
-  const isError = tab === "target" ? !!streamError.target : !!streamError.collected;
-  const queryError = tab === "target" ? streamError.target : streamError.collected;
-  const refetch = useCallback(() => fetchStream(tab), [fetchStream, tab]);
+  const isLoading = tab === "target" ? streamLoading.target : (tab === "collected" ? streamLoading.collected : false);
+  const isError = tab === "target" ? !!streamError.target : (tab === "collected" ? !!streamError.collected : false);
+  const queryError = tab === "target" ? streamError.target : (tab === "collected" ? streamError.collected : null);
+  const refetch = useCallback(() => { if (tab !== "monthly") fetchStream(tab as "target" | "collected"); }, [fetchStream, tab]);
 
   // Track elapsed time for first-load progress indicator
   const [elapsedSec, setElapsedSec] = useState(0);
@@ -583,7 +1039,7 @@ export default function DebtReport() {
   const activeRows: (TargetRow | CollectedRow)[] =
     (tab === "target"
       ? (streamData.target?.rows as TargetRow[])
-      : (streamData.collected?.rows as CollectedRow[])) ?? [];
+      : tab === "collected" ? (streamData.collected?.rows as CollectedRow[]) : []) ?? [];
   // hasPrincipalBreakdown: true = Boonphone (แสดง principal/interest/fee จริง)
   //                         false = Fastfone365 (แสดง "-" แทน 0.00)
   const hasPrincipalBreakdown = streamData.collected?.hasPrincipalBreakdown !== false;
@@ -1117,6 +1573,18 @@ export default function DebtReport() {
               <Coins className="w-4 h-4 mr-1.5" />
               ยอดเก็บหนี้
             </Button>
+            <Button
+              variant={tab === "monthly" ? "default" : "outline"}
+              className={
+                tab === "monthly"
+                  ? "bg-blue-600 hover:bg-blue-700 text-white border-blue-600"
+                  : "bg-gray-200 hover:bg-gray-300 text-gray-600 border-gray-200"
+              }
+              onClick={() => setTab("monthly")}
+            >
+              <CalendarRange className="w-4 h-4 mr-1.5" />
+              รายเดือน
+            </Button>
           </div>
           <div className="flex items-center gap-2">
             {/* ปุ่ม i อธิบายสีตัวเลข */}
@@ -1129,7 +1597,7 @@ export default function DebtReport() {
             >
               <Info className="w-4 h-4" />
             </Button>
-            {canExport && (
+            {canExport && tab !== "monthly" && (
               <div className="flex flex-col items-end gap-0.5">
                 <Button
                   className="bg-green-600 hover:bg-green-700 text-white"
@@ -1147,7 +1615,7 @@ export default function DebtReport() {
         </div>
 
         {/* Toolbar: Search > ApproveDate > Date > DueDate > Status > ProductType > PrincipalOnly > ตั้งหนี้ (target) | บันทึกโดย (collected) */}
-        <div className="flex flex-col gap-2 mb-2">
+        {tab !== "monthly" && <div className="flex flex-col gap-2 mb-2">
           <div className="flex flex-col md:flex-row md:items-center gap-2">
             <div className="relative flex-1 min-w-0">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -1279,10 +1747,10 @@ export default function DebtReport() {
               )}
             </div>
           </div>
-        </div>
+        </div>}
 
         {/* Summary line + Summary Badges */}
-        <div className="flex flex-wrap items-start justify-between gap-2 mb-2">
+        {tab !== "monthly" && <div className="flex flex-wrap items-start justify-between gap-2 mb-2">
           <div className="text-xs text-gray-500 self-center">
             ทั้งหมด {activeRows.length.toLocaleString("th-TH")} สัญญา · กรอง{" "}
             {filteredRows.length.toLocaleString("th-TH")} รายการ ·{" "}
@@ -1365,10 +1833,13 @@ export default function DebtReport() {
               </span>
             </div>
           )}
-        </div>
+        </div>}
+
+        {/* Monthly tab content */}
+        {tab === "monthly" && <MonthlyTabContent section={section} canExport={canExport} lightbox={monthlyLightbox} setLightbox={setMonthlyLightbox} lightboxSearch={monthlyLightboxSearch} setLightboxSearch={setMonthlyLightboxSearch} lightboxProductType={monthlyLightboxProductType} setLightboxProductType={setMonthlyLightboxProductType} lightboxDebtRange={monthlyLightboxDebtRange} setLightboxDebtRange={setMonthlyLightboxDebtRange} lightboxPage={monthlyLightboxPage} setLightboxPage={setMonthlyLightboxPage} pageSize={MONTHLY_LIGHTBOX_PAGE_SIZE} />}
 
         {/* Table */}
-        {isError ? (
+        {tab !== "monthly" && (isError ? (
           /* Phase 32: แสดง error state พร้อมปุ่ม retry */
           <div className="flex flex-col items-center justify-center py-20 gap-4">
             <div className="text-center">
@@ -2224,8 +2695,7 @@ export default function DebtReport() {
             </div>
           </div>
 
-        )}
-
+        ))}
         {/* Phase 125: Pagination removed — ใช้ Virtual Scroll กับ filteredRows ทั้งหมด */}
       </div>
 

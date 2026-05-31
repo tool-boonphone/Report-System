@@ -20,8 +20,11 @@ import {
   type ContractSort,
 } from "../contractsDb";
 import { streamTargetFromCache, streamCollectedFromCache } from "../sync/queryCacheDb";
+import { storageGetSignedUrl } from "../storage";
+import { listDebtTarget, listDebtCollected } from "../debtDb";
 
 import { getBadDebtSummary } from "../badDebtDb";
+import { getDebtReport } from "../debtDb";
 import {
   setMoneyCell,
   setIntCell,
@@ -367,7 +370,7 @@ export async function handleDebtTargetExport(req: Request, res: Response) {
     const todayStr = new Date().toISOString().slice(0, 10); // YYYY-MM-DD for future period check
 
     // Helper: check if a contract matches all active filters (target tab)
-    function contractMatchesTarget(contract: any): boolean {
+    const contractMatchesTarget = (contract: any): boolean => {
       if (search) {
         const hay = `${contract.contractNo ?? ""} ${contract.customerName ?? ""} ${contract.phone ?? ""}`.toLowerCase();
         if (!hay.includes(search)) return false;
@@ -599,7 +602,7 @@ export async function handleDebtCollectedExport(req: Request, res: Response) {
 
     // Helper: check if a contract matches all active filters (collected tab)
     // Note: dueDateFilter on collected tab matches paidAt (payment date), not due_date
-    function contractMatchesCollected(contract: any): boolean {
+    const contractMatchesCollected = (contract: any): boolean => {
       if (searchC) {
         const hay = `${contract.contractNo ?? ""} ${contract.customerName ?? ""} ${contract.phone ?? ""}`.toLowerCase();
         if (!hay.includes(searchC)) return false;
@@ -833,18 +836,6 @@ export async function handleDebtExport(req: Request, res: Response) {
     }
     const variant = variantRaw as "target" | "collected";
 
-    // ── Pre-built export: redirect to S3 URL if available ──────────────────
-    const prebuilt = await getDebtExportEntry(section, variant);
-    if (prebuilt) {
-      try {
-        const signedUrl = await storageGetSignedUrl(prebuilt.storageKey);
-        res.redirect(302, signedUrl);
-        return;
-      } catch (redirectErr: any) {
-        console.warn(`[export] Pre-built redirect failed, falling back to on-the-fly:`, redirectErr?.message);
-      }
-    }
-
     const search = req.query.search ? String(req.query.search).trim() : "";
     const statusFilter = req.query.status ? String(req.query.status) : "";
     const dueDateExact = req.query.dueDateExact ? String(req.query.dueDateExact) : "";
@@ -855,26 +846,14 @@ export async function handleDebtExport(req: Request, res: Response) {
     const productTypeRaw = req.query.productType ? String(req.query.productType) : "";
     const productTypes = productTypeRaw ? new Set(productTypeRaw.split(",").filter(Boolean)) : new Set<string>();
 
-    // 1. Load all rows — use in-memory cache (same as UI) to avoid timeout.
+    // 1. Load all rows from DB
     let rows: any[];
     if (variant === "target") {
-      await waitForPrewarmTarget(section);
-      const cached = getCachedTarget(section);
-      if (cached) {
-        rows = cached.rows ?? cached;
-      } else {
-        const r = await listDebtTarget({ section });
-        rows = r.rows;
-      }
+      const r = await listDebtTarget({ section });
+      rows = r.rows;
     } else {
-      await waitForPrewarmCollected(section);
-      const cached = getCachedCollected(section);
-      if (cached) {
-        rows = cached.rows ?? cached;
-      } else {
-        const r = await listDebtCollected({ section });
-        rows = r.rows;
-      }
+      const r = await listDebtCollected({ section });
+      rows = r.rows;
     }
 
     // 2. Apply same filters as the UI.
@@ -1478,7 +1457,16 @@ export async function handleMonthlySummaryExport(req: Request, res: Response) {
       return;
     }
 
-        const year = req.query.year ? String(req.query.year) : undefined;
+    const sectionRaw = String(req.query.section ?? "");
+    let section: SectionKey;
+    try {
+      section = normalizeSectionKey(sectionRaw);
+    } catch {
+      res.status(400).json({ message: "ต้องระบุ section" });
+      return;
+    }
+
+    const year = req.query.year ? String(req.query.year) : undefined;
     const month = req.query.month ? String(req.query.month) : undefined;
 
     if (!year) {
@@ -1587,7 +1575,16 @@ export async function handleYearlySummaryExport(req: Request, res: Response) {
       return;
     }
 
-        const year = req.query.year ? String(req.query.year) : undefined;
+    const sectionRaw = String(req.query.section ?? "");
+    let section: SectionKey;
+    try {
+      section = normalizeSectionKey(sectionRaw);
+    } catch {
+      res.status(400).json({ message: "ต้องระบุ section" });
+      return;
+    }
+
+    const year = req.query.year ? String(req.query.year) : undefined;
 
     if (!year) {
       res.status(400).json({ message: "ต้องระบุปี (year)" });
@@ -1695,17 +1692,25 @@ export async function handleBadDebtSummaryExport(req: Request, res: Response) {
       return;
     }
 
-        const year = req.query.year ? String(req.query.year) : undefined;
+    const sectionRaw = String(req.query.section ?? "");
+    let section: SectionKey;
+    try {
+      section = normalizeSectionKey(sectionRaw);
+    } catch {
+      res.status(400).json({ message: "ต้องระบุ section" });
+      return;
+    }
+
+    const year = req.query.year ? String(req.query.year) : undefined;
 
     if (!year) {
       res.status(400).json({ message: "ต้องระบุปี (year)" });
       return;
     }
 
-    const { summary } = await getBadDebtSummary({
-      section: section,
-      year: Number(year),
-    });
+    // getBadDebtSummary ใช้ approveMonth filter (ไม่มี year parameter)
+    // Export ข้อมูลหนี้เสียทั้งหมดของ section
+    const { rows: badDebtRows, summary } = await getBadDebtSummary({ section });
 
     const fileName = `bad_debt_summary_${section}_${year}_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.xlsx`;
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
@@ -1716,9 +1721,12 @@ export async function handleBadDebtSummaryExport(req: Request, res: Response) {
     const ws = wb.addWorksheet("สรุปหนี้เสีย");
 
     const columns = [
-      { key: "month", header: "เดือน", width: 12, type: "text" },
-      { key: "badDebtCount", header: "จำนวนสัญญาหนี้เสีย", width: 20, type: "number" },
-      { key: "badDebtAmount", header: "ยอดหนี้เสีย (บาท)", width: 20, type: "money" },
+      { key: "contractNo", header: "เลขที่สัญญา", width: 22, type: "text" },
+      { key: "customerName", header: "ชื่อ-นามสกุล", width: 22, type: "text" },
+      { key: "approveDate", header: "วันที่อนุมัติ", width: 14, type: "date" },
+      { key: "financeAmount", header: "ยอดจัดสรร (บาท)", width: 18, type: "money" },
+      { key: "totalInstallmentPaid", header: "ชำระแล้ว (บาท)", width: 18, type: "money" },
+      { key: "profitLoss", header: "กำไร/ขาดทุน (บาท)", width: 18, type: "money" },
     ];
 
     ws.columns = columns.map(col => ({ key: col.key, width: col.width }));
@@ -1733,26 +1741,16 @@ export async function handleBadDebtSummaryExport(req: Request, res: Response) {
     });
     headerRow.commit();
 
-    // Summary row
-    const summaryRow = ws.addRow({});
-    summaryRow.getCell(1).value = "รวม";
-    setIntCell(summaryRow.getCell(2), summary.totalBadDebtCount);
-    setMoneyCell(summaryRow.getCell(3), summary.totalBadDebtAmount);
-    summaryRow.font = { bold: true };
-    summaryRow.commit();
-
-    for (const row of summary.monthlyBreakdown) {
+    for (const row of badDebtRows) {
       const exRow = ws.addRow({});
       let colIdx = 1;
       for (const col of columns) {
         const cell = exRow.getCell(colIdx++);
         const value = (row as any)[col.key];
-        if (col.key === "month") {
-          cell.value = value;
-        } else if (col.type === "money") {
+        if (col.type === "money") {
           setMoneyCell(cell, value);
-        } else if (col.type === "number") {
-          setIntCell(cell, value);
+        } else if (col.type === "date") {
+          setDateCell(cell, value);
         } else {
           cell.value = value != null ? String(value) : "";
         }
@@ -1766,6 +1764,382 @@ export async function handleBadDebtSummaryExport(req: Request, res: Response) {
 
   } catch (err) {
     console.error("[export] bad-debt-summary failed:", err);
+    if (!res.headersSent) {
+      res.status(500).json({ message: "Export failed" });
+    } else {
+      res.end();
+    }
+  }
+}
+
+/* ----------------------------------------------------------------------- */
+/*  Monthly Collection Snapshot — Lightbox Export                          */
+/* ----------------------------------------------------------------------- */
+
+// Columns for monthly target lightbox export
+const MONTHLY_TARGET_LEFT_COLUMNS: Array<{
+  key: string; header: string; width: number; type: "text" | "money" | "number" | "date";
+}> = [
+  { key: "seq",               header: "#",               width: 6,  type: "number" },
+  { key: "approve_date",      header: "วันที่อนุมัติ",   width: 14, type: "date"   },
+  { key: "contract_no",       header: "เลขที่สัญญา",    width: 22, type: "text"   },
+  { key: "customer_name",     header: "ชื่อ-นามสกุล",   width: 22, type: "text"   },
+  { key: "product_type",      header: "ประเภทเครื่อง",  width: 14, type: "text"   },
+  { key: "partner_name",      header: "พาร์ทเนอร์",     width: 18, type: "text"   },
+  { key: "device",            header: "อุปกรณ์",         width: 12, type: "text"   },
+  { key: "model",             header: "รุ่น",             width: 16, type: "text"   },
+  { key: "debt_range",        header: "สถานะหนี้",       width: 14, type: "text"   },
+  { key: "contract_status",   header: "สถานะสัญญา",     width: 14, type: "text"   },
+];
+
+const MONTHLY_TARGET_SUB_COLUMNS: Array<{
+  key: string; header: string; width: number; type: "text" | "money" | "number" | "date";
+}> = [
+  { key: "period",      header: "งวดที่",          width: 8,  type: "number" },
+  { key: "due_date",    header: "วันที่ต้องชำระ",  width: 14, type: "date"   },
+  { key: "principal",   header: "เงินต้น",          width: 12, type: "money"  },
+  { key: "interest",    header: "ดอกเบี้ย",         width: 12, type: "money"  },
+  { key: "fee",         header: "ค่าดำเนินการ",     width: 12, type: "money"  },
+  { key: "penalty",     header: "ค่าปรับ",           width: 10, type: "money"  },
+  { key: "unlock_fee",  header: "ค่าปลดล็อก",       width: 12, type: "money"  },
+  { key: "net_amount",  header: "ยอดหนี้คงเหลือ",   width: 18, type: "money"  },
+  { key: "total_amount",header: "ยอดหนี้รวม",       width: 18, type: "money"  },
+  { key: "paid_amount", header: "ชำระแล้ว",          width: 12, type: "money"  },
+];
+
+// Columns for monthly collected lightbox export
+const MONTHLY_COLLECTED_LEFT_COLUMNS: Array<{
+  key: string; header: string; width: number; type: "text" | "money" | "number" | "date";
+}> = [
+  { key: "seq",               header: "#",               width: 6,  type: "number" },
+  { key: "approve_date",      header: "วันที่อนุมัติ",   width: 14, type: "date"   },
+  { key: "contract_no",       header: "เลขที่สัญญา",    width: 22, type: "text"   },
+  { key: "customer_name",     header: "ชื่อ-นามสกุล",   width: 22, type: "text"   },
+  { key: "product_type",      header: "ประเภทเครื่อง",  width: 14, type: "text"   },
+  { key: "partner_name",      header: "พาร์ทเนอร์",     width: 18, type: "text"   },
+  { key: "device",            header: "อุปกรณ์",         width: 12, type: "text"   },
+  { key: "model",             header: "รุ่น",             width: 16, type: "text"   },
+  { key: "debt_range",        header: "สถานะหนี้",       width: 14, type: "text"   },
+  { key: "contract_status",   header: "สถานะสัญญา",     width: 14, type: "text"   },
+];
+
+const MONTHLY_COLLECTED_SUB_COLUMNS: Array<{
+  key: string; header: string; width: number; type: "text" | "money" | "number" | "date";
+}> = [
+  { key: "period_no",         header: "รายการ",           width: 8,  type: "number" },
+  { key: "paid_at",           header: "วันที่ชำระ",        width: 14, type: "date"   },
+  { key: "principal",         header: "เงินต้น",           width: 12, type: "money"  },
+  { key: "interest",          header: "ดอกเบี้ย",          width: 12, type: "money"  },
+  { key: "fee",               header: "ค่าดำเนินการ",      width: 12, type: "money"  },
+  { key: "penalty",           header: "ค่าปรับ",            width: 10, type: "money"  },
+  { key: "unlock_fee",        header: "ค่าปลดล็อก",        width: 10, type: "money"  },
+  { key: "discount",          header: "ส่วนลด",             width: 10, type: "money"  },
+  { key: "overpaid",          header: "ชำระเกิน",           width: 10, type: "money"  },
+  { key: "bad_debt",          header: "หนี้เสีย",           width: 10, type: "money"  },
+  { key: "total_amount",      header: "ยอดที่ชำระรวม",     width: 14, type: "money"  },
+];
+
+const MONTHLY_TARGET_GROUP_ARGB   = "FFB45309"; // amber-700 (เหมือน debt target)
+const MONTHLY_COLLECTED_GROUP_ARGB = "FF047857"; // emerald-700 (เหมือน debt collected)
+
+/**
+ * Export Excel สำหรับ Lightbox เป้าเก็บหนี้รายเดือน
+ * GET /api/export/monthly-target-detail?section=...&collectionMonth=YYYY-MM&search=...&productType=...&debtRange=...
+ */
+export async function handleMonthlyTargetDetailExport(req: Request, res: Response) {
+  try {
+    const sid = parseCookies(req.headers.cookie)[APP_SESSION_COOKIE];
+    const appUser = sid ? await getUserFromSession(sid) : null;
+    if (!appUser) {
+      res.status(401).json({ message: "Please login (10001)" });
+      return;
+    }
+    if (!checkPermission(appUser, "debt_report", "export")) {
+      res.status(403).json({ message: "ไม่มีสิทธิ์ Export รายงานหนี้" });
+      return;
+    }
+
+    const sectionRaw = String(req.query.section ?? "");
+    let section: SectionKey;
+    try {
+      section = normalizeSectionKey(sectionRaw);
+    } catch {
+      res.status(400).json({ message: "ต้องระบุ section" });
+      return;
+    }
+
+    const collectionMonth = req.query.collectionMonth ? String(req.query.collectionMonth) : "";
+    if (!collectionMonth || !/^\d{4}-\d{2}$/.test(collectionMonth)) {
+      res.status(400).json({ message: "ต้องระบุ collectionMonth (YYYY-MM)" });
+      return;
+    }
+
+    const search = req.query.search ? String(req.query.search).toLowerCase() : undefined;
+    const productType = req.query.productType ? String(req.query.productType) : undefined;
+    const debtRange = req.query.debtRange ? String(req.query.debtRange) : undefined;
+
+    // Import DB helper
+    const { getMonthlyTargetDetail: getDetail } = await import("../monthlyCollectionSnapshotDb");
+
+    const fileName = `monthly_target_${collectionMonth}_${section}_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.xlsx`;
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+    res.flushHeaders();
+
+    const wb = new ExcelJS.stream.xlsx.WorkbookWriter({ stream: res, useStyles: true });
+    const ws = wb.addWorksheet(`เป้าเก็บหนี้ ${collectionMonth}`);
+
+    const columns = [
+      ...MONTHLY_TARGET_LEFT_COLUMNS,
+      ...MONTHLY_TARGET_SUB_COLUMNS,
+    ];
+    ws.columns = columns.map(col => ({ key: col.key, width: col.width }));
+
+    const groups = [
+      { label: "ข้อมูลสัญญา", colCount: MONTHLY_TARGET_LEFT_COLUMNS.length, argb: DEBT_LEFT_ARGB },
+      { label: `เป้าเก็บหนี้ ${collectionMonth}`, colCount: MONTHLY_TARGET_SUB_COLUMNS.length, argb: MONTHLY_TARGET_GROUP_ARGB },
+    ];
+
+    // Row 1: Group headers
+    const row1 = ws.getRow(1);
+    let colOffset = 1;
+    for (const grp of groups) {
+      for (let ci = 0; ci < grp.colCount; ci++) {
+        const cell = row1.getCell(colOffset + ci);
+        cell.value = ci === 0 ? grp.label : null;
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: grp.argb } };
+        cell.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 10 };
+        cell.alignment = { vertical: "middle", horizontal: "center" };
+      }
+      if (grp.colCount > 1) ws.mergeCells(1, colOffset, 1, colOffset + grp.colCount - 1);
+      colOffset += grp.colCount;
+    }
+    row1.height = 22;
+    row1.commit();
+
+    // Row 2: Column headers
+    const row2 = ws.getRow(2);
+    let colIdx2 = 1;
+    for (const grp of groups) {
+      for (let ci = 0; ci < grp.colCount; ci++) {
+        const col = columns[colIdx2 - 1];
+        const cell = row2.getCell(colIdx2);
+        cell.value = col?.header ?? "";
+        cell.fill = {
+          type: "pattern", pattern: "solid",
+          fgColor: { argb: grp.argb === DEBT_LEFT_ARGB ? DEBT_LEFT_SUB_ARGB : "FFFBE9E9" },
+        };
+        cell.font = { bold: true, size: 9 };
+        cell.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
+        cell.border = { bottom: { style: "thin", color: { argb: "FFD1D5DB" } } };
+        colIdx2++;
+      }
+    }
+    row2.height = 30;
+    row2.commit();
+
+    // Stream data in batches
+    const BATCH_SIZE = 500;
+    let offset = 0;
+    let seq = 0;
+    let hasMore = true;
+
+    while (hasMore) {
+      const { rows, total } = await getDetail({
+        section,
+        collectionMonth,
+        search,
+        productType,
+        debtRange,
+        offset,
+        limit: BATCH_SIZE,
+      });
+
+      for (const row of rows) {
+        seq++;
+        const exRow = ws.addRow({});
+        let colIdx = 1;
+        for (const col of columns) {
+          const cell = exRow.getCell(colIdx++);
+          if (col.key === "seq") {
+            cell.value = seq;
+            cell.numFmt = INT_FORMAT;
+            cell.alignment = { horizontal: "center" };
+          } else if (col.type === "money") {
+            setMoneyCell(cell, row[col.key]);
+          } else if (col.type === "number") {
+            setIntCell(cell, row[col.key]);
+          } else if (col.type === "date") {
+            setDateCell(cell, row[col.key]);
+          } else {
+            const v = row[col.key];
+            cell.value = v != null ? String(v) : "";
+          }
+        }
+        exRow.commit();
+      }
+
+      offset += rows.length;
+      hasMore = rows.length === BATCH_SIZE && offset < total;
+    }
+
+    ws.commit();
+    await wb.commit();
+  } catch (err) {
+    console.error("[export] monthly-target-detail failed:", err);
+    if (!res.headersSent) {
+      res.status(500).json({ message: "Export failed" });
+    } else {
+      res.end();
+    }
+  }
+}
+
+/**
+ * Export Excel สำหรับ Lightbox ยอดเก็บหนี้รายเดือน
+ * GET /api/export/monthly-collected-detail?section=...&collectionMonth=YYYY-MM&search=...&productType=...&debtRange=...
+ */
+export async function handleMonthlyCollectedDetailExport(req: Request, res: Response) {
+  try {
+    const sid = parseCookies(req.headers.cookie)[APP_SESSION_COOKIE];
+    const appUser = sid ? await getUserFromSession(sid) : null;
+    if (!appUser) {
+      res.status(401).json({ message: "Please login (10001)" });
+      return;
+    }
+    if (!checkPermission(appUser, "debt_report", "export")) {
+      res.status(403).json({ message: "ไม่มีสิทธิ์ Export รายงานหนี้" });
+      return;
+    }
+
+    const sectionRaw = String(req.query.section ?? "");
+    let section: SectionKey;
+    try {
+      section = normalizeSectionKey(sectionRaw);
+    } catch {
+      res.status(400).json({ message: "ต้องระบุ section" });
+      return;
+    }
+
+    const collectionMonth = req.query.collectionMonth ? String(req.query.collectionMonth) : "";
+    if (!collectionMonth || !/^\d{4}-\d{2}$/.test(collectionMonth)) {
+      res.status(400).json({ message: "ต้องระบุ collectionMonth (YYYY-MM)" });
+      return;
+    }
+
+    const search = req.query.search ? String(req.query.search).toLowerCase() : undefined;
+    const productType = req.query.productType ? String(req.query.productType) : undefined;
+    const debtRange = req.query.debtRange ? String(req.query.debtRange) : undefined;
+
+    // Import DB helper
+    const { getMonthlyCollectedDetail: getDetail } = await import("../monthlyCollectionSnapshotDb");
+
+    const fileName = `monthly_collected_${collectionMonth}_${section}_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.xlsx`;
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+    res.flushHeaders();
+
+    const wb = new ExcelJS.stream.xlsx.WorkbookWriter({ stream: res, useStyles: true });
+    const ws = wb.addWorksheet(`ยอดเก็บหนี้ ${collectionMonth}`);
+
+    const columns = [
+      ...MONTHLY_COLLECTED_LEFT_COLUMNS,
+      ...MONTHLY_COLLECTED_SUB_COLUMNS,
+    ];
+    ws.columns = columns.map(col => ({ key: col.key, width: col.width }));
+
+    const groups = [
+      { label: "ข้อมูลสัญญา", colCount: MONTHLY_COLLECTED_LEFT_COLUMNS.length, argb: DEBT_LEFT_ARGB },
+      { label: `ยอดเก็บหนี้ ${collectionMonth}`, colCount: MONTHLY_COLLECTED_SUB_COLUMNS.length, argb: MONTHLY_COLLECTED_GROUP_ARGB },
+    ];
+
+    // Row 1: Group headers
+    const row1 = ws.getRow(1);
+    let colOffset = 1;
+    for (const grp of groups) {
+      for (let ci = 0; ci < grp.colCount; ci++) {
+        const cell = row1.getCell(colOffset + ci);
+        cell.value = ci === 0 ? grp.label : null;
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: grp.argb } };
+        cell.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 10 };
+        cell.alignment = { vertical: "middle", horizontal: "center" };
+      }
+      if (grp.colCount > 1) ws.mergeCells(1, colOffset, 1, colOffset + grp.colCount - 1);
+      colOffset += grp.colCount;
+    }
+    row1.height = 22;
+    row1.commit();
+
+    // Row 2: Column headers
+    const row2 = ws.getRow(2);
+    let colIdx2 = 1;
+    for (const grp of groups) {
+      for (let ci = 0; ci < grp.colCount; ci++) {
+        const col = columns[colIdx2 - 1];
+        const cell = row2.getCell(colIdx2);
+        cell.value = col?.header ?? "";
+        cell.fill = {
+          type: "pattern", pattern: "solid",
+          fgColor: { argb: grp.argb === DEBT_LEFT_ARGB ? DEBT_LEFT_SUB_ARGB : "FFF0FDFA" },
+        };
+        cell.font = { bold: true, size: 9 };
+        cell.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
+        cell.border = { bottom: { style: "thin", color: { argb: "FFD1D5DB" } } };
+        colIdx2++;
+      }
+    }
+    row2.height = 30;
+    row2.commit();
+
+    // Stream data in batches
+    const BATCH_SIZE = 500;
+    let offset = 0;
+    let seq = 0;
+    let hasMore = true;
+
+    while (hasMore) {
+      const { rows, total } = await getDetail({
+        section,
+        collectionMonth,
+        search,
+        productType,
+        debtRange,
+        offset,
+        limit: BATCH_SIZE,
+      });
+
+      for (const row of rows) {
+        seq++;
+        const exRow = ws.addRow({});
+        let colIdx = 1;
+        for (const col of columns) {
+          const cell = exRow.getCell(colIdx++);
+          if (col.key === "seq") {
+            cell.value = seq;
+            cell.numFmt = INT_FORMAT;
+            cell.alignment = { horizontal: "center" };
+          } else if (col.type === "money") {
+            setMoneyCell(cell, row[col.key]);
+          } else if (col.type === "number") {
+            setIntCell(cell, row[col.key]);
+          } else if (col.type === "date") {
+            setDateCell(cell, row[col.key]);
+          } else {
+            const v = row[col.key];
+            cell.value = v != null ? String(v) : "";
+          }
+        }
+        exRow.commit();
+      }
+
+      offset += rows.length;
+      hasMore = rows.length === BATCH_SIZE && offset < total;
+    }
+
+    ws.commit();
+    await wb.commit();
+  } catch (err) {
+    console.error("[export] monthly-collected-detail failed:", err);
     if (!res.headersSent) {
       res.status(500).json({ message: "Export failed" });
     } else {
