@@ -279,39 +279,14 @@ export const monthlySummaryRouter = router({
         deviceFamily: input.deviceFamily,
         search: input.search || undefined,
       };
-      // ดึง totals ที่ถูกต้อง (group by approve_date) พร้อมกัน
-      const [summaryRowsDirect, totalsRows] = await Promise.all([
-        getDueMonthSummary(params),  // ← ดึงจาก DB โดยตรงเสมอ
-        getMonthlySummaryTotalsOnly(input.section, {
-          section: input.section,
-          // ใน DueMonthSummary ไม่มี per-tab filter — ใช้ productType/deviceFamily/approveMonths ร่วมกัน
-          countProductType:    input.productType,
-          countDeviceFamily:   input.deviceFamily,
-          countApproveMonths:  input.approveMonths,
-          targetProductType:   input.productType,
-          targetDeviceFamily:  input.deviceFamily,
-          paidProductType:     input.productType,
-          paidDeviceFamily:    input.deviceFamily,
-          dueProductType:      input.productType,
-          dueDeviceFamily:     input.deviceFamily,
-          notYetDueProductType:  input.productType,
-          notYetDueDeviceFamily: input.deviceFamily,
-          installTotalProductType:  input.productType,
-          installTotalDeviceFamily: input.deviceFamily,
-          installTotalApproveMonths: input.approveMonths,
-          search: input.search || undefined,
-        }),
-      ]);
-      // totalsRows = grand total single object (ไม่แยก approve_month)
-      const gt = totalsRows;
-
+      // ดึงจาก DB โดยตรง — row.totalPaid/totalDue/totalTarget ถูกต้องต่อ approveMonth อยู่แล้ว
+      const summaryRowsDirect = await getDueMonthSummary(params);
       let summaryRows = summaryRowsDirect;
       const dueMonthSet = new Set<string>();
       for (const row of summaryRows) {
         for (const dm of Object.keys(row.dueMonths)) dueMonthSet.add(dm);
       }
       let allDueMonths = Array.from(dueMonthSet).sort((a, b) => a.localeCompare(b));
-      const usedCache = false;
       console.log(`[getDueMonthSummary] DIRECT DB — section=${params.section} rows=${summaryRows.length} pt=${params.productType??'null'} df=${params.deviceFamily??'null'}`);
 
       // Flatten to array of flat rows for JSON transport
@@ -344,51 +319,52 @@ export const monthlySummaryRouter = router({
             financeTotal: cell.financeTotal ?? 0,
           });
         }
-        // __total__ row — ใช้ grand total (getMonthlySummaryTotalsOnly) เพื่อความถูกต้อง
-        const t = gt;
+        // __total__ row — ใช้ค่าต่อ approveMonth จาก row โดยตรง (ไม่ใช้ grand total)
+        // row.totalPaid/totalDue/totalTarget/totalNotYetDue/totalInstallTotal
+        // ถูกคำนวณ SUM จาก due_month cells ของ approveMonth นั้นแล้วใน getDueMonthSummary()
         flatRows.push({
           approveMonth: row.approveMonth,
           dueMonth: "__total__",
-          contractCount:          t?.contractCount  ?? row.approvedCount,
-          paidTotal:              t?.paidTotal              ?? row.totalPaid.total,
-          paidPrincipal:          t?.paidPrincipal          ?? 0,
-          paidInterest:           t?.paidInterest           ?? 0,
-          paidFee:                t?.paidFee                ?? 0,
-          paidPenalty:            t?.paidPenalty            ?? 0,
-          paidUnlockFee:          t?.paidUnlockFee          ?? 0,
-          paidDiscount:           t?.paidDiscount           ?? 0,
-          paidOverpaid:           t?.paidOverpaid           ?? 0,
-          paidBadDebt:            t?.paidBadDebt            ?? 0,
-          paidBadDebtInstallment: t?.paidBadDebtInstallment ?? 0,
-          targetTotal:            t?.targetTotal    ?? row.totalTarget.total,
-          targetPrincipal:        t?.targetPrincipal ?? 0,
-          targetInterest:         t?.targetInterest  ?? 0,
-          targetFee:              t?.targetFee       ?? 0,
-          targetPenalty:          t?.targetPenalty   ?? 0,
-          targetUnlockFee:        t?.targetUnlockFee ?? 0,
-          dueTotal:               t?.dueTotal        ?? row.totalDue.total,
-          duePrincipal:           t?.duePrincipal    ?? 0,
-          dueInterest:            t?.dueInterest     ?? 0,
-          dueFee:                 t?.dueFee          ?? 0,
-          duePenalty:             t?.duePenalty      ?? 0,
-          dueUnlockFee:           t?.dueUnlockFee    ?? 0,
-          notYetDueTotal:         t?.notYetDueTotal  ?? row.totalNotYetDue.total,
-          notYetDuePrincipal:     t?.notYetDuePrincipal ?? 0,
-          notYetDueInterest:      t?.notYetDueInterest  ?? 0,
-          notYetDueFee:           t?.notYetDueFee        ?? 0,
-          notYetDuePenalty:       t?.notYetDuePenalty    ?? 0,
-          notYetDueUnlockFee:     t?.notYetDueUnlockFee  ?? 0,
-          installTotalTotal:      t?.installTotal    ?? row.totalInstallTotal.total,
-          installTotalPrincipal:  t?.installPrincipal ?? 0,
-          installTotalInterest:   t?.installInterest  ?? 0,
-          installTotalFee:        t?.installFee       ?? 0,
-          financeTotal:           t?.financeTotal    ?? row.totalFinanceTotal ?? 0,
+          contractCount:          row.approvedCount,
+          paidTotal:              row.totalPaid.total,
+          paidPrincipal:          row.totalPaid.principal,
+          paidInterest:           row.totalPaid.interest,
+          paidFee:                row.totalPaid.fee,
+          paidPenalty:            row.totalPaid.penalty,
+          paidUnlockFee:          row.totalPaid.unlockFee,
+          paidDiscount:           row.totalPaid.discount,
+          paidOverpaid:           row.totalPaid.overpaid,
+          paidBadDebt:            row.totalPaid.badDebt,
+          paidBadDebtInstallment: row.totalPaid.badDebtInstallment,
+          targetTotal:            row.totalTarget.total,
+          targetPrincipal:        row.totalTarget.principal,
+          targetInterest:         row.totalTarget.interest,
+          targetFee:              row.totalTarget.fee,
+          targetPenalty:          row.totalTarget.penalty,
+          targetUnlockFee:        row.totalTarget.unlockFee,
+          dueTotal:               row.totalDue.total,
+          duePrincipal:           row.totalDue.principal,
+          dueInterest:            row.totalDue.interest,
+          dueFee:                 row.totalDue.fee,
+          duePenalty:             row.totalDue.penalty,
+          dueUnlockFee:           row.totalDue.unlockFee,
+          notYetDueTotal:         row.totalNotYetDue.total,
+          notYetDuePrincipal:     row.totalNotYetDue.principal,
+          notYetDueInterest:      row.totalNotYetDue.interest,
+          notYetDueFee:           row.totalNotYetDue.fee,
+          notYetDuePenalty:       row.totalNotYetDue.penalty,
+          notYetDueUnlockFee:     row.totalNotYetDue.unlockFee,
+          installTotalTotal:      row.totalInstallTotal.total,
+          installTotalPrincipal:  row.totalInstallTotal.principal,
+          installTotalInterest:   row.totalInstallTotal.interest,
+          installTotalFee:        row.totalInstallTotal.fee,
+          financeTotal:           row.totalFinanceTotal ?? 0,
         });
       }
 
       // Debug: log totalFinanceTotal per approveMonth
       const financeSummary = summaryRows.map((r) => `${r.approveMonth}=${r.totalFinanceTotal?.toFixed(0)}`);
-      console.log(`[getDueMonthSummary] source=${usedCache?'cache':'direct'} financeTotal=[${financeSummary.join(',')}]`);
+      console.log(`[getDueMonthSummary] DIRECT DB financeTotal=[${financeSummary.join(',')}]`);
 
       return {
         rowsJson: JSON.stringify(flatRows),
