@@ -271,7 +271,6 @@ export const monthlySummaryRouter = router({
       search: z.string().max(100).optional(),
     }))
     .query(async ({ input }) => {
-      // Direct query — ดึงจาก DB โดยตรงเสมอ (ไม่ใช้ cache เป็น primary)
       const params = {
         section: input.section,
         approveMonths: input.approveMonths,
@@ -279,15 +278,40 @@ export const monthlySummaryRouter = router({
         deviceFamily: input.deviceFamily,
         search: input.search || undefined,
       };
-      // ดึงจาก DB โดยตรง — row.totalPaid/totalDue/totalTarget ถูกต้องต่อ approveMonth อยู่แล้ว
-      const summaryRowsDirect = await getDueMonthSummary(params);
-      let summaryRows = summaryRowsDirect;
-      const dueMonthSet = new Set<string>();
-      for (const row of summaryRows) {
-        for (const dm of Object.keys(row.dueMonths)) dueMonthSet.add(dm);
+
+      // Smart Cache Strategy:
+      // - ใช้ cache เมื่อไม่มี search (cache ไม่รองรับ search)
+      // - fallback ไป live query เมื่อมี search หรือ cache ว่างเปล่า
+      let summaryRows: Awaited<ReturnType<typeof getDueMonthSummary>>;
+      let allDueMonths: string[];
+
+      if (!params.search) {
+        // Fast path: ดึงจาก cache
+        const cached = await getDueMonthSummaryFromCache(params);
+        if (cached.rows.length > 0) {
+          summaryRows = cached.rows;
+          allDueMonths = cached.allDueMonths;
+          console.log(`[getDueMonthSummary] CACHE HIT — section=${params.section} rows=${summaryRows.length} pt=${params.productType??'null'} df=${params.deviceFamily??'null'}`);
+        } else {
+          // Cache miss: fallback ไป live query
+          console.log(`[getDueMonthSummary] CACHE MISS — fallback to live query section=${params.section}`);
+          summaryRows = await getDueMonthSummary(params);
+          const dueMonthSet = new Set<string>();
+          for (const row of summaryRows) {
+            for (const dm of Object.keys(row.dueMonths)) dueMonthSet.add(dm);
+          }
+          allDueMonths = Array.from(dueMonthSet).sort((a, b) => a.localeCompare(b));
+        }
+      } else {
+        // Live query: มี search
+        console.log(`[getDueMonthSummary] LIVE QUERY (search) — section=${params.section}`);
+        summaryRows = await getDueMonthSummary(params);
+        const dueMonthSet = new Set<string>();
+        for (const row of summaryRows) {
+          for (const dm of Object.keys(row.dueMonths)) dueMonthSet.add(dm);
+        }
+        allDueMonths = Array.from(dueMonthSet).sort((a, b) => a.localeCompare(b));
       }
-      let allDueMonths = Array.from(dueMonthSet).sort((a, b) => a.localeCompare(b));
-      console.log(`[getDueMonthSummary] DIRECT DB — section=${params.section} rows=${summaryRows.length} pt=${params.productType??'null'} df=${params.deviceFamily??'null'}`);
 
       // Flatten to array of flat rows for JSON transport
       type FlatDueMonthRow = {
