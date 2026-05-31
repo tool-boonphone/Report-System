@@ -1184,6 +1184,20 @@ async function getMonthlySummaryFromCache(
     return `date_month IS NULL`;
   }
 
+  // dateMonthCondAll: เหมือน dateMonthCond แต่เมื่อไม่มี filter จะดึงทุก date_month (1=1)
+  // ใช้กับ paid/notYetDue ซึ่ง date_month มีค่าเสมอ (ไม่เคย NULL)
+  function dateMonthCondAll(months: string[] | undefined, singleDate: string | undefined): string {
+    if (singleDate) {
+      const m = singleDate.substring(0, 7);
+      return `date_month = '${m}'`;
+    }
+    if (months && months.length > 0) {
+      const list = months.map((m) => `'${m}'`).join(",");
+      return `date_month IN (${list})`;
+    }
+    return `1=1`; // ไม่มี filter → ดึงทุก date_month
+  }
+
   function productTypeCond(pt: string | undefined): string {
     if (pt) return `product_type = '${pt.replace(/'/g, "''")}'`;
     return `product_type IS NULL`;
@@ -1234,7 +1248,8 @@ async function getMonthlySummaryFromCache(
         AND ${dateMonthCond(params.targetDueMonths, params.targetDueDate)}
       ORDER BY approve_month DESC
     `)),
-    // paid: approveMonth filter (populate เก็บ dateMonth = approveMonth ตั้งแต่ Phase 141-fix2)
+    // paid: approveMonth filter (populate เก็บ dateMonth = approveMonth)
+    // ใช้ dateMonthCondAll เพราะ date_month มีค่าเสมอ (ไม่เคย NULL)
     db.execute(sql.raw(`
       SELECT approve_month, bucket, contract_count,
              principal AS principal_paid, interest AS interest_paid,
@@ -1246,7 +1261,7 @@ async function getMonthlySummaryFromCache(
       WHERE section = '${section}' AND query_type = 'paid'
         AND ${productTypeCond(params.paidProductType)}
         AND ${deviceFamilyCond(params.paidDeviceFamily)}
-        AND ${dateMonthCond(params.paidApproveMonths, undefined)}
+        AND ${dateMonthCondAll(params.paidApproveMonths, params.paidAtDate)}
       ORDER BY approve_month DESC
     `)),
     // due: dueAtMonth filter
@@ -1262,7 +1277,8 @@ async function getMonthlySummaryFromCache(
         AND ${dateMonthCond(params.dueAtMonths, params.dueAtDate)}
       ORDER BY approve_month DESC
     `)),
-    // notYetDue: dueMonth filter
+    // notYetDue: dueMonth filter (populate เก็บ dateMonth = dueMonth)
+    // ใช้ dateMonthCondAll เพราะ date_month มีค่าเสมอ (ไม่เคย NULL)
     db.execute(sql.raw(`
       SELECT approve_month, bucket, contract_count,
              principal AS principal_notyet, interest AS interest_notyet,
@@ -1272,7 +1288,7 @@ async function getMonthlySummaryFromCache(
       WHERE section = '${section}' AND query_type = 'notYetDue'
         AND ${productTypeCond(params.notYetDueProductType)}
         AND ${deviceFamilyCond(params.notYetDueDeviceFamily)}
-        AND ${dateMonthCond(params.notYetDueDueMonths, params.notYetDueDueDate)}
+        AND ${dateMonthCondAll(params.notYetDueDueMonths, params.notYetDueDueDate)}
       ORDER BY approve_month DESC
     `)),
     // installTotal: ไม่มี dateMonth filter
