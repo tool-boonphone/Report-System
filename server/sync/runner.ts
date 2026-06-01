@@ -709,8 +709,7 @@ export async function syncMdmOnlineDays(
 ): Promise<number> {
   const { getDb } = await import("../db");
   const { contracts } = await import("../../drizzle/schema");
-  const { eq, and } = await import("drizzle-orm");
-  const { getBatchMdmData } = await import("../services/mdm");
+  const { eq, and, isNotNull } = await import("drizzle-orm");
 
   const db = await getDb(section);
   if (!db) return 0;
@@ -719,7 +718,7 @@ export async function syncMdmOnlineDays(
   const rows = await db
     .select({ externalId: contracts.externalId, serialNo: contracts.serialNo })
     .from(contracts)
-    .where(eq(contracts.section, section));
+    .where(and(eq(contracts.section, section), isNotNull(contracts.serialNo)));
 
   const validRows = rows.filter((r: { externalId: string; serialNo: string | null }) => r.serialNo);
   const total = validRows.length;
@@ -727,44 +726,31 @@ export async function syncMdmOnlineDays(
 
   if (total === 0) return 0;
 
-  // ดึง MDM device list ครั้งเดียว แล้ว match ทั้งหมด
-  // getBatchMdmData คืนเฉพาะ SN ที่เจอใน MDM (SN ที่ไม่เจอ = ไม่มี entry ใน map)
-  const serials = validRows.map((r: { externalId: string; serialNo: string | null }) => r.serialNo as string);
   onProgress?.(0, total);
-  const snMdmMap = await getBatchMdmData(serials, section);
 
-  console.log(`[syncMdmOnlineDays] ${section}: MDM returned ${snMdmMap.size} matched devices out of ${total} contracts`);
-
-  // Bulk update ทุก row เสมอ:
-  //   - SN เจอใน MDM → บันทึกค่าใหม่ (days + lastTime + deviceLock จริง)
-  //   - SN ไม่เจอใน MDM → set null ทั้งหมด (แสดงเป็น – ในตาราง)
-  //   - MDM API fail (ไม่มี device เลย) → set null ทั้งหมด (เหมือนกัน)
+  // Bulk update ทุก row ให้เป็น null เพื่อรอให้ frontend มาดึง MDM ทีหลัง
+  // (แก้ปัญหา Cloudflare block Render IP)
   let updated = 0;
   const BATCH = 100;
   for (let i = 0; i < validRows.length; i += BATCH) {
     const batch = validRows.slice(i, i + BATCH);
     await Promise.all(
       batch.map(async (r: { externalId: string; serialNo: string | null }) => {
-        const mdm = snMdmMap.get(r.serialNo!);
-        // mdm = undefined → SN ไม่เจอใน MDM → set null ทั้งหมด (แสดง –)
-        // mdm = { days, lastTime, deviceLock } → SN เจอ → บันทึกค่าจริง
         await db
           .update(contracts)
           .set({
-            lastOnlineDays: mdm?.days ?? null,
-            // ใช้ lastTime จริงจาก MDM ("YYYY-MM-DD HH:mm:ss") แทน CURRENT_TIMESTAMP
-            lastOnlineAt: mdm?.lastTime ?? null,
-            // deviceLock: true=ล็อค, false=ปลดล็อค, null=ไม่พบใน MDM
-            deviceLock: mdm !== undefined ? (mdm.deviceLock ?? null) : null,
+            lastOnlineDays: null,
+            lastOnlineAt: null,
+            deviceLock: null,
           })
           .where(and(eq(contracts.section, section), eq(contracts.externalId, r.externalId)));
-        if (mdm?.days !== null && mdm?.days !== undefined) updated++;
+        updated++;
       })
     );
     onProgress?.(Math.min(i + BATCH, total), total);
   }
 
-  console.log(`[syncMdmOnlineDays] ${section}: updated ${updated}/${total} contracts with online days`);
+  console.log(`[syncMdmOnlineDays] ${section}: cleared MDM data for ${updated}/${total} contracts (waiting for frontend sync)`);
   return updated;
 }
 

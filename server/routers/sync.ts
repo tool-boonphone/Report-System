@@ -110,6 +110,36 @@ export const syncRouter = router({
    * ดึง MDM device list ครั้งเดียว แล้ว bulk update last_online_days ใน contracts
    * ไม่ต้องรอ Full Sync — ใช้ได้ทันทีหลัง deploy
    */
+  /**
+   * ตรวจสอบว่า MDM ข้อมูลเก่าหรือไม่ (last_online_days เป็น null สำหรับเครื่องที่มี serial_no)
+   */
+  isMdmStale: appProcedure
+    .input(z.object({ section: sectionSchema }))
+    .query(async ({ input }) => {
+      const section = input.section as SectionKey;
+      const { getDb } = await import("../db");
+      const { contracts } = await import("../../drizzle/schema");
+      const { eq, and, isNotNull, isNull, count } = await import("drizzle-orm");
+      
+      const db = await getDb(section);
+      if (!db) return { stale: false, staleCount: 0 };
+      
+      // นับจำนวนเครื่องที่มี serial_no แต่ last_online_days เป็น null
+      const res = await db
+        .select({ value: count() })
+        .from(contracts)
+        .where(
+          and(
+            eq(contracts.section, section),
+            isNotNull(contracts.serialNo),
+            isNull(contracts.lastOnlineDays)
+          )
+        );
+        
+      const staleCount = res[0]?.value ?? 0;
+      return { stale: staleCount > 0, staleCount };
+    }),
+
   syncMdm: appProcedure
     .input(z.object({ section: sectionSchema }))
     .mutation(async ({ input, ctx }) => {

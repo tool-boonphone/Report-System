@@ -28,7 +28,7 @@ import { useLocation } from "wouter";
 type ItemStatus = "idle" | "loading" | "done" | "error";
 
 type LoadItem = {
-  key: "contracts" | "target" | "collected";
+  key: "contracts" | "target" | "collected" | "mdm";
   label: string;
   icon: string;
 };
@@ -37,6 +37,7 @@ const LOAD_ITEMS: LoadItem[] = [
   { key: "contracts", label: "สัญญา", icon: "📋" },
   { key: "target", label: "เป้าเก็บหนี้", icon: "🎯" },
   { key: "collected", label: "ยอดเก็บหนี้", icon: "💰" },
+  { key: "mdm", label: "MDM Online", icon: "📱" },
 ];
 
 const CHUNK_SIZE = 1000;
@@ -246,22 +247,28 @@ export default function DataLoadingScreen() {
     contracts: "idle",
     target: "idle",
     collected: "idle",
+    mdm: "idle",
   });
   const [loaded, setLoaded] = useState<Record<LoadItem["key"], number>>({
     contracts: 0,
     target: 0,
     collected: 0,
+    mdm: 0,
   });
   const [total, setTotal] = useState<Record<LoadItem["key"], number>>({
     contracts: 0,
     target: 0,
     collected: 0,
+    mdm: 0,
   });
   const [errors, setErrors] = useState<Record<LoadItem["key"], string | null>>({
     contracts: null,
     target: null,
     collected: null,
+    mdm: null,
   });
+
+  const [mdmStale, setMdmStale] = useState(false);
 
   const startedRef = useRef(false);
   const idbCheckedRef = useRef(false);
@@ -435,12 +442,104 @@ export default function DataLoadingScreen() {
 
   // ─── Main preload logic ───────────────────────────────────────────────────
 
-  const startPreload = useCallback(async (sec: SectionKey) => {
+  const getMdmApiKeyQuery = trpc.sync.getMdmApiKey.useQuery(
+    { section: (section ?? "Boonphone") as SectionKey },
+    { enabled: false, retry: false, refetchOnWindowFocus: false }
+  );
+
+  const saveMdmDataMutation = trpc.sync.saveMdmData.useMutation();
+
+  const fetchMdm = useCallback(async (sec: SectionKey, staleCount: number) => {
+    setStatus("mdm", "loading");
+    setItemLoaded("mdm", 0);
+    setItemTotal("mdm", staleCount);
+    
+    try {
+      // 1. ขอ API Key
+      const keyResult = await getMdmApiKeyQuery.refetch();
+      const apiKey = keyResult.data?.apiKey;
+      if (!apiKey) throw new Error("ไม่พบ MDM API Key");
+
+      // 2. ดึงข้อมูล MDM
+      const PAGE_SIZE = 1000;
+      let pageNum = 1;
+      let totalDevices = 0;
+      let fetched = 0;
+      const devicePayload: any[] = [];
+
+      do {
+        const url = `https://mdm-th.com/api/mdm/devices?pageNum=${pageNum}&pageSize=${PAGE_SIZE}`;
+        const res = await fetch(url, {
+          headers: {
+            "X-API-Key": apiKey,
+            "Accept": "application/json, text/plain, */*",
+            "Accept-Language": "th-TH,th;q=0.9,en;q=0.8",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "Referer": "https://mdm-th.com/",
+            "Origin": "https://mdm-th.com",
+          },
+          signal: AbortSignal.timeout(30_000),
+        });
+
+        if (!res.ok) {
+          const body = await res.text().catch(() => "");
+          throw new Error(`MDM API ตอบกลับ ${res.status}: ${body.slice(0, 100)}`);
+        }
+
+        const json = await res.json();
+        const devices = Array.isArray(json) ? json : (json?.rows ?? json?.data ?? json?.devices ?? []);
+        
+        if (pageNum === 1) {
+          totalDevices = json?.total ?? devices.length;
+          setItemTotal("mdm", totalDevices);
+        }
+
+        for (const d of devices) {
+          if (d.deviceId && d.lastTime) {
+            const lockVal = d.deviceLock;
+            const isLocked = lockVal === 1 || lockVal === "1" || lockVal === true;
+            devicePayload.push({
+              deviceId: d.deviceId.trim().toUpperCase(),
+              lastTime: d.lastTime,
+              deviceLock: isLocked,
+            });
+          }
+        }
+
+        fetched += devices.length;
+        setItemLoaded("mdm", fetched);
+        pageNum++;
+      } while (fetched < totalDevices && totalDevices > 0);
+
+      // 3. บันทึกลง DB
+      if (devicePayload.length > 0) {
+        await saveMdmDataMutation.mutateAsync({
+          section: sec,
+          devices: devicePayload,
+        });
+      }
+      
+      setStatus("mdm", "done");
+    } catch (err: any) {
+      const msg = err?.message ?? "เกิดข้อผิดพลาดในการดึงข้อมูล MDM";
+      setItemError("mdm", msg);
+      setStatus("mdm", "error"); // ให้ข้ามไปได้แม้ MDM จะ error
+    }
+  }, [setStatus, setItemLoaded, setItemTotal, setItemError, getMdmApiKeyQuery, saveMdmDataMutation]);
+
+  const startPreload = useCallback(async (sec: SectionKey, needsMdm: boolean, staleCount: number) => {
     if (startedRef.current) return;
     startedRef.current = true;
     await fetchContracts(sec);
     await fetchDebt(sec, "target");
     await fetchDebt(sec, "collected");
+    
+    if (needsMdm) {
+      await fetchMdm(sec, staleCount);
+    } else {
+      setStatus("mdm", "done"); // ข้าม MDM
+    }
+    
     // บันทึกลง IndexedDB หลังโหลดครบทั้งหมด
     const cache = debtCache.getCache(sec);
     if (cache.target && cache.collected) {
@@ -460,29 +559,67 @@ export default function DataLoadingScreen() {
     if (phase !== "loading") return;
     if (authLoading || !isAuthenticated || !section) return;
 
-    // ตรวจสอบว่า memory cache มีข้อมูลอยู่แล้วหรือไม่
-    const memCache = debtCache.getCache(section as SectionKey);
-    if (memCache.target && memCache.collected) {        navigate(popReturnPath() ?? "/contracts", { replace: true });
-      return;
-    }
     // ป้องกัน IDB check ซ้ำ
     if (idbCheckedRef.current) return;
     idbCheckedRef.current = true;
 
-    // ตรวจสอบ IndexedDB cache ก่อนโหลดจาก API
-    readIdbCache(section as SectionKey).then((idbEntry) => {
-      if (idbEntry) {
-        // มี IDB cache ที่ยังไม่หมดอายุ → restore เข้า memory แล้วไปหน้า contracts ทันที
-        debtCache.setTargetRows(section as SectionKey, idbEntry.targetRows);
-        debtCache.setCollectedRows(section as SectionKey, idbEntry.collectedRows, idbEntry.hasPrincipalBreakdown);
-        navigate(popReturnPath() ?? "/contracts", { replace: true });
-      } else {
-        // ไม่มี IDB cache → โหลดจาก API ตามปกติ
-        startPreload(section as SectionKey);
+    const runInit = async () => {
+      // ตรวจสอบ MDM Stale ก่อน
+      let needsMdm = false;
+      let mdmStaleCount = 0;
+      try {
+        const staleRes = await utils.sync.isMdmStale.fetch({ section: section as SectionKey });
+        needsMdm = staleRes.stale;
+        mdmStaleCount = staleRes.staleCount;
+        setMdmStale(needsMdm);
+        if (!needsMdm) {
+          setStatus("mdm", "done");
+        }
+      } catch (err) {
+        console.warn("[DataLoadingScreen] isMdmStale error:", err);
+        setStatus("mdm", "done"); // ถ้าเช็คไม่ได้ ให้ข้ามไปเลย
       }
-    }).catch(() => {
-      startPreload(section as SectionKey);
-    });
+
+      // ตรวจสอบว่า memory cache มีข้อมูลอยู่แล้วหรือไม่
+      const memCache = debtCache.getCache(section as SectionKey);
+      if (memCache.target && memCache.collected) {
+        if (needsMdm) {
+          // มีข้อมูลใน cache แต่ MDM stale -> ให้ดึงแค่ MDM
+          setStatus("contracts", "done");
+          setStatus("target", "done");
+          setStatus("collected", "done");
+          await fetchMdm(section as SectionKey, mdmStaleCount);
+        }
+        navigate(popReturnPath() ?? "/contracts", { replace: true });
+        return;
+      }
+
+      // ตรวจสอบ IndexedDB cache ก่อนโหลดจาก API
+      try {
+        const idbEntry = await readIdbCache(section as SectionKey);
+        if (idbEntry) {
+          // มี IDB cache ที่ยังไม่หมดอายุ → restore เข้า memory
+          debtCache.setTargetRows(section as SectionKey, idbEntry.targetRows);
+          debtCache.setCollectedRows(section as SectionKey, idbEntry.collectedRows, idbEntry.hasPrincipalBreakdown);
+          
+          if (needsMdm) {
+            // IDB มีข้อมูล แต่ MDM stale -> ให้ดึงแค่ MDM
+            setStatus("contracts", "done");
+            setStatus("target", "done");
+            setStatus("collected", "done");
+            await fetchMdm(section as SectionKey, mdmStaleCount);
+          }
+          navigate(popReturnPath() ?? "/contracts", { replace: true });
+        } else {
+          // ไม่มี IDB cache → โหลดจาก API ตามปกติ
+          startPreload(section as SectionKey, needsMdm, mdmStaleCount);
+        }
+      } catch (err) {
+        startPreload(section as SectionKey, needsMdm, mdmStaleCount);
+      }
+    };
+
+    runInit();
   }, [phase, authLoading, isAuthenticated, section]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Navigate เมื่อโหลดเสร็จ ──────────────────────────────────────────────
@@ -550,10 +687,10 @@ export default function DataLoadingScreen() {
           onSyncDone={() => {
             // reset state แล้วเข้าหน้าโหลด
             startedRef.current = false;
-            setStatuses({ contracts: "idle", target: "idle", collected: "idle" });
-            setLoaded({ contracts: 0, target: 0, collected: 0 });
-            setTotal({ contracts: 0, target: 0, collected: 0 });
-            setErrors({ contracts: null, target: null, collected: null });
+            setStatuses({ contracts: "idle", target: "idle", collected: "idle", mdm: "idle" });
+            setLoaded({ contracts: 0, target: 0, collected: 0, mdm: 0 });
+            setTotal({ contracts: 0, target: 0, collected: 0, mdm: 0 });
+            setErrors({ contracts: null, target: null, collected: null, mdm: null });
             setPhase("loading");
           }}
         />
@@ -578,6 +715,9 @@ export default function DataLoadingScreen() {
           {/* Progress items */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-5">
             {LOAD_ITEMS.map((item) => {
+              // ซ่อน MDM ถ้าไม่ได้ stale และไม่ได้มีสถานะโหลดอยู่
+              if (item.key === "mdm" && !mdmStale && statuses.mdm === "done") return null;
+
               const status = statuses[item.key];
               const loadedN = loaded[item.key];
               const totalN = total[item.key];
@@ -649,17 +789,17 @@ export default function DataLoadingScreen() {
           <div className="text-center mt-6">
             {allDone ? (
               <p className="text-sm text-green-600 font-medium">โหลดข้อมูลเสร็จสิ้น กำลังเข้าสู่ระบบ...</p>
-            ) : hasError ? (
+            ) : hasError && statuses.mdm !== "error" ? ( // ถ้า MDM error อย่างเดียวให้ไปต่อได้
               <div className="space-y-3">
                 <p className="text-sm text-red-500">เกิดข้อผิดพลาดระหว่างโหลดข้อมูล</p>
                 <button
                   onClick={() => {
                     startedRef.current = false;
-                    setStatuses({ contracts: "idle", target: "idle", collected: "idle" });
-                    setLoaded({ contracts: 0, target: 0, collected: 0 });
-                    setTotal({ contracts: 0, target: 0, collected: 0 });
-                    setErrors({ contracts: null, target: null, collected: null });
-                    if (section) startPreload(section as SectionKey);
+                    setStatuses({ contracts: "idle", target: "idle", collected: "idle", mdm: "idle" });
+                    setLoaded({ contracts: 0, target: 0, collected: 0, mdm: 0 });
+                    setTotal({ contracts: 0, target: 0, collected: 0, mdm: 0 });
+                    setErrors({ contracts: null, target: null, collected: null, mdm: null });
+                    if (section) startPreload(section as SectionKey, mdmStale, total.mdm);
                   }}
                   className="px-4 py-2 text-sm font-medium text-white rounded-lg"
                   style={{ background: accent }}
