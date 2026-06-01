@@ -94,6 +94,8 @@ export async function populateMonthlyCollectionSnapshot(
   console.log(`[monthlySnapshot] ${section}: starting populate`);
 
   // ── 1. Query target aggregates per due_month from debt_target_cache ──────────
+  // ยอดเป้าเก็บหนี้: ตัดออก is_closed, is_future_period, is_suspended, is_bad_debt
+  // (ตรงกับ logic toggle ตั้งหนี้: เหลือแค่ยอดถึงกำหนดชำระ + ค้างชำระ)
   const targetResult = await db.execute(sql`
     SELECT
       TO_CHAR(due_date, 'YYYY-MM') AS due_month,
@@ -105,17 +107,48 @@ export async function populateMonthlyCollectionSnapshot(
       SUM(penalty::numeric) AS target_penalty,
       SUM(unlock_fee::numeric) AS target_unlock_fee,
       SUM(baseline_amount::numeric) AS install_total,
-      SUM(COALESCE(finance_amount::numeric, 0) * COALESCE(installment_count, 0)) AS financed_total,
+      SUM(COALESCE(finance_amount::numeric, 0) * COALESCE(installment_count, 0)) AS financed_total
+    FROM debt_target_cache
+    WHERE section = ${section}
+      AND due_date IS NOT NULL
+      AND is_closed IS NOT TRUE
+      AND is_future_period IS NOT TRUE
+      AND is_suspended IS NOT TRUE
+      AND is_bad_debt IS NOT TRUE
+    GROUP BY TO_CHAR(due_date, 'YYYY-MM')
+    ORDER BY due_month
+  `);
+    const targetRows: any[] = pgRows(targetResult);
+
+  // ── 1b. Query overdue_total per due_month ──────────────────────────────────
+  // ค้างชำระ: ยอดที่ค้างมาจากเดือนก่อนหน้า (due_date < เดือนนั้น)
+  // นับเฉพาะ rows ที่ยังไม่ชำระ (paid_amount < total_amount) และไม่ถูกตัดออกด้วย is_closed/is_suspended/is_bad_debt
+  // Group ตามเดือนถัดไปจาก due_month (คือเดือนที่ค้างจะไปปรากฏในตาราง)
+  const overdueResult = await db.execute(sql`
+    SELECT
+      TO_CHAR(
+        (DATE_TRUNC('month', due_date::date) + INTERVAL '1 month')::date,
+        'YYYY-MM'
+      ) AS overdue_month,
       SUM(GREATEST(COALESCE(total_amount::numeric, 0) - COALESCE(paid_amount::numeric, 0), 0)) AS overdue_total
     FROM debt_target_cache
     WHERE section = ${section}
       AND due_date IS NOT NULL
       AND is_closed IS NOT TRUE
       AND is_future_period IS NOT TRUE
-    GROUP BY TO_CHAR(due_date, 'YYYY-MM')
-    ORDER BY due_month
+      AND is_suspended IS NOT TRUE
+      AND is_bad_debt IS NOT TRUE
+      AND is_paid IS NOT TRUE
+      AND COALESCE(paid_amount::numeric, 0) < COALESCE(total_amount::numeric, 0)
+    GROUP BY DATE_TRUNC('month', due_date::date) + INTERVAL '1 month'
+    ORDER BY overdue_month
   `);
-  const targetRows: any[] = pgRows(targetResult);
+  const overdueRows: any[] = pgRows(overdueResult);
+  const overdueMap = new Map<string, number>();
+  for (const row of overdueRows) {
+    const m = String(row.overdue_month ?? "").slice(0, 7);
+    if (m && m.length === 7) overdueMap.set(m, n(row.overdue_total));
+  }
 
   // ── 2. Query collected aggregates per paid_at month from debt_collected_cache ─
   const collectedResult = await db.execute(sql`
@@ -194,7 +227,7 @@ export async function populateMonthlyCollectionSnapshot(
       targetUnlockFee: n(row.target_unlock_fee),
       installTotal: n(row.install_total),
       financedTotal: n(row.financed_total),
-      overdueTotal: n(row.overdue_total),
+      overdueTotal: overdueMap.get(month) ?? 0, // ค้างชำระจากเดือนก่อนหน้า
       collectedAmount: 0,
       collectedContractCount: 0,
       collectedPrincipal: 0,
@@ -483,6 +516,8 @@ export async function getMonthlyTargetDetail(params: {
     `TO_CHAR(due_date, 'YYYY-MM') = '${collectionMonth}'`,
     `is_closed IS NOT TRUE`,
     `is_future_period IS NOT TRUE`,
+    `is_suspended IS NOT TRUE`,
+    `is_bad_debt IS NOT TRUE`,
   ];
 
   if (search) {
@@ -616,7 +651,10 @@ export async function getMonthlyCollectedDetail(params: {
       partner_name,
       device,
       model,
-      contract_status
+      contract_status,
+      finance_amount,
+      installment_count,
+      remark
     FROM debt_collected_cache
     WHERE ${whereClause}
     ORDER BY contract_no, paid_at

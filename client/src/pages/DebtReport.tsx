@@ -762,7 +762,7 @@ function MonthlyTabContent({
 
       {/* Lightbox Dialog */}
       <Dialog open={!!lightbox} onOpenChange={(open) => { if (!open) setLightbox(null); }}>
-        <DialogContent className="max-w-5xl w-[96vw] max-h-[90vh] flex flex-col p-0 gap-0">
+        <DialogContent className="w-[99vw] max-w-[99vw] max-h-[96vh] flex flex-col p-0 gap-0">
           <DialogHeader className="px-4 pt-4 pb-2 border-b flex-shrink-0">
             <div className="flex items-center justify-between gap-2">
               <DialogTitle className="flex items-center gap-2 text-base">
@@ -833,7 +833,10 @@ function MonthlyTabContent({
                     <th className="px-2 py-2 text-left border-r border-amber-600 whitespace-nowrap">วันที่อนุมัติ</th>
                     <th className="px-2 py-2 text-left border-r border-amber-600 whitespace-nowrap">เลขที่สัญญา</th>
                     <th className="px-2 py-2 text-left border-r border-amber-600 whitespace-nowrap">ชื่อ-นามสกุล</th>
-                    <th className="px-2 py-2 text-left border-r border-amber-600 whitespace-nowrap">ประเภทเครื่อง</th>
+                    <th className="px-2 py-2 text-left border-r border-amber-600 whitespace-nowrap">เบอร์โทร</th>
+                    <th className="px-2 py-2 text-right border-r border-amber-600 whitespace-nowrap">ยอดจัดฯ</th>
+                    <th className="px-2 py-2 text-center border-r border-amber-600 whitespace-nowrap">งวดผ่อน</th>
+                    <th className="px-2 py-2 text-right border-r border-amber-600 whitespace-nowrap">ผ่อนงวดละ</th>
                     <th className="px-2 py-2 text-left border-r border-amber-600 whitespace-nowrap">สถานะหนี้</th>
                     <th className="px-2 py-2 text-center border-r border-amber-600 whitespace-nowrap">งวดที่</th>
                     <th className="px-2 py-2 text-left border-r border-amber-600 whitespace-nowrap">วันที่ต้องชำระ</th>
@@ -847,13 +850,19 @@ function MonthlyTabContent({
                   </tr>
                 </thead>
                 <tbody>
-                  {detailRows.map((row: any, idx: number) => (
+                  {detailRows.map((row: any, idx: number) => {
+                    // คำนวณผ่อนงวดละ = baseline_amount (total_amount ต่องวด)
+                    const installAmt = row.baseline_amount ? Number(row.baseline_amount) : 0;
+                    return (
                     <tr key={`${row.contract_no}-${row.period}-${idx}`} className={`border-b hover:bg-amber-50 transition-colors ${idx % 2 === 0 ? "bg-white" : "bg-amber-50/30"}`}>
                       <td className="px-2 py-1.5 text-center text-slate-400 border-r">{lightboxPage * pageSize + idx + 1}</td>
                       <td className="px-2 py-1.5 border-r whitespace-nowrap">{fmtDate(row.approve_date)}</td>
                       <td className="px-2 py-1.5 border-r font-mono text-xs whitespace-nowrap">{row.contract_no}</td>
                       <td className="px-2 py-1.5 border-r whitespace-nowrap">{row.customer_name}</td>
-                      <td className="px-2 py-1.5 border-r whitespace-nowrap">{row.product_type}</td>
+                      <td className="px-2 py-1.5 border-r whitespace-nowrap">{row.partner_code ?? "-"}</td>
+                      <td className="px-2 py-1.5 text-right tabular-nums border-r">{row.finance_amount ? fmtMoney(row.finance_amount) : "-"}</td>
+                      <td className="px-2 py-1.5 text-center border-r">{row.installment_count ?? "-"}</td>
+                      <td className="px-2 py-1.5 text-right tabular-nums border-r">{installAmt > 0 ? fmtMoney(installAmt) : "-"}</td>
                       <td className="px-2 py-1.5 border-r whitespace-nowrap">
                         <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${
                           row.debt_range === "ปกติ" ? "bg-green-100 text-green-700" :
@@ -872,7 +881,8 @@ function MonthlyTabContent({
                       <td className="px-2 py-1.5 text-right tabular-nums border-r font-semibold text-amber-700">{fmtMoney(row.net_amount)}</td>
                       <td className="px-2 py-1.5 text-right tabular-nums">{fmtMoney(row.paid_amount)}</td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             ) : (
@@ -883,9 +893,12 @@ function MonthlyTabContent({
                     <th className="px-2 py-2 text-left border-r border-emerald-600 whitespace-nowrap">วันที่อนุมัติ</th>
                     <th className="px-2 py-2 text-left border-r border-emerald-600 whitespace-nowrap">เลขที่สัญญา</th>
                     <th className="px-2 py-2 text-left border-r border-emerald-600 whitespace-nowrap">ชื่อ-นามสกุล</th>
-                    <th className="px-2 py-2 text-left border-r border-emerald-600 whitespace-nowrap">ประเภทเครื่อง</th>
+                    <th className="px-2 py-2 text-left border-r border-emerald-600 whitespace-nowrap">เบอร์โทร</th>
+                    <th className="px-2 py-2 text-right border-r border-emerald-600 whitespace-nowrap">ยอดจัดฯ</th>
+                    <th className="px-2 py-2 text-center border-r border-emerald-600 whitespace-nowrap">งวดผ่อน</th>
+                    <th className="px-2 py-2 text-right border-r border-emerald-600 whitespace-nowrap">ผ่อนงวดละ</th>
                     <th className="px-2 py-2 text-left border-r border-emerald-600 whitespace-nowrap">สถานะหนี้</th>
-                    <th className="px-2 py-2 text-center border-r border-emerald-600 whitespace-nowrap">รายการ</th>
+                    <th className="px-2 py-2 text-center border-r border-emerald-600 whitespace-nowrap">งวดที่</th>
                     <th className="px-2 py-2 text-left border-r border-emerald-600 whitespace-nowrap">วันที่ชำระ</th>
                     <th className="px-2 py-2 text-right border-r border-emerald-600 whitespace-nowrap">เงินต้น</th>
                     <th className="px-2 py-2 text-right border-r border-emerald-600 whitespace-nowrap">ดอกเบี้ย</th>
@@ -894,17 +907,25 @@ function MonthlyTabContent({
                     <th className="px-2 py-2 text-right border-r border-emerald-600 whitespace-nowrap">ค่าปลดล็อก</th>
                     <th className="px-2 py-2 text-right border-r border-emerald-600 whitespace-nowrap">ส่วนลด</th>
                     <th className="px-2 py-2 text-right border-r border-emerald-600 whitespace-nowrap">ชำระเกิน</th>
-                    <th className="px-2 py-2 text-right whitespace-nowrap">ยอดชำระรวม</th>
+                    <th className="px-2 py-2 text-right border-r border-emerald-600 whitespace-nowrap">ยอดชำระรวม</th>
+                    <th className="px-2 py-2 text-left border-r border-emerald-600 whitespace-nowrap">ปันเก็บโดย</th>
+                    <th className="px-2 py-2 text-left whitespace-nowrap">หมายเหตุ</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {detailRows.map((row: any, idx: number) => (
+                  {detailRows.map((row: any, idx: number) => {
+                    // คำนวณผ่อนงวดละ จาก payment_tx_amount (baseline)
+                    const installAmt = row.payment_tx_amount ? Number(row.payment_tx_amount) : 0;
+                    return (
                     <tr key={`${row.contract_no}-${row.payment_external_id}-${idx}`} className={`border-b hover:bg-emerald-50 transition-colors ${idx % 2 === 0 ? "bg-white" : "bg-emerald-50/30"}`}>
                       <td className="px-2 py-1.5 text-center text-slate-400 border-r">{lightboxPage * pageSize + idx + 1}</td>
                       <td className="px-2 py-1.5 border-r whitespace-nowrap">{fmtDate(row.approve_date)}</td>
                       <td className="px-2 py-1.5 border-r font-mono text-xs whitespace-nowrap">{row.contract_no}</td>
                       <td className="px-2 py-1.5 border-r whitespace-nowrap">{row.customer_name}</td>
-                      <td className="px-2 py-1.5 border-r whitespace-nowrap">{row.product_type}</td>
+                      <td className="px-2 py-1.5 border-r whitespace-nowrap">{row.partner_code ?? "-"}</td>
+                      <td className="px-2 py-1.5 text-right tabular-nums border-r">{row.finance_amount ? fmtMoney(row.finance_amount) : "-"}</td>
+                      <td className="px-2 py-1.5 text-center border-r">{row.installment_count ?? "-"}</td>
+                      <td className="px-2 py-1.5 text-right tabular-nums border-r">{installAmt > 0 ? fmtMoney(installAmt) : "-"}</td>
                       <td className="px-2 py-1.5 border-r whitespace-nowrap">
                         <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${
                           row.debt_range === "ปกติ" ? "bg-green-100 text-green-700" :
@@ -919,12 +940,15 @@ function MonthlyTabContent({
                       <td className="px-2 py-1.5 text-right tabular-nums border-r">{fmtMoney(row.interest)}</td>
                       <td className="px-2 py-1.5 text-right tabular-nums border-r">{fmtMoney(row.fee)}</td>
                       <td className="px-2 py-1.5 text-right tabular-nums border-r">{fmtMoney(row.penalty)}</td>
-                      <td className="px-2 py-1.5 text-right tabular-nums border-r">{fmtMoney(row.unlock_fee)}</td>
-                      <td className="px-2 py-1.5 text-right tabular-nums border-r text-teal-600">{fmtMoney(row.discount)}</td>
-                      <td className="px-2 py-1.5 text-right tabular-nums border-r text-emerald-600">{fmtMoney(row.overpaid)}</td>
-                      <td className="px-2 py-1.5 text-right tabular-nums font-semibold text-emerald-700">{fmtMoney(row.total_amount)}</td>
+                      <td className="px-2 py-1.5 text-right tabular-nums border-r text-orange-600 font-semibold">{row.unlock_fee && Number(row.unlock_fee) > 0 ? fmtMoney(row.unlock_fee) : "-"}</td>
+                      <td className="px-2 py-1.5 text-right tabular-nums border-r text-teal-600 italic">{row.discount && Number(row.discount) > 0 ? fmtMoney(row.discount) : "-"}</td>
+                      <td className="px-2 py-1.5 text-right tabular-nums border-r text-emerald-600">{row.overpaid && Number(row.overpaid) > 0 ? fmtMoney(row.overpaid) : "-"}</td>
+                      <td className="px-2 py-1.5 text-right tabular-nums border-r font-semibold text-emerald-700">{fmtMoney(row.total_amount)}</td>
+                      <td className="px-2 py-1.5 border-r whitespace-nowrap text-slate-600">{row.partner_name ?? "-"}</td>
+                      <td className="px-2 py-1.5 whitespace-nowrap text-slate-500">{row.remark ?? "-"}</td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             )}
