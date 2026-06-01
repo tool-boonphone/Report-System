@@ -29,6 +29,11 @@ import {
   getMonthlyCollectedDetail,
   populateMonthlyCollectionSnapshot,
 } from "../monthlyCollectionSnapshotDb";
+import {
+  populateTargetDetailSnapshot as populateMonthlyTargetDetailSnapshot,
+  getTargetDetailSnapshot as getMonthlyTargetDetailSnapshot,
+  getAvailableSnapshotMonths,
+} from "../monthlyTargetDetailSnapshotDb";
 
 const debtViewProcedure = requirePermission("debt_report", "view");
 const SectionEnum = sectionSchema;
@@ -150,6 +155,48 @@ export const debtRouter = router({
     }))
     .query(async ({ input }) => {
       return getMonthlyCollectedDetail(input);
+    }),
+
+  // ── Monthly Target Detail Snapshot ──────────────────────────────────────
+  /**
+   * Populate monthly_target_detail_snapshot สำหรับเดือนที่ระบุ
+   * ใช้สำหรับทดสอบโดยไม่ต้อง Sync ใหม่ — populate จาก cache ปัจจุบัน
+   * Cron จะเรียกอัตโนมัติทุกวันที่ 1 ของเดือน 06:00 น.
+   */
+  populateTargetDetailSnapshot: debtViewProcedure
+    .input(z.object({
+      section: SectionEnum,
+      snapshotMonth: z.string().regex(/^\d{4}-\d{2}$/, "must be YYYY-MM"),
+    }))
+    .mutation(async ({ input }) => {
+      const count = await populateMonthlyTargetDetailSnapshot(
+        input.section,
+        input.snapshotMonth,
+      );
+      return { success: true, rowsInserted: count };
+    }),
+
+  /** ดึง detail rows จาก monthly_target_detail_snapshot สำหรับ Lightbox ยอดเก็บหนี้ */
+  getTargetDetailSnapshot: debtViewProcedure
+    .input(z.object({
+      section: SectionEnum,
+      snapshotMonth: z.string().regex(/^\d{4}-\d{2}$/, "must be YYYY-MM"),
+      upToMonth: z.string().regex(/^\d{4}-\d{2}$/, "must be YYYY-MM").optional(),
+      search: z.string().optional(),
+      productType: z.string().optional(),
+      debtRange: z.string().optional(),
+      offset: z.number().int().min(0).default(0),
+      limit: z.number().int().min(1).max(500).default(100),
+    }))
+    .query(async ({ input }) => {
+      return getMonthlyTargetDetailSnapshot(input);
+    }),
+
+  /** ดึงรายการ snapshot months ที่มีอยู่ใน DB */
+  getAvailableSnapshotMonths: debtViewProcedure
+    .input(z.object({ section: SectionEnum }))
+    .query(async ({ input }) => {
+      return getAvailableSnapshotMonths(input.section);
     }),
 
   /**

@@ -56,6 +56,7 @@ import { pgRows } from "../db";
 import { rebuildIncomeMonthlySummary, populateIncomeType } from "../accountingDb";
 import { populateMonthlySummaryCache, populateDueMonthCache } from "../monthlySummaryDb";
 import { populateMonthlyCollectionSnapshot } from "../monthlyCollectionSnapshotDb";
+import { populateTargetDetailSnapshot as populateMonthlyTargetDetailSnapshot } from "../monthlyTargetDetailSnapshotDb";
 
 /* ─────────────────────────────────────────────────────────────────────────── */
 /* Constants & types                                                           */
@@ -473,7 +474,20 @@ async function doSync(
     }
 
     // ── Finish sync log ───────────────────────────────────────────────────
-    const partialFail = instFailed || payFailed;
+    // ── Populate monthly_target_detail_snapshot (เดือนปัจจุบัน) ─────────────────────────────
+    try {
+      const bangkokNow = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Bangkok",
+        year: "numeric",
+        month: "2-digit",
+      }).format(new Date());
+      const currentMonth = bangkokNow.replace("/", "-"); // "YYYY-MM"
+      const detailRows = await populateMonthlyTargetDetailSnapshot(section, currentMonth);
+      console.log(`[sync] ${section}: monthly_target_detail_snapshot populated — ${detailRows} rows for ${currentMonth}`);
+    } catch (detailErr: any) {
+      console.warn(`[sync] ${section}: populateMonthlyTargetDetailSnapshot failed (non-fatal):`, detailErr?.message ?? detailErr);
+    }
+        const partialFail = instFailed || payFailed;
     // Set progress to 100% before finishing so UI shows completion
     const logId = _overallLogId[section];
     if (logId) {

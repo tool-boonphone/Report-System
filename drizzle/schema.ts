@@ -653,3 +653,67 @@ export const monthlyCollectionSnapshot = pgTable(
   }),
 );
 export type MonthlyCollectionSnapshot = typeof monthlyCollectionSnapshot.$inferSelect;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// monthly_target_detail_snapshot
+// เก็บ snapshot รายสัญญา ณ วันที่ 1 ของทุกเดือน (freeze ตลอด)
+// ใช้สำหรับ Lightbox "ยอดเก็บหนี้" ใน tab รายเดือน
+// ─────────────────────────────────────────────────────────────────────────────
+export const monthlyTargetDetailSnapshot = pgTable(
+  "monthly_target_detail_snapshot",
+  {
+    id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+    section: varchar("section", { length: 32 }).notNull(),
+    snapshotMonth: varchar("snapshot_month", { length: 7 }).notNull(), // YYYY-MM
+    // ข้อมูลสัญญา
+    contractExternalId: varchar("contract_external_id", { length: 64 }).notNull(),
+    contractNo: varchar("contract_no", { length: 64 }),
+    customerName: varchar("customer_name", { length: 255 }),
+    partnerCode: varchar("partner_code", { length: 255 }),
+    partnerName: varchar("partner_name", { length: 255 }),
+    approveDate: varchar("approve_date", { length: 20 }),
+    productType: varchar("product_type", { length: 64 }),
+    device: varchar("device", { length: 64 }),
+    model: varchar("model", { length: 128 }),
+    financeAmount: decimal("finance_amount", { precision: 12, scale: 2 }),
+    installmentCount: integer("installment_count"),
+    baselineAmount: decimal("baseline_amount", { precision: 12, scale: 2 }).notNull().default("0"),
+    // ข้อมูลงวด
+    period: integer("period"),
+    dueDate: varchar("due_date", { length: 20 }),
+    principal: decimal("principal", { precision: 12, scale: 2 }).notNull().default("0"),
+    interest: decimal("interest", { precision: 12, scale: 2 }).notNull().default("0"),
+    fee: decimal("fee", { precision: 12, scale: 2 }).notNull().default("0"),
+    penalty: decimal("penalty", { precision: 12, scale: 2 }).notNull().default("0"),
+    unlockFee: decimal("unlock_fee", { precision: 12, scale: 2 }).notNull().default("0"),
+    totalAmount: decimal("total_amount", { precision: 12, scale: 2 }).notNull().default("0"),
+    paidAmount: decimal("paid_amount", { precision: 12, scale: 2 }).notNull().default("0"),
+    // สถานะ
+    contractStatus: varchar("contract_status", { length: 32 }),
+    debtRange: varchar("debt_range", { length: 32 }),
+    isPaid: boolean("is_paid").notNull().default(false),
+    isArrears: boolean("is_arrears").notNull().default(false),
+    isBadDebt: boolean("is_bad_debt").notNull().default(false),
+    isClosed: boolean("is_closed").notNull().default(false),
+    isSuspended: boolean("is_suspended").notNull().default(false),
+    isCurrentPeriod: boolean("is_current_period").notNull().default(false),
+    isFuturePeriod: boolean("is_future_period").notNull().default(false),
+    // เวลาที่ populate
+    populatedAt: timestamp("populated_at").defaultNow().notNull(),
+  },
+  (t) => ({
+    // index สำหรับ query
+    mtdsSectionMonthIdx: index("mtds_section_month_idx").on(t.section, t.snapshotMonth),
+    mtdsSectionMonthContractIdx: index("mtds_section_month_contract_idx").on(
+      t.section,
+      t.snapshotMonth,
+      t.contractExternalId,
+    ),
+    mtdsSectionMonthDueIdx: index("mtds_section_month_due_idx").on(
+      t.section,
+      t.snapshotMonth,
+      t.dueDate,
+    ),
+  }),
+);
+export type MonthlyTargetDetailSnapshot = typeof monthlyTargetDetailSnapshot.$inferSelect;
