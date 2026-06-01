@@ -684,7 +684,7 @@ export default function WatchGroup() {
       const headers = [
         "#","วันที่อนุมัติ","เลขที่สัญญา","ชื่อ-นามสกุล","เบอร์โทร",
         "ประเภท","รุ่น","รหัสพาร์ทเนอร์","ชื่อพาร์ทเนอร์","ราคา","ยอดจัดไฟแนนซ์",
-        "ค่าคอมมิชชั่น","Incentive","ต้นทุน","ยอดผ่อนรวม","ค่างวด","ยอดชำระ",
+        "ค่าคอมมิชชั่น","Incentive","ต้นทุน","ยอดผ่อนรวม","ผ่อนงวดละ","ยอดชำระ",
         "เกินกำหนด(วัน)","ชำระ(งวด)","Online (วันที่แล้ว)",
       ];
       const dataRows = filteredRows.map((r, i) => {
@@ -1029,7 +1029,7 @@ export default function WatchGroup() {
                         ยอดผ่อนรวม
                       </Th>
                       <th className="px-3 py-2 text-right text-xs font-semibold whitespace-nowrap min-w-[100px]">
-                        ค่างวด
+                        ผ่อนงวดละ
                       </th>
                       <th className="px-3 py-2 text-right text-xs font-semibold whitespace-nowrap min-w-[100px]">
                         ยอดชำระ
@@ -1118,7 +1118,7 @@ export default function WatchGroup() {
                           <td className="px-3 py-1.5 text-right whitespace-nowrap text-green-700">
                             {fmtMoney(r.installmentTotal)}
                           </td>
-                          {/* ค่างวด = ยอดค้างชำระรวมทุกงวดที่ถึงกำหนดแล้ว */}
+                          {/* ผ่อนงวดละ = ยอดค้างชำระรวมทุกงวดที่ถึงกำหนดแล้ว */}
                           <td className="px-3 py-1.5 text-right whitespace-nowrap font-medium text-gray-800">
                             {fmtMoney(r.totalAmountDue)}
                           </td>
