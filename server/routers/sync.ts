@@ -300,7 +300,9 @@ export const syncRouter = router({
           batch.map(async (r: { externalId: string; serialNo: string | null }) => {
             const key = r.serialNo!.trim().toUpperCase();
             const mdm = snMap.get(key);
-            const days = mdm?.days ?? null;
+            // ถ้าเจอใน MDM ใช้ค่าจริง, ถ้าไม่เจอ set -1 (แทน null)
+            // เพื่อให้ isMdmStale รู้ว่า sync แล้ว แต่เครื่องนี้ไม่อยู่ใน MDM
+            const days = mdm !== undefined ? (mdm.days ?? -1) : -1;
             const lastOnlineAt = mdm?.lastOnlineAt ?? null;
             // deviceLock: ถ้า SN เจอใน MDM ให้ใช้ค่าจริง, ถ้าไม่เจอให้ set null
             const deviceLock = mdm !== undefined ? (mdm.deviceLock ?? null) : null;
@@ -312,7 +314,7 @@ export const syncRouter = router({
                 deviceLock: deviceLock,
               })
               .where(and(eq(contracts.section, section), eq(contracts.externalId, r.externalId)));
-            if (days !== null) updated++;
+            if (days !== null && days >= 0) updated++; // นับเฉพาะที่เจอใน MDM จริงๆ
           })
         );
       }

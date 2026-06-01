@@ -533,10 +533,15 @@ export default function DataLoadingScreen() {
 
       // 4. บันทึกลง DB
       if (mappedPayload.length > 0) {
-        await saveMdmDataMutation.mutateAsync({
-          section: sec,
-          devices: mappedPayload,
-        });
+        // แบ่ง batch 500 records เพื่อป้องกัน timeout
+        const BATCH_SIZE = 500;
+        for (let i = 0; i < mappedPayload.length; i += BATCH_SIZE) {
+          const batch = mappedPayload.slice(i, i + BATCH_SIZE);
+          await saveMdmDataMutation.mutateAsync({
+            section: sec,
+            devices: batch,
+          });
+        }
         // Invalidate contracts.listAll เพื่อให้หน้า Contracts re-fetch ข้อมูลใหม่
         // พร้อม lastOnlineDays ที่อัปเดตแล้ว
         await utils.contracts.listAll.invalidate({ section: sec });
