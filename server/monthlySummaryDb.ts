@@ -1051,6 +1051,10 @@ export async function populateMonthlySummaryCache(
   if (!db) return 0;
   let totalRows = 0;
 
+  // ── ลบ rows เก่าทั้งหมดก่อน populate ใหม่ ────────────────────────────────
+  // เพื่อไม่ให้ row เก่าที่มี key ต่างออกไป (เช่น date_month มีค่า) ค้างอยู่
+  await db.execute(sql.raw(`DELETE FROM monthly_summary_cache WHERE section = '${section}'`));
+
   // ── ดึง distinct productTypes จาก DB ──────────────────────────────────────
   const ptRows = pgRows(await db.execute(sql.raw(
     `SELECT DISTINCT product_type FROM debt_target_cache WHERE section = '${section}' AND product_type IS NOT NULL ORDER BY 1`
