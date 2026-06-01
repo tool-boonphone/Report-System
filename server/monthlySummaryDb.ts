@@ -1594,6 +1594,7 @@ async function getMonthlySummaryFromCache(
              bad_debt_installment AS installment_paid, total_amount AS total_paid
       FROM monthly_summary_cache
       WHERE section = '${section}' AND query_type = 'paid'
+        AND date_month IS NOT NULL
         AND ${productTypeCond(params.paidProductType)}
         AND ${deviceFamilyCond(params.paidDeviceFamily)}
         AND ${dateMonthCondAll(params.paidApproveMonths, params.paidAtDate)}
@@ -1621,6 +1622,7 @@ async function getMonthlySummaryFromCache(
              unlock_fee AS unlock_fee_notyet, total_amount AS total_notyet
       FROM monthly_summary_cache
       WHERE section = '${section}' AND query_type = 'notYetDue'
+        AND date_month IS NOT NULL
         AND ${productTypeCond(params.notYetDueProductType)}
         AND ${deviceFamilyCond(params.notYetDueDeviceFamily)}
         AND ${dateMonthCondAll(params.notYetDueDueMonths, params.notYetDueDueDate)}
