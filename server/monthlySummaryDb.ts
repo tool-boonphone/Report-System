@@ -2918,6 +2918,21 @@ export async function getDueMonthSummaryFromCache(
     : `AND device_family IS NULL`;
 
   // ── ดึงข้อมูล due_month จาก monthly_summary_due_month_cache ──────────────
+  // ถ้ายอด cache row เป็น 0 (เช่น เพิ่งเพิ่ม productType ใหม่ หรือ filter นี้ยังไม่ถูก populate)
+  // ให้ return { rows: [], allDueMonths: [] } เพื่อให้ fallback ไปใช้ live query ทันที
+  const countQ = `
+    SELECT COUNT(1) AS cnt
+    FROM monthly_summary_due_month_cache
+    WHERE section = '${section}'
+      ${ptFilter}
+      ${dfFilter}
+  `;
+  const cntRes = await db.execute(sql.raw(countQ));
+  const cacheCount = Number(pgRows(cntRes)[0]?.cnt || 0);
+  if (cacheCount === 0) {
+    return { rows: [], allDueMonths: [] };
+  }
+
   const baseQ = `
     SELECT query_type, approve_month, due_month,
            contract_count,
