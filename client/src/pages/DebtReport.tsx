@@ -29,6 +29,7 @@ import {
   Banknote,
   CalendarDays,
   CalendarRange,
+  Camera,
   Check,
   ChevronRight,
   ChevronDown,
@@ -40,11 +41,13 @@ import {
   Coins,
   Download,
   Gavel,
+  History,
   Info,
   LockOpen,
   Percent,
   Pin,
   PinOff,
+  RefreshCw,
   Search,
   Smartphone,
   Tag,
@@ -1774,6 +1777,74 @@ export default function DebtReport() {
   const [principalOnly, setPrincipalOnly] = useState(true);
   // สวิต "ตั้งหนี้" (target tab only): เมื่อเปิด ซ่อนแถวที่ชำระครบ/ล่วงหน้า/ระงับ/สิ้นสุด/หนี้เสีย/ยังไม่ถึงดิว
   const [debtSetMode, setDebtSetMode] = useState(false);
+  // ── Target Tab Snapshot View ─────────────────────────────────────────────────
+  // viewMode: "live" = ข้อมูล live จาก cache, "snapshot" = ข้อมูล snapshot ที่เลือก
+  const [targetViewMode, setTargetViewMode] = useState<"live" | "snapshot">("live");
+  const [selectedSnapshotMonth, setSelectedSnapshotMonth] = useState<string | null>(null);
+  const [showSnapshotLog, setShowSnapshotLog] = useState(false);
+  // query รายการ snapshot ที่มีอยู่ใน DB (สำหรับ Log Dropdown)
+  const availableTargetSnapshotsQuery = trpc.debt.getAvailableSnapshotMonths.useQuery(
+    { section: sectionKey },
+    { enabled: !!section && tab === "target", staleTime: 30 * 1000 },
+  );
+  // query ข้อมูล snapshot สำหรับแสดงในตาราง (ไม่ใช่ Lightbox)
+  const targetSnapshotViewQuery = trpc.debt.getTargetDetailSnapshot.useQuery(
+    {
+      section: sectionKey,
+      snapshotMonth: selectedSnapshotMonth ?? "",
+      upToMonth: selectedSnapshotMonth ?? "",
+      debtOnly: debtSetMode, // ใช้ debtSetMode เดิมในการกรอง
+      offset: 0,
+      limit: 5000, // ดึงทั้งหมดเพื่อแสดงในตาราง
+    },
+    { enabled: !!section && targetViewMode === "snapshot" && !!selectedSnapshotMonth, staleTime: 5 * 60 * 1000 },
+  );
+  // mutation สำหรับ Snapshot ปัจจุบัน
+  const createSnapshotMutation = trpc.debt.populateTargetDetailSnapshot.useMutation({
+    onSuccess: (data) => {
+      toast.success(`บันทึก Snapshot สำเร็จ — ${data.rowsInserted.toLocaleString("th-TH")} รายการ`);
+      availableTargetSnapshotsQuery.refetch();
+    },
+    onError: (err) => toast.error(`บันทึก Snapshot ไม่สำเร็จ: ${err.message}`),
+  });
+  // helper: สร้าง snapshot เดือนปัจจุบัน
+  const handleCreateSnapshot = React.useCallback(() => {
+    if (!section) return;
+    const now = new Date();
+    const snapshotMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    createSnapshotMutation.mutate({ section: sectionKey, snapshotMonth });
+  }, [section, sectionKey, createSnapshotMutation]); // eslint-disable-line react-hooks/exhaustive-deps
+  // helper: เลือก snapshot จาก Log
+  const handleSelectSnapshot = React.useCallback((month: string) => {
+    setSelectedSnapshotMonth(month);
+    setTargetViewMode("snapshot");
+    setShowSnapshotLog(false);
+  }, []);
+  // helper: กลับมา live
+  const handleBackToLive = React.useCallback(() => {
+    setTargetViewMode("live");
+    setSelectedSnapshotMonth(null);
+    setShowSnapshotLog(false);
+  }, []);
+  // ปิด Dropdown เมื่อคลิกนอกพื้นที่ หรือกด Escape
+  React.useEffect(() => {
+    if (!showSnapshotLog) return;
+    const handler = (e: MouseEvent | KeyboardEvent) => {
+      if (e instanceof KeyboardEvent) {
+        if (e.key === "Escape") setShowSnapshotLog(false);
+      } else {
+        // ตรวจว่าคลิกอยู่นอก .snapshot-log-dropdown
+        const target = e.target as HTMLElement;
+        if (!target.closest(".snapshot-log-dropdown")) setShowSnapshotLog(false);
+      }
+    };
+    document.addEventListener("mousedown", handler as EventListener);
+    document.addEventListener("keydown", handler as EventListener);
+    return () => {
+      document.removeEventListener("mousedown", handler as EventListener);
+      document.removeEventListener("keydown", handler as EventListener);
+    };
+  }, [showSnapshotLog]);
   // ตัวกรอง "บันทึกโดย" (collected tab only)
   const [updatedByFilter, setUpdatedByFilter] = useState<string | null>(null);
   // Color legend modal
@@ -1927,9 +1998,48 @@ export default function DebtReport() {
     return () => clearInterval(interval);
   }, [isLoading]);
 
+  // แปลง TargetDetailSnapshotRow → TargetRow สำหรับแสดงในตาราง
+  const snapshotAsTargetRows: TargetRow[] = useMemo(() => {
+    if (targetViewMode !== "snapshot" || !targetSnapshotViewQuery.data?.rows) return [];
+    return targetSnapshotViewQuery.data.rows.map((r) => ({
+      contractExternalId: r.contractExternalId,
+      contractNo: r.contractNo,
+      approveDate: r.approveDate,
+      customerName: r.customerName,
+      phone: null, // snapshot ไม่มี phone
+      productType: r.productType,
+      installmentCount: r.installmentCount,
+      installmentAmount: r.baselineAmount,
+      totalAmount: r.totalAmount,
+      totalPaid: r.paidAmount,
+      remaining: Math.max(r.totalAmount - r.paidAmount, 0),
+      debtStatus: r.debtRange ?? (r.isPaid ? "ปกติ" : r.isBadDebt ? "หนี้เสีย" : r.isSuspended ? "ระงับสัญญา" : "ปกติ"),
+      daysOverdue: 0, // snapshot ไม่มี daysOverdue
+      installments: [{
+        period: r.period,
+        dueDate: r.dueDate,
+        principal: r.principal,
+        interest: r.interest,
+        fee: r.fee,
+        penalty: r.penalty,
+        unlockFee: r.unlockFee,
+        amount: r.totalAmount,
+        paid: r.paidAmount,
+        baselineAmount: r.baselineAmount,
+        overpaidApplied: 0,
+        isClosed: r.isClosed,
+        isSuspended: r.isSuspended,
+        isArrears: r.isArrears,
+        isCurrentPeriod: r.isCurrentPeriod,
+        isPaid: r.isPaid,
+        netAmount: r.principal + r.interest + r.fee,
+      }],
+    }));
+  }, [targetViewMode, targetSnapshotViewQuery.data]);
+
   const activeRows: (TargetRow | CollectedRow)[] =
     (tab === "target"
-      ? (streamData.target?.rows as TargetRow[])
+      ? (targetViewMode === "snapshot" ? snapshotAsTargetRows : (streamData.target?.rows as TargetRow[]))
       : tab === "collected" ? (streamData.collected?.rows as CollectedRow[]) : []) ?? [];
   // hasPrincipalBreakdown: true = Boonphone (แสดง principal/interest/fee จริง)
   //                         false = Fastfone365 (แสดง "-" แทน 0.00)
@@ -2478,6 +2588,88 @@ export default function DebtReport() {
             </Button>
           </div>
           <div className="flex items-center gap-2">
+            {/* ปุ่ม Snapshot + Log (target tab only) */}
+            {tab === "target" && (
+              <div className="flex items-center gap-1.5 relative">
+                {/* ปุ่ม Snapshot */}
+                <Button
+                  variant="outline"
+                  className="border-violet-300 text-violet-700 hover:bg-violet-50 hover:border-violet-400 text-xs px-3 h-9"
+                  onClick={handleCreateSnapshot}
+                  disabled={createSnapshotMutation.isPending}
+                  title="บันทึก Snapshot ข้อมูลเป้าเก็บหนี้ ณ ปัจจุบัน"
+                >
+                  {createSnapshotMutation.isPending ? (
+                    <RefreshCw className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                  ) : (
+                    <Camera className="w-3.5 h-3.5 mr-1.5" />
+                  )}
+                  Snapshot
+                </Button>
+                {/* ปุ่ม Log */}
+                <div className="relative snapshot-log-dropdown">
+                  <Button
+                    variant="outline"
+                    className={`border-slate-300 text-slate-700 hover:bg-slate-50 text-xs px-3 h-9 ${
+                      targetViewMode === "snapshot" ? "bg-violet-50 border-violet-400 text-violet-700" : ""
+                    }`}
+                    onClick={() => setShowSnapshotLog((v) => !v)}
+                    title="ดู Log Snapshot ที่บันทึกไว้"
+                  >
+                    <History className="w-3.5 h-3.5 mr-1.5" />
+                    Log
+                    {targetViewMode === "snapshot" && selectedSnapshotMonth && (
+                      <span className="ml-1.5 bg-violet-600 text-white text-[10px] px-1.5 py-0.5 rounded-full">
+                        {selectedSnapshotMonth}
+                      </span>
+                    )}
+                  </Button>
+                  {/* Dropdown รายการ Snapshot */}
+                  {showSnapshotLog && (
+                    <div className="absolute right-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-lg shadow-xl min-w-[220px] py-1">
+                      {/* ข้อมูลปัจจุบัน (live) */}
+                      <button
+                        type="button"
+                        className={`w-full text-left px-4 py-2.5 text-sm flex items-center gap-2 hover:bg-gray-50 ${
+                          targetViewMode === "live" ? "bg-emerald-50 text-emerald-700 font-medium" : "text-gray-700"
+                        }`}
+                        onClick={handleBackToLive}
+                      >
+                        <RefreshCw className="w-3.5 h-3.5 flex-shrink-0" />
+                        <span>ข้อมูลปัจจุบัน (Live)</span>
+                        {targetViewMode === "live" && <Check className="w-3.5 h-3.5 ml-auto" />}
+                      </button>
+                      <div className="border-t border-gray-100 my-1" />
+                      {/* รายการ Snapshot */}
+                      {availableTargetSnapshotsQuery.isLoading ? (
+                        <div className="px-4 py-3 text-xs text-gray-400">กำลังโหลด...</div>
+                      ) : (availableTargetSnapshotsQuery.data ?? []).length === 0 ? (
+                        <div className="px-4 py-3 text-xs text-gray-400">ยังไม่มี Snapshot</div>
+                      ) : (
+                        (availableTargetSnapshotsQuery.data ?? []).slice().reverse().map((month) => (
+                          <button
+                            key={month}
+                            type="button"
+                            className={`w-full text-left px-4 py-2.5 text-sm flex items-center gap-2 hover:bg-violet-50 ${
+                              targetViewMode === "snapshot" && selectedSnapshotMonth === month
+                                ? "bg-violet-50 text-violet-700 font-medium"
+                                : "text-gray-700"
+                            }`}
+                            onClick={() => handleSelectSnapshot(month)}
+                          >
+                            <Camera className="w-3.5 h-3.5 flex-shrink-0 text-violet-500" />
+                            <span>Snapshot {month}</span>
+                            {targetViewMode === "snapshot" && selectedSnapshotMonth === month && (
+                              <Check className="w-3.5 h-3.5 ml-auto text-violet-600" />
+                            )}
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
             {/* ปุ่ม i อธิบายสีตัวเลข */}
             <Button
               variant="outline"
@@ -2639,6 +2831,22 @@ export default function DebtReport() {
             </div>
           </div>
         </div>}
+
+        {/* Snapshot Mode Banner */}
+        {tab === "target" && targetViewMode === "snapshot" && selectedSnapshotMonth && (
+          <div className="flex items-center gap-2 mb-2 px-3 py-2 bg-violet-50 border border-violet-200 rounded-lg text-sm text-violet-800">
+            <Camera className="w-4 h-4 flex-shrink-0 text-violet-600" />
+            <span>กำลังดูข้อมูล <strong>Snapshot {selectedSnapshotMonth}</strong> — ไม่ใช่ข้อมูล Live</span>
+            {targetSnapshotViewQuery.isFetching && <RefreshCw className="w-3.5 h-3.5 animate-spin ml-1 text-violet-500" />}
+            <button
+              type="button"
+              className="ml-auto text-xs text-violet-600 hover:text-violet-800 underline"
+              onClick={handleBackToLive}
+            >
+              กลับ Live
+            </button>
+          </div>
+        )}
 
         {/* Summary line + Summary Badges */}
         {tab !== "monthly" && <div className="flex flex-wrap items-start justify-between gap-2 mb-2">
