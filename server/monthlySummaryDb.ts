@@ -2797,24 +2797,26 @@ export async function populateDueMonthCache(
   console.log(`[populateDueMonthCache] Deleted old cache rows for section=${section}`);
 
   let totalRows = 0;
-  onProgress?.(0, 4);
 
-  // ── combinations ที่ต้อง populate ─────────────────────────────────────────
-  // null = ทุกประเภท (ไม่ filter), iOS/Android = filter เฉพาะ
-  const combos: Array<{ productType: string | undefined; deviceFamily: "iOS" | "Android" | undefined }> = [
-    { productType: undefined, deviceFamily: undefined },
-    { productType: undefined, deviceFamily: "iOS" },
-    { productType: undefined, deviceFamily: "Android" },
-    { productType: "installment", deviceFamily: undefined },
-    { productType: "installment", deviceFamily: "iOS" },
-    { productType: "installment", deviceFamily: "Android" },
-    { productType: "leasing", deviceFamily: undefined },
-    { productType: "leasing", deviceFamily: "iOS" },
-    { productType: "leasing", deviceFamily: "Android" },
-  ];
+  // ── ดึง distinct productTypes จาก DB ──────────────────────────────────────
+  // เพื่อ generate combos แบบ dynamic (ไม่ hardcode productType)
+  const ptRows = pgRows(await db.execute(sql.raw(
+    `SELECT DISTINCT product_type FROM debt_target_cache WHERE section = '${section}' AND product_type IS NOT NULL ORDER BY 1`
+  )));
+  const productTypes: Array<string | undefined> = [undefined, ...ptRows.map((r: any) => String(r.product_type))];
+  const deviceFamilyOptions: Array<"iOS" | "Android" | undefined> = [undefined, "iOS", "Android"];
+
+  // combinations ทั้งหมด: productType × deviceFamily
+  const combos: Array<{ productType: string | undefined; deviceFamily: "iOS" | "Android" | undefined }> = [];
+  for (const pt of productTypes) {
+    for (const df of deviceFamilyOptions) {
+      combos.push({ productType: pt, deviceFamily: df });
+    }
+  }
 
   // ── เรียก getDueMonthSummary live query ต่อ combo แล้ว upsert ลง cache ─────
   // วิธีนี้รับประกัน 100% ว่า cache ตรงกับ live query เสมอ เพราะใช้ code path เดียวกัน
+  onProgress?.(0, combos.length);
   for (let i = 0; i < combos.length; i++) {
     const combo = combos[i];
     onProgress?.(i, combos.length);
