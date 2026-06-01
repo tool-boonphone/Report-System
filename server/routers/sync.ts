@@ -119,25 +119,26 @@ export const syncRouter = router({
       const section = input.section as SectionKey;
       const { getDb } = await import("../db");
       const { contracts } = await import("../../drizzle/schema");
-      const { eq, and, isNotNull, isNull, count } = await import("drizzle-orm");
+      const { eq, and, isNotNull, count } = await import("drizzle-orm");
       
       const db = await getDb(section);
       if (!db) return { stale: false, staleCount: 0 };
       
-      // นับจำนวนเครื่องที่มี serial_no แต่ last_online_days เป็น null
+      // เช็คแค่ว่ามี lastOnlineDays ที่ไม่ใช่ null อยู่บ้างไหม
+      // ถ้าไม่มีเลย = DB ว่าง (หลัง Auto Sync ล้างข้อมูล) = ต้องดึง MDM API ใหม่
+      // ถ้ามีอยู่แล้ว = ข้ามไปเลย ไม่ต้องดึง API ซ้ำ
       const res = await db
         .select({ value: count() })
         .from(contracts)
         .where(
           and(
             eq(contracts.section, section),
-            isNotNull(contracts.serialNo),
-            isNull(contracts.lastOnlineDays)
+            isNotNull(contracts.lastOnlineDays)
           )
         );
         
-      const staleCount = res[0]?.value ?? 0;
-      return { stale: staleCount > 0, staleCount };
+      const hasData = (res[0]?.value ?? 0) > 0;
+      return { stale: !hasData, staleCount: hasData ? 0 : 1 };
     }),
 
   syncMdm: appProcedure
@@ -300,9 +301,8 @@ export const syncRouter = router({
           batch.map(async (r: { externalId: string; serialNo: string | null }) => {
             const key = r.serialNo!.trim().toUpperCase();
             const mdm = snMap.get(key);
-            // ถ้าเจอใน MDM ใช้ค่าจริง, ถ้าไม่เจอ set -1 (แทน null)
-            // เพื่อให้ isMdmStale รู้ว่า sync แล้ว แต่เครื่องนี้ไม่อยู่ใน MDM
-            const days = mdm !== undefined ? (mdm.days ?? -1) : -1;
+            // ถ้าเจอใน MDM ใช้ค่าจริง, ถ้าไม่เจอ set null
+            const days = mdm !== undefined ? (mdm.days ?? null) : null;
             const lastOnlineAt = mdm?.lastOnlineAt ?? null;
             // deviceLock: ถ้า SN เจอใน MDM ให้ใช้ค่าจริง, ถ้าไม่เจอให้ set null
             const deviceLock = mdm !== undefined ? (mdm.deviceLock ?? null) : null;
@@ -314,7 +314,7 @@ export const syncRouter = router({
                 deviceLock: deviceLock,
               })
               .where(and(eq(contracts.section, section), eq(contracts.externalId, r.externalId)));
-            if (days !== null && days >= 0) updated++; // นับเฉพาะที่เจอใน MDM จริงๆ
+            if (days !== null) updated++;
           })
         );
       }
