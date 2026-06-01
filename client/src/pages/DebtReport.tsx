@@ -1258,8 +1258,9 @@ function MonthlyTabContent({
                       <td className="px-2 py-1.5 text-right tabular-nums border-r">{fmtMoney(row.fee)}</td>
                       <td className="px-2 py-1.5 text-right tabular-nums border-r">{fmtMoney(row.penalty)}</td>
                       <td className="px-2 py-1.5 text-right tabular-nums border-r">{fmtMoney(row.unlockFee)}</td>
-                      <td className="px-2 py-1.5 text-right tabular-nums border-r font-semibold text-amber-700">{fmtMoney(row.totalAmount - row.paidAmount > 0 ? row.totalAmount - row.paidAmount : 0)}</td>
-                      <td className="px-2 py-1.5 text-right tabular-nums">{fmtMoney(row.paidAmount)}</td>
+                      <td className="px-2 py-1.5 text-right tabular-nums border-r font-bold text-amber-900 bg-amber-50">{fmtMoney(row.totalAmount)}</td>
+                      <td className="px-2 py-1.5 text-right tabular-nums border-r text-green-700">{fmtMoney(row.paidAmount)}</td>
+                      <td className="px-2 py-1.5 text-right tabular-nums font-semibold text-red-600 bg-red-50">{fmtMoney(row.totalAmount - row.paidAmount > 0 ? row.totalAmount - row.paidAmount : 0)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -1370,6 +1371,37 @@ function MonthlyTabContent({
             )}
           </div>
 
+          {/* Target Snapshot Badges - สรุปยอดรวม server-side */}
+          {targetSnapshotDetailQuery.data && targetSnapshotDetailQuery.data.total > 0 && (
+            <div className="px-4 py-2 border-b flex-shrink-0 flex flex-wrap items-center gap-2 bg-amber-50">
+              <span className="text-[10px] text-amber-600 font-semibold uppercase tracking-wide">ยอดรวม</span>
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white border border-amber-200 text-[11px] font-medium text-slate-700">
+                เงินต้น: <span className="font-semibold text-amber-700 ml-1">{fmtMoney(targetSnapshotDetailQuery.data.sumPrincipal)}</span>
+              </span>
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white border border-amber-200 text-[11px] font-medium text-slate-700">
+                ดอกเบี้ย: <span className="font-semibold text-amber-700 ml-1">{fmtMoney(targetSnapshotDetailQuery.data.sumInterest)}</span>
+              </span>
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white border border-amber-200 text-[11px] font-medium text-slate-700">
+                ค่าดำเนินการ: <span className="font-semibold text-amber-700 ml-1">{fmtMoney(targetSnapshotDetailQuery.data.sumFee)}</span>
+              </span>
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white border border-amber-200 text-[11px] font-medium text-slate-700">
+                ค่าปรับ: <span className="font-semibold text-red-600 ml-1">{fmtMoney(targetSnapshotDetailQuery.data.sumPenalty)}</span>
+              </span>
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white border border-amber-200 text-[11px] font-medium text-slate-700">
+                ค่าปลดล็อก: <span className="font-semibold text-orange-600 ml-1">{fmtMoney(targetSnapshotDetailQuery.data.sumUnlockFee)}</span>
+              </span>
+              <span className="mx-1 text-amber-300">|</span>
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 border border-amber-300 text-[11px] font-semibold text-amber-800">
+                ยอดที่ต้องชำระ: <span className="text-amber-900 ml-1">{fmtMoney(targetSnapshotDetailQuery.data.sumTotalAmount)}</span>
+              </span>
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-100 border border-green-300 text-[11px] font-semibold text-green-700">
+                ชำระแล้ว: <span className="ml-1">{fmtMoney(targetSnapshotDetailQuery.data.sumPaidAmount)}</span>
+              </span>
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-100 border border-red-300 text-[11px] font-semibold text-red-700">
+                ยอดหนี้คงเหลือ: <span className="ml-1">{fmtMoney(targetSnapshotDetailQuery.data.sumNetAmount)}</span>
+              </span>
+            </div>
+          )}
           {/* Target Snapshot Table */}
           <div className="flex-1 overflow-auto px-0">
             {targetSnapshotDetailQuery.isLoading ? (
@@ -1400,8 +1432,9 @@ function MonthlyTabContent({
                     <th className="px-2 py-2 text-right border-r border-amber-600 whitespace-nowrap">ค่าดำเนินการ</th>
                     <th className="px-2 py-2 text-right border-r border-amber-600 whitespace-nowrap">ค่าปรับ</th>
                     <th className="px-2 py-2 text-right border-r border-amber-600 whitespace-nowrap">ค่าปลดล็อก</th>
-                    <th className="px-2 py-2 text-right border-r border-amber-600 whitespace-nowrap">ยอดหนี้คงเหลือ</th>
-                    <th className="px-2 py-2 text-right whitespace-nowrap">ชำระแล้ว</th>
+                    <th className="px-2 py-2 text-right border-r border-amber-500 whitespace-nowrap bg-amber-800">ยอดที่ต้องชำระ</th>
+                    <th className="px-2 py-2 text-right border-r border-amber-600 whitespace-nowrap">ชำระแล้ว</th>
+                    <th className="px-2 py-2 text-right whitespace-nowrap bg-amber-800">ยอดหนี้คงเหลือ</th>
                   </tr>
                 </thead>
                 <tbody>

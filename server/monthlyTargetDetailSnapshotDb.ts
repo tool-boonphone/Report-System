@@ -64,6 +64,15 @@ export interface TargetDetailSnapshotResult {
   total: number;
   snapshotMonth: string;
   populatedAt: string | null;
+  // สรุปยอดรวมทั้งหมด (ไม่ขึ้นกับ pagination)
+  sumPrincipal: number;
+  sumInterest: number;
+  sumFee: number;
+  sumPenalty: number;
+  sumUnlockFee: number;
+  sumTotalAmount: number;
+  sumPaidAmount: number;
+  sumNetAmount: number; // sumTotalAmount - sumPaidAmount (ยอดหนี้คงเหลือรวม)
 }
 
 // ─── Populate ─────────────────────────────────────────────────────────────────
@@ -270,14 +279,31 @@ export async function getTargetDetailSnapshot(params: {
 
   const whereClause = conditions.join(" AND ");
 
-  // Count
+  // Count + Sum (server-side, ไม่ขึ้นกับ pagination)
   const countResult = await db.execute(sql.raw(`
-    SELECT COUNT(*) AS cnt
+    SELECT
+      COUNT(*) AS cnt,
+      COALESCE(SUM(principal::numeric), 0) AS sum_principal,
+      COALESCE(SUM(interest::numeric), 0) AS sum_interest,
+      COALESCE(SUM(fee::numeric), 0) AS sum_fee,
+      COALESCE(SUM(penalty::numeric), 0) AS sum_penalty,
+      COALESCE(SUM(unlock_fee::numeric), 0) AS sum_unlock_fee,
+      COALESCE(SUM(total_amount::numeric), 0) AS sum_total_amount,
+      COALESCE(SUM(paid_amount::numeric), 0) AS sum_paid_amount,
+      COALESCE(SUM(GREATEST(total_amount::numeric - paid_amount::numeric, 0)), 0) AS sum_net_amount
     FROM monthly_target_detail_snapshot
     WHERE ${whereClause}
   `));
   const countRows = pgRows(countResult);
   const total = n(countRows[0]?.cnt ?? 0);
+  const sumPrincipal = n(countRows[0]?.sum_principal ?? 0);
+  const sumInterest = n(countRows[0]?.sum_interest ?? 0);
+  const sumFee = n(countRows[0]?.sum_fee ?? 0);
+  const sumPenalty = n(countRows[0]?.sum_penalty ?? 0);
+  const sumUnlockFee = n(countRows[0]?.sum_unlock_fee ?? 0);
+  const sumTotalAmount = n(countRows[0]?.sum_total_amount ?? 0);
+  const sumPaidAmount = n(countRows[0]?.sum_paid_amount ?? 0);
+  const sumNetAmount = n(countRows[0]?.sum_net_amount ?? 0);
 
   // Data
   const dataResult = await db.execute(sql.raw(`
@@ -361,7 +387,20 @@ export async function getTargetDetailSnapshot(params: {
     populatedAt: String(row.populated_at ?? ""),
   }));
 
-  return { rows, total, snapshotMonth, populatedAt };
+  return {
+    rows,
+    total,
+    snapshotMonth,
+    populatedAt,
+    sumPrincipal,
+    sumInterest,
+    sumFee,
+    sumPenalty,
+    sumUnlockFee,
+    sumTotalAmount,
+    sumPaidAmount,
+    sumNetAmount,
+  };
 }
 
 /**
