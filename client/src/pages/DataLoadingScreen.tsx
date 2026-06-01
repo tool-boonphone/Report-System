@@ -511,24 +511,44 @@ export default function DataLoadingScreen() {
         pageNum++;
       } while (fetched < totalDevices && totalDevices > 0);
 
-      // 3. บันทึกลง DB
-      if (devicePayload.length > 0) {
+      // 3. คำนวณ lastOnlineDays จาก lastTime (เหมือน SyncStatusBar.handleSyncMdm)
+      const today = new Date();
+      const todayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      const calcDays = (lastTime: string): number | null => {
+        const datePart = lastTime.split(" ")[0];
+        if (!datePart || !/^\d{4}-\d{2}-\d{2}$/.test(datePart)) return null;
+        const lastDate = new Date(`${datePart}T00:00:00`);
+        if (isNaN(lastDate.getTime())) return null;
+        const diffMs = todayDate.getTime() - lastDate.getTime();
+        return Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
+      };
+
+      // แปลง deviceId เป็น serialNo และคำนวณ lastOnlineDays
+      const mappedPayload = devicePayload.map((d) => ({
+        serialNo: d.deviceId,
+        lastOnlineDays: calcDays(d.lastTime),
+        lastOnlineAt: d.lastTime,
+        deviceLock: d.deviceLock,
+      }));
+
+      // 4. บันทึกลง DB
+      if (mappedPayload.length > 0) {
         await saveMdmDataMutation.mutateAsync({
           section: sec,
-          devices: devicePayload,
+          devices: mappedPayload,
         });
         // Invalidate contracts.listAll เพื่อให้หน้า Contracts re-fetch ข้อมูลใหม่
         // พร้อม lastOnlineDays ที่อัปเดตแล้ว
         await utils.contracts.listAll.invalidate({ section: sec });
       }
-      
+
       setStatus("mdm", "done");
     } catch (err: any) {
       const msg = err?.message ?? "เกิดข้อผิดพลาดในการดึงข้อมูล MDM";
       setItemError("mdm", msg);
       setStatus("mdm", "error"); // ให้ข้ามไปได้แม้ MDM จะ error
     }
-  }, [setStatus, setItemLoaded, setItemTotal, setItemError, getMdmApiKeyQuery, saveMdmDataMutation]);
+  }, [setStatus, setItemLoaded, setItemTotal, setItemError, getMdmApiKeyQuery, saveMdmDataMutation, utils]);
 
   const startPreload = useCallback(async (sec: SectionKey, needsMdm: boolean, staleCount: number) => {
     if (startedRef.current) return;
