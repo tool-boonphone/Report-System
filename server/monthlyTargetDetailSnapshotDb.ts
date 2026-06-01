@@ -424,3 +424,99 @@ export async function getAvailableSnapshotMonths(section: SectionKey): Promise<s
   const rows = pgRows(result);
   return rows.map((r: any) => String(r.snapshot_month ?? ""));
 }
+
+/**
+ * ดึงงวดทั้งหมดของสัญญาหนึ่งจาก monthly_target_detail_snapshot
+ * ใช้สำหรับ Installment Detail Lightbox เมื่อกดปุ่ม "ค่างวด"
+ */
+export async function getContractInstallmentsBySnapshot(params: {
+  section: SectionKey;
+  snapshotMonth: string;
+  contractNo: string;
+}): Promise<TargetDetailSnapshotRow[]> {
+  const { section, snapshotMonth, contractNo } = params;
+  const db = await getDb(section);
+  if (!db) return [];
+
+  const escaped = contractNo.replace(/'/g, "''");
+  const result = await db.execute(sql.raw(`
+    SELECT
+      id,
+      section,
+      snapshot_month,
+      contract_external_id,
+      contract_no,
+      customer_name,
+      partner_code,
+      partner_name,
+      approve_date::text AS approve_date,
+      product_type,
+      device,
+      model,
+      COALESCE(finance_amount::numeric, 0) AS finance_amount,
+      installment_count,
+      COALESCE(baseline_amount::numeric, 0) AS baseline_amount,
+      period,
+      due_date::text AS due_date,
+      COALESCE(principal::numeric, 0) AS principal,
+      COALESCE(interest::numeric, 0) AS interest,
+      COALESCE(fee::numeric, 0) AS fee,
+      COALESCE(penalty::numeric, 0) AS penalty,
+      COALESCE(unlock_fee::numeric, 0) AS unlock_fee,
+      COALESCE(total_amount::numeric, 0) AS total_amount,
+      COALESCE(paid_amount::numeric, 0) AS paid_amount,
+      contract_status,
+      debt_range,
+      is_paid,
+      is_arrears,
+      is_bad_debt,
+      is_closed,
+      is_suspended,
+      is_current_period,
+      is_future_period,
+      populated_at::text AS populated_at
+    FROM monthly_target_detail_snapshot
+    WHERE section = '${section}'
+      AND snapshot_month = '${snapshotMonth}'
+      AND contract_no = '${escaped}'
+    ORDER BY period ASC
+  `));
+  const dataRows = pgRows(result);
+
+  return dataRows.map((row: any) => ({
+    id: n(row.id),
+    section: String(row.section ?? ""),
+    snapshotMonth: String(row.snapshot_month ?? ""),
+    contractExternalId: String(row.contract_external_id ?? ""),
+    contractNo: row.contract_no ? String(row.contract_no) : null,
+    customerName: row.customer_name ? String(row.customer_name) : null,
+    partnerCode: row.partner_code ? String(row.partner_code) : null,
+    partnerName: row.partner_name ? String(row.partner_name) : null,
+    approveDate: row.approve_date ? String(row.approve_date) : null,
+    productType: row.product_type ? String(row.product_type) : null,
+    device: row.device ? String(row.device) : null,
+    model: row.model ? String(row.model) : null,
+    financeAmount: n(row.finance_amount),
+    installmentCount: row.installment_count != null ? n(row.installment_count) : null,
+    baselineAmount: n(row.baseline_amount),
+    period: row.period != null ? n(row.period) : null,
+    dueDate: row.due_date ? String(row.due_date) : null,
+    principal: n(row.principal),
+    interest: n(row.interest),
+    fee: n(row.fee),
+    penalty: n(row.penalty),
+    unlockFee: n(row.unlock_fee),
+    totalAmount: n(row.total_amount),
+    paidAmount: n(row.paid_amount),
+    contractStatus: row.contract_status ? String(row.contract_status) : null,
+    debtRange: row.debt_range ? String(row.debt_range) : null,
+    isPaid: Boolean(row.is_paid),
+    isArrears: Boolean(row.is_arrears),
+    isBadDebt: Boolean(row.is_bad_debt),
+    isClosed: Boolean(row.is_closed),
+    isSuspended: Boolean(row.is_suspended),
+    isCurrentPeriod: Boolean(row.is_current_period),
+    isFuturePeriod: Boolean(row.is_future_period),
+    populatedAt: String(row.populated_at ?? ""),
+  }));
+}

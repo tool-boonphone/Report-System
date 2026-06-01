@@ -526,6 +526,22 @@ function MonthlyTabContent({
   // Toggle ตั้งหนี้: เมื่อเปิด = แสดงเฉพาะงวดที่ยังค้างชำระ (ยอดหนี้คงเหลือ > 0)
   const [targetSnapshotDebtOnly, setTargetSnapshotDebtOnly] = React.useState(true);
   const TARGET_SNAPSHOT_PAGE_SIZE = 100;
+
+  // ── Installment Detail Lightbox state (เปิดเมื่อกดปุ่ม "ค่างวด" ใน Target Snapshot) ────────
+  const [installmentLightbox, setInstallmentLightbox] = React.useState<{
+    contractNo: string;
+    customerName: string | null;
+    snapshotMonth: string;
+  } | null>(null);
+  const installmentDetailQuery = trpc.debt.getContractInstallments.useQuery(
+    {
+      section: sectionKey,
+      snapshotMonth: installmentLightbox?.snapshotMonth ?? "",
+      contractNo: installmentLightbox?.contractNo ?? "",
+    },
+    { enabled: !!section && !!installmentLightbox?.contractNo, staleTime: 0 },
+  );
+
   const targetSnapshotDetailQuery = trpc.debt.getTargetDetailSnapshot.useQuery(
     {
       section: sectionKey,
@@ -1495,6 +1511,7 @@ function MonthlyTabContent({
                     <th className="px-2 py-2 text-right border-r border-amber-500 whitespace-nowrap bg-amber-800">ยอดที่ต้องชำระ</th>
                     <th className="px-2 py-2 text-right border-r border-amber-600 whitespace-nowrap">ชำระแล้ว</th>
                     <th className="px-2 py-2 text-right whitespace-nowrap bg-amber-800">ยอดหนี้คงเหลือ</th>
+                    <th className="px-2 py-2 text-center whitespace-nowrap">ค่างวด</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1532,6 +1549,21 @@ function MonthlyTabContent({
                         row.debtRange?.startsWith("เกิน") ? "text-orange-600 bg-orange-50" :
                         "text-slate-700"
                       }`}>{fmtMoney(Math.max(row.totalAmount - row.paidAmount, 0))}</td>
+                      <td className="px-2 py-1.5 text-center">
+                        {row.contractNo && (
+                          <button
+                            type="button"
+                            onClick={() => setInstallmentLightbox({
+                              contractNo: row.contractNo!,
+                              customerName: row.customerName,
+                              snapshotMonth: targetSnapshotLightbox!.snapshotMonth,
+                            })}
+                            className="px-2 py-0.5 text-[10px] rounded bg-amber-100 text-amber-700 border border-amber-300 hover:bg-amber-200 transition-colors whitespace-nowrap"
+                          >
+                            ค่างวด
+                          </button>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -1565,6 +1597,119 @@ function MonthlyTabContent({
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Installment Detail Lightbox (งวดทั้งหมดของสัญญา) ── */}
+      <Dialog open={!!installmentLightbox} onOpenChange={(open) => { if (!open) setInstallmentLightbox(null); }}>
+        <DialogContent fullWidth className="h-[90vh] flex flex-col p-0 gap-0 overflow-hidden">
+          {/* Header */}
+          <div className="px-4 py-3 border-b bg-amber-700 text-white flex-shrink-0">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <div className="font-semibold text-sm">งวดชำระทั้งหมด</div>
+                <div className="text-xs text-amber-200 mt-0.5">
+                  <span className="font-mono">{installmentLightbox?.contractNo}</span>
+                  {installmentLightbox?.customerName && (
+                    <span className="ml-2">— {installmentLightbox.customerName}</span>
+                  )}
+                  <span className="ml-2 text-amber-300">
+                    (Snapshot {installmentLightbox?.snapshotMonth})
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Summary badges */}
+          {installmentDetailQuery.data && installmentDetailQuery.data.length > 0 && (() => {
+            const rows = installmentDetailQuery.data;
+            const sumTotal = rows.reduce((s, r) => s + r.totalAmount, 0);
+            const sumPaid = rows.reduce((s, r) => s + r.paidAmount, 0);
+            const sumNet = Math.max(sumTotal - sumPaid, 0);
+            const firstRow = rows[0];
+            return (
+              <div className="px-4 py-2 border-b bg-amber-50 flex-shrink-0 flex flex-wrap gap-2 text-xs">
+                <span className="px-2 py-1 rounded bg-white border border-amber-200 text-amber-800">
+                  ยอดจัดฯ: <strong>{fmtMoney(firstRow.financeAmount)}</strong>
+                </span>
+                <span className="px-2 py-1 rounded bg-white border border-amber-200 text-amber-800">
+                  {firstRow.installmentCount} งวด × {fmtMoney(firstRow.baselineAmount)}
+                </span>
+                <span className="px-2 py-1 rounded bg-amber-100 border border-amber-300 text-amber-800 font-semibold">
+                  ยอดที่ต้องชำระ: {fmtMoney(sumTotal)}
+                </span>
+                <span className="px-2 py-1 rounded bg-green-100 border border-green-300 text-green-700 font-semibold">
+                  ชำระแล้ว: {fmtMoney(sumPaid)}
+                </span>
+                <span className={`px-2 py-1 rounded font-semibold border ${
+                  sumNet <= 0 ? "bg-green-100 border-green-300 text-green-700" :
+                  firstRow.debtRange?.startsWith("เกิน 6") || firstRow.debtRange?.startsWith("เกิน >") ? "bg-red-100 border-red-300 text-red-700" :
+                  firstRow.debtRange?.startsWith("เกิน") ? "bg-orange-100 border-orange-300 text-orange-700" :
+                  "bg-amber-100 border-amber-300 text-amber-800"
+                }`}>
+                  คงเหลือ: {fmtMoney(sumNet)}
+                </span>
+              </div>
+            );
+          })()}
+
+          {/* Table */}
+          <div className="flex-1 overflow-auto">
+            {installmentDetailQuery.isLoading ? (
+              <div className="flex items-center justify-center h-32 text-sm text-gray-400">กำลังโหลดข้อมูล...</div>
+            ) : !installmentDetailQuery.data || installmentDetailQuery.data.length === 0 ? (
+              <div className="flex items-center justify-center h-32 text-sm text-gray-400">ไม่พบข้อมูล</div>
+            ) : (
+              <table className="w-full text-xs border-collapse">
+                <thead className="sticky top-0 z-10">
+                  <tr className="bg-amber-700 text-white">
+                    <th className="px-2 py-2 text-center border-r border-amber-600 whitespace-nowrap">งวดที่</th>
+                    <th className="px-2 py-2 text-left border-r border-amber-600 whitespace-nowrap">วันที่ต้องชำระ</th>
+                    <th className="px-2 py-2 text-right border-r border-amber-600 whitespace-nowrap">เงินต้น</th>
+                    <th className="px-2 py-2 text-right border-r border-amber-600 whitespace-nowrap">ดอกเบี้ย</th>
+                    <th className="px-2 py-2 text-right border-r border-amber-600 whitespace-nowrap">ค่าดำเนินการ</th>
+                    <th className="px-2 py-2 text-right border-r border-amber-600 whitespace-nowrap">ค่าปรับ</th>
+                    <th className="px-2 py-2 text-right border-r border-amber-600 whitespace-nowrap">ค่าปลดล็อก</th>
+                    <th className="px-2 py-2 text-right border-r border-amber-500 whitespace-nowrap bg-amber-800">ยอดที่ต้องชำระ</th>
+                    <th className="px-2 py-2 text-right border-r border-amber-600 whitespace-nowrap">ชำระแล้ว</th>
+                    <th className="px-2 py-2 text-right whitespace-nowrap bg-amber-800">ยอดหนี้คงเหลือ</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {installmentDetailQuery.data.map((row, idx) => {
+                    const netAmt = Math.max(row.totalAmount - row.paidAmount, 0);
+                    const isOverdue6 = row.debtRange?.startsWith("เกิน 6") || row.debtRange?.startsWith("เกิน >");
+                    const isOverdue = row.debtRange?.startsWith("เกิน");
+                    return (
+                      <tr key={`inst-${row.period}-${idx}`} className={`border-b transition-colors ${
+                        row.isPaid ? "bg-green-50" :
+                        isOverdue6 ? "bg-red-50/40" :
+                        isOverdue ? "bg-orange-50/40" :
+                        idx % 2 === 0 ? "bg-white" : "bg-amber-50/20"
+                      } hover:bg-amber-50`}>
+                        <td className="px-2 py-1.5 text-center font-semibold border-r">{row.period ?? "-"}</td>
+                        <td className="px-2 py-1.5 border-r whitespace-nowrap">{fmtDate(row.dueDate)}</td>
+                        <td className="px-2 py-1.5 text-right tabular-nums border-r">{fmtMoney(row.principal)}</td>
+                        <td className="px-2 py-1.5 text-right tabular-nums border-r">{fmtMoney(row.interest)}</td>
+                        <td className="px-2 py-1.5 text-right tabular-nums border-r">{fmtMoney(row.fee)}</td>
+                        <td className="px-2 py-1.5 text-right tabular-nums border-r">{fmtMoney(row.penalty)}</td>
+                        <td className="px-2 py-1.5 text-right tabular-nums border-r">{fmtMoney(row.unlockFee)}</td>
+                        <td className="px-2 py-1.5 text-right tabular-nums border-r font-semibold text-amber-700 bg-amber-50">{fmtMoney(row.totalAmount)}</td>
+                        <td className="px-2 py-1.5 text-right tabular-nums border-r text-green-700">{fmtMoney(row.paidAmount)}</td>
+                        <td className={`px-2 py-1.5 text-right tabular-nums font-semibold ${
+                          netAmt <= 0 ? "text-green-600" :
+                          isOverdue6 ? "text-red-600" :
+                          isOverdue ? "text-orange-600" :
+                          "text-slate-700"
+                        }`}>{fmtMoney(netAmt)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
     </div>

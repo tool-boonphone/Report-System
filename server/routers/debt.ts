@@ -33,6 +33,7 @@ import {
   populateTargetDetailSnapshot as populateMonthlyTargetDetailSnapshot,
   getTargetDetailSnapshot as getMonthlyTargetDetailSnapshot,
   getAvailableSnapshotMonths,
+  getContractInstallmentsBySnapshot,
 } from "../monthlyTargetDetailSnapshotDb";
 
 const debtViewProcedure = requirePermission("debt_report", "view");
@@ -215,5 +216,16 @@ export const debtRouter = router({
       }
       const count = await populateMonthlyCollectionSnapshot(input.section);
       return { success: true, hasCacheData: true, monthsUpdated: count };
+    }),
+
+  /** ดึงงวดทั้งหมดของสัญญาหนึ่งจาก snapshot — ใช้สำหรับ Installment Detail Lightbox */
+  getContractInstallments: debtViewProcedure
+    .input(z.object({
+      section: SectionEnum,
+      snapshotMonth: z.string().regex(/^\d{4}-\d{2}$/, "must be YYYY-MM"),
+      contractNo: z.string().min(1),
+    }))
+    .query(async ({ input }) => {
+      return getContractInstallmentsBySnapshot(input);
     }),
 });
