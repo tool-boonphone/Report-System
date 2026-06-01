@@ -517,6 +517,9 @@ export default function DataLoadingScreen() {
           section: sec,
           devices: devicePayload,
         });
+        // Invalidate contracts.listAll เพื่อให้หน้า Contracts re-fetch ข้อมูลใหม่
+        // พร้อม lastOnlineDays ที่อัปเดตแล้ว
+        await utils.contracts.listAll.invalidate({ section: sec });
       }
       
       setStatus("mdm", "done");
