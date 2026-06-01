@@ -523,6 +523,8 @@ function MonthlyTabContent({
   const [targetSnapshotProductType, setTargetSnapshotProductType] = React.useState<string | undefined>(undefined);
   const [targetSnapshotDebtRange, setTargetSnapshotDebtRange] = React.useState<string | undefined>(undefined);
   const [targetSnapshotPage, setTargetSnapshotPage] = React.useState(0);
+  // Toggle ตั้งหนี้: เมื่อเปิด = แสดงเฉพาะงวดที่ยังค้างชำระ (ยอดหนี้คงเหลือ > 0)
+  const [targetSnapshotDebtOnly, setTargetSnapshotDebtOnly] = React.useState(true);
   const TARGET_SNAPSHOT_PAGE_SIZE = 100;
   const targetSnapshotDetailQuery = trpc.debt.getTargetDetailSnapshot.useQuery(
     {
@@ -630,6 +632,37 @@ function MonthlyTabContent({
     }
   }, [section, lightbox, lightboxSearch, lightboxProductType, lightboxDebtRange]);
 
+
+  // ── Target Snapshot Export handler ──────────────────────────────────────────
+  const handleTargetSnapshotExport = React.useCallback(async () => {
+    if (!section || !targetSnapshotLightbox) return;
+    const params = new URLSearchParams({ section, snapshotMonth: targetSnapshotLightbox.snapshotMonth });
+    if (targetSnapshotSearch) params.set("search", targetSnapshotSearch);
+    if (targetSnapshotProductType) params.set("productType", targetSnapshotProductType);
+    if (targetSnapshotDebtRange) params.set("debtRange", targetSnapshotDebtRange);
+    if (targetSnapshotDebtOnly) params.set("debtOnly", "1");
+    const toastId = toast.loading("กำลังเตรียมไฟล์ Excel…");
+    try {
+      const resp = await fetch(`/api/export/target-snapshot-detail?${params.toString()}`, { credentials: "include" });
+      if (!resp.ok) {
+        const { message } = await resp.json().catch(() => ({ message: "Export failed" }));
+        toast.error(message, { id: toastId });
+        return;
+      }
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `target_snapshot_${targetSnapshotLightbox.snapshotMonth}_${section}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast.success("ดาวน์โหลดสำเร็จ", { id: toastId });
+    } catch (err) {
+      toast.error((err as Error).message ?? "Export failed", { id: toastId });
+    }
+  }, [section, targetSnapshotLightbox, targetSnapshotSearch, targetSnapshotProductType, targetSnapshotDebtRange, targetSnapshotDebtOnly]);
   // ── Helpers ──────────────────────────────────────────────────────────────────
   function fmtMonth(m: string) {
     // YYYY-MM → เดือน/ปี พ.ศ.
@@ -1369,6 +1402,27 @@ function MonthlyTabContent({
                 ล้างฟิลเตอร์
               </button>
             )}
+            {/* Toggle ตั้งหนี้ */}
+            <div className="flex items-center gap-1.5 ml-auto">
+              <span className={`text-xs font-medium ${targetSnapshotDebtOnly ? "text-amber-700" : "text-gray-400"}`}>ตั้งหนี้</span>
+              <Switch
+                checked={targetSnapshotDebtOnly}
+                onCheckedChange={(v) => { setTargetSnapshotDebtOnly(v); setTargetSnapshotPage(0); }}
+                className="data-[state=checked]:bg-amber-600"
+              />
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${
+                targetSnapshotDebtOnly ? "bg-amber-100 text-amber-700 border border-amber-300" : "bg-gray-100 text-gray-400"
+              }`}>{targetSnapshotDebtOnly ? "เปิด" : "ปิด"}</span>
+            </div>
+            {/* ปุ่ม Export Excel */}
+            <button
+              type="button"
+              onClick={handleTargetSnapshotExport}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md bg-emerald-600 hover:bg-emerald-700 text-white font-medium transition-colors"
+            >
+              <Download className="w-3.5 h-3.5" />
+              Export Excel
+            </button>
           </div>
 
           {/* Target Snapshot Badges - สรุปยอดรวม server-side */}
@@ -1438,7 +1492,9 @@ function MonthlyTabContent({
                   </tr>
                 </thead>
                 <tbody>
-                  {targetSnapshotDetailQuery.data.rows.map((row, idx) => (
+                  {targetSnapshotDetailQuery.data.rows
+                    .filter((row) => !targetSnapshotDebtOnly || Math.max(row.totalAmount - row.paidAmount, 0) > 0)
+                    .map((row, idx) => (
                     <tr key={`${row.contractNo}-${row.period}-${idx}`} className={`border-b hover:bg-amber-50 transition-colors ${idx % 2 === 0 ? "bg-white" : "bg-amber-50/30"}`}>
                       <td className="px-2 py-1.5 text-center text-slate-400 border-r">{targetSnapshotPage * TARGET_SNAPSHOT_PAGE_SIZE + idx + 1}</td>
                       <td className="px-2 py-1.5 border-r whitespace-nowrap">{fmtDate(row.approveDate)}</td>
