@@ -83,7 +83,7 @@ export async function populateMonthlyCollectionSnapshot(
   // ── 1. Query target aggregates per due_month from debt_target_cache ──────────
   const targetResult = await db.execute(sql`
     SELECT
-      SUBSTRING(due_date, 1, 7) AS due_month,
+      TO_CHAR(due_date, 'YYYY-MM') AS due_month,
       COUNT(DISTINCT contract_external_id) AS contract_count,
       SUM(GREATEST(COALESCE(total_amount::numeric, 0) - COALESCE(paid_amount::numeric, 0), 0)) AS target_amount,
       SUM(GREATEST(COALESCE(principal::numeric, 0) - COALESCE(paid_amount::numeric, 0), 0)) AS target_principal,
@@ -97,7 +97,7 @@ export async function populateMonthlyCollectionSnapshot(
       AND due_date IS NOT NULL
       AND is_closed IS NOT TRUE
       AND is_future_period IS NOT TRUE
-    GROUP BY SUBSTRING(due_date, 1, 7)
+    GROUP BY TO_CHAR(due_date, 'YYYY-MM')
     ORDER BY due_month
   `);
   const targetRows: any[] = pgRows(targetResult);
@@ -105,7 +105,7 @@ export async function populateMonthlyCollectionSnapshot(
   // ── 2. Query collected aggregates per paid_at month from debt_collected_cache ─
   const collectedResult = await db.execute(sql`
     SELECT
-      SUBSTRING(paid_at, 1, 7) AS paid_month,
+      TO_CHAR(paid_at, 'YYYY-MM') AS paid_month,
       COUNT(DISTINCT contract_external_id) AS contract_count,
       SUM(total_amount::numeric) AS collected_amount,
       SUM(principal::numeric) AS collected_principal,
@@ -120,7 +120,7 @@ export async function populateMonthlyCollectionSnapshot(
     WHERE section = ${section}
       AND paid_at IS NOT NULL
       AND is_bad_debt_row IS NOT TRUE
-    GROUP BY SUBSTRING(paid_at, 1, 7)
+    GROUP BY TO_CHAR(paid_at, 'YYYY-MM')
     ORDER BY paid_month
   `);
   const collectedRows: any[] = pgRows(collectedResult);
@@ -430,7 +430,7 @@ export async function getMonthlyTargetDetail(params: {
 
   const conditions: string[] = [
     `section = '${section}'`,
-    `SUBSTRING(due_date, 1, 7) = '${collectionMonth}'`,
+    `TO_CHAR(due_date, 'YYYY-MM') = '${collectionMonth}'`,
     `is_closed IS NOT TRUE`,
     `is_future_period IS NOT TRUE`,
   ];
@@ -514,7 +514,7 @@ export async function getMonthlyCollectedDetail(params: {
 
   const conditions: string[] = [
     `section = '${section}'`,
-    `SUBSTRING(paid_at, 1, 7) = '${collectionMonth}'`,
+    `TO_CHAR(paid_at, 'YYYY-MM') = '${collectionMonth}'`,
     `is_bad_debt_row IS NOT TRUE`,
   ];
 
