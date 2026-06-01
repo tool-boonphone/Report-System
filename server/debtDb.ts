@@ -4623,27 +4623,26 @@ export async function listWatchGroup(params: {
         // คำนวณ arrearsCount และ daysOverdue
     const dueDate1 = s.due_date_1 ? new Date(`${s.due_date_1}T00:00:00`) : null;
     const dueDate2 = s.due_date_2 ? new Date(`${s.due_date_2}T00:00:00`) : null;
-    const dueDate3 = s.due_date_3 ? new Date(`${s.due_date_3}T00:00:00`) : null;
-    // due_date_first_unpaid = งวดแรกที่ยังไม่ได้ชำระและถึงกำหนดแล้ว (แม่นยำกว่า due_date_1)
+    // due_date_first_unpaid = งวดแรกที่ยังไม่ได้ชำระและถึงกำหนดแล้ว (ใช้คำนวณ daysOverdue)
     const dueDateFirstUnpaid = s.due_date_first_unpaid ? new Date(`${s.due_date_first_unpaid}T00:00:00`) : null;
-    // กรองออก: ถ้างวดที่ 3 ถึงกำหนดแล้ว = ค้าง 2 งวดแล้ว ไม่แสดงในหน้านี้
-    if (dueDate3 != null && dueDate3 <= today) continue;
-    // ตรวจสอบว่างวดที่ 2 ถึงกำหนดแล้วหรือยัง
-    const due2Reached = dueDate2 != null && dueDate2 <= today;
-    // arrearsCount (เงื่อนไขใหม่ล่าสุด: "ชำระ (0งวด/1งวด)"):
-    //   0 งวด (กลุ่มเร่งติดตามก่อนหลุด): ถึงกำหนดชำระงวดที่ 1 แล้ว แต่ยังไม่ชำระเลย หรือชำระมาแค่บางส่วนแต่ยังไม่ครบยอดที่ต้องชำระของงวดที่ 1
-    //   1 งวด (กลุ่มเร่งลงพื้นที่ติดตามเครื่อง): ชำระงวดที่ 1 ครบแล้ว ปัจจุบันเลยกำหนดชำระงวดที่ 2 แล้ว แต่ยังไม่ชำระงวดที่ 2 เลย หรือชำระมาแค่บางส่วนแต่ยังไม่ครบ
+
+    // arrearsCount (เงื่อนไขล่าสุด: "ชำระ (0งวด/1งวด)"):
+    //   0 งวด: ถึงกำหนดงวด 1 แล้ว แต่งวด 1 ยังไม่ครบ
+    //      (ไม่จำกัดว่าปัจจุบันอยู่งวดที่เท่าไร ขอแค่งวด 1 ยังไม่ครบ)
+    //   1 งวด: ชำระงวด 1 ครบแล้ว + ถึงกำหนดงวด 2 แล้ว + งวด 2 ยังไม่ครบ
+    //      (ไม่จำกัดว่าปัจจุบันอยู่งวดที่เท่าไร ขอแค่งวด 2 ยังไม่ครบ)
     const paid1  = inst1PaidMap.get(extId)  ?? 0;
     const total1 = inst1TotalMap.get(extId) ?? 0;
     const paid2  = inst2PaidMap.get(extId)  ?? 0;
     const total2 = inst2TotalMap.get(extId) ?? 0;
     const inst1Done    = total1 > 0 && paid1 >= total1 - 0.5;   // ชำระงวด 1 ครบแล้ว
     const inst1NotDone = total1 <= 0 || paid1 < total1 - 0.5;  // งวด 1 ยังไม่ครบ
-    const inst2NotDone = total2 <= 0 || paid2 < total2 - 0.5;  // งวด 2 ยังไม่ครบ
+    const inst2NotDone = total2 <= 0 || paid2 < total2 - 0.5;  // งวด 2 ยัງไม่ครบ
     const due1Reached  = dueDate1 != null && dueDate1 <= today;
+    const due2Reached  = dueDate2 != null && dueDate2 <= today;
 
-    // 0 งวด: ถึงกำหนดงวด 1 แล้ว (due1Reached) + งวด 1 ยังไม่ครบ (inst1NotDone)
-    // 1 งวด: ชำระงวด 1 ครบแล้ว (inst1Done) + ถึงกำหนดงวด 2 แล้ว (due2Reached) + งวด 2 ยังไม่ครบ (inst2NotDone)
+    // 0 งวด: ถึงกำหนดงวด 1 แล้ว (due1Reached) + งวด 1 ยัງไม่ครบ (inst1NotDone)
+    // 1 งวด: ชำระงวด 1 ครบแล้ว (inst1Done) + ถึงกำหนดงวด 2 แล้ว (due2Reached) + งวด 2 ยัງไม่ครบ (inst2NotDone)
     let arrearsCount = -1;
     if (inst1Done && due2Reached && inst2NotDone) {
       arrearsCount = 1;
@@ -4651,7 +4650,7 @@ export async function listWatchGroup(params: {
       arrearsCount = 0;
     }
 
-    // ถ้าไม่เข้าเงื่อนไข 0 หรือ 1 เลย ให้ข้ามสัญญานี้ไป (เพราะหน้าเฝ้าระวังดูแค่ 0 กับ 1)
+    // ถ้าไม่เข้าเงื่อนไข 0 หรือ 1 เลย ให้ข้ามสัญญานี้ไป
     if (arrearsCount === -1) continue;
     // daysOverdue: นับจาก due_date_first_unpaid (งวดแรกที่ยังค้างชำระจริง)
     // ถ้าชำระครบแล้ว due_date_first_unpaid จะเป็น null → daysOverdue = 0 → กรองออกโดย HAVING
