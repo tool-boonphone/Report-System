@@ -774,29 +774,10 @@ export async function getMonthlySummary(
 ): Promise<MonthlySummaryRow[]> {
   const { section } = params;
 
-  // Smart Cache Strategy:
-  // - ใช้ cache เมื่อไม่มี search และไม่มี approveMonths filter ที่ cache ไม่รองรับ
-  //   (count/notYetDue/installTotal ไม่มี approveMonths filter ใน cache)
-  // - fallback ไป live query เมื่อมี search หรือ countApproveMonths/notYetDueApproveMonths/installTotalApproveMonths
-  const needsLiveQuery =
-    !!params.search ||
-    (params.countApproveMonths && params.countApproveMonths.length > 0) ||
-    (params.notYetDueApproveMonths && params.notYetDueApproveMonths.length > 0) ||
-    (params.installTotalApproveMonths && params.installTotalApproveMonths.length > 0);
+  // NOTE: ใช้ live query เสมอ (cache disabled เพื่อความถูกต้องของข้อมูล)
+  console.log(`[getMonthlySummary] LIVE QUERY — section=${section}`);
 
-  if (!needsLiveQuery) {
-    // Fast path: ดึงจาก cache
-    const cachedRows = await getMonthlySummaryFromCache(params);
-    if (cachedRows !== null) {
-      console.log(`[getMonthlySummary] CACHE HIT — section=${section} rows=${cachedRows.length}`);
-      return cachedRows;
-    }
-    console.log(`[getMonthlySummary] CACHE MISS — fallback to live query section=${section}`);
-  } else {
-    console.log(`[getMonthlySummary] LIVE QUERY (search/approveMonths filter) — section=${section}`);
-  }
-
-  // Fallback: รัน 6 queries สด
+  // รัน 6 queries สด
   // Run 6 queries in parallel
   const [countRows, targetRows, paidRows, dueRows, notYetDueRows, installTotalRows] = await Promise.all([
     queryCount(section, {

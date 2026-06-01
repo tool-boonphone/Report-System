@@ -279,39 +279,17 @@ export const monthlySummaryRouter = router({
         search: input.search || undefined,
       };
 
-      // Smart Cache Strategy:
-      // - ใช้ cache เมื่อไม่มี search (cache ไม่รองรับ search)
-      // - fallback ไป live query เมื่อมี search หรือ cache ว่างเปล่า
+      // NOTE: ใช้ live query เสมอ (cache disabled เพื่อความถูกต้องของข้อมูล)
       let summaryRows: Awaited<ReturnType<typeof getDueMonthSummary>>;
       let allDueMonths: string[];
 
-      if (!params.search) {
-        // Fast path: ดึงจาก cache
-        const cached = await getDueMonthSummaryFromCache(params);
-        if (cached.rows.length > 0) {
-          summaryRows = cached.rows;
-          allDueMonths = cached.allDueMonths;
-          console.log(`[getDueMonthSummary] CACHE HIT — section=${params.section} rows=${summaryRows.length} pt=${params.productType??'null'} df=${params.deviceFamily??'null'}`);
-        } else {
-          // Cache miss: fallback ไป live query
-          console.log(`[getDueMonthSummary] CACHE MISS — fallback to live query section=${params.section}`);
-          summaryRows = await getDueMonthSummary(params);
-          const dueMonthSet = new Set<string>();
-          for (const row of summaryRows) {
-            for (const dm of Object.keys(row.dueMonths)) dueMonthSet.add(dm);
-          }
-          allDueMonths = Array.from(dueMonthSet).sort((a, b) => a.localeCompare(b));
-        }
-      } else {
-        // Live query: มี search
-        console.log(`[getDueMonthSummary] LIVE QUERY (search) — section=${params.section}`);
-        summaryRows = await getDueMonthSummary(params);
-        const dueMonthSet = new Set<string>();
-        for (const row of summaryRows) {
-          for (const dm of Object.keys(row.dueMonths)) dueMonthSet.add(dm);
-        }
-        allDueMonths = Array.from(dueMonthSet).sort((a, b) => a.localeCompare(b));
+      console.log(`[getDueMonthSummary] LIVE QUERY — section=${params.section}`);
+      summaryRows = await getDueMonthSummary(params);
+      const dueMonthSet = new Set<string>();
+      for (const row of summaryRows) {
+        for (const dm of Object.keys(row.dueMonths)) dueMonthSet.add(dm);
       }
+      allDueMonths = Array.from(dueMonthSet).sort((a, b) => a.localeCompare(b));
 
       // Flatten to array of flat rows for JSON transport
       type FlatDueMonthRow = {
