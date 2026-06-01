@@ -352,23 +352,29 @@ function ArrearsInfoPopover() {
             กลุ่มเฝ้าระวัง — เงื่อนไขการจัดกลุ่ม
           </h4>
           <p className="text-xs text-gray-500 leading-relaxed">
-            แสดงเฉพาะสัญญาที่เกินช่วงผ่อนผันที่กำหนดแล้ว
-            แบ่งเป็น  2 กลุ่มตามยอดชำระงวดที่ 1:
+            แสดงเฉพาะสัญญาที่เกินช่วงผ่อนผันแล้ว แบ่งเป็น 2 กลุ่มตามยอดชำระงวดที่ 1
+            (ไม่จำกัดว่าปัจจุบันอยู่งวดที่เท่าไร)
           </p>
           <div className="rounded-md border border-amber-200 bg-amber-50 p-3 space-y-1">
             <p className="text-xs font-semibold text-amber-800">0 งวด — กลุ่มเร่งติดตามก่อนหลุด</p>
             <p className="text-xs text-amber-700 leading-relaxed">
-              ถึงกำหนดชำระ<span className="font-medium">งวดที่ 1</span> แล้ว แต่ยอดชำระยังไม่ครบยอดที่ต้องชำระของงวดที่ 1
-              และเกินกำหนดชำระงวดที่ 1 มาแล้วมากกว่าช่วงผ่อนผัน —
-              ยังไม่ชำระเลย หรือชำระมาแค่บางส่วนแต่ยังไม่ครบ
+              ถึงกำหนดชำระ<span className="font-medium">งวดที่ 1</span> แล้ว และเกินกำหนดมามากกว่าช่วงผ่อนผัน
+              แต่ยอดชำระงวดที่ 1 ยังไม่ครบ — ไม่ชำระเลย
+              หรือชำระมาแค่บางส่วนแต่ยังไม่ครบ
             </p>
           </div>
           <div className="rounded-md border border-red-200 bg-red-50 p-3 space-y-1">
             <p className="text-xs font-semibold text-red-800">1 งวด — กลุ่มเร่งลงพื้นที่ติดตามเครื่อง</p>
             <p className="text-xs text-red-700 leading-relaxed">
-              ชำระ<span className="font-medium">งวดที่ 1</span> ครบแล้ว ปัจจุบันเลยกำหนดชำระ<span className="font-medium">งวดที่ 2</span> มาแล้วมากกว่าช่วงผ่อนผัน
-              — ยังไม่ชำระงวดที่ 2 เลย หรือชำระมาแค่บางส่วนแต่ยังไม่ครบ
-              ต้องเร่งลงพื้นที่เพื่อติดตามเครื่องคืน
+              ชำระ<span className="font-medium">งวดที่ 1</span> ครบแล้ว ถึงกำหนดชำระ<span className="font-medium">งวดที่ 2</span> แล้ว
+              และเกินกำหนดมามากกว่าช่วงผ่อนผัน แต่ยอดชำระงวดที่ 2 ยังไม่ครบ
+              — ไม่ชำระเลย หรือชำระมาแค่บางส่วนแต่ยังไม่ครบ
+            </p>
+          </div>
+          <div className="rounded-md border border-gray-200 bg-gray-50 p-3 space-y-1">
+            <p className="text-xs font-semibold text-gray-700">สัญญาที่ตัดออก (ไม่แสดง)</p>
+            <p className="text-xs text-gray-600 leading-relaxed">
+              ระงับสัญญา / หนี้เสีย / ยกเลิกสัญญา / สิ้นสุดสัญญา
             </p>
           </div>
           <p className="text-[11px] text-gray-400 leading-relaxed">
@@ -1118,9 +1124,9 @@ export default function WatchGroup() {
                           <td className="px-3 py-1.5 text-right whitespace-nowrap text-green-700">
                             {fmtMoney(r.installmentTotal)}
                           </td>
-                          {/* ผ่อนงวดละ = ยอดค้างชำระรวมทุกงวดที่ถึงกำหนดแล้ว */}
+                          {/* ผ่อนงวดละ = ค่างวดต่องวด (installmentAmount) */}
                           <td className="px-3 py-1.5 text-right whitespace-nowrap font-medium text-gray-800">
-                            {fmtMoney(r.totalAmountDue)}
+                            {fmtMoney(r.installmentAmount)}
                           </td>
                           {/* ยอดชำระ = ยอดที่ชำระมาแล้วในงวดที่ 1 */}
                           <td className="px-3 py-1.5 text-right whitespace-nowrap">
