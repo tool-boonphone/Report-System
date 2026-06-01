@@ -1089,14 +1089,14 @@ function MonthlyTabContent({
           <DialogHeader className="px-4 pt-4 pb-2 border-b flex-shrink-0">
             <div className="flex items-center justify-between gap-2 flex-wrap">
               <DialogTitle className="flex items-center gap-2 text-base">
-                <Target className="w-4 h-4 text-amber-600" />
-                <span className="text-amber-700">เป้าเก็บหนี้</span>
+                <Coins className="w-4 h-4 text-emerald-600" />
+                <span className="text-emerald-700">ยอดเก็บหนี้ (ค่างวด)</span>
                 <span className="text-slate-600 font-normal">เดือน {snapshotLightbox ? fmtMonth(snapshotLightbox.snapshotMonth) : ""}</span>
                 {snapshotDetailQuery.data?.total != null && (
                   <span className="text-slate-400 text-xs font-normal">({snapshotDetailQuery.data.total.toLocaleString("th-TH")} รายการ)</span>
                 )}
                 {/* badge แสดงว่าเป็น snapshot freeze */}
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[10px] font-semibold border border-amber-300">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-semibold border border-emerald-300">
                   <Pin className="w-3 h-3" /> Snapshot ณ วันที่ 1
                 </span>
               </DialogTitle>
