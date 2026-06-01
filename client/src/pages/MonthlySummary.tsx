@@ -10,6 +10,7 @@
  *   6. ยังไม่ถึงกำหนด (notYetDue)     — blue
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { AppShell } from "@/components/AppShell";
 import { SyncStatusBar } from "@/components/SyncStatusBar";
 import { useNavActions } from "@/contexts/NavActionsContext";
@@ -627,6 +628,7 @@ function DeviceFamilyFilter({value,onChange}:{value:string;onChange:(v:string)=>
 export default function MonthlySummary() {
   const{can,isSuperAdmin}=useAppAuth();const{section}=useSection();const{setActions}=useNavActions();
   const canView=can("debt_report","view");const canExport=can("debt_report","export");
+  const queryClient=useQueryClient();
   const[tab,setTab]=useState<TabKey>("combined");
 
   // ── Repopulate Monthly Summary Cache (superAdmin only) ────────────────────
@@ -634,24 +636,28 @@ export default function MonthlySummary() {
   const handleRepopulateMonthlySummary=useCallback(async()=>{
     if(!section||isRepopulating)return;
     setIsRepopulating(true);
+    const toastId=toast.loading(`กำลัง Repopulate Summary (${section}) — กรุณารอสักครู่...`);
     try{
+      // async:false → รอจนเสร็จก่อน return เพื่อให้รู้ว่า populate เสร็จแล้ว
       const res=await fetch("/api/internal/repopulate-monthly-summary",{
         method:"POST",
         headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({section,async:true}),
+        body:JSON.stringify({section,async:false}),
       });
       const data=await res.json();
       if(data.ok){
-        toast.success(`เริ่ม Repopulate Monthly Summary (${section}) แล้ว — กำลังประมวลผลในพื้นหลัง`);
+        toast.success(`Repopulate Summary (${section}) เสร็จแล้ว — msRows=${data.msRows} dmRows=${data.dmRows}`,{id:toastId});
+        // Refresh ข้อมูลอัตโนมัติหลัง populate เสร็จ
+        queryClient.invalidateQueries();
       }else{
-        toast.error(`Repopulate ล้มเหลว: ${data.error??"Unknown error"}`);
+        toast.error(`Repopulate ล้มเหลว: ${data.error??"Unknown error"}`,{id:toastId});
       }
     }catch(err:any){
-      toast.error(`Repopulate ล้มเหลว: ${err?.message??"Network error"}`);
+      toast.error(`Repopulate ล้มเหลว: ${err?.message??"Network error"}`,{id:toastId});
     }finally{
       setIsRepopulating(false);
     }
-  },[section,isRepopulating]);
+  },[section,isRepopulating,queryClient]);
 
   // ── filter state ─────────────────────────────────────────────────────────
   // Tab 1: จำนวนสัญญา
