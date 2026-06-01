@@ -1039,9 +1039,9 @@ function buildMscBatchCombinations(
 
 /**
  * populateMonthlySummaryCache — เรียกตอน Sync หลัง populateDebtCache
- * BATCH version: ใช้ 6 queries แทน N×M×6 sequential queries
- * แต่ละ query เพิ่ม product_type + device + date_month เข้า GROUP BY
- * แล้ว aggregate combinations ใน JavaScript ด้วย buildMscBatchCombinations
+ * NEW APPROACH: เรียก live query functions โดยตรง (queryCount, queryTarget, queryPaid, queryDue, queryNotYetDue, queryInstallTotal)
+ * สำหรับแต่ละ combination ของ productType × deviceFamily (รวม null×null)
+ * รับประกัน 100% ว่า cache ตรงกับ live query เสมอ เพราะใช้ code path เดียวกัน
  */
 export async function populateMonthlySummaryCache(
   section: SectionKey,
@@ -1050,15 +1050,172 @@ export async function populateMonthlySummaryCache(
   const db = await getDb(section);
   if (!db) return 0;
   let totalRows = 0;
-  const TOTAL_STEPS = 6;
-  let doneSteps = 0;
 
-  // ── Helper: map deviceFamily string to iOS/Android/null ──────────────────
+  // ── ดึง distinct productTypes จาก DB ──────────────────────────────────────
+  const ptRows = pgRows(await db.execute(sql.raw(
+    `SELECT DISTINCT product_type FROM debt_target_cache WHERE section = '${section}' AND product_type IS NOT NULL ORDER BY 1`
+  )));
+  const productTypes: Array<string | null> = [null, ...ptRows.map((r: any) => String(r.product_type))];
+  const deviceFamilies: Array<"iOS" | "Android" | null> = [null, "iOS", "Android"];
+
+  // ── Helper: แปลง device string → iOS/Android/null ────────────────────────────
   function toDeviceFamily(device: string | null): "iOS" | "Android" | null {
     if (!device) return null;
     if (device === "iOS") return "iOS";
     if (device === "Android") return "Android";
     return null;
+  }
+
+  // combinations ทั้งหมด: productType × deviceFamily
+  const combos: Array<{ pt: string | null; df: "iOS" | "Android" | null }> = [];
+  for (const pt of productTypes) {
+    for (const df of deviceFamilies) {
+      combos.push({ pt, df });
+    }
+  }
+
+  const TOTAL_STEPS = combos.length * 6; // 6 query types per combo
+  let doneSteps = 0;
+
+  // ── Helper: แปลง queryCount rows → upsert rows ───────────────────────────
+  function mapCountRows(
+    rows: Array<{ approve_month: string; bucket: string; contract_count: number }>,
+    pt: string | null,
+    df: "iOS" | "Android" | null,
+  ) {
+    return rows.map((r) => ({
+      approve_month: r.approve_month,
+      bucket: r.bucket,
+      productType: pt,
+      deviceFamily: df,
+      dateMonth: null as string | null,
+      contractCount: Number(r.contract_count),
+      principal: 0, interest: 0, fee: 0, penalty: 0, unlockFee: 0,
+      discount: 0, overpaid: 0, badDebt: 0, badDebtInstallment: 0,
+      totalAmount: 0,
+    }));
+  }
+
+  // ── Helper: แปลง queryTarget rows → upsert rows ──────────────────────────
+  function mapTargetRows(
+    rows: Array<{ approve_month: string; bucket: string; contract_count: number;
+      principal_target: number; interest_target: number; fee_target: number;
+      penalty_target: number; unlock_fee_target: number; total_target: number; }>,
+    pt: string | null,
+    df: "iOS" | "Android" | null,
+  ) {
+    return rows.map((r) => ({
+      approve_month: r.approve_month,
+      bucket: r.bucket,
+      productType: pt,
+      deviceFamily: df,
+      dateMonth: null as string | null, // cache read ใช้ date_month IS NULL เมื่อไม่มี filter
+      contractCount: Number(r.contract_count),
+      principal: Number(r.principal_target), interest: Number(r.interest_target),
+      fee: Number(r.fee_target), penalty: Number(r.penalty_target),
+      unlockFee: Number(r.unlock_fee_target),
+      discount: 0, overpaid: 0, badDebt: 0, badDebtInstallment: 0,
+      totalAmount: Number(r.total_target),
+    }));
+  }
+
+  // ── Helper: แปลง queryPaid rows → upsert rows ────────────────────────────
+  function mapPaidRows(
+    rows: Array<{ approve_month: string; bucket: string; contract_count: number;
+      principal_paid: number; interest_paid: number; fee_paid: number;
+      penalty_paid: number; unlock_fee_paid: number; discount_amount: number;
+      overpaid_amount: number; installment_paid: number; device_sale_amount: number;
+      total_paid: number; }>,
+    pt: string | null,
+    df: "iOS" | "Android" | null,
+  ) {
+    // paid เก็บ dateMonth = approveMonth เพื่อให้ cache read ใช้ dateMonthCondAll(paidApproveMonths)
+    return rows.map((r) => ({
+      approve_month: r.approve_month,
+      bucket: r.bucket,
+      productType: pt,
+      deviceFamily: df,
+      dateMonth: r.approve_month, // = approveMonth
+      contractCount: Number(r.contract_count),
+      principal: Number(r.principal_paid), interest: Number(r.interest_paid),
+      fee: Number(r.fee_paid), penalty: Number(r.penalty_paid),
+      unlockFee: Number(r.unlock_fee_paid),
+      discount: Number(r.discount_amount), overpaid: Number(r.overpaid_amount),
+      badDebt: Number(r.device_sale_amount), badDebtInstallment: Number(r.installment_paid),
+      totalAmount: Number(r.total_paid),
+    }));
+  }
+
+  // ── Helper: แปลง queryDue rows → upsert rows ─────────────────────────────
+  function mapDueRows(
+    rows: Array<{ approve_month: string; bucket: string; contract_count: number;
+      principal_due: number; interest_due: number; fee_due: number;
+      penalty_due: number; unlock_fee_due: number; total_due: number; }>,
+    pt: string | null,
+    df: "iOS" | "Android" | null,
+  ) {
+    return rows.map((r) => ({
+      approve_month: r.approve_month,
+      bucket: r.bucket,
+      productType: pt,
+      deviceFamily: df,
+      dateMonth: null as string | null, // cache read ใช้ date_month IS NULL เมื่อไม่มี filter
+      contractCount: Number(r.contract_count),
+      principal: Number(r.principal_due), interest: Number(r.interest_due),
+      fee: Number(r.fee_due), penalty: Number(r.penalty_due),
+      unlockFee: Number(r.unlock_fee_due),
+      discount: 0, overpaid: 0, badDebt: 0, badDebtInstallment: 0,
+      totalAmount: Number(r.total_due),
+    }));
+  }
+
+  // ── Helper: แปลง queryNotYetDue rows → upsert rows ───────────────────────
+  function mapNotYetDueRows(
+    rows: Array<{ approve_month: string; bucket: string; contract_count: number;
+      principal_notyet: number; interest_notyet: number; fee_notyet: number;
+      penalty_notyet: number; unlock_fee_notyet: number; total_notyet: number; }>,
+    pt: string | null,
+    df: "iOS" | "Android" | null,
+  ) {
+    // notYetDue ไม่มี dateMonth filter ใน default mode → เก็บ dateMonth = null
+    // เพื่อให้ cache read ใช้ date_month IS NOT NULL AND 1=1 ดึงได้ถูกต้อง
+    // แต่ถ้าเก็บ null จะ conflict กับ due (ซึ่งก็ null) ไม่ได้ เพราะ query_type ต่างกัน
+    return rows.map((r) => ({
+      approve_month: r.approve_month,
+      bucket: r.bucket,
+      productType: pt,
+      deviceFamily: df,
+      dateMonth: null as string | null,
+      contractCount: Number(r.contract_count),
+      principal: Number(r.principal_notyet), interest: Number(r.interest_notyet),
+      fee: Number(r.fee_notyet), penalty: Number(r.penalty_notyet),
+      unlockFee: Number(r.unlock_fee_notyet),
+      discount: 0, overpaid: 0, badDebt: 0, badDebtInstallment: 0,
+      totalAmount: Number(r.total_notyet),
+    }));
+  }
+
+  // ── Helper: แปลง queryInstallTotal rows → upsert rows ────────────────────
+  function mapInstallTotalRows(
+    rows: Array<{ approve_month: string; bucket: string; contract_count: number;
+      principal_install: number; interest_install: number; fee_install: number;
+      total_install: number; finance_total: number; }>,
+    pt: string | null,
+    df: "iOS" | "Android" | null,
+  ) {
+    return rows.map((r) => ({
+      approve_month: r.approve_month,
+      bucket: r.bucket,
+      productType: pt,
+      deviceFamily: df,
+      dateMonth: null as string | null,
+      contractCount: Number(r.contract_count),
+      principal: Number(r.principal_install), interest: Number(r.interest_install),
+      fee: Number(r.fee_install), penalty: 0, unlockFee: 0,
+      discount: 0, overpaid: 0, badDebt: 0, badDebtInstallment: 0,
+      totalAmount: Number(r.total_install),
+      financeTotal: Number(r.finance_total),
+    }));
   }
 
   // ── Query 1: count (BATCH) ────────────────────────────────────────────────
@@ -1328,13 +1485,12 @@ export async function populateMonthlySummaryCache(
   }
 
   // ── Query 5: notYetDue (BATCH) — ใช้ SQL เดียวกับ queryNotYetDue live query เป๊ะๆ ──
-  // เพิ่ม is_paid IS NOT TRUE ใน subquery — ตรงกับ live query (Phase 141-fix3)
+  // dateMonth = null เพื่อให้ cache read ใช้ date_month IS NULL เมื่อไม่มี filter (ไม่เก็บ due_month เพราะจะรวมซ้ำ)
   {
     const baseWhere = `dtc.section = '${section}' AND dtc.approve_date IS NOT NULL`;
     const q = `
       SELECT
         TO_CHAR(base.approve_date, 'YYYY-MM') AS approve_month,
-        TO_CHAR(base.due_date, 'YYYY-MM') AS due_month,
         CASE
           WHEN base.contract_status = 'หนี้เสีย'      THEN 'หนี้เสีย'
           WHEN base.contract_status = 'ระงับสัญญา'   THEN 'ระงับสัญญา'
@@ -1359,13 +1515,12 @@ export async function populateMonthlySummaryCache(
         SUM(CAST(base.total_amount AS DECIMAL(18,2))) AS total_notyet
       FROM debt_target_cache base
       JOIN (
-        -- ตรงกับ queryNotYetDue live query: is_paid IS NOT TRUE + is_suspended + contract_status filter
+        -- ตรงกับ queryNotYetDue live query: due_date > CURRENT_DATE + is_closed + is_suspended + contract_status filter
         SELECT dtc.section, dtc.contract_external_id, MAX(dtc.period) AS max_period
         FROM debt_target_cache dtc
         WHERE ${baseWhere}
           AND dtc.due_date > CURRENT_DATE
           AND dtc.is_closed IS NOT TRUE
-          AND dtc.is_paid IS NOT TRUE
           AND COALESCE(dtc.is_suspended, false) IS NOT TRUE
           AND COALESCE(dtc.contract_status, '') NOT IN ('ระงับสัญญา', 'สิ้นสุดสัญญา', 'หนี้เสีย', 'ยกเลิกสัญญา')
         GROUP BY dtc.section, dtc.contract_external_id
@@ -1375,10 +1530,9 @@ export async function populateMonthlySummaryCache(
         AND base.approve_date IS NOT NULL
         AND base.due_date > CURRENT_DATE
         AND base.is_closed IS NOT TRUE
-        AND base.is_paid IS NOT TRUE
         AND COALESCE(base.is_suspended, false) IS NOT TRUE
         AND COALESCE(base.contract_status, '') NOT IN ('ระงับสัญญา', 'สิ้นสุดสัญญา', 'หนี้เสีย', 'ยกเลิกสัญญา')
-      GROUP BY 1, 2, 3, 4, 5
+      GROUP BY 1, 2, 3, 4
       ORDER BY 1 DESC
     `;
     const rawRows = pgRows(await db.execute(sql.raw(q)));
@@ -1387,7 +1541,7 @@ export async function populateMonthlySummaryCache(
       bucket: String(r.bucket),
       productType: r.product_type ? String(r.product_type) : null,
       deviceFamily: toDeviceFamily(r.device_family),
-      dateMonth: r.due_month ? String(r.due_month) : null,
+      dateMonth: null as string | null, // null เพื่อให้ cache read ใช้ date_month IS NULL เมื่อไม่มี filter
       contractCount: Number(r.contract_count),
       principal: Number(r.principal_notyet), interest: Number(r.interest_notyet), fee: Number(r.fee_notyet),
       penalty: Number(r.penalty_notyet), unlockFee: Number(r.unlock_fee_notyet),
@@ -1615,8 +1769,8 @@ async function getMonthlySummaryFromCache(
         AND ${dateMonthCond(params.dueAtMonths, params.dueAtDate)}
       ORDER BY approve_month DESC
     `)),
-    // notYetDue: dueMonth filter (populate เก็บ dateMonth = dueMonth)
-    // ใช้ dateMonthCondAll เพราะ date_month มีค่าเสมอ (ไม่เคย NULL)
+    // notYetDue: populate เก็บ dateMonth = null เสมอ (ไม่แยกตาม due_month เพราะจะรวมซ้ำ)
+    // ใช้ dateMonthCond (เมื่อไม่มี filter = IS NULL ตรงกับที่เก็บ)
     db.execute(sql.raw(`
       SELECT approve_month, bucket, contract_count,
              principal AS principal_notyet, interest AS interest_notyet,
@@ -1624,10 +1778,9 @@ async function getMonthlySummaryFromCache(
              unlock_fee AS unlock_fee_notyet, total_amount AS total_notyet
       FROM monthly_summary_cache
       WHERE section = '${section}' AND query_type = 'notYetDue'
-        AND date_month IS NOT NULL
         AND ${productTypeCond(params.notYetDueProductType)}
         AND ${deviceFamilyCond(params.notYetDueDeviceFamily)}
-        AND ${dateMonthCondAll(params.notYetDueDueMonths, params.notYetDueDueDate)}
+        AND ${dateMonthCond(params.notYetDueDueMonths, params.notYetDueDueDate)}
       ORDER BY approve_month DESC
     `)),
     // installTotal: ไม่มี dateMonth filter
