@@ -1107,7 +1107,6 @@ export async function populateMonthlySummaryCache(
     const q = `
       SELECT
         TO_CHAR(base.approve_date, 'YYYY-MM') AS approve_month,
-        TO_CHAR(base.due_date, 'YYYY-MM') AS due_month,
         CASE
           WHEN base.contract_status = 'หนี้เสีย'      THEN 'หนี้เสีย'
           WHEN base.contract_status = 'ระงับสัญญา'   THEN 'ระงับสัญญา'
@@ -1151,7 +1150,7 @@ export async function populateMonthlySummaryCache(
         AND base.approve_date IS NOT NULL
         AND DATE(base.due_date) <= CURRENT_DATE
         AND base.due_date IS NOT NULL
-      GROUP BY 1, 2, 3, 4, 5
+      GROUP BY 1, 2, 3, 4
       ORDER BY 1 DESC
     `;
     const rawRows = pgRows(await db.execute(sql.raw(q)));
@@ -1160,7 +1159,7 @@ export async function populateMonthlySummaryCache(
       bucket: String(r.bucket),
       productType: r.product_type ? String(r.product_type) : null,
       deviceFamily: toDeviceFamily(r.device_family),
-      dateMonth: r.due_month ? String(r.due_month) : null,
+      dateMonth: null as string | null, // cache read ใช้ date_month IS NULL เมื่อไม่มี filter → ต้องเก็บ null
       contractCount: Number(r.contract_count),
       principal: Number(r.principal_target), interest: Number(r.interest_target), fee: Number(r.fee_target),
       penalty: Number(r.penalty_target), unlockFee: Number(r.unlock_fee_target),
@@ -1268,7 +1267,6 @@ export async function populateMonthlySummaryCache(
     const q = `
       SELECT
         TO_CHAR(base.approve_date, 'YYYY-MM') AS approve_month,
-        TO_CHAR(base.due_date, 'YYYY-MM') AS due_month,
         CASE
           WHEN base.contract_status = 'หนี้เสีย'      THEN 'หนี้เสีย'
           WHEN base.contract_status = 'ระงับสัญญา'   THEN 'ระงับสัญญา'
@@ -1306,7 +1304,7 @@ export async function populateMonthlySummaryCache(
         AND base.approve_date IS NOT NULL
         AND base.is_arrears = true
         AND base.due_date IS NOT NULL
-      GROUP BY 1, 2, 3, 4, 5
+      GROUP BY 1, 2, 3, 4
       ORDER BY 1 DESC
     `;
     const rawRows = pgRows(await db.execute(sql.raw(q)));
@@ -1315,7 +1313,7 @@ export async function populateMonthlySummaryCache(
       bucket: String(r.bucket),
       productType: r.product_type ? String(r.product_type) : null,
       deviceFamily: toDeviceFamily(r.device_family),
-      dateMonth: r.due_month ? String(r.due_month) : null,
+      dateMonth: null as string | null, // cache read ใช้ date_month IS NULL เมื่อไม่มี filter → ต้องเก็บ null
       contractCount: Number(r.contract_count),
       principal: Number(r.principal_due), interest: Number(r.interest_due), fee: Number(r.fee_due),
       penalty: Number(r.penalty_due), unlockFee: Number(r.unlock_fee_due),
