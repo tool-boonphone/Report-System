@@ -279,17 +279,34 @@ export const monthlySummaryRouter = router({
         search: input.search || undefined,
       };
 
-      // NOTE: ใช้ live query เสมอ (cache disabled เพื่อความถูกต้องของข้อมูล)
+      // Fast path: ดึงจาก cache ก่อน (ถ้า cache ว่าง → fallback live query)
       let summaryRows: Awaited<ReturnType<typeof getDueMonthSummary>>;
       let allDueMonths: string[];
 
-      console.log(`[getDueMonthSummary] LIVE QUERY — section=${params.section}`);
-      summaryRows = await getDueMonthSummary(params);
-      const dueMonthSet = new Set<string>();
-      for (const row of summaryRows) {
-        for (const dm of Object.keys(row.dueMonths)) dueMonthSet.add(dm);
+      if (!params.search) {
+        const cached = await getDueMonthSummaryFromCache(params);
+        if (cached.rows.length > 0) {
+          console.log(`[getDueMonthSummary] CACHE HIT — section=${params.section} rows=${cached.rows.length}`);
+          summaryRows = cached.rows;
+          allDueMonths = cached.allDueMonths;
+        } else {
+          console.log(`[getDueMonthSummary] CACHE MISS — section=${params.section} fallback to live query`);
+          summaryRows = await getDueMonthSummary(params);
+          const dueMonthSet = new Set<string>();
+          for (const row of summaryRows) {
+            for (const dm of Object.keys(row.dueMonths)) dueMonthSet.add(dm);
+          }
+          allDueMonths = Array.from(dueMonthSet).sort((a, b) => a.localeCompare(b));
+        }
+      } else {
+        console.log(`[getDueMonthSummary] LIVE QUERY (search) — section=${params.section}`);
+        summaryRows = await getDueMonthSummary(params);
+        const dueMonthSet = new Set<string>();
+        for (const row of summaryRows) {
+          for (const dm of Object.keys(row.dueMonths)) dueMonthSet.add(dm);
+        }
+        allDueMonths = Array.from(dueMonthSet).sort((a, b) => a.localeCompare(b));
       }
-      allDueMonths = Array.from(dueMonthSet).sort((a, b) => a.localeCompare(b));
 
       // Flatten to array of flat rows for JSON transport
       type FlatDueMonthRow = {
