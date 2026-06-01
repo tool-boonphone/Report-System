@@ -24,6 +24,7 @@ import {
 import { sectionSchema } from "../../shared/const";
 import {
   getMonthlyCollectionSnapshots,
+  getMonthlyCollectionSnapshotsLive,
   getMonthlyTargetDetail,
   getMonthlyCollectedDetail,
   populateMonthlyCollectionSnapshot,
@@ -109,6 +110,16 @@ export const debtRouter = router({
     .input(z.object({ section: SectionEnum }))
     .query(async ({ input }) => {
       return getMonthlyCollectionSnapshots(input.section);
+    }),
+
+  /**
+   * Live mode: คำนวณ real-time จาก cache โดยตรง (ไม่ผ่าน snapshot table)
+   * ใช้สำหรับทดสอบ logic ใหม่โดยไม่ต้อง re-sync ข้อมูล
+   */
+  getMonthlySnapshotsLive: debtViewProcedure
+    .input(z.object({ section: SectionEnum }))
+    .query(async ({ input }) => {
+      return getMonthlyCollectionSnapshotsLive(input.section);
     }),
 
   /** ดึง detail rows สำหรับ lightbox เป้าเก็บหนี้ */

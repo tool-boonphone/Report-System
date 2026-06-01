@@ -427,9 +427,18 @@ function MonthlyTabContent({
   const sectionKey = (section ?? "") as any;
 
   // ── ดึงข้อมูลตารางหลัก ──────────────────────────────────────────────────────
+  // useLive = true → คำนวณ real-time จาก cache โดยตรง (ไม่ผ่าน snapshot table)
+  // ใช้สำหรับทดสอบ logic ใหม่โดยไม่ต้อง re-sync ข้อมูล
+  const [useLive, setUseLive] = React.useState(false);
+
   const snapshotsQuery = trpc.debt.getMonthlySnapshots.useQuery(
     { section: sectionKey },
-    { enabled: !!section, staleTime: 5 * 60 * 1000 },
+    { enabled: !!section && !useLive, staleTime: 5 * 60 * 1000 },
+  );
+
+  const snapshotsLiveQuery = trpc.debt.getMonthlySnapshotsLive.useQuery(
+    { section: sectionKey },
+    { enabled: !!section && useLive, staleTime: 0 },
   );
 
   // ── ดึงข้อมูล lightbox (เป้าเก็บหนี้) ──────────────────────────────────────
@@ -461,7 +470,9 @@ function MonthlyTabContent({
   );
 
   // กรองเฉพาะ มิ.ย. 2569 (2026-06) เป็นต้นไป และไม่เกินเดือนปัจจุบัน
-  const allSnapshots = snapshotsQuery.data ?? [];
+  // ถ้า useLive = true ใช้ข้อมูลจาก live query แทน
+  const allSnapshots = useLive ? (snapshotsLiveQuery.data ?? []) : (snapshotsQuery.data ?? []);
+  const activeQuery = useLive ? snapshotsLiveQuery : snapshotsQuery;
   const snapshots = React.useMemo(() => {
     const now = new Date();
     const currentYM = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -492,6 +503,7 @@ function MonthlyTabContent({
   React.useEffect(() => {
     if (
       !section ||
+      useLive || // live mode ไม่ต้อง rebuild
       snapshotsQuery.isLoading ||
       snapshotsQuery.isFetching ||
       rebuildMutation.isPending ||
@@ -500,7 +512,7 @@ function MonthlyTabContent({
     ) return;
     // ไม่มี snapshot — สร้างอัตโนมัติจาก cache ที่มีอยู่ใน DB
     rebuildMutation.mutate({ section: sectionKey });
-  }, [section, sectionKey, snapshotsQuery.isLoading, snapshotsQuery.isFetching, snapshots.length, rebuildMutation.isPending, rebuildMutation.isSuccess]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [section, sectionKey, useLive, snapshotsQuery.isLoading, snapshotsQuery.isFetching, snapshots.length, rebuildMutation.isPending, rebuildMutation.isSuccess]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Export handlers ────────────────────────────────────────────
   const handleLightboxExport = React.useCallback(async () => {
@@ -569,10 +581,32 @@ function MonthlyTabContent({
 
   return (
     <div className="space-y-4">
+      {/* Toggle Live/Snapshot */}
+      <div className="flex items-center gap-2 px-1">
+        <button
+          type="button"
+          onClick={() => setUseLive((v) => !v)}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
+            useLive
+              ? "bg-emerald-100 text-emerald-700 border-emerald-300 shadow-sm"
+              : "bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200"
+          }`}
+          title={useLive ? "คำนวณจาก cache โดยตรง (ไม่ผ่าน snapshot)" : "คลิกเพื่อเปลี่ยนเป็น Live mode"}
+        >
+          <span className={`w-2 h-2 rounded-full ${useLive ? "bg-emerald-500 animate-pulse" : "bg-slate-400"}`} />
+          {useLive ? "Live (real-time)" : "Snapshot"}
+        </button>
+        {useLive && (
+          <span className="text-xs text-emerald-600">
+            คำนวณจาก cache โดยตรง — ไม่ต้อง Sync ใหม่
+          </span>
+        )}
+      </div>
+
       {/* ตารางหลัก: สรุปรายเดือน */}
-      {snapshotsQuery.isLoading ? (
+      {activeQuery.isLoading ? (
         <div className="flex items-center justify-center py-16"><Spinner /></div>
-      ) : snapshotsQuery.isError ? (
+      ) : activeQuery.isError ? (
         <div className="text-center py-12 text-red-500 text-sm">โหลดข้อมูลไม่สำเร็จ</div>
       ) : snapshots.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 gap-3">

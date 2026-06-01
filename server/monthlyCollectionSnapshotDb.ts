@@ -664,3 +664,250 @@ export async function getMonthlyCollectedDetail(params: {
 
   return { rows: dataRows, total };
 }
+
+// ─── Live Query: คำนวณ real-time จาก cache (ไม่ผ่าน snapshot table) ──────────
+/**
+ * getMonthlyCollectionSnapshotsLive
+ *
+ * คำนวณตัวเลขทั้งหมดแบบ real-time จาก debt_target_cache และ debt_collected_cache
+ * โดยตรง โดยไม่อ่านจาก monthly_collection_snapshot table
+ *
+ * ใช้สำหรับ:
+ *   - ทดสอบ logic ใหม่โดยไม่ต้อง re-sync ข้อมูล
+ *   - ตรวจสอบว่า query ถูกต้องก่อน populate snapshot จริง
+ *
+ * @returns MonthlyCollectionSnapshotRow[] เหมือนกับ getMonthlyCollectionSnapshots
+ *          แต่ collectedIsFrozen = false เสมอ (ไม่มี freeze logic)
+ *          และ updatedAt = NOW()
+ */
+export async function getMonthlyCollectionSnapshotsLive(
+  section: SectionKey,
+): Promise<MonthlyCollectionSnapshotRow[]> {
+  const db = await getDb(section);
+  if (!db) return [];
+
+  // ── 1a. Target aggregates per due_month ──────────────────────────────────
+  const targetResult = await db.execute(sql`
+    SELECT
+      TO_CHAR(due_date, 'YYYY-MM') AS due_month,
+      COUNT(DISTINCT contract_external_id) AS contract_count,
+      SUM(GREATEST(COALESCE(total_amount::numeric, 0) - COALESCE(paid_amount::numeric, 0), 0)) AS target_amount,
+      SUM(GREATEST(COALESCE(principal::numeric, 0) - COALESCE(paid_amount::numeric, 0), 0)) AS target_principal,
+      SUM(interest::numeric) AS target_interest,
+      SUM(fee::numeric) AS target_fee,
+      SUM(penalty::numeric) AS target_penalty,
+      SUM(unlock_fee::numeric) AS target_unlock_fee,
+      SUM(baseline_amount::numeric) AS install_total,
+      SUM(COALESCE(finance_amount::numeric, 0) * COALESCE(installment_count, 0)) AS financed_total
+    FROM debt_target_cache
+    WHERE section = ${section}
+      AND due_date IS NOT NULL
+      AND is_closed IS NOT TRUE
+      AND is_future_period IS NOT TRUE
+      AND is_suspended IS NOT TRUE
+      AND is_bad_debt IS NOT TRUE
+    GROUP BY TO_CHAR(due_date, 'YYYY-MM')
+    ORDER BY due_month
+  `);
+  const targetRows: any[] = pgRows(targetResult);
+
+  // ── 1b. Overdue per month (ค้างชำระจากเดือนก่อนหน้า) ───────────────────
+  const overdueResult = await db.execute(sql`
+    SELECT
+      TO_CHAR(
+        (DATE_TRUNC('month', due_date::date) + INTERVAL '1 month')::date,
+        'YYYY-MM'
+      ) AS overdue_month,
+      SUM(GREATEST(COALESCE(total_amount::numeric, 0) - COALESCE(paid_amount::numeric, 0), 0)) AS overdue_total
+    FROM debt_target_cache
+    WHERE section = ${section}
+      AND due_date IS NOT NULL
+      AND is_closed IS NOT TRUE
+      AND is_future_period IS NOT TRUE
+      AND is_suspended IS NOT TRUE
+      AND is_bad_debt IS NOT TRUE
+      AND is_paid IS NOT TRUE
+      AND COALESCE(paid_amount::numeric, 0) < COALESCE(total_amount::numeric, 0)
+    GROUP BY DATE_TRUNC('month', due_date::date) + INTERVAL '1 month'
+    ORDER BY overdue_month
+  `);
+  const overdueRows: any[] = pgRows(overdueResult);
+  const overdueMap = new Map<string, number>();
+  for (const row of overdueRows) {
+    const m = String(row.overdue_month ?? "").slice(0, 7);
+    if (m && m.length === 7) overdueMap.set(m, n(row.overdue_total));
+  }
+
+  // ── 2. Collected aggregates per paid_at month ────────────────────────────
+  const collectedResult = await db.execute(sql`
+    SELECT
+      TO_CHAR(paid_at, 'YYYY-MM') AS paid_month,
+      COUNT(DISTINCT contract_external_id) AS contract_count,
+      SUM(total_amount::numeric) AS collected_amount,
+      SUM(principal::numeric) AS collected_principal,
+      SUM(interest::numeric) AS collected_interest,
+      SUM(fee::numeric) AS collected_fee,
+      SUM(penalty::numeric) AS collected_penalty,
+      SUM(unlock_fee::numeric) AS collected_unlock_fee,
+      SUM(discount::numeric) AS collected_discount,
+      SUM(overpaid::numeric) AS collected_overpaid,
+      SUM(bad_debt::numeric) AS collected_bad_debt
+    FROM debt_collected_cache
+    WHERE section = ${section}
+      AND paid_at IS NOT NULL
+      AND is_bad_debt_row IS NOT TRUE
+    GROUP BY TO_CHAR(paid_at, 'YYYY-MM')
+    ORDER BY paid_month
+  `);
+  const collectedRows: any[] = pgRows(collectedResult);
+
+  // ── 3. ยอดขายเครื่อง จาก income_monthly_summary ─────────────────────────
+  const saleResult = await db.execute(sql`
+    SELECT
+      LPAD(year::text, 4, '0') || '-' || LPAD(month::text, 2, '0') AS paid_month,
+      COALESCE(total_amount::numeric, 0) AS collected_sale
+    FROM income_monthly_summary
+    WHERE section = ${section}
+      AND income_type = 'ขายเครื่อง'
+    ORDER BY year, month
+  `);
+  const saleRows: any[] = pgRows(saleResult);
+  const saleMap = new Map<string, number>();
+  for (const row of saleRows) {
+    saleMap.set(String(row.paid_month), n(row.collected_sale));
+  }
+
+  // ── 4. Merge into monthMap ────────────────────────────────────────────────
+  const monthMap = new Map<string, {
+    targetAmount: number;
+    targetContractCount: number;
+    targetPrincipal: number;
+    targetInterest: number;
+    targetFee: number;
+    targetPenalty: number;
+    targetUnlockFee: number;
+    installTotal: number;
+    financedTotal: number;
+    overdueTotal: number;
+    collectedAmount: number;
+    collectedContractCount: number;
+    collectedPrincipal: number;
+    collectedInterest: number;
+    collectedFee: number;
+    collectedPenalty: number;
+    collectedUnlockFee: number;
+    collectedDiscount: number;
+    collectedOverpaid: number;
+    collectedBadDebt: number;
+  }>();
+
+  for (const row of targetRows) {
+    const month = String(row.due_month ?? "").slice(0, 7);
+    if (!month || month.length !== 7) continue;
+    monthMap.set(month, {
+      targetAmount: n(row.target_amount),
+      targetContractCount: n(row.contract_count),
+      targetPrincipal: n(row.target_principal),
+      targetInterest: n(row.target_interest),
+      targetFee: n(row.target_fee),
+      targetPenalty: n(row.target_penalty),
+      targetUnlockFee: n(row.target_unlock_fee),
+      installTotal: n(row.install_total),
+      financedTotal: n(row.financed_total),
+      overdueTotal: overdueMap.get(month) ?? 0,
+      collectedAmount: 0,
+      collectedContractCount: 0,
+      collectedPrincipal: 0,
+      collectedInterest: 0,
+      collectedFee: 0,
+      collectedPenalty: 0,
+      collectedUnlockFee: 0,
+      collectedDiscount: 0,
+      collectedOverpaid: 0,
+      collectedBadDebt: 0,
+    });
+  }
+
+  for (const row of collectedRows) {
+    const month = String(row.paid_month ?? "").slice(0, 7);
+    if (!month || month.length !== 7) continue;
+    const existing = monthMap.get(month);
+    if (existing) {
+      existing.collectedAmount = n(row.collected_amount);
+      existing.collectedContractCount = n(row.contract_count);
+      existing.collectedPrincipal = n(row.collected_principal);
+      existing.collectedInterest = n(row.collected_interest);
+      existing.collectedFee = n(row.collected_fee);
+      existing.collectedPenalty = n(row.collected_penalty);
+      existing.collectedUnlockFee = n(row.collected_unlock_fee);
+      existing.collectedDiscount = n(row.collected_discount);
+      existing.collectedOverpaid = n(row.collected_overpaid);
+      existing.collectedBadDebt = n(row.collected_bad_debt);
+    } else {
+      monthMap.set(month, {
+        targetAmount: 0,
+        targetContractCount: 0,
+        targetPrincipal: 0,
+        targetInterest: 0,
+        targetFee: 0,
+        targetPenalty: 0,
+        targetUnlockFee: 0,
+        installTotal: 0,
+        financedTotal: 0,
+        overdueTotal: 0,
+        collectedAmount: n(row.collected_amount),
+        collectedContractCount: n(row.contract_count),
+        collectedPrincipal: n(row.collected_principal),
+        collectedInterest: n(row.collected_interest),
+        collectedFee: n(row.collected_fee),
+        collectedPenalty: n(row.collected_penalty),
+        collectedUnlockFee: n(row.collected_unlock_fee),
+        collectedDiscount: n(row.collected_discount),
+        collectedOverpaid: n(row.collected_overpaid),
+        collectedBadDebt: n(row.collected_bad_debt),
+      });
+    }
+  }
+
+  // ── 5. Build result array ─────────────────────────────────────────────────
+  const now = new Date();
+  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const nowStr = now.toISOString();
+
+  const months = Array.from(monthMap.keys())
+    .filter((m) => m >= "2026-06" && m <= currentMonth)
+    .sort((a, b) => b.localeCompare(a)); // เรียงจากใหม่ไปเก่า
+
+  return months.map((month) => {
+    const data = monthMap.get(month)!;
+    const collectedSale = saleMap.get(month) ?? 0;
+    return {
+      collectionMonth: month,
+      targetAmount: data.targetAmount,
+      targetContractCount: data.targetContractCount,
+      targetPrincipal: data.targetPrincipal,
+      targetInterest: data.targetInterest,
+      targetFee: data.targetFee,
+      targetPenalty: data.targetPenalty,
+      targetUnlockFee: data.targetUnlockFee,
+      collectedAmount: data.collectedAmount,
+      collectedContractCount: data.collectedContractCount,
+      collectedPrincipal: data.collectedPrincipal,
+      collectedInterest: data.collectedInterest,
+      collectedFee: data.collectedFee,
+      collectedPenalty: data.collectedPenalty,
+      collectedUnlockFee: data.collectedUnlockFee,
+      collectedDiscount: data.collectedDiscount,
+      collectedOverpaid: data.collectedOverpaid,
+      collectedBadDebt: data.collectedBadDebt,
+      installTotal: data.installTotal,
+      financedTotal: data.financedTotal,
+      overdueTotal: data.overdueTotal,
+      collectedSale,
+      collectedIsFrozen: false, // live mode ไม่มี freeze
+      targetFrozenAt: null,
+      collectedFrozenAt: null,
+      updatedAt: nowStr,
+    };
+  });
+}
