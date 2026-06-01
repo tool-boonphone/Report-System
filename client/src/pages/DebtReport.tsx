@@ -396,6 +396,8 @@ function MultiSelectFilter({
 type MonthlyLightboxState = { type: "target" | "collected"; month: string } | null;
 // Snapshot lightbox state: เปิดเมื่อคลิกยอดเก็บหนี้ (ค่างวด) — แสดงข้อมูล snapshot ที่ freeze ตลอด
 type SnapshotLightboxState = { snapshotMonth: string; upToMonth: string } | null;
+// Target Snapshot lightbox state: เปิดเมื่อคลิกเป้าเก็บหนี้ — แสดงข้อมูล target snapshot ที่ freeze ณ วันที่ 1
+type TargetSnapshotLightboxState = { snapshotMonth: string } | null;
 
 function MonthlyTabContent({
   section,
@@ -414,6 +416,8 @@ function MonthlyTabContent({
   onNavigateToTab,
   snapshotLightbox,
   setSnapshotLightbox,
+  targetSnapshotLightbox,
+  setTargetSnapshotLightbox,
 }: {
   section: string | null;
   canExport: boolean;
@@ -433,6 +437,9 @@ function MonthlyTabContent({
   // snapshot lightbox: เปิดเมื่อคลิกยอดเก็บหนี้ (ค่างวด)
   snapshotLightbox: SnapshotLightboxState;
   setSnapshotLightbox: (v: SnapshotLightboxState) => void;
+  // target snapshot lightbox: เปิดเมื่อคลิกเป้าเก็บหนี้ — freeze ณ วันที่ 1
+  targetSnapshotLightbox: TargetSnapshotLightboxState;
+  setTargetSnapshotLightbox: (v: TargetSnapshotLightboxState) => void;
 }) {
   const sectionKey = (section ?? "") as any;
 
@@ -510,6 +517,40 @@ function MonthlyTabContent({
     },
     onError: (err) => toast.error(`Populate ไม่สำเร็จ: ${err.message}`),
   });
+
+  // ── Target Snapshot Lightbox state (เป้าเก็บหนี้ — freeze ณ วันที่ 1) ───────────────────────
+  const [targetSnapshotSearch, setTargetSnapshotSearch] = React.useState("");
+  const [targetSnapshotProductType, setTargetSnapshotProductType] = React.useState<string | undefined>(undefined);
+  const [targetSnapshotDebtRange, setTargetSnapshotDebtRange] = React.useState<string | undefined>(undefined);
+  const [targetSnapshotPage, setTargetSnapshotPage] = React.useState(0);
+  const TARGET_SNAPSHOT_PAGE_SIZE = 100;
+  const targetSnapshotDetailQuery = trpc.debt.getTargetDetailSnapshot.useQuery(
+    {
+      section: sectionKey,
+      snapshotMonth: targetSnapshotLightbox?.snapshotMonth ?? "",
+      upToMonth: targetSnapshotLightbox?.snapshotMonth ?? "", // ดึงทั้งเดือนนั้น
+      search: targetSnapshotSearch || undefined,
+      productType: targetSnapshotProductType,
+      debtRange: targetSnapshotDebtRange,
+      offset: targetSnapshotPage * TARGET_SNAPSHOT_PAGE_SIZE,
+      limit: TARGET_SNAPSHOT_PAGE_SIZE,
+    },
+    { enabled: !!section && !!targetSnapshotLightbox?.snapshotMonth, staleTime: 5 * 60 * 1000 },
+  );
+  const populateTargetSnapshotMutation = trpc.debt.populateTargetDetailSnapshot.useMutation({
+    onSuccess: (data) => {
+      toast.success(`Populate target snapshot สำเร็จ — ${data.rowsInserted.toLocaleString("th-TH")} รายการ`);
+      targetSnapshotDetailQuery.refetch();
+    },
+    onError: (err) => toast.error(`Populate ไม่สำเร็จ: ${err.message}`),
+  });
+  // Reset target snapshot filters เมื่อเปิด lightbox ใหม่
+  React.useEffect(() => {
+    setTargetSnapshotSearch("");
+    setTargetSnapshotProductType(undefined);
+    setTargetSnapshotDebtRange(undefined);
+    setTargetSnapshotPage(0);
+  }, [targetSnapshotLightbox?.snapshotMonth]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // กรองเฉพาะ มิ.ย. 2569 (2026-06) เป็นต้นไป และไม่เกินเดือนปัจจุบัน
   // ถ้า useLive = true ใช้ข้อมูลจาก live query แทน
@@ -734,14 +775,14 @@ function MonthlyTabContent({
                         <span className="text-red-600 font-medium">{fmtMoney(row.overdueTotal)}</span>
                       ) : "-"}
                     </td>
-                    {/* เป้าเก็บหนี้ */}
+                    {/* เป้าเก็บหนี้ — เปิด Target Snapshot Lightbox (freeze ณ วันที่ 1) */}
                     <td className="px-3 py-2 text-right tabular-nums border-r border-slate-100">
                       {row.targetAmount > 0 ? (
                         <button
                           type="button"
-                          onClick={() => onNavigateToTab("target", row.collectionMonth)}
+                          onClick={() => setTargetSnapshotLightbox({ snapshotMonth: row.collectionMonth })}
                           className="text-amber-700 font-semibold hover:underline cursor-pointer"
-                          title={`ดูรายละเอียดเป้าเก็บหนี้ ${fmtMonth(row.collectionMonth)}`}
+                          title={`ดูรายละเอียดเป้าเก็บหนี้ ${fmtMonth(row.collectionMonth)} (ข้อมูล snapshot ณ วันที่ 1)`}
                         >
                           {fmtMoney(row.targetAmount)}
                         </button>
@@ -1254,6 +1295,178 @@ function MonthlyTabContent({
           )}
         </DialogContent>
       </Dialog>
+
+      {/* ── Target Snapshot Lightbox Dialog (เป้าเก็บหนี้ — freeze ณ วันที่ 1 ของเดือนนั้น) ── */}
+      <Dialog open={!!targetSnapshotLightbox} onOpenChange={(open) => { if (!open) setTargetSnapshotLightbox(null); }}>
+        <DialogContent className="w-[99vw] max-w-[99vw] max-h-[96vh] flex flex-col p-0 gap-0">
+          <DialogHeader className="px-4 pt-4 pb-2 border-b flex-shrink-0">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <DialogTitle className="flex items-center gap-2 text-base">
+                <Target className="w-4 h-4 text-amber-600" />
+                <span className="text-amber-700">เป้าเก็บหนี้</span>
+                <span className="text-slate-600 font-normal">เดือน {targetSnapshotLightbox ? fmtMonth(targetSnapshotLightbox.snapshotMonth) : ""}</span>
+                {targetSnapshotDetailQuery.data?.total != null && (
+                  <span className="text-slate-400 text-xs font-normal">({targetSnapshotDetailQuery.data.total.toLocaleString("th-TH")} รายการ)</span>
+                )}
+                {/* badge แสดงว่าเป็น snapshot freeze */}
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[10px] font-semibold border border-amber-300">
+                  <Pin className="w-3 h-3" /> Snapshot ณ วันที่ 1
+                </span>
+              </DialogTitle>
+              <div className="flex items-center gap-2">
+                {/* ปุ่ม Populate Snapshot สำหรับทดสอบ */}
+                {targetSnapshotDetailQuery.data?.total === 0 || !targetSnapshotDetailQuery.data ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!section || !targetSnapshotLightbox) return;
+                      populateTargetSnapshotMutation.mutate({
+                        section: section as any,
+                        snapshotMonth: targetSnapshotLightbox.snapshotMonth,
+                      });
+                    }}
+                    disabled={populateTargetSnapshotMutation.isPending}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md bg-amber-600 hover:bg-amber-700 text-white disabled:opacity-50"
+                  >
+                    {populateTargetSnapshotMutation.isPending ? <Spinner className="w-3 h-3" /> : <Pin className="w-3 h-3" />}
+                    Populate Snapshot
+                  </button>
+                ) : (
+                  <span className="text-[10px] text-slate-400">
+                    Populated: {targetSnapshotDetailQuery.data?.populatedAt ? fmtDateTime(targetSnapshotDetailQuery.data.populatedAt) : "-"}
+                  </span>
+                )}
+              </div>
+            </div>
+          </DialogHeader>
+
+          {/* Target Snapshot Filters */}
+          <div className="px-4 py-2 border-b flex-shrink-0 flex flex-wrap items-center gap-2">
+            <div className="relative flex-1 min-w-[180px]">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+              <Input
+                placeholder="ค้นหา: เลขที่สัญญา / ชื่อลูกค้า"
+                className="pl-8 h-8 text-sm bg-white"
+                value={targetSnapshotSearch}
+                onChange={(e) => { setTargetSnapshotSearch(e.target.value); setTargetSnapshotPage(0); }}
+              />
+            </div>
+            <select
+              value={targetSnapshotDebtRange ?? ""}
+              onChange={(e) => { setTargetSnapshotDebtRange(e.target.value || undefined); setTargetSnapshotPage(0); }}
+              className="h-8 pl-2 pr-6 rounded-md border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-amber-500"
+            >
+              <option value="">ทุกสถานะหนี้</option>
+              {DEBT_RANGES.map((r) => <option key={r} value={r}>{r}</option>)}
+            </select>
+            {(targetSnapshotSearch || targetSnapshotProductType || targetSnapshotDebtRange) && (
+              <button
+                type="button"
+                onClick={() => { setTargetSnapshotSearch(""); setTargetSnapshotProductType(undefined); setTargetSnapshotDebtRange(undefined); setTargetSnapshotPage(0); }}
+                className="text-xs text-gray-400 hover:text-red-500 underline"
+              >
+                ล้างฟิลเตอร์
+              </button>
+            )}
+          </div>
+
+          {/* Target Snapshot Table */}
+          <div className="flex-1 overflow-auto px-0">
+            {targetSnapshotDetailQuery.isLoading ? (
+              <div className="flex items-center justify-center py-12"><Spinner /></div>
+            ) : !targetSnapshotDetailQuery.data || targetSnapshotDetailQuery.data.total === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 gap-3">
+                <Target className="w-8 h-8 text-amber-300" />
+                <p className="text-sm text-gray-500">ยังไม่มี snapshot สำหรับเดือนนี้</p>
+                <p className="text-xs text-gray-400">กด &quot;Populate Snapshot&quot; เพื่อสร้างข้อมูลทดสอบ</p>
+              </div>
+            ) : (
+              <table className="w-full text-xs border-collapse">
+                <thead className="sticky top-0 z-10">
+                  <tr className="bg-amber-700 text-white">
+                    <th className="px-2 py-2 text-center border-r border-amber-600 whitespace-nowrap">#</th>
+                    <th className="px-2 py-2 text-left border-r border-amber-600 whitespace-nowrap">วันที่อนุมัติ</th>
+                    <th className="px-2 py-2 text-left border-r border-amber-600 whitespace-nowrap">เลขที่สัญญา</th>
+                    <th className="px-2 py-2 text-left border-r border-amber-600 whitespace-nowrap">ชื่อ-นามสกุล</th>
+                    <th className="px-2 py-2 text-left border-r border-amber-600 whitespace-nowrap">เบอร์โทร</th>
+                    <th className="px-2 py-2 text-right border-r border-amber-600 whitespace-nowrap">ยอดจัดฯ</th>
+                    <th className="px-2 py-2 text-center border-r border-amber-600 whitespace-nowrap">งวดผ่อน</th>
+                    <th className="px-2 py-2 text-right border-r border-amber-600 whitespace-nowrap">ผ่อนงวดละ</th>
+                    <th className="px-2 py-2 text-left border-r border-amber-600 whitespace-nowrap">สถานะหนี้</th>
+                    <th className="px-2 py-2 text-center border-r border-amber-600 whitespace-nowrap">งวดที่</th>
+                    <th className="px-2 py-2 text-left border-r border-amber-600 whitespace-nowrap">วันที่ต้องชำระ</th>
+                    <th className="px-2 py-2 text-right border-r border-amber-600 whitespace-nowrap">เงินต้น</th>
+                    <th className="px-2 py-2 text-right border-r border-amber-600 whitespace-nowrap">ดอกเบี้ย</th>
+                    <th className="px-2 py-2 text-right border-r border-amber-600 whitespace-nowrap">ค่าดำเนินการ</th>
+                    <th className="px-2 py-2 text-right border-r border-amber-600 whitespace-nowrap">ค่าปรับ</th>
+                    <th className="px-2 py-2 text-right border-r border-amber-600 whitespace-nowrap">ค่าปลดล็อก</th>
+                    <th className="px-2 py-2 text-right border-r border-amber-600 whitespace-nowrap">ยอดหนี้คงเหลือ</th>
+                    <th className="px-2 py-2 text-right whitespace-nowrap">ชำระแล้ว</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {targetSnapshotDetailQuery.data.rows.map((row, idx) => (
+                    <tr key={`${row.contractNo}-${row.period}-${idx}`} className={`border-b hover:bg-amber-50 transition-colors ${idx % 2 === 0 ? "bg-white" : "bg-amber-50/30"}`}>
+                      <td className="px-2 py-1.5 text-center text-slate-400 border-r">{targetSnapshotPage * TARGET_SNAPSHOT_PAGE_SIZE + idx + 1}</td>
+                      <td className="px-2 py-1.5 border-r whitespace-nowrap">{fmtDate(row.approveDate)}</td>
+                      <td className="px-2 py-1.5 border-r font-mono text-xs whitespace-nowrap">{row.contractNo ?? "-"}</td>
+                      <td className="px-2 py-1.5 border-r whitespace-nowrap">{row.customerName ?? "-"}</td>
+                      <td className="px-2 py-1.5 border-r whitespace-nowrap">{row.partnerCode ?? "-"}</td>
+                      <td className="px-2 py-1.5 text-right tabular-nums border-r">{row.financeAmount > 0 ? fmtMoney(row.financeAmount) : "-"}</td>
+                      <td className="px-2 py-1.5 text-center border-r">{row.installmentCount ?? "-"}</td>
+                      <td className="px-2 py-1.5 text-right tabular-nums border-r">{row.baselineAmount > 0 ? fmtMoney(row.baselineAmount) : "-"}</td>
+                      <td className="px-2 py-1.5 border-r whitespace-nowrap">
+                        <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                          row.debtRange === "ปกติ" ? "bg-green-100 text-green-700" :
+                          row.debtRange?.startsWith("เกิน 6") || row.debtRange?.startsWith("เกิน >") ? "bg-red-100 text-red-700" :
+                          row.debtRange?.startsWith("เกิน") ? "bg-orange-100 text-orange-700" :
+                          "bg-gray-100 text-gray-600"
+                        }`}>{row.debtRange ?? "-"}</span>
+                      </td>
+                      <td className="px-2 py-1.5 text-center border-r">{row.period ?? "-"}</td>
+                      <td className="px-2 py-1.5 border-r whitespace-nowrap">{fmtDate(row.dueDate)}</td>
+                      <td className="px-2 py-1.5 text-right tabular-nums border-r">{fmtMoney(row.principal)}</td>
+                      <td className="px-2 py-1.5 text-right tabular-nums border-r">{fmtMoney(row.interest)}</td>
+                      <td className="px-2 py-1.5 text-right tabular-nums border-r">{fmtMoney(row.fee)}</td>
+                      <td className="px-2 py-1.5 text-right tabular-nums border-r">{fmtMoney(row.penalty)}</td>
+                      <td className="px-2 py-1.5 text-right tabular-nums border-r">{fmtMoney(row.unlockFee)}</td>
+                      <td className="px-2 py-1.5 text-right tabular-nums border-r font-semibold text-amber-700">{fmtMoney(row.totalAmount - row.paidAmount > 0 ? row.totalAmount - row.paidAmount : 0)}</td>
+                      <td className="px-2 py-1.5 text-right tabular-nums">{fmtMoney(row.paidAmount)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+
+          {/* Target Snapshot Pagination */}
+          {targetSnapshotDetailQuery.data && targetSnapshotDetailQuery.data.total > TARGET_SNAPSHOT_PAGE_SIZE && (
+            <div className="px-4 py-2 border-t flex-shrink-0 flex items-center justify-between gap-2">
+              <span className="text-xs text-gray-500">
+                หน้า {targetSnapshotPage + 1} / {Math.ceil(targetSnapshotDetailQuery.data.total / TARGET_SNAPSHOT_PAGE_SIZE)} ({targetSnapshotDetailQuery.data.total.toLocaleString("th-TH")} รายการ)
+              </span>
+              <div className="flex gap-1">
+                <button
+                  type="button"
+                  disabled={targetSnapshotPage === 0}
+                  onClick={() => setTargetSnapshotPage(Math.max(0, targetSnapshotPage - 1))}
+                  className="px-2 py-1 text-xs rounded border border-gray-200 bg-white hover:bg-gray-50 disabled:opacity-40"
+                >
+                  ← ก่อนหน้า
+                </button>
+                <button
+                  type="button"
+                  disabled={targetSnapshotPage >= Math.ceil(targetSnapshotDetailQuery.data.total / TARGET_SNAPSHOT_PAGE_SIZE) - 1}
+                  onClick={() => setTargetSnapshotPage(targetSnapshotPage + 1)}
+                  className="px-2 py-1 text-xs rounded border border-gray-200 bg-white hover:bg-gray-50 disabled:opacity-40"
+                >
+                  ถัดไป →
+                </button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -1281,6 +1494,8 @@ export default function DebtReport() {
 
   // ── Snapshot lightbox state (ยอดเก็บหนี้ ค่างวด — freeze ตลอด) ─────────────────
   const [snapshotLightbox, setSnapshotLightbox] = useState<{ snapshotMonth: string; upToMonth: string } | null>(null);
+  // ── Target Snapshot lightbox state (เป้าเก็บหนี้ — freeze ณ วันที่ 1) ─────────────────
+  const [targetSnapshotLightbox, setTargetSnapshotLightbox] = useState<{ snapshotMonth: string } | null>(null);
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
@@ -2297,6 +2512,8 @@ export default function DebtReport() {
           }}
           snapshotLightbox={snapshotLightbox}
           setSnapshotLightbox={setSnapshotLightbox}
+          targetSnapshotLightbox={targetSnapshotLightbox}
+          setTargetSnapshotLightbox={setTargetSnapshotLightbox}
         />}
 
         {/* Table */}

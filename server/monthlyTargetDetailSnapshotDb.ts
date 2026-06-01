@@ -9,7 +9,8 @@
  *    ตัดออก: is_closed, is_future_period, is_suspended, is_bad_debt
  *    เหลือ: งวดที่ถึงกำหนดชำระ (is_current_period) + ค้างชำระ (is_arrears)
  *  - snapshot_month = เดือนปัจจุบัน (YYYY-MM)
- *  - ถ้า snapshot_month นั้นมีข้อมูลอยู่แล้ว → ลบแล้ว insert ใหม่ (replace)
+ *  - ถ้า snapshot_month นั้นมีข้อมูลอยู่แล้ว → ไม่ทำอะไร (freeze ตลอด ไม่ replace)
+ *  - populate เฉพาะวันที่ 1 ของเดือน (ควบคุมโดย runner.ts)
  */
 import { sql } from "drizzle-orm";
 import { getDb, pgRows } from "./db";
@@ -89,12 +90,20 @@ export async function populateTargetDetailSnapshot(
     snapshotMonth = bangkokNow.slice(0, 7);
   }
 
-  // ลบ snapshot เก่าของเดือนนี้ก่อน (replace strategy)
-  await db.execute(sql.raw(`
-    DELETE FROM monthly_target_detail_snapshot
+  // ตรวจสอบว่ามีข้อมูลเดือนนี้แล้วหรือไม่ (freeze strategy)
+  // ถ้ามีแล้ว → ไม่ populate ซ้ำ (ข้อมูลถูก freeze ไว้ตลอด)
+  const existingCountResult = await db.execute(sql.raw(`
+    SELECT COUNT(*) AS cnt
+    FROM monthly_target_detail_snapshot
     WHERE section = '${section}'
       AND snapshot_month = '${snapshotMonth}'
   `));
+  const existingCountRows = pgRows(existingCountResult);
+  const existingCnt = n(existingCountRows[0]?.cnt ?? 0);
+  if (existingCnt > 0) {
+    console.log(`[targetDetailSnapshot] ${section}: ${snapshotMonth} already has ${existingCnt} rows — skipping (frozen)`);
+    return existingCnt;
+  }
 
   // Insert ใหม่จาก debt_target_cache
   // debtSetMode filter: ตัด is_closed, is_future_period, is_suspended, is_bad_debt ออก

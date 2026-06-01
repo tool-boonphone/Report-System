@@ -311,14 +311,22 @@ export async function populateMonthlyCollectionSnapshot(
     const existing = frozenMap.get(month);
     const collectedSale = saleMap.get(month) ?? 0;
 
-    // Freeze logic: เดือนที่ผ่านมาให้ freeze collected ครั้งแรกที่ sync เดือนถัดไป
+        // Freeze logic:
+    //   - เดือนปัจจุบัน: อัพเดทได้เสมอ (live)
+    //   - เดือนที่ผ่านมา: สะสมข้อมูลทุกวันจนถึงสิ้นเดือน
+    //     แล้ว freeze เมื่อ sync ครั้งแรกของเดือนถัดไป (isPastMonth && !existing?.isFrozen)
+    //   - เดือนที่ freeze แล้ว: ไม่อัพเดท collected อีก
     const isPastMonth = month < currentMonth;
-    const isFrozen = existing?.isFrozen || isPastMonth;
+    // freeze เฉพาะเมื่อ existing record ถูก mark isFrozen=true แล้วเท่านั้น
+    // ไม่ freeze อัตโนมัติจาก isPastMonth เพื่อให้สะสมข้อมูลได้ตลอดเดือน
+    const isFrozen = existing?.isFrozen === true;
+    // freeze เมื่อเป็นเดือนที่ผ่านมาและยังไม่เคย freeze → ครั้งนี้คือครั้งสุดท้ายที่อัพเดท
+    const shouldFreezeNow = isPastMonth && !isFrozen;
+    const newIsFrozen = isFrozen || shouldFreezeNow;
     const targetFrozenAt = existing?.targetFrozenAt ?? (isPastMonth ? nowStr : null);
-    const collectedFrozenAt = existing?.collectedFrozenAt ?? (isPastMonth ? nowStr : null);
-
+    const collectedFrozenAt = existing?.collectedFrozenAt ?? (shouldFreezeNow ? nowStr : null);
     // ถ้าเดือนนั้น freeze แล้ว ไม่อัพเดทยอด collected (แต่ยังอัพเดท target ได้)
-    const shouldUpdateCollected = !existing?.isFrozen;
+    const shouldUpdateCollected = !isFrozen;
 
     if (shouldUpdateCollected) {
       // Upsert ทั้ง target และ collected
@@ -337,7 +345,7 @@ export async function populateMonthlyCollectionSnapshot(
           ${data.targetAmount}, ${data.targetContractCount}, ${targetFrozenAt},
           ${data.targetPrincipal}, ${data.targetInterest}, ${data.targetFee},
           ${data.targetPenalty}, ${data.targetUnlockFee},
-          ${data.collectedAmount}, ${data.collectedContractCount}, ${collectedFrozenAt}, ${isFrozen},
+          ${data.collectedAmount}, ${data.collectedContractCount}, ${collectedFrozenAt}, ${newIsFrozen},
           ${data.collectedPrincipal}, ${data.collectedInterest}, ${data.collectedFee},
           ${data.collectedPenalty}, ${data.collectedUnlockFee},
           ${data.collectedDiscount}, ${data.collectedOverpaid}, ${data.collectedBadDebt},
@@ -355,7 +363,7 @@ export async function populateMonthlyCollectionSnapshot(
           collected_amount = EXCLUDED.collected_amount,
           collected_contract_count = EXCLUDED.collected_contract_count,
           collected_frozen_at = COALESCE(monthly_collection_snapshot.collected_frozen_at, EXCLUDED.collected_frozen_at),
-          collected_is_frozen = EXCLUDED.collected_is_frozen,
+          collected_is_frozen = EXCLUDED.collected_is_frozen, -- freeze เมื่อ shouldFreezeNow=true
           collected_principal = EXCLUDED.collected_principal,
           collected_interest = EXCLUDED.collected_interest,
           collected_fee = EXCLUDED.collected_fee,

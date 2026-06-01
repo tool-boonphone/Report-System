@@ -473,20 +473,37 @@ async function doSync(
       console.warn(`[sync] ${section}: populateMonthlyCollectionSnapshot failed (non-fatal):`, snapshotErr?.message ?? snapshotErr);
     }
 
-    // ── Finish sync log ───────────────────────────────────────────────────
-    // ── Populate monthly_target_detail_snapshot (เดือนปัจจุบัน) ─────────────────────────────
+    // ── Populate monthly_target_detail_snapshot (เฉพาะวันที่ 1 ของเดือน — freeze strategy) ──
+    // ถ้าวันที่ 1: populate snapshot เดือนนี้ (ถ้ายังไม่มีจะ insert, ถ้ามีแล้วจะ skip)
+    // วันอื่น: เรียก populate แต่ function จะ skip เองถ้ามีข้อมูลแล้ว (กรณี retry ถ้าวันที่ 1 sync ล้มเหลว)
     try {
-      const bangkokNow = new Intl.DateTimeFormat("en-CA", {
+      const bangkokDate = new Intl.DateTimeFormat("en-CA", {
         timeZone: "Asia/Bangkok",
         year: "numeric",
         month: "2-digit",
+        day: "2-digit",
       }).format(new Date());
-      const currentMonth = bangkokNow.replace("/", "-"); // "YYYY-MM"
-      const detailRows = await populateMonthlyTargetDetailSnapshot(section, currentMonth);
-      console.log(`[sync] ${section}: monthly_target_detail_snapshot populated — ${detailRows} rows for ${currentMonth}`);
+      // en-CA format: "YYYY-MM-DD"
+      const dayOfMonth = parseInt(bangkokDate.slice(8, 10), 10);
+      const currentMonth = bangkokDate.slice(0, 7); // "YYYY-MM"
+      if (dayOfMonth === 1) {
+        // วันที่ 1: populate snapshot เดือนนี้
+        const detailRows = await populateMonthlyTargetDetailSnapshot(section, currentMonth);
+        console.log(`[sync] ${section}: monthly_target_detail_snapshot populated — ${detailRows} rows for ${currentMonth} (day-1 freeze)`);
+      } else {
+        // วันอื่น: เรียก populate แต่ function จะ skip เองถ้ามีข้อมูลแล้ว
+        const detailRows = await populateMonthlyTargetDetailSnapshot(section, currentMonth);
+        if (detailRows > 0) {
+          console.log(`[sync] ${section}: monthly_target_detail_snapshot retry-populated — ${detailRows} rows for ${currentMonth}`);
+        } else {
+          console.log(`[sync] ${section}: monthly_target_detail_snapshot already frozen for ${currentMonth} — skipped`);
+        }
+      }
     } catch (detailErr: any) {
       console.warn(`[sync] ${section}: populateMonthlyTargetDetailSnapshot failed (non-fatal):`, detailErr?.message ?? detailErr);
     }
+
+    // ── Finish sync log ───────────────────────────────────────────────────
         const partialFail = instFailed || payFailed;
     // Set progress to 100% before finishing so UI shows completion
     const logId = _overallLogId[section];
