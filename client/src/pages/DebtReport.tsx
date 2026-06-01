@@ -534,10 +534,11 @@ function MonthlyTabContent({
       search: targetSnapshotSearch || undefined,
       productType: targetSnapshotProductType,
       debtRange: targetSnapshotDebtRange,
+      debtOnly: targetSnapshotDebtOnly, // Toggle ตั้งหนี้: ส่งไป server กรองตั้งแต่ต้น
       offset: targetSnapshotPage * TARGET_SNAPSHOT_PAGE_SIZE,
       limit: TARGET_SNAPSHOT_PAGE_SIZE,
     },
-    { enabled: !!section && !!targetSnapshotLightbox?.snapshotMonth, staleTime: 5 * 60 * 1000 },
+    { enabled: !!section && !!targetSnapshotLightbox?.snapshotMonth, staleTime: 0 },
   );
   const populateTargetSnapshotMutation = trpc.debt.populateTargetDetailSnapshot.useMutation({
     onSuccess: (data) => {
@@ -553,6 +554,11 @@ function MonthlyTabContent({
     setTargetSnapshotDebtRange(undefined);
     setTargetSnapshotPage(0);
   }, [targetSnapshotLightbox?.snapshotMonth]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Reset page เมื่อ toggle ตั้งหนี้เปลี่ยน (server กรองใหม่ จำนวนหน้าเปลี่ยน)
+  React.useEffect(() => {
+    setTargetSnapshotPage(0);
+  }, [targetSnapshotDebtOnly]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // กรองเฉพาะ มิ.ย. 2569 (2026-06) เป็นต้นไป และไม่เกินเดือนปัจจุบัน
   // ถ้า useLive = true ใช้ข้อมูลจาก live query แทน
@@ -1493,7 +1499,6 @@ function MonthlyTabContent({
                 </thead>
                 <tbody>
                   {targetSnapshotDetailQuery.data.rows
-                    .filter((row) => !targetSnapshotDebtOnly || Math.max(row.totalAmount - row.paidAmount, 0) > 0)
                     .map((row, idx) => (
                     <tr key={`${row.contractNo}-${row.period}-${idx}`} className={`border-b hover:bg-amber-50 transition-colors ${idx % 2 === 0 ? "bg-white" : "bg-amber-50/30"}`}>
                       <td className="px-2 py-1.5 text-center text-slate-400 border-r">{targetSnapshotPage * TARGET_SNAPSHOT_PAGE_SIZE + idx + 1}</td>

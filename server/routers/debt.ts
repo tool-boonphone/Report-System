@@ -185,6 +185,7 @@ export const debtRouter = router({
       search: z.string().optional(),
       productType: z.string().optional(),
       debtRange: z.string().optional(),
+      debtOnly: z.boolean().optional(), // Toggle ตั้งหนี้: กรองเฉพาะยอดหนี้คงเหลือ > 0
       offset: z.number().int().min(0).default(0),
       limit: z.number().int().min(1).max(500).default(100),
     }))

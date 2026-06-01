@@ -221,6 +221,7 @@ export async function getTargetDetailSnapshot(params: {
   search?: string;
   productType?: string;
   debtRange?: string;
+  debtOnly?: boolean; // Toggle ตั้งหนี้: กรองเฉพาะยอดหนี้คงเหลือ > 0
   offset?: number;
   limit?: number;
 }): Promise<TargetDetailSnapshotResult> {
@@ -231,6 +232,7 @@ export async function getTargetDetailSnapshot(params: {
     search,
     productType,
     debtRange,
+    debtOnly = false,
     offset = 0,
     limit = 100,
   } = params;
@@ -275,6 +277,10 @@ export async function getTargetDetailSnapshot(params: {
   }
   if (debtRange) {
     conditions.push(`debt_range = '${debtRange.replace(/'/g, "''")}'`);
+  }
+  // Toggle ตั้งหนี้: กรองเฉพาะแถวที่ยอดหนี้คงเหลือ > 0 (ยอดที่ต้องชำระ - ชำระแล้ว > 0)
+  if (debtOnly) {
+    conditions.push(`GREATEST(COALESCE(total_amount::numeric, 0) - COALESCE(paid_amount::numeric, 0), 0) > 0`);
   }
 
   const whereClause = conditions.join(" AND ");
