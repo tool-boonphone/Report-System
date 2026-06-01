@@ -1176,9 +1176,9 @@ export async function populateMonthlySummaryCache(
 
   // ── Query 3: paid (BATCH) — ใช้ SQL เดียวกับ queryPaid live query เป๊ะๆ ──────────
   // dateMonth = approve_month (เก็บ approve_month เป็น date_month เพื่อ filter ใน getMonthlySummaryFromCache)
-  // เพิ่ม filter paid_at IS NOT NULL เพื่อป้องกัน null paid_at
+  // ไม่ filter paid_at IS NOT NULL เพื่อให้ตรงกับ dccWhere ใน live query (ซึ่งไม่มี filter นี้เช่นกัน)
   {
-    const baseWhere = `dcc.section = '${section}' AND dcc.approve_date IS NOT NULL AND dcc.paid_at IS NOT NULL`;
+    const baseWhere = `dcc.section = '${section}' AND dcc.approve_date IS NOT NULL`;
     const q = `
       SELECT
         TO_CHAR(dcc.approve_date, 'YYYY-MM') AS approve_month,
