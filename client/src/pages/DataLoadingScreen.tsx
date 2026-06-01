@@ -585,6 +585,17 @@ export default function DataLoadingScreen() {
       if (memCache.target && memCache.collected) {
         if (needsMdm) {
           // มีข้อมูลใน cache แต่ MDM stale -> ให้ดึงแค่ MDM
+          startedRef.current = true;
+          // แสดงจำนวนจริงจาก memory cache
+          const contractCount = memCache.target.rows.length;
+          const targetCount = memCache.target.rows.length;
+          const collectedCount = memCache.collected.rows.length;
+          setItemTotal("contracts", contractCount);
+          setItemLoaded("contracts", contractCount);
+          setItemTotal("target", targetCount);
+          setItemLoaded("target", targetCount);
+          setItemTotal("collected", collectedCount);
+          setItemLoaded("collected", collectedCount);
           setStatus("contracts", "done");
           setStatus("target", "done");
           setStatus("collected", "done");
@@ -604,6 +615,16 @@ export default function DataLoadingScreen() {
           
           if (needsMdm) {
             // IDB มีข้อมูล แต่ MDM stale -> ให้ดึงแค่ MDM
+            startedRef.current = true;
+            // แสดงจำนวนจริงจาก IDB cache
+            const targetCount = idbEntry.targetRows.length;
+            const collectedCount = idbEntry.collectedRows.length;
+            setItemTotal("contracts", targetCount);
+            setItemLoaded("contracts", targetCount);
+            setItemTotal("target", targetCount);
+            setItemLoaded("target", targetCount);
+            setItemTotal("collected", collectedCount);
+            setItemLoaded("collected", collectedCount);
             setStatus("contracts", "done");
             setStatus("target", "done");
             setStatus("collected", "done");
