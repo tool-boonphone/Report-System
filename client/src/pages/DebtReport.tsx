@@ -409,6 +409,7 @@ function MonthlyTabContent({
   lightboxPage,
   setLightboxPage,
   pageSize,
+  onNavigateToTab,
 }: {
   section: string | null;
   canExport: boolean;
@@ -423,6 +424,8 @@ function MonthlyTabContent({
   lightboxPage: number;
   setLightboxPage: (v: number) => void;
   pageSize: number;
+  // callback: สลับไป tab หลัก พร้อม pre-filter เดือน (YYYY-MM)
+  onNavigateToTab: (tab: "target" | "collected", month: string) => void;
 }) {
   const sectionKey = (section ?? "") as any;
 
@@ -697,7 +700,7 @@ function MonthlyTabContent({
                       {row.targetAmount > 0 ? (
                         <button
                           type="button"
-                          onClick={() => setLightbox({ type: "target", month: row.collectionMonth })}
+                          onClick={() => onNavigateToTab("target", row.collectionMonth)}
                           className="text-amber-700 font-semibold hover:underline cursor-pointer"
                           title={`ดูรายละเอียดเป้าเก็บหนี้ ${fmtMonth(row.collectionMonth)}`}
                         >
@@ -709,7 +712,7 @@ function MonthlyTabContent({
                     <td className="px-3 py-2 text-right tabular-nums border-r border-slate-100">
                       <button
                         type="button"
-                        onClick={() => setLightbox({ type: "collected", month: row.collectionMonth })}
+                        onClick={() => onNavigateToTab("collected", row.collectionMonth)}
                         className="text-emerald-700 font-semibold hover:underline cursor-pointer"
                         title={`ดูรายละเอียดยอดเก็บหนี้ ${fmtMonth(row.collectionMonth)}`}
                       >
@@ -2044,7 +2047,35 @@ export default function DebtReport() {
         </div>}
 
         {/* Monthly tab content */}
-        {tab === "monthly" && <MonthlyTabContent section={section} canExport={canExport} lightbox={monthlyLightbox} setLightbox={setMonthlyLightbox} lightboxSearch={monthlyLightboxSearch} setLightboxSearch={setMonthlyLightboxSearch} lightboxProductType={monthlyLightboxProductType} setLightboxProductType={setMonthlyLightboxProductType} lightboxDebtRange={monthlyLightboxDebtRange} setLightboxDebtRange={setMonthlyLightboxDebtRange} lightboxPage={monthlyLightboxPage} setLightboxPage={setMonthlyLightboxPage} pageSize={MONTHLY_LIGHTBOX_PAGE_SIZE} />}
+        {tab === "monthly" && <MonthlyTabContent
+          section={section}
+          canExport={canExport}
+          lightbox={monthlyLightbox}
+          setLightbox={setMonthlyLightbox}
+          lightboxSearch={monthlyLightboxSearch}
+          setLightboxSearch={setMonthlyLightboxSearch}
+          lightboxProductType={monthlyLightboxProductType}
+          setLightboxProductType={setMonthlyLightboxProductType}
+          lightboxDebtRange={monthlyLightboxDebtRange}
+          setLightboxDebtRange={setMonthlyLightboxDebtRange}
+          lightboxPage={monthlyLightboxPage}
+          setLightboxPage={setMonthlyLightboxPage}
+          pageSize={MONTHLY_LIGHTBOX_PAGE_SIZE}
+          onNavigateToTab={(targetTab, month) => {
+            // ล้าง filter เดิมทั้งหมดก่อน
+            setSearch("");
+            setStatusFilter(new Set());
+            setApproveDateFilter(new Set());
+            setProductTypeFilter(new Set());
+            setDueDateExact(null);
+            setUpdatedByFilter(null);
+            setDebtSetMode(false);
+            // ตั้ง dueDateFilter เป็นเดือนที่เลือก (YYYY-MM)
+            setDueDateFilter(new Set([month]));
+            // สลับไป tab หลัก
+            setTab(targetTab);
+          }}
+        />}
 
         {/* Table */}
         {tab !== "monthly" && (isError ? (
