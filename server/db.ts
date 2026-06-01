@@ -260,6 +260,18 @@ export async function runStartupMigrations(): Promise<void> {
       console.error(`[migration] ${section}: monthly_summary_due_month_cache.finance_total failed:`, err?.message ?? err);
     }
     try {
+      // Migration 0014: เพิ่ม financed_total, overdue_total, collected_sale ใน monthly_collection_snapshot
+      await db.execute(sql.raw(`
+        ALTER TABLE monthly_collection_snapshot
+        ADD COLUMN IF NOT EXISTS financed_total  DECIMAL(18,2) NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS overdue_total   DECIMAL(18,2) NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS collected_sale  DECIMAL(18,2) NOT NULL DEFAULT 0
+      `));
+      console.log(`[migration] ${section}: monthly_collection_snapshot — financed_total, overdue_total, collected_sale OK`);
+    } catch (err: any) {
+      console.error(`[migration] ${section}: monthly_collection_snapshot new cols failed:`, err?.message ?? err);
+    }
+    try {
       // Migration 0013: ขยาย due_month เป็น VARCHAR(16) (backup migration สำหรับค่า sentinel เก่า "__approved__" และ "__summary__" ที่ยาวเกิน 7 ตัว)
       await db.execute(sql.raw(`
         ALTER TABLE monthly_summary_due_month_cache

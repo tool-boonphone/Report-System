@@ -460,7 +460,15 @@ function MonthlyTabContent({
     { enabled: !!section && lightbox?.type === "collected" && !!lightbox?.month, staleTime: 2 * 60 * 1000 },
   );
 
-  const snapshots = snapshotsQuery.data ?? [];
+  // กรองเฉพาะ มิ.ย. 2569 (2026-06) เป็นต้นไป และไม่เกินเดือนปัจจุบัน
+  const allSnapshots = snapshotsQuery.data ?? [];
+  const snapshots = React.useMemo(() => {
+    const now = new Date();
+    const currentYM = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    return allSnapshots.filter((r) => r.collectionMonth >= "2026-06" && r.collectionMonth <= currentYM);
+  }, [allSnapshots]);
+  // toggle ตา: เดือน-ปีที่ต้องชำระ
+  const [showDueMonth, setShowDueMonth] = React.useState(true);
 
   // ── On-demand rebuild mutation ───────────────────────────────────────────
   // เก็บสถานะว่า server ตอบกลับมาว่าไม่มี cache data (ยังไม่เคย sync เลย)
@@ -587,70 +595,166 @@ function MonthlyTabContent({
           <table className="w-full text-xs border-collapse">
             <thead className="sticky top-0 z-10">
               <tr className="bg-slate-700 text-white">
-                <th className="px-3 py-2 text-left font-semibold border-r border-slate-600 whitespace-nowrap">เดือน</th>
-                <th className="px-3 py-2 text-center font-semibold border-r border-slate-600 whitespace-nowrap" colSpan={2}>เป้าเก็บหนี้</th>
-                <th className="px-3 py-2 text-center font-semibold border-r border-slate-600 whitespace-nowrap" colSpan={2}>ยอดเก็บหนี้</th>
-                <th className="px-3 py-2 text-center font-semibold whitespace-nowrap">อัปเดต</th>
+                {/* เดือน-ปี ที่ต้องชำระ */}
+                <th className="px-3 py-2 text-left font-semibold border-r border-slate-600 whitespace-nowrap">
+                  <div className="flex items-center gap-1.5">
+                    <span>เดือน-ปี ที่ต้องชำระ</span>
+                    <button
+                      type="button"
+                      onClick={() => setShowDueMonth((v) => !v)}
+                      className="text-slate-300 hover:text-white transition-colors ml-1"
+                      title={showDueMonth ? "ซ่อนคอลัมน์" : "แสดงคอลัมน์"}
+                    >
+                      {showDueMonth ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+                </th>
+                {/* ถึงกำหนดชำระ */}
+                <th className="px-3 py-2 text-center font-semibold border-r border-slate-600 whitespace-nowrap" colSpan={4}>ถึงกำหนดชำระ</th>
+                {/* เป้าเก็บหนี้ */}
+                <th className="px-3 py-2 text-center font-semibold border-r border-slate-600 whitespace-nowrap">เป้าเก็บหนี้</th>
+                {/* ยอดเก็บหนี้ */}
+                <th className="px-3 py-2 text-center font-semibold whitespace-nowrap" colSpan={2}>ยอดเก็บหนี้</th>
               </tr>
               <tr className="bg-slate-100 text-slate-700 border-b">
                 <th className="px-3 py-1.5 text-left font-medium border-r border-slate-200"></th>
+                <th className="px-3 py-1.5 text-right font-medium border-r border-slate-200">จำนวนสัญญา</th>
+                <th className="px-3 py-1.5 text-right font-medium border-r border-slate-200">ยอดจัดฯ</th>
+                <th className="px-3 py-1.5 text-right font-medium border-r border-slate-200">ยอดผ่อนรวม</th>
+                <th className="px-3 py-1.5 text-right font-medium border-r border-slate-200 text-red-600">ค้างชำระ</th>
                 <th className="px-3 py-1.5 text-right font-medium border-r border-slate-200 text-amber-700">ยอดเป้า</th>
-                <th className="px-3 py-1.5 text-right font-medium border-r border-slate-200 text-amber-700">สัญญา</th>
-                <th className="px-3 py-1.5 text-right font-medium border-r border-slate-200 text-emerald-700">ยอดเก็บ</th>
-                <th className="px-3 py-1.5 text-right font-medium border-r border-slate-200 text-emerald-700">สัญญา</th>
-                <th className="px-3 py-1.5 text-center font-medium"></th>
+                <th className="px-3 py-1.5 text-right font-medium border-r border-slate-200 text-emerald-700">ค่างวด</th>
+                <th className="px-3 py-1.5 text-right font-medium text-blue-700">ขายเครื่อง</th>
               </tr>
             </thead>
             <tbody>
               {snapshots.map((row, idx) => {
-                const achievePct = row.targetAmount > 0 ? Math.round((row.collectedAmount / row.targetAmount) * 100) : null;
+                // % ค่างวด เทียบกับยอดผ่อนรวม
+                const installPct = row.installTotal > 0 ? Math.round((row.collectedAmount / row.installTotal) * 100) : null;
+                // % ค่างวด เทียบกับเป้าเก็บหนี้
+                const targetPct = row.targetAmount > 0 ? Math.round((row.collectedAmount / row.targetAmount) * 100) : null;
                 return (
                   <tr key={row.collectionMonth} className={`border-b hover:bg-blue-50 transition-colors ${idx % 2 === 0 ? "bg-white" : "bg-gray-50"}`}>
+                    {/* เดือน-ปี ที่ต้องชำระ */}
                     <td className="px-3 py-2 font-medium text-slate-700 border-r border-slate-100 whitespace-nowrap">
-                      {fmtMonth(row.collectionMonth)}
+                      {showDueMonth ? fmtMonth(row.collectionMonth) : "●●●"}
                       {row.collectedIsFrozen && <span className="ml-1.5 text-[10px] text-slate-400">❄️</span>}
+                    </td>
+                    {/* ถึงกำหนดชำระ: จำนวนสัญญา */}
+                    <td className="px-3 py-2 text-right tabular-nums border-r border-slate-100 text-slate-600">
+                      {row.targetContractCount > 0 ? row.targetContractCount.toLocaleString("th-TH") : "-"}
+                    </td>
+                    {/* ถึงกำหนดชำระ: ยอดจัดฯ */}
+                    <td className="px-3 py-2 text-right tabular-nums border-r border-slate-100 text-slate-600">
+                      {row.financedTotal > 0 ? fmtMoney(row.financedTotal) : "-"}
+                    </td>
+                    {/* ถึงกำหนดชำระ: ยอดผ่อนรวม */}
+                    <td className="px-3 py-2 text-right tabular-nums border-r border-slate-100 text-slate-600">
+                      {row.installTotal > 0 ? fmtMoney(row.installTotal) : "-"}
+                    </td>
+                    {/* ถึงกำหนดชำระ: ค้างชำระ */}
+                    <td className="px-3 py-2 text-right tabular-nums border-r border-slate-100">
+                      {row.overdueTotal > 0 ? (
+                        <span className="text-red-600 font-medium">{fmtMoney(row.overdueTotal)}</span>
+                      ) : "-"}
                     </td>
                     {/* เป้าเก็บหนี้ */}
                     <td className="px-3 py-2 text-right tabular-nums border-r border-slate-100">
-                      <button
-                        type="button"
-                        onClick={() => setLightbox({ type: "target", month: row.collectionMonth })}
-                        className="text-amber-700 font-medium hover:underline cursor-pointer"
-                        title={`ดูรายละเอียดเป้าเก็บหนี้ ${fmtMonth(row.collectionMonth)}`}
-                      >
-                        {fmtMoney(row.targetAmount)}
-                      </button>
+                      {row.targetAmount > 0 ? (
+                        <button
+                          type="button"
+                          onClick={() => setLightbox({ type: "target", month: row.collectionMonth })}
+                          className="text-amber-700 font-semibold hover:underline cursor-pointer"
+                          title={`ดูรายละเอียดเป้าเก็บหนี้ ${fmtMonth(row.collectionMonth)}`}
+                        >
+                          {fmtMoney(row.targetAmount)}
+                        </button>
+                      ) : "-"}
                     </td>
-                    <td className="px-3 py-2 text-right tabular-nums border-r border-slate-100 text-slate-500">
-                      {row.targetContractCount.toLocaleString("th-TH")}
-                    </td>
-                    {/* ยอดเก็บหนี้ */}
+                    {/* ยอดเก็บหนี้: ค่างวด */}
                     <td className="px-3 py-2 text-right tabular-nums border-r border-slate-100">
                       <button
                         type="button"
                         onClick={() => setLightbox({ type: "collected", month: row.collectionMonth })}
-                        className="text-emerald-700 font-medium hover:underline cursor-pointer"
+                        className="text-emerald-700 font-semibold hover:underline cursor-pointer"
                         title={`ดูรายละเอียดยอดเก็บหนี้ ${fmtMonth(row.collectionMonth)}`}
                       >
-                        {fmtMoney(row.collectedAmount)}
+                        {row.collectedAmount > 0 ? fmtMoney(row.collectedAmount) : "-"}
                       </button>
-                      {achievePct !== null && (
-                        <span className={`ml-1.5 text-[10px] font-semibold px-1 py-0.5 rounded ${
-                          achievePct >= 100 ? "bg-emerald-100 text-emerald-700" :
-                          achievePct >= 80 ? "bg-yellow-100 text-yellow-700" :
-                          "bg-red-100 text-red-600"
-                        }`}>{achievePct}%</span>
+                      {(installPct !== null || targetPct !== null) && (
+                        <div className="flex gap-1 justify-end mt-0.5 flex-wrap">
+                          {installPct !== null && (
+                            <span className={`text-[10px] font-semibold px-1 py-0.5 rounded ${
+                              installPct >= 100 ? "bg-emerald-100 text-emerald-700" :
+                              installPct >= 80 ? "bg-yellow-100 text-yellow-700" :
+                              "bg-red-100 text-red-600"
+                            }`} title="% เทียบยอดผ่อนรวม">ผ่อน {installPct}%</span>
+                          )}
+                          {targetPct !== null && (
+                            <span className={`text-[10px] font-semibold px-1 py-0.5 rounded ${
+                              targetPct >= 100 ? "bg-emerald-100 text-emerald-700" :
+                              targetPct >= 80 ? "bg-yellow-100 text-yellow-700" :
+                              "bg-red-100 text-red-600"
+                            }`} title="% เทียบเป้าเก็บหนี้">เป้า {targetPct}%</span>
+                          )}
+                        </div>
                       )}
                     </td>
-                    <td className="px-3 py-2 text-right tabular-nums border-r border-slate-100 text-slate-500">
-                      {row.collectedContractCount.toLocaleString("th-TH")}
-                    </td>
-                    <td className="px-3 py-2 text-center text-slate-400 text-[10px]">
-                      {row.updatedAt ? row.updatedAt.slice(0, 16).replace("T", " ") : "-"}
+                    {/* ยอดเก็บหนี้: ขายเครื่อง */}
+                    <td className="px-3 py-2 text-right tabular-nums">
+                      {row.collectedSale > 0 ? (
+                        <span className="text-blue-700 font-medium">{fmtMoney(row.collectedSale)}</span>
+                      ) : "-"}
                     </td>
                   </tr>
                 );
               })}
+              {/* แถวรวม */}
+              {snapshots.length > 0 && (() => {
+                const totals = snapshots.reduce((acc, r) => ({
+                  targetContractCount: acc.targetContractCount + r.targetContractCount,
+                  financedTotal: acc.financedTotal + r.financedTotal,
+                  installTotal: acc.installTotal + r.installTotal,
+                  overdueTotal: acc.overdueTotal + r.overdueTotal,
+                  targetAmount: acc.targetAmount + r.targetAmount,
+                  collectedAmount: acc.collectedAmount + r.collectedAmount,
+                  collectedSale: acc.collectedSale + r.collectedSale,
+                }), { targetContractCount: 0, financedTotal: 0, installTotal: 0, overdueTotal: 0, targetAmount: 0, collectedAmount: 0, collectedSale: 0 });
+                const totalInstallPct = totals.installTotal > 0 ? Math.round((totals.collectedAmount / totals.installTotal) * 100) : null;
+                const totalTargetPct = totals.targetAmount > 0 ? Math.round((totals.collectedAmount / totals.targetAmount) * 100) : null;
+                return (
+                  <tr className="border-t-2 border-slate-300 bg-slate-50 font-semibold">
+                    <td className="px-3 py-2 text-slate-700 border-r border-slate-200">รวม</td>
+                    <td className="px-3 py-2 text-right tabular-nums border-r border-slate-200 text-slate-700">{totals.targetContractCount.toLocaleString("th-TH")}</td>
+                    <td className="px-3 py-2 text-right tabular-nums border-r border-slate-200 text-slate-700">{totals.financedTotal > 0 ? fmtMoney(totals.financedTotal) : "-"}</td>
+                    <td className="px-3 py-2 text-right tabular-nums border-r border-slate-200 text-slate-700">{totals.installTotal > 0 ? fmtMoney(totals.installTotal) : "-"}</td>
+                    <td className="px-3 py-2 text-right tabular-nums border-r border-slate-200 text-red-600">{totals.overdueTotal > 0 ? fmtMoney(totals.overdueTotal) : "-"}</td>
+                    <td className="px-3 py-2 text-right tabular-nums border-r border-slate-200 text-amber-700">{totals.targetAmount > 0 ? fmtMoney(totals.targetAmount) : "-"}</td>
+                    <td className="px-3 py-2 text-right tabular-nums border-r border-slate-200">
+                      <span className="text-emerald-700">{totals.collectedAmount > 0 ? fmtMoney(totals.collectedAmount) : "-"}</span>
+                      {(totalInstallPct !== null || totalTargetPct !== null) && (
+                        <div className="flex gap-1 justify-end mt-0.5 flex-wrap">
+                          {totalInstallPct !== null && (
+                            <span className={`text-[10px] font-semibold px-1 py-0.5 rounded ${
+                              totalInstallPct >= 100 ? "bg-emerald-100 text-emerald-700" :
+                              totalInstallPct >= 80 ? "bg-yellow-100 text-yellow-700" :
+                              "bg-red-100 text-red-600"
+                            }`}>ผ่อน {totalInstallPct}%</span>
+                          )}
+                          {totalTargetPct !== null && (
+                            <span className={`text-[10px] font-semibold px-1 py-0.5 rounded ${
+                              totalTargetPct >= 100 ? "bg-emerald-100 text-emerald-700" :
+                              totalTargetPct >= 80 ? "bg-yellow-100 text-yellow-700" :
+                              "bg-red-100 text-red-600"
+                            }`}>เป้า {totalTargetPct}%</span>
+                          )}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums text-blue-700">{totals.collectedSale > 0 ? fmtMoney(totals.collectedSale) : "-"}</td>
+                  </tr>
+                );
+              })()}
             </tbody>
           </table>
         </div>

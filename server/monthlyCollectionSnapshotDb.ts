@@ -4,12 +4,18 @@
  * ตาราง monthly_collection_snapshot เก็บ snapshot รายเดือน:
  *   - target_amount: เป้าเก็บหนี้ (คำนวณจาก debt_target_cache)
  *   - collected_amount: ยอดเก็บหนี้ (คำนวณจาก debt_collected_cache)
+ *   - financed_total: ยอดผ่อนรวม (SUM finance_amount × installment_count ต่อ due_month)
+ *   - overdue_total: ค้างชำระรวม (SUM total_amount - paid_amount ทุก contract ที่ค้างใน due_month)
+ *   - collected_sale: ยอดขายเครื่อง (จาก income_monthly_summary ประเภท 'ขายเครื่อง')
  *
  * Logic:
  *   1. Target = SUM(GREATEST(total_amount - paid_amount, 0)) ต่อ due_month
  *      WHERE due_date อยู่ใน collection_month AND is_closed IS NOT TRUE
  *   2. Collected = SUM(total_amount) จาก debt_collected_cache
  *      WHERE paid_at อยู่ใน collection_month
+ *   3. FinancedTotal = SUM(finance_amount * installment_count) ต่อ due_month
+ *   4. OverdueTotal = SUM(total_amount - paid_amount) ทุก row ที่ค้างชำระ ใน due_month
+ *   5. CollectedSale = total_amount จาก income_monthly_summary WHERE income_type = 'ขายเครื่อง'
  *
  * Trigger: เรียกหลัง populateDebtCache() ใน runner.ts
  *
@@ -43,6 +49,11 @@ export type MonthlyCollectionSnapshotRow = {
   collectedOverpaid: number;
   collectedBadDebt: number;
   installTotal: number;
+  // ── New columns ──────────────────────────────────────────────────────────────
+  financedTotal: number;   // ยอดผ่อนรวม (finance_amount × installment_count)
+  overdueTotal: number;    // ค้างชำระรวม
+  collectedSale: number;   // ยอดขายเครื่อง
+  // ── Freeze status ────────────────────────────────────────────────────────────
   collectedIsFrozen: boolean;
   targetFrozenAt: string | null;
   collectedFrozenAt: string | null;
@@ -63,6 +74,8 @@ function n(v: unknown): number {
  * Strategy:
  *   - คำนวณ target จาก debt_target_cache (group by due_month)
  *   - คำนวณ collected จาก debt_collected_cache (group by paid_at month)
+ *   - คำนวณ financed_total, overdue_total จาก debt_target_cache
+ *   - คำนวณ collected_sale จาก income_monthly_summary
  *   - Upsert ลง monthly_collection_snapshot
  *   - เดือนที่ผ่านมาจะ freeze (collected_is_frozen = true) เมื่อ sync เดือนถัดไป
  *
@@ -91,7 +104,9 @@ export async function populateMonthlyCollectionSnapshot(
       SUM(fee::numeric) AS target_fee,
       SUM(penalty::numeric) AS target_penalty,
       SUM(unlock_fee::numeric) AS target_unlock_fee,
-      SUM(baseline_amount::numeric) AS install_total
+      SUM(baseline_amount::numeric) AS install_total,
+      SUM(COALESCE(finance_amount::numeric, 0) * COALESCE(installment_count, 0)) AS financed_total,
+      SUM(GREATEST(COALESCE(total_amount::numeric, 0) - COALESCE(paid_amount::numeric, 0), 0)) AS overdue_total
     FROM debt_target_cache
     WHERE section = ${section}
       AND due_date IS NOT NULL
@@ -125,7 +140,23 @@ export async function populateMonthlyCollectionSnapshot(
   `);
   const collectedRows: any[] = pgRows(collectedResult);
 
-  // ── 3. Merge into a map keyed by month ────────────────────────────────────────
+  // ── 3. Query ยอดขายเครื่อง จาก income_monthly_summary ────────────────────────
+  const saleResult = await db.execute(sql`
+    SELECT
+      LPAD(year::text, 4, '0') || '-' || LPAD(month::text, 2, '0') AS paid_month,
+      COALESCE(total_amount::numeric, 0) AS collected_sale
+    FROM income_monthly_summary
+    WHERE section = ${section}
+      AND income_type = 'ขายเครื่อง'
+    ORDER BY year, month
+  `);
+  const saleRows: any[] = pgRows(saleResult);
+  const saleMap = new Map<string, number>();
+  for (const row of saleRows) {
+    saleMap.set(String(row.paid_month), n(row.collected_sale));
+  }
+
+  // ── 4. Merge into a map keyed by month ────────────────────────────────────────
   const monthMap = new Map<string, {
     targetAmount: number;
     targetContractCount: number;
@@ -135,6 +166,8 @@ export async function populateMonthlyCollectionSnapshot(
     targetPenalty: number;
     targetUnlockFee: number;
     installTotal: number;
+    financedTotal: number;
+    overdueTotal: number;
     collectedAmount: number;
     collectedContractCount: number;
     collectedPrincipal: number;
@@ -160,6 +193,8 @@ export async function populateMonthlyCollectionSnapshot(
       targetPenalty: n(row.target_penalty),
       targetUnlockFee: n(row.target_unlock_fee),
       installTotal: n(row.install_total),
+      financedTotal: n(row.financed_total),
+      overdueTotal: n(row.overdue_total),
       collectedAmount: 0,
       collectedContractCount: 0,
       collectedPrincipal: 0,
@@ -200,6 +235,8 @@ export async function populateMonthlyCollectionSnapshot(
         targetPenalty: 0,
         targetUnlockFee: 0,
         installTotal: 0,
+        financedTotal: 0,
+        overdueTotal: 0,
         collectedAmount: n(row.collected_amount),
         collectedContractCount: n(row.contract_count),
         collectedPrincipal: n(row.collected_principal),
@@ -214,7 +251,7 @@ export async function populateMonthlyCollectionSnapshot(
     }
   }
 
-  // ── 4. Fetch existing frozen status from DB ────────────────────────────────
+  // ── 5. Fetch existing frozen status from DB ────────────────────────────────
   const existingResult = await db.execute(sql`
     SELECT collection_month, collected_is_frozen, target_frozen_at, collected_frozen_at
     FROM monthly_collection_snapshot
@@ -230,7 +267,7 @@ export async function populateMonthlyCollectionSnapshot(
     });
   }
 
-  // ── 5. Upsert each month ──────────────────────────────────────────────────
+  // ── 6. Upsert each month ──────────────────────────────────────────────────
   const months = Array.from(monthMap.keys()).sort();
   let upsertCount = 0;
   const total = months.length;
@@ -239,6 +276,7 @@ export async function populateMonthlyCollectionSnapshot(
     const month = months[i];
     const data = monthMap.get(month)!;
     const existing = frozenMap.get(month);
+    const collectedSale = saleMap.get(month) ?? 0;
 
     // Freeze logic: เดือนที่ผ่านมาให้ freeze collected ครั้งแรกที่ sync เดือนถัดไป
     const isPastMonth = month < currentMonth;
@@ -259,7 +297,7 @@ export async function populateMonthlyCollectionSnapshot(
           collected_amount, collected_contract_count, collected_frozen_at, collected_is_frozen,
           collected_principal, collected_interest, collected_fee, collected_penalty,
           collected_unlock_fee, collected_discount, collected_overpaid, collected_bad_debt,
-          install_total, updated_at
+          install_total, financed_total, overdue_total, collected_sale, updated_at
         )
         VALUES (
           ${section}, ${month},
@@ -270,7 +308,7 @@ export async function populateMonthlyCollectionSnapshot(
           ${data.collectedPrincipal}, ${data.collectedInterest}, ${data.collectedFee},
           ${data.collectedPenalty}, ${data.collectedUnlockFee},
           ${data.collectedDiscount}, ${data.collectedOverpaid}, ${data.collectedBadDebt},
-          ${data.installTotal}, NOW()
+          ${data.installTotal}, ${data.financedTotal}, ${data.overdueTotal}, ${collectedSale}, NOW()
         )
         ON CONFLICT (section, collection_month) DO UPDATE SET
           target_amount = EXCLUDED.target_amount,
@@ -294,10 +332,13 @@ export async function populateMonthlyCollectionSnapshot(
           collected_overpaid = EXCLUDED.collected_overpaid,
           collected_bad_debt = EXCLUDED.collected_bad_debt,
           install_total = EXCLUDED.install_total,
+          financed_total = EXCLUDED.financed_total,
+          overdue_total = EXCLUDED.overdue_total,
+          collected_sale = EXCLUDED.collected_sale,
           updated_at = NOW()
       `);
     } else {
-      // เดือน freeze แล้ว: อัพเดทเฉพาะ target
+      // เดือน freeze แล้ว: อัพเดทเฉพาะ target (ไม่แตะ collected)
       await db.execute(sql`
         INSERT INTO monthly_collection_snapshot (
           section, collection_month,
@@ -306,7 +347,7 @@ export async function populateMonthlyCollectionSnapshot(
           collected_amount, collected_contract_count, collected_frozen_at, collected_is_frozen,
           collected_principal, collected_interest, collected_fee, collected_penalty,
           collected_unlock_fee, collected_discount, collected_overpaid, collected_bad_debt,
-          install_total, updated_at
+          install_total, financed_total, overdue_total, collected_sale, updated_at
         )
         VALUES (
           ${section}, ${month},
@@ -317,7 +358,7 @@ export async function populateMonthlyCollectionSnapshot(
           ${data.collectedPrincipal}, ${data.collectedInterest}, ${data.collectedFee},
           ${data.collectedPenalty}, ${data.collectedUnlockFee},
           ${data.collectedDiscount}, ${data.collectedOverpaid}, ${data.collectedBadDebt},
-          ${data.installTotal}, NOW()
+          ${data.installTotal}, ${data.financedTotal}, ${data.overdueTotal}, ${collectedSale}, NOW()
         )
         ON CONFLICT (section, collection_month) DO UPDATE SET
           target_amount = EXCLUDED.target_amount,
@@ -329,6 +370,7 @@ export async function populateMonthlyCollectionSnapshot(
           target_penalty = EXCLUDED.target_penalty,
           target_unlock_fee = EXCLUDED.target_unlock_fee,
           install_total = EXCLUDED.install_total,
+          financed_total = EXCLUDED.financed_total,
           updated_at = NOW()
       `);
     }
@@ -345,6 +387,7 @@ export async function populateMonthlyCollectionSnapshot(
 /**
  * ดึง monthly_collection_snapshot ทั้งหมดของ section
  * เรียงจากเดือนล่าสุดไปเก่าสุด
+ * กรองเฉพาะตั้งแต่ มิ.ย. 2569 (2026-06) เป็นต้นไป
  */
 export async function getMonthlyCollectionSnapshots(
   section: SectionKey,
@@ -373,12 +416,16 @@ export async function getMonthlyCollectionSnapshots(
       collected_overpaid,
       collected_bad_debt,
       install_total,
+      COALESCE(financed_total, 0)  AS financed_total,
+      COALESCE(overdue_total, 0)   AS overdue_total,
+      COALESCE(collected_sale, 0)  AS collected_sale,
       collected_is_frozen,
       target_frozen_at,
       collected_frozen_at,
       updated_at
     FROM monthly_collection_snapshot
     WHERE section = ${section}
+      AND collection_month >= '2026-06'
     ORDER BY collection_month DESC
   `);
 
@@ -403,6 +450,9 @@ export async function getMonthlyCollectionSnapshots(
     collectedOverpaid: n(row.collected_overpaid),
     collectedBadDebt: n(row.collected_bad_debt),
     installTotal: n(row.install_total),
+    financedTotal: n(row.financed_total),
+    overdueTotal: n(row.overdue_total),
+    collectedSale: n(row.collected_sale),
     collectedIsFrozen: Boolean(row.collected_is_frozen),
     targetFrozenAt: row.target_frozen_at ? String(row.target_frozen_at) : null,
     collectedFrozenAt: row.collected_frozen_at ? String(row.collected_frozen_at) : null,
@@ -474,6 +524,8 @@ export async function getMonthlyTargetDetail(params: {
       penalty,
       unlock_fee,
       baseline_amount,
+      finance_amount,
+      installment_count,
       is_paid,
       is_arrears,
       is_bad_debt,
