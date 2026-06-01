@@ -1136,16 +1136,6 @@ export default function WatchGroup() {
                             )}>
                               {fmtMoney(r.paidAmount1)}
                             </span>
-                            {r.totalAmountDue > 0 && (
-                              <span className={cn(
-                                "ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full",
-                                r.paidAmount1 > 0
-                                  ? "bg-blue-50 text-blue-600"
-                                  : "bg-red-50 text-red-500",
-                              )}>
-                                {Math.round((r.paidAmount1 / r.totalAmountDue) * 100)}%
-                              </span>
-                            )}
                           </td>
                           <td className={cn(
                             "px-3 py-1.5 text-right whitespace-nowrap font-semibold",
