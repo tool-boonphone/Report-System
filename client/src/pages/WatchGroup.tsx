@@ -340,7 +340,7 @@ function ArrearsInfoPopover() {
         <button
           type="button"
           className="flex items-center justify-center w-7 h-7 rounded-full text-teal-600 hover:bg-teal-50 border border-teal-200 transition-colors"
-          title="อธิบายความหมายค้างชำระ"
+          title="อธิบายความหมายกลุ่มเฝ้าระวัง"
         >
           <Info className="w-4 h-4" />
         </button>
@@ -349,25 +349,25 @@ function ArrearsInfoPopover() {
         <div className="space-y-3">
           <h4 className="font-semibold text-gray-800 flex items-center gap-1.5">
             <Eye className="w-4 h-4 text-teal-600" />
-            กลุ่มเฝ้าระวัง — ความหมายค้างชำระ
+            กลุ่มเฝ้าระวัง — เงื่อนไขการจัดกลุ่ม
           </h4>
           <p className="text-xs text-gray-500 leading-relaxed">
-            แสดงเฉพาะสัญญาที่ <span className="font-semibold text-gray-700">ไม่เคยชำระเลยตั้งแต่งวดแรก</span>{" "}
-            และเกินช่วงผ่อนผันที่กำหนดแล้ว แบ่งเป็น 2 กลุ่ม:
+            แสดงเฉพาะสัญญาที่เกินช่วงผ่อนผันที่กำหนดแล้ว
+            แบ่งเป็น  2 กลุ่มตามยอดชำระงวดที่ 1:
           </p>
           <div className="rounded-md border border-amber-200 bg-amber-50 p-3 space-y-1">
             <p className="text-xs font-semibold text-amber-800">0 งวด — กลุ่มเร่งติดตามก่อนหลุด</p>
             <p className="text-xs text-amber-700 leading-relaxed">
-              ถึงกำหนดชำระ <span className="font-medium">งวดที่ 1</span> แล้ว และเกินกำหนดมาแล้วมากกว่าช่วงผ่อนผัน
-              แต่งวดที่ 2 ยังไม่ถึงกำหนด — ลูกค้ายังไม่ค้างชำระอย่างเป็นทางการ
-              ต้องเร่งติดตามเพื่อไม่ให้กลายเป็นค้างชำระ
+              ถึงกำหนดชำระ<span className="font-medium">งวดที่ 1</span> แล้ว แต่ยอดชำระยังไม่ครบยอดที่ต้องชำระของงวดที่ 1
+              และเกินกำหนดชำระงวดที่ 1 มาแล้วมากกว่าช่วงผ่อนผัน —
+              ยังไม่ชำระเลย หรือชำระมาแค่บางส่วนแต่ยังไม่ครบ
             </p>
           </div>
           <div className="rounded-md border border-red-200 bg-red-50 p-3 space-y-1">
             <p className="text-xs font-semibold text-red-800">1 งวด — กลุ่มเร่งลงพื้นที่ติดตามเครื่อง</p>
             <p className="text-xs text-red-700 leading-relaxed">
-              ถึงกำหนดชำระ <span className="font-medium">งวดที่ 2</span> แล้ว และเกินกำหนดมาแล้วมากกว่าช่วงผ่อนผัน
-              — ค้างชำระ 1 งวดแล้ว กำลังจะค้างชำระ 2 งวด
+              ชำระ<span className="font-medium">งวดที่ 1</span> ครบแล้ว ปัจจุบันเลยกำหนดชำระ<span className="font-medium">งวดที่ 2</span> มาแล้วมากกว่าช่วงผ่อนผัน
+              — ยังไม่ชำระงวดที่ 2 เลย หรือชำระมาแค่บางส่วนแต่ยังไม่ครบ
               ต้องเร่งลงพื้นที่เพื่อติดตามเครื่องคืน
             </p>
           </div>
@@ -685,7 +685,7 @@ export default function WatchGroup() {
         "#","วันที่อนุมัติ","เลขที่สัญญา","ชื่อ-นามสกุล","เบอร์โทร",
         "ประเภท","รุ่น","รหัสพาร์ทเนอร์","ชื่อพาร์ทเนอร์","ราคา","ยอดจัดไฟแนนซ์",
         "ค่าคอมมิชชั่น","Incentive","ต้นทุน","ยอดผ่อนรวม","ค่างวด","ยอดชำระ",
-        "เกินกำหนด(วัน)","ค้างชำระ(งวด)","Online (วันที่แล้ว)",
+        "เกินกำหนด(วัน)","ชำระ(งวด)","Online (วันที่แล้ว)",
       ];
       const dataRows = filteredRows.map((r, i) => {
         const onlineDays = r.lastOnlineDays;
@@ -872,13 +872,13 @@ export default function WatchGroup() {
                   formatOption={(code) => partnerOptions.find((p) => p.code === code)?.label ?? code}
                 />
 
-                {/* ค้างชำระ — Multi-Select */}
+                {/* ชำระ (0งวด/1งวด) — Multi-Select */}
                 <MultiSelectFilter
-                  label="ค้างชำระ"
+                  label="ชำระ"
                   selected={arrearsFilter}
                   onChange={setArrearsFilter}
                   options={["0", "1"]}
-                  placeholder="ค้างชำระ: ทั้งหมด"
+                  placeholder="ชำระ: ทั้งหมด"
                   formatOption={(v) => `${v} งวด`}
                 />
 
@@ -1038,7 +1038,7 @@ export default function WatchGroup() {
                         เกินกำหนด(วัน)
                       </Th>
                       <Th col="arrearsCount" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="min-w-[110px] text-center">
-                        ค้างชำระ(งวด)
+                        ชำระ(งวด)
                       </Th>
                       <th className="px-3 py-2 text-center text-xs font-semibold whitespace-nowrap min-w-[90px]">
                         Online
