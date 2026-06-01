@@ -1091,7 +1091,9 @@ export async function populateMonthlySummaryCache(
     onProgress?.(doneSteps, TOTAL_STEPS);
   }
 
-  // ── Query 2: target (BATCH) ───────────────────────────────────────────────
+  // ── Query 2: target (BATCH) — ใช้ SQL เดียวกับ queryTarget live query เป๊ะๆ ──────
+  // penalty/unlockFee ดึงจาก MAX(period) WHERE due_date <= CURRENT_DATE ต่อสัญญา
+  // (ไม่แยก per due_month เพราะ live query ก็ไม่แยก)
   {
     const baseWhere = `dtc.section = '${section}' AND dtc.approve_date IS NOT NULL`;
     const q = `
@@ -1128,16 +1130,19 @@ export async function populateMonthlySummaryCache(
                  THEN CAST(base.unlock_fee AS DECIMAL(18,2)) ELSE 0 END) AS total_target
       FROM debt_target_cache base
       JOIN (
+        -- MAX(period) WHERE due_date <= CURRENT_DATE — ตรงกับ queryTarget live query
         SELECT dtc.section, dtc.contract_external_id, MAX(dtc.period) AS max_period
         FROM debt_target_cache dtc
         WHERE ${baseWhere}
           AND DATE(dtc.due_date) <= CURRENT_DATE
+          AND dtc.due_date IS NOT NULL
         GROUP BY dtc.section, dtc.contract_external_id
       ) latest ON latest.section = base.section
                AND latest.contract_external_id = base.contract_external_id
       WHERE base.section = '${section}'
         AND base.approve_date IS NOT NULL
         AND DATE(base.due_date) <= CURRENT_DATE
+        AND base.due_date IS NOT NULL
       GROUP BY 1, 2, 3, 4, 5
       ORDER BY 1 DESC
     `;
@@ -1161,9 +1166,11 @@ export async function populateMonthlySummaryCache(
     onProgress?.(doneSteps, TOTAL_STEPS);
   }
 
-  // ── Query 3: paid (BATCH) ─────────────────────────────────────────────────
+  // ── Query 3: paid (BATCH) — ใช้ SQL เดียวกับ queryPaid live query เป๊ะๆ ──────────
+  // dateMonth = approve_month (เก็บ approve_month เป็น date_month เพื่อ filter ใน getMonthlySummaryFromCache)
+  // เพิ่ม filter paid_at IS NOT NULL เพื่อป้องกัน null paid_at
   {
-    const baseWhere = `dcc.section = '${section}' AND dcc.approve_date IS NOT NULL`;
+    const baseWhere = `dcc.section = '${section}' AND dcc.approve_date IS NOT NULL AND dcc.paid_at IS NOT NULL`;
     const q = `
       SELECT
         TO_CHAR(dcc.approve_date, 'YYYY-MM') AS approve_month,
@@ -1246,7 +1253,8 @@ export async function populateMonthlySummaryCache(
     onProgress?.(doneSteps, TOTAL_STEPS);
   }
 
-  // ── Query 4: due (BATCH) ──────────────────────────────────────────────────
+  // ── Query 4: due (BATCH) — ใช้ SQL เดียวกับ queryDue live query เป๊ะๆ ──────────────
+  // MAX(period) WHERE is_arrears = true ต่อสัญญา (ไม่แยก per due_month — ตรงกับ live query)
   {
     const baseWhere = `dtc.section = '${section}' AND dtc.approve_date IS NOT NULL`;
     const q = `
@@ -1277,16 +1285,19 @@ export async function populateMonthlySummaryCache(
         SUM(GREATEST(CAST(base.total_amount AS DECIMAL(18,2)) - CAST(base.paid_amount AS DECIMAL(18,2)), 0)) AS total_due
       FROM debt_target_cache base
       JOIN (
+        -- MAX(period) WHERE is_arrears = true ต่อสัญญา — ตรงกับ queryDue live query
         SELECT dtc.section, dtc.contract_external_id, MAX(dtc.period) AS max_period
         FROM debt_target_cache dtc
         WHERE ${baseWhere}
           AND dtc.is_arrears = true
+          AND dtc.due_date IS NOT NULL
         GROUP BY dtc.section, dtc.contract_external_id
       ) latest ON latest.section = base.section
                AND latest.contract_external_id = base.contract_external_id
       WHERE base.section = '${section}'
         AND base.approve_date IS NOT NULL
         AND base.is_arrears = true
+        AND base.due_date IS NOT NULL
       GROUP BY 1, 2, 3, 4, 5
       ORDER BY 1 DESC
     `;
@@ -1310,7 +1321,8 @@ export async function populateMonthlySummaryCache(
     onProgress?.(doneSteps, TOTAL_STEPS);
   }
 
-  // ── Query 5: notYetDue (BATCH) ────────────────────────────────────────────
+  // ── Query 5: notYetDue (BATCH) — ใช้ SQL เดียวกับ queryNotYetDue live query เป๊ะๆ ──
+  // เพิ่ม is_paid IS NOT TRUE ใน subquery — ตรงกับ live query (Phase 141-fix3)
   {
     const baseWhere = `dtc.section = '${section}' AND dtc.approve_date IS NOT NULL`;
     const q = `
@@ -1341,11 +1353,13 @@ export async function populateMonthlySummaryCache(
         SUM(CAST(base.total_amount AS DECIMAL(18,2))) AS total_notyet
       FROM debt_target_cache base
       JOIN (
+        -- ตรงกับ queryNotYetDue live query: is_paid IS NOT TRUE + is_suspended + contract_status filter
         SELECT dtc.section, dtc.contract_external_id, MAX(dtc.period) AS max_period
         FROM debt_target_cache dtc
         WHERE ${baseWhere}
           AND dtc.due_date > CURRENT_DATE
           AND dtc.is_closed IS NOT TRUE
+          AND dtc.is_paid IS NOT TRUE
           AND COALESCE(dtc.is_suspended, false) IS NOT TRUE
           AND COALESCE(dtc.contract_status, '') NOT IN ('ระงับสัญญา', 'สิ้นสุดสัญญา', 'หนี้เสีย', 'ยกเลิกสัญญา')
         GROUP BY dtc.section, dtc.contract_external_id
@@ -1355,6 +1369,7 @@ export async function populateMonthlySummaryCache(
         AND base.approve_date IS NOT NULL
         AND base.due_date > CURRENT_DATE
         AND base.is_closed IS NOT TRUE
+        AND base.is_paid IS NOT TRUE
         AND COALESCE(base.is_suspended, false) IS NOT TRUE
         AND COALESCE(base.contract_status, '') NOT IN ('ระงับสัญญา', 'สิ้นสุดสัญญา', 'หนี้เสีย', 'ยกเลิกสัญญา')
       GROUP BY 1, 2, 3, 4, 5
