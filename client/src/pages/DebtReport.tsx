@@ -1299,7 +1299,7 @@ function MonthlyTabContent({
 
       {/* ── Target Snapshot Lightbox Dialog (เป้าเก็บหนี้ — freeze ณ วันที่ 1 ของเดือนนั้น) ── */}
       <Dialog open={!!targetSnapshotLightbox} onOpenChange={(open) => { if (!open) setTargetSnapshotLightbox(null); }}>
-        <DialogContent className="w-[99vw] max-w-[99vw] max-h-[96vh] flex flex-col p-0 gap-0">
+        <DialogContent fullWidth className="w-[99vw] max-w-[99vw] max-h-[96vh] flex flex-col p-0 gap-0">
           <DialogHeader className="px-4 pt-4 pb-2 border-b flex-shrink-0">
             <div className="flex items-center justify-between gap-2 flex-wrap">
               <DialogTitle className="flex items-center gap-2 text-base">
@@ -1397,8 +1397,8 @@ function MonthlyTabContent({
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-100 border border-green-300 text-[11px] font-semibold text-green-700">
                 ชำระแล้ว: <span className="ml-1">{fmtMoney(targetSnapshotDetailQuery.data.sumPaidAmount)}</span>
               </span>
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-100 border border-red-300 text-[11px] font-semibold text-red-700">
-                ยอดหนี้คงเหลือ: <span className="ml-1">{fmtMoney(targetSnapshotDetailQuery.data.sumNetAmount)}</span>
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-orange-100 border border-orange-300 text-[11px] font-semibold text-orange-700">
+                ยอดหนี้คงเหลือ: <span className="ml-1">{fmtMoney(Math.max(targetSnapshotDetailQuery.data.sumTotalAmount - targetSnapshotDetailQuery.data.sumPaidAmount, 0))}</span>
               </span>
             </div>
           )}
@@ -1463,8 +1463,14 @@ function MonthlyTabContent({
                       <td className="px-2 py-1.5 text-right tabular-nums border-r">{fmtMoney(row.fee)}</td>
                       <td className="px-2 py-1.5 text-right tabular-nums border-r">{fmtMoney(row.penalty)}</td>
                       <td className="px-2 py-1.5 text-right tabular-nums border-r">{fmtMoney(row.unlockFee)}</td>
-                      <td className="px-2 py-1.5 text-right tabular-nums border-r font-semibold text-amber-700">{fmtMoney(row.totalAmount - row.paidAmount > 0 ? row.totalAmount - row.paidAmount : 0)}</td>
-                      <td className="px-2 py-1.5 text-right tabular-nums">{fmtMoney(row.paidAmount)}</td>
+                      <td className="px-2 py-1.5 text-right tabular-nums border-r font-semibold text-amber-700 bg-amber-50">{fmtMoney(row.totalAmount)}</td>
+                      <td className="px-2 py-1.5 text-right tabular-nums border-r text-green-700">{fmtMoney(row.paidAmount)}</td>
+                      <td className={`px-2 py-1.5 text-right tabular-nums font-semibold ${
+                        (row.totalAmount - row.paidAmount) <= 0 ? "text-green-600" :
+                        row.debtRange?.startsWith("เกิน 6") || row.debtRange?.startsWith("เกิน >") ? "text-red-600 bg-red-50" :
+                        row.debtRange?.startsWith("เกิน") ? "text-orange-600 bg-orange-50" :
+                        "text-slate-700"
+                      }`}>{fmtMoney(Math.max(row.totalAmount - row.paidAmount, 0))}</td>
                     </tr>
                   ))}
                 </tbody>
