@@ -774,11 +774,19 @@ export async function getMonthlySummary(
 ): Promise<MonthlySummaryRow[]> {
   const { section } = params;
 
-  // NOTE: ใช้ live query เสมอ (cache disabled เพื่อความถูกต้องของข้อมูล)
-  console.log(`[getMonthlySummary] LIVE QUERY — section=${section}`);
+  // Fast path: ดึงจาก cache ถ้าไม่มี search filter
+  if (!params.search) {
+    const cached = await getMonthlySummaryFromCache(params);
+    if (cached !== null) {
+      console.log(`[getMonthlySummary] CACHE HIT — section=${section}`);
+      return cached;
+    }
+    console.log(`[getMonthlySummary] CACHE MISS — fallback to live query, section=${section}`);
+  } else {
+    console.log(`[getMonthlySummary] SEARCH MODE — live query, section=${section}`);
+  }
 
-  // รัน 6 queries สด
-  // Run 6 queries in parallel
+  // Fallback: รัน 6 queries สด (มี search หรือ cache ว่าง)
   const [countRows, targetRows, paidRows, dueRows, notYetDueRows, installTotalRows] = await Promise.all([
     queryCount(section, {
       productType:    params.countProductType,
