@@ -172,6 +172,7 @@ export const debtRouter = router({
       snapshotMode: z.enum(["today", "end_of_month"]).default("today"),
       filterDebtOnly: z.boolean().default(false),
       filterPrincipalOnly: z.boolean().default(true),
+      filterState: z.string().nullable().optional(), // JSON string ของ filter ที่ใช้ตอน Snapshot — ใช้ auto-restore ตอนเปิดดู Snapshot
     }))
     .mutation(async ({ input }) => {
       const count = await populateMonthlyTargetDetailSnapshot(
@@ -180,6 +181,7 @@ export const debtRouter = router({
         input.snapshotMode,
         input.filterDebtOnly,
         input.filterPrincipalOnly,
+        input.filterState ?? null,
       );
       return { success: true, rowsInserted: count };
     }),

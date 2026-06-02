@@ -1816,9 +1816,10 @@ export default function DebtReport() {
     },
     { enabled: !!section && targetViewMode === "snapshot" && !!selectedSnapshotMonth, staleTime: 5 * 60 * 1000 },
   );
-  // ── Snapshot (WYSIWYS) ───────────────────────────────────────────────────────
-  // mutation สำหรับ WYSIWYS Snapshot — ส่ง filteredRows ที่แสดงอยู่บนหน้าจอไป save ลง DB โดยตรง
-  const createSnapshotMutation = trpc.debt.saveClientSnapshot.useMutation({
+  // ── Snapshot (Server-Side) ──────────────────────────────────────────────────
+  // mutation สำหรับ Server-Side Snapshot — ให้ server ดึงข้อมูลจาก debt_target_cache โดยตรง
+  // (แทน saveClientSnapshot ที่ส่ง rows จาก client ซึ่งอาจโหลดไม่ครบ)
+  const createSnapshotMutation = trpc.debt.populateTargetDetailSnapshot.useMutation({
     onSuccess: (data) => {
       toast.success(`บันทึก Snapshot สำเร็จ — ${data.rowsInserted.toLocaleString("th-TH")} รายการ`);
       availableTargetSnapshotsQuery.refetch();
@@ -2314,73 +2315,15 @@ export default function DebtReport() {
     });
   }, [activeRows, search, statusFilter, approveDateFilter, dueDateFilter, productTypeFilter, dueDateExact, tab, updatedByFilter, debtSetMode, debtSetCutoffMode, targetViewMode, selectedSnapshotMeta]);
 
-  // helper: กด Snapshot → ส่ง filteredRows ที่แสดงอยู่บนหน้าจอไป save ลง DB โดยตรง (WYSIWYS)
+  // helper: กด Snapshot → ให้ server ดึงข้อมูลจาก debt_target_cache โดยตรง (Server-Side Snapshot)
+  // เปลี่ยนจาก saveClientSnapshot (ส่ง rows จาก client) → populateTargetDetailSnapshot (server ดึงเอง)
+  // เพื่อให้ได้ข้อมูลครบทุกสัญญา ไม่ขึ้นกับ client cache ที่อาจโหลดไม่ครบ
   const handleCreateSnapshot = React.useCallback(() => {
     if (!section) return;
-    // ตรวจสอบว่า stream โหลดครบแล้วก่อน Snapshot
-    // ใช้ cachedEntry (Global Cache) เป็น source of truth แทน local state
-    // เพราะ local state อาจ out-of-sync หลัง section เปลี่ยนหรือ cache hit
-    const cacheEntry = debtCache.getCache(section as any);
-    if (cacheEntry.loading.target) {
-      toast.error("กำลังโหลดข้อมูลอยู่ กรุณารอให้โหลดครบก่อนกด Snapshot");
-      return;
-    }
-    const totalLoaded = cacheEntry.target?.rows?.length ?? 0;
-    const totalExpected = cacheEntry.total.target;
-    if (totalExpected > 0 && totalLoaded < totalExpected) {
-      toast.error(`ข้อมูลโหลดไม่ครบ (${totalLoaded.toLocaleString("th-TH")} / ${totalExpected.toLocaleString("th-TH")} สัญญา) กรุณารอให้โหลดครบก่อนกด Snapshot`);
-      return;
-    }
-    if (totalLoaded === 0) {
-      toast.error("ไม่พบข้อมูล กรุณาโหลดข้อมูลก่อนกด Snapshot");
-      return;
-    }
     const now = new Date();
     const snapshotMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-    // cutoffDate: ใช้ debtSetCutoffMode ที่เลือกไว้ตอนกด toggle ตั้งหนี้
-    // today = วันนี้, end_of_month = วันสุดท้ายของเดือน
+    // cutoffMode: ใช้ debtSetCutoffMode ที่เลือกไว้ตอนกด toggle ตั้งหนี้
     const mode = debtSetCutoffMode;
-    let cutoffDate: string;
-    if (mode === "end_of_month") {
-      const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-      cutoffDate = `${lastDay.getFullYear()}-${String(lastDay.getMonth() + 1).padStart(2, "0")}-${String(lastDay.getDate()).padStart(2, "0")}`;
-    } else {
-      cutoffDate = now.toISOString().slice(0, 10);
-    }
-    // ส่ง cacheEntry.target?.rows ทั้งหมด (ไม่กรอง) เพื่อให้ Snapshot ได้ข้อมูลครบทุกสัญญา
-    // ใช้ cachedEntry แทน streamData เพื่อให้ได้ข้อมูลที่ verified ครบแล้ว
-    // filter state จะถูกบันทึกแยกใน filterState field เพื่อ auto-restore ตอนเปิดดู Snapshot
-    const allTargetRows = (cacheEntry.target?.rows ?? []) as TargetRow[];
-    const rowsToSave = allTargetRows.map((r) => ({
-      contractExternalId: r.contractExternalId,
-      contractNo: r.contractNo ?? null,
-      customerName: r.customerName ?? null,
-      phone: r.phone ?? null,
-      approveDate: r.approveDate ?? null,
-      productType: r.productType ?? null,
-      installmentCount: r.installmentCount ?? null,
-      installmentAmount: r.installmentAmount ?? null,
-      debtStatus: r.debtStatus,
-      installments: r.installments.map((inst) => ({
-        period: inst.period ?? null,
-        dueDate: inst.dueDate ?? null,
-        principal: inst.principal ?? 0,
-        interest: inst.interest ?? 0,
-        fee: inst.fee ?? 0,
-        penalty: inst.penalty ?? 0,
-        unlockFee: inst.unlockFee ?? 0,
-        amount: inst.amount ?? 0,
-        paid: inst.paid ?? 0,
-        baselineAmount: inst.baselineAmount ?? 0,
-        isClosed: !!inst.isClosed,
-        isSuspended: !!inst.isSuspended,
-        isCurrentPeriod: !!inst.isCurrentPeriod,
-        isFuturePeriod: !!inst.isFuturePeriod,
-        isArrears: !!inst.isArrears,
-        isPaid: !!inst.isPaid,
-        netAmount: inst.netAmount ?? 0,
-      })),
-    }));
     // serialize filter state เพื่อ auto-restore ตอนเปิดดู Snapshot
     const filterStateObj = {
       search,
@@ -2394,17 +2337,17 @@ export default function DebtReport() {
       principalOnly,
     };
     const filterStateJson = JSON.stringify(filterStateObj);
+    // ส่งแค่ metadata ไปยัง server — server จะดึงข้อมูลจาก debt_target_cache โดยตรง
+    // ไม่ต้องส่ง rows จาก client (ซึ่งอาจโหลดไม่ครบ)
     createSnapshotMutation.mutate({
       section: sectionKey,
       snapshotMonth,
       snapshotMode: mode,
-      cutoffDate,
       filterDebtOnly: debtSetMode,
       filterPrincipalOnly: principalOnly,
       filterState: filterStateJson,
-      rows: rowsToSave,
     });
-  }, [section, sectionKey, debtSetCutoffMode, streamData, streamLoading, streamTotal, debtSetMode, principalOnly, createSnapshotMutation, search, statusFilter, approveDateFilter, dueDateFilter, productTypeFilter, dueDateExact]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [section, sectionKey, debtSetCutoffMode, debtSetMode, principalOnly, createSnapshotMutation, search, statusFilter, approveDateFilter, dueDateFilter, productTypeFilter, dueDateExact]); // eslint-disable-line react-hooks/exhaustive-deps
 
 
   /* ---- Max periods for the repeating group block ---- */

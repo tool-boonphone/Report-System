@@ -137,6 +137,7 @@ export async function populateTargetDetailSnapshot(
   snapshotMode: "today" | "end_of_month" = "today",
   filterDebtOnly = false,
   filterPrincipalOnly = true,
+  filterState: string | null = null, // JSON string ของ filter ที่ใช้ตอน Snapshot — ใช้ auto-restore ตอนเปิดดู Snapshot
 ): Promise<number> {
   const db = await getDb(section);
   if (!db) return 0;
@@ -218,6 +219,7 @@ export async function populateTargetDetailSnapshot(
       cutoff_date,
       filter_debt_only,
       filter_principal_only,
+      filter_state,
       phone,
       populated_at
     )
@@ -258,6 +260,7 @@ export async function populateTargetDetailSnapshot(
       '${cutoffDate}' AS cutoff_date,
       ${filterDebtOnly ? "TRUE" : "FALSE"} AS filter_debt_only,
       ${filterPrincipalOnly ? "TRUE" : "FALSE"} AS filter_principal_only,
+      ${filterState != null ? `'${filterState.replace(/'/g, "''")}'` : "NULL"} AS filter_state,
       c.phone,
       NOW()
     FROM debt_target_cache dtc
