@@ -138,6 +138,7 @@ export async function populateTargetDetailSnapshot(
   filterDebtOnly = false,
   filterPrincipalOnly = true,
   filterState: string | null = null, // JSON string ของ filter ที่ใช้ตอน Snapshot — ใช้ auto-restore ตอนเปิดดู Snapshot
+  clientTargetAmount?: number, // ยอดเป้าเก็บหนี้ที่ client คำนวณได้ (ตรงกับ badge ยอดหนี้รวม) — ถ้าระบุจะ upsert ลง monthly_collection_snapshot โดยตรง
 ): Promise<number> {
   const db = await getDb(section);
   if (!db) return 0;
@@ -278,6 +279,21 @@ export async function populateTargetDetailSnapshot(
   const countRows = pgRows(countResult);
   const inserted = n(countRows[0]?.cnt ?? 0);
   console.log(`[targetDetailSnapshot] ${section}: ${snapshotMonth} (${snapshotMode}, cutoff=${cutoffDate}) inserted ${inserted} rows`);
+
+  // ถ้า client ส่ง targetAmount มาด้วย → upsert ลง monthly_collection_snapshot.target_amount โดยตรง
+  // (ยอดนี้ตรงกับ badge ยอดหนี้รวมที่เห็นบนหน้าจอก่อน snapshot)
+  if (clientTargetAmount != null && clientTargetAmount > 0) {
+    await db.execute(sql.raw(`
+      INSERT INTO monthly_collection_snapshot (section, collection_month, target_amount, updated_at)
+      VALUES ('${section}', '${snapshotMonth}', ${clientTargetAmount}, NOW())
+      ON CONFLICT (section, collection_month)
+      DO UPDATE SET
+        target_amount = EXCLUDED.target_amount,
+        updated_at    = NOW()
+    `));
+    console.log(`[targetDetailSnapshot] ${section}: ${snapshotMonth} upserted target_amount = ${clientTargetAmount} into monthly_collection_snapshot`);
+  }
+
   return inserted;
 }
 

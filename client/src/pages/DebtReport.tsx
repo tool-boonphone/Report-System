@@ -998,6 +998,7 @@ export default function DebtReport() {
     const filterStateJson = JSON.stringify(filterStateObj);
     // ส่งแค่ metadata ไปยัง server — server จะดึงข้อมูลจาก debt_target_cache โดยตรง
     // ไม่ต้องส่ง rows จาก client (ซึ่งอาจโหลดไม่ครบ)
+    // targetAmount = badge ยอดหนี้รวมที่เห็นบนหน้าจอก่อน snapshot — server จะ upsert ลง monthly_collection_snapshot โดยตรง
     createSnapshotMutation.mutate({
       section: sectionKey,
       snapshotMonth,
@@ -1005,6 +1006,7 @@ export default function DebtReport() {
       filterDebtOnly: debtSetMode,
       filterPrincipalOnly: principalOnly,
       filterState: filterStateJson,
+      targetAmount: targetSummary?.total ?? undefined,
     });
   }, [section, sectionKey, debtSetCutoffMode, debtSetMode, principalOnly, createSnapshotMutation, search, statusFilter, approveDateFilter, dueDateFilter, productTypeFilter, dueDateExact]); // eslint-disable-line react-hooks/exhaustive-deps
 

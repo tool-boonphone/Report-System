@@ -175,6 +175,8 @@ export const debtRouter = router({
       filterDebtOnly: z.boolean().default(false),
       filterPrincipalOnly: z.boolean().default(true),
       filterState: z.string().nullable().optional(), // JSON string ของ filter ที่ใช้ตอน Snapshot — ใช้ auto-restore ตอนเปิดดู Snapshot
+      // targetAmount: ยอดเป้าเก็บหนี้ที่ client คำนวณได้ (ตรงกับ badge ยอดหนี้รวม) — บันทึกลง monthly_collection_snapshot โดยตรง
+      targetAmount: z.number().optional(),
     }))
     .mutation(async ({ input }) => {
       const count = await populateMonthlyTargetDetailSnapshot(
@@ -184,6 +186,7 @@ export const debtRouter = router({
         input.filterDebtOnly,
         input.filterPrincipalOnly,
         input.filterState ?? null,
+        input.targetAmount,
       );
       return { success: true, rowsInserted: count };
     }),
