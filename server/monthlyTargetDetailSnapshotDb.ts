@@ -1005,3 +1005,79 @@ export async function getTargetSnapshotGrouped(params: {
     filterState,
   };
 }
+
+// ─── Monthly Debt Summary (เป้าเก็บหนี้รายเดือน) ──────────────────────────────
+/**
+ * ข้อมูล summary รายเดือน สำหรับ dropdown "เป้าเก็บหนี้รายเดือน"
+ * - targetAmount    = SUM(GREATEST(total_amount - paid_amount, 0)) จาก monthly_target_detail_snapshot
+ *                    (freeze ณ วันที่ 1 ของเดือน, filter_debt_only = TRUE)
+ * - collectedAmount = collected_amount - collected_sale จาก monthly_collection_snapshot
+ *                    (ค่างวดเท่านั้น ไม่รวมขายเครื่อง)
+ * - percentage      = collectedAmount / targetAmount × 100
+ */
+export interface MonthlyDebtSummaryRow {
+  snapshotMonth: string;       // YYYY-MM
+  targetAmount: number;        // เป้าเก็บหนี้ (freeze ณ วันที่ 1)
+  collectedAmount: number;     // ยอดเก็บหนี้ค่างวดจริง (ไม่รวมขายเครื่อง)
+  percentage: number;          // % เก็บหนี้ (0-100+)
+  populatedAt: string | null;  // เวลาที่ snapshot ถูก populate
+  rowCount: number;            // จำนวน rows ใน snapshot
+}
+
+/**
+ * ดึง summary รายเดือน สำหรับ dropdown "เป้าเก็บหนี้รายเดือน"
+ *
+ * Logic:
+ *   1. ดึง available snapshot months จาก monthly_target_detail_snapshot (GROUP BY snapshot_month)
+ *      WHERE filter_debt_only = TRUE (เฉพาะ auto-snapshot ที่ถูกต้อง)
+ *   2. SUM(GREATEST(total_amount - paid_amount, 0)) = เป้าเก็บหนี้ (net_amount)
+ *   3. LEFT JOIN monthly_collection_snapshot เพื่อดึง collected_amount - collected_sale
+ *   4. คำนวณ percentage = collectedAmount / targetAmount × 100
+ *   5. เรียงเดือนล่าสุดบนสุด (DESC)
+ *
+ * @param section - section key (Boonphone | Fastfone365)
+ * @returns MonthlyDebtSummaryRow[] เรียง DESC
+ */
+export async function getMonthlyDebtSummary(
+  section: SectionKey,
+): Promise<MonthlyDebtSummaryRow[]> {
+  const db = await getDb(section);
+  if (!db) return [];
+
+  // Query: JOIN monthly_target_detail_snapshot + monthly_collection_snapshot
+  // net_amount = GREATEST(total_amount - paid_amount, 0) (ยอดหนี้คงเหลือ ไม่ติดลบ)
+  const result = await db.execute(sql.raw(`
+    SELECT
+      t.snapshot_month,
+      SUM(GREATEST(COALESCE(t.total_amount, 0) - COALESCE(t.paid_amount, 0), 0)) AS target_amount,
+      MAX(t.populated_at::text)                                                    AS populated_at,
+      COUNT(*)                                                                     AS row_count,
+      COALESCE(c.collected_amount, 0)                                              AS collected_amount,
+      COALESCE(c.collected_sale, 0)                                                AS collected_sale
+    FROM monthly_target_detail_snapshot t
+    LEFT JOIN monthly_collection_snapshot c
+      ON c.section = t.section
+     AND c.collection_month = t.snapshot_month
+    WHERE t.section = '${section}'
+      AND t.filter_debt_only = TRUE
+    GROUP BY t.snapshot_month, c.collected_amount, c.collected_sale
+    ORDER BY t.snapshot_month DESC
+  `));
+
+  const rows = pgRows(result);
+  return rows.map((r: any) => {
+    const targetAmount = n(r.target_amount);
+    // ยอดเก็บหนี้ค่างวด = collected_amount - collected_sale (ไม่รวมขายเครื่อง)
+    const collectedRaw = n(r.collected_amount) - n(r.collected_sale);
+    const collectedAmount = Math.max(collectedRaw, 0);
+    const percentage = targetAmount > 0 ? (collectedAmount / targetAmount) * 100 : 0;
+    return {
+      snapshotMonth: String(r.snapshot_month ?? ""),
+      targetAmount,
+      collectedAmount,
+      percentage,
+      populatedAt: r.populated_at ? String(r.populated_at) : null,
+      rowCount: n(r.row_count),
+    };
+  });
+}

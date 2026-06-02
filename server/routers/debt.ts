@@ -36,6 +36,7 @@ import {
   getContractInstallmentsBySnapshot,
   saveClientSnapshot,
   getTargetSnapshotGrouped,
+  getMonthlyDebtSummary,
 } from "../monthlyTargetDetailSnapshotDb";
 
 const debtViewProcedure = requirePermission("debt_report", "view");
@@ -310,5 +311,18 @@ export const debtRouter = router({
     }))
     .query(async ({ input }) => {
       return getContractInstallmentsBySnapshot(input);
+    }),
+
+  // ── Monthly Debt Summary (เป้าเก็บหนี้รายเดือน) ──────────────────────────
+  /**
+   * ดึง summary รายเดือน สำหรับ dropdown "เป้าเก็บหนี้รายเดือน"
+   * - targetAmount    = SUM(net_amount) จาก monthly_target_detail_snapshot (freeze ณ วันที่ 1)
+   * - collectedAmount = collected_amount - collected_sale จาก monthly_collection_snapshot
+   * - percentage      = collectedAmount / targetAmount × 100
+   */
+  getMonthlyDebtSummary: debtViewProcedure
+    .input(z.object({ section: SectionEnum }))
+    .query(async ({ input }) => {
+      return getMonthlyDebtSummary(input.section);
     }),
 });
