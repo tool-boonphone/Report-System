@@ -1029,7 +1029,7 @@ export interface MonthlyDebtSummaryRow {
  *
  * Logic:
  *   1. ดึง available snapshot months จาก monthly_target_detail_snapshot (GROUP BY snapshot_month)
- *      WHERE filter_debt_only = TRUE (เฉพาะ auto-snapshot ที่ถูกต้อง)
+ *      (ดึงทุก snapshot ไม่กรอง filter_debt_only)
  *   2. SUM(GREATEST(total_amount - paid_amount, 0)) = เป้าเก็บหนี้ (net_amount)
  *   3. LEFT JOIN monthly_collection_snapshot เพื่อดึง collected_amount - collected_sale
  *   4. คำนวณ percentage = collectedAmount / targetAmount × 100
@@ -1059,7 +1059,6 @@ export async function getMonthlyDebtSummary(
       ON c.section = t.section
      AND c.collection_month = t.snapshot_month
     WHERE t.section = '${section}'
-      AND t.filter_debt_only = TRUE
     GROUP BY t.snapshot_month, c.collected_amount, c.collected_sale
     ORDER BY t.snapshot_month DESC
   `));
