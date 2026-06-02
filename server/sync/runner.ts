@@ -464,11 +464,21 @@ async function doSync(
     }
 
     // ── Populate monthly_collection_snapshot ─────────────────────────────────
+    // วันที่ 1: ใช้ end_of_month cutoffMode เพื่อให้ target_amount นับงวดทั้งเดือน
+    // วันอื่น: ใช้ today cutoffMode (นับแค่งวดถึงวันนี้)
     try {
+      const bangkokDateForSnapshot = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Bangkok",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).format(new Date());
+      const dayOfMonthForSnapshot = parseInt(bangkokDateForSnapshot.slice(8, 10), 10);
+      const snapshotCutoffMode = dayOfMonthForSnapshot === 1 ? "end_of_month" : "today";
       const snapshotRows = await populateMonthlyCollectionSnapshot(section, (current, total) => {
         setSubProgress(section, "monthly_cache", current, total);
-      });
-      console.log(`[sync] ${section}: monthly_collection_snapshot populated — ${snapshotRows} months`);
+      }, snapshotCutoffMode);
+      console.log(`[sync] ${section}: monthly_collection_snapshot populated — ${snapshotRows} months (cutoffMode=${snapshotCutoffMode})`);
     } catch (snapshotErr: any) {
       console.warn(`[sync] ${section}: populateMonthlyCollectionSnapshot failed (non-fatal):`, snapshotErr?.message ?? snapshotErr);
     }

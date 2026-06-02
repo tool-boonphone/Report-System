@@ -84,6 +84,7 @@ function n(v: unknown): number {
 export async function populateMonthlyCollectionSnapshot(
   section: SectionKey,
   onProgress?: (current: number, total: number) => void,
+  cutoffMode: "today" | "end_of_month" = "today",
 ): Promise<number> {
   const db = await getDb(section);
   if (!db) throw new Error("[monthlySnapshot] DB not available");
@@ -91,10 +92,17 @@ export async function populateMonthlyCollectionSnapshot(
   const nowStr = new Date().toISOString();
   const currentMonth = nowStr.slice(0, 7); // YYYY-MM
 
-  console.log(`[monthlySnapshot] ${section}: starting populate`);
+  // เมื่อ cutoffMode='end_of_month' → ใช้ due_date <= วันสุดท้ายของแต่ละเดือน (นับงวดทั้งเดือน)
+  // เมื่อ cutoffMode='today' → ใช้ is_future_period IS NOT TRUE (นับแค่งวดถึงวันนี้)
+  // cutoffMode='end_of_month' ใช้สำหรับ Auto Snapshot วันที่ 1 เพื่อให้ target_amount ครบทั้งเดือน
+  const futurePeriodFilter = cutoffMode === "end_of_month"
+    ? sql`AND due_date::date <= (DATE_TRUNC('month', due_date::date) + INTERVAL '1 month' - INTERVAL '1 day')::date`
+    : sql`AND is_future_period IS NOT TRUE`;
+
+  console.log(`[monthlySnapshot] ${section}: starting populate (cutoffMode=${cutoffMode})`);
 
   // ── 1. Query target aggregates per due_month from debt_target_cache ──────────
-  // ยอดเป้าเก็บหนี้: ตัดออก is_closed, is_future_period, is_suspended, is_bad_debt
+  // ยอดเป้าเก็บหนี้: ตัดออก is_closed, is_future_period (หรือ due_date > สิ้นเดือน), is_suspended, is_bad_debt
   // (ตรงกับ logic toggle ตั้งหนี้: เหลือแค่ยอดถึงกำหนดชำระ + ค้างชำระ)
   const targetResult = await db.execute(sql`
     SELECT
@@ -112,7 +120,7 @@ export async function populateMonthlyCollectionSnapshot(
     WHERE section = ${section}
       AND due_date IS NOT NULL
       AND is_closed IS NOT TRUE
-      AND is_future_period IS NOT TRUE
+      ${futurePeriodFilter}
       AND is_suspended IS NOT TRUE
       AND is_bad_debt IS NOT TRUE
     GROUP BY TO_CHAR(due_date, 'YYYY-MM')
@@ -135,7 +143,7 @@ export async function populateMonthlyCollectionSnapshot(
     WHERE section = ${section}
       AND due_date IS NOT NULL
       AND is_closed IS NOT TRUE
-      AND is_future_period IS NOT TRUE
+      ${futurePeriodFilter}
       AND is_suspended IS NOT TRUE
       AND is_bad_debt IS NOT TRUE
       AND is_paid IS NOT TRUE
