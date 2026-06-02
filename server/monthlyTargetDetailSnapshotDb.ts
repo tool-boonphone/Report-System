@@ -152,20 +152,24 @@ export async function populateTargetDetailSnapshot(
   // คำนวณ cutoff date จาก mode
   const cutoffDate = resolveCutoffDate(snapshotMode, snapshotMonth);
 
-  // ตรวจสอบว่ามีข้อมูลเดือนนี้ + mode นี้แล้วหรือไม่ (freeze strategy)
-  // ถ้ามีแล้ว → ไม่ populate ซ้ำ (ข้อมูลถูก freeze ไว้ตลอด)
+  // ตรวจสอบว่ามีข้อมูลเดือนนี้แล้วหรือไม่ (freeze strategy)
+  // ถ้ามีแล้ว → ลบออกก่อน แล้ว INSERT ใหม่ (snapshot เดือนหนึ่งมีแค่ 1 ชุดข้อมูล ไม่แยกตาม mode)
   const existingCountResult = await db.execute(sql.raw(`
     SELECT COUNT(*) AS cnt
     FROM monthly_target_detail_snapshot
     WHERE section = '${section}'
       AND snapshot_month = '${snapshotMonth}'
-      AND COALESCE(snapshot_mode, 'today') = '${snapshotMode}'
   `));
   const existingCountRows = pgRows(existingCountResult);
   const existingCnt = n(existingCountRows[0]?.cnt ?? 0);
   if (existingCnt > 0) {
-    console.log(`[targetDetailSnapshot] ${section}: ${snapshotMonth} (${snapshotMode}) already has ${existingCnt} rows — skipping (frozen)`);
-    return existingCnt;
+    // ลบ snapshot เก่าของเดือนนี้ออกก่อน INSERT ใหม่ (overwrite)
+    console.log(`[targetDetailSnapshot] ${section}: ${snapshotMonth} has ${existingCnt} existing rows — deleting and re-inserting with mode=${snapshotMode}`);
+    await db.execute(sql.raw(`
+      DELETE FROM monthly_target_detail_snapshot
+      WHERE section = '${section}'
+        AND snapshot_month = '${snapshotMonth}'
+    `));
   }
 
   // Insert ใหม่จาก debt_target_cache
@@ -265,7 +269,6 @@ export async function populateTargetDetailSnapshot(
     FROM monthly_target_detail_snapshot
     WHERE section = '${section}'
       AND snapshot_month = '${snapshotMonth}'
-      AND COALESCE(snapshot_mode, 'today') = '${snapshotMode}'
   `));
   const countRows = pgRows(countResult);
   const inserted = n(countRows[0]?.cnt ?? 0);
@@ -327,7 +330,6 @@ export async function getTargetDetailSnapshot(params: {
     FROM monthly_target_detail_snapshot
     WHERE section = '${section}'
       AND snapshot_month = '${snapshotMonth}'
-      AND COALESCE(snapshot_mode, 'today') = '${snapshotMode}'
   `));
   const checkRows = pgRows(checkResult);
   const totalInSnapshot = n(checkRows[0]?.cnt ?? 0);
@@ -346,11 +348,10 @@ export async function getTargetDetailSnapshot(params: {
     };
   }
 
-  // สร้าง WHERE conditions
+  // สร้าง WHERE conditions (ไม่กรองด้วย snapshotMode เพราะ snapshot เดือนหนึ่งมีแค่ 1 ชุดข้อมูล)
   const conditions: string[] = [
     `section = '${section}'`,
     `snapshot_month = '${snapshotMonth}'`,
-    `COALESCE(snapshot_mode, 'today') = '${snapshotMode}'`,
   ];
 
   // filter due_date <= upToMonth (ดึงย้อนหลังทั้งหมดจนถึงเดือนที่คลิก)
@@ -517,7 +518,7 @@ export async function getAvailableSnapshotMonths(section: SectionKey): Promise<S
   const result = await db.execute(sql.raw(`
     SELECT
       snapshot_month,
-      COALESCE(snapshot_mode, 'today') AS snapshot_mode,
+      MAX(COALESCE(snapshot_mode, 'today')) AS snapshot_mode,
       MAX(cutoff_date) AS cutoff_date,
       BOOL_OR(COALESCE(filter_debt_only, FALSE)) AS filter_debt_only,
       BOOL_OR(COALESCE(filter_principal_only, TRUE)) AS filter_principal_only,
@@ -525,8 +526,8 @@ export async function getAvailableSnapshotMonths(section: SectionKey): Promise<S
       COUNT(*) AS row_count
     FROM monthly_target_detail_snapshot
     WHERE section = '${section}'
-    GROUP BY snapshot_month, COALESCE(snapshot_mode, 'today')
-    ORDER BY snapshot_month DESC, snapshot_mode ASC
+    GROUP BY snapshot_month
+    ORDER BY snapshot_month DESC
   `));
   const rows = pgRows(result);
   return rows.map((r: any) => ({
@@ -594,7 +595,6 @@ export async function getContractInstallmentsBySnapshot(params: {
     FROM monthly_target_detail_snapshot
     WHERE section = '${section}'
       AND snapshot_month = '${snapshotMonth}'
-      AND COALESCE(snapshot_mode, 'today') = '${snapshotMode}'
       AND contract_no = '${escaped}'
     ORDER BY period ASC
   `));
