@@ -391,5 +391,49 @@ export async function runStartupMigrations(): Promise<void> {
     } catch (err: any) {
       console.error(`[migration] ${section}: monthly_target_detail_snapshot.filter_state failed:`, err?.message ?? err);
     }
+    try {
+      // Migration 0021: สร้าง monthly_collection_snapshot table (IF NOT EXISTS)
+      // ป้องกัน DB ที่ไม่เคยรัน migration นี้ (เช่น section ที่เพิ่มทีหลัง)
+      await db.execute(sql.raw(`
+        CREATE TABLE IF NOT EXISTS monthly_collection_snapshot (
+          id                      INTEGER          PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+          section                 VARCHAR(32)      NOT NULL,
+          collection_month        VARCHAR(7)       NOT NULL,
+          target_amount           NUMERIC          NOT NULL DEFAULT 0,
+          target_contract_count   INTEGER          NOT NULL DEFAULT 0,
+          target_frozen_at        TIMESTAMP,
+          target_principal        NUMERIC          NOT NULL DEFAULT 0,
+          target_interest         NUMERIC          NOT NULL DEFAULT 0,
+          target_fee              NUMERIC          NOT NULL DEFAULT 0,
+          target_penalty          NUMERIC          NOT NULL DEFAULT 0,
+          target_unlock_fee       NUMERIC          NOT NULL DEFAULT 0,
+          collected_amount        NUMERIC          NOT NULL DEFAULT 0,
+          collected_contract_count INTEGER         NOT NULL DEFAULT 0,
+          collected_frozen_at     TIMESTAMP,
+          collected_is_frozen     BOOLEAN          NOT NULL DEFAULT false,
+          collected_principal     NUMERIC          NOT NULL DEFAULT 0,
+          collected_interest      NUMERIC          NOT NULL DEFAULT 0,
+          collected_fee           NUMERIC          NOT NULL DEFAULT 0,
+          collected_penalty       NUMERIC          NOT NULL DEFAULT 0,
+          collected_unlock_fee    NUMERIC          NOT NULL DEFAULT 0,
+          collected_discount      NUMERIC          NOT NULL DEFAULT 0,
+          collected_overpaid      NUMERIC          NOT NULL DEFAULT 0,
+          collected_bad_debt      NUMERIC          NOT NULL DEFAULT 0,
+          install_total           NUMERIC          NOT NULL DEFAULT 0,
+          financed_total          NUMERIC          NOT NULL DEFAULT 0,
+          overdue_total           NUMERIC          NOT NULL DEFAULT 0,
+          collected_sale          NUMERIC          NOT NULL DEFAULT 0,
+          created_at              TIMESTAMP        NOT NULL DEFAULT NOW(),
+          updated_at              TIMESTAMP        NOT NULL DEFAULT NOW()
+        )
+      `));
+      await db.execute(sql.raw(`
+        CREATE UNIQUE INDEX IF NOT EXISTS mcs_section_month_idx
+          ON monthly_collection_snapshot (section, collection_month)
+      `));
+      console.log(`[migration] ${section}: monthly_collection_snapshot — CREATE TABLE IF NOT EXISTS OK`);
+    } catch (err: any) {
+      console.error(`[migration] ${section}: monthly_collection_snapshot CREATE failed:`, err?.message ?? err);
+    }
   }
 }
