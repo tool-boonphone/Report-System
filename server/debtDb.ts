@@ -936,15 +936,15 @@ function deriveDebtStatus(
     // This handles cases where paid_amount < amount due to waived penalties/discounts
     // but the API's inst_status confirms the period is settled.
     if (it.inst_status === 'ยืนยันการชำระ') continue;
-    // If paid_amount >= amount, the installment is fully paid regardless of what balance says.
-    // This handles cases where the API returns a stale balance (before payment was applied)
-    // but paid_amount has already been summed correctly via dedup logic.
-    if (paid >= amt - 0.001) continue;
-    // Prefer balance from raw_json (API-computed, already accounts for discounts/partial payments).
-    // Fall back to amount - paid_amount when balance is not available.
-    const outstanding = (it.balance !== null && it.balance !== undefined)
-      ? Number(it.balance)
-      : amt - paid;
+    // Fix: ใช้ netAmount (เงินต้น+ดอกเบี้ย+ค่าดำเนิน) แทน totalAmount ในการตัดสินว่างวดจ่ายครบ
+    // ไม่นับค่าปรับ (penalty_due) และค่าปลดล็อก (unlock_fee_due) เป็นเกณฑ์
+    const netAmt = (it.principal_due != null && it.interest_due != null && it.fee_due != null)
+      ? Number(it.principal_due) + Number(it.interest_due) + Number(it.fee_due)
+      : amt; // fallback ถ้าไม่มี breakdown
+    if (paid >= netAmt - 0.001) continue;
+    // Fix: ใช้ netAmt - paid แทน balance (ซึ่งรวมค่าปรับ) เพื่อตัดสินว่างวดยังค้างอยู่ไหม
+    // balance จาก API รวม penalty+unlock_fee ทำให้งวดที่จ่ายครบยอดปกติแต่ค้างค่าปรับถูกนับว่าเกินกำหนด
+    const outstanding = netAmt - paid;
     if (outstanding <= 0.001) continue;
     const days = Math.floor((today.getTime() - dueMs) / (1000 * 60 * 60 * 24));
     if (days > maxDays) maxDays = days;
