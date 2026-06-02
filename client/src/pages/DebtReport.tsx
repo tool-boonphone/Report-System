@@ -1722,6 +1722,7 @@ function MonthlyTabContent({
 export default function DebtReport() {
   const { can, isSuperAdmin, isLoading: isAuthLoading } = useAppAuth();
   const { section } = useSection();
+  const sectionKey = (section ?? "") as any;
   const { setActions } = useNavActions();
   const canView = can("debt_report", "view");
   const canExport = can("debt_report", "export");
