@@ -743,6 +743,9 @@ export default function DebtReport() {
       ? String(targetSnapshotViewQuery.data.cutoffDate).slice(0, 10)
       : new Date().toISOString().slice(0, 10);
     const cutoffMs = Date.parse(`${cutoffStr}T23:59:59`);
+    // todayMs: ใช้คำนวณ debtStatus/daysOverdue เท่านั้น (ไม่ขึ้นกับ cutoffDate ของ snapshot)
+    // เพื่อให้สถานะหนี้และเกินกำหนดตรงกับ Live mode ณ วันที่ดูข้อมูล
+    const todayMs = Date.now();
 
     // ─── แปลง TargetSnapshotContractRow → TargetRow ───
     // server ส่งมาเป็น contracts[] ที่ group แล้ว (1 contract = 1 row + installments[])
@@ -785,11 +788,12 @@ export default function DebtReport() {
       }
       const remaining = Math.max(totalAmount - totalPaid, 0);
 
-      // คำนวณ debtStatus + daysOverdue ด้วย cutoffMs (ณ วันที่ถ่าย snapshot)
+      // คำนวณ debtStatus + daysOverdue ด้วย todayMs (วันนี้) ไม่ใช้ cutoffMs
+      // เพื่อให้สถานะหนี้/เกินกำหนดตรงกับ Live mode ไม่ขึ้นกับ end_of_month cutoff
       const { debtStatus, daysOverdue } = rederiveDebtStatus(
         lastContractStatus,
         c.installments,
-        cutoffMs,
+        todayMs,
       );
 
       result.push({
