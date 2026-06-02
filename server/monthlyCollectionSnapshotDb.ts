@@ -104,12 +104,18 @@ export async function populateMonthlyCollectionSnapshot(
   // ── 1. Query target aggregates per due_month from debt_target_cache ──────────
   // ยอดเป้าเก็บหนี้: ตัดออก is_closed, is_future_period (หรือ due_date > สิ้นเดือน), is_suspended, is_bad_debt
   // (ตรงกับ logic toggle ตั้งหนี้: เหลือแค่ยอดถึงกำหนดชำระ + ค้างชำระ)
+  // *** target_amount ใช้ SUM(total_amount) ไม่หัก paid_amount ***
+  // เพื่อให้ตรงกับ badge ยอดหนี้รวมใน UI ที่คำนวณจาก SUM(principal + interest + fee) ของทุกงวดที่ due ≤ cutoff
+  // ตัด contract_status พิเศษออก เพื่อให้ตรงกับ filteredRows ใน client (debtSetMode)
+  // client ตัด: ระงับสัญญา, สิ้นสุดสัญญา, หนี้เสีย, ยกเลิกสัญญา
+  const excludedStatuses = `'ระงับสัญญา','สิ้นสุดสัญญา','หนี้เสีย','ยกเลิกสัญญา'`;
+
   const targetResult = await db.execute(sql`
     SELECT
       TO_CHAR(due_date, 'YYYY-MM') AS due_month,
       COUNT(DISTINCT contract_external_id) AS contract_count,
-      SUM(GREATEST(COALESCE(total_amount::numeric, 0) - COALESCE(paid_amount::numeric, 0), 0)) AS target_amount,
-      SUM(GREATEST(COALESCE(principal::numeric, 0) - COALESCE(paid_amount::numeric, 0), 0)) AS target_principal,
+      SUM(COALESCE(principal::numeric, 0) + COALESCE(interest::numeric, 0) + COALESCE(fee::numeric, 0)) AS target_amount,
+      SUM(COALESCE(principal::numeric, 0)) AS target_principal,
       SUM(interest::numeric) AS target_interest,
       SUM(fee::numeric) AS target_fee,
       SUM(penalty::numeric) AS target_penalty,
@@ -123,10 +129,44 @@ export async function populateMonthlyCollectionSnapshot(
       ${futurePeriodFilter}
       AND is_suspended IS NOT TRUE
       AND is_bad_debt IS NOT TRUE
+      AND is_paid IS NOT TRUE
+      AND contract_status NOT IN (${sql.raw(excludedStatuses)})
     GROUP BY TO_CHAR(due_date, 'YYYY-MM')
     ORDER BY due_month
   `);
     const targetRows: any[] = pgRows(targetResult);
+
+  // ── 1a. Cumulative query สำหรับ currentMonth ──────────────────────────────
+  // target_amount ของ currentMonth ต้องรวมงวดค้างจากทุกเดือนก่อน (due_date <= สิ้นเดือนปัจจุบัน)
+  // เพื่อให้ตรงกับ badge ยอดหนี้รวมใน UI ที่คำนวณจาก SUM(principal + interest + fee)
+  // ของทุกงวดที่ due_date <= สิ้นเดือน (ไม่ใช่แค่งวดที่ due ในเดือนนั้น)
+  const currentMonthEndDate = sql.raw(
+    `DATE_TRUNC('month', '${currentMonth}-01'::date) + INTERVAL '1 month' - INTERVAL '1 day'`
+  );
+  const currentMonthCumulativeResult = await db.execute(sql`
+    SELECT
+      COUNT(DISTINCT contract_external_id) AS contract_count,
+      SUM(COALESCE(principal::numeric, 0) + COALESCE(interest::numeric, 0) + COALESCE(fee::numeric, 0)) AS target_amount,
+      SUM(COALESCE(principal::numeric, 0)) AS target_principal,
+      SUM(interest::numeric) AS target_interest,
+      SUM(fee::numeric) AS target_fee,
+      SUM(penalty::numeric) AS target_penalty,
+      SUM(unlock_fee::numeric) AS target_unlock_fee,
+      SUM(baseline_amount::numeric) AS install_total,
+      SUM(COALESCE(finance_amount::numeric, 0) * COALESCE(installment_count, 0)) AS financed_total
+    FROM debt_target_cache
+    WHERE section = ${section}
+      AND due_date IS NOT NULL
+      AND due_date::date <= ${currentMonthEndDate}
+      AND is_closed IS NOT TRUE
+      AND is_suspended IS NOT TRUE
+      AND is_bad_debt IS NOT TRUE
+      AND is_paid IS NOT TRUE
+      AND contract_status NOT IN (${sql.raw(excludedStatuses)})
+  `);
+  const cumulativeRows: any[] = pgRows(currentMonthCumulativeResult);
+  const cumulativeRow = cumulativeRows[0] ?? null;
+  console.log(`[monthlySnapshot] ${section}: currentMonth=${currentMonth} cumulative target_amount=${cumulativeRow?.target_amount ?? 'N/A'}`);
 
   // ── 1b. Query overdue_total per due_month ──────────────────────────────────
   // ค้างชำระ: ยอดที่ค้างมาจากเดือนก่อนหน้า (due_date < เดือนนั้น)
@@ -148,6 +188,7 @@ export async function populateMonthlyCollectionSnapshot(
       AND is_bad_debt IS NOT TRUE
       AND is_paid IS NOT TRUE
       AND COALESCE(paid_amount::numeric, 0) < COALESCE(total_amount::numeric, 0)
+      AND contract_status NOT IN (${sql.raw(excludedStatuses)})
     GROUP BY DATE_TRUNC('month', due_date::date) + INTERVAL '1 month'
     ORDER BY overdue_month
   `);
@@ -247,6 +288,49 @@ export async function populateMonthlyCollectionSnapshot(
       collectedOverpaid: 0,
       collectedBadDebt: 0,
     });
+  }
+
+  // ── Override currentMonth ด้วย cumulative target_amount ──────────────────────
+  // target_amount ของ currentMonth ต้องรวมงวดค้างจากทุกเดือนก่อน (due_date <= สิ้นเดือน)
+  // ไม่ใช่แค่งวดที่ due ในเดือนนั้น เพื่อให้ตรงกับ badge ยอดหนี้รวมใน UI
+  if (cumulativeRow) {
+    const existingCurrentMonth = monthMap.get(currentMonth);
+    if (existingCurrentMonth) {
+      // Override target fields ด้วยค่า cumulative
+      existingCurrentMonth.targetAmount = n(cumulativeRow.target_amount);
+      existingCurrentMonth.targetContractCount = n(cumulativeRow.contract_count);
+      existingCurrentMonth.targetPrincipal = n(cumulativeRow.target_principal);
+      existingCurrentMonth.targetInterest = n(cumulativeRow.target_interest);
+      existingCurrentMonth.targetFee = n(cumulativeRow.target_fee);
+      existingCurrentMonth.targetPenalty = n(cumulativeRow.target_penalty);
+      existingCurrentMonth.targetUnlockFee = n(cumulativeRow.target_unlock_fee);
+      existingCurrentMonth.installTotal = n(cumulativeRow.install_total);
+      existingCurrentMonth.financedTotal = n(cumulativeRow.financed_total);
+    } else {
+      // currentMonth ไม่มีใน targetRows (เช่น ยังไม่มีงวดในเดือนนี้) → สร้างใหม่
+      monthMap.set(currentMonth, {
+        targetAmount: n(cumulativeRow.target_amount),
+        targetContractCount: n(cumulativeRow.contract_count),
+        targetPrincipal: n(cumulativeRow.target_principal),
+        targetInterest: n(cumulativeRow.target_interest),
+        targetFee: n(cumulativeRow.target_fee),
+        targetPenalty: n(cumulativeRow.target_penalty),
+        targetUnlockFee: n(cumulativeRow.target_unlock_fee),
+        installTotal: n(cumulativeRow.install_total),
+        financedTotal: n(cumulativeRow.financed_total),
+        overdueTotal: overdueMap.get(currentMonth) ?? 0,
+        collectedAmount: 0,
+        collectedContractCount: 0,
+        collectedPrincipal: 0,
+        collectedInterest: 0,
+        collectedFee: 0,
+        collectedPenalty: 0,
+        collectedUnlockFee: 0,
+        collectedDiscount: 0,
+        collectedOverpaid: 0,
+        collectedBadDebt: 0,
+      });
+    }
   }
 
   // Merge collected rows
