@@ -1804,15 +1804,13 @@ export default function DebtReport() {
       (m: any) => m.snapshotMonth === selectedSnapshotMonth,
     ) ?? null;
   }, [selectedSnapshotMonth, availableTargetSnapshotsQuery.data]);
-  const targetSnapshotViewQuery = trpc.debt.getTargetDetailSnapshot.useQuery(
+  // ✅ Fix: ใช้ getTargetSnapshotGrouped แทน getTargetDetailSnapshot
+  // getTargetDetailSnapshot มี limit=10000 rows ซึ่งไม่เพียงพอ (snapshot มี 58,656 rows = 4,928 สัญญา)
+  // getTargetSnapshotGrouped ดึงทุก row ไม่มี limit แล้ว group ที่ server → ส่งกลับ contracts[]
+  const targetSnapshotViewQuery = trpc.debt.getTargetSnapshotGrouped.useQuery(
     {
       section: sectionKey,
       snapshotMonth: selectedSnapshotMonth ?? "",
-      snapshotMode: (selectedSnapshotMeta as any)?.snapshotMode ?? "today",
-      // ไม่ส่ง debtOnly ไป server — filter ทั้งหมดทำที่ client (เหมือน Live query)
-      // ไม่ส่ง upToMonth — ดึงทุก row ของ snapshot นั้น
-      offset: 0,
-      limit: 10000, // ดึงทั้งหมดเพื่อแสดงในตาราง (max 10000)
     },
     { enabled: !!section && targetViewMode === "snapshot" && !!selectedSnapshotMonth, staleTime: 5 * 60 * 1000 },
   );
@@ -2033,9 +2031,10 @@ export default function DebtReport() {
   }, [isLoading]);
 
   // แปลง TargetDetailSnapshotRow → TargetRow สำหรับแสดงในตาราง
-  // *** Logic เหมือน Live ทุกอย่าง: group by contractExternalId, คำนวณ debtStatus/daysOverdue ***
+  // *** แปลง contracts[] จาก getTargetSnapshotGrouped → TargetRow[] สำหรับแสดงในตาราง ***
+  // ✅ Fix: ใช้ contracts[] ที่ server group แล้ว (ครบทุกสัญญา ไม่มี limit)
   const snapshotAsTargetRows: TargetRow[] = useMemo(() => {
-    if (targetViewMode !== "snapshot" || !targetSnapshotViewQuery.data?.rows) return [];
+    if (targetViewMode !== "snapshot" || !targetSnapshotViewQuery.data?.contracts) return [];
 
     // ─── Helper: คำนวณ debtStatus + daysOverdue จาก installments (เหมือน rederiveDaysOverdue ใน server) ───
     const TERMINAL_STATUSES = new Set(["ระงับสัญญา", "สิ้นสุดสัญญา", "หนี้เสีย", "ยกเลิกสัญญา"]);
@@ -2050,7 +2049,7 @@ export default function DebtReport() {
     }
     function rederiveDebtStatus(
       contractStatus: string | null,
-      insts: Array<{ dueDate: string | null; amount: number; paid: number; isClosed: boolean; isSuspended?: boolean; isPaid?: boolean }>,
+      insts: Array<{ dueDate: string | null; totalAmount: number; paidAmount: number; isClosed: boolean; isSuspended?: boolean; isPaid?: boolean }>,
       todayMs: number,
     ): { debtStatus: string; daysOverdue: number } {
       // Terminal statuses: ใช้ contractStatus โดยตรง
@@ -2063,8 +2062,8 @@ export default function DebtReport() {
         if (!it.dueDate) continue;
         const dueMs = Date.parse(`${it.dueDate}T00:00:00`);
         if (Number.isNaN(dueMs)) continue;
-        if (it.amount <= 0.001) continue;
-        if (it.paid >= it.amount - 0.5) continue; // fully paid
+        if (it.totalAmount <= 0.001) continue;
+        if (it.paidAmount >= it.totalAmount - 0.5) continue; // fully paid
         if (dueMs > todayMs) continue; // future
         const days = Math.floor((todayMs - dueMs) / 86_400_000);
         if (days > maxDays) maxDays = days;
@@ -2073,82 +2072,75 @@ export default function DebtReport() {
     }
 
     // ─── cutoffDate ของ snapshot นี้ (ใช้คำนวณ isFuturePeriod ใน badge) ───
-    const cutoffStr = (targetSnapshotViewQuery.data as any)?.cutoffDate
-      ? String((targetSnapshotViewQuery.data as any).cutoffDate).slice(0, 10)
+    const cutoffStr = targetSnapshotViewQuery.data.cutoffDate
+      ? String(targetSnapshotViewQuery.data.cutoffDate).slice(0, 10)
       : new Date().toISOString().slice(0, 10);
     const cutoffMs = Date.parse(`${cutoffStr}T23:59:59`);
-    const todayMs = Date.now();
 
-    // ─── Group by contractExternalId ───
-    // snapshot เก็บ 1 row ต่อ 1 งวด (period) ดังนั้นต้อง group เพื่อให้ได้ 1 row ต่อ 1 สัญญา
-    // พร้อม installments[] ครบทุกงวด เหมือน streamData.target.rows
-    const contractMap = new Map<string, TargetRow & { _contractStatus: string | null }>();
-    for (const r of targetSnapshotViewQuery.data.rows) {
-      const key = r.contractExternalId;
-      if (!contractMap.has(key)) {
-        contractMap.set(key, {
-          contractExternalId: r.contractExternalId,
-          contractNo: r.contractNo,
-          approveDate: r.approveDate,
-          customerName: r.customerName,
-          phone: r.phone ?? null,  // ✅ ดึง phone จาก snapshot row
-          productType: r.productType,
-          installmentCount: r.installmentCount,
-          installmentAmount: r.baselineAmount,
-          totalAmount: 0,   // จะ sum จาก installments
-          totalPaid: 0,     // จะ sum จาก installments
-          remaining: 0,     // จะคำนวณหลัง sum
-          debtStatus: "ปกติ",  // จะคำนวณใหม่หลัง group ครบ
-          daysOverdue: 0,       // จะคำนวณใหม่หลัง group ครบ
-          installments: [],
-          _contractStatus: r.contractStatus,
-        });
-      }
-      const row = contractMap.get(key)!;
-      // เพิ่ม installment นี้เข้าไปใน installments[]
-      row.installments.push({
-        period: r.period,
-        dueDate: r.dueDate,
-        principal: r.principal,
-        interest: r.interest,
-        fee: r.fee,
-        penalty: r.penalty,
-        unlockFee: r.unlockFee,
-        amount: r.totalAmount,
-        paid: r.paidAmount,
-        baselineAmount: r.baselineAmount,
-        overpaidApplied: 0,
-        isClosed: r.isClosed,
-        isSuspended: r.isSuspended,
-        suspendLabel: r.isSuspended ? (r.contractStatus ?? null) : null,
-        isArrears: r.isArrears,
-        isCurrentPeriod: r.isCurrentPeriod,
-        isPaid: r.isPaid,
-        netAmount: r.principal + r.interest + r.fee,
-      });
-      // อัพเดท totalAmount/totalPaid ของ contract row
-      row.totalAmount += r.totalAmount;
-      row.totalPaid += r.paidAmount;
-    }
-
-    // ─── คำนวณ remaining, debtStatus, daysOverdue หลัง group ครบ ───
+    // ─── แปลง TargetSnapshotContractRow → TargetRow ───
+    // server ส่งมาเป็น contracts[] ที่ group แล้ว (1 contract = 1 row + installments[])
     const result: TargetRow[] = [];
-    for (const row of contractMap.values()) {
-      row.remaining = Math.max(row.totalAmount - row.totalPaid, 0);
-      // เรียง installments ตาม period
-      row.installments.sort((a, b) => (a.period ?? 0) - (b.period ?? 0));
-      // ✅ คำนวณ debtStatus + daysOverdue ด้วย logic เดียวกับ Live (rederiveDaysOverdue)
-      // ใช้ cutoffMs แทน todayMs เพื่อให้ตรงกับ snapshot ณ เวลาที่ถ่าย
+    for (const c of targetSnapshotViewQuery.data.contracts) {
+      // หา contractStatus จาก installment ล่าสุด (ใช้ terminal status check)
+      const lastContractStatus = c.installments.length > 0
+        ? (c.installments[c.installments.length - 1].contractStatus ?? null)
+        : null;
+
+      // แปลง installments → InstallmentCell[]
+      const installments: InstallmentCell[] = c.installments.map((inst) => ({
+        period: inst.period,
+        dueDate: inst.dueDate,
+        principal: inst.principal,
+        interest: inst.interest,
+        fee: inst.fee,
+        penalty: inst.penalty,
+        unlockFee: inst.unlockFee,
+        amount: inst.totalAmount,
+        paid: inst.paidAmount,
+        baselineAmount: c.baselineAmount,
+        overpaidApplied: 0,
+        isClosed: inst.isClosed,
+        isSuspended: inst.isSuspended,
+        suspendLabel: inst.isSuspended ? (inst.contractStatus ?? null) : null,
+        isArrears: inst.isArrears,
+        isCurrentPeriod: inst.isCurrentPeriod,
+        isFuturePeriod: inst.isFuturePeriod,
+        isPaid: inst.isPaid,
+        netAmount: inst.principal + inst.interest + inst.fee,
+      }));
+
+      // คำนวณ totalAmount, totalPaid, remaining
+      let totalAmount = 0;
+      let totalPaid = 0;
+      for (const inst of c.installments) {
+        totalAmount += inst.totalAmount;
+        totalPaid += inst.paidAmount;
+      }
+      const remaining = Math.max(totalAmount - totalPaid, 0);
+
+      // คำนวณ debtStatus + daysOverdue ด้วย cutoffMs (ณ วันที่ถ่าย snapshot)
       const { debtStatus, daysOverdue } = rederiveDebtStatus(
-        row._contractStatus,
-        row.installments,
+        lastContractStatus,
+        c.installments,
         cutoffMs,
       );
-      row.debtStatus = debtStatus;
-      row.daysOverdue = daysOverdue;
-      // ลบ _contractStatus ออก (ไม่ใช่ส่วนของ TargetRow)
-      const { _contractStatus: _cs, ...cleanRow } = row as any;
-      result.push(cleanRow as TargetRow);
+
+      result.push({
+        contractExternalId: c.contractExternalId,
+        contractNo: c.contractNo,
+        approveDate: c.approveDate,
+        customerName: c.customerName,
+        phone: c.phone ?? null,
+        productType: c.productType,
+        installmentCount: c.installmentCount,
+        installmentAmount: c.baselineAmount,
+        totalAmount,
+        totalPaid,
+        remaining,
+        debtStatus,
+        daysOverdue,
+        installments,
+      });
     }
     return result;
   }, [targetViewMode, targetSnapshotViewQuery.data]);
