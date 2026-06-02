@@ -77,7 +77,7 @@ function computeSplitIndexes(payRows: any[]): number[] {
  */
 function rederiveDaysOverdue(
   contractStatus: string | null,
-  instRows: Array<{ dueDate: string | null; totalAmount: string; paidAmount: string; isClosed: boolean; isSuspended: boolean; isPaid?: boolean }>,
+  instRows: Array<{ dueDate: string | null; totalAmount: string; paidAmount: string; principal?: string; interest?: string; fee?: string; isClosed: boolean; isSuspended: boolean; isPaid?: boolean }>,
   today: Date,
 ): { debtStatus: string; daysOverdue: number } {
   if (contractStatus && TERMINAL_STATUSES.has(contractStatus)) {
@@ -93,9 +93,12 @@ function rederiveDaysOverdue(
     const dueMs = Date.parse(`${it.dueDate}T00:00:00`);
     if (Number.isNaN(dueMs)) continue;
     const paid = Number(it.paidAmount ?? 0);
-    const amt = Number(it.totalAmount ?? 0);
-    if (amt <= 0.001) continue;
-    if (paid >= amt - 0.5) continue; // fully paid
+    // ใช้ netAmount (เงินต้น+ดอกเบี้ย+ค่าดำเนินการ) เท่านั้น ไม่นับค่าปรับและค่าปลดล็อก
+    const netAmt = (it.principal !== undefined && it.interest !== undefined && it.fee !== undefined)
+      ? Number(it.principal ?? 0) + Number(it.interest ?? 0) + Number(it.fee ?? 0)
+      : Number(it.totalAmount ?? 0); // fallback ถ้าไม่มี breakdown
+    if (netAmt <= 0.001) continue;
+    if (paid >= netAmt - 0.5) continue; // จ่ายครบ netAmount แล้ว
     if (dueMs > todayMs) continue; // future
     const days = Math.floor((todayMs - dueMs) / 86_400_000);
     if (days > maxDays) maxDays = days;
@@ -246,6 +249,9 @@ export async function* streamTargetFromCache(params: {
           dueDate: r.due_date ?? null,
           totalAmount: r.total_amount ?? "0",
           paidAmount: r.paid_amount ?? "0",
+          principal: r.principal ?? "0",
+          interest: r.interest ?? "0",
+          fee: r.fee ?? "0",
           isClosed: !!r.is_closed,
           isSuspended: !!r.is_suspended,
           isPaid: !!r.is_paid,
@@ -484,6 +490,9 @@ export async function* streamCollectedFromCache(params: {
           dueDate: r.due_date ?? null,
           totalAmount: r.total_amount ?? "0",
           paidAmount: r.paid_amount ?? "0",
+          principal: r.principal ?? "0",
+          interest: r.interest ?? "0",
+          fee: r.fee ?? "0",
           isClosed: !!r.is_closed,
           isSuspended: !!r.is_suspended,
           isPaid: !!r.is_paid,
@@ -761,6 +770,9 @@ export async function getTargetChunk(params: {
         dueDate: r.due_date ?? null,
         totalAmount: r.total_amount ?? "0",
         paidAmount: r.paid_amount ?? "0",
+        principal: r.principal ?? "0",
+        interest: r.interest ?? "0",
+        fee: r.fee ?? "0",
         isClosed: !!r.is_closed,
         isSuspended: !!r.is_suspended,
         isPaid: !!r.is_paid,
@@ -978,6 +990,9 @@ export async function getCollectedChunk(params: {
         dueDate: r.due_date ?? null,
         totalAmount: r.total_amount ?? "0",
         paidAmount: r.paid_amount ?? "0",
+        principal: r.principal ?? "0",
+        interest: r.interest ?? "0",
+        fee: r.fee ?? "0",
         isClosed: !!r.is_closed,
         isSuspended: !!r.is_suspended,
         isPaid: !!r.is_paid,

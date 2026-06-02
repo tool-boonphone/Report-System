@@ -716,7 +716,7 @@ export default function DebtReport() {
     }
     function rederiveDebtStatus(
       contractStatus: string | null,
-      insts: Array<{ dueDate: string | null; totalAmount: number; paidAmount: number; isClosed: boolean; isSuspended?: boolean; isPaid?: boolean }>,
+      insts: Array<{ dueDate: string | null; totalAmount: number; paidAmount: number; principal: number; interest: number; fee: number; isClosed: boolean; isSuspended?: boolean; isPaid?: boolean }>,
       todayMs: number,
     ): { debtStatus: string; daysOverdue: number } {
       // Terminal statuses: ใช้ contractStatus โดยตรง
@@ -729,8 +729,10 @@ export default function DebtReport() {
         if (!it.dueDate) continue;
         const dueMs = Date.parse(`${it.dueDate}T00:00:00`);
         if (Number.isNaN(dueMs)) continue;
-        if (it.totalAmount <= 0.001) continue;
-        if (it.paidAmount >= it.totalAmount - 0.5) continue; // fully paid
+        // ใช้ netAmount (เงินต้น+ดอกเบี้ย+ค่าดำเนินการ) เท่านั้น ไม่นับค่าปรับและค่าปลดล็อก
+        const netAmount = it.principal + it.interest + it.fee;
+        if (netAmount <= 0.001) continue;
+        if (it.paidAmount >= netAmount - 0.5) continue; // จ่ายครบ netAmount แล้ว
         if (dueMs > todayMs) continue; // future
         const days = Math.floor((todayMs - dueMs) / 86_400_000);
         if (days > maxDays) maxDays = days;
