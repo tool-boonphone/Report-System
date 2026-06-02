@@ -367,5 +367,13 @@ export async function runStartupMigrations(): Promise<void> {
     } catch (err: any) {
       console.error(`[migration] ${section}: monthly_target_detail_snapshot clear failed:`, err?.message ?? err);
     }
+    try {
+      // Migration 0020: เพิ่ม filter_state column (JSON) ใน monthly_target_detail_snapshot
+      // เก็บ filter state ที่ใช้ตอน Snapshot เพื่อ auto-restore เมื่อเปิดดู Snapshot
+      await db.execute(sql.raw(`ALTER TABLE monthly_target_detail_snapshot ADD COLUMN IF NOT EXISTS filter_state TEXT DEFAULT NULL`));
+      console.log(`[migration] ${section}: monthly_target_detail_snapshot.filter_state — OK`);
+    } catch (err: any) {
+      console.error(`[migration] ${section}: monthly_target_detail_snapshot.filter_state failed:`, err?.message ?? err);
+    }
   }
 }

@@ -2297,6 +2297,18 @@ export default function DebtReport() {
   // helper: กด Snapshot → ส่ง filteredRows ที่แสดงอยู่บนหน้าจอไป save ลง DB โดยตรง (WYSIWYS)
   const handleCreateSnapshot = React.useCallback(() => {
     if (!section) return;
+    // ตรวจสอบว่า stream โหลดครบแล้วก่อน Snapshot
+    // ถ้ายังโหลดอยู่หรือโหลดไม่ครบ ให้แสดง warning และไม่ดำเนินการต่อ
+    if (streamLoading.target) {
+      toast.error("กำลังโหลดข้อมูลอยู่ กรุณารอให้โหลดครบก่อนกด Snapshot");
+      return;
+    }
+    const totalLoaded = streamData.target?.rows?.length ?? 0;
+    const totalExpected = streamTotal.target;
+    if (totalExpected > 0 && totalLoaded < totalExpected) {
+      toast.error(`ข้อมูลโหลดไม่ครบ (${totalLoaded.toLocaleString("th-TH")} / ${totalExpected.toLocaleString("th-TH")} สัญญา) กรุณารอให้โหลดครบก่อนกด Snapshot`);
+      return;
+    }
     const now = new Date();
     const snapshotMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
     // cutoffDate: ใช้ debtSetCutoffMode ที่เลือกไว้ตอนกด toggle ตั้งหนี้
@@ -2309,8 +2321,10 @@ export default function DebtReport() {
     } else {
       cutoffDate = now.toISOString().slice(0, 10);
     }
-    // ส่ง filteredRows ที่แสดงอยู่บนหน้าจอ (WYSIWYS)
-    const rowsToSave = (filteredRows as TargetRow[]).map((r) => ({
+    // ส่ง streamData.target?.rows ทั้งหมด (ไม่กรอง) เพื่อให้ Snapshot ได้ข้อมูลครบทุกสัญญา
+    // filter state จะถูกบันทึกแยกใน filterState field เพื่อ auto-restore ตอนเปิดดู Snapshot
+    const allTargetRows = (streamData.target?.rows ?? []) as TargetRow[];
+    const rowsToSave = allTargetRows.map((r) => ({
       contractExternalId: r.contractExternalId,
       contractNo: r.contractNo ?? null,
       customerName: r.customerName ?? null,
@@ -2349,7 +2363,7 @@ export default function DebtReport() {
       filterPrincipalOnly: principalOnly,
       rows: rowsToSave,
     });
-  }, [section, sectionKey, debtSetCutoffMode, filteredRows, debtSetMode, principalOnly, createSnapshotMutation]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [section, sectionKey, debtSetCutoffMode, streamData, streamLoading, streamTotal, debtSetMode, principalOnly, createSnapshotMutation]); // eslint-disable-line react-hooks/exhaustive-deps
 
 
   /* ---- Max periods for the repeating group block ---- */
