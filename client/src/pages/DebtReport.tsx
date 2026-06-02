@@ -1801,9 +1801,8 @@ export default function DebtReport() {
       section: sectionKey,
       snapshotMonth: selectedSnapshotMonth ?? "",
       snapshotMode: (selectedSnapshotMeta as any)?.snapshotMode ?? "today",
-      // ไม่ส่ง upToMonth เพื่อดึงข้อมูลทั้งหมดของ snapshot นั้น (ไม่กรองตาม due_date)
-      // debtOnly: ใช้ค่าจาก metadata ที่ freeze ไว้ตอน snapshot (ไม่ใช้ debtSetMode ปัจจุบัน)
-      debtOnly: (selectedSnapshotMeta as any)?.filterDebtOnly ?? false,
+      // ไม่ส่ง debtOnly ไป server — filter ทั้งหมดทำที่ client (เหมือน Live query)
+      // ไม่ส่ง upToMonth — ดึงทุก row ของ snapshot นั้น
       offset: 0,
       limit: 10000, // ดึงทั้งหมดเพื่อแสดงในตาราง (max 10000)
     },
@@ -2032,21 +2031,34 @@ export default function DebtReport() {
   // แปลง TargetDetailSnapshotRow → TargetRow สำหรับแสดงในตาราง
   const snapshotAsTargetRows: TargetRow[] = useMemo(() => {
     if (targetViewMode !== "snapshot" || !targetSnapshotViewQuery.data?.rows) return [];
-    return targetSnapshotViewQuery.data.rows.map((r) => ({
-      contractExternalId: r.contractExternalId,
-      contractNo: r.contractNo,
-      approveDate: r.approveDate,
-      customerName: r.customerName,
-      phone: null, // snapshot ไม่มี phone
-      productType: r.productType,
-      installmentCount: r.installmentCount,
-      installmentAmount: r.baselineAmount,
-      totalAmount: r.totalAmount,
-      totalPaid: r.paidAmount,
-      remaining: Math.max(r.totalAmount - r.paidAmount, 0),
-      debtStatus: r.debtRange ?? (r.isPaid ? "ปกติ" : r.isBadDebt ? "หนี้เสีย" : r.isSuspended ? "ระงับสัญญา" : "ปกติ"),
-      daysOverdue: 0, // snapshot ไม่มี daysOverdue
-      installments: [{
+    // *** Group by contractExternalId เหมือน Live query ***
+    // snapshot เก็บ 1 row ต่อ 1 งวด (period) ดังนั้นต้อง group เพื่อให้ได้ 1 row ต่อ 1 สัญญา
+    // พร้อม installments[] ครบทุกงวด เหมือน streamData.target.rows
+    const contractMap = new Map<string, TargetRow>();
+    for (const r of targetSnapshotViewQuery.data.rows) {
+      const key = r.contractExternalId;
+      if (!contractMap.has(key)) {
+        // สร้าง TargetRow ใหม่สำหรับสัญญานี้
+        contractMap.set(key, {
+          contractExternalId: r.contractExternalId,
+          contractNo: r.contractNo,
+          approveDate: r.approveDate,
+          customerName: r.customerName,
+          phone: null, // snapshot ไม่มี phone
+          productType: r.productType,
+          installmentCount: r.installmentCount,
+          installmentAmount: r.baselineAmount,
+          totalAmount: 0,   // จะ sum จาก installments
+          totalPaid: 0,     // จะ sum จาก installments
+          remaining: 0,     // จะคำนวณหลัง sum
+          debtStatus: r.contractStatus ?? r.debtRange ?? (r.isBadDebt ? "หนี้เสีย" : r.isSuspended ? "ระงับสัญญา" : "ปกติ"),
+          daysOverdue: 0,   // snapshot ไม่มี daysOverdue
+          installments: [],
+        });
+      }
+      const row = contractMap.get(key)!;
+      // เพิ่ม installment นี้เข้าไปใน installments[]
+      row.installments.push({
         period: r.period,
         dueDate: r.dueDate,
         principal: r.principal,
@@ -2060,12 +2072,25 @@ export default function DebtReport() {
         overpaidApplied: 0,
         isClosed: r.isClosed,
         isSuspended: r.isSuspended,
+        suspendLabel: r.isSuspended ? (r.contractStatus ?? null) : null,
         isArrears: r.isArrears,
         isCurrentPeriod: r.isCurrentPeriod,
         isPaid: r.isPaid,
         netAmount: r.principal + r.interest + r.fee,
-      }],
-    }));
+      });
+      // อัพเดท totalAmount/totalPaid ของ contract row
+      row.totalAmount += r.totalAmount;
+      row.totalPaid += r.paidAmount;
+    }
+    // คำนวณ remaining หลัง sum ครบ
+    const result: TargetRow[] = [];
+    for (const row of contractMap.values()) {
+      row.remaining = Math.max(row.totalAmount - row.totalPaid, 0);
+      // เรียง installments ตาม period
+      row.installments.sort((a, b) => (a.period ?? 0) - (b.period ?? 0));
+      result.push(row);
+    }
+    return result;
   }, [targetViewMode, targetSnapshotViewQuery.data]);
 
   const activeRows: (TargetRow | CollectedRow)[] =
@@ -2201,16 +2226,20 @@ export default function DebtReport() {
       }
       // 7. ตั้งหนี้ (target tab only) — ซ่อน row ที่ทุก installment เป็น paid/closed/suspended/future
       if (tab === "target" && debtSetMode) {
-        const todayStr = new Date().toISOString().slice(0, 10);
+        // Snapshot mode: ใช้ cutoffDate ของ snapshot เป็น cutoff สำหรับ isFuturePeriod
+        // Live mode: ใช้วันนี้
+        const cutoffStr = (targetViewMode === "snapshot" && (selectedSnapshotMeta as any)?.cutoffDate)
+          ? String((selectedSnapshotMeta as any).cutoffDate).slice(0, 10)
+          : new Date().toISOString().slice(0, 10);
         // Row ผ่านถ้ามี installment อย่างน้อย 1 งวดที่ต้องเก็บ (ส้มหรือดำ)
-        // = ไม่ใช่ closed, ไม่ใช่ suspended, ไม่ใช่ paid, ไม่ใช่ future (dueDate > today)
+        // = ไม่ใช่ closed, ไม่ใช่ suspended, ไม่ใช่ paid, ไม่ใช่ future (dueDate > cutoff)
         // และ contract status ไม่ใช่ ระงับสัญญา / สิ้นสุดสัญญา / หนี้เสีย
         const specialStatus = r.debtStatus === "ระงับสัญญา" || r.debtStatus === "สิ้นสุดสัญญา" || r.debtStatus === "หนี้เสีย" || r.debtStatus === "ยกเลิกสัญญา"; // ยกเลิกสัญญา ยังคงอยู่ใน specialStatus เพื่อไม่แสดงใน debtSetMode (ตั้งหนี้)
         if (specialStatus) return false;
         const hasCollectableInst = r.installments.some((inst) => {
           if (inst.isClosed || inst.isSuspended) return false;
           if (inst.isPaid) return false;
-          if (inst.dueDate && inst.dueDate > todayStr) return false;
+          if (inst.dueDate && inst.dueDate > cutoffStr) return false;
           return true;
         });
         if (!hasCollectableInst) return false;
@@ -2223,7 +2252,7 @@ export default function DebtReport() {
         (r.phone ?? "").toLowerCase().includes(q)
       );
     });
-  }, [activeRows, search, statusFilter, approveDateFilter, dueDateFilter, productTypeFilter, dueDateExact, tab, updatedByFilter, debtSetMode]);
+  }, [activeRows, search, statusFilter, approveDateFilter, dueDateFilter, productTypeFilter, dueDateExact, tab, updatedByFilter, debtSetMode, targetViewMode, selectedSnapshotMeta]);
 
   /* ---- Max periods for the repeating group block ---- */
   // Phase 125: ใช้ filteredRows ทั้งหมดแทน pagedRows (ไม่มี pagination แล้ว)
@@ -2277,7 +2306,11 @@ export default function DebtReport() {
   /* ---- Summary totals (computed from filteredRows, respects all filters) ---- */
   const targetSummary = useMemo(() => {
     if (tab !== "target") return null;
-    const todayStr = new Date().toISOString().slice(0, 10);
+    // Snapshot mode: ใช้ cutoffDate ของ snapshot เป็น cutoff สำหรับ isFuturePeriod
+    // Live mode: ใช้วันนี้
+    const cutoffStr = (targetViewMode === "snapshot" && (selectedSnapshotMeta as any)?.cutoffDate)
+      ? String((selectedSnapshotMeta as any).cutoffDate).slice(0, 10)
+      : new Date().toISOString().slice(0, 10);
     let principal = 0, interest = 0, fee = 0, penalty = 0, unlockFee = 0, total = 0;
     for (const r of filteredRows) {
       // Phase 125 fix: penalty/unlockFee ใช้เฉพาะ currentPeriod ของแต่ละสัญญา (ค่าปรับถูก accumulate ไว้ที่งวดนั้นแล้ว)
@@ -2287,8 +2320,9 @@ export default function DebtReport() {
         if (inst.isClosed || inst.isSuspended) continue;
         // Phase 125: debtSetMode — ไม่รวมงวดที่ชำระครบแล้ว (isPaid/เขียว) ใน badge
         if (debtSetMode && inst.isPaid) continue;
-        // ไม่รวมงวดอนาคต (dueDate > วันนี้) เสมอ ไม่ว่า debtSetMode จะเปิดหรือปิด
-        if (inst.dueDate && inst.dueDate > todayStr) continue;
+        // ไม่รวมงวดอนาคต (dueDate > cutoff) เสมอ ไม่ว่า debtSetMode จะเปิดหรือปิด
+        // Snapshot mode: cutoff = cutoffDate ของ snapshot | Live mode: cutoff = วันนี้
+        if (inst.dueDate && inst.dueDate > cutoffStr) continue;
         // Phase 23: dueDateFilter cell-mask — only sum periods whose dueDate month matches
         if (dueDateFilter.size > 0 && !(inst.dueDate && dueDateFilter.has(inst.dueDate.slice(0, 7)))) continue;
         // Phase 23: dueDateExact cell-mask — only sum periods whose dueDate matches exact date
@@ -2315,7 +2349,7 @@ export default function DebtReport() {
     }
     total = principal + interest + fee + penalty + unlockFee;
     return { principal, interest, fee, penalty, unlockFee, total };
-  }, [filteredRows, tab, principalOnly, dueDateFilter, dueDateExact, debtSetMode]);
+  }, [filteredRows, tab, principalOnly, dueDateFilter, dueDateExact, debtSetMode, targetViewMode, selectedSnapshotMeta]);
 
   const collectedSummary = useMemo(() => {
     if (tab !== "collected") return null;
@@ -2679,7 +2713,7 @@ export default function DebtReport() {
                       ) : (
                         (availableTargetSnapshotsQuery.data as any[] ?? []).slice().map((meta: any) => {
                           const isSelected = targetViewMode === "snapshot" && selectedSnapshotMonth === meta.snapshotMonth;
-                          const modeLabel = meta.snapshotMode === "end_of_month" ? "สิ้นเดือน" : "วันนี้";
+                          const modeLabel = meta.snapshotMode === "end_of_month" ? "เดือนนี้" : "วันนี้";
                           const modeColor = meta.snapshotMode === "end_of_month" ? "text-blue-600" : "text-violet-600";
                           const debtOnlyLabel = meta.filterDebtOnly ? " · ตั้งหนี้" : "";
                           const principalOnlyLabel = meta.filterPrincipalOnly ? " · เงินต้น" : "";
@@ -3639,8 +3673,11 @@ export default function DebtReport() {
                           // Grey-out applies to both closed AND suspended cells.
                           const dimmed = closed || suspended;
                           // Phase 93: pre-compute isFuturePeriod+isPaid before cell value block
-                          const _todayStrPre = new Date().toISOString().slice(0, 10);
-                          const _isFuturePeriodPre = !dimmed && !!inst?.dueDate && inst.dueDate > _todayStrPre;
+                          // Snapshot mode: ใช้ cutoffDate ของ snapshot | Live mode: ใช้วันนี้
+                          const _cutoffStrPre = (targetViewMode === "snapshot" && (selectedSnapshotMeta as any)?.cutoffDate)
+                            ? String((selectedSnapshotMeta as any).cutoffDate).slice(0, 10)
+                            : new Date().toISOString().slice(0, 10);
+                          const _isFuturePeriodPre = !dimmed && !!inst?.dueDate && inst.dueDate > _cutoffStrPre;
                           const _isPaidPre = !dimmed && !!inst?.isPaid;
                           // Phase 23: cell-level masking for dueDateFilter and dueDateExact
                           // If a filter is active and this period's dueDate doesn't match,
@@ -3745,8 +3782,12 @@ export default function DebtReport() {
                             const isCurrentPeriod = !dimmed && !isSpecialContractStatus && !!inst?.isCurrentPeriod;
                             // Phase 9AI: future period = dueDate > today (not closed/suspended)
                             const todayStr = new Date().toISOString().slice(0, 10);
+                            // Snapshot mode: ใช้ cutoffDate ของ snapshot | Live mode: ใช้วันนี้
+                            const _cutoffStrCell = (targetViewMode === "snapshot" && (selectedSnapshotMeta as any)?.cutoffDate)
+                              ? String((selectedSnapshotMeta as any).cutoffDate).slice(0, 10)
+                              : new Date().toISOString().slice(0, 10);
                             const isFuturePeriod = !dimmed && !isArrears && !isCurrentPeriod &&
-                              !!inst?.dueDate && inst.dueDate > todayStr;
+                              !!inst?.dueDate && inst.dueDate > _cutoffStrCell;
                             // Phase 85: isPaid = ชำระครบแล้ว (ใช้ backend isPaid flag)
                             const isPaid = !dimmed && !!inst?.isPaid;
                             // Phase 85: isPartialPaid = จ่ายบางส่วน (paid > 0 แต่ยังไม่ครบ)
@@ -3916,7 +3957,7 @@ export default function DebtReport() {
                     {snapshotDialogMode === "end_of_month" && <div className="w-1.5 h-1.5 bg-white rounded-full" />}
                   </div>
                   <div>
-                    <div className="text-sm font-medium text-gray-800">ณ สิ้นเดือนปัจจุบัน</div>
+                    <div className="text-sm font-medium text-gray-800">ณ เดือนปัจจุบัน</div>
                     <div className="text-xs text-gray-500">นับงวดทั้งเดือน รวมที่ยังไม่ถึง due</div>
                   </div>
                 </div>

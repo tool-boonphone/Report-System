@@ -343,5 +343,14 @@ export async function runStartupMigrations(): Promise<void> {
     } catch (err: any) {
       console.error(`[migration] ${section}: monthly_target_detail_snapshot snapshot metadata columns failed:`, err?.message ?? err);
     }
+    try {
+      // Migration 0017: ลบ Snapshot เก่าทั้งหมด — populate logic เปลี่ยนเป็น v3
+      // Snapshot เก่าถูก populate ด้วย logic เดิมที่ตัด is_closed/is_suspended/is_bad_debt ออก
+      // และตัด due_date > cutoffDate ออก — ต้องลบทิ้งและ populate ใหม่ด้วย logic ใหม่
+      await db.execute(sql.raw(`DELETE FROM monthly_target_detail_snapshot WHERE section = '${section}'`));
+      console.log(`[migration] ${section}: monthly_target_detail_snapshot — cleared all old snapshots (v3 reset)`);
+    } catch (err: any) {
+      console.error(`[migration] ${section}: monthly_target_detail_snapshot clear failed:`, err?.message ?? err);
+    }
   }
 }

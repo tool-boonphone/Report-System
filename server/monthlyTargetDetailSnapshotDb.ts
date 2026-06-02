@@ -4,11 +4,11 @@
  * Populate และ Query ข้อมูล monthly_target_detail_snapshot
  * — snapshot รายสัญญา ณ เวลาที่ผู้ใช้กด "Snapshot" (freeze ตลอด)
  *
- * Logic การ populate (v2 — รองรับ cutoffDate + filter metadata):
- *  - ดึงจาก debt_target_cache โดยใช้ snapshotMode เป็น cutoff:
- *    'today'        → ตัด is_future_period (dueDate > วันนี้) ออก
- *    'end_of_month' → ตัดเฉพาะ dueDate > สิ้นเดือนของ snapshotMonth ออก
- *  - บันทึก filter metadata: filterDebtOnly, filterPrincipalOnly
+ * Logic การ populate (v3 — Freeze ทุก row เหมือน Live):
+ *  - ดึงจาก debt_target_cache ทุก row ไม่กรองอะไรออกเลย (เหมือน Live query)
+ *  - เก็บ cutoffDate เป็น metadata เพื่อให้ client ใช้คำนวณ isFuturePeriod ใน badge/filter
+ *  - เก็บ filter metadata: filterDebtOnly, filterPrincipalOnly (ไม่กรองตอน populate)
+ *  - filter ทั้งหมด (debtSetMode, principalOnly, search) ทำที่ client
  *  - ถ้า snapshot_month + snapshot_mode นั้นมีข้อมูลอยู่แล้ว → ไม่ทำอะไร (freeze)
  *  - populate อัตโนมัติทุกวันที่ 1 ของเดือน 06:00 น. (ควบคุมโดย runner.ts)
  *    หรือ on-demand เมื่อผู้ใช้กดปุ่ม Snapshot
@@ -168,10 +168,11 @@ export async function populateTargetDetailSnapshot(
   }
 
   // Insert ใหม่จาก debt_target_cache
-  // cutoff filter: ตัดงวดที่ dueDate > cutoffDate ออก (is_future_period ตาม cutoff ที่เลือก)
-  // เสมอ: ตัด is_closed, is_suspended, is_bad_debt ออก
-  // หมายเหตุ: filterDebtOnly และ filterPrincipalOnly เป็นแค่ metadata — ไม่กรองตอน populate
-  //           เพื่อให้ snapshot เก็บข้อมูลครบ แล้วค่อย apply filter ตอน query
+  // *** สำคัญ: บันทึกทุก row ทั้งหมด ไม่กรองอะไรออกเลย ***
+  // เหมือน Live query ที่ไม่กรอง is_closed/is_suspended/is_bad_debt ที่ server
+  // เพราะ filter ทั้งหมดทำที่ client (filteredRows useMemo)
+  // cutoffDate เก็บไว้เป็น metadata เพื่อให้ client ใช้คำนวณ isFuturePeriod ใน badge/filter
+  // filterDebtOnly และ filterPrincipalOnly เป็นแค่ metadata — ไม่กรองตอน populate
   const insertResult = await db.execute(sql.raw(`
     INSERT INTO monthly_target_detail_snapshot (
       section,
@@ -252,13 +253,6 @@ export async function populateTargetDetailSnapshot(
       NOW()
     FROM debt_target_cache
     WHERE section = '${section}'
-      AND is_closed IS NOT TRUE
-      AND is_suspended IS NOT TRUE
-      AND is_bad_debt IS NOT TRUE
-      AND (
-        due_date IS NULL
-        OR due_date::date <= '${cutoffDate}'::date
-      )
   `));
 
   // ดึงจำนวน rows ที่ insert
