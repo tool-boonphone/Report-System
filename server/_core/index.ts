@@ -148,6 +148,48 @@ async function startServer() {
       return res.status(500).json({ error: String(err?.message ?? err) });
     }
   });
+  // Internal endpoint: Auto-populate monthly_target_detail_snapshot (ตั้งหนี้เดือนนี้)
+  // POST /api/internal/auto-snapshot
+  // Body: { section: 'Boonphone' | 'Fastfone365', snapshotMonth?: 'YYYY-MM', async?: boolean }
+  // - ใช้ snapshotMode='end_of_month' เสมอ (เหมือน Auto Snapshot วันที่ 1)
+  // - async=true (default) → fire-and-forget, returns immediately
+  app.post("/api/internal/auto-snapshot", async (req, res) => {
+    const { section, snapshotMonth, async: isAsync = true } = req.body as {
+      section?: string;
+      snapshotMonth?: string;
+      async?: boolean;
+    };
+    if (!section || !["Boonphone", "Fastfone365"].includes(section)) {
+      return res.status(400).json({ error: "Invalid section. Use Boonphone or Fastfone365" });
+    }
+    try {
+      const { populateTargetDetailSnapshot } = await import("../monthlyTargetDetailSnapshotDb");
+      const sec = section as import("../../shared/const").SectionKey;
+      // คำนวณ snapshotMonth ถ้าไม่ระบุ (ใช้เดือนปัจจุบัน Asia/Bangkok)
+      const bangkokDate = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Bangkok",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).format(new Date());
+      const month = snapshotMonth ?? bangkokDate.slice(0, 7); // YYYY-MM
+      console.log(`[auto-snapshot] ${sec} ${month} (end_of_month) — triggered via API`);
+      if (isAsync) {
+        // Fire and forget — return immediately
+        populateTargetDetailSnapshot(sec, month, "end_of_month", false, true)
+          .then((rows) => console.log(`[auto-snapshot] ${sec} ${month} done — ${rows} rows inserted`))
+          .catch((err: unknown) => console.error(`[auto-snapshot] ${sec} ${month} failed:`, (err as Error)?.message ?? err));
+        return res.json({ ok: true, section: sec, snapshotMonth: month, snapshotMode: "end_of_month", started: true, startedAt: new Date().toISOString() });
+      } else {
+        // Synchronous — await and return result
+        const rows = await populateTargetDetailSnapshot(sec, month, "end_of_month", false, true);
+        return res.json({ ok: true, section: sec, snapshotMonth: month, snapshotMode: "end_of_month", rowsInserted: rows, completedAt: new Date().toISOString() });
+      }
+    } catch (err: any) {
+      console.error("[auto-snapshot]", err);
+      return res.status(500).json({ error: String(err?.message ?? err) });
+    }
+  });
   // Internal backfill endpoint — no auth, only for local/admin use
   app.post("/api/internal/backfill-cache", async (req, res) => {
     const { section } = req.body as { section?: string };

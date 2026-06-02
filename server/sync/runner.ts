@@ -473,9 +473,10 @@ async function doSync(
       console.warn(`[sync] ${section}: populateMonthlyCollectionSnapshot failed (non-fatal):`, snapshotErr?.message ?? snapshotErr);
     }
 
-    // ── Populate monthly_target_detail_snapshot (เฉพาะวันที่ 1 ของเดือน — freeze strategy) ──
-    // ถ้าวันที่ 1: populate snapshot เดือนนี้ (ถ้ายังไม่มีจะ insert, ถ้ามีแล้วจะ skip)
-    // วันอื่น: เรียก populate แต่ function จะ skip เองถ้ามีข้อมูลแล้ว (กรณี retry ถ้าวันที่ 1 sync ล้มเหลว)
+    // ── Auto Snapshot: ตั้งหนี้เดือนนี้ (end_of_month mode) ──
+    // วันที่ 1: populate snapshot เดือนนี้ด้วย snapshotMode='end_of_month'
+    //   → cutoff = วันสุดท้ายของเดือน (แสดงงวดครบทุกงวดที่ตั้งหนี้ในเดือนนี้)
+    // วันอื่น: เรียก populate แต่ function จะ skip เองถ้ามีข้อมูลแล้ว (กรณี retry)
     try {
       const bangkokDate = new Intl.DateTimeFormat("en-CA", {
         timeZone: "Asia/Bangkok",
@@ -487,14 +488,26 @@ async function doSync(
       const dayOfMonth = parseInt(bangkokDate.slice(8, 10), 10);
       const currentMonth = bangkokDate.slice(0, 7); // "YYYY-MM"
       if (dayOfMonth === 1) {
-        // วันที่ 1: populate snapshot เดือนนี้
-        const detailRows = await populateMonthlyTargetDetailSnapshot(section, currentMonth);
-        console.log(`[sync] ${section}: monthly_target_detail_snapshot populated — ${detailRows} rows for ${currentMonth} (day-1 freeze)`);
+        // วันที่ 1: Auto Snapshot ด้วย end_of_month mode (ตั้งหนี้เดือนนี้)
+        const detailRows = await populateMonthlyTargetDetailSnapshot(
+          section,
+          currentMonth,
+          "end_of_month", // cutoff = วันสุดท้ายของเดือน
+          false,          // filterDebtOnly = false (แสดงทุกสัญญา)
+          true,           // filterPrincipalOnly = true (default)
+        );
+        console.log(`[sync] ${section}: monthly_target_detail_snapshot AUTO populated — ${detailRows} rows for ${currentMonth} (end_of_month mode, day-1 freeze)`);
       } else {
         // วันอื่น: เรียก populate แต่ function จะ skip เองถ้ามีข้อมูลแล้ว
-        const detailRows = await populateMonthlyTargetDetailSnapshot(section, currentMonth);
+        const detailRows = await populateMonthlyTargetDetailSnapshot(
+          section,
+          currentMonth,
+          "end_of_month",
+          false,
+          true,
+        );
         if (detailRows > 0) {
-          console.log(`[sync] ${section}: monthly_target_detail_snapshot retry-populated — ${detailRows} rows for ${currentMonth}`);
+          console.log(`[sync] ${section}: monthly_target_detail_snapshot retry-populated — ${detailRows} rows for ${currentMonth} (end_of_month)`);
         } else {
           console.log(`[sync] ${section}: monthly_target_detail_snapshot already frozen for ${currentMonth} — skipped`);
         }
