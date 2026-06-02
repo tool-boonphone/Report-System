@@ -551,7 +551,7 @@ function MonthlyTabContent({
     {
       section: sectionKey,
       snapshotMonth: targetSnapshotLightbox?.snapshotMonth ?? "",
-      upToMonth: targetSnapshotLightbox?.snapshotMonth ?? "", // ดึงทั้งเดือนนั้น
+      // ไม่ส่ง upToMonth เพื่อให้ดึงทุก row ทั้งหมด (ไม่กรอง due_date)
       search: targetSnapshotSearch || undefined,
       productType: targetSnapshotProductType,
       debtRange: targetSnapshotDebtRange,

@@ -35,6 +35,7 @@ import {
   getAvailableSnapshotMonths,
   getContractInstallmentsBySnapshot,
   saveClientSnapshot,
+  getTargetSnapshotGrouped,
 } from "../monthlyTargetDetailSnapshotDb";
 
 const debtViewProcedure = requirePermission("debt_report", "view");
@@ -198,7 +199,7 @@ export const debtRouter = router({
       debtRange: z.string().optional(),
       debtOnly: z.boolean().optional(),
       offset: z.number().int().min(0).default(0),
-      limit: z.number().int().min(1).max(10000).default(100),
+      limit: z.number().int().min(1).max(100000).default(100),
     }))
     .query(async ({ input }) => {
       return getMonthlyTargetDetailSnapshot(input);
@@ -284,6 +285,20 @@ export const debtRouter = router({
         input.filterState ?? null,
       );
       return { success: true, rowsInserted: count };
+    }),
+
+  /**
+   * ดึง snapshot ทั้งหมดแบบ contract-level (GROUP BY contract)
+   * — ไม่มี pagination — ได้ครบทุกสัญญาไม่มี limit
+   * — ใช้สำหรับ Snapshot View แทน getTargetDetailSnapshot
+   */
+  getTargetSnapshotGrouped: debtViewProcedure
+    .input(z.object({
+      section: SectionEnum,
+      snapshotMonth: z.string().regex(/^\d{4}-\d{2}$/, "must be YYYY-MM"),
+    }))
+    .query(async ({ input }) => {
+      return getTargetSnapshotGrouped(input);
     }),
 
   /** ดึงงวดทั้งหมดของสัญญาหนึ่งจาก snapshot — ใช้สำหรับ Installment Detail Lightbox */

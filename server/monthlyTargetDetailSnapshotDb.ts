@@ -799,3 +799,209 @@ export async function saveClientSnapshot(
   console.log(`[saveClientSnapshot] ${section}: ${snapshotMonth} (${snapshotMode}, cutoff=${cutoffDate}) saved ${totalInserted} rows from client (WYSIWYS)`);
   return totalInserted;
 }
+
+// ─── Grouped Snapshot (Contract-Level) ───────────────────────────────────────
+/**
+ * ดึง snapshot ทั้งหมดแบบ GROUP BY contract
+ * — ส่ง installments[] เป็น JSON aggregation มาใน 1 query
+ * — ไม่มี pagination เพราะ 1 row = 1 contract (ไม่ใช่ 1 row = 1 installment)
+ * — ใช้แทน getTargetDetailSnapshot เพื่อให้ได้ครบทุกสัญญา
+ */
+export interface TargetSnapshotInstallment {
+  period: number | null;
+  dueDate: string | null;
+  principal: number;
+  interest: number;
+  fee: number;
+  penalty: number;
+  unlockFee: number;
+  totalAmount: number;
+  paidAmount: number;
+  isPaid: boolean;
+  isArrears: boolean;
+  isBadDebt: boolean;
+  isClosed: boolean;
+  isSuspended: boolean;
+  isCurrentPeriod: boolean;
+  isFuturePeriod: boolean;
+  contractStatus: string | null;
+  debtRange: string | null;
+}
+
+export interface TargetSnapshotContractRow {
+  contractExternalId: string;
+  contractNo: string | null;
+  customerName: string | null;
+  partnerCode: string | null;
+  partnerName: string | null;
+  approveDate: string | null;
+  productType: string | null;
+  device: string | null;
+  model: string | null;
+  financeAmount: number;
+  installmentCount: number | null;
+  baselineAmount: number;
+  phone: string | null;
+  installments: TargetSnapshotInstallment[];
+}
+
+export interface TargetSnapshotGroupedResult {
+  contracts: TargetSnapshotContractRow[];
+  totalContracts: number;
+  snapshotMonth: string;
+  populatedAt: string | null;
+  snapshotMode: string | null;
+  cutoffDate: string | null;
+  filterDebtOnly: boolean;
+  filterPrincipalOnly: boolean;
+  filterState: string | null;
+}
+
+/**
+ * ดึง snapshot ทั้งหมดแบบ contract-level (GROUP BY contract ที่ application layer)
+ * — ดึง installment rows ทั้งหมดจาก DB แล้ว group ที่ Node.js
+ * — ได้ครบทุกสัญญาไม่มี limit
+ */
+export async function getTargetSnapshotGrouped(params: {
+  section: SectionKey;
+  snapshotMonth: string;
+}): Promise<TargetSnapshotGroupedResult> {
+  const { section, snapshotMonth } = params;
+  const db = await getDb(section);
+  if (!db) return {
+    contracts: [], totalContracts: 0, snapshotMonth, populatedAt: null,
+    snapshotMode: null, cutoffDate: null, filterDebtOnly: false, filterPrincipalOnly: true,
+    filterState: null,
+  };
+
+  // ดึง metadata ของ snapshot นี้
+  const metaResult = await db.execute(sql.raw(`
+    SELECT
+      COUNT(*) AS cnt,
+      MAX(populated_at::text) AS populated_at,
+      MAX(COALESCE(snapshot_mode, 'today')) AS snapshot_mode,
+      MAX(cutoff_date) AS cutoff_date,
+      BOOL_OR(COALESCE(filter_debt_only, FALSE)) AS filter_debt_only,
+      BOOL_OR(COALESCE(filter_principal_only, TRUE)) AS filter_principal_only,
+      MAX(filter_state) AS filter_state
+    FROM monthly_target_detail_snapshot
+    WHERE section = '${section}'
+      AND snapshot_month = '${snapshotMonth}'
+  `));
+  const metaRows = pgRows(metaResult);
+  const totalRows = n(metaRows[0]?.cnt ?? 0);
+  if (totalRows === 0) {
+    return {
+      contracts: [], totalContracts: 0, snapshotMonth, populatedAt: null,
+      snapshotMode: null, cutoffDate: null, filterDebtOnly: false, filterPrincipalOnly: true,
+      filterState: null,
+    };
+  }
+  const populatedAt = metaRows[0]?.populated_at ? String(metaRows[0].populated_at) : null;
+  const snapshotMode = metaRows[0]?.snapshot_mode ? String(metaRows[0].snapshot_mode) : "today";
+  const cutoffDate = metaRows[0]?.cutoff_date ? String(metaRows[0].cutoff_date) : null;
+  const filterDebtOnly = Boolean(metaRows[0]?.filter_debt_only);
+  const filterPrincipalOnly = Boolean(metaRows[0]?.filter_principal_only);
+  const filterState = metaRows[0]?.filter_state ? String(metaRows[0].filter_state) : null;
+
+  // ดึง installments ทั้งหมด เรียงตาม contract + period
+  // แล้ว group ที่ application layer เพื่อหลีกเลี่ยงปัญหา JSON_AGG size limit
+  const dataResult = await db.execute(sql.raw(`
+    SELECT
+      contract_external_id,
+      contract_no,
+      customer_name,
+      partner_code,
+      partner_name,
+      approve_date::text AS approve_date,
+      product_type,
+      device,
+      model,
+      COALESCE(finance_amount::numeric, 0) AS finance_amount,
+      installment_count,
+      COALESCE(baseline_amount::numeric, 0) AS baseline_amount,
+      COALESCE(phone, '') AS phone,
+      period,
+      due_date::text AS due_date,
+      COALESCE(principal::numeric, 0) AS principal,
+      COALESCE(interest::numeric, 0) AS interest,
+      COALESCE(fee::numeric, 0) AS fee,
+      COALESCE(penalty::numeric, 0) AS penalty,
+      COALESCE(unlock_fee::numeric, 0) AS unlock_fee,
+      COALESCE(total_amount::numeric, 0) AS total_amount,
+      COALESCE(paid_amount::numeric, 0) AS paid_amount,
+      is_paid,
+      is_arrears,
+      is_bad_debt,
+      is_closed,
+      is_suspended,
+      is_current_period,
+      is_future_period,
+      contract_status,
+      debt_range
+    FROM monthly_target_detail_snapshot
+    WHERE section = '${section}'
+      AND snapshot_month = '${snapshotMonth}'
+    ORDER BY contract_no, period
+  `));
+  const dataRows = pgRows(dataResult);
+
+  // Group by contractExternalId ที่ application layer
+  const contractMap = new Map<string, TargetSnapshotContractRow>();
+  for (const r of dataRows) {
+    const key = String(r.contract_external_id ?? "");
+    if (!contractMap.has(key)) {
+      contractMap.set(key, {
+        contractExternalId: key,
+        contractNo: r.contract_no ? String(r.contract_no) : null,
+        customerName: r.customer_name ? String(r.customer_name) : null,
+        partnerCode: r.partner_code ? String(r.partner_code) : null,
+        partnerName: r.partner_name ? String(r.partner_name) : null,
+        approveDate: r.approve_date ? String(r.approve_date) : null,
+        productType: r.product_type ? String(r.product_type) : null,
+        device: r.device ? String(r.device) : null,
+        model: r.model ? String(r.model) : null,
+        financeAmount: n(r.finance_amount),
+        installmentCount: r.installment_count != null ? n(r.installment_count) : null,
+        baselineAmount: n(r.baseline_amount),
+        phone: r.phone ? String(r.phone) : null,
+        installments: [],
+      });
+    }
+    contractMap.get(key)!.installments.push({
+      period: r.period != null ? n(r.period) : null,
+      dueDate: r.due_date ? String(r.due_date) : null,
+      principal: n(r.principal),
+      interest: n(r.interest),
+      fee: n(r.fee),
+      penalty: n(r.penalty),
+      unlockFee: n(r.unlock_fee),
+      totalAmount: n(r.total_amount),
+      paidAmount: n(r.paid_amount),
+      isPaid: Boolean(r.is_paid),
+      isArrears: Boolean(r.is_arrears),
+      isBadDebt: Boolean(r.is_bad_debt),
+      isClosed: Boolean(r.is_closed),
+      isSuspended: Boolean(r.is_suspended),
+      isCurrentPeriod: Boolean(r.is_current_period),
+      isFuturePeriod: Boolean(r.is_future_period),
+      contractStatus: r.contract_status ? String(r.contract_status) : null,
+      debtRange: r.debt_range ? String(r.debt_range) : null,
+    });
+  }
+
+  const contracts = Array.from(contractMap.values());
+  console.log(`[getTargetSnapshotGrouped] ${section}: ${snapshotMonth} — ${contracts.length} contracts, ${dataRows.length} installment rows`);
+
+  return {
+    contracts,
+    totalContracts: contracts.length,
+    snapshotMonth,
+    populatedAt,
+    snapshotMode,
+    cutoffDate,
+    filterDebtOnly,
+    filterPrincipalOnly,
+    filterState,
+  };
+}
