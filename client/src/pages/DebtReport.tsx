@@ -1793,10 +1793,10 @@ export default function DebtReport() {
     {
       section: sectionKey,
       snapshotMonth: selectedSnapshotMonth ?? "",
-      upToMonth: selectedSnapshotMonth ?? "",
+      // ไม่ส่ง upToMonth เพื่อดึงข้อมูลทั้งหมดของ snapshot นั้น (ไม่กรองตาม due_date)
       debtOnly: debtSetMode, // ใช้ debtSetMode เดิมในการกรอง
       offset: 0,
-      limit: 5000, // ดึงทั้งหมดเพื่อแสดงในตาราง
+      limit: 10000, // ดึงทั้งหมดเพื่อแสดงในตาราง (max 10000)
     },
     { enabled: !!section && targetViewMode === "snapshot" && !!selectedSnapshotMonth, staleTime: 5 * 60 * 1000 },
   );
