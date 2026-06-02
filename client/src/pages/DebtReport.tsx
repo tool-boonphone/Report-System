@@ -452,6 +452,12 @@ export default function DebtReport() {
   const [targetViewMode, setTargetViewMode] = useState<"live" | "snapshot">("live");
   const [selectedSnapshotMonth, setSelectedSnapshotMonth] = useState<string | null>(null);
   const [showSnapshotLog, setShowSnapshotLog] = useState(false);
+  // query getMonthlyDebtSummary สำหรับ dropdown "เป้าเก็บหนี้รายเดือน" (ตาราง 4 คอลัมน์)
+  // ดึงจาก monthly_target_detail_snapshot (freeze ณ วันที่ 1) + debt_collected_cache (ค่างวดเท่านั้น)
+  const monthlyDebtSummaryQuery = trpc.debt.getMonthlyDebtSummary.useQuery(
+    { section: sectionKey },
+    { enabled: !!section && tab === "target" && showSnapshotLog, staleTime: 2 * 60 * 1000 },
+  );
   // query รายการ snapshot ที่มีอยู่ใน DB (สำหรับ Log Dropdown)
   const availableTargetSnapshotsQuery = trpc.debt.getAvailableSnapshotMonths.useQuery(
     { section: sectionKey },
@@ -1415,13 +1421,13 @@ export default function DebtReport() {
                       </span>
                     )}
                   </Button>
-                  {/* Dropdown รายการ Snapshot */}
+                  {/* Dropdown ตาราง 4 คอลัมน์: เดือน-ปี / เป้าเก็บหนี้ / ยอดเก็บหนี้ / % เก็บหนี้ */}
                   {showSnapshotLog && (
-                    <div className="absolute right-0 top-full mt-1 z-50 bg-white border border-amber-200 rounded-lg shadow-xl min-w-[240px] py-1">
-                      {/* ข้อมูลปัจจุบัน (live) */}
+                    <div className="absolute right-0 top-full mt-1 z-50 bg-white border border-amber-200 rounded-xl shadow-2xl py-0 overflow-hidden" style={{ minWidth: 520 }}>
+                      {/* Header: ข้อมูลปัจจุบัน (Live) */}
                       <button
                         type="button"
-                        className={`w-full text-left px-4 py-2.5 text-sm flex items-center gap-2 hover:bg-gray-50 ${
+                        className={`w-full text-left px-4 py-2.5 text-sm flex items-center gap-2 hover:bg-gray-50 border-b border-gray-100 ${
                           targetViewMode === "live" ? "bg-emerald-50 text-emerald-700 font-medium" : "text-gray-700"
                         }`}
                         onClick={handleBackToLive}
@@ -1430,37 +1436,52 @@ export default function DebtReport() {
                         <span>ข้อมูลปัจจุบัน (Live)</span>
                         {targetViewMode === "live" && <Check className="w-3.5 h-3.5 ml-auto" />}
                       </button>
-                      <div className="border-t border-gray-100 my-1" />
-                      {/* รายการ Snapshot */}
-                      {availableTargetSnapshotsQuery.isLoading ? (
-                        <div className="px-4 py-3 text-xs text-gray-400">กำลังโหลด...</div>
-                      ) : (availableTargetSnapshotsQuery.data ?? []).length === 0 ? (
-                        <div className="px-4 py-3 text-xs text-gray-400">ยังไม่มี Snapshot</div>
+                      {/* ตาราง 4 คอลัมน์ */}
+                      {monthlyDebtSummaryQuery.isLoading ? (
+                        <div className="px-4 py-4 text-xs text-gray-400 text-center">กำลังโหลด...</div>
+                      ) : (monthlyDebtSummaryQuery.data ?? []).length === 0 ? (
+                        <div className="px-4 py-4 text-xs text-gray-400 text-center">ยังไม่มีข้อมูลรายเดือน</div>
                       ) : (
-                        (availableTargetSnapshotsQuery.data as any[] ?? []).slice().map((meta: any) => {
-                          const isSelected = targetViewMode === "snapshot" && selectedSnapshotMonth === meta.snapshotMonth;
-                          const modeLabel = meta.snapshotMode === "end_of_month" ? "เดือนนี้" : "วันนี้";
-                          const modeColor = meta.snapshotMode === "end_of_month" ? "text-blue-600" : "text-violet-600";
-                          const debtOnlyLabel = meta.filterDebtOnly ? " · ตั้งหนี้" : "";
-                          const principalOnlyLabel = meta.filterPrincipalOnly ? " · เงินต้น" : "";
-                          return (
-                            <button
-                              key={`${meta.snapshotMonth}-${meta.snapshotMode}`}
-                              type="button"
-                              className={`w-full text-left px-4 py-2.5 text-sm flex items-center gap-2 hover:bg-amber-50 ${
-                                isSelected ? "bg-amber-50 text-amber-800 font-medium" : "text-gray-700"
-                              }`}
-                              onClick={() => handleSelectSnapshot(meta.snapshotMonth)}
-                            >
-                              <Target className="w-3.5 h-3.5 flex-shrink-0 text-amber-500" />
-                              <span className="flex-1 min-w-0">
-                                <span className="block font-medium">เป้าเก็บหนี้ {meta.snapshotMonth}</span>
-                                <span className={`text-[10px] ${modeColor}`}>{modeLabel}{debtOnlyLabel}{principalOnlyLabel}</span>
-                              </span>
-                              {isSelected && <Check className="w-3.5 h-3.5 flex-shrink-0 text-amber-600" />}
-                            </button>
-                          );
-                        })
+                        <div className="overflow-x-auto">
+                          {/* Table Header */}
+                          <div className="grid grid-cols-4 gap-0 bg-amber-50 border-b border-amber-200 text-[11px] font-semibold text-amber-800">
+                            <div className="px-3 py-2">เดือน-ปี</div>
+                            <div className="px-3 py-2 text-right">เป้าเก็บหนี้</div>
+                            <div className="px-3 py-2 text-right">ยอดเก็บหนี้</div>
+                            <div className="px-3 py-2 text-right">% เก็บหนี้</div>
+                          </div>
+                          {/* Table Rows */}
+                          {(monthlyDebtSummaryQuery.data as any[]).map((row: any) => {
+                            // เป้าเก็บหนี้: ดึงจาก monthly_target_detail_snapshot (freeze ณ วันที่ 1)
+                            // ยอดเก็บหนี้: collectedAmount จาก debt_collected_cache (ค่างวดเท่านั้น ไม่รวมขายเครื่อง)
+                            const targetAmt = row.targetAmount ?? 0;
+                            const collectedAmt = Math.max(row.collectedAmount ?? 0, 0);
+                            const pct = targetAmt > 0 ? (collectedAmt / targetAmt) * 100 : 0;
+                            const pctColor = pct >= 100 ? "text-emerald-600 font-bold" : pct >= 80 ? "text-yellow-600 font-semibold" : "text-red-600 font-semibold";
+                            // แปลง YYYY-MM → มิ.ย. 2026 (ใช้ snapshotMonth จาก getMonthlyDebtSummary)
+                            const monthStr = String(row.snapshotMonth ?? "");
+                            const [yr, mo] = monthStr.split("-").map(Number);
+                            const THAI_MONTHS_SHORT = ["ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."];
+                            const monthLabel = mo >= 1 && mo <= 12 ? `${THAI_MONTHS_SHORT[mo - 1]} ${yr}` : monthStr;
+                            return (
+                              <div
+                                key={monthStr}
+                                className="grid grid-cols-4 gap-0 border-b border-gray-50 hover:bg-amber-50 text-sm transition-colors"
+                              >
+                                <div className="px-3 py-2.5 font-medium text-gray-800 text-[13px]">{monthLabel}</div>
+                                <div className="px-3 py-2.5 text-right text-gray-700 tabular-nums text-[13px]">
+                                  {targetAmt > 0 ? targetAmt.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : <span className="text-gray-300">—</span>}
+                                </div>
+                                <div className="px-3 py-2.5 text-right text-gray-700 tabular-nums text-[13px]">
+                                  {collectedAmt > 0 ? collectedAmt.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : <span className="text-gray-300">—</span>}
+                                </div>
+                                <div className={`px-3 py-2.5 text-right tabular-nums text-[13px] ${pctColor}`}>
+                                  {targetAmt > 0 ? `${pct.toFixed(1)}%` : <span className="text-gray-300">—</span>}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
                       )}
                     </div>
                   )}

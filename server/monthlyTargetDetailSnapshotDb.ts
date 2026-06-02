@@ -1044,31 +1044,41 @@ export async function getMonthlyDebtSummary(
   const db = await getDb(section);
   if (!db) return [];
 
-  // Query: JOIN monthly_target_detail_snapshot + monthly_collection_snapshot
-  // net_amount = GREATEST(total_amount - paid_amount, 0) (ยอดหนี้คงเหลือ ไม่ติดลบ)
+  // Query:
+  // 1. เป้าเก็บหนี้: SUM(GREATEST(total_amount - paid_amount, 0)) จาก monthly_target_detail_snapshot
+  //    กรอง due_date ตรงกับ snapshot_month (ตั้งหนี้เดือนนั้น)
+  // 2. ยอดเก็บหนี้: SUM(total_amount) จาก debt_collected_cache
+  //    กรอง paid_at ตรงกับ snapshot_month + ไม่ใช่ is_bad_debt_row
+  //    ไม่รวมขายเครื่อง (กรอง payment_type != 'ขายเครื่อง' ถ้ามี column นั้น)
   const result = await db.execute(sql.raw(`
     SELECT
       t.snapshot_month,
       SUM(GREATEST(COALESCE(t.total_amount, 0) - COALESCE(t.paid_amount, 0), 0)) AS target_amount,
       MAX(t.populated_at::text)                                                    AS populated_at,
       COUNT(*)                                                                     AS row_count,
-      COALESCE(c.collected_amount, 0)                                              AS collected_amount,
-      COALESCE(c.collected_sale, 0)                                                AS collected_sale
+      COALESCE(c.collected_amount, 0)                                              AS collected_amount
     FROM monthly_target_detail_snapshot t
-    LEFT JOIN monthly_collection_snapshot c
-      ON c.section = t.section
-     AND c.collection_month = t.snapshot_month
+    LEFT JOIN (
+      SELECT
+        TO_CHAR(paid_at, 'YYYY-MM') AS paid_month,
+        SUM(total_amount::numeric)  AS collected_amount
+      FROM debt_collected_cache
+      WHERE section = '${section}'
+        AND paid_at IS NOT NULL
+        AND is_bad_debt_row IS NOT TRUE
+      GROUP BY TO_CHAR(paid_at, 'YYYY-MM')
+    ) c ON c.paid_month = t.snapshot_month
     WHERE t.section = '${section}'
-    GROUP BY t.snapshot_month, c.collected_amount, c.collected_sale
+      AND TO_CHAR(t.due_date::date, 'YYYY-MM') = t.snapshot_month
+    GROUP BY t.snapshot_month, c.collected_amount
     ORDER BY t.snapshot_month DESC
   `));
 
   const rows = pgRows(result);
   return rows.map((r: any) => {
     const targetAmount = n(r.target_amount);
-    // ยอดเก็บหนี้ค่างวด = collected_amount - collected_sale (ไม่รวมขายเครื่อง)
-    const collectedRaw = n(r.collected_amount) - n(r.collected_sale);
-    const collectedAmount = Math.max(collectedRaw, 0);
+    // ยอดเก็บหนี้ค่างวด = collected_amount จาก debt_collected_cache (ไม่รวมขายเครื่อง เพราะกรองที่ query แล้ว)
+    const collectedAmount = Math.max(n(r.collected_amount), 0);
     const percentage = targetAmount > 0 ? (collectedAmount / targetAmount) * 100 : 0;
     return {
       snapshotMonth: String(r.snapshot_month ?? ""),

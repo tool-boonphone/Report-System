@@ -436,38 +436,52 @@ export async function getMonthlyCollectionSnapshots(
   const db = await getDb(section);
   if (!db) return [];
 
+  // JOIN monthly_target_detail_snapshot เพื่อดึง target_amount ที่ freeze ณ วันที่ 1 ของเดือน
+  // (GREATEST(total_amount - paid_amount, 0) = ยอดหนี้คงเหลือ ณ วันที่ 1 เดือนนั้น)
   const result = await db.execute(sql`
     SELECT
-      collection_month,
-      target_amount,
-      target_contract_count,
-      target_principal,
-      target_interest,
-      target_fee,
-      target_penalty,
-      target_unlock_fee,
-      collected_amount,
-      collected_contract_count,
-      collected_principal,
-      collected_interest,
-      collected_fee,
-      collected_penalty,
-      collected_unlock_fee,
-      collected_discount,
-      collected_overpaid,
-      collected_bad_debt,
-      install_total,
-      COALESCE(financed_total, 0)  AS financed_total,
-      COALESCE(overdue_total, 0)   AS overdue_total,
-      COALESCE(collected_sale, 0)  AS collected_sale,
-      collected_is_frozen,
-      target_frozen_at,
-      collected_frozen_at,
-      updated_at
-    FROM monthly_collection_snapshot
-    WHERE section = ${section}
-      AND collection_month >= '2026-06'
-    ORDER BY collection_month DESC
+      c.collection_month,
+      -- เป้าเก็บหนี้: ใช้จาก monthly_target_detail_snapshot (freeze ณ วันที่ 1) ถ้ามี, ไม่งั้นใช้ live target_amount
+      COALESCE(t.snapshot_target_amount, c.target_amount) AS target_amount,
+      c.target_contract_count,
+      c.target_principal,
+      c.target_interest,
+      c.target_fee,
+      c.target_penalty,
+      c.target_unlock_fee,
+      c.collected_amount,
+      c.collected_contract_count,
+      c.collected_principal,
+      c.collected_interest,
+      c.collected_fee,
+      c.collected_penalty,
+      c.collected_unlock_fee,
+      c.collected_discount,
+      c.collected_overpaid,
+      c.collected_bad_debt,
+      c.install_total,
+      COALESCE(c.financed_total, 0)  AS financed_total,
+      COALESCE(c.overdue_total, 0)   AS overdue_total,
+      COALESCE(c.collected_sale, 0)  AS collected_sale,
+      c.collected_is_frozen,
+      c.target_frozen_at,
+      c.collected_frozen_at,
+      c.updated_at
+    FROM monthly_collection_snapshot c
+    LEFT JOIN (
+      SELECT
+        section,
+        snapshot_month,
+        -- กรองเฉพาะ due_date ที่อยู่ในเดือนเดียวกับ snapshot_month (ตั้งหนี้เดือนนั้น)
+        SUM(GREATEST(COALESCE(total_amount, 0) - COALESCE(paid_amount, 0), 0)) AS snapshot_target_amount
+      FROM monthly_target_detail_snapshot
+      WHERE section = ${section}
+        AND TO_CHAR(due_date::date, 'YYYY-MM') = snapshot_month
+      GROUP BY section, snapshot_month
+    ) t ON t.section = c.section AND t.snapshot_month = c.collection_month
+    WHERE c.section = ${section}
+      AND c.collection_month >= '2026-06'
+    ORDER BY c.collection_month DESC
   `);
 
   const rows: any[] = pgRows(result);
