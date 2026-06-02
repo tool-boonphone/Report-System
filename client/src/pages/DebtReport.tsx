@@ -182,6 +182,8 @@ type InstallmentCell = {
   netAmount?: number;
   /** True when this period has been fully paid (principal reduced to 0). Used for green text styling. */
   isPaid?: boolean;
+  /** True when dueDate > cutoffDate (computed at snapshot time for WYSIWYS). */
+  isFuturePeriod?: boolean;
 };
 
 type PaymentCell = {
@@ -1778,6 +1780,12 @@ export default function DebtReport() {
   const [principalOnly, setPrincipalOnly] = useState(true);
   // สวิต "ตั้งหนี้" (target tab only): เมื่อเปิด ซ่อนแถวที่ชำระครบ/ล่วงหน้า/ระงับ/สิ้นสุด/หนี้เสีย/ยังไม่ถึงดิว
   const [debtSetMode, setDebtSetMode] = useState(false);
+  // cutoff mode สำหรับ debtSetMode: 'today' = ณ วันที่ปัจจุบัน, 'end_of_month' = ณ เดือนปัจจุบัน
+  const [debtSetCutoffMode, setDebtSetCutoffMode] = useState<"today" | "end_of_month">("today");
+  // Dialog เลือก cutoff mode ตอนกด toggle ตั้งหนี้
+  const [showDebtSetDialog, setShowDebtSetDialog] = useState(false);
+  // pending cutoff mode ที่เลือกใน Dialog (ก่อน confirm)
+  const [pendingDebtSetCutoffMode, setPendingDebtSetCutoffMode] = useState<"today" | "end_of_month">("today");
   // ── Target Tab Snapshot View ─────────────────────────────────────────────────
   // viewMode: "live" = ข้อมูล live จาก cache, "snapshot" = ข้อมูล snapshot ที่เลือก
   const [targetViewMode, setTargetViewMode] = useState<"live" | "snapshot">("live");
@@ -1808,42 +1816,17 @@ export default function DebtReport() {
     },
     { enabled: !!section && targetViewMode === "snapshot" && !!selectedSnapshotMonth, staleTime: 5 * 60 * 1000 },
   );
-  // ── Snapshot Dialog state ───────────────────────────────────────────────────
-  // showSnapshotDialog: เปิด/ปิด Dialog เลือก mode ก่อน Snapshot
-  const [showSnapshotDialog, setShowSnapshotDialog] = useState(false);
-  // snapshotDialogMode: mode ที่เลือกใน Dialog ('today' | 'end_of_month')
-  const [snapshotDialogMode, setSnapshotDialogMode] = useState<"today" | "end_of_month">("today");
-  // mutation สำหรับ Snapshot ปัจจุบัน
-  const createSnapshotMutation = trpc.debt.populateTargetDetailSnapshot.useMutation({
+  // ── Snapshot (WYSIWYS) ───────────────────────────────────────────────────────
+  // mutation สำหรับ WYSIWYS Snapshot — ส่ง filteredRows ที่แสดงอยู่บนหน้าจอไป save ลง DB โดยตรง
+  const createSnapshotMutation = trpc.debt.saveClientSnapshot.useMutation({
     onSuccess: (data) => {
       toast.success(`บันทึก Snapshot สำเร็จ — ${data.rowsInserted.toLocaleString("th-TH")} รายการ`);
       availableTargetSnapshotsQuery.refetch();
-      setShowSnapshotDialog(false);
     },
     onError: (err) => {
       toast.error(`บันทึก Snapshot ไม่สำเร็จ: ${err.message}`);
-      setShowSnapshotDialog(false);
     },
   });
-  // helper: เปิด Dialog เลือก mode ก่อน Snapshot
-  const handleCreateSnapshot = React.useCallback(() => {
-    if (!section) return;
-    setSnapshotDialogMode("today"); // reset to default
-    setShowSnapshotDialog(true);
-  }, [section]); // eslint-disable-line react-hooks/exhaustive-deps
-  // helper: ยืนยัน Snapshot พร้อม mode + filter metadata ณ เวลานั้น
-  const handleConfirmSnapshot = React.useCallback((mode: "today" | "end_of_month") => {
-    if (!section) return;
-    const now = new Date();
-    const snapshotMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-    createSnapshotMutation.mutate({
-      section: sectionKey,
-      snapshotMonth,
-      snapshotMode: mode,
-      filterDebtOnly: debtSetMode,     // freeze toggle ตั้งหนี้ ณ เวลานี้
-      filterPrincipalOnly: principalOnly, // freeze toggle เฉพาะเงินต้น ณ เวลานี้
-    });
-  }, [section, sectionKey, createSnapshotMutation, debtSetMode, principalOnly]); // eslint-disable-line react-hooks/exhaustive-deps
   // helper: เลือก snapshot จาก Log
   const handleSelectSnapshot = React.useCallback((month: string) => {
     setSelectedSnapshotMonth(month);
@@ -2282,11 +2265,12 @@ export default function DebtReport() {
       }
       // 7. ตั้งหนี้ (target tab only) — ซ่อน row ที่ทุก installment เป็น paid/closed/suspended/future
       if (tab === "target" && debtSetMode) {
-        // Snapshot mode: ใช้ cutoffDate ของ snapshot เป็น cutoff สำหรับ isFuturePeriod
-        // Live mode: ใช้วันนี้
-        const cutoffStr = (targetViewMode === "snapshot" && (selectedSnapshotMeta as any)?.cutoffDate)
-          ? String((selectedSnapshotMeta as any).cutoffDate).slice(0, 10)
-          : new Date().toISOString().slice(0, 10);
+        // ใช้ debtSetCutoffMode ที่เลือกตอนกด toggle ตั้งหนี้
+        // today = วันนี้, end_of_month = วันสุดท้ายของเดือน
+        const _now = new Date();
+        const cutoffStr = debtSetCutoffMode === "end_of_month"
+          ? (() => { const d = new Date(_now.getFullYear(), _now.getMonth() + 1, 0); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; })()
+          : _now.toISOString().slice(0, 10);
         // Row ผ่านถ้ามี installment อย่างน้อย 1 งวดที่ต้องเก็บ (ส้มหรือดำ)
         // = ไม่ใช่ closed, ไม่ใช่ suspended, ไม่ใช่ paid, ไม่ใช่ future (dueDate > cutoff)
         // และ contract status ไม่ใช่ ระงับสัญญา / สิ้นสุดสัญญา / หนี้เสีย
@@ -2308,7 +2292,65 @@ export default function DebtReport() {
         (r.phone ?? "").toLowerCase().includes(q)
       );
     });
-  }, [activeRows, search, statusFilter, approveDateFilter, dueDateFilter, productTypeFilter, dueDateExact, tab, updatedByFilter, debtSetMode, targetViewMode, selectedSnapshotMeta]);
+  }, [activeRows, search, statusFilter, approveDateFilter, dueDateFilter, productTypeFilter, dueDateExact, tab, updatedByFilter, debtSetMode, debtSetCutoffMode, targetViewMode, selectedSnapshotMeta]);
+
+  // helper: กด Snapshot → ส่ง filteredRows ที่แสดงอยู่บนหน้าจอไป save ลง DB โดยตรง (WYSIWYS)
+  const handleCreateSnapshot = React.useCallback(() => {
+    if (!section) return;
+    const now = new Date();
+    const snapshotMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    // cutoffDate: ใช้ debtSetCutoffMode ที่เลือกไว้ตอนกด toggle ตั้งหนี้
+    // today = วันนี้, end_of_month = วันสุดท้ายของเดือน
+    const mode = debtSetCutoffMode;
+    let cutoffDate: string;
+    if (mode === "end_of_month") {
+      const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      cutoffDate = `${lastDay.getFullYear()}-${String(lastDay.getMonth() + 1).padStart(2, "0")}-${String(lastDay.getDate()).padStart(2, "0")}`;
+    } else {
+      cutoffDate = now.toISOString().slice(0, 10);
+    }
+    // ส่ง filteredRows ที่แสดงอยู่บนหน้าจอ (WYSIWYS)
+    const rowsToSave = (filteredRows as TargetRow[]).map((r) => ({
+      contractExternalId: r.contractExternalId,
+      contractNo: r.contractNo ?? null,
+      customerName: r.customerName ?? null,
+      phone: r.phone ?? null,
+      approveDate: r.approveDate ?? null,
+      productType: r.productType ?? null,
+      installmentCount: r.installmentCount ?? null,
+      installmentAmount: r.installmentAmount ?? null,
+      debtStatus: r.debtStatus,
+      installments: r.installments.map((inst) => ({
+        period: inst.period ?? null,
+        dueDate: inst.dueDate ?? null,
+        principal: inst.principal ?? 0,
+        interest: inst.interest ?? 0,
+        fee: inst.fee ?? 0,
+        penalty: inst.penalty ?? 0,
+        unlockFee: inst.unlockFee ?? 0,
+        amount: inst.amount ?? 0,
+        paid: inst.paid ?? 0,
+        baselineAmount: inst.baselineAmount ?? 0,
+        isClosed: !!inst.isClosed,
+        isSuspended: !!inst.isSuspended,
+        isCurrentPeriod: !!inst.isCurrentPeriod,
+        isFuturePeriod: !!inst.isFuturePeriod,
+        isArrears: !!inst.isArrears,
+        isPaid: !!inst.isPaid,
+        netAmount: inst.netAmount ?? 0,
+      })),
+    }));
+    createSnapshotMutation.mutate({
+      section: sectionKey,
+      snapshotMonth,
+      snapshotMode: mode,
+      cutoffDate,
+      filterDebtOnly: debtSetMode,
+      filterPrincipalOnly: principalOnly,
+      rows: rowsToSave,
+    });
+  }, [section, sectionKey, debtSetCutoffMode, filteredRows, debtSetMode, principalOnly, createSnapshotMutation]); // eslint-disable-line react-hooks/exhaustive-deps
+
 
   /* ---- Max periods for the repeating group block ---- */
   // Phase 125: ใช้ filteredRows ทั้งหมดแทน pagedRows (ไม่มี pagination แล้ว)
@@ -2362,11 +2404,14 @@ export default function DebtReport() {
   /* ---- Summary totals (computed from filteredRows, respects all filters) ---- */
   const targetSummary = useMemo(() => {
     if (tab !== "target") return null;
-    // Snapshot mode: ใช้ cutoffDate ของ snapshot เป็น cutoff สำหรับ isFuturePeriod
-    // Live mode: ใช้วันนี้
-    const cutoffStr = (targetViewMode === "snapshot" && (selectedSnapshotMeta as any)?.cutoffDate)
+    // ใช้ debtSetCutoffMode ที่เลือกตอนกด toggle ตั้งหนี้ (Live mode)
+    // Snapshot mode: ใช้ cutoffDate ของ snapshot
+    const _now2 = new Date();
+    const cutoffStr = targetViewMode === "snapshot" && (selectedSnapshotMeta as any)?.cutoffDate
       ? String((selectedSnapshotMeta as any).cutoffDate).slice(0, 10)
-      : new Date().toISOString().slice(0, 10);
+      : debtSetCutoffMode === "end_of_month"
+        ? (() => { const d = new Date(_now2.getFullYear(), _now2.getMonth() + 1, 0); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; })()
+        : _now2.toISOString().slice(0, 10);
     let principal = 0, interest = 0, fee = 0, penalty = 0, unlockFee = 0, total = 0;
     for (const r of filteredRows) {
       // Phase 125 fix: penalty/unlockFee ใช้เฉพาะ currentPeriod ของแต่ละสัญญา (ค่าปรับถูก accumulate ไว้ที่งวดนั้นแล้ว)
@@ -2405,7 +2450,7 @@ export default function DebtReport() {
     }
     total = principal + interest + fee + penalty + unlockFee;
     return { principal, interest, fee, penalty, unlockFee, total };
-  }, [filteredRows, tab, principalOnly, dueDateFilter, dueDateExact, debtSetMode, targetViewMode, selectedSnapshotMeta]);
+  }, [filteredRows, tab, principalOnly, dueDateFilter, dueDateExact, debtSetMode, debtSetCutoffMode, targetViewMode, selectedSnapshotMeta]);
 
   const collectedSummary = useMemo(() => {
     if (tab !== "collected") return null;
@@ -2896,7 +2941,7 @@ export default function DebtReport() {
                   </label>
                 </div>
               )}
-              {/* ตั้งหนี้ (target tab only) — ซ่อนแถวที่ไม่ต้องเก็บ */}
+              {/* ตั้งหนี้ (target tab only) — เมื่อเปิด ขึ้น Dialog เลือก cutoff mode */}
               {tab === "target" && (
                 <div
                   className={`flex items-center gap-2 border rounded-md px-3 py-1.5 cursor-pointer select-none transition-colors ${
@@ -2904,19 +2949,45 @@ export default function DebtReport() {
                       ? "bg-orange-50 border-orange-300"
                       : "bg-white border-gray-200"
                   }`}
-                  onClick={() => setDebtSetMode((v) => !v)}
+                  onClick={() => {
+                    if (debtSetMode) {
+                      // ปิด toggle โดยตรง
+                      setDebtSetMode(false);
+                    } else {
+                      // เปิด Dialog เลือก cutoff mode
+                      setPendingDebtSetCutoffMode(debtSetCutoffMode);
+                      setShowDebtSetDialog(true);
+                    }
+                  }}
                   title="เปิด: แสดงเฉพาะยอดค้างชำระและยอดที่ยังไม่ได้ชำระถึงงวดปัจจุบัน (ส้ม+ดำ)"
                 >
                   <Switch
                     id="debt-set-mode"
                     checked={debtSetMode}
-                    onCheckedChange={setDebtSetMode}
+                    onCheckedChange={(v) => {
+                      if (v) {
+                        // เปิด Dialog เลือก cutoff mode
+                        setPendingDebtSetCutoffMode(debtSetCutoffMode);
+                        setShowDebtSetDialog(true);
+                      } else {
+                        setDebtSetMode(false);
+                      }
+                    }}
                     onClick={(e) => e.stopPropagation()}
                   />
                   <label htmlFor="debt-set-mode" className={`text-xs cursor-pointer whitespace-nowrap ${
                     debtSetMode ? "text-orange-700 font-medium" : "text-gray-600"
                   }`}>
                     ตั้งหนี้
+                    {debtSetMode && (
+                      <span className={`ml-1 text-[10px] px-1 py-0.5 rounded ${
+                        debtSetCutoffMode === "end_of_month"
+                          ? "bg-blue-100 text-blue-700"
+                          : "bg-violet-100 text-violet-700"
+                      }`}>
+                        {debtSetCutoffMode === "end_of_month" ? "เดือนนี้" : "วันนี้"}
+                      </span>
+                    )}
                   </label>
                 </div>
               )}
@@ -3729,10 +3800,13 @@ export default function DebtReport() {
                           // Grey-out applies to both closed AND suspended cells.
                           const dimmed = closed || suspended;
                           // Phase 93: pre-compute isFuturePeriod+isPaid before cell value block
-                          // Snapshot mode: ใช้ cutoffDate ของ snapshot | Live mode: ใช้วันนี้
-                          const _cutoffStrPre = (targetViewMode === "snapshot" && (selectedSnapshotMeta as any)?.cutoffDate)
+                          // Snapshot mode: ใช้ cutoffDate ของ snapshot | Live mode: ใช้ debtSetCutoffMode
+                          const _nowPre = new Date();
+                          const _cutoffStrPre = targetViewMode === "snapshot" && (selectedSnapshotMeta as any)?.cutoffDate
                             ? String((selectedSnapshotMeta as any).cutoffDate).slice(0, 10)
-                            : new Date().toISOString().slice(0, 10);
+                            : debtSetCutoffMode === "end_of_month"
+                              ? (() => { const d = new Date(_nowPre.getFullYear(), _nowPre.getMonth() + 1, 0); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; })()
+                              : _nowPre.toISOString().slice(0, 10);
                           const _isFuturePeriodPre = !dimmed && !!inst?.dueDate && inst.dueDate > _cutoffStrPre;
                           const _isPaidPre = !dimmed && !!inst?.isPaid;
                           // Phase 23: cell-level masking for dueDateFilter and dueDateExact
@@ -3838,10 +3912,13 @@ export default function DebtReport() {
                             const isCurrentPeriod = !dimmed && !isSpecialContractStatus && !!inst?.isCurrentPeriod;
                             // Phase 9AI: future period = dueDate > today (not closed/suspended)
                             const todayStr = new Date().toISOString().slice(0, 10);
-                            // Snapshot mode: ใช้ cutoffDate ของ snapshot | Live mode: ใช้วันนี้
-                            const _cutoffStrCell = (targetViewMode === "snapshot" && (selectedSnapshotMeta as any)?.cutoffDate)
+                            // Snapshot mode: ใช้ cutoffDate ของ snapshot | Live mode: ใช้ debtSetCutoffMode
+                            const _nowCell = new Date();
+                            const _cutoffStrCell = targetViewMode === "snapshot" && (selectedSnapshotMeta as any)?.cutoffDate
                               ? String((selectedSnapshotMeta as any).cutoffDate).slice(0, 10)
-                              : new Date().toISOString().slice(0, 10);
+                              : debtSetCutoffMode === "end_of_month"
+                                ? (() => { const d = new Date(_nowCell.getFullYear(), _nowCell.getMonth() + 1, 0); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; })()
+                                : _nowCell.toISOString().slice(0, 10);
                             const isFuturePeriod = !dimmed && !isArrears && !isCurrentPeriod &&
                               !!inst?.dueDate && inst.dueDate > _cutoffStrCell;
                             // Phase 85: isPaid = ชำระครบแล้ว (ใช้ backend isPaid flag)
@@ -3964,32 +4041,32 @@ export default function DebtReport() {
         {/* Phase 125: Pagination removed — ใช้ Virtual Scroll กับ filteredRows ทั้งหมด */}
       </div>
 
-      {/* ── Snapshot Mode Dialog ────────────────────────────────────────────── */}
-      <Dialog open={showSnapshotDialog} onOpenChange={setShowSnapshotDialog}>
+      {/* ── DebtSet Cutoff Mode Dialog — ขึ้นตอนกด Toggle ตั้งหนี้ ────────────────────────────── */}
+      <Dialog open={showDebtSetDialog} onOpenChange={setShowDebtSetDialog}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Camera className="w-4 h-4 text-violet-600" />
-              บันทึก Snapshot
+              <Target className="w-4 h-4 text-orange-600" />
+              ตั้งหนี้ — เลือกช่วงข้อมูล
             </DialogTitle>
           </DialogHeader>
           <div className="py-2 space-y-3">
-            <p className="text-sm text-gray-600">เลือกช่วงข้อมูลที่ต้องการ Freeze:</p>
+            <p className="text-sm text-gray-600">เลือกช่วงข้อมูลที่ต้องการแสดง:</p>
             <div className="space-y-2">
               <button
                 type="button"
                 className={`w-full text-left px-4 py-3 rounded-lg border-2 transition-colors ${
-                  snapshotDialogMode === "today"
+                  pendingDebtSetCutoffMode === "today"
                     ? "border-violet-500 bg-violet-50"
                     : "border-gray-200 hover:border-violet-300 hover:bg-violet-50/50"
                 }`}
-                onClick={() => setSnapshotDialogMode("today")}
+                onClick={() => setPendingDebtSetCutoffMode("today")}
               >
                 <div className="flex items-center gap-2">
                   <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
-                    snapshotDialogMode === "today" ? "border-violet-500 bg-violet-500" : "border-gray-400"
+                    pendingDebtSetCutoffMode === "today" ? "border-violet-500 bg-violet-500" : "border-gray-400"
                   }`}>
-                    {snapshotDialogMode === "today" && <div className="w-1.5 h-1.5 bg-white rounded-full" />}
+                    {pendingDebtSetCutoffMode === "today" && <div className="w-1.5 h-1.5 bg-white rounded-full" />}
                   </div>
                   <div>
                     <div className="text-sm font-medium text-gray-800">ณ วันที่ปัจจุบัน</div>
@@ -4000,17 +4077,17 @@ export default function DebtReport() {
               <button
                 type="button"
                 className={`w-full text-left px-4 py-3 rounded-lg border-2 transition-colors ${
-                  snapshotDialogMode === "end_of_month"
+                  pendingDebtSetCutoffMode === "end_of_month"
                     ? "border-blue-500 bg-blue-50"
                     : "border-gray-200 hover:border-blue-300 hover:bg-blue-50/50"
                 }`}
-                onClick={() => setSnapshotDialogMode("end_of_month")}
+                onClick={() => setPendingDebtSetCutoffMode("end_of_month")}
               >
                 <div className="flex items-center gap-2">
                   <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
-                    snapshotDialogMode === "end_of_month" ? "border-blue-500 bg-blue-500" : "border-gray-400"
+                    pendingDebtSetCutoffMode === "end_of_month" ? "border-blue-500 bg-blue-500" : "border-gray-400"
                   }`}>
-                    {snapshotDialogMode === "end_of_month" && <div className="w-1.5 h-1.5 bg-white rounded-full" />}
+                    {pendingDebtSetCutoffMode === "end_of_month" && <div className="w-1.5 h-1.5 bg-white rounded-full" />}
                   </div>
                   <div>
                     <div className="text-sm font-medium text-gray-800">ณ เดือนปัจจุบัน</div>
@@ -4019,41 +4096,28 @@ export default function DebtReport() {
                 </div>
               </button>
             </div>
-            {/* แสดง filter ที่จะ freeze */}
-            <div className="bg-gray-50 rounded-lg px-4 py-3 text-xs text-gray-600 space-y-1">
-              <div className="font-medium text-gray-700 mb-1">Filter ที่จะ Freeze ไว้:</div>
-              <div className="flex items-center gap-1.5">
-                <span className={`w-2 h-2 rounded-full ${debtSetMode ? "bg-orange-400" : "bg-gray-300"}`} />
-                <span>Toggle ตั้งหนี้: <span className="font-medium">{debtSetMode ? "เปิด" : "ปิด"}</span></span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className={`w-2 h-2 rounded-full ${principalOnly ? "bg-violet-400" : "bg-gray-300"}`} />
-                <span>เฉพาะเงินต้น: <span className="font-medium">{principalOnly ? "เปิด" : "ปิด"}</span></span>
-              </div>
-            </div>
             <div className="flex gap-2 pt-1">
               <Button
                 variant="outline"
                 className="flex-1"
-                onClick={() => setShowSnapshotDialog(false)}
-                disabled={createSnapshotMutation.isPending}
+                onClick={() => setShowDebtSetDialog(false)}
               >
                 ยกเลิก
               </Button>
               <Button
                 className={`flex-1 text-white ${
-                  snapshotDialogMode === "end_of_month"
+                  pendingDebtSetCutoffMode === "end_of_month"
                     ? "bg-blue-600 hover:bg-blue-700"
-                    : "bg-violet-600 hover:bg-violet-700"
+                    : "bg-orange-500 hover:bg-orange-600"
                 }`}
-                onClick={() => handleConfirmSnapshot(snapshotDialogMode)}
-                disabled={createSnapshotMutation.isPending}
+                onClick={() => {
+                  setDebtSetCutoffMode(pendingDebtSetCutoffMode);
+                  setDebtSetMode(true);
+                  setShowDebtSetDialog(false);
+                }}
               >
-                {createSnapshotMutation.isPending ? (
-                  <><RefreshCw className="w-3.5 h-3.5 mr-1.5 animate-spin" />กำลังบันทึก...</>
-                ) : (
-                  <><Camera className="w-3.5 h-3.5 mr-1.5" />บันทึก Snapshot</>
-                )}
+                <Target className="w-3.5 h-3.5 mr-1.5" />
+                ตั้งหนี้
               </Button>
             </div>
           </div>

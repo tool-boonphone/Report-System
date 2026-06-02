@@ -637,3 +637,155 @@ export async function getContractInstallmentsBySnapshot(params: {
     populatedAt: String(row.populated_at ?? ""),
   }));
 }
+
+// ─── WYSIWYS Snapshot (What You See Is What You Save) ─────────────────────────
+/**
+ * Payload shape สำหรับ 1 สัญญา ที่ client ส่งมาจาก filteredRows
+ * (ตรงกับ TargetRow ใน DebtReport.tsx)
+ */
+export interface ClientSnapshotContractRow {
+  contractExternalId: string;
+  contractNo: string | null;
+  customerName: string | null;
+  phone: string | null;
+  approveDate: string | null;
+  productType: string | null;
+  installmentCount: number | null;
+  installmentAmount: number | null;
+  debtStatus: string;
+  installments: Array<{
+    period: number | null;
+    dueDate: string | null;
+    principal: number;
+    interest: number;
+    fee: number;
+    penalty: number;
+    unlockFee: number;
+    amount: number;
+    paid: number;
+    baselineAmount: number;
+    isClosed: boolean;
+    isSuspended: boolean;
+    isCurrentPeriod: boolean;
+    isFuturePeriod: boolean;
+    isArrears: boolean;
+    isPaid: boolean;
+    netAmount?: number;
+  }>;
+}
+
+/**
+ * บันทึก Snapshot จาก rows ที่ client ส่งมา (WYSIWYS — What You See Is What You Save)
+ *
+ * แทนที่จะ query DB ใหม่ฝั่ง server, ใช้ข้อมูลที่แสดงอยู่บนหน้าจอโดยตรง
+ * → ข้อมูลที่บันทึกตรงกับที่เห็น 100%
+ *
+ * @param section       - section key
+ * @param snapshotMonth - YYYY-MM
+ * @param snapshotMode  - 'today' | 'end_of_month'
+ * @param cutoffDate    - YYYY-MM-DD (cutoff ที่ client ใช้กรอง)
+ * @param filterDebtOnly       - toggle ตั้งหนี้เปิดอยู่ไหม (metadata)
+ * @param filterPrincipalOnly  - toggle เฉพาะเงินต้นเปิดอยู่ไหม (metadata)
+ * @param rows          - filteredRows จาก client (ทุก row ที่แสดงอยู่บนหน้าจอ)
+ * @returns จำนวน rows ที่ insert
+ */
+export async function saveClientSnapshot(
+  section: SectionKey,
+  snapshotMonth: string,
+  snapshotMode: "today" | "end_of_month",
+  cutoffDate: string,
+  filterDebtOnly: boolean,
+  filterPrincipalOnly: boolean,
+  rows: ClientSnapshotContractRow[],
+): Promise<number> {
+  const db = await getDb(section);
+  if (!db) return 0;
+
+  // ลบ snapshot เก่าของเดือนนี้ออกก่อน (overwrite)
+  const existingResult = await db.execute(sql.raw(`
+    SELECT COUNT(*) AS cnt
+    FROM monthly_target_detail_snapshot
+    WHERE section = '${section}'
+      AND snapshot_month = '${snapshotMonth}'
+  `));
+  const existingCnt = n(pgRows(existingResult)[0]?.cnt ?? 0);
+  if (existingCnt > 0) {
+    console.log(`[saveClientSnapshot] ${section}: ${snapshotMonth} has ${existingCnt} existing rows — deleting before re-insert`);
+    await db.execute(sql.raw(`
+      DELETE FROM monthly_target_detail_snapshot
+      WHERE section = '${section}'
+        AND snapshot_month = '${snapshotMonth}'
+    `));
+  }
+
+  // Flatten: 1 contract × N installments → N rows
+  const BATCH_SIZE = 200;
+  let totalInserted = 0;
+  let batch: string[] = [];
+
+  const escape = (v: string | null | undefined): string => {
+    if (v == null) return "NULL";
+    return `'${String(v).replace(/'/g, "''")}'`;
+  };
+  const num = (v: number | null | undefined): string => {
+    const n = Number(v ?? 0);
+    return isNaN(n) ? "0" : String(n);
+  };
+  const bool = (v: boolean | null | undefined): string => (v ? "TRUE" : "FALSE");
+
+  const flushBatch = async () => {
+    if (batch.length === 0) return;
+    const valuesSql = batch.join(",\n");
+    await db.execute(sql.raw(`
+      INSERT INTO monthly_target_detail_snapshot (
+        section, snapshot_month,
+        contract_external_id, contract_no, customer_name, phone,
+        approve_date, product_type, installment_count, baseline_amount,
+        period, due_date,
+        principal, interest, fee, penalty, unlock_fee,
+        total_amount, paid_amount,
+        contract_status, debt_range,
+        is_paid, is_arrears, is_bad_debt, is_closed, is_suspended,
+        is_current_period, is_future_period,
+        snapshot_mode, cutoff_date,
+        filter_debt_only, filter_principal_only,
+        populated_at
+      ) VALUES ${valuesSql}
+    `));
+    totalInserted += batch.length;
+    batch = [];
+  };
+
+  for (const contract of rows) {
+    const extId = contract.contractExternalId;
+    const contractStatus = contract.debtStatus; // debtStatus = computed status (ปกติ/เกิน X/ระงับ/etc.)
+    // debtRange = same as debtStatus (ใช้ debtStatus เป็น debt_range ใน snapshot)
+    const debtRange = contractStatus;
+
+    for (const inst of contract.installments ?? []) {
+      const isBadDebt = !!inst.isSuspended && contractStatus === "หนี้เสีย";
+      batch.push(`(
+        ${escape(section)}, ${escape(snapshotMonth)},
+        ${escape(extId)}, ${escape(contract.contractNo)}, ${escape(contract.customerName)}, ${escape(contract.phone)},
+        ${escape(contract.approveDate)}, ${escape(contract.productType)}, ${contract.installmentCount != null ? String(contract.installmentCount) : "NULL"}, ${num(inst.baselineAmount)},
+        ${inst.period != null ? String(inst.period) : "NULL"}, ${escape(inst.dueDate)},
+        ${num(inst.principal)}, ${num(inst.interest)}, ${num(inst.fee)}, ${num(inst.penalty)}, ${num(inst.unlockFee)},
+        ${num(inst.amount)}, ${num(inst.paid)},
+        ${escape(contractStatus)}, ${escape(debtRange)},
+        ${bool(inst.isPaid)}, ${bool(inst.isArrears)}, ${bool(isBadDebt)}, ${bool(inst.isClosed)}, ${bool(inst.isSuspended)},
+        ${bool(inst.isCurrentPeriod)}, ${bool(inst.isFuturePeriod)},
+        ${escape(snapshotMode)}, ${escape(cutoffDate)},
+        ${bool(filterDebtOnly)}, ${bool(filterPrincipalOnly)},
+        NOW()
+      )`);
+
+      if (batch.length >= BATCH_SIZE) {
+        await flushBatch();
+      }
+    }
+  }
+  await flushBatch();
+
+  console.log(`[saveClientSnapshot] ${section}: ${snapshotMonth} (${snapshotMode}, cutoff=${cutoffDate}) saved ${totalInserted} rows from client (WYSIWYS)`);
+  return totalInserted;
+}

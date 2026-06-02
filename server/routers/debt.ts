@@ -34,6 +34,7 @@ import {
   getTargetDetailSnapshot as getMonthlyTargetDetailSnapshot,
   getAvailableSnapshotMonths,
   getContractInstallmentsBySnapshot,
+  saveClientSnapshot,
 } from "../monthlyTargetDetailSnapshotDb";
 
 const debtViewProcedure = requirePermission("debt_report", "view");
@@ -223,6 +224,62 @@ export const debtRouter = router({
       }
       const count = await populateMonthlyCollectionSnapshot(input.section);
       return { success: true, hasCacheData: true, monthsUpdated: count };
+    }),
+
+  /**
+   * WYSIWYS Snapshot: รับ rows ที่แสดงอยู่บนหน้าจอจาก client แล้ว save ลง DB โดยตรง
+   * (What You See Is What You Save — ข้อมูลตรงกับที่เห็น 100%)
+   */
+  saveClientSnapshot: debtViewProcedure
+    .input(z.object({
+      section: SectionEnum,
+      snapshotMonth: z.string().regex(/^\d{4}-\d{2}$/, "must be YYYY-MM"),
+      snapshotMode: z.enum(["today", "end_of_month"]).default("today"),
+      cutoffDate: DateStr,
+      filterDebtOnly: z.boolean().default(false),
+      filterPrincipalOnly: z.boolean().default(true),
+      rows: z.array(z.object({
+        contractExternalId: z.string(),
+        contractNo: z.string().nullable(),
+        customerName: z.string().nullable(),
+        phone: z.string().nullable(),
+        approveDate: z.string().nullable(),
+        productType: z.string().nullable(),
+        installmentCount: z.number().nullable(),
+        installmentAmount: z.number().nullable(),
+        debtStatus: z.string(),
+        installments: z.array(z.object({
+          period: z.number().nullable(),
+          dueDate: z.string().nullable(),
+          principal: z.number(),
+          interest: z.number(),
+          fee: z.number(),
+          penalty: z.number(),
+          unlockFee: z.number(),
+          amount: z.number(),
+          paid: z.number(),
+          baselineAmount: z.number(),
+          isClosed: z.boolean(),
+          isSuspended: z.boolean(),
+          isCurrentPeriod: z.boolean(),
+          isFuturePeriod: z.boolean(),
+          isArrears: z.boolean(),
+          isPaid: z.boolean(),
+          netAmount: z.number().optional(),
+        })),
+      })),
+    }))
+    .mutation(async ({ input }) => {
+      const count = await saveClientSnapshot(
+        input.section,
+        input.snapshotMonth,
+        input.snapshotMode,
+        input.cutoffDate,
+        input.filterDebtOnly,
+        input.filterPrincipalOnly,
+        input.rows,
+      );
+      return { success: true, rowsInserted: count };
     }),
 
   /** ดึงงวดทั้งหมดของสัญญาหนึ่งจาก snapshot — ใช้สำหรับ Installment Detail Lightbox */
