@@ -2318,15 +2318,21 @@ export default function DebtReport() {
   const handleCreateSnapshot = React.useCallback(() => {
     if (!section) return;
     // ตรวจสอบว่า stream โหลดครบแล้วก่อน Snapshot
-    // ถ้ายังโหลดอยู่หรือโหลดไม่ครบ ให้แสดง warning และไม่ดำเนินการต่อ
-    if (streamLoading.target) {
+    // ใช้ cachedEntry (Global Cache) เป็น source of truth แทน local state
+    // เพราะ local state อาจ out-of-sync หลัง section เปลี่ยนหรือ cache hit
+    const cacheEntry = debtCache.getCache(section as any);
+    if (cacheEntry.loading.target) {
       toast.error("กำลังโหลดข้อมูลอยู่ กรุณารอให้โหลดครบก่อนกด Snapshot");
       return;
     }
-    const totalLoaded = streamData.target?.rows?.length ?? 0;
-    const totalExpected = streamTotal.target;
+    const totalLoaded = cacheEntry.target?.rows?.length ?? 0;
+    const totalExpected = cacheEntry.total.target;
     if (totalExpected > 0 && totalLoaded < totalExpected) {
       toast.error(`ข้อมูลโหลดไม่ครบ (${totalLoaded.toLocaleString("th-TH")} / ${totalExpected.toLocaleString("th-TH")} สัญญา) กรุณารอให้โหลดครบก่อนกด Snapshot`);
+      return;
+    }
+    if (totalLoaded === 0) {
+      toast.error("ไม่พบข้อมูล กรุณาโหลดข้อมูลก่อนกด Snapshot");
       return;
     }
     const now = new Date();
@@ -2341,9 +2347,10 @@ export default function DebtReport() {
     } else {
       cutoffDate = now.toISOString().slice(0, 10);
     }
-    // ส่ง streamData.target?.rows ทั้งหมด (ไม่กรอง) เพื่อให้ Snapshot ได้ข้อมูลครบทุกสัญญา
+    // ส่ง cacheEntry.target?.rows ทั้งหมด (ไม่กรอง) เพื่อให้ Snapshot ได้ข้อมูลครบทุกสัญญา
+    // ใช้ cachedEntry แทน streamData เพื่อให้ได้ข้อมูลที่ verified ครบแล้ว
     // filter state จะถูกบันทึกแยกใน filterState field เพื่อ auto-restore ตอนเปิดดู Snapshot
-    const allTargetRows = (streamData.target?.rows ?? []) as TargetRow[];
+    const allTargetRows = (cacheEntry.target?.rows ?? []) as TargetRow[];
     const rowsToSave = allTargetRows.map((r) => ({
       contractExternalId: r.contractExternalId,
       contractNo: r.contractNo ?? null,
