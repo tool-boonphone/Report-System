@@ -1789,32 +1789,62 @@ export default function DebtReport() {
     { enabled: !!section && tab === "target", staleTime: 30 * 1000 },
   );
   // query ข้อมูล snapshot สำหรับแสดงในตาราง (ไม่ใช่ Lightbox)
+  // snapshotMode ดึงจาก metadata ของ snapshot ที่เลือก (availableTargetSnapshotsQuery.data)
+  const selectedSnapshotMeta = React.useMemo(() => {
+    if (!selectedSnapshotMonth || !availableTargetSnapshotsQuery.data) return null;
+    return (availableTargetSnapshotsQuery.data as any[]).find(
+      (m: any) => m.snapshotMonth === selectedSnapshotMonth,
+    ) ?? null;
+  }, [selectedSnapshotMonth, availableTargetSnapshotsQuery.data]);
   const targetSnapshotViewQuery = trpc.debt.getTargetDetailSnapshot.useQuery(
     {
       section: sectionKey,
       snapshotMonth: selectedSnapshotMonth ?? "",
+      snapshotMode: (selectedSnapshotMeta as any)?.snapshotMode ?? "today",
       // ไม่ส่ง upToMonth เพื่อดึงข้อมูลทั้งหมดของ snapshot นั้น (ไม่กรองตาม due_date)
-      debtOnly: debtSetMode, // ใช้ debtSetMode เดิมในการกรอง
+      // debtOnly: ใช้ค่าจาก metadata ที่ freeze ไว้ตอน snapshot (ไม่ใช้ debtSetMode ปัจจุบัน)
+      debtOnly: (selectedSnapshotMeta as any)?.filterDebtOnly ?? false,
       offset: 0,
       limit: 10000, // ดึงทั้งหมดเพื่อแสดงในตาราง (max 10000)
     },
     { enabled: !!section && targetViewMode === "snapshot" && !!selectedSnapshotMonth, staleTime: 5 * 60 * 1000 },
   );
+  // ── Snapshot Dialog state ───────────────────────────────────────────────────
+  // showSnapshotDialog: เปิด/ปิด Dialog เลือก mode ก่อน Snapshot
+  const [showSnapshotDialog, setShowSnapshotDialog] = useState(false);
+  // snapshotDialogMode: mode ที่เลือกใน Dialog ('today' | 'end_of_month')
+  const [snapshotDialogMode, setSnapshotDialogMode] = useState<"today" | "end_of_month">("today");
   // mutation สำหรับ Snapshot ปัจจุบัน
   const createSnapshotMutation = trpc.debt.populateTargetDetailSnapshot.useMutation({
     onSuccess: (data) => {
       toast.success(`บันทึก Snapshot สำเร็จ — ${data.rowsInserted.toLocaleString("th-TH")} รายการ`);
       availableTargetSnapshotsQuery.refetch();
+      setShowSnapshotDialog(false);
     },
-    onError: (err) => toast.error(`บันทึก Snapshot ไม่สำเร็จ: ${err.message}`),
+    onError: (err) => {
+      toast.error(`บันทึก Snapshot ไม่สำเร็จ: ${err.message}`);
+      setShowSnapshotDialog(false);
+    },
   });
-  // helper: สร้าง snapshot เดือนปัจจุบัน
+  // helper: เปิด Dialog เลือก mode ก่อน Snapshot
   const handleCreateSnapshot = React.useCallback(() => {
+    if (!section) return;
+    setSnapshotDialogMode("today"); // reset to default
+    setShowSnapshotDialog(true);
+  }, [section]); // eslint-disable-line react-hooks/exhaustive-deps
+  // helper: ยืนยัน Snapshot พร้อม mode + filter metadata ณ เวลานั้น
+  const handleConfirmSnapshot = React.useCallback((mode: "today" | "end_of_month") => {
     if (!section) return;
     const now = new Date();
     const snapshotMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-    createSnapshotMutation.mutate({ section: sectionKey, snapshotMonth });
-  }, [section, sectionKey, createSnapshotMutation]); // eslint-disable-line react-hooks/exhaustive-deps
+    createSnapshotMutation.mutate({
+      section: sectionKey,
+      snapshotMonth,
+      snapshotMode: mode,
+      filterDebtOnly: debtSetMode,     // freeze toggle ตั้งหนี้ ณ เวลานี้
+      filterPrincipalOnly: principalOnly, // freeze toggle เฉพาะเงินต้น ณ เวลานี้
+    });
+  }, [section, sectionKey, createSnapshotMutation, debtSetMode, principalOnly]); // eslint-disable-line react-hooks/exhaustive-deps
   // helper: เลือก snapshot จาก Log
   const handleSelectSnapshot = React.useCallback((month: string) => {
     setSelectedSnapshotMonth(month);
@@ -2647,24 +2677,30 @@ export default function DebtReport() {
                       ) : (availableTargetSnapshotsQuery.data ?? []).length === 0 ? (
                         <div className="px-4 py-3 text-xs text-gray-400">ยังไม่มี Snapshot</div>
                       ) : (
-                        (availableTargetSnapshotsQuery.data ?? []).slice().reverse().map((month) => (
-                          <button
-                            key={month}
-                            type="button"
-                            className={`w-full text-left px-4 py-2.5 text-sm flex items-center gap-2 hover:bg-violet-50 ${
-                              targetViewMode === "snapshot" && selectedSnapshotMonth === month
-                                ? "bg-violet-50 text-violet-700 font-medium"
-                                : "text-gray-700"
-                            }`}
-                            onClick={() => handleSelectSnapshot(month)}
-                          >
-                            <Camera className="w-3.5 h-3.5 flex-shrink-0 text-violet-500" />
-                            <span>Snapshot {month}</span>
-                            {targetViewMode === "snapshot" && selectedSnapshotMonth === month && (
-                              <Check className="w-3.5 h-3.5 ml-auto text-violet-600" />
-                            )}
-                          </button>
-                        ))
+                        (availableTargetSnapshotsQuery.data as any[] ?? []).slice().map((meta: any) => {
+                          const isSelected = targetViewMode === "snapshot" && selectedSnapshotMonth === meta.snapshotMonth;
+                          const modeLabel = meta.snapshotMode === "end_of_month" ? "สิ้นเดือน" : "วันนี้";
+                          const modeColor = meta.snapshotMode === "end_of_month" ? "text-blue-600" : "text-violet-600";
+                          const debtOnlyLabel = meta.filterDebtOnly ? " · ตั้งหนี้" : "";
+                          const principalOnlyLabel = meta.filterPrincipalOnly ? " · เงินต้น" : "";
+                          return (
+                            <button
+                              key={`${meta.snapshotMonth}-${meta.snapshotMode}`}
+                              type="button"
+                              className={`w-full text-left px-4 py-2.5 text-sm flex items-center gap-2 hover:bg-violet-50 ${
+                                isSelected ? "bg-violet-50 text-violet-700 font-medium" : "text-gray-700"
+                              }`}
+                              onClick={() => handleSelectSnapshot(meta.snapshotMonth)}
+                            >
+                              <Camera className="w-3.5 h-3.5 flex-shrink-0 text-violet-500" />
+                              <span className="flex-1 min-w-0">
+                                <span className="block font-medium">Snapshot {meta.snapshotMonth}</span>
+                                <span className={`text-[10px] ${modeColor}`}>{modeLabel}{debtOnlyLabel}{principalOnlyLabel}</span>
+                              </span>
+                              {isSelected && <Check className="w-3.5 h-3.5 flex-shrink-0 text-violet-600" />}
+                            </button>
+                          );
+                        })
                       )}
                     </div>
                   )}
@@ -3830,6 +3866,102 @@ export default function DebtReport() {
         ))}
         {/* Phase 125: Pagination removed — ใช้ Virtual Scroll กับ filteredRows ทั้งหมด */}
       </div>
+
+      {/* ── Snapshot Mode Dialog ────────────────────────────────────────────── */}
+      <Dialog open={showSnapshotDialog} onOpenChange={setShowSnapshotDialog}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Camera className="w-4 h-4 text-violet-600" />
+              บันทึก Snapshot
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-2 space-y-3">
+            <p className="text-sm text-gray-600">เลือกช่วงข้อมูลที่ต้องการ Freeze:</p>
+            <div className="space-y-2">
+              <button
+                type="button"
+                className={`w-full text-left px-4 py-3 rounded-lg border-2 transition-colors ${
+                  snapshotDialogMode === "today"
+                    ? "border-violet-500 bg-violet-50"
+                    : "border-gray-200 hover:border-violet-300 hover:bg-violet-50/50"
+                }`}
+                onClick={() => setSnapshotDialogMode("today")}
+              >
+                <div className="flex items-center gap-2">
+                  <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
+                    snapshotDialogMode === "today" ? "border-violet-500 bg-violet-500" : "border-gray-400"
+                  }`}>
+                    {snapshotDialogMode === "today" && <div className="w-1.5 h-1.5 bg-white rounded-full" />}
+                  </div>
+                  <div>
+                    <div className="text-sm font-medium text-gray-800">ณ วันที่ปัจจุบัน</div>
+                    <div className="text-xs text-gray-500">นับงวดถึงวันนี้เท่านั้น (งวดที่ยังไม่ถึง due ถูกตัดออก)</div>
+                  </div>
+                </div>
+              </button>
+              <button
+                type="button"
+                className={`w-full text-left px-4 py-3 rounded-lg border-2 transition-colors ${
+                  snapshotDialogMode === "end_of_month"
+                    ? "border-blue-500 bg-blue-50"
+                    : "border-gray-200 hover:border-blue-300 hover:bg-blue-50/50"
+                }`}
+                onClick={() => setSnapshotDialogMode("end_of_month")}
+              >
+                <div className="flex items-center gap-2">
+                  <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
+                    snapshotDialogMode === "end_of_month" ? "border-blue-500 bg-blue-500" : "border-gray-400"
+                  }`}>
+                    {snapshotDialogMode === "end_of_month" && <div className="w-1.5 h-1.5 bg-white rounded-full" />}
+                  </div>
+                  <div>
+                    <div className="text-sm font-medium text-gray-800">ณ สิ้นเดือนปัจจุบัน</div>
+                    <div className="text-xs text-gray-500">นับงวดทั้งเดือน รวมที่ยังไม่ถึง due</div>
+                  </div>
+                </div>
+              </button>
+            </div>
+            {/* แสดง filter ที่จะ freeze */}
+            <div className="bg-gray-50 rounded-lg px-4 py-3 text-xs text-gray-600 space-y-1">
+              <div className="font-medium text-gray-700 mb-1">Filter ที่จะ Freeze ไว้:</div>
+              <div className="flex items-center gap-1.5">
+                <span className={`w-2 h-2 rounded-full ${debtSetMode ? "bg-orange-400" : "bg-gray-300"}`} />
+                <span>Toggle ตั้งหนี้: <span className="font-medium">{debtSetMode ? "เปิด" : "ปิด"}</span></span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className={`w-2 h-2 rounded-full ${principalOnly ? "bg-violet-400" : "bg-gray-300"}`} />
+                <span>เฉพาะเงินต้น: <span className="font-medium">{principalOnly ? "เปิด" : "ปิด"}</span></span>
+              </div>
+            </div>
+            <div className="flex gap-2 pt-1">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => setShowSnapshotDialog(false)}
+                disabled={createSnapshotMutation.isPending}
+              >
+                ยกเลิก
+              </Button>
+              <Button
+                className={`flex-1 text-white ${
+                  snapshotDialogMode === "end_of_month"
+                    ? "bg-blue-600 hover:bg-blue-700"
+                    : "bg-violet-600 hover:bg-violet-700"
+                }`}
+                onClick={() => handleConfirmSnapshot(snapshotDialogMode)}
+                disabled={createSnapshotMutation.isPending}
+              >
+                {createSnapshotMutation.isPending ? (
+                  <><RefreshCw className="w-3.5 h-3.5 mr-1.5 animate-spin" />กำลังบันทึก...</>
+                ) : (
+                  <><Camera className="w-3.5 h-3.5 mr-1.5" />บันทึก Snapshot</>
+                )}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Color Legend Dialog */}
       <Dialog open={showColorLegend} onOpenChange={setShowColorLegend}>

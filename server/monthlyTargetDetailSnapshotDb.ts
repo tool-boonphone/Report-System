@@ -2,15 +2,16 @@
  * monthlyTargetDetailSnapshotDb.ts
  *
  * Populate และ Query ข้อมูล monthly_target_detail_snapshot
- * — snapshot รายสัญญา ณ วันที่ 1 ของทุกเดือน (freeze ตลอด)
+ * — snapshot รายสัญญา ณ เวลาที่ผู้ใช้กด "Snapshot" (freeze ตลอด)
  *
- * Logic การ populate:
- *  - ดึงจาก debt_target_cache โดยใช้ debtSetMode filter:
- *    ตัดออก: is_closed, is_future_period, is_suspended, is_bad_debt
- *    เหลือ: งวดที่ถึงกำหนดชำระ (is_current_period) + ค้างชำระ (is_arrears)
- *  - snapshot_month = เดือนปัจจุบัน (YYYY-MM)
- *  - ถ้า snapshot_month นั้นมีข้อมูลอยู่แล้ว → ไม่ทำอะไร (freeze ตลอด ไม่ replace)
- *  - populate เฉพาะวันที่ 1 ของเดือน (ควบคุมโดย runner.ts)
+ * Logic การ populate (v2 — รองรับ cutoffDate + filter metadata):
+ *  - ดึงจาก debt_target_cache โดยใช้ snapshotMode เป็น cutoff:
+ *    'today'        → ตัด is_future_period (dueDate > วันนี้) ออก
+ *    'end_of_month' → ตัดเฉพาะ dueDate > สิ้นเดือนของ snapshotMonth ออก
+ *  - บันทึก filter metadata: filterDebtOnly, filterPrincipalOnly
+ *  - ถ้า snapshot_month + snapshot_mode นั้นมีข้อมูลอยู่แล้ว → ไม่ทำอะไร (freeze)
+ *  - populate อัตโนมัติทุกวันที่ 1 ของเดือน 06:00 น. (ควบคุมโดย runner.ts)
+ *    หรือ on-demand เมื่อผู้ใช้กดปุ่ม Snapshot
  */
 import { sql } from "drizzle-orm";
 import { getDb, pgRows } from "./db";
@@ -64,6 +65,11 @@ export interface TargetDetailSnapshotResult {
   total: number;
   snapshotMonth: string;
   populatedAt: string | null;
+  // metadata ของ snapshot นี้
+  snapshotMode: string | null;      // 'today' | 'end_of_month'
+  cutoffDate: string | null;        // YYYY-MM-DD
+  filterDebtOnly: boolean;          // toggle ตั้งหนี้ที่เปิดตอน snapshot
+  filterPrincipalOnly: boolean;     // toggle เฉพาะเงินต้นที่เปิดตอน snapshot
   // สรุปยอดรวมทั้งหมด (ไม่ขึ้นกับ pagination)
   sumPrincipal: number;
   sumInterest: number;
@@ -75,15 +81,59 @@ export interface TargetDetailSnapshotResult {
   sumNetAmount: number; // sumTotalAmount - sumPaidAmount (ยอดหนี้คงเหลือรวม)
 }
 
+/** Metadata ของ snapshot month หนึ่งๆ — ใช้ใน Log dropdown */
+export interface SnapshotMonthMeta {
+  snapshotMonth: string;       // YYYY-MM
+  snapshotMode: string;        // 'today' | 'end_of_month'
+  cutoffDate: string | null;   // YYYY-MM-DD
+  filterDebtOnly: boolean;
+  filterPrincipalOnly: boolean;
+  populatedAt: string | null;
+  rowCount: number;
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+/**
+ * คำนวณ cutoff date จาก snapshotMode + snapshotMonth
+ * - 'today'        → วันนี้ (Asia/Bangkok)
+ * - 'end_of_month' → วันสุดท้ายของ snapshotMonth
+ */
+function resolveCutoffDate(mode: string, snapshotMonth: string): string {
+  if (mode === "end_of_month") {
+    // สิ้นเดือน: YYYY-MM-DD ของวันสุดท้ายในเดือน
+    const [year, month] = snapshotMonth.split("-").map(Number);
+    const lastDay = new Date(year, month, 0); // วันที่ 0 ของเดือนถัดไป = วันสุดท้ายของเดือนนี้
+    const mm = String(lastDay.getMonth() + 1).padStart(2, "0");
+    const dd = String(lastDay.getDate()).padStart(2, "0");
+    return `${year}-${mm}-${dd}`;
+  }
+  // 'today' — ใช้วันนี้ (Asia/Bangkok)
+  const bangkokNow = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Bangkok",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+  return bangkokNow; // en-CA = YYYY-MM-DD
+}
+
 // ─── Populate ─────────────────────────────────────────────────────────────────
 /**
  * Populate monthly_target_detail_snapshot สำหรับ section + snapshotMonth ที่กำหนด
- * ถ้า snapshotMonth ไม่ระบุ จะใช้เดือนปัจจุบัน (Asia/Bangkok)
- * Returns: จำนวน rows ที่ insert
+ *
+ * @param section       - section key (Boonphone | Fastfone365)
+ * @param snapshotMonth - YYYY-MM, default = เดือนปัจจุบัน (Asia/Bangkok)
+ * @param snapshotMode  - 'today' | 'end_of_month' (default = 'today')
+ * @param filterDebtOnly       - บันทึกว่า toggle ตั้งหนี้เปิดอยู่ไหม (metadata เท่านั้น ไม่กรองตอน populate)
+ * @param filterPrincipalOnly  - บันทึกว่า toggle เฉพาะเงินต้นเปิดอยู่ไหม (metadata เท่านั้น)
+ * @returns จำนวน rows ที่ insert
  */
 export async function populateTargetDetailSnapshot(
   section: SectionKey,
-  snapshotMonth?: string, // YYYY-MM, default = เดือนปัจจุบัน
+  snapshotMonth?: string,
+  snapshotMode: "today" | "end_of_month" = "today",
+  filterDebtOnly = false,
+  filterPrincipalOnly = true,
 ): Promise<number> {
   const db = await getDb(section);
   if (!db) return 0;
@@ -95,28 +145,33 @@ export async function populateTargetDetailSnapshot(
       year: "numeric",
       month: "2-digit",
     }).format(new Date());
-    // en-CA format: "YYYY-MM" (เพราะ en-CA ใช้ ISO format)
     snapshotMonth = bangkokNow.slice(0, 7);
   }
 
-  // ตรวจสอบว่ามีข้อมูลเดือนนี้แล้วหรือไม่ (freeze strategy)
+  // คำนวณ cutoff date จาก mode
+  const cutoffDate = resolveCutoffDate(snapshotMode, snapshotMonth);
+
+  // ตรวจสอบว่ามีข้อมูลเดือนนี้ + mode นี้แล้วหรือไม่ (freeze strategy)
   // ถ้ามีแล้ว → ไม่ populate ซ้ำ (ข้อมูลถูก freeze ไว้ตลอด)
   const existingCountResult = await db.execute(sql.raw(`
     SELECT COUNT(*) AS cnt
     FROM monthly_target_detail_snapshot
     WHERE section = '${section}'
       AND snapshot_month = '${snapshotMonth}'
+      AND COALESCE(snapshot_mode, 'today') = '${snapshotMode}'
   `));
   const existingCountRows = pgRows(existingCountResult);
   const existingCnt = n(existingCountRows[0]?.cnt ?? 0);
   if (existingCnt > 0) {
-    console.log(`[targetDetailSnapshot] ${section}: ${snapshotMonth} already has ${existingCnt} rows — skipping (frozen)`);
+    console.log(`[targetDetailSnapshot] ${section}: ${snapshotMonth} (${snapshotMode}) already has ${existingCnt} rows — skipping (frozen)`);
     return existingCnt;
   }
 
   // Insert ใหม่จาก debt_target_cache
-  // debtSetMode filter: ตัด is_closed, is_future_period, is_suspended, is_bad_debt ออก
-  // เหลือเฉพาะ: งวดที่ถึงกำหนดชำระ + ค้างชำระ (is_arrears)
+  // cutoff filter: ตัดงวดที่ dueDate > cutoffDate ออก (is_future_period ตาม cutoff ที่เลือก)
+  // เสมอ: ตัด is_closed, is_suspended, is_bad_debt ออก
+  // หมายเหตุ: filterDebtOnly และ filterPrincipalOnly เป็นแค่ metadata — ไม่กรองตอน populate
+  //           เพื่อให้ snapshot เก็บข้อมูลครบ แล้วค่อย apply filter ตอน query
   const insertResult = await db.execute(sql.raw(`
     INSERT INTO monthly_target_detail_snapshot (
       section,
@@ -151,6 +206,10 @@ export async function populateTargetDetailSnapshot(
       is_suspended,
       is_current_period,
       is_future_period,
+      snapshot_mode,
+      cutoff_date,
+      filter_debt_only,
+      filter_principal_only,
       populated_at
     )
     SELECT
@@ -186,13 +245,20 @@ export async function populateTargetDetailSnapshot(
       is_suspended,
       is_current_period,
       is_future_period,
+      '${snapshotMode}' AS snapshot_mode,
+      '${cutoffDate}' AS cutoff_date,
+      ${filterDebtOnly ? "TRUE" : "FALSE"} AS filter_debt_only,
+      ${filterPrincipalOnly ? "TRUE" : "FALSE"} AS filter_principal_only,
       NOW()
     FROM debt_target_cache
     WHERE section = '${section}'
       AND is_closed IS NOT TRUE
-      AND is_future_period IS NOT TRUE
       AND is_suspended IS NOT TRUE
       AND is_bad_debt IS NOT TRUE
+      AND (
+        due_date IS NULL
+        OR due_date::date <= '${cutoffDate}'::date
+      )
   `));
 
   // ดึงจำนวน rows ที่ insert
@@ -201,33 +267,39 @@ export async function populateTargetDetailSnapshot(
     FROM monthly_target_detail_snapshot
     WHERE section = '${section}'
       AND snapshot_month = '${snapshotMonth}'
+      AND COALESCE(snapshot_mode, 'today') = '${snapshotMode}'
   `));
   const countRows = pgRows(countResult);
-  return n(countRows[0]?.cnt ?? 0);
+  const inserted = n(countRows[0]?.cnt ?? 0);
+  console.log(`[targetDetailSnapshot] ${section}: ${snapshotMonth} (${snapshotMode}, cutoff=${cutoffDate}) inserted ${inserted} rows`);
+  return inserted;
 }
 
 // ─── Query ────────────────────────────────────────────────────────────────────
 /**
  * ดึง detail rows จาก monthly_target_detail_snapshot
- * สำหรับ Lightbox ยอดเก็บหนี้ใน tab รายเดือน
+ * สำหรับ Snapshot View ใน tab เป้าเก็บหนี้
  *
  * @param snapshotMonth - เดือน snapshot ที่ต้องการดู (YYYY-MM)
- * @param upToMonth - ดึงข้อมูลตั้งแต่เดือนแรกจนถึงเดือนนี้ (YYYY-MM) — ถ้าไม่ระบุ = snapshotMonth เดียว
+ * @param snapshotMode  - 'today' | 'end_of_month' (default = 'today')
+ * @param upToMonth     - filter due_date <= เดือนนี้ (YYYY-MM) — optional
  */
 export async function getTargetDetailSnapshot(params: {
   section: SectionKey;
-  snapshotMonth: string; // snapshot ที่ populate ไว้ (YYYY-MM)
-  upToMonth?: string; // filter due_date <= เดือนนี้ (YYYY-MM)
+  snapshotMonth: string;
+  snapshotMode?: string;
+  upToMonth?: string;
   search?: string;
   productType?: string;
   debtRange?: string;
-  debtOnly?: boolean; // Toggle ตั้งหนี้: กรองเฉพาะยอดหนี้คงเหลือ > 0
+  debtOnly?: boolean;
   offset?: number;
   limit?: number;
 }): Promise<TargetDetailSnapshotResult> {
   const {
     section,
     snapshotMonth,
+    snapshotMode = "today",
     upToMonth,
     search,
     productType,
@@ -238,27 +310,49 @@ export async function getTargetDetailSnapshot(params: {
   } = params;
 
   const db = await getDb(section);
-  if (!db) return { rows: [], total: 0, snapshotMonth, populatedAt: null };
+  if (!db) return {
+    rows: [], total: 0, snapshotMonth, populatedAt: null,
+    snapshotMode: null, cutoffDate: null, filterDebtOnly: false, filterPrincipalOnly: true,
+    sumPrincipal: 0, sumInterest: 0, sumFee: 0, sumPenalty: 0, sumUnlockFee: 0,
+    sumTotalAmount: 0, sumPaidAmount: 0, sumNetAmount: 0,
+  };
 
-  // ตรวจสอบว่า snapshot นี้มีข้อมูลหรือไม่
+  // ตรวจสอบว่า snapshot นี้มีข้อมูลหรือไม่ + ดึง metadata
   const checkResult = await db.execute(sql.raw(`
-    SELECT COUNT(*) AS cnt, MAX(populated_at::text) AS populated_at
+    SELECT
+      COUNT(*) AS cnt,
+      MAX(populated_at::text) AS populated_at,
+      MAX(COALESCE(snapshot_mode, 'today')) AS snapshot_mode,
+      MAX(cutoff_date) AS cutoff_date,
+      BOOL_OR(COALESCE(filter_debt_only, FALSE)) AS filter_debt_only,
+      BOOL_OR(COALESCE(filter_principal_only, TRUE)) AS filter_principal_only
     FROM monthly_target_detail_snapshot
     WHERE section = '${section}'
       AND snapshot_month = '${snapshotMonth}'
+      AND COALESCE(snapshot_mode, 'today') = '${snapshotMode}'
   `));
   const checkRows = pgRows(checkResult);
   const totalInSnapshot = n(checkRows[0]?.cnt ?? 0);
   const populatedAt = checkRows[0]?.populated_at ? String(checkRows[0].populated_at) : null;
+  const resolvedMode = checkRows[0]?.snapshot_mode ? String(checkRows[0].snapshot_mode) : snapshotMode;
+  const cutoffDate = checkRows[0]?.cutoff_date ? String(checkRows[0].cutoff_date) : null;
+  const filterDebtOnlyMeta = Boolean(checkRows[0]?.filter_debt_only);
+  const filterPrincipalOnlyMeta = Boolean(checkRows[0]?.filter_principal_only);
 
   if (totalInSnapshot === 0) {
-    return { rows: [], total: 0, snapshotMonth, populatedAt: null };
+    return {
+      rows: [], total: 0, snapshotMonth, populatedAt: null,
+      snapshotMode: resolvedMode, cutoffDate: null, filterDebtOnly: false, filterPrincipalOnly: true,
+      sumPrincipal: 0, sumInterest: 0, sumFee: 0, sumPenalty: 0, sumUnlockFee: 0,
+      sumTotalAmount: 0, sumPaidAmount: 0, sumNetAmount: 0,
+    };
   }
 
   // สร้าง WHERE conditions
   const conditions: string[] = [
     `section = '${section}'`,
     `snapshot_month = '${snapshotMonth}'`,
+    `COALESCE(snapshot_mode, 'today') = '${snapshotMode}'`,
   ];
 
   // filter due_date <= upToMonth (ดึงย้อนหลังทั้งหมดจนถึงเดือนที่คลิก)
@@ -278,7 +372,7 @@ export async function getTargetDetailSnapshot(params: {
   if (debtRange) {
     conditions.push(`debt_range = '${debtRange.replace(/'/g, "''")}'`);
   }
-  // Toggle ตั้งหนี้: กรองเฉพาะแถวที่ยอดหนี้คงเหลือ > 0 (ยอดที่ต้องชำระ - ชำระแล้ว > 0)
+  // Toggle ตั้งหนี้: กรองเฉพาะแถวที่ยอดหนี้คงเหลือ > 0
   if (debtOnly) {
     conditions.push(`GREATEST(COALESCE(total_amount::numeric, 0) - COALESCE(paid_amount::numeric, 0), 0) > 0`);
   }
@@ -398,6 +492,10 @@ export async function getTargetDetailSnapshot(params: {
     total,
     snapshotMonth,
     populatedAt,
+    snapshotMode: resolvedMode,
+    cutoffDate,
+    filterDebtOnly: filterDebtOnlyMeta,
+    filterPrincipalOnly: filterPrincipalOnlyMeta,
     sumPrincipal,
     sumInterest,
     sumFee,
@@ -411,18 +509,35 @@ export async function getTargetDetailSnapshot(params: {
 
 /**
  * ดึงรายการ snapshot months ที่มีอยู่ใน DB สำหรับ section นี้
+ * Returns: SnapshotMonthMeta[] เรียงจากใหม่ไปเก่า
  */
-export async function getAvailableSnapshotMonths(section: SectionKey): Promise<string[]> {
+export async function getAvailableSnapshotMonths(section: SectionKey): Promise<SnapshotMonthMeta[]> {
   const db = await getDb(section);
   if (!db) return [];
   const result = await db.execute(sql.raw(`
-    SELECT DISTINCT snapshot_month
+    SELECT
+      snapshot_month,
+      COALESCE(snapshot_mode, 'today') AS snapshot_mode,
+      MAX(cutoff_date) AS cutoff_date,
+      BOOL_OR(COALESCE(filter_debt_only, FALSE)) AS filter_debt_only,
+      BOOL_OR(COALESCE(filter_principal_only, TRUE)) AS filter_principal_only,
+      MAX(populated_at::text) AS populated_at,
+      COUNT(*) AS row_count
     FROM monthly_target_detail_snapshot
     WHERE section = '${section}'
-    ORDER BY snapshot_month DESC
+    GROUP BY snapshot_month, COALESCE(snapshot_mode, 'today')
+    ORDER BY snapshot_month DESC, snapshot_mode ASC
   `));
   const rows = pgRows(result);
-  return rows.map((r: any) => String(r.snapshot_month ?? ""));
+  return rows.map((r: any) => ({
+    snapshotMonth: String(r.snapshot_month ?? ""),
+    snapshotMode: String(r.snapshot_mode ?? "today"),
+    cutoffDate: r.cutoff_date ? String(r.cutoff_date) : null,
+    filterDebtOnly: Boolean(r.filter_debt_only),
+    filterPrincipalOnly: Boolean(r.filter_principal_only),
+    populatedAt: r.populated_at ? String(r.populated_at) : null,
+    rowCount: n(r.row_count),
+  }));
 }
 
 /**
@@ -432,9 +547,10 @@ export async function getAvailableSnapshotMonths(section: SectionKey): Promise<s
 export async function getContractInstallmentsBySnapshot(params: {
   section: SectionKey;
   snapshotMonth: string;
+  snapshotMode?: string;
   contractNo: string;
 }): Promise<TargetDetailSnapshotRow[]> {
-  const { section, snapshotMonth, contractNo } = params;
+  const { section, snapshotMonth, snapshotMode = "today", contractNo } = params;
   const db = await getDb(section);
   if (!db) return [];
 
@@ -478,6 +594,7 @@ export async function getContractInstallmentsBySnapshot(params: {
     FROM monthly_target_detail_snapshot
     WHERE section = '${section}'
       AND snapshot_month = '${snapshotMonth}'
+      AND COALESCE(snapshot_mode, 'today') = '${snapshotMode}'
       AND contract_no = '${escaped}'
     ORDER BY period ASC
   `));

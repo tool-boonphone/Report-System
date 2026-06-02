@@ -168,11 +168,17 @@ export const debtRouter = router({
     .input(z.object({
       section: SectionEnum,
       snapshotMonth: z.string().regex(/^\d{4}-\d{2}$/, "must be YYYY-MM"),
+      snapshotMode: z.enum(["today", "end_of_month"]).default("today"),
+      filterDebtOnly: z.boolean().default(false),
+      filterPrincipalOnly: z.boolean().default(true),
     }))
     .mutation(async ({ input }) => {
       const count = await populateMonthlyTargetDetailSnapshot(
         input.section,
         input.snapshotMonth,
+        input.snapshotMode,
+        input.filterDebtOnly,
+        input.filterPrincipalOnly,
       );
       return { success: true, rowsInserted: count };
     }),
@@ -182,11 +188,12 @@ export const debtRouter = router({
     .input(z.object({
       section: SectionEnum,
       snapshotMonth: z.string().regex(/^\d{4}-\d{2}$/, "must be YYYY-MM"),
+      snapshotMode: z.string().optional(),  // 'today' | 'end_of_month'
       upToMonth: z.string().regex(/^\d{4}-\d{2}$/, "must be YYYY-MM").optional(),
       search: z.string().optional(),
       productType: z.string().optional(),
       debtRange: z.string().optional(),
-      debtOnly: z.boolean().optional(), // Toggle ตั้งหนี้: กรองเฉพาะยอดหนี้คงเหลือ > 0
+      debtOnly: z.boolean().optional(),
       offset: z.number().int().min(0).default(0),
       limit: z.number().int().min(1).max(10000).default(100),
     }))

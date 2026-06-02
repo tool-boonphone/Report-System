@@ -329,5 +329,19 @@ export async function runStartupMigrations(): Promise<void> {
     } catch (err: any) {
       console.error(`[migration] ${section}: monthly_summary_due_month_cache.due_month -> VARCHAR(16) failed:`, err?.message ?? err);
     }
+    try {
+      // Migration 0016: เพิ่ม snapshot metadata columns ใน monthly_target_detail_snapshot
+      // snapshot_mode: 'today' | 'end_of_month' — cutoff ที่ใช้ตอน populate
+      // cutoff_date: วันที่ cutoff จริง (YYYY-MM-DD)
+      // filter_debt_only: toggle ตั้งหนี้ที่เปิดอยู่ตอน snapshot
+      // filter_principal_only: toggle เฉพาะเงินต้นที่เปิดอยู่ตอน snapshot
+      await db.execute(sql.raw(`ALTER TABLE monthly_target_detail_snapshot ADD COLUMN IF NOT EXISTS snapshot_mode VARCHAR(16) DEFAULT 'today'`));
+      await db.execute(sql.raw(`ALTER TABLE monthly_target_detail_snapshot ADD COLUMN IF NOT EXISTS cutoff_date VARCHAR(10) DEFAULT NULL`));
+      await db.execute(sql.raw(`ALTER TABLE monthly_target_detail_snapshot ADD COLUMN IF NOT EXISTS filter_debt_only BOOLEAN DEFAULT FALSE`));
+      await db.execute(sql.raw(`ALTER TABLE monthly_target_detail_snapshot ADD COLUMN IF NOT EXISTS filter_principal_only BOOLEAN DEFAULT TRUE`));
+      console.log(`[migration] ${section}: monthly_target_detail_snapshot snapshot metadata columns — OK`);
+    } catch (err: any) {
+      console.error(`[migration] ${section}: monthly_target_detail_snapshot snapshot metadata columns failed:`, err?.message ?? err);
+    }
   }
 }
