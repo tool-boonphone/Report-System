@@ -238,6 +238,7 @@ export const debtRouter = router({
       cutoffDate: DateStr,
       filterDebtOnly: z.boolean().default(false),
       filterPrincipalOnly: z.boolean().default(true),
+      filterState: z.string().nullable().optional(), // JSON string ของ filter ที่ใช้ตอน Snapshot
       rows: z.array(z.object({
         contractExternalId: z.string(),
         contractNo: z.string().nullable(),
@@ -278,6 +279,7 @@ export const debtRouter = router({
         input.filterDebtOnly,
         input.filterPrincipalOnly,
         input.rows,
+        input.filterState ?? null,
       );
       return { success: true, rowsInserted: count };
     }),

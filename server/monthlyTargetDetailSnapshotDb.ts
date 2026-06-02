@@ -91,6 +91,8 @@ export interface SnapshotMonthMeta {
   filterPrincipalOnly: boolean;
   populatedAt: string | null;
   rowCount: number;
+  // filter_state: JSON string ของ filter ที่ใช้ตอน Snapshot — ใช้ auto-restore ตอนเปิดดู Snapshot
+  filterState: string | null;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -523,7 +525,8 @@ export async function getAvailableSnapshotMonths(section: SectionKey): Promise<S
       BOOL_OR(COALESCE(filter_debt_only, FALSE)) AS filter_debt_only,
       BOOL_OR(COALESCE(filter_principal_only, TRUE)) AS filter_principal_only,
       MAX(populated_at::text) AS populated_at,
-      COUNT(*) AS row_count
+      COUNT(*) AS row_count,
+      MAX(filter_state) AS filter_state
     FROM monthly_target_detail_snapshot
     WHERE section = '${section}'
     GROUP BY snapshot_month
@@ -538,6 +541,7 @@ export async function getAvailableSnapshotMonths(section: SectionKey): Promise<S
     filterPrincipalOnly: Boolean(r.filter_principal_only),
     populatedAt: r.populated_at ? String(r.populated_at) : null,
     rowCount: n(r.row_count),
+    filterState: r.filter_state ? String(r.filter_state) : null,
   }));
 }
 
@@ -697,6 +701,7 @@ export async function saveClientSnapshot(
   filterDebtOnly: boolean,
   filterPrincipalOnly: boolean,
   rows: ClientSnapshotContractRow[],
+  filterState: string | null = null, // JSON string ของ filter ที่ใช้ตอน Snapshot — ใช้ auto-restore ตอนเปิดดู Snapshot
 ): Promise<number> {
   const db = await getDb(section);
   if (!db) return 0;
@@ -749,6 +754,7 @@ export async function saveClientSnapshot(
         is_current_period, is_future_period,
         snapshot_mode, cutoff_date,
         filter_debt_only, filter_principal_only,
+        filter_state,
         populated_at
       ) VALUES ${valuesSql}
     `));
@@ -776,6 +782,7 @@ export async function saveClientSnapshot(
         ${bool(inst.isCurrentPeriod)}, ${bool(inst.isFuturePeriod)},
         ${escape(snapshotMode)}, ${escape(cutoffDate)},
         ${bool(filterDebtOnly)}, ${bool(filterPrincipalOnly)},
+        ${escape(filterState)},
         NOW()
       )`);
 

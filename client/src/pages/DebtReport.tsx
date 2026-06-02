@@ -1832,7 +1832,27 @@ export default function DebtReport() {
     setSelectedSnapshotMonth(month);
     setTargetViewMode("snapshot");
     setShowSnapshotLog(false);
-  }, []);
+    // auto-restore filter state จาก snapshot metadata
+    const meta = (availableTargetSnapshotsQuery.data as any[])?.find(
+      (m: any) => m.snapshotMonth === month,
+    );
+    if (meta?.filterState) {
+      try {
+        const fs = JSON.parse(meta.filterState);
+        if (typeof fs.search === "string") setSearch(fs.search);
+        if (Array.isArray(fs.statusFilter)) setStatusFilter(new Set(fs.statusFilter));
+        if (Array.isArray(fs.approveDateFilter)) setApproveDateFilter(new Set(fs.approveDateFilter));
+        if (Array.isArray(fs.dueDateFilter)) setDueDateFilter(new Set(fs.dueDateFilter));
+        if (Array.isArray(fs.productTypeFilter)) setProductTypeFilter(new Set(fs.productTypeFilter));
+        if (fs.dueDateExact !== undefined) setDueDateExact(fs.dueDateExact);
+        if (typeof fs.debtSetMode === "boolean") setDebtSetMode(fs.debtSetMode);
+        if (fs.debtSetCutoffMode === "today" || fs.debtSetCutoffMode === "end_of_month") setDebtSetCutoffMode(fs.debtSetCutoffMode);
+        if (typeof fs.principalOnly === "boolean") setPrincipalOnly(fs.principalOnly);
+      } catch {
+        // ถ้า parse ไม่ได้ ไม่ต้องทำอะไร — ใช้ filter เดิม
+      }
+    }
+  }, [availableTargetSnapshotsQuery.data, setSearch, setStatusFilter, setApproveDateFilter, setDueDateFilter, setProductTypeFilter, setDueDateExact, setDebtSetMode, setDebtSetCutoffMode, setPrincipalOnly]);
   // helper: กลับมา live
   const handleBackToLive = React.useCallback(() => {
     setTargetViewMode("live");
@@ -2354,6 +2374,19 @@ export default function DebtReport() {
         netAmount: inst.netAmount ?? 0,
       })),
     }));
+    // serialize filter state เพื่อ auto-restore ตอนเปิดดู Snapshot
+    const filterStateObj = {
+      search,
+      statusFilter: Array.from(statusFilter),
+      approveDateFilter: Array.from(approveDateFilter),
+      dueDateFilter: Array.from(dueDateFilter),
+      productTypeFilter: Array.from(productTypeFilter),
+      dueDateExact,
+      debtSetMode,
+      debtSetCutoffMode,
+      principalOnly,
+    };
+    const filterStateJson = JSON.stringify(filterStateObj);
     createSnapshotMutation.mutate({
       section: sectionKey,
       snapshotMonth,
@@ -2361,9 +2394,10 @@ export default function DebtReport() {
       cutoffDate,
       filterDebtOnly: debtSetMode,
       filterPrincipalOnly: principalOnly,
+      filterState: filterStateJson,
       rows: rowsToSave,
     });
-  }, [section, sectionKey, debtSetCutoffMode, streamData, streamLoading, streamTotal, debtSetMode, principalOnly, createSnapshotMutation]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [section, sectionKey, debtSetCutoffMode, streamData, streamLoading, streamTotal, debtSetMode, principalOnly, createSnapshotMutation, search, statusFilter, approveDateFilter, dueDateFilter, productTypeFilter, dueDateExact]); // eslint-disable-line react-hooks/exhaustive-deps
 
 
   /* ---- Max periods for the repeating group block ---- */
