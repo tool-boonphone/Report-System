@@ -345,10 +345,17 @@ export async function runStartupMigrations(): Promise<void> {
     }
     try {
       // Migration 0017: ลบ Snapshot เก่าทั้งหมด — populate logic เปลี่ยนเป็น v3
-      // Snapshot เก่าถูก populate ด้วย logic เดิมที่ตัด is_closed/is_suspended/is_bad_debt ออก
-      // และตัด due_date > cutoffDate ออก — ต้องลบทิ้งและ populate ใหม่ด้วย logic ใหม่
-      await db.execute(sql.raw(`DELETE FROM monthly_target_detail_snapshot WHERE section = '${section}'`));
-      console.log(`[migration] ${section}: monthly_target_detail_snapshot — cleared all old snapshots (v3 reset)`);
+      // ใช้ migration_flags table เพื่อตรวจสอบว่ารันแล้วหรือยัง (รันแค่ครั้งเดียว)
+      await db.execute(sql.raw(`CREATE TABLE IF NOT EXISTS migration_flags (flag_key VARCHAR(128) PRIMARY KEY, ran_at TIMESTAMP NOT NULL DEFAULT NOW())`));
+      const m17 = await db.execute(sql.raw(`SELECT 1 FROM migration_flags WHERE flag_key = 'snapshot_v3_reset_${section}'`));
+      const m17rows = pgRows(m17);
+      if (m17rows.length === 0) {
+        await db.execute(sql.raw(`DELETE FROM monthly_target_detail_snapshot WHERE section = '${section}'`));
+        await db.execute(sql.raw(`INSERT INTO migration_flags (flag_key) VALUES ('snapshot_v3_reset_${section}') ON CONFLICT DO NOTHING`));
+        console.log(`[migration] ${section}: monthly_target_detail_snapshot — cleared all old snapshots (v3 reset)`);
+      } else {
+        console.log(`[migration] ${section}: monthly_target_detail_snapshot v3 reset — already done, skipping`);
+      }
     } catch (err: any) {
       console.error(`[migration] ${section}: monthly_target_detail_snapshot clear failed:`, err?.message ?? err);
     }
@@ -362,8 +369,17 @@ export async function runStartupMigrations(): Promise<void> {
     }
     try {
       // Migration 0019: ลบ Snapshot เก่าทั้งหมด — populate logic เปลี่ยนเป็น v4 (เพิ่ม phone)
-      await db.execute(sql.raw(`DELETE FROM monthly_target_detail_snapshot WHERE section = '${section}'`));
-      console.log(`[migration] ${section}: monthly_target_detail_snapshot — cleared all old snapshots (v4 reset)`);
+      // ใช้ migration_flags table เพื่อตรวจสอบว่ารันแล้วหรือยัง (รันแค่ครั้งเดียว)
+      await db.execute(sql.raw(`CREATE TABLE IF NOT EXISTS migration_flags (flag_key VARCHAR(128) PRIMARY KEY, ran_at TIMESTAMP NOT NULL DEFAULT NOW())`));
+      const m19 = await db.execute(sql.raw(`SELECT 1 FROM migration_flags WHERE flag_key = 'snapshot_v4_reset_${section}'`));
+      const m19rows = pgRows(m19);
+      if (m19rows.length === 0) {
+        await db.execute(sql.raw(`DELETE FROM monthly_target_detail_snapshot WHERE section = '${section}'`));
+        await db.execute(sql.raw(`INSERT INTO migration_flags (flag_key) VALUES ('snapshot_v4_reset_${section}') ON CONFLICT DO NOTHING`));
+        console.log(`[migration] ${section}: monthly_target_detail_snapshot — cleared all old snapshots (v4 reset)`);
+      } else {
+        console.log(`[migration] ${section}: monthly_target_detail_snapshot v4 reset — already done, skipping`);
+      }
     } catch (err: any) {
       console.error(`[migration] ${section}: monthly_target_detail_snapshot clear failed:`, err?.message ?? err);
     }
