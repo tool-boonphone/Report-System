@@ -1466,7 +1466,9 @@ export default function DebtReport() {
                             return (
                               <div
                                 key={monthStr}
-                                className="grid grid-cols-4 gap-0 border-b border-gray-50 hover:bg-amber-50 text-sm transition-colors"
+                                className="grid grid-cols-4 gap-0 border-b border-gray-50 hover:bg-amber-100 text-sm transition-colors cursor-pointer select-none"
+                                onClick={() => { handleSelectSnapshot(monthStr); setShowSnapshotLog(false); }}
+                                title={`คลิกเพื่อดู Snapshot เดือน ${monthLabel}`}
                               >
                                 <div className="px-3 py-2.5 font-medium text-gray-800 text-[13px]">{monthLabel}</div>
                                 <div className="px-3 py-2.5 text-right text-gray-700 tabular-nums text-[13px]">

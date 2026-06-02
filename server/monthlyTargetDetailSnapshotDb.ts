@@ -1045,19 +1045,26 @@ export async function getMonthlyDebtSummary(
   if (!db) return [];
 
   // Query:
-  // 1. เป้าเก็บหนี้: SUM(GREATEST(total_amount - paid_amount, 0)) จาก monthly_target_detail_snapshot
-  //    กรอง due_date ตรงกับ snapshot_month (ตั้งหนี้เดือนนั้น)
-  // 2. ยอดเก็บหนี้: SUM(total_amount) จาก debt_collected_cache
-  //    กรอง paid_at ตรงกับ snapshot_month + ไม่ใช่ is_bad_debt_row
-  //    ไม่รวมขายเครื่อง (กรอง payment_type != 'ขายเครื่อง' ถ้ามี column นั้น)
+  // 1. เป้าเก็บหนี้: ใช้จาก monthly_collection_snapshot (target_amount ที่ถูก freeze ณ วันที่ 1 ของเดือน)
+  //    ถ้ายังไม่มีใน monthly_collection_snapshot ให้ fallback SUM จาก monthly_target_detail_snapshot
+  // 2. ยอดเก็บหนี้: ใช้ collected_amount จาก monthly_collection_snapshot (ค่างวดเท่านั้น ไม่รวมขายเครื่อง)
+  //    ถ้ายังไม่มีใน monthly_collection_snapshot ให้ fallback SUM จาก debt_collected_cache
   const result = await db.execute(sql.raw(`
     SELECT
       t.snapshot_month,
-      SUM(GREATEST(COALESCE(t.total_amount, 0) - COALESCE(t.paid_amount, 0), 0)) AS target_amount,
-      MAX(t.populated_at::text)                                                    AS populated_at,
-      COUNT(*)                                                                     AS row_count,
-      COALESCE(c.collected_amount, 0)                                              AS collected_amount
+      MAX(t.populated_at::text)                                                                AS populated_at,
+      COUNT(*)                                                                                 AS row_count,
+      -- เป้าเก็บหนี้: ใช้จาก monthly_collection_snapshot (freeze ณ วันที่ 1) ถ้ามี, ไม่งั้น SUM จาก detail snapshot
+      COALESCE(
+        mcs.target_amount,
+        SUM(GREATEST(COALESCE(t.total_amount, 0) - COALESCE(t.paid_amount, 0), 0))
+      ) AS target_amount,
+      -- ยอดเก็บหนี้: ใช้จาก monthly_collection_snapshot ถ้ามี, ไม่งั้น SUM จาก debt_collected_cache
+      COALESCE(mcs.collected_amount, COALESCE(c.collected_amount, 0)) AS collected_amount
     FROM monthly_target_detail_snapshot t
+    LEFT JOIN monthly_collection_snapshot mcs
+      ON mcs.section = '${section}'
+      AND mcs.collection_month = t.snapshot_month
     LEFT JOIN (
       SELECT
         TO_CHAR(paid_at, 'YYYY-MM') AS paid_month,
@@ -1069,8 +1076,7 @@ export async function getMonthlyDebtSummary(
       GROUP BY TO_CHAR(paid_at, 'YYYY-MM')
     ) c ON c.paid_month = t.snapshot_month
     WHERE t.section = '${section}'
-      AND TO_CHAR(t.due_date::date, 'YYYY-MM') = t.snapshot_month
-    GROUP BY t.snapshot_month, c.collected_amount
+    GROUP BY t.snapshot_month, mcs.target_amount, mcs.collected_amount, c.collected_amount
     ORDER BY t.snapshot_month DESC
   `));
 
