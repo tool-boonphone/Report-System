@@ -352,5 +352,20 @@ export async function runStartupMigrations(): Promise<void> {
     } catch (err: any) {
       console.error(`[migration] ${section}: monthly_target_detail_snapshot clear failed:`, err?.message ?? err);
     }
+    try {
+      // Migration 0018: เพิ่ม phone column ใน monthly_target_detail_snapshot
+      // phone ไม่ได้อยู่ใน debt_target_cache — ต้อง JOIN กับ contracts ตอน populate
+      await db.execute(sql.raw(`ALTER TABLE monthly_target_detail_snapshot ADD COLUMN IF NOT EXISTS phone VARCHAR(32)`));
+      console.log(`[migration] ${section}: monthly_target_detail_snapshot.phone — OK`);
+    } catch (err: any) {
+      console.error(`[migration] ${section}: monthly_target_detail_snapshot.phone failed:`, err?.message ?? err);
+    }
+    try {
+      // Migration 0019: ลบ Snapshot เก่าทั้งหมด — populate logic เปลี่ยนเป็น v4 (เพิ่ม phone)
+      await db.execute(sql.raw(`DELETE FROM monthly_target_detail_snapshot WHERE section = '${section}'`));
+      console.log(`[migration] ${section}: monthly_target_detail_snapshot — cleared all old snapshots (v4 reset)`);
+    } catch (err: any) {
+      console.error(`[migration] ${section}: monthly_target_detail_snapshot clear failed:`, err?.message ?? err);
+    }
   }
 }

@@ -57,6 +57,7 @@ export interface TargetDetailSnapshotRow {
   isSuspended: boolean;
   isCurrentPeriod: boolean;
   isFuturePeriod: boolean;
+  phone: string | null;
   populatedAt: string;
 }
 
@@ -211,48 +212,51 @@ export async function populateTargetDetailSnapshot(
       cutoff_date,
       filter_debt_only,
       filter_principal_only,
+      phone,
       populated_at
     )
     SELECT
-      section,
+      dtc.section,
       '${snapshotMonth}' AS snapshot_month,
-      contract_external_id,
-      contract_no,
-      customer_name,
-      partner_code,
-      partner_name,
-      approve_date,
-      product_type,
-      device,
-      model,
-      COALESCE(finance_amount::numeric, 0),
-      installment_count,
-      COALESCE(baseline_amount::numeric, 0),
-      period,
-      due_date,
-      COALESCE(principal::numeric, 0),
-      COALESCE(interest::numeric, 0),
-      COALESCE(fee::numeric, 0),
-      COALESCE(penalty::numeric, 0),
-      COALESCE(unlock_fee::numeric, 0),
-      COALESCE(total_amount::numeric, 0),
-      COALESCE(paid_amount::numeric, 0),
-      contract_status,
-      debt_range,
-      is_paid,
-      is_arrears,
-      is_bad_debt,
-      is_closed,
-      is_suspended,
-      is_current_period,
-      is_future_period,
+      dtc.contract_external_id,
+      dtc.contract_no,
+      dtc.customer_name,
+      dtc.partner_code,
+      dtc.partner_name,
+      dtc.approve_date,
+      dtc.product_type,
+      dtc.device,
+      dtc.model,
+      COALESCE(dtc.finance_amount::numeric, 0),
+      dtc.installment_count,
+      COALESCE(dtc.baseline_amount::numeric, 0),
+      dtc.period,
+      dtc.due_date,
+      COALESCE(dtc.principal::numeric, 0),
+      COALESCE(dtc.interest::numeric, 0),
+      COALESCE(dtc.fee::numeric, 0),
+      COALESCE(dtc.penalty::numeric, 0),
+      COALESCE(dtc.unlock_fee::numeric, 0),
+      COALESCE(dtc.total_amount::numeric, 0),
+      COALESCE(dtc.paid_amount::numeric, 0),
+      dtc.contract_status,
+      dtc.debt_range,
+      dtc.is_paid,
+      dtc.is_arrears,
+      dtc.is_bad_debt,
+      dtc.is_closed,
+      dtc.is_suspended,
+      dtc.is_current_period,
+      dtc.is_future_period,
       '${snapshotMode}' AS snapshot_mode,
       '${cutoffDate}' AS cutoff_date,
       ${filterDebtOnly ? "TRUE" : "FALSE"} AS filter_debt_only,
       ${filterPrincipalOnly ? "TRUE" : "FALSE"} AS filter_principal_only,
+      c.phone,
       NOW()
-    FROM debt_target_cache
-    WHERE section = '${section}'
+    FROM debt_target_cache dtc
+    LEFT JOIN contracts c ON c.external_id = dtc.contract_external_id
+    WHERE dtc.section = '${section}'
   `));
 
   // ดึงจำนวน rows ที่ insert
@@ -436,6 +440,7 @@ export async function getTargetDetailSnapshot(params: {
       is_suspended,
       is_current_period,
       is_future_period,
+      COALESCE(phone, '') AS phone,
       populated_at::text AS populated_at
     FROM monthly_target_detail_snapshot
     WHERE ${whereClause}
@@ -478,6 +483,7 @@ export async function getTargetDetailSnapshot(params: {
     isSuspended: Boolean(row.is_suspended),
     isCurrentPeriod: Boolean(row.is_current_period),
     isFuturePeriod: Boolean(row.is_future_period),
+    phone: row.phone ? String(row.phone) : null,
     populatedAt: String(row.populated_at ?? ""),
   }));
 
