@@ -87,7 +87,9 @@ async function main() {
     for (const contract of matchingContracts) {
       const extId = String(contract.contractExternalId ?? "");
       const daysOverdue = Number(contract.daysOverdue ?? 0);
-      const debtRange = bucketFromDays(daysOverdue);
+      // Fix: ใช้ debtStatus จาก stream โดยตรง (เหมือน populateCache.ts)
+      // bucketFromDays(daysOverdue) ใช้ minDays ซึ่งอาจทำให้ bucket ผิด
+      const debtRange = (contract as any).debtStatus ?? bucketFromDays(daysOverdue);
       const contractStatus = meta.status;
 
       for (const inst of contract.installments ?? []) {

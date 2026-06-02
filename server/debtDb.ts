@@ -4500,6 +4500,8 @@ export async function listWatchGroup(params: {
         -- งวดที่ 2
         COALESCE(SUM(CASE WHEN period = 2 THEN paid_amount ELSE 0 END), 0)   AS paid_amount_2,
         COALESCE(SUM(CASE WHEN period = 2 THEN total_amount ELSE 0 END), 0)  AS total_amount_2,
+        -- ยอดชำระมาแล้วทั้งหมดทุกงวด
+        COALESCE(SUM(paid_amount), 0) AS total_paid_all,
         -- ยอดค้างชำระรวมทุกงวดที่ถึงกำหนดแล้วและยังไม่ได้ชำระครบ
         COALESCE(SUM(
           CASE WHEN is_paid = false AND due_date <= '${todayStr}'
@@ -4521,14 +4523,17 @@ export async function listWatchGroup(params: {
   const inst1TotalMap = new Map<string, number>(); // total_amount_1
   const inst2PaidMap  = new Map<string, number>(); // paid_amount_2
   const inst2TotalMap = new Map<string, number>(); // total_amount_2
+  const totalPaidAllMap = new Map<string, number>(); // total_paid_all (ยอดชำระรวมทุกงวด)
   for (const r of (pgRows(inst1Raw) as any[])) {
     const paid1  = Number(r.paid_amount_1  ?? 0);
     const total1 = Number(r.total_amount_1 ?? 0);
     const paid2  = Number(r.paid_amount_2  ?? 0);
     const total2 = Number(r.total_amount_2 ?? 0);
     const totalDue = Number(r.total_amount_due ?? 0);
+    const totalPaidAll = Number(r.total_paid_all ?? 0);
     inst1Map.set(r.contract_external_id, paid1);
     totalAmountDueMap.set(r.contract_external_id, totalDue);
+    totalPaidAllMap.set(r.contract_external_id, totalPaidAll);
     inst1PaidMap.set(r.contract_external_id,  paid1);
     inst1TotalMap.set(r.contract_external_id, total1);
     inst2PaidMap.set(r.contract_external_id,  paid2);
@@ -4611,6 +4616,7 @@ export async function listWatchGroup(params: {
     daysOverdue: number;
     arrearsCount: number;
     paidAmount1: number;   // ยอดชำระงวดที่ 1 (อาจเป็น 0 ถ้าไม่เคยชำระ)
+    totalPaid: number;     // ยอดชำระรวมทั้งหมดทุกงวด
     totalAmountDue: number; // ยอดค้างชำระรวมทุกงวดที่ถึงกำหนดแล้ว
   }> = [];
 
@@ -4725,6 +4731,7 @@ export async function listWatchGroup(params: {
       daysOverdue,
       arrearsCount,
       paidAmount1: inst1Map.get(extId) ?? 0,
+      totalPaid: totalPaidAllMap.get(extId) ?? 0,         // ยอดชำระรวมทั้งหมดทุกงวด
       totalAmountDue: totalAmountDueMap.get(extId) ?? 0,  // ยอดค้างชำระรวมทุกงวดที่ถึงกำหนด
     });
   }

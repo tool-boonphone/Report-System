@@ -163,6 +163,7 @@ type Row = {
   daysOverdue: number;
   arrearsCount: number;
   paidAmount1: number;  // ยอดชำระงวดที่ 1 (อาจเป็น 0 ถ้าไม่เคยชำระ)
+  totalPaid: number;     // ยอดชำระรวมทั้งหมดทุกงวด
   totalAmountDue: number; // ยอดค้างชำระรวมทุกงวดที่ถึงกำหนดแล้ว
 };
 
@@ -551,7 +552,7 @@ export default function WatchGroup() {
     // filter ยอดชำระ (client-side)
     if (paymentFilter.size > 0) {
       rows = rows.filter((r) => {
-        const paid = r.paidAmount1 ?? 0;
+        const paid = r.totalPaid ?? 0; // ใช้ totalPaid แทน paidAmount1 เพื่อ filter ยอดชำระทั้งหมด
         if (paymentFilter.has("none") && paid === 0) return true;
         if (paymentFilter.has("partial") && paid > 0) return true;
         return false;
@@ -713,7 +714,7 @@ export default function WatchGroup() {
           r.cost ?? 0,
           r.installmentTotal ?? 0,
           r.installmentAmount ?? 0,
-          r.paidAmount1 ?? 0,
+          r.totalPaid ?? 0,
           r.daysOverdue ?? 0,
           r.arrearsCount ?? 0,
           onlineLabel,
@@ -1128,13 +1129,13 @@ export default function WatchGroup() {
                           <td className="px-3 py-1.5 text-right whitespace-nowrap font-medium text-gray-800">
                             {fmtMoney(r.installmentAmount)}
                           </td>
-                          {/* ยอดชำระ = ยอดที่ชำระมาแล้วในงวดที่ 1 */}
+                          {/* ยอดชำระ = ยอดชำระรวมทั้งหมดทุกงวด */}
                           <td className="px-3 py-1.5 text-right whitespace-nowrap">
                             <span className={cn(
                               "font-medium",
-                              r.paidAmount1 > 0 ? "text-blue-700" : "text-red-600",
+                              r.totalPaid > 0 ? "text-blue-700" : "text-red-600",
                             )}>
-                              {fmtMoney(r.paidAmount1)}
+                              {fmtMoney(r.totalPaid)}
                             </span>
                           </td>
                           <td className={cn(
