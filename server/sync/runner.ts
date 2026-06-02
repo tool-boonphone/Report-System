@@ -473,9 +473,9 @@ async function doSync(
       console.warn(`[sync] ${section}: populateMonthlyCollectionSnapshot failed (non-fatal):`, snapshotErr?.message ?? snapshotErr);
     }
 
-    // ── Auto Snapshot: ตั้งหนี้เดือนนี้ (today mode) ──
-    // วันที่ 1: populate snapshot เดือนนี้ด้วย snapshotMode='today'
-    //   → cutoff = วันที่ 1 (วันนี้) — เฉพาะงวดที่ถึงกำหนดแล้ว (ไม่ใช่งวดอนาคต)
+    // ── Auto Snapshot: ตั้งหนี้เดือนนี้ (end_of_month mode) ──
+    // วันที่ 1: populate snapshot เดือนนี้ด้วย snapshotMode='end_of_month'
+    //   → cutoff = วันสุดท้ายของเดือน — ณ เดือนปัจจุบัน (นับทั้งเดือน รวมงวดที่ยังไม่ถึง due)
     // วันอื่น: เรียก populate แต่ function จะ skip เองถ้ามีข้อมูลแล้ว (กรณี retry)
     try {
       const bangkokDate = new Intl.DateTimeFormat("en-CA", {
@@ -496,32 +496,32 @@ async function doSync(
         productTypeFilter: [],
         dueDateExact: "",
         debtSetMode: true,        // toggle ตั้งหนี้ = ON
-        debtSetCutoffMode: "today", // cutoff = วันที่ทำ snapshot
+        debtSetCutoffMode: "end_of_month", // cutoff = ณ เดือนปัจจุบัน (นับทั้งเดือน)
         principalOnly: true,      // toggle เฉพาะเงินต้น = ON
       });
       if (dayOfMonth === 1) {
-        // วันที่ 1: Auto Snapshot ด้วย today mode (ตั้งหนี้เดือนนี้ = เฉพาะงวดที่ถึงกำหนดแล้ว)
+        // วันที่ 1: Auto Snapshot ด้วย end_of_month mode (ตั้งหนี้เดือนนี้ = ณ เดือนปัจจุบัน)
         const detailRows = await populateMonthlyTargetDetailSnapshot(
           section,
           currentMonth,
-          "today",  // cutoff = วันนี้ (วันที่ 1)
-          true,     // filterDebtOnly = true (ตั้งหนี้ ON)
-          true,     // filterPrincipalOnly = true (เฉพาะเงินต้น ON)
+          "end_of_month", // cutoff = วันสุดท้ายของเดือน
+          true,           // filterDebtOnly = true (ตั้งหนี้ ON)
+          true,           // filterPrincipalOnly = true (เฉพาะเงินต้น ON)
           autoSnapshotFilterState,
         );
-        console.log(`[sync] ${section}: monthly_target_detail_snapshot AUTO populated — ${detailRows} rows for ${currentMonth} (today mode, day-1 freeze, debtSetMode=true)`);
+        console.log(`[sync] ${section}: monthly_target_detail_snapshot AUTO populated — ${detailRows} rows for ${currentMonth} (end_of_month mode, day-1 freeze, debtSetMode=true)`);
       } else {
         // วันอื่น: เรียก populate แต่ function จะ skip เองถ้ามีข้อมูลแล้ว
         const detailRows = await populateMonthlyTargetDetailSnapshot(
           section,
           currentMonth,
-          "today",
+          "end_of_month",
           true,
           true,
           autoSnapshotFilterState,
         );
         if (detailRows > 0) {
-          console.log(`[sync] ${section}: monthly_target_detail_snapshot retry-populated — ${detailRows} rows for ${currentMonth} (today)`);
+          console.log(`[sync] ${section}: monthly_target_detail_snapshot retry-populated — ${detailRows} rows for ${currentMonth} (end_of_month)`);
         } else {
           console.log(`[sync] ${section}: monthly_target_detail_snapshot already frozen for ${currentMonth} — skipped`);
         }

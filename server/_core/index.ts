@@ -151,7 +151,7 @@ async function startServer() {
   // Internal endpoint: Auto-populate monthly_target_detail_snapshot (ตั้งหนี้เดือนนี้)
   // POST /api/internal/auto-snapshot
   // Body: { section: 'Boonphone' | 'Fastfone365', snapshotMonth?: 'YYYY-MM', async?: boolean }
-  // - ใช้ snapshotMode='today' (ตั้งหนี้เดือนนี้ = เฉพาะงวดที่ถึงกำหนดแล้ว ไม่ใช่งวดอนาคต)
+  // - ใช้ snapshotMode='end_of_month' (ตั้งหนี้เดือนนี้ = ณ เดือนปัจจุบัน นับทั้งเดือน รวมงวดที่ยังไม่ถึง due)
   // - filterDebtOnly=true เสมอ (ตั้งหนี้ ON) + filterPrincipalOnly=true (เฉพาะเงินต้น ON)
   // - async=true (default) → fire-and-forget, returns immediately
   app.post("/api/internal/auto-snapshot", async (req, res) => {
@@ -183,20 +183,20 @@ async function startServer() {
         productTypeFilter: [],
         dueDateExact: "",
         debtSetMode: true,           // toggle ตั้งหนี้ = ON
-        debtSetCutoffMode: "today",       // cutoff = วันที่ทำ snapshot (วันที่ 1 ของเดือน) — เฉพาะงวดที่ถึงกำหนดแล้ว
+        debtSetCutoffMode: "end_of_month", // cutoff = ณ เดือนปัจจุบัน (นับทั้งเดือน รวมงวดที่ยังไม่ถึง due)
         principalOnly: true,         // toggle เฉพาะเงินต้น = ON
       });
-      console.log(`[auto-snapshot] ${sec} ${month} (today, debtSetMode=true) — triggered via API`);
+      console.log(`[auto-snapshot] ${sec} ${month} (end_of_month, debtSetMode=true) — triggered via API`);
       if (isAsync) {
         // Fire and forget — return immediately
-        populateTargetDetailSnapshot(sec, month, "today", true, true, filterStateJson)
+        populateTargetDetailSnapshot(sec, month, "end_of_month", true, true, filterStateJson)
           .then((rows) => console.log(`[auto-snapshot] ${sec} ${month} done — ${rows} rows inserted`))
           .catch((err: unknown) => console.error(`[auto-snapshot] ${sec} ${month} failed:`, (err as Error)?.message ?? err));
-        return res.json({ ok: true, section: sec, snapshotMonth: month, snapshotMode: "today", filterDebtOnly: true, started: true, startedAt: new Date().toISOString() });
+        return res.json({ ok: true, section: sec, snapshotMonth: month, snapshotMode: "end_of_month", filterDebtOnly: true, started: true, startedAt: new Date().toISOString() });
       } else {
         // Synchronous — await and return result
-        const rows = await populateTargetDetailSnapshot(sec, month, "today", true, true, filterStateJson);
-        return res.json({ ok: true, section: sec, snapshotMonth: month, snapshotMode: "today", filterDebtOnly: true, rowsInserted: rows, completedAt: new Date().toISOString() });
+        const rows = await populateTargetDetailSnapshot(sec, month, "end_of_month", true, true, filterStateJson);
+        return res.json({ ok: true, section: sec, snapshotMonth: month, snapshotMode: "end_of_month", filterDebtOnly: true, rowsInserted: rows, completedAt: new Date().toISOString() });
       }
     } catch (err: any) {
       console.error("[auto-snapshot]", err);
