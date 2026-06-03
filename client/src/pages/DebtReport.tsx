@@ -3012,11 +3012,11 @@ export default function DebtReport() {
       <Dialog open={!!dailyBreakdownMonth} onOpenChange={(open) => { if (!open) { setDailyBreakdownMonth(null); setDailyBreakdownStatuses([]); setDailyStatusDropdownOpen(false); } }}>
         <DialogContent className="max-w-lg w-full p-0 overflow-hidden rounded-2xl">
           <DialogHeader className="px-5 pt-4 pb-3 bg-amber-50 border-b border-amber-200">
-            {/* Row 1: title ซ้าย + Excel + X ขวา */}
+            {/* แถวเดียว: title ซ้าย | filter สถานะหนี้ | Excel | X ขวาสุด */}
             <div className="flex items-center gap-2 pr-8">
-              <DialogTitle className="text-base font-bold text-amber-900 flex items-center gap-2 flex-1 min-w-0">
+              <DialogTitle className="text-sm font-bold text-amber-900 flex items-center gap-1.5 shrink-0">
                 <BarChart2 className="w-4 h-4 text-amber-600 shrink-0" />
-                <span className="truncate">
+                <span className="whitespace-nowrap">
                   {
                     (() => {
                       if (!dailyBreakdownMonth) return "ยอดรายวัน";
@@ -3028,6 +3028,50 @@ export default function DebtReport() {
                   }
                 </span>
               </DialogTitle>
+              {/* filter สถานะหนี้ — อยู่กลางระหว่าง title และ Excel */}
+              <div className="relative flex-1 min-w-0">
+                <button
+                  type="button"
+                  onClick={() => setDailyStatusDropdownOpen(prev => !prev)}
+                  className="flex items-center gap-1 px-2 py-1 rounded-lg border border-amber-300 bg-white text-xs text-amber-900 hover:bg-amber-50 transition-colors w-full"
+                >
+                  <span className="flex-1 text-left truncate">
+                    {dailyBreakdownStatuses.length === 0
+                      ? "ทุกสถานะ"
+                      : dailyBreakdownStatuses.length === 1
+                      ? dailyBreakdownStatuses[0]
+                      : `${dailyBreakdownStatuses.length} สถานะ`
+                    }
+                  </span>
+                  <svg className={`w-3 h-3 text-amber-600 shrink-0 transition-transform ${dailyStatusDropdownOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                </button>
+                {dailyStatusDropdownOpen && (
+                  <div className="absolute left-0 top-full mt-1 z-50 bg-white border border-amber-200 rounded-xl shadow-lg py-1 min-w-[160px] max-h-64 overflow-y-auto">
+                    <label className="flex items-center gap-2 px-3 py-1.5 hover:bg-amber-50 cursor-pointer text-xs text-amber-900 font-semibold">
+                      <input type="checkbox" checked={dailyBreakdownStatuses.length === 0} onChange={() => setDailyBreakdownStatuses([])} className="accent-amber-500" />
+                      ทุกสถานะหนี้
+                    </label>
+                    <div className="border-t border-amber-100 my-0.5" />
+                    {DEBT_STATUS_OPTIONS.map(status => (
+                      <label key={status} className="flex items-center gap-2 px-3 py-1.5 hover:bg-amber-50 cursor-pointer text-xs text-gray-700">
+                        <input
+                          type="checkbox"
+                          checked={dailyBreakdownStatuses.includes(status)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setDailyBreakdownStatuses(prev => [...prev, status]);
+                            } else {
+                              setDailyBreakdownStatuses(prev => prev.filter(s => s !== status));
+                            }
+                          }}
+                          className="accent-amber-500"
+                        />
+                        {status}
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
               {/* ปุ่ม Export Excel — อยู่ซ้ายของปุ่ม X */}
               {dailyBreakdownQuery.data && (dailyBreakdownQuery.data as Array<unknown>).length > 0 && (
                 <button
@@ -3068,56 +3112,6 @@ export default function DebtReport() {
                   <Download className="w-3 h-3" />
                   Excel
                 </button>
-              )}
-            </div>
-            {/* Row 2: Multi-select filter สถานะหนี้ */}
-            <div className="relative mt-2">
-              <button
-                type="button"
-                onClick={() => setDailyStatusDropdownOpen(prev => !prev)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-300 bg-white text-xs text-amber-900 hover:bg-amber-50 transition-colors w-full max-w-xs"
-              >
-                <span className="flex-1 text-left truncate">
-                  {dailyBreakdownStatuses.length === 0
-                    ? "ทุกสถานะหนี้"
-                    : dailyBreakdownStatuses.length === 1
-                    ? dailyBreakdownStatuses[0]
-                    : `เลือกแล้ว ${dailyBreakdownStatuses.length} สถานะ`
-                  }
-                </span>
-                <svg className={`w-3 h-3 text-amber-600 transition-transform ${dailyStatusDropdownOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-              </button>
-              {dailyStatusDropdownOpen && (
-                <div className="absolute left-0 top-full mt-1 z-50 bg-white border border-amber-200 rounded-xl shadow-lg py-1 min-w-[180px] max-h-64 overflow-y-auto">
-                  {/* ตัวเลือก ทุกสถานะ */}
-                  <label className="flex items-center gap-2 px-3 py-1.5 hover:bg-amber-50 cursor-pointer text-xs text-amber-900 font-semibold">
-                    <input
-                      type="checkbox"
-                      checked={dailyBreakdownStatuses.length === 0}
-                      onChange={() => setDailyBreakdownStatuses([])}
-                      className="accent-amber-500"
-                    />
-                    ทุกสถานะหนี้
-                  </label>
-                  <div className="border-t border-amber-100 my-0.5" />
-                  {DEBT_STATUS_OPTIONS.map(status => (
-                    <label key={status} className="flex items-center gap-2 px-3 py-1.5 hover:bg-amber-50 cursor-pointer text-xs text-gray-700">
-                      <input
-                        type="checkbox"
-                        checked={dailyBreakdownStatuses.includes(status)}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setDailyBreakdownStatuses(prev => [...prev, status]);
-                          } else {
-                            setDailyBreakdownStatuses(prev => prev.filter(s => s !== status));
-                          }
-                        }}
-                        className="accent-amber-500"
-                      />
-                      {status}
-                    </label>
-                  ))}
-                </div>
               )}
             </div>
           </DialogHeader>
