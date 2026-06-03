@@ -1140,9 +1140,9 @@ export interface DailyBreakdownRow {
  * ดึงยอดเป้าเก็บหนี้และยอดเก็บหนี้จริง แยกตามวันที่ 1-สิ้นเดือน
  *
  * Logic:
- *   1. เป้าแต่ละวัน = SUM(GREATEST(total_amount - paid_amount, 0))
- *      จาก monthly_target_detail_snapshot WHERE due_date ตรงกับวันนั้น
- *   2. ยอดค้างจากเดือนก่อนหน้า (due_date < วันที่ 1 ของเดือน) จาก debt_target_cache
+ *   1. เป้าแต่ละวัน = SUM(principal+interest+fee) จาก monthly_target_detail_snapshot
+ *      WHERE due_date ตรงกับวันนั้น (ไม่หัก paid_amount เพื่อให้ตรงกับ dropdown)
+ *   2. ยอดค้างจากเดือนก่อนหน้า (due_date < วันที่ 1 ของเดือน) จาก monthly_target_detail_snapshot
  *      จะถูกรวมเข้าในวันที่ 1 ของเดือน เพื่อให้ผลรวม (รม) ตรงกับ dropdown
  *   3. ยอดเก็บหนี้แต่ละวัน = SUM(total_amount) จาก debt_collected_cache
  *      WHERE paid_at::date ตรงกับวันนั้น (ไม่รวม is_bad_debt_row)
@@ -1175,25 +1175,28 @@ export async function getDailyBreakdown(
         INTERVAL '1 day'
       )::date AS day
     ),
-    -- เป้าเก็บหนี้แต่ละวัน: SUM net_amount จาก snapshot (group by due_date)
+    -- เป้าเก็บหนี้แต่ละวัน: SUM(principal+interest+fee) จาก monthly_target_detail_snapshot
+    -- ใช้ SUM gross (ไม่หัก paid_amount) เพื่อให้ตรงกับ target_amount ใน monthly_collection_snapshot
     target_by_day AS (
       SELECT
-        due_date::date                                                     AS day,
-        SUM(GREATEST(COALESCE(total_amount, 0) - COALESCE(paid_amount, 0), 0)) AS target_amount
+        due_date::date                                                                                                AS day,
+        SUM(COALESCE(principal::numeric, 0) + COALESCE(interest::numeric, 0) + COALESCE(fee::numeric, 0))           AS target_amount
       FROM monthly_target_detail_snapshot
       WHERE section = '${section}'
         AND snapshot_month = '${snapshotMonth}'
         AND due_date IS NOT NULL
         AND due_date::date >= DATE_TRUNC('month', '${snapshotMonth}-01'::date)
         AND due_date::date <= (DATE_TRUNC('month', '${snapshotMonth}-01'::date) + INTERVAL '1 month - 1 day')
+        AND contract_status NOT IN (${excludedStatuses})
       GROUP BY due_date::date
     ),
     -- ยอดค้างจากเดือนก่อนหน้า (due_date < วันที่ 1 ของเดือน)
-    -- ดึงจาก debt_target_cache เพื่อให้ตรงกับ cumulative target ใน dropdown
+    -- ดึงจาก monthly_target_detail_snapshot ของ snapshot เดือนก่อนๆ ที่ยังไม่ paid
+    -- ใช้ SUM gross เพื่อให้ตรงกับ cumulative target ใน monthly_collection_snapshot
     overdue_carry AS (
       SELECT
         SUM(COALESCE(principal::numeric, 0) + COALESCE(interest::numeric, 0) + COALESCE(fee::numeric, 0)) AS carry_amount
-      FROM debt_target_cache
+      FROM monthly_target_detail_snapshot
       WHERE section = '${section}'
         AND due_date IS NOT NULL
         AND due_date::date < DATE_TRUNC('month', '${snapshotMonth}-01'::date)
