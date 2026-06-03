@@ -1075,11 +1075,23 @@ export async function getMonthlyDebtSummary(
       mcs.collection_month                    AS snapshot_month,
       mcs.target_amount,
       mcs.target_by_range,
-      mcs.collected_amount,
+      -- เดือนปัจจุบัน (ยังไม่ freeze) ให้ดึง collected จาก debt_collected_cache แทน
+      CASE
+        WHEN mcs.collected_is_frozen = FALSE THEN COALESCE((
+          SELECT SUM(total_amount::numeric)
+          FROM debt_collected_cache
+          WHERE section = '${section}'
+            AND TO_CHAR(paid_at, 'YYYY-MM') = mcs.collection_month
+            AND paid_at IS NOT NULL
+            AND is_bad_debt_row IS NOT TRUE
+        ), 0)
+        ELSE mcs.collected_amount
+      END                                     AS collected_amount,
       mcs.updated_at::text                    AS populated_at,
       NULL::bigint                            AS row_count
     FROM monthly_collection_snapshot mcs
     WHERE mcs.section = '${section}'
+      AND mcs.collection_month <= TO_CHAR(NOW(), 'YYYY-MM')
     UNION ALL
     -- fallback: เดือนที่มีใน monthly_target_detail_snapshot แต่ไม่มีใน monthly_collection_snapshot
     SELECT
@@ -1097,6 +1109,7 @@ export async function getMonthlyDebtSummary(
       GROUP BY TO_CHAR(paid_at, 'YYYY-MM')
     ) c ON c.paid_month = t.snapshot_month
     WHERE t.section = '${section}'
+      AND t.snapshot_month <= TO_CHAR(NOW(), 'YYYY-MM')
       AND NOT EXISTS (
         SELECT 1 FROM monthly_collection_snapshot mcs2
         WHERE mcs2.section = '${section}' AND mcs2.collection_month = t.snapshot_month
