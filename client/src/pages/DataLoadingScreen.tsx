@@ -469,17 +469,33 @@ export default function DataLoadingScreen() {
 
       do {
         const url = `https://mdm-th.com/api/mdm/devices?pageNum=${pageNum}&pageSize=${PAGE_SIZE}`;
-        const res = await fetch(url, {
-          headers: {
-            "X-API-Key": apiKey,
-            "Accept": "application/json, text/plain, */*",
-            "Accept-Language": "th-TH,th;q=0.9,en;q=0.8",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-            "Referer": "https://mdm-th.com/",
-            "Origin": "https://mdm-th.com",
-          },
-          signal: AbortSignal.timeout(30_000),
-        });
+        // retry 1 ครั้งเมื่อ abort/timeout เพื่อรองรับ network ช้า
+        let res: Response | null = null;
+        for (let attempt = 0; attempt < 2; attempt++) {
+          try {
+            res = await fetch(url, {
+              headers: {
+                "X-API-Key": apiKey,
+                "Accept": "application/json, text/plain, */*",
+                "Accept-Language": "th-TH,th;q=0.9,en;q=0.8",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                "Referer": "https://mdm-th.com/",
+                "Origin": "https://mdm-th.com",
+              },
+              signal: AbortSignal.timeout(60_000), // เพิ่มจาก 30s เป็น 60s เพื่อรองรับ network ช้า
+            });
+            break; // สำเร็จ ออกจาก loop
+          } catch (fetchErr: any) {
+            const isAbort = fetchErr?.name === "AbortError" || fetchErr?.name === "TimeoutError";
+            if (isAbort && attempt === 0) {
+              // retry ครั้งที่ 2 หลัง delay 2s
+              await new Promise(r => setTimeout(r, 2000));
+              continue;
+            }
+            throw fetchErr; // ถ้า retry แล้วยัง fail หรือไม่ใช่ abort ให้โยน error
+          }
+        }
+        if (!res) throw new Error("MDM fetch ล้มเหลวสิ้น");
 
         if (!res.ok) {
           const body = await res.text().catch(() => "");
