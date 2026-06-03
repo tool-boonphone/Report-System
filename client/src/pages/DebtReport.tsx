@@ -487,9 +487,10 @@ export default function DebtReport() {
   );
   // query getMonthlySnapshots — ดึง frozen targetByRange + dailyBreakdown จาก monthly_collection_snapshot
   // ใช้แทน getMonthlyDebtSummary และ getDailyBreakdown เมื่อ frozen data พร้อมแล้ว
+  // enabled ทันที่ที่ tab=target เพื่อให้ frozen data พร้อมก่อนเปิด popup ยอดรายวัน
   const monthlySnapshotsQuery = trpc.debt.getMonthlySnapshots.useQuery(
     { section: sectionKey },
-    { enabled: !!section && tab === "target" && showSnapshotLog, staleTime: 5 * 60 * 1000 },
+    { enabled: !!section && tab === "target", staleTime: 5 * 60 * 1000 },
   );
   // helper: ดึง frozen dailyBreakdown ของ snapshotMonth ที่ระบุ
   const getFrozenDailyBreakdown = (snapshotMonth: string) => {

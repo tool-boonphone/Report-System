@@ -561,7 +561,9 @@ export async function getMonthlyCollectionSnapshots(
       c.collected_is_frozen,
       c.target_frozen_at,
       c.collected_frozen_at,
-      c.updated_at
+      c.updated_at,
+      c.target_by_range,
+      c.daily_breakdown
     FROM monthly_collection_snapshot c
     LEFT JOIN (
       SELECT
