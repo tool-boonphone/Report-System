@@ -1142,10 +1142,12 @@ export interface DailyBreakdownRow {
  * Logic:
  *   1. เป้าแต่ละวัน = SUM(GREATEST(total_amount - paid_amount, 0))
  *      จาก monthly_target_detail_snapshot WHERE due_date ตรงกับวันนั้น
- *   2. ยอดเก็บหนี้แต่ละวัน = SUM(total_amount) จาก debt_collected_cache
+ *   2. ยอดค้างจากเดือนก่อนหน้า (due_date < วันที่ 1 ของเดือน) จาก debt_target_cache
+ *      จะถูกรวมเข้าในวันที่ 1 ของเดือน เพื่อให้ผลรวม (รม) ตรงกับ dropdown
+ *   3. ยอดเก็บหนี้แต่ละวัน = SUM(total_amount) จาก debt_collected_cache
  *      WHERE paid_at::date ตรงกับวันนั้น (ไม่รวม is_bad_debt_row)
- *   3. Generate วันที่ทุกวันในเดือน (1-สิ้นเดือน) แม้ไม่มีข้อมูล
- *   4. เรียงวันที่ ASC
+ *   4. Generate วันที่ทุกวันในเดือน (1-สิ้นเดือน) แม้ไม่มีข้อมูล
+ *   5. เรียงวันที่ ASC
  *
  * @param section       - section key (Boonphone | Fastfone365)
  * @param snapshotMonth - เดือน YYYY-MM ของ snapshot ที่ต้องการ
@@ -1160,6 +1162,8 @@ export async function getDailyBreakdown(
 
   // Validate snapshotMonth format
   if (!/^\d{4}-\d{2}$/.test(snapshotMonth)) return [];
+
+  const excludedStatuses = `'ระงับสัญญา','สิ้นสุดสัญญา','หนี้เสีย','ยกเลิกสัญญา'`;
 
   const result = await db.execute(sql.raw(`
     WITH
@@ -1184,6 +1188,21 @@ export async function getDailyBreakdown(
         AND due_date::date <= (DATE_TRUNC('month', '${snapshotMonth}-01'::date) + INTERVAL '1 month - 1 day')
       GROUP BY due_date::date
     ),
+    -- ยอดค้างจากเดือนก่อนหน้า (due_date < วันที่ 1 ของเดือน)
+    -- ดึงจาก debt_target_cache เพื่อให้ตรงกับ cumulative target ใน dropdown
+    overdue_carry AS (
+      SELECT
+        SUM(COALESCE(principal::numeric, 0) + COALESCE(interest::numeric, 0) + COALESCE(fee::numeric, 0)) AS carry_amount
+      FROM debt_target_cache
+      WHERE section = '${section}'
+        AND due_date IS NOT NULL
+        AND due_date::date < DATE_TRUNC('month', '${snapshotMonth}-01'::date)
+        AND is_closed IS NOT TRUE
+        AND is_suspended IS NOT TRUE
+        AND is_bad_debt IS NOT TRUE
+        AND is_paid IS NOT TRUE
+        AND contract_status NOT IN (${excludedStatuses})
+    ),
     -- ยอดเก็บหนี้จริงแต่ละวัน: SUM จาก debt_collected_cache (group by paid_at::date)
     collected_by_day AS (
       SELECT
@@ -1198,7 +1217,12 @@ export async function getDailyBreakdown(
     )
     SELECT
       TO_CHAR(d.day, 'YYYY-MM-DD')            AS date,
-      COALESCE(t.target_amount, 0)             AS target_amount,
+      -- วันที่ 1 ของเดือน: รวมยอดค้างจากเดือนก่อนหน้าด้วย
+      CASE
+        WHEN d.day = DATE_TRUNC('month', '${snapshotMonth}-01'::date)::date
+        THEN COALESCE(t.target_amount, 0) + COALESCE((SELECT carry_amount FROM overdue_carry), 0)
+        ELSE COALESCE(t.target_amount, 0)
+      END                                      AS target_amount,
       COALESCE(c.collected_amount, 0)          AS collected_amount
     FROM all_days d
     LEFT JOIN target_by_day    t ON t.day = d.day

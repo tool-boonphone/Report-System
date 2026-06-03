@@ -65,6 +65,7 @@ import {
 } from "@/components/ui/dialog";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import * as XLSX from "xlsx";
 
 /* -------------------------------------------------------------------- */
 /* Utilities                                                            */
@@ -2986,7 +2987,7 @@ export default function DebtReport() {
           <DialogHeader className="px-5 pt-4 pb-3 bg-amber-50 border-b border-amber-200">
             <DialogTitle className="text-base font-bold text-amber-900 flex items-center gap-2">
               <BarChart2 className="w-4 h-4 text-amber-600" />
-              <span>
+              <span className="flex-1">
                 {
                   (() => {
                     if (!dailyBreakdownMonth) return "ยอดรายวัน";
@@ -2997,9 +2998,50 @@ export default function DebtReport() {
                   })()
                 }
               </span>
+              {/* ปุ่ม Export Excel */}
+              {dailyBreakdownQuery.data && (dailyBreakdownQuery.data as Array<unknown>).length > 0 && (
+                <button
+                  type="button"
+                  title="Export Excel"
+                  className="ml-auto flex items-center gap-1 px-2 py-1 rounded text-xs font-medium bg-emerald-100 text-emerald-700 hover:bg-emerald-200 transition-colors"
+                  onClick={() => {
+                    const rows = (dailyBreakdownQuery.data ?? []) as Array<{ date: string; targetAmount: number; collectedAmount: number; percentage: number }>;
+                    const TM2 = ["ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."];
+                    const [yr2, mo2] = (dailyBreakdownMonth ?? "").split("-").map(Number);
+                    const monthLabel = (mo2 >= 1 && mo2 <= 12) ? (TM2[mo2 - 1] + " " + yr2) : (dailyBreakdownMonth ?? "");
+                    const totalTarget    = rows.reduce((s, r) => s + r.targetAmount,    0);
+                    const totalCollected = rows.reduce((s, r) => s + r.collectedAmount, 0);
+                    const totalPct       = totalTarget > 0 ? (totalCollected / totalTarget) * 100 : 0;
+                    // สร้าง worksheet data
+                    const wsData: (string | number)[][] = [
+                      [`ยอดรายวัน — ${monthLabel}`],
+                      ["วันที่", "เป้าเก็บหนี้", "ยอดเก็บหนี้", "% เก็บหนี้"],
+                      ...rows.map(r => {
+                        const dayNum = r.date ? parseInt(r.date.split("-")[2] ?? "0", 10) : 0;
+                        return [
+                          dayNum,
+                          r.targetAmount > 0 ? r.targetAmount : 0,
+                          r.collectedAmount > 0 ? r.collectedAmount : 0,
+                          r.targetAmount > 0 ? parseFloat(r.percentage.toFixed(2)) : 0,
+                        ];
+                      }),
+                      ["รม", totalTarget, totalCollected, totalTarget > 0 ? parseFloat(totalPct.toFixed(2)) : 0],
+                    ];
+                    const wb = XLSX.utils.book_new();
+                    const ws = XLSX.utils.aoa_to_sheet(wsData);
+                    // กำหนด column widths
+                    ws["!cols"] = [{ wch: 8 }, { wch: 18 }, { wch: 18 }, { wch: 12 }];
+                    XLSX.utils.book_append_sheet(wb, ws, monthLabel);
+                    XLSX.writeFile(wb, `daily_breakdown_${dailyBreakdownMonth ?? ""}.xlsx`);
+                  }}
+                >
+                  <Download className="w-3 h-3" />
+                  Excel
+                </button>
+              )}
             </DialogTitle>
           </DialogHeader>
-          <div className="overflow-y-auto" style={{ maxHeight: 'calc(80vh - 80px)' }}>
+          <div className="overflow-y-auto relative" style={{ maxHeight: 'calc(80vh - 80px)' }}>
             {dailyBreakdownQuery.isLoading ? (
               <div className="flex items-center justify-center py-10 gap-2 text-amber-600">
                 <Spinner className="w-5 h-5" />
@@ -3061,8 +3103,8 @@ export default function DebtReport() {
                         );
                       })}
                     </tbody>
-                    {/* แถวรวม (รม) */}
-                    <tfoot>
+                    {/* แถวรวม (รม) — sticky ค้างไว้ที่ด้านล่างตลอด */}
+                    <tfoot className="sticky bottom-0 z-10">
                       <tr className="bg-amber-100 border-t-2 border-amber-300 font-bold text-[13px]">
                         <td className="px-3 py-2.5 text-amber-900">รม</td>
                         <td className="px-3 py-2.5 text-right tabular-nums text-amber-900">
