@@ -1075,17 +1075,48 @@ export async function getMonthlyDebtSummary(
   const excludedStatusesMcs = `'ระงับสัญญา','สิ้นสุดสัญญา','หนี้เสีย','ยกเลิกสัญญา'`;
   const result = await db.execute(sql.raw(`
     WITH
-    -- targetByRange: SUM แยกตาม debt_range ต่อ snapshot_month (สำหรับ client-side filter สถานะหนี้)
-    range_by_month AS (
+    -- targetByRange: SUM แยกตาม debt_range ต่อ snapshot_month
+    -- Logic เดียวกับ getDailyBreakdown:
+    --   in_month = due_date อยู่ในเดือนนั้น + is_paid IS NOT TRUE
+    --   carry    = due_date < วันที่ 1 ของเดือน + is_paid IS NOT TRUE + ไม่ใช่ closed/suspended/bad_debt
+    range_in_month AS (
       SELECT
         snapshot_month,
         COALESCE(debt_range, 'ปกติ') AS range_key,
         SUM(COALESCE(principal::numeric, 0) + COALESCE(interest::numeric, 0) + COALESCE(fee::numeric, 0)) AS range_amount
       FROM monthly_target_detail_snapshot
       WHERE section = '${section}'
+        AND due_date IS NOT NULL
+        AND due_date::date >= DATE_TRUNC('month', (snapshot_month || '-01')::date)
+        AND due_date::date <= (DATE_TRUNC('month', (snapshot_month || '-01')::date) + INTERVAL '1 month - 1 day')
         AND is_paid IS NOT TRUE
         AND contract_status NOT IN (${excludedStatusesMcs})
       GROUP BY snapshot_month, COALESCE(debt_range, 'ปกติ')
+    ),
+    range_carry AS (
+      SELECT
+        snapshot_month,
+        COALESCE(debt_range, 'ปกติ') AS range_key,
+        SUM(COALESCE(principal::numeric, 0) + COALESCE(interest::numeric, 0) + COALESCE(fee::numeric, 0)) AS range_amount
+      FROM monthly_target_detail_snapshot
+      WHERE section = '${section}'
+        AND due_date IS NOT NULL
+        AND due_date::date < DATE_TRUNC('month', (snapshot_month || '-01')::date)
+        AND is_paid IS NOT TRUE
+        AND is_closed IS NOT TRUE
+        AND is_suspended IS NOT TRUE
+        AND is_bad_debt IS NOT TRUE
+        AND contract_status NOT IN (${excludedStatusesMcs})
+      GROUP BY snapshot_month, COALESCE(debt_range, 'ปกติ')
+    ),
+    range_by_month AS (
+      SELECT snapshot_month, range_key, SUM(range_amount) AS range_amount
+      FROM (
+        SELECT snapshot_month, range_key, range_amount FROM range_in_month
+        UNION ALL
+        SELECT snapshot_month, range_key, range_amount FROM range_carry
+      ) combined
+      GROUP BY snapshot_month, range_key
     ),
     range_json_by_month AS (
       SELECT
