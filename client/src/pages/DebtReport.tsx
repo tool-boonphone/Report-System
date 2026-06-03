@@ -687,7 +687,10 @@ export default function DebtReport() {
     }
   }, [tab, section, canView, isAuthLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const isLoading = tab === "target" ? streamLoading.target : (tab === "collected" ? streamLoading.collected : false);
+  // isLoading: Live mode ดู streamLoading, Snapshot mode ดู targetSnapshotViewQuery.isFetching
+  const isLoading = tab === "target"
+    ? (targetViewMode === "snapshot" ? targetSnapshotViewQuery.isFetching : streamLoading.target)
+    : (tab === "collected" ? streamLoading.collected : false);
   const isError = tab === "target" ? !!streamError.target : (tab === "collected" ? !!streamError.collected : false);
   const queryError = tab === "target" ? streamError.target : (tab === "collected" ? streamError.collected : null);
   const refetch = useCallback(() => { fetchStream(tab); }, [fetchStream, tab]);
