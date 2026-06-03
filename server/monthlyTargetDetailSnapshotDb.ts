@@ -1156,6 +1156,7 @@ export interface DailyBreakdownRow {
 export async function getDailyBreakdown(
   section: SectionKey,
   snapshotMonth: string, // YYYY-MM
+  debtStatuses?: string[], // filter debt_range (undefined = ทุกสถานะ)
 ): Promise<DailyBreakdownRow[]> {
   const db = await getDb(section);
   if (!db) return [];
@@ -1164,6 +1165,10 @@ export async function getDailyBreakdown(
   if (!/^\d{4}-\d{2}$/.test(snapshotMonth)) return [];
 
   const excludedStatuses = `'ระงับสัญญา','สิ้นสุดสัญญา','หนี้เสีย','ยกเลิกสัญญา'`;
+  // สร้าง SQL condition สำหรับ filter debt_range (ถ้าระบุ)
+  const debtRangeCondition = (debtStatuses && debtStatuses.length > 0)
+    ? `AND debt_range IN (${debtStatuses.map(s => `'${s.replace(/'/g, "''")}'`).join(',')})`
+    : '';
 
   const result = await db.execute(sql.raw(`
     WITH
@@ -1188,6 +1193,7 @@ export async function getDailyBreakdown(
         AND due_date::date >= DATE_TRUNC('month', '${snapshotMonth}-01'::date)
         AND due_date::date <= (DATE_TRUNC('month', '${snapshotMonth}-01'::date) + INTERVAL '1 month - 1 day')
         AND contract_status NOT IN (${excludedStatuses})
+        ${debtRangeCondition}
       GROUP BY due_date::date
     ),
     -- ยอดค้างจากเดือนก่อนหน้า (due_date < วันที่ 1 ของเดือน)
@@ -1205,6 +1211,7 @@ export async function getDailyBreakdown(
         AND is_bad_debt IS NOT TRUE
         AND is_paid IS NOT TRUE
         AND contract_status NOT IN (${excludedStatuses})
+        ${debtRangeCondition}
     ),
     -- ยอดเก็บหนี้จริงแต่ละวัน: SUM จาก debt_collected_cache (group by paid_at::date)
     collected_by_day AS (

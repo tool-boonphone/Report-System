@@ -338,8 +338,9 @@ export const debtRouter = router({
     .input(z.object({
       section: SectionEnum,
       snapshotMonth: z.string().regex(/^\d{4}-\d{2}$/, "snapshotMonth must be YYYY-MM"),
+      debtStatuses: z.array(z.string()).optional(), // filter debt_range (ถ้าไม่ระบุ = ทุกสถานะ)
     }))
     .query(async ({ input }) => {
-      return getDailyBreakdown(input.section, input.snapshotMonth);
+      return getDailyBreakdown(input.section, input.snapshotMonth, input.debtStatuses);
     }),
 });

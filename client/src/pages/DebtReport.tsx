@@ -457,9 +457,32 @@ export default function DebtReport() {
   // ── Daily Breakdown popup state ──────────────────────────────────────────────
   // เก็บ snapshotMonth ที่กดปุ่มดูรายวัน (null = ปิด popup)
   const [dailyBreakdownMonth, setDailyBreakdownMonth] = useState<string | null>(null);
+  // state สำหรับ multi-select filter สถานะหนี้ใน Daily Breakdown popup
+  // [] = ทุกสถานะ (ไม่กรอง), มีค่า = กรองเฉพาะสถานะที่เลือก
+  const [dailyBreakdownStatuses, setDailyBreakdownStatuses] = useState<string[]>([]);
+  // state สำหรับ dropdown open/close
+  const [dailyStatusDropdownOpen, setDailyStatusDropdownOpen] = useState(false);
+  // รายการสถานะหนี้ทั้งหมดสำหรับ filter
+  const DEBT_STATUS_OPTIONS = [
+    "ปกติ",
+    "เกิน 1-7",
+    "เกิน 8-14",
+    "เกิน 15-30",
+    "เกิน 31-60",
+    "เกิน 61-90",
+    "เกิน >90",
+    "ระงับสัญญา",
+    "สิ้นสุดสัญญา",
+    "หนี้เสีย",
+    "ยกเลิกสัญญา",
+  ];
   // query getDailyBreakdown — ดึงเฉพาะเมื่อ popup เปิด
   const dailyBreakdownQuery = trpc.debt.getDailyBreakdown.useQuery(
-    { section: sectionKey, snapshotMonth: dailyBreakdownMonth ?? "" },
+    {
+      section: sectionKey,
+      snapshotMonth: dailyBreakdownMonth ?? "",
+      debtStatuses: dailyBreakdownStatuses.length > 0 ? dailyBreakdownStatuses : undefined,
+    },
     { enabled: !!section && !!dailyBreakdownMonth, staleTime: 2 * 60 * 1000 },
   );
   // query getMonthlyDebtSummary สำหรับ dropdown "เป้าเก็บหนี้รายเดือน" (ตาราง 4 คอลัมน์)
@@ -2989,10 +3012,10 @@ export default function DebtReport() {
       </Dialog>
       {/* ── Daily Breakdown Popup ────────────────────────────────────────────── */}
       {/* แสดงยอดเป้าเก็บหนี้และยอดเก็บหนี้จริง แยกตามวันที่ 1-สิ้นเดือน */}
-      <Dialog open={!!dailyBreakdownMonth} onOpenChange={(open) => { if (!open) setDailyBreakdownMonth(null); }}>
+      <Dialog open={!!dailyBreakdownMonth} onOpenChange={(open) => { if (!open) { setDailyBreakdownMonth(null); setDailyBreakdownStatuses([]); setDailyStatusDropdownOpen(false); } }}>
         <DialogContent className="max-w-lg w-full p-0 overflow-hidden rounded-2xl">
           <DialogHeader className="px-5 pt-4 pb-3 bg-amber-50 border-b border-amber-200">
-            {/* Row: title ซ้าย + Excel กลาง-ขวา (X ของ Shadcn จะอยู่ขวาสุด absolute) */}
+            {/* Row 1: title ซ้าย + Excel + X ขวา */}
             <div className="flex items-center gap-2 pr-8">
               <DialogTitle className="text-base font-bold text-amber-900 flex items-center gap-2 flex-1 min-w-0">
                 <BarChart2 className="w-4 h-4 text-amber-600 shrink-0" />
@@ -3050,8 +3073,58 @@ export default function DebtReport() {
                 </button>
               )}
             </div>
+            {/* Row 2: Multi-select filter สถานะหนี้ */}
+            <div className="relative mt-2">
+              <button
+                type="button"
+                onClick={() => setDailyStatusDropdownOpen(prev => !prev)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-300 bg-white text-xs text-amber-900 hover:bg-amber-50 transition-colors w-full max-w-xs"
+              >
+                <span className="flex-1 text-left truncate">
+                  {dailyBreakdownStatuses.length === 0
+                    ? "ทุกสถานะหนี้"
+                    : dailyBreakdownStatuses.length === 1
+                    ? dailyBreakdownStatuses[0]
+                    : `เลือกแล้ว ${dailyBreakdownStatuses.length} สถานะ`
+                  }
+                </span>
+                <svg className={`w-3 h-3 text-amber-600 transition-transform ${dailyStatusDropdownOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+              </button>
+              {dailyStatusDropdownOpen && (
+                <div className="absolute left-0 top-full mt-1 z-50 bg-white border border-amber-200 rounded-xl shadow-lg py-1 min-w-[180px] max-h-64 overflow-y-auto">
+                  {/* ตัวเลือก ทุกสถานะ */}
+                  <label className="flex items-center gap-2 px-3 py-1.5 hover:bg-amber-50 cursor-pointer text-xs text-amber-900 font-semibold">
+                    <input
+                      type="checkbox"
+                      checked={dailyBreakdownStatuses.length === 0}
+                      onChange={() => setDailyBreakdownStatuses([])}
+                      className="accent-amber-500"
+                    />
+                    ทุกสถานะหนี้
+                  </label>
+                  <div className="border-t border-amber-100 my-0.5" />
+                  {DEBT_STATUS_OPTIONS.map(status => (
+                    <label key={status} className="flex items-center gap-2 px-3 py-1.5 hover:bg-amber-50 cursor-pointer text-xs text-gray-700">
+                      <input
+                        type="checkbox"
+                        checked={dailyBreakdownStatuses.includes(status)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setDailyBreakdownStatuses(prev => [...prev, status]);
+                          } else {
+                            setDailyBreakdownStatuses(prev => prev.filter(s => s !== status));
+                          }
+                        }}
+                        className="accent-amber-500"
+                      />
+                      {status}
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
           </DialogHeader>
-          <div className="overflow-y-auto relative" style={{ maxHeight: 'calc(80vh - 80px)' }}>
+          <div className="overflow-y-auto relative" style={{ maxHeight: 'calc(80vh - 120px)' }}>
             {dailyBreakdownQuery.isLoading ? (
               <div className="flex items-center justify-center py-10 gap-2 text-amber-600">
                 <Spinner className="w-5 h-5" />
