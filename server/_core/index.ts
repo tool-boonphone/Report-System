@@ -218,6 +218,21 @@ async function startServer() {
       return res.status(500).json({ error: String(err?.message ?? err) });
     }
   });
+  // Internal backfill frozen breakdown endpoint — no auth, one-time use
+  app.post("/api/internal/backfill-frozen-breakdown", async (req, res) => {
+    const { section, snapshotMonth } = req.body as { section?: string; snapshotMonth?: string };
+    if (!section || !['Boonphone', 'Fastfone365'].includes(section)) {
+      return res.status(400).json({ error: 'Invalid section. Use Boonphone or Fastfone365' });
+    }
+    try {
+      const { backfillFrozenBreakdown } = await import('../monthlyCollectionSnapshotDb');
+      const count = await backfillFrozenBreakdown(section as any, snapshotMonth);
+      return res.json({ ok: true, section, monthsUpdated: count });
+    } catch (err: any) {
+      console.error('[backfill-frozen]', err);
+      return res.status(500).json({ error: String(err?.message ?? err) });
+    }
+  });
   // tRPC API
   app.use(
     "/api/trpc",
