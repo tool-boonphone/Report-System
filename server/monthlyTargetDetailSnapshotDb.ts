@@ -139,6 +139,7 @@ export async function populateTargetDetailSnapshot(
   filterPrincipalOnly = true,
   filterState: string | null = null, // JSON string ของ filter ที่ใช้ตอน Snapshot — ใช้ auto-restore ตอนเปิดดู Snapshot
   clientTargetAmount?: number, // ยอดเป้าเก็บหนี้ที่ client คำนวณได้ (ตรงกับ badge ยอดหนี้รวม) — ถ้าระบุจะ upsert ลง monthly_collection_snapshot โดยตรง
+  skipIfExists = false, // ถ้า true และมีข้อมูลเดือนนั้นอยู่แล้ว → return 0 ทันที (freeze — ห้าม overwrite)
 ): Promise<number> {
   const db = await getDb(section);
   if (!db) return 0;
@@ -167,6 +168,11 @@ export async function populateTargetDetailSnapshot(
   const existingCountRows = pgRows(existingCountResult);
   const existingCnt = n(existingCountRows[0]?.cnt ?? 0);
   if (existingCnt > 0) {
+    if (skipIfExists) {
+      // freeze mode: มีข้อมูลแล้ว → ไม่ overwrite
+      console.log(`[targetDetailSnapshot] ${section}: ${snapshotMonth} already frozen (${existingCnt} rows) — skipIfExists=true, skipping`);
+      return 0;
+    }
     // ลบ snapshot เก่าของเดือนนี้ออกก่อน INSERT ใหม่ (overwrite)
     console.log(`[targetDetailSnapshot] ${section}: ${snapshotMonth} has ${existingCnt} existing rows — deleting and re-inserting with mode=${snapshotMode}`);
     await db.execute(sql.raw(`

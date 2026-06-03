@@ -521,7 +521,7 @@ async function doSync(
         );
         console.log(`[sync] ${section}: monthly_target_detail_snapshot AUTO populated — ${detailRows} rows for ${currentMonth} (end_of_month mode, day-1 freeze, debtSetMode=true)`);
       } else {
-        // วันอื่น: เรียก populate แต่ function จะ skip เองถ้ามีข้อมูลแล้ว
+        // วันอื่น: skip ถ้ามีข้อมูลเดือนนั้นอยู่แล้ว (skipIfExists=true — freeze ไม่ให้ overwrite)
         const detailRows = await populateMonthlyTargetDetailSnapshot(
           section,
           currentMonth,
@@ -529,11 +529,13 @@ async function doSync(
           true,
           true,
           autoSnapshotFilterState,
+          undefined, // clientTargetAmount
+          true,      // skipIfExists = true → ถ้ามีข้อมูลแล้วจะ skip ทันที
         );
         if (detailRows > 0) {
           console.log(`[sync] ${section}: monthly_target_detail_snapshot retry-populated — ${detailRows} rows for ${currentMonth} (end_of_month)`);
         } else {
-          console.log(`[sync] ${section}: monthly_target_detail_snapshot already frozen for ${currentMonth} — skipped`);
+          console.log(`[sync] ${section}: monthly_target_detail_snapshot already frozen for ${currentMonth} — skipped (skipIfExists)`);
         }
       }
     } catch (detailErr: any) {
