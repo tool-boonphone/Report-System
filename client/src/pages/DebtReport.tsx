@@ -1682,7 +1682,11 @@ export default function DebtReport() {
                           ? "bg-blue-100 text-blue-700"
                           : "bg-violet-100 text-violet-700"
                       }`}>
-                        {debtSetCutoffMode === "end_of_month" ? "เดือนนี้" : "วันนี้"}
+                        {debtSetCutoffMode === "end_of_month" ? (() => {
+                          const _TM = ["ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."];
+                          const _d = new Date();
+                          return _TM[_d.getMonth()] + String(_d.getFullYear()).slice(2);
+                        })() : "วันนี้"}
                       </span>
                     )}
                   </label>
