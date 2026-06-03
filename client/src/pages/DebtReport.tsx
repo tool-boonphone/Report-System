@@ -736,51 +736,14 @@ export default function DebtReport() {
   const snapshotAsTargetRows: TargetRow[] = useMemo(() => {
     if (targetViewMode !== "snapshot" || !targetSnapshotViewQuery.data?.contracts) return [];
 
-    // ─── Helper: คำนวณ debtStatus + daysOverdue จาก installments (เหมือน rederiveDaysOverdue ใน server) ───
-    const TERMINAL_STATUSES = new Set(["ระงับสัญญา", "สิ้นสุดสัญญา", "หนี้เสีย", "ยกเลิกสัญญา"]);
-    function bucketFromDays(days: number): string {
-      if (days <= 0) return "ปกติ";
-      if (days <= 7) return "เกิน 1-7";
-      if (days <= 14) return "เกิน 8-14";
-      if (days <= 30) return "เกิน 15-30";
-      if (days <= 60) return "เกิน 31-60";
-      if (days <= 90) return "เกิน 61-90";
-      return "เกิน >90";
-    }
-    function rederiveDebtStatus(
-      contractStatus: string | null,
-      insts: Array<{ dueDate: string | null; totalAmount: number; paidAmount: number; principal: number; interest: number; fee: number; isClosed: boolean; isSuspended?: boolean; isPaid?: boolean }>,
-      todayMs: number,
-    ): { debtStatus: string; daysOverdue: number } {
-      // Terminal statuses: ใช้ contractStatus โดยตรง
-      if (contractStatus && TERMINAL_STATUSES.has(contractStatus)) {
-        return { debtStatus: contractStatus, daysOverdue: 0 };
-      }
-      let maxDays = 0;
-      for (const it of insts) {
-        if (it.isPaid || it.isClosed || it.isSuspended) continue;
-        if (!it.dueDate) continue;
-        const dueMs = Date.parse(`${it.dueDate}T00:00:00`);
-        if (Number.isNaN(dueMs)) continue;
-        // ใช้ netAmount (เงินต้น+ดอกเบี้ย+ค่าดำเนินการ) เท่านั้น ไม่นับค่าปรับและค่าปลดล็อก
-        const netAmount = it.principal + it.interest + it.fee;
-        if (netAmount <= 0.001) continue;
-        if (it.paidAmount >= netAmount - 0.5) continue; // จ่ายครบ netAmount แล้ว
-        if (dueMs > todayMs) continue; // future
-        const days = Math.floor((todayMs - dueMs) / 86_400_000);
-        if (days > maxDays) maxDays = days;
-      }
-      return { debtStatus: bucketFromDays(maxDays), daysOverdue: maxDays };
-    }
-
     // ─── cutoffDate ของ snapshot นี้ (ใช้คำนวณ isFuturePeriod ใน badge) ───
     const cutoffStr = targetSnapshotViewQuery.data.cutoffDate
       ? String(targetSnapshotViewQuery.data.cutoffDate).slice(0, 10)
       : new Date().toISOString().slice(0, 10);
-    const cutoffMs = Date.parse(`${cutoffStr}T23:59:59`);
-    // todayMs: ใช้คำนวณ debtStatus/daysOverdue เท่านั้น (ไม่ขึ้นกับ cutoffDate ของ snapshot)
-    // เพื่อให้สถานะหนี้และเกินกำหนดตรงกับ Live mode ณ วันที่ดูข้อมูล
-    const todayMs = Date.now();
+    // cutoffMs: เก็บไว้เผื่อใช้ใน badge (isFuturePeriod check) ถ้าต้องการในอนาคต
+    void Date.parse(`${cutoffStr}T23:59:59`); // ยังไม่ใช้ cutoffMs ในโค้ดนี้ (isFuturePeriod มาจาก server อยู่แล้ว)
+    // ✅ Snapshot mode: ใช้ debtRange ที่ frozen ไว้ใน DB แทน re-compute จาก today
+    // debtRange ถูก populate ตอนถ่าย snapshot → ตรงกับสถานะ ณ วันที่ถ่าย snapshot จริง
 
     // ─── แปลง TargetSnapshotContractRow → TargetRow ───
     // server ส่งมาเป็น contracts[] ที่ group แล้ว (1 contract = 1 row + installments[])
@@ -823,13 +786,12 @@ export default function DebtReport() {
       }
       const remaining = Math.max(totalAmount - totalPaid, 0);
 
-      // คำนวณ debtStatus + daysOverdue ด้วย todayMs (วันนี้) ไม่ใช้ cutoffMs
-      // เพื่อให้สถานะหนี้/เกินกำหนดตรงกับ Live mode ไม่ขึ้นกับ end_of_month cutoff
-      const { debtStatus, daysOverdue } = rederiveDebtStatus(
-        lastContractStatus,
-        c.installments,
-        todayMs,
-      );
+      // ✅ Snapshot mode: ใช้ debtRange ที่ frozen ไว้ใน DB (ไม่ re-compute จาก today)
+      // หา debtRange จาก installment แรกที่มีค่า (ทุก installment ของสัญญาเดียวกันมี debtRange เหมือนกัน)
+      const frozenDebtRange = c.installments.find(i => i.debtRange)?.debtRange ?? null;
+      const debtStatus = frozenDebtRange ?? (lastContractStatus ?? "ปกติ");
+      // daysOverdue: ไม่สามารถ derive จาก frozen snapshot ได้แม่นยำ → ใช้ 0 สำหรับ snapshot mode
+      const daysOverdue = 0;
 
       result.push({
         contractExternalId: c.contractExternalId,
@@ -3046,7 +3008,7 @@ export default function DebtReport() {
                   <svg className={`w-3 h-3 text-amber-600 shrink-0 transition-transform ${dailyStatusDropdownOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
                 </button>
                 {dailyStatusDropdownOpen && (
-                  <div className="absolute left-0 top-full mt-1 z-50 bg-white border border-amber-200 rounded-xl shadow-lg py-1 min-w-[160px] max-h-64 overflow-y-auto">
+                  <div className="absolute left-0 top-full mt-1 z-50 bg-white border border-amber-200 rounded-xl shadow-lg py-1 min-w-[160px] max-h-80 overflow-y-auto">
                     <label className="flex items-center gap-2 px-3 py-1.5 hover:bg-amber-50 cursor-pointer text-xs text-amber-900 font-semibold">
                       <input type="checkbox" checked={dailyBreakdownStatuses.length === 0} onChange={() => setDailyBreakdownStatuses([])} className="accent-amber-500" />
                       ทุกสถานะหนี้
