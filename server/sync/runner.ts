@@ -55,7 +55,7 @@ import { populateDebtCache } from "./populateCache";
 import { pgRows } from "../db";
 import { rebuildIncomeMonthlySummary, populateIncomeType } from "../accountingDb";
 import { populateMonthlySummaryCache, populateDueMonthCache } from "../monthlySummaryDb";
-import { populateMonthlyCollectionSnapshot } from "../monthlyCollectionSnapshotDb";
+import { populateMonthlyCollectionSnapshot, backfillFrozenBreakdown } from "../monthlyCollectionSnapshotDb";
 import { populateTargetDetailSnapshot as populateMonthlyTargetDetailSnapshot } from "../monthlyTargetDetailSnapshotDb";
 
 /* ─────────────────────────────────────────────────────────────────────────── */
@@ -540,6 +540,22 @@ async function doSync(
       }
     } catch (detailErr: any) {
       console.warn(`[sync] ${section}: populateMonthlyTargetDetailSnapshot failed (non-fatal):`, detailErr?.message ?? detailErr);
+    }
+
+    // ── Backfill frozen breakdown: คำนวณ target_by_range + daily_breakdown ──
+    // รันหลัง populateTargetDetailSnapshot เพื่อให้ข้อมูล monthly_target_detail_snapshot พร้อมแล้ว
+    try {
+      const bangkokDateForBreakdown = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Bangkok",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).format(new Date());
+      const currentMonthForBreakdown = bangkokDateForBreakdown.slice(0, 7);
+      const backfillRows = await backfillFrozenBreakdown(section, currentMonthForBreakdown);
+      console.log(`[sync] ${section}: backfillFrozenBreakdown — updated ${backfillRows} months`);
+    } catch (backfillErr: any) {
+      console.warn(`[sync] ${section}: backfillFrozenBreakdown failed (non-fatal):`, backfillErr?.message ?? backfillErr);
     }
 
     // ── Finish sync log ───────────────────────────────────────────────────

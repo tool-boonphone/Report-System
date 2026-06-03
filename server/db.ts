@@ -392,6 +392,20 @@ export async function runStartupMigrations(): Promise<void> {
       console.error(`[migration] ${section}: monthly_target_detail_snapshot.filter_state failed:`, err?.message ?? err);
     }
     try {
+      // Migration 0022: เพิ่ม target_by_range และ daily_breakdown ใน monthly_collection_snapshot
+      // เก็บ pre-computed data เพื่อให้โหลดเร็ว ไม่ต้อง query real-time
+      // target_by_range: { "ปกติ": 1234, "เกิน 1-7": 5678, ... } (6 สถานะ default)
+      // daily_breakdown: { "1": { target: 1234, collected: 0 }, "2": {...}, ... } (รายวัน)
+      await db.execute(sql.raw(`
+        ALTER TABLE monthly_collection_snapshot
+        ADD COLUMN IF NOT EXISTS target_by_range  JSONB,
+        ADD COLUMN IF NOT EXISTS daily_breakdown  JSONB
+      `));
+      console.log(`[migration] ${section}: monthly_collection_snapshot — target_by_range, daily_breakdown OK`);
+    } catch (err: any) {
+      console.error(`[migration] ${section}: monthly_collection_snapshot target_by_range/daily_breakdown failed:`, err?.message ?? err);
+    }
+    try {
       // Migration 0021: สร้าง monthly_collection_snapshot table (IF NOT EXISTS)
       // ป้องกัน DB ที่ไม่เคยรัน migration นี้ (เช่น section ที่เพิ่มทีหลัง)
       await db.execute(sql.raw(`

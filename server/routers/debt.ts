@@ -28,6 +28,7 @@ import {
   getMonthlyTargetDetail,
   getMonthlyCollectedDetail,
   populateMonthlyCollectionSnapshot,
+  backfillFrozenBreakdown,
 } from "../monthlyCollectionSnapshotDb";
 import {
   populateTargetDetailSnapshot as populateMonthlyTargetDetailSnapshot,
@@ -315,6 +316,20 @@ export const debtRouter = router({
     }))
     .query(async ({ input }) => {
       return getContractInstallmentsBySnapshot(input);
+    }),
+
+  /**
+   * Backfill frozen target_by_range + daily_breakdown สำหรับ snapshot เก่า
+   * ถ้าไม่ระบุ snapshotMonth จะ backfill ทุกเดือนที่มีใน monthly_collection_snapshot
+   */
+  backfillFrozenBreakdown: debtViewProcedure
+    .input(z.object({
+      section: SectionEnum,
+      snapshotMonth: z.string().regex(/^\d{4}-\d{2}$/, "must be YYYY-MM").optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const count = await backfillFrozenBreakdown(input.section, input.snapshotMonth);
+      return { success: true, monthsUpdated: count };
     }),
 
   // ── Monthly Debt Summary (เป้าเก็บหนี้รายเดือน) ──────────────────────────

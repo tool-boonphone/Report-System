@@ -485,8 +485,27 @@ export default function DebtReport() {
     },
     { enabled: !!section && !!dailyBreakdownMonth, staleTime: 2 * 60 * 1000 },
   );
+  // query getMonthlySnapshots — ดึง frozen targetByRange + dailyBreakdown จาก monthly_collection_snapshot
+  // ใช้แทน getMonthlyDebtSummary และ getDailyBreakdown เมื่อ frozen data พร้อมแล้ว
+  const monthlySnapshotsQuery = trpc.debt.getMonthlySnapshots.useQuery(
+    { section: sectionKey },
+    { enabled: !!section && tab === "target" && showSnapshotLog, staleTime: 5 * 60 * 1000 },
+  );
+  // helper: ดึง frozen dailyBreakdown ของ snapshotMonth ที่ระบุ
+  const getFrozenDailyBreakdown = (snapshotMonth: string) => {
+    const rows = (monthlySnapshotsQuery.data ?? []) as any[];
+    const row = rows.find((r: any) => r.collectionMonth === snapshotMonth);
+    return row?.dailyBreakdown ?? null;
+  };
+  // helper: ดึง frozen targetByRange ของ snapshotMonth ที่ระบุ
+  const getFrozenTargetByRange = (snapshotMonth: string) => {
+    const rows = (monthlySnapshotsQuery.data ?? []) as any[];
+    const row = rows.find((r: any) => r.collectionMonth === snapshotMonth);
+    return row?.targetByRange ?? null;
+  };
   // query getMonthlyDebtSummary สำหรับ dropdown "เป้าเก็บหนี้รายเดือน" (ตาราง 4 คอลัมน์)
   // ดึงจาก monthly_target_detail_snapshot (freeze ณ วันที่ 1) + debt_collected_cache (ค่างวดเท่านั้น)
+  // fallback เมื่อ frozen data ยังไม่มี (snapshot เก่าก่อน backfill)
   const monthlyDebtSummaryQuery = trpc.debt.getMonthlyDebtSummary.useQuery(
     { section: sectionKey },
     { enabled: !!section && tab === "target" && showSnapshotLog, staleTime: 2 * 60 * 1000 },
@@ -1462,16 +1481,18 @@ export default function DebtReport() {
                           </div>
                           {/* Table Rows */}
                           {(monthlyDebtSummaryQuery.data as any[]).map((row: any) => {
-                            // เป้าเก็บหนี้: ใช้ targetByRange กรองตาม SNAPSHOT_DEFAULT_STATUSES (6 สถานะ)
-                            // ยอดเก็บหนี้: collectedAmount จาก debt_collected_cache (ค่างวดเท่านั้น ไม่รวมขายเครื่อง)
-                            const targetByRange: Record<string, number> = (typeof row.targetByRange === 'object' && row.targetByRange) ? row.targetByRange : {};
+                            // เป้าเก็บหนี้: ใช้ frozen targetByRange จาก monthly_collection_snapshot ถ้ามี ไม่งั้น fallback ไป row.targetByRange
+                            const monthStr = String(row.snapshotMonth ?? "");
+                            const frozenRange = getFrozenTargetByRange(monthStr);
+                            const targetByRange: Record<string, number> = frozenRange
+                              ? frozenRange
+                              : (typeof row.targetByRange === 'object' && row.targetByRange) ? row.targetByRange : {};
                             // SUM เฉพาะ 6 สถานะ default (ไม่รวม "เกิน >90")
                             const targetAmt = SNAPSHOT_DEFAULT_STATUSES.reduce((s, rng) => s + (targetByRange[rng] ?? 0), 0) || (row.targetAmount ?? 0);
                             const collectedAmt = Math.max(row.collectedAmount ?? 0, 0);
                             const pct = targetAmt > 0 ? (collectedAmt / targetAmt) * 100 : 0;
                             const pctColor = pct >= 100 ? "text-emerald-600 font-bold" : pct >= 80 ? "text-yellow-600 font-semibold" : "text-red-600 font-semibold";
                             // แปลง YYYY-MM → มิ.ย. 2026 (ใช้ snapshotMonth จาก getMonthlyDebtSummary)
-                            const monthStr = String(row.snapshotMonth ?? "");
                             const [yr, mo] = monthStr.split("-").map(Number);
                             const THAI_MONTHS_SHORT = ["ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."];
                             const monthLabel = mo >= 1 && mo <= 12 ? `${THAI_MONTHS_SHORT[mo - 1]} ${yr}` : monthStr;
@@ -3098,18 +3119,25 @@ export default function DebtReport() {
             </div>
           </DialogHeader>
           <div className="overflow-y-auto relative" style={{ maxHeight: 'calc(80vh - 120px)' }}>
-            {dailyBreakdownQuery.isLoading ? (
+            {(() => {
+              // ตรวจสอบ frozen dailyBreakdown จาก monthly_collection_snapshot
+              const frozenDaily = dailyBreakdownMonth ? getFrozenDailyBreakdown(dailyBreakdownMonth) : null;
+              // ถ้ามี frozen data → ใช้ทันที (isLoading = false)
+              const isLoadingDaily = frozenDaily ? false : dailyBreakdownQuery.isLoading;
+              const isErrorDaily = frozenDaily ? false : dailyBreakdownQuery.isError;
+              return isLoadingDaily ? (
               <div className="flex items-center justify-center py-10 gap-2 text-amber-600">
                 <Spinner className="w-5 h-5" />
                 <span className="text-sm">กำลังโหลด...</span>
               </div>
-            ) : dailyBreakdownQuery.isError ? (
+            ) : isErrorDaily ? (
               <div className="px-5 py-6 text-center text-sm text-red-500">โหลดข้อมูลไม่สำเร็จ</div>
             ) : (
               (() => {
                 // Type ใหม่ที่มี targetByRange สำหรับ client-side filter
                 type DailyRow = { date: string; targetAmount: number; targetByRange: Record<string, number>; collectedAmount: number; percentage: number };
-                const rawRows = (dailyBreakdownQuery.data ?? []) as DailyRow[];
+                // ใช้ frozen data ถ้ามี ไม่งั้น fallback ไป real-time query
+                const rawRows = (frozenDaily ?? dailyBreakdownQuery.data ?? []) as DailyRow[];
 
                 // Client-side filter: คำนวณ displayTargetAmount ตาม dailyBreakdownStatuses
                 // ถ้าไม่ได้ filter (ทุกสถานะ) → ใช้ targetAmount จาก server (ซึ่งตรงกับ mcs target แล้ว)
@@ -3200,7 +3228,8 @@ export default function DebtReport() {
                   </table>
                 );
               })()
-            )}
+            );
+          })()}
           </div>
         </DialogContent>
       </Dialog>

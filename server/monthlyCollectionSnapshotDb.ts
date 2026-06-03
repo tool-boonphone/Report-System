@@ -53,6 +53,9 @@ export type MonthlyCollectionSnapshotRow = {
   financedTotal: number;   // ยอดผ่อนรวม (finance_amount × installment_count)
   overdueTotal: number;    // ค้างชำระรวม
   collectedSale: number;   // ยอดขายเครื่อง
+  // ── Frozen breakdown (freeze ไว้ตอน backfillFrozenBreakdown) ────────────────
+  targetByRange: Record<string, number> | null;  // { "ปกติ": 1234, "เกิน 1-7": 5678, ... }
+  dailyBreakdown: Record<string, { target: number; targetByRange: Record<string, number>; collected: number }> | null;
   // ── Freeze status ────────────────────────────────────────────────────────────
   collectedIsFrozen: boolean;
   targetFrozenAt: string | null;
@@ -600,6 +603,8 @@ export async function getMonthlyCollectionSnapshots(
     financedTotal: n(row.financed_total),
     overdueTotal: n(row.overdue_total),
     collectedSale: n(row.collected_sale),
+    targetByRange: row.target_by_range ?? null,
+    dailyBreakdown: row.daily_breakdown ?? null,
     collectedIsFrozen: Boolean(row.collected_is_frozen),
     targetFrozenAt: row.target_frozen_at ? String(row.target_frozen_at) : null,
     collectedFrozenAt: row.collected_frozen_at ? String(row.collected_frozen_at) : null,
@@ -1024,4 +1029,264 @@ export async function getMonthlyCollectionSnapshotsLive(
       updatedAt: nowStr,
     };
   });
+}
+
+// ─── Backfill: คำนวณ target_by_range และ daily_breakdown แล้ว freeze ใน mcs ──────
+/**
+ * backfillFrozenBreakdown
+ *
+ * คำนวณ target_by_range (JSON แยกตาม debt_range 7 สถานะ) และ daily_breakdown (JSON รายวัน)
+ * จาก monthly_target_detail_snapshot แล้ว UPDATE ลงใน monthly_collection_snapshot
+ *
+ * ใช้ logic เดียวกับ getDailyBreakdown เพื่อให้ตัวเลขตรงกัน 100%
+ *
+ * เรียกหลัง populateTargetDetailSnapshot เสร็จใน runner.ts
+ * และสามารถเรียกซ้ำเพื่อ backfill snapshot เก่าได้
+ *
+ * @param section - section key
+ * @param snapshotMonth - YYYY-MM (ถ้าไม่ระบุ จะ backfill ทุกเดือนที่มีใน mcs)
+ */
+export async function backfillFrozenBreakdown(
+  section: SectionKey,
+  snapshotMonth?: string,
+): Promise<number> {
+  const db = await getDb(section);
+  if (!db) return 0;
+
+  // ดึงรายการเดือนที่ต้อง backfill
+  let months: string[] = [];
+  if (snapshotMonth) {
+    months = [snapshotMonth];
+  } else {
+    // ดึงทุกเดือนที่มีใน monthly_collection_snapshot
+    const monthsResult = await db.execute(sql.raw(`
+      SELECT DISTINCT collection_month
+      FROM monthly_collection_snapshot
+      WHERE section = '${section}'
+        AND collection_month >= '2026-06'
+      ORDER BY collection_month ASC
+    `));
+    months = pgRows(monthsResult).map((r: any) => String(r.collection_month));
+  }
+
+  if (months.length === 0) return 0;
+
+  const excludedStatuses = `'ระงับสัญญา','สิ้นสุดสัญญา','หนี้เสีย','ยกเลิกสัญญา'`;
+  const ALL_DEBT_RANGES = ["ปกติ", "เกิน 1-7", "เกิน 8-14", "เกิน 15-30", "เกิน 31-60", "เกิน 61-90", "เกิน >90"];
+
+  let updatedCount = 0;
+
+  for (const month of months) {
+    if (!/^\d{4}-\d{2}$/.test(month)) continue;
+
+    try {
+      // ── 1. คำนวณ target_by_range (SUM แยกตาม debt_range ทั้ง in_month + carry) ──
+      const rangeResult = await db.execute(sql.raw(`
+        WITH
+        in_month AS (
+          SELECT
+            COALESCE(debt_range, 'ปกติ') AS range_key,
+            SUM(COALESCE(principal::numeric, 0) + COALESCE(interest::numeric, 0) + COALESCE(fee::numeric, 0)) AS amount
+          FROM monthly_target_detail_snapshot
+          WHERE section = '${section}'
+            AND snapshot_month = '${month}'
+            AND due_date IS NOT NULL
+            AND due_date::date >= DATE_TRUNC('month', '${month}-01'::date)
+            AND due_date::date <= (DATE_TRUNC('month', '${month}-01'::date) + INTERVAL '1 month - 1 day')
+            AND is_paid IS NOT TRUE
+            AND contract_status NOT IN (${excludedStatuses})
+          GROUP BY COALESCE(debt_range, 'ปกติ')
+        ),
+        carry AS (
+          SELECT
+            COALESCE(debt_range, 'ปกติ') AS range_key,
+            SUM(COALESCE(principal::numeric, 0) + COALESCE(interest::numeric, 0) + COALESCE(fee::numeric, 0)) AS amount
+          FROM monthly_target_detail_snapshot
+          WHERE section = '${section}'
+            AND snapshot_month = '${month}'
+            AND due_date IS NOT NULL
+            AND due_date::date < DATE_TRUNC('month', '${month}-01'::date)
+            AND is_closed IS NOT TRUE
+            AND is_suspended IS NOT TRUE
+            AND is_bad_debt IS NOT TRUE
+            AND is_paid IS NOT TRUE
+            AND contract_status NOT IN (${excludedStatuses})
+          GROUP BY COALESCE(debt_range, 'ปกติ')
+        ),
+        combined AS (
+          SELECT range_key, SUM(amount) AS total_amount
+          FROM (SELECT * FROM in_month UNION ALL SELECT * FROM carry) t
+          GROUP BY range_key
+        )
+        SELECT json_object_agg(range_key, total_amount) AS target_by_range
+        FROM combined
+      `));
+      const rangeRows = pgRows(rangeResult);
+      const rawRange = rangeRows[0]?.target_by_range ?? {};
+      const targetByRange: Record<string, number> = {};
+      for (const rng of ALL_DEBT_RANGES) {
+        const v = n(rawRange[rng]);
+        if (v > 0) targetByRange[rng] = v;
+      }
+
+      // ── 2. คำนวณ daily_breakdown (target + collected แยกตามวัน) ──────────────
+      const dailyResult = await db.execute(sql.raw(`
+        WITH
+        all_days AS (
+          SELECT generate_series(
+            DATE_TRUNC('month', '${month}-01'::date),
+            (DATE_TRUNC('month', '${month}-01'::date) + INTERVAL '1 month - 1 day'),
+            INTERVAL '1 day'
+          )::date AS day
+        ),
+        target_by_day_range AS (
+          SELECT
+            due_date::date AS day,
+            COALESCE(debt_range, 'ปกติ') AS range_key,
+            SUM(COALESCE(principal::numeric, 0) + COALESCE(interest::numeric, 0) + COALESCE(fee::numeric, 0)) AS range_amount
+          FROM monthly_target_detail_snapshot
+          WHERE section = '${section}'
+            AND snapshot_month = '${month}'
+            AND due_date IS NOT NULL
+            AND due_date::date >= DATE_TRUNC('month', '${month}-01'::date)
+            AND due_date::date <= (DATE_TRUNC('month', '${month}-01'::date) + INTERVAL '1 month - 1 day')
+            AND is_paid IS NOT TRUE
+            AND contract_status NOT IN (${excludedStatuses})
+          GROUP BY due_date::date, COALESCE(debt_range, 'ปกติ')
+        ),
+        target_by_day AS (
+          SELECT
+            day,
+            json_object_agg(range_key, range_amount) AS range_json,
+            SUM(range_amount) AS target_amount
+          FROM target_by_day_range
+          GROUP BY day
+        ),
+        overdue_carry_range AS (
+          SELECT
+            COALESCE(debt_range, 'ปกติ') AS range_key,
+            SUM(COALESCE(principal::numeric, 0) + COALESCE(interest::numeric, 0) + COALESCE(fee::numeric, 0)) AS carry_amount
+          FROM monthly_target_detail_snapshot
+          WHERE section = '${section}'
+            AND snapshot_month = '${month}'
+            AND due_date IS NOT NULL
+            AND due_date::date < DATE_TRUNC('month', '${month}-01'::date)
+            AND is_closed IS NOT TRUE
+            AND is_suspended IS NOT TRUE
+            AND is_bad_debt IS NOT TRUE
+            AND is_paid IS NOT TRUE
+            AND contract_status NOT IN (${excludedStatuses})
+          GROUP BY COALESCE(debt_range, 'ปกติ')
+        ),
+        overdue_carry AS (
+          SELECT
+            json_object_agg(range_key, carry_amount) AS carry_json,
+            SUM(carry_amount) AS total_carry
+          FROM overdue_carry_range
+        ),
+        collected_by_day AS (
+          SELECT
+            paid_at::date AS day,
+            SUM(total_amount::numeric) AS collected_amount
+          FROM debt_collected_cache
+          WHERE section = '${section}'
+            AND paid_at IS NOT NULL
+            AND is_bad_debt_row IS NOT TRUE
+            AND TO_CHAR(paid_at, 'YYYY-MM') = '${month}'
+          GROUP BY paid_at::date
+        )
+        SELECT
+          TO_CHAR(d.day, 'YYYY-MM-DD') AS date,
+          CASE
+            WHEN d.day = DATE_TRUNC('month', '${month}-01'::date)::date
+            THEN COALESCE(t.target_amount, 0) + COALESCE((SELECT total_carry FROM overdue_carry), 0)
+            ELSE COALESCE(t.target_amount, 0)
+          END AS target_amount,
+          t.range_json AS range_json,
+          CASE
+            WHEN d.day = DATE_TRUNC('month', '${month}-01'::date)::date
+            THEN (SELECT carry_json FROM overdue_carry)
+            ELSE NULL
+          END AS carry_json,
+          COALESCE(c.collected_amount, 0) AS collected_amount
+        FROM all_days d
+        LEFT JOIN target_by_day t ON t.day = d.day
+        LEFT JOIN collected_by_day c ON c.day = d.day
+        ORDER BY d.day ASC
+      `));
+      const dailyRows = pgRows(dailyResult);
+
+      // ดึง mcs target_amount เพื่อ adjustment (เหมือน getDailyBreakdown)
+      const mcsResult2 = await db.execute(sql.raw(`
+        SELECT target_amount FROM monthly_collection_snapshot
+        WHERE section = '${section}' AND collection_month = '${month}'
+      `));
+      const mcsRow = pgRows(mcsResult2)[0];
+      let mcsTargetAmount: number | null = mcsRow?.target_amount != null ? n(mcsRow.target_amount) : null;
+
+      // คำนวณ adjustment
+      let mcsAdjustment = 0;
+      if (mcsTargetAmount !== null && dailyRows.length > 0) {
+        const currentTotal = dailyRows.reduce((sum: number, r: any) => sum + n(r.target_amount), 0);
+        mcsAdjustment = mcsTargetAmount - currentTotal;
+      }
+
+      // Build daily_breakdown JSON: { "1": { target, targetByRange, collected }, ... }
+      const dailyBreakdown: Record<string, { target: number; targetByRange: Record<string, number>; collected: number }> = {};
+      for (let idx = 0; idx < dailyRows.length; idx++) {
+        const r: any = dailyRows[idx];
+        const rangeJson: Record<string, number> = typeof r.range_json === 'object' && r.range_json ? r.range_json : {};
+        const carryJson: Record<string, number> = typeof r.carry_json === 'object' && r.carry_json ? r.carry_json : {};
+
+        const dayTargetByRange: Record<string, number> = {};
+        for (const rng of ALL_DEBT_RANGES) {
+          const total = n(rangeJson[rng]) + n(carryJson[rng]);
+          if (total > 0) dayTargetByRange[rng] = total;
+        }
+
+        let targetAmount = Math.max(n(r.target_amount), 0);
+        if (idx === 0 && mcsAdjustment !== 0) {
+          targetAmount = Math.max(targetAmount + mcsAdjustment, 0);
+          const oldRangeTotal = Object.values(dayTargetByRange).reduce((s, v) => s + v, 0);
+          if (oldRangeTotal > 0) {
+            const ratio = targetAmount / oldRangeTotal;
+            for (const rng of ALL_DEBT_RANGES) {
+              if (dayTargetByRange[rng] != null) {
+                dayTargetByRange[rng] = Math.max(dayTargetByRange[rng] * ratio, 0);
+              }
+            }
+          } else if (oldRangeTotal === 0 && targetAmount > 0) {
+            dayTargetByRange['ปกติ'] = targetAmount;
+          }
+        }
+
+        // ใช้วันที่เป็น key (1-31)
+        const dayNum = String(parseInt(String(r.date ?? "").slice(8, 10), 10));
+        dailyBreakdown[dayNum] = {
+          target: targetAmount,
+          targetByRange: dayTargetByRange,
+          collected: Math.max(n(r.collected_amount), 0),
+        };
+      }
+
+      // ── 3. UPDATE monthly_collection_snapshot ─────────────────────────────────
+      await db.execute(sql.raw(`
+        UPDATE monthly_collection_snapshot
+        SET
+          target_by_range = '${JSON.stringify(targetByRange)}'::jsonb,
+          daily_breakdown  = '${JSON.stringify(dailyBreakdown)}'::jsonb,
+          updated_at       = NOW()
+        WHERE section = '${section}'
+          AND collection_month = '${month}'
+      `));
+
+      updatedCount++;
+      console.log(`[backfillFrozenBreakdown] ${section} ${month}: target_by_range=${JSON.stringify(targetByRange)}, daily_breakdown days=${Object.keys(dailyBreakdown).length}`);
+    } catch (err: any) {
+      console.error(`[backfillFrozenBreakdown] ${section} ${month}: failed:`, err?.message ?? err);
+    }
+  }
+
+  console.log(`[backfillFrozenBreakdown] ${section}: updated ${updatedCount}/${months.length} months`);
+  return updatedCount;
 }
