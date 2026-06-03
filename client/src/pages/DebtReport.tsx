@@ -528,7 +528,7 @@ export default function DebtReport() {
   // fallback เมื่อ frozen data ยังไม่มี (snapshot เก่าก่อน backfill)
   const monthlyDebtSummaryQuery = trpc.debt.getMonthlyDebtSummary.useQuery(
     { section: sectionKey },
-    { enabled: !!section && tab === "target" && showSnapshotLog, staleTime: 2 * 60 * 1000 },
+    { enabled: !!section && tab === "target", staleTime: 2 * 60 * 1000 },
   );
   // query รายการ snapshot ที่มีอยู่ใน DB (สำหรับ Log Dropdown)
   const availableTargetSnapshotsQuery = trpc.debt.getAvailableSnapshotMonths.useQuery(
