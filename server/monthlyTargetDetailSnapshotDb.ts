@@ -1091,7 +1091,7 @@ export async function getMonthlyDebtSummary(
       NULL::bigint                            AS row_count
     FROM monthly_collection_snapshot mcs
     WHERE mcs.section = '${section}'
-      AND mcs.collection_month <= TO_CHAR(NOW(), 'YYYY-MM')
+      AND mcs.collection_month = TO_CHAR(NOW(), 'YYYY-MM')
     UNION ALL
     -- fallback: เดือนที่มีใน monthly_target_detail_snapshot แต่ไม่มีใน monthly_collection_snapshot
     SELECT
@@ -1109,7 +1109,7 @@ export async function getMonthlyDebtSummary(
       GROUP BY TO_CHAR(paid_at, 'YYYY-MM')
     ) c ON c.paid_month = t.snapshot_month
     WHERE t.section = '${section}'
-      AND t.snapshot_month <= TO_CHAR(NOW(), 'YYYY-MM')
+      AND t.snapshot_month = TO_CHAR(NOW(), 'YYYY-MM')
       AND NOT EXISTS (
         SELECT 1 FROM monthly_collection_snapshot mcs2
         WHERE mcs2.section = '${section}' AND mcs2.collection_month = t.snapshot_month
