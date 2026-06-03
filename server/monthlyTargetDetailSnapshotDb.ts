@@ -1224,6 +1224,7 @@ export async function getDailyBreakdown(
         SUM(COALESCE(principal::numeric, 0) + COALESCE(interest::numeric, 0) + COALESCE(fee::numeric, 0))           AS carry_amount
       FROM monthly_target_detail_snapshot
       WHERE section = '${section}'
+        AND snapshot_month = '${snapshotMonth}'
         AND due_date IS NOT NULL
         AND due_date::date < DATE_TRUNC('month', '${snapshotMonth}-01'::date)
         AND is_closed IS NOT TRUE
