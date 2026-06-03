@@ -1170,6 +1170,23 @@ export async function getDailyBreakdown(
     ? `AND debt_range IN (${debtStatuses.map(s => `'${s.replace(/'/g, "''")}'`).join(',')})`
     : '';
 
+  // ถ้าเลือกทุกสถานะ (debtStatuses undefined) → ดึง mcs target_amount มาใช้เป็นยอดรวม
+  // แล้วกระจายลงวันที่ 1 (carry) + วันอื่นๆ ตาม target_by_day proportion
+  const isAllStatuses = !debtStatuses || debtStatuses.length === 0;
+
+  // ดึง mcs target_amount เมื่อทุกสถานะ (เพื่อให้ยอดรวมตรงกับ dropdown)
+  let mcsTargetAmount: number | null = null;
+  if (isAllStatuses) {
+    const mcsResult = await db.execute(sql.raw(`
+      SELECT target_amount FROM monthly_collection_snapshot
+      WHERE section = '${section}' AND collection_month = '${snapshotMonth}'
+    `));
+    const mcsRows = pgRows(mcsResult);
+    if (mcsRows.length > 0 && mcsRows[0].target_amount != null) {
+      mcsTargetAmount = n(mcsRows[0].target_amount);
+    }
+  }
+
   const result = await db.execute(sql.raw(`
     WITH
     -- Generate ทุกวันในเดือน (1-สิ้นเดือน)
@@ -1181,7 +1198,7 @@ export async function getDailyBreakdown(
       )::date AS day
     ),
     -- เป้าเก็บหนี้แต่ละวัน: SUM(principal+interest+fee) จาก monthly_target_detail_snapshot
-    -- ใช้ SUM gross (ไม่หัก paid_amount) เพื่อให้ตรงกับ target_amount ใน monthly_collection_snapshot
+    -- filter debtRangeCondition มีผลเฉพาะเป้าเก็บหนี้ ไม่กระทบยอดเก็บหนี้
     target_by_day AS (
       SELECT
         due_date::date                                                                                                AS day,
@@ -1197,8 +1214,7 @@ export async function getDailyBreakdown(
       GROUP BY due_date::date
     ),
     -- ยอดค้างจากเดือนก่อนหน้า (due_date < วันที่ 1 ของเดือน)
-    -- ดึงจาก monthly_target_detail_snapshot ของ snapshot เดือนก่อนๆ ที่ยังไม่ paid
-    -- ใช้ SUM gross เพื่อให้ตรงกับ cumulative target ใน monthly_collection_snapshot
+    -- filter debtRangeCondition มีผลเฉพาะเป้าเก็บหนี้
     overdue_carry AS (
       SELECT
         SUM(COALESCE(principal::numeric, 0) + COALESCE(interest::numeric, 0) + COALESCE(fee::numeric, 0)) AS carry_amount
@@ -1214,6 +1230,7 @@ export async function getDailyBreakdown(
         ${debtRangeCondition}
     ),
     -- ยอดเก็บหนี้จริงแต่ละวัน: SUM จาก debt_collected_cache (group by paid_at::date)
+    -- ไม่กรองตามสถานะหนี้ — ยอดเก็บหนี้คงเดิมไม่ว่าจะ filter สถานะอะไร
     collected_by_day AS (
       SELECT
         paid_at::date                AS day,
@@ -1224,6 +1241,19 @@ export async function getDailyBreakdown(
         AND is_bad_debt_row IS NOT TRUE
         AND TO_CHAR(paid_at, 'YYYY-MM') = '${snapshotMonth}'
       GROUP BY paid_at::date
+    ),
+    -- SUM เป้าเก็บหนี้ทั้งเดือน (ใช้คำนวณ carry adjustment เมื่อมี mcs target)
+    total_target AS (
+      SELECT
+        COALESCE(SUM(COALESCE(principal::numeric, 0) + COALESCE(interest::numeric, 0) + COALESCE(fee::numeric, 0)), 0) AS sum_in_month
+      FROM monthly_target_detail_snapshot
+      WHERE section = '${section}'
+        AND snapshot_month = '${snapshotMonth}'
+        AND due_date IS NOT NULL
+        AND due_date::date >= DATE_TRUNC('month', '${snapshotMonth}-01'::date)
+        AND due_date::date <= (DATE_TRUNC('month', '${snapshotMonth}-01'::date) + INTERVAL '1 month - 1 day')
+        AND contract_status NOT IN (${excludedStatuses})
+        ${debtRangeCondition}
     )
     SELECT
       TO_CHAR(d.day, 'YYYY-MM-DD')            AS date,
@@ -1233,7 +1263,9 @@ export async function getDailyBreakdown(
         THEN COALESCE(t.target_amount, 0) + COALESCE((SELECT carry_amount FROM overdue_carry), 0)
         ELSE COALESCE(t.target_amount, 0)
       END                                      AS target_amount,
-      COALESCE(c.collected_amount, 0)          AS collected_amount
+      COALESCE(c.collected_amount, 0)          AS collected_amount,
+      -- ส่ง sum_in_month กลับไปให้ server ใช้คำนวณ carry_adjustment
+      (SELECT sum_in_month FROM total_target)  AS sum_in_month
     FROM all_days d
     LEFT JOIN target_by_day    t ON t.day = d.day
     LEFT JOIN collected_by_day c ON c.day = d.day
@@ -1241,8 +1273,25 @@ export async function getDailyBreakdown(
   `));
 
   const rows = pgRows(result);
-  return rows.map((r: any) => {
-    const targetAmount    = n(r.target_amount);
+
+  // ถ้ามี mcs target_amount → ปรับยอดวันที่ 1 ให้ยอดรวมทั้งเดือนตรงกับ mcs
+  // วิธี: คำนวณ diff = mcsTarget - currentTotal แล้วบวกเข้าวันที่ 1
+  // เพื่อให้ SUM ของทุกวันในตาราง = mcsTargetAmount พอดี
+  let adjustedRows = rows;
+  if (mcsTargetAmount !== null && rows.length > 0) {
+    const currentTotal = rows.reduce((sum: number, r: any) => sum + n(r.target_amount), 0);
+    const diff = mcsTargetAmount - currentTotal;
+    adjustedRows = rows.map((r: any, idx: number) => {
+      if (idx === 0) {
+        // วันที่ 1: บวก diff เพื่อให้ยอดรวมทั้งเดือนตรงกับ mcs target
+        return { ...r, target_amount: n(r.target_amount) + diff };
+      }
+      return r;
+    });
+  }
+
+  return adjustedRows.map((r: any) => {
+    const targetAmount    = Math.max(n(r.target_amount), 0);
     const collectedAmount = Math.max(n(r.collected_amount), 0);
     const percentage      = targetAmount > 0 ? (collectedAmount / targetAmount) * 100 : 0;
     return {
