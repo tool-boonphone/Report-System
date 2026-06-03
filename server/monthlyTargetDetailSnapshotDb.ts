@@ -1067,97 +1067,42 @@ export async function getMonthlyDebtSummary(
   const db = await getDb(section);
   if (!db) return [];
 
-  // Query:
-  // 1. เป้าเก็บหนี้: ใช้จาก monthly_collection_snapshot (target_amount ที่ถูก freeze ณ วันที่ 1 ของเดือน)
-  //    ถ้ายังไม่มีใน monthly_collection_snapshot ให้ fallback SUM จาก monthly_target_detail_snapshot
-  // 2. ยอดเก็บหนี้: ใช้ collected_amount จาก monthly_collection_snapshot (ค่างวดเท่านั้น ไม่รวมขายเครื่อง)
-  //    ถ้ายังไม่มีใน monthly_collection_snapshot ให้ fallback SUM จาก debt_collected_cache
-  const excludedStatusesMcs = `'ระงับสัญญา','สิ้นสุดสัญญา','หนี้เสีย','ยกเลิกสัญญา'`;
+  // ── Fast path: ดึงจาก monthly_collection_snapshot โดยตรง ──────────────────────
+  // target_by_range และ daily_breakdown ถูก freeze ไว้แล้ว ไม่ต้องคำนวณ CTE ขนาดใหญ่
+  // fallback: ถ้า monthly_collection_snapshot ไม่มีข้อมูลเดือนนั้น ให้ดึงจาก monthly_target_detail_snapshot
   const result = await db.execute(sql.raw(`
-    WITH
-    -- targetByRange: SUM แยกตาม debt_range ต่อ snapshot_month
-    -- Logic เดียวกับ getDailyBreakdown:
-    --   in_month = due_date อยู่ในเดือนนั้น + is_paid IS NOT TRUE
-    --   carry    = due_date < วันที่ 1 ของเดือน + is_paid IS NOT TRUE + ไม่ใช่ closed/suspended/bad_debt
-    range_in_month AS (
-      SELECT
-        snapshot_month,
-        COALESCE(debt_range, 'ปกติ') AS range_key,
-        SUM(COALESCE(principal::numeric, 0) + COALESCE(interest::numeric, 0) + COALESCE(fee::numeric, 0)) AS range_amount
-      FROM monthly_target_detail_snapshot
-      WHERE section = '${section}'
-        AND due_date IS NOT NULL
-        AND due_date::date >= DATE_TRUNC('month', (snapshot_month || '-01')::date)
-        AND due_date::date <= (DATE_TRUNC('month', (snapshot_month || '-01')::date) + INTERVAL '1 month - 1 day')
-        AND is_paid IS NOT TRUE
-        AND contract_status NOT IN (${excludedStatusesMcs})
-      GROUP BY snapshot_month, COALESCE(debt_range, 'ปกติ')
-    ),
-    range_carry AS (
-      SELECT
-        snapshot_month,
-        COALESCE(debt_range, 'ปกติ') AS range_key,
-        SUM(COALESCE(principal::numeric, 0) + COALESCE(interest::numeric, 0) + COALESCE(fee::numeric, 0)) AS range_amount
-      FROM monthly_target_detail_snapshot
-      WHERE section = '${section}'
-        AND due_date IS NOT NULL
-        AND due_date::date < DATE_TRUNC('month', (snapshot_month || '-01')::date)
-        AND is_paid IS NOT TRUE
-        AND is_closed IS NOT TRUE
-        AND is_suspended IS NOT TRUE
-        AND is_bad_debt IS NOT TRUE
-        AND contract_status NOT IN (${excludedStatusesMcs})
-      GROUP BY snapshot_month, COALESCE(debt_range, 'ปกติ')
-    ),
-    range_by_month AS (
-      SELECT snapshot_month, range_key, SUM(range_amount) AS range_amount
-      FROM (
-        SELECT snapshot_month, range_key, range_amount FROM range_in_month
-        UNION ALL
-        SELECT snapshot_month, range_key, range_amount FROM range_carry
-      ) combined
-      GROUP BY snapshot_month, range_key
-    ),
-    range_json_by_month AS (
-      SELECT
-        snapshot_month,
-        json_object_agg(range_key, range_amount) AS target_by_range
-      FROM range_by_month
-      GROUP BY snapshot_month
-    )
+    SELECT
+      mcs.collection_month                    AS snapshot_month,
+      mcs.target_amount,
+      mcs.target_by_range,
+      mcs.collected_amount,
+      mcs.updated_at                          AS populated_at,
+      NULL::bigint                            AS row_count
+    FROM monthly_collection_snapshot mcs
+    WHERE mcs.section = '${section}'
+    UNION ALL
+    -- fallback: เดือนที่มีใน monthly_target_detail_snapshot แต่ไม่มีใน monthly_collection_snapshot
     SELECT
       t.snapshot_month,
-      MAX(t.populated_at::text)                                                                AS populated_at,
-      COUNT(*)                                                                                 AS row_count,
-      -- เป้าเก็บหนี้: ใช้จาก monthly_collection_snapshot (freeze ณ วันที่ 1) ถ้ามี, ไม่งั้น SUM จาก detail snapshot
-      COALESCE(
-        mcs.target_amount,
-        SUM(GREATEST(COALESCE(t.total_amount, 0) - COALESCE(t.paid_amount, 0), 0))
-      ) AS target_amount,
-      -- targetByRange จาก CTE (ใช้ MAX เพื่อหลีก GROUP BY JSON)
-      MAX(rbm.target_by_range::text)::json AS target_by_range,
-      -- ยอดเก็บหนี้: ใช้จาก monthly_collection_snapshot ถ้ามี (และไม่ใช่ 0), ไม่งั้น fallback ไป debt_collected_cache
-      -- ใช้ NULLIF เพื่อให้ค่า 0 ใน snapshot ถูก fallback ไปใช้ live cache แทน
-      COALESCE(NULLIF(mcs.collected_amount, 0), COALESCE(c.collected_amount, 0)) AS collected_amount
+      SUM(GREATEST(COALESCE(t.total_amount, 0) - COALESCE(t.paid_amount, 0), 0)) AS target_amount,
+      NULL::jsonb AS target_by_range,
+      COALESCE(c.collected_amount, 0) AS collected_amount,
+      MAX(t.populated_at::text) AS populated_at,
+      COUNT(*) AS row_count
     FROM monthly_target_detail_snapshot t
-    LEFT JOIN monthly_collection_snapshot mcs
-      ON mcs.section = '${section}'
-      AND mcs.collection_month = t.snapshot_month
-    LEFT JOIN range_json_by_month rbm
-      ON rbm.snapshot_month = t.snapshot_month
     LEFT JOIN (
-      SELECT
-        TO_CHAR(paid_at, 'YYYY-MM') AS paid_month,
-        SUM(total_amount::numeric)  AS collected_amount
+      SELECT TO_CHAR(paid_at, 'YYYY-MM') AS paid_month, SUM(total_amount::numeric) AS collected_amount
       FROM debt_collected_cache
-      WHERE section = '${section}'
-        AND paid_at IS NOT NULL
-        AND is_bad_debt_row IS NOT TRUE
+      WHERE section = '${section}' AND paid_at IS NOT NULL AND is_bad_debt_row IS NOT TRUE
       GROUP BY TO_CHAR(paid_at, 'YYYY-MM')
     ) c ON c.paid_month = t.snapshot_month
     WHERE t.section = '${section}'
-    GROUP BY t.snapshot_month, mcs.target_amount, mcs.collected_amount, c.collected_amount
-    ORDER BY t.snapshot_month DESC
+      AND NOT EXISTS (
+        SELECT 1 FROM monthly_collection_snapshot mcs2
+        WHERE mcs2.section = '${section}' AND mcs2.collection_month = t.snapshot_month
+      )
+    GROUP BY t.snapshot_month, c.collected_amount
+    ORDER BY snapshot_month DESC
   `));
 
   const ALL_RANGES_MCS = ["ปกติ", "เกิน 1-7", "เกิน 8-14", "เกิน 15-30", "เกิน 31-60", "เกิน 61-90", "เกิน >90"];
