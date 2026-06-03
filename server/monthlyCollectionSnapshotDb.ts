@@ -577,7 +577,6 @@ export async function getMonthlyCollectionSnapshots(
       GROUP BY section, snapshot_month
     ) t ON t.section = c.section AND t.snapshot_month = c.collection_month
     WHERE c.section = ${section}
-      AND c.collection_month >= '2026-06'
     ORDER BY c.collection_month DESC
   `);
 
@@ -1065,7 +1064,6 @@ export async function backfillFrozenBreakdown(
       SELECT DISTINCT collection_month
       FROM monthly_collection_snapshot
       WHERE section = '${section}'
-        AND collection_month >= '2026-06'
       ORDER BY collection_month ASC
     `));
     months = pgRows(monthsResult).map((r: any) => String(r.collection_month));
