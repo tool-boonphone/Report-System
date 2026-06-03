@@ -1103,8 +1103,8 @@ export async function getMonthlyDebtSummary(
         mcs.target_amount,
         SUM(GREATEST(COALESCE(t.total_amount, 0) - COALESCE(t.paid_amount, 0), 0))
       ) AS target_amount,
-      -- targetByRange จาก CTE
-      rbm.target_by_range,
+      -- targetByRange จาก CTE (ใช้ MAX เพื่อหลีก GROUP BY JSON)
+      MAX(rbm.target_by_range::text)::json AS target_by_range,
       -- ยอดเก็บหนี้: ใช้จาก monthly_collection_snapshot ถ้ามี (และไม่ใช่ 0), ไม่งั้น fallback ไป debt_collected_cache
       -- ใช้ NULLIF เพื่อให้ค่า 0 ใน snapshot ถูก fallback ไปใช้ live cache แทน
       COALESCE(NULLIF(mcs.collected_amount, 0), COALESCE(c.collected_amount, 0)) AS collected_amount
@@ -1125,7 +1125,7 @@ export async function getMonthlyDebtSummary(
       GROUP BY TO_CHAR(paid_at, 'YYYY-MM')
     ) c ON c.paid_month = t.snapshot_month
     WHERE t.section = '${section}'
-    GROUP BY t.snapshot_month, mcs.target_amount, mcs.collected_amount, c.collected_amount, rbm.target_by_range
+    GROUP BY t.snapshot_month, mcs.target_amount, mcs.collected_amount, c.collected_amount
     ORDER BY t.snapshot_month DESC
   `));
 
