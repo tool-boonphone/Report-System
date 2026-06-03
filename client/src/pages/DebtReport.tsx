@@ -463,6 +463,7 @@ export default function DebtReport() {
   // state สำหรับ dropdown open/close
   const [dailyStatusDropdownOpen, setDailyStatusDropdownOpen] = useState(false);
   // รายการสถานะหนี้ทั้งหมดสำหรับ filter
+  // สถานะที่แสดงใน filter — ไม่รวม ระงับ/สิ้นสุด/หนี้เสีย/ยกเลิก เพราะ SQL ตัดออกอยู่แล้ว
   const DEBT_STATUS_OPTIONS = [
     "ปกติ",
     "เกิน 1-7",
@@ -471,10 +472,6 @@ export default function DebtReport() {
     "เกิน 31-60",
     "เกิน 61-90",
     "เกิน >90",
-    "ระงับสัญญา",
-    "สิ้นสุดสัญญา",
-    "หนี้เสีย",
-    "ยกเลิกสัญญา",
   ];
   // query getDailyBreakdown — ดึงเฉพาะเมื่อ popup เปิด
   const dailyBreakdownQuery = trpc.debt.getDailyBreakdown.useQuery(
