@@ -478,7 +478,7 @@ export default function DebtReport() {
     {
       section: sectionKey,
       snapshotMonth: dailyBreakdownMonth ?? "",
-      debtStatuses: dailyBreakdownStatuses.length > 0 ? dailyBreakdownStatuses : undefined,
+      // debtStatuses ถูกย้ายไป filter ที่ client-side แล้ว ไม่ต้องส่งมา server
     },
     { enabled: !!section && !!dailyBreakdownMonth, staleTime: 2 * 60 * 1000 },
   );
@@ -3041,11 +3041,21 @@ export default function DebtReport() {
                   title="Export Excel"
                   className="shrink-0 flex items-center gap-1 px-2 py-1 rounded text-xs font-medium bg-emerald-100 text-emerald-700 hover:bg-emerald-200 transition-colors"
                   onClick={() => {
-                    const rows = (dailyBreakdownQuery.data ?? []) as Array<{ date: string; targetAmount: number; collectedAmount: number; percentage: number }>;
+                    // คำนวณ displayTarget client-side เหมือนกับ render ตาราง
+                    type DailyRowExport = { date: string; targetAmount: number; targetByRange: Record<string, number>; collectedAmount: number };
+                    const rawRows = (dailyBreakdownQuery.data ?? []) as DailyRowExport[];
+                    const isFilteringExport = dailyBreakdownStatuses.length > 0;
+                    const rows = rawRows.map(r => {
+                      const displayTarget = isFilteringExport
+                        ? dailyBreakdownStatuses.reduce((s, rng) => s + (r.targetByRange[rng] ?? 0), 0)
+                        : r.targetAmount;
+                      const pct = displayTarget > 0 ? (r.collectedAmount / displayTarget) * 100 : 0;
+                      return { ...r, displayTarget, displayPct: pct };
+                    });
                     const TM2 = ["ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."];
                     const [yr2, mo2] = (dailyBreakdownMonth ?? "").split("-").map(Number);
                     const monthLabel = (mo2 >= 1 && mo2 <= 12) ? (TM2[mo2 - 1] + " " + yr2) : (dailyBreakdownMonth ?? "");
-                    const totalTarget    = rows.reduce((s, r) => s + r.targetAmount,    0);
+                    const totalTarget    = rows.reduce((s, r) => s + r.displayTarget,    0);
                     const totalCollected = rows.reduce((s, r) => s + r.collectedAmount, 0);
                     const totalPct       = totalTarget > 0 ? (totalCollected / totalTarget) * 100 : 0;
                     // สร้าง worksheet data
@@ -3056,12 +3066,12 @@ export default function DebtReport() {
                         const dayNum = r.date ? parseInt(r.date.split("-")[2] ?? "0", 10) : 0;
                         return [
                           dayNum,
-                          r.targetAmount > 0 ? r.targetAmount : 0,
+                          r.displayTarget > 0 ? r.displayTarget : 0,
                           r.collectedAmount > 0 ? r.collectedAmount : 0,
-                          r.targetAmount > 0 ? parseFloat(r.percentage.toFixed(2)) : 0,
+                          r.displayTarget > 0 ? parseFloat(r.displayPct.toFixed(2)) : 0,
                         ];
                       }),
-                      ["รม", totalTarget, totalCollected, totalTarget > 0 ? parseFloat(totalPct.toFixed(2)) : 0],
+                      ["รวม", totalTarget, totalCollected, totalTarget > 0 ? parseFloat(totalPct.toFixed(2)) : 0],
                     ];
                     const wb = XLSX.utils.book_new();
                     const ws = XLSX.utils.aoa_to_sheet(wsData);
@@ -3087,9 +3097,28 @@ export default function DebtReport() {
               <div className="px-5 py-6 text-center text-sm text-red-500">โหลดข้อมูลไม่สำเร็จ</div>
             ) : (
               (() => {
-                const rows = (dailyBreakdownQuery.data ?? []) as Array<{ date: string; targetAmount: number; collectedAmount: number; percentage: number }>;
+                // Type ใหม่ที่มี targetByRange สำหรับ client-side filter
+                type DailyRow = { date: string; targetAmount: number; targetByRange: Record<string, number>; collectedAmount: number; percentage: number };
+                const rawRows = (dailyBreakdownQuery.data ?? []) as DailyRow[];
+
+                // Client-side filter: คำนวณ displayTargetAmount ตาม dailyBreakdownStatuses
+                // ถ้าไม่ได้ filter (ทุกสถานะ) → ใช้ targetAmount จาก server (ซึ่งตรงกับ mcs target แล้ว)
+                const isFilteringStatuses = dailyBreakdownStatuses.length > 0;
+                const rows = rawRows.map(r => {
+                  let displayTarget: number;
+                  if (isFilteringStatuses) {
+                    // SUM เฉพาะ range ที่เลือก
+                    displayTarget = dailyBreakdownStatuses.reduce((s, rng) => s + (r.targetByRange[rng] ?? 0), 0);
+                  } else {
+                    // ทุกสถานะ → ใช้ targetAmount จาก server (ตรงกับ mcs target)
+                    displayTarget = r.targetAmount;
+                  }
+                  const pct = displayTarget > 0 ? (r.collectedAmount / displayTarget) * 100 : 0;
+                  return { ...r, displayTarget, displayPct: pct };
+                });
+
                 // คำนวณยอดรวม
-                const totalTarget    = rows.reduce((s, r) => s + r.targetAmount,    0);
+                const totalTarget    = rows.reduce((s, r) => s + r.displayTarget,    0);
                 const totalCollected = rows.reduce((s, r) => s + r.collectedAmount, 0);
                 const totalPct       = totalTarget > 0 ? (totalCollected / totalTarget) * 100 : 0;
                 const totalPctColor  = totalPct >= 100 ? "text-emerald-600 font-bold" : totalPct >= 80 ? "text-yellow-600 font-semibold" : "text-red-600 font-semibold";
@@ -3105,11 +3134,11 @@ export default function DebtReport() {
                     </thead>
                     <tbody>
                       {rows.map((row, idx) => {
-                        const pctColor = row.percentage >= 100
+                        const pctColor = row.displayPct >= 100
                           ? "text-emerald-600 font-bold"
-                          : row.percentage >= 80
+                          : row.displayPct >= 80
                           ? "text-yellow-600 font-semibold"
-                          : row.targetAmount > 0
+                          : row.displayTarget > 0
                           ? "text-red-500"
                           : "text-gray-300";
                         // แสดงเฉพาะวันที่ (DD) ไม่เอาปี-เดือน
@@ -3123,8 +3152,8 @@ export default function DebtReport() {
                           >
                             <td className="px-3 py-2 text-gray-700 tabular-nums font-medium text-[13px]">{dayNum}</td>
                             <td className="px-3 py-2 text-right tabular-nums text-gray-700 text-[13px]">
-                              {row.targetAmount > 0
-                                ? row.targetAmount.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                              {row.displayTarget > 0
+                                ? row.displayTarget.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
                                 : <span className="text-gray-300">—</span>}
                             </td>
                             <td className="px-3 py-2 text-right tabular-nums text-gray-700 text-[13px]">
@@ -3133,16 +3162,16 @@ export default function DebtReport() {
                                 : <span className="text-gray-300">—</span>}
                             </td>
                             <td className={`px-3 py-2 text-right tabular-nums text-[13px] ${pctColor}`}>
-                              {row.targetAmount > 0 ? `${row.percentage.toFixed(1)}%` : <span className="text-gray-300">—</span>}
+                              {row.displayTarget > 0 ? `${row.displayPct.toFixed(1)}%` : <span className="text-gray-300">—</span>}
                             </td>
                           </tr>
                         );
                       })}
                     </tbody>
-                    {/* แถวรวม (รม) — sticky ค้างไว้ที่ด้านล่างตลอด */}
+                    {/* แถวรวม — sticky ค้างไว้ที่ด้านล่างตลอด */}
                     <tfoot className="sticky bottom-0 z-10">
                       <tr className="bg-amber-100 border-t-2 border-amber-300 font-bold text-[13px]">
-                        <td className="px-3 py-2.5 text-amber-900">รม</td>
+                        <td className="px-3 py-2.5 text-amber-900">รวม</td>
                         <td className="px-3 py-2.5 text-right tabular-nums text-amber-900">
                           {totalTarget > 0
                             ? totalTarget.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
