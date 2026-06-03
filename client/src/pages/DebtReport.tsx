@@ -27,6 +27,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   BadgeDollarSign,
   Banknote,
+  BarChart2,
   CalendarDays,
   Camera,
   Check,
@@ -452,6 +453,14 @@ export default function DebtReport() {
   const [targetViewMode, setTargetViewMode] = useState<"live" | "snapshot">("live");
   const [selectedSnapshotMonth, setSelectedSnapshotMonth] = useState<string | null>(null);
   const [showSnapshotLog, setShowSnapshotLog] = useState(false);
+  // ── Daily Breakdown popup state ──────────────────────────────────────────────
+  // เก็บ snapshotMonth ที่กดปุ่มดูรายวัน (null = ปิด popup)
+  const [dailyBreakdownMonth, setDailyBreakdownMonth] = useState<string | null>(null);
+  // query getDailyBreakdown — ดึงเฉพาะเมื่อ popup เปิด
+  const dailyBreakdownQuery = trpc.debt.getDailyBreakdown.useQuery(
+    { section: sectionKey, snapshotMonth: dailyBreakdownMonth ?? "" },
+    { enabled: !!section && !!dailyBreakdownMonth, staleTime: 2 * 60 * 1000 },
+  );
   // query getMonthlyDebtSummary สำหรับ dropdown "เป้าเก็บหนี้รายเดือน" (ตาราง 4 คอลัมน์)
   // ดึงจาก monthly_target_detail_snapshot (freeze ณ วันที่ 1) + debt_collected_cache (ค่างวดเท่านั้น)
   const monthlyDebtSummaryQuery = trpc.debt.getMonthlyDebtSummary.useQuery(
@@ -1452,11 +1461,12 @@ export default function DebtReport() {
                       ) : (
                         <div className="overflow-x-auto">
                           {/* Table Header */}
-                          <div className="grid grid-cols-4 gap-0 bg-amber-50 border-b border-amber-200 text-[11px] font-semibold text-amber-800">
+                          <div className="grid gap-0 bg-amber-50 border-b border-amber-200 text-[11px] font-semibold text-amber-800" style={{ gridTemplateColumns: '1fr 1fr 1fr 1fr auto' }}>
                             <div className="px-3 py-2">เดือน-ปี</div>
                             <div className="px-3 py-2 text-right">เป้าเก็บหนี้</div>
                             <div className="px-3 py-2 text-right">ยอดเก็บหนี้</div>
                             <div className="px-3 py-2 text-right">% เก็บหนี้</div>
+                            <div className="px-2 py-2 text-center w-9"></div>
                           </div>
                           {/* Table Rows */}
                           {(monthlyDebtSummaryQuery.data as any[]).map((row: any) => {
@@ -1474,19 +1484,46 @@ export default function DebtReport() {
                             return (
                               <div
                                 key={monthStr}
-                                className="grid grid-cols-4 gap-0 border-b border-gray-50 hover:bg-amber-100 text-sm transition-colors cursor-pointer select-none"
-                                onClick={() => { handleSelectSnapshot(monthStr); setShowSnapshotLog(false); }}
-                                title={`คลิกเพื่อดู Snapshot เดือน ${monthLabel}`}
+                                className="grid gap-0 border-b border-gray-50 hover:bg-amber-50 text-sm transition-colors group"
+                                style={{ gridTemplateColumns: '1fr 1fr 1fr 1fr auto' }}
                               >
-                                <div className="px-3 py-2.5 font-medium text-gray-800 text-[13px]">{monthLabel}</div>
-                                <div className="px-3 py-2.5 text-right text-gray-700 tabular-nums text-[13px]">
+                                {/* คลิกทั้ง row เพื่อเลือก Snapshot */}
+                                <div
+                                  className="px-3 py-2.5 font-medium text-gray-800 text-[13px] cursor-pointer select-none"
+                                  onClick={() => { handleSelectSnapshot(monthStr); setShowSnapshotLog(false); }}
+                                  title={`คลิกเพื่อดู Snapshot เดือน ${monthLabel}`}
+                                >{monthLabel}</div>
+                                <div
+                                  className="px-3 py-2.5 text-right text-gray-700 tabular-nums text-[13px] cursor-pointer select-none"
+                                  onClick={() => { handleSelectSnapshot(monthStr); setShowSnapshotLog(false); }}
+                                >
                                   {targetAmt > 0 ? targetAmt.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : <span className="text-gray-300">—</span>}
                                 </div>
-                                <div className="px-3 py-2.5 text-right text-gray-700 tabular-nums text-[13px]">
+                                <div
+                                  className="px-3 py-2.5 text-right text-gray-700 tabular-nums text-[13px] cursor-pointer select-none"
+                                  onClick={() => { handleSelectSnapshot(monthStr); setShowSnapshotLog(false); }}
+                                >
                                   {collectedAmt > 0 ? collectedAmt.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : <span className="text-gray-300">—</span>}
                                 </div>
-                                <div className={`px-3 py-2.5 text-right tabular-nums text-[13px] ${pctColor}`}>
+                                <div
+                                  className={`px-3 py-2.5 text-right tabular-nums text-[13px] ${pctColor} cursor-pointer select-none`}
+                                  onClick={() => { handleSelectSnapshot(monthStr); setShowSnapshotLog(false); }}
+                                >
                                   {targetAmt > 0 ? `${pct.toFixed(1)}%` : <span className="text-gray-300">—</span>}
+                                </div>
+                                {/* ปุ่มดูรายวัน */}
+                                <div className="px-1 py-1.5 flex items-center justify-center w-9">
+                                  <button
+                                    type="button"
+                                    className="p-1.5 rounded-md text-amber-600 hover:bg-amber-200 hover:text-amber-800 transition-colors"
+                                    title={`ดูยอดรายวัน ${monthLabel}`}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setDailyBreakdownMonth(monthStr);
+                                    }}
+                                  >
+                                    <BarChart2 className="w-3.5 h-3.5" />
+                                  </button>
                                 </div>
                               </div>
                             );
@@ -2940,6 +2977,114 @@ export default function DebtReport() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+      {/* ── Daily Breakdown Popup ────────────────────────────────────────────── */}
+      {/* แสดงยอดเป้าเก็บหนี้และยอดเก็บหนี้จริง แยกตามวันที่ 1-สิ้นเดือน */}
+      <Dialog open={!!dailyBreakdownMonth} onOpenChange={(open) => { if (!open) setDailyBreakdownMonth(null); }}>
+        <DialogContent className="max-w-lg w-full p-0 overflow-hidden rounded-2xl">
+          <DialogHeader className="px-5 pt-4 pb-3 bg-amber-50 border-b border-amber-200">
+            <DialogTitle className="text-base font-bold text-amber-900 flex items-center gap-2">
+              <BarChart2 className="w-4 h-4 text-amber-600" />
+              <span>
+                {
+                  (() => {
+                    if (!dailyBreakdownMonth) return "ยอดรายวัน";
+                    const [yr, mo] = dailyBreakdownMonth.split("-").map(Number);
+                    const TM = ["ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."];
+                    const label = (mo >= 1 && mo <= 12) ? (TM[mo - 1] + " " + yr) : dailyBreakdownMonth;
+                    return `ยอดรายวัน — ${label}`;
+                  })()
+                }
+              </span>
+            </DialogTitle>
+          </DialogHeader>
+          <div className="overflow-y-auto" style={{ maxHeight: 'calc(80vh - 80px)' }}>
+            {dailyBreakdownQuery.isLoading ? (
+              <div className="flex items-center justify-center py-10 gap-2 text-amber-600">
+                <Spinner className="w-5 h-5" />
+                <span className="text-sm">กำลังโหลด...</span>
+              </div>
+            ) : dailyBreakdownQuery.isError ? (
+              <div className="px-5 py-6 text-center text-sm text-red-500">โหลดข้อมูลไม่สำเร็จ</div>
+            ) : (
+              (() => {
+                const rows = (dailyBreakdownQuery.data ?? []) as Array<{ date: string; targetAmount: number; collectedAmount: number; percentage: number }>;
+                // คำนวณยอดรวม
+                const totalTarget    = rows.reduce((s, r) => s + r.targetAmount,    0);
+                const totalCollected = rows.reduce((s, r) => s + r.collectedAmount, 0);
+                const totalPct       = totalTarget > 0 ? (totalCollected / totalTarget) * 100 : 0;
+                const totalPctColor  = totalPct >= 100 ? "text-emerald-600 font-bold" : totalPct >= 80 ? "text-yellow-600 font-semibold" : "text-red-600 font-semibold";
+                return (
+                  <table className="w-full text-sm border-collapse">
+                    <thead className="sticky top-0 z-10">
+                      <tr className="bg-amber-100 text-amber-900 text-[12px] font-semibold">
+                        <th className="px-3 py-2 text-left border-b border-amber-200 w-16">วันที่</th>
+                        <th className="px-3 py-2 text-right border-b border-amber-200">เป้าเก็บหนี้</th>
+                        <th className="px-3 py-2 text-right border-b border-amber-200">ยอดเก็บหนี้</th>
+                        <th className="px-3 py-2 text-right border-b border-amber-200">% เก็บหนี้</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows.map((row, idx) => {
+                        const pctColor = row.percentage >= 100
+                          ? "text-emerald-600 font-bold"
+                          : row.percentage >= 80
+                          ? "text-yellow-600 font-semibold"
+                          : row.targetAmount > 0
+                          ? "text-red-500"
+                          : "text-gray-300";
+                        // แสดงเฉพาะวันที่ (DD) ไม่เอาปี-เดือน
+                        const dayNum = row.date ? parseInt(row.date.split("-")[2] ?? "0", 10) : idx + 1;
+                        return (
+                          <tr
+                            key={row.date}
+                            className={`border-b border-gray-100 ${
+                              idx % 2 === 0 ? "bg-white" : "bg-gray-50"
+                            } hover:bg-amber-50 transition-colors`}
+                          >
+                            <td className="px-3 py-2 text-gray-700 tabular-nums font-medium text-[13px]">{dayNum}</td>
+                            <td className="px-3 py-2 text-right tabular-nums text-gray-700 text-[13px]">
+                              {row.targetAmount > 0
+                                ? row.targetAmount.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                                : <span className="text-gray-300">—</span>}
+                            </td>
+                            <td className="px-3 py-2 text-right tabular-nums text-gray-700 text-[13px]">
+                              {row.collectedAmount > 0
+                                ? row.collectedAmount.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                                : <span className="text-gray-300">—</span>}
+                            </td>
+                            <td className={`px-3 py-2 text-right tabular-nums text-[13px] ${pctColor}`}>
+                              {row.targetAmount > 0 ? `${row.percentage.toFixed(1)}%` : <span className="text-gray-300">—</span>}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                    {/* แถวรวม (รม) */}
+                    <tfoot>
+                      <tr className="bg-amber-100 border-t-2 border-amber-300 font-bold text-[13px]">
+                        <td className="px-3 py-2.5 text-amber-900">รม</td>
+                        <td className="px-3 py-2.5 text-right tabular-nums text-amber-900">
+                          {totalTarget > 0
+                            ? totalTarget.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                            : <span className="text-gray-300">—</span>}
+                        </td>
+                        <td className="px-3 py-2.5 text-right tabular-nums text-amber-900">
+                          {totalCollected > 0
+                            ? totalCollected.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                            : <span className="text-gray-300">—</span>}
+                        </td>
+                        <td className={`px-3 py-2.5 text-right tabular-nums ${totalPctColor}`}>
+                          {totalTarget > 0 ? `${totalPct.toFixed(1)}%` : <span className="text-gray-300">—</span>}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                );
+              })()
+            )}
+          </div>
         </DialogContent>
       </Dialog>
     </AppShell>

@@ -37,6 +37,7 @@ import {
   saveClientSnapshot,
   getTargetSnapshotGrouped,
   getMonthlyDebtSummary,
+  getDailyBreakdown,
 } from "../monthlyTargetDetailSnapshotDb";
 
 const debtViewProcedure = requirePermission("debt_report", "view");
@@ -327,5 +328,18 @@ export const debtRouter = router({
     .input(z.object({ section: SectionEnum }))
     .query(async ({ input }) => {
       return getMonthlyDebtSummary(input.section);
+    }),
+
+  /**
+   * ดึงยอดเป้าเก็บหนี้และยอดเก็บหนี้จริง แยกตามวันที่ 1-สิ้นเดือน
+   * สำหรับ popup ใน Snapshot row ของ DebtReport
+   */
+  getDailyBreakdown: debtViewProcedure
+    .input(z.object({
+      section: SectionEnum,
+      snapshotMonth: z.string().regex(/^\d{4}-\d{2}$/, "snapshotMonth must be YYYY-MM"),
+    }))
+    .query(async ({ input }) => {
+      return getDailyBreakdown(input.section, input.snapshotMonth);
     }),
 });

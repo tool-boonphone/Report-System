@@ -1119,3 +1119,103 @@ export async function getMonthlyDebtSummary(
     };
   });
 }
+
+// ─── Daily Breakdown ──────────────────────────────────────────────────────────
+
+/**
+ * แต่ละ row ใน Daily Breakdown
+ * - date:            วันที่ (YYYY-MM-DD)
+ * - targetAmount:    เป้าเก็บหนี้ของวันนั้น (SUM จาก monthly_target_detail_snapshot)
+ * - collectedAmount: ยอดเก็บหนี้จริงของวันนั้น (SUM จาก debt_collected_cache)
+ * - percentage:      % เก็บหนี้ (0-100+)
+ */
+export interface DailyBreakdownRow {
+  date: string;           // YYYY-MM-DD
+  targetAmount: number;   // เป้าเก็บหนี้วันนั้น
+  collectedAmount: number; // ยอดเก็บหนี้วันนั้น
+  percentage: number;     // % เก็บหนี้
+}
+
+/**
+ * ดึงยอดเป้าเก็บหนี้และยอดเก็บหนี้จริง แยกตามวันที่ 1-สิ้นเดือน
+ *
+ * Logic:
+ *   1. เป้าแต่ละวัน = SUM(GREATEST(total_amount - paid_amount, 0))
+ *      จาก monthly_target_detail_snapshot WHERE due_date ตรงกับวันนั้น
+ *   2. ยอดเก็บหนี้แต่ละวัน = SUM(total_amount) จาก debt_collected_cache
+ *      WHERE paid_at::date ตรงกับวันนั้น (ไม่รวม is_bad_debt_row)
+ *   3. Generate วันที่ทุกวันในเดือน (1-สิ้นเดือน) แม้ไม่มีข้อมูล
+ *   4. เรียงวันที่ ASC
+ *
+ * @param section       - section key (Boonphone | Fastfone365)
+ * @param snapshotMonth - เดือน YYYY-MM ของ snapshot ที่ต้องการ
+ * @returns DailyBreakdownRow[] เรียง ASC ตามวันที่
+ */
+export async function getDailyBreakdown(
+  section: SectionKey,
+  snapshotMonth: string, // YYYY-MM
+): Promise<DailyBreakdownRow[]> {
+  const db = await getDb(section);
+  if (!db) return [];
+
+  // Validate snapshotMonth format
+  if (!/^\d{4}-\d{2}$/.test(snapshotMonth)) return [];
+
+  const result = await db.execute(sql.raw(`
+    WITH
+    -- Generate ทุกวันในเดือน (1-สิ้นเดือน)
+    all_days AS (
+      SELECT generate_series(
+        DATE_TRUNC('month', '${snapshotMonth}-01'::date),
+        (DATE_TRUNC('month', '${snapshotMonth}-01'::date) + INTERVAL '1 month - 1 day'),
+        INTERVAL '1 day'
+      )::date AS day
+    ),
+    -- เป้าเก็บหนี้แต่ละวัน: SUM net_amount จาก snapshot (group by due_date)
+    target_by_day AS (
+      SELECT
+        due_date::date                                                     AS day,
+        SUM(GREATEST(COALESCE(total_amount, 0) - COALESCE(paid_amount, 0), 0)) AS target_amount
+      FROM monthly_target_detail_snapshot
+      WHERE section = '${section}'
+        AND snapshot_month = '${snapshotMonth}'
+        AND due_date IS NOT NULL
+        AND due_date::date >= DATE_TRUNC('month', '${snapshotMonth}-01'::date)
+        AND due_date::date <= (DATE_TRUNC('month', '${snapshotMonth}-01'::date) + INTERVAL '1 month - 1 day')
+      GROUP BY due_date::date
+    ),
+    -- ยอดเก็บหนี้จริงแต่ละวัน: SUM จาก debt_collected_cache (group by paid_at::date)
+    collected_by_day AS (
+      SELECT
+        paid_at::date                AS day,
+        SUM(total_amount::numeric)   AS collected_amount
+      FROM debt_collected_cache
+      WHERE section = '${section}'
+        AND paid_at IS NOT NULL
+        AND is_bad_debt_row IS NOT TRUE
+        AND TO_CHAR(paid_at, 'YYYY-MM') = '${snapshotMonth}'
+      GROUP BY paid_at::date
+    )
+    SELECT
+      TO_CHAR(d.day, 'YYYY-MM-DD')            AS date,
+      COALESCE(t.target_amount, 0)             AS target_amount,
+      COALESCE(c.collected_amount, 0)          AS collected_amount
+    FROM all_days d
+    LEFT JOIN target_by_day    t ON t.day = d.day
+    LEFT JOIN collected_by_day c ON c.day = d.day
+    ORDER BY d.day ASC
+  `));
+
+  const rows = pgRows(result);
+  return rows.map((r: any) => {
+    const targetAmount    = n(r.target_amount);
+    const collectedAmount = Math.max(n(r.collected_amount), 0);
+    const percentage      = targetAmount > 0 ? (collectedAmount / targetAmount) * 100 : 0;
+    return {
+      date: String(r.date ?? ""),
+      targetAmount,
+      collectedAmount,
+      percentage,
+    };
+  });
+}
