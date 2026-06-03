@@ -1076,7 +1076,7 @@ export async function getMonthlyDebtSummary(
       mcs.target_amount,
       mcs.target_by_range,
       mcs.collected_amount,
-      mcs.updated_at                          AS populated_at,
+      mcs.updated_at::text                    AS populated_at,
       NULL::bigint                            AS row_count
     FROM monthly_collection_snapshot mcs
     WHERE mcs.section = '${section}'
