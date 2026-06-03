@@ -1040,6 +1040,7 @@ export async function getTargetSnapshotGrouped(params: {
 export interface MonthlyDebtSummaryRow {
   snapshotMonth: string;       // YYYY-MM
   targetAmount: number;        // เป้าเก็บหนี้ (freeze ณ วันที่ 1)
+  targetByRange: Record<string, number>; // เป้าเก็บหนี้แยกตาม debt_range (สำหรับ client-side filter)
   collectedAmount: number;     // ยอดเก็บหนี้ค่างวดจริง (ไม่รวมขายเครื่อง)
   percentage: number;          // % เก็บหนี้ (0-100+)
   populatedAt: string | null;  // เวลาที่ snapshot ถูก populate
@@ -1071,7 +1072,28 @@ export async function getMonthlyDebtSummary(
   //    ถ้ายังไม่มีใน monthly_collection_snapshot ให้ fallback SUM จาก monthly_target_detail_snapshot
   // 2. ยอดเก็บหนี้: ใช้ collected_amount จาก monthly_collection_snapshot (ค่างวดเท่านั้น ไม่รวมขายเครื่อง)
   //    ถ้ายังไม่มีใน monthly_collection_snapshot ให้ fallback SUM จาก debt_collected_cache
+  const excludedStatusesMcs = `'ระงับสัญญา','สิ้นสุดสัญญา','หนี้เสีย','ยกเลิกสัญญา'`;
   const result = await db.execute(sql.raw(`
+    WITH
+    -- targetByRange: SUM แยกตาม debt_range ต่อ snapshot_month (สำหรับ client-side filter สถานะหนี้)
+    range_by_month AS (
+      SELECT
+        snapshot_month,
+        COALESCE(debt_range, 'ปกติ') AS range_key,
+        SUM(COALESCE(principal::numeric, 0) + COALESCE(interest::numeric, 0) + COALESCE(fee::numeric, 0)) AS range_amount
+      FROM monthly_target_detail_snapshot
+      WHERE section = '${section}'
+        AND is_paid IS NOT TRUE
+        AND contract_status NOT IN (${excludedStatusesMcs})
+      GROUP BY snapshot_month, COALESCE(debt_range, 'ปกติ')
+    ),
+    range_json_by_month AS (
+      SELECT
+        snapshot_month,
+        json_object_agg(range_key, range_amount) AS target_by_range
+      FROM range_by_month
+      GROUP BY snapshot_month
+    )
     SELECT
       t.snapshot_month,
       MAX(t.populated_at::text)                                                                AS populated_at,
@@ -1081,6 +1103,8 @@ export async function getMonthlyDebtSummary(
         mcs.target_amount,
         SUM(GREATEST(COALESCE(t.total_amount, 0) - COALESCE(t.paid_amount, 0), 0))
       ) AS target_amount,
+      -- targetByRange จาก CTE
+      rbm.target_by_range,
       -- ยอดเก็บหนี้: ใช้จาก monthly_collection_snapshot ถ้ามี (และไม่ใช่ 0), ไม่งั้น fallback ไป debt_collected_cache
       -- ใช้ NULLIF เพื่อให้ค่า 0 ใน snapshot ถูก fallback ไปใช้ live cache แทน
       COALESCE(NULLIF(mcs.collected_amount, 0), COALESCE(c.collected_amount, 0)) AS collected_amount
@@ -1088,6 +1112,8 @@ export async function getMonthlyDebtSummary(
     LEFT JOIN monthly_collection_snapshot mcs
       ON mcs.section = '${section}'
       AND mcs.collection_month = t.snapshot_month
+    LEFT JOIN range_json_by_month rbm
+      ON rbm.snapshot_month = t.snapshot_month
     LEFT JOIN (
       SELECT
         TO_CHAR(paid_at, 'YYYY-MM') AS paid_month,
@@ -1099,19 +1125,28 @@ export async function getMonthlyDebtSummary(
       GROUP BY TO_CHAR(paid_at, 'YYYY-MM')
     ) c ON c.paid_month = t.snapshot_month
     WHERE t.section = '${section}'
-    GROUP BY t.snapshot_month, mcs.target_amount, mcs.collected_amount, c.collected_amount
+    GROUP BY t.snapshot_month, mcs.target_amount, mcs.collected_amount, c.collected_amount, rbm.target_by_range
     ORDER BY t.snapshot_month DESC
   `));
 
+  const ALL_RANGES_MCS = ["ปกติ", "เกิน 1-7", "เกิน 8-14", "เกิน 15-30", "เกิน 31-60", "เกิน 61-90", "เกิน >90"];
   const rows = pgRows(result);
   return rows.map((r: any) => {
     const targetAmount = n(r.target_amount);
     // ยอดเก็บหนี้ค่างวด = collected_amount จาก debt_collected_cache (ไม่รวมขายเครื่อง เพราะกรองที่ query แล้ว)
     const collectedAmount = Math.max(n(r.collected_amount), 0);
     const percentage = targetAmount > 0 ? (collectedAmount / targetAmount) * 100 : 0;
+    // parse targetByRange จาก json_object_agg
+    const rawByRange = typeof r.target_by_range === 'object' && r.target_by_range ? r.target_by_range : {};
+    const targetByRange: Record<string, number> = {};
+    for (const rng of ALL_RANGES_MCS) {
+      const v = n(rawByRange[rng]);
+      if (v > 0) targetByRange[rng] = v;
+    }
     return {
       snapshotMonth: String(r.snapshot_month ?? ""),
       targetAmount,
+      targetByRange,
       collectedAmount,
       percentage,
       populatedAt: r.populated_at ? String(r.populated_at) : null,

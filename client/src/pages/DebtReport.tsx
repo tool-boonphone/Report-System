@@ -457,9 +457,12 @@ export default function DebtReport() {
   // ── Daily Breakdown popup state ──────────────────────────────────────────────
   // เก็บ snapshotMonth ที่กดปุ่มดูรายวัน (null = ปิด popup)
   const [dailyBreakdownMonth, setDailyBreakdownMonth] = useState<string | null>(null);
+  // ── Global default filter สถานะหนี้สำหรับ Snapshot mode ──────────────────────
+  // ใช้ 6 สถานะ (ไม่รวม "เกิน >90") เป็น default เมื่อเปิด popup ยอดรายวัน
+  const SNAPSHOT_DEFAULT_STATUSES = ["ปกติ", "เกิน 1-7", "เกิน 8-14", "เกิน 15-30", "เกิน 31-60", "เกิน 61-90"];
   // state สำหรับ multi-select filter สถานะหนี้ใน Daily Breakdown popup
-  // [] = ทุกสถานะ (ไม่กรอง), มีค่า = กรองเฉพาะสถานะที่เลือก
-  const [dailyBreakdownStatuses, setDailyBreakdownStatuses] = useState<string[]>([]);
+  // default = SNAPSHOT_DEFAULT_STATUSES (6 สถานะ), user เปลี่ยนได้แต่ไม่บันทึก
+  const [dailyBreakdownStatuses, setDailyBreakdownStatuses] = useState<string[]>(SNAPSHOT_DEFAULT_STATUSES);
   // state สำหรับ dropdown open/close
   const [dailyStatusDropdownOpen, setDailyStatusDropdownOpen] = useState(false);
   // รายการสถานะหนี้ทั้งหมดสำหรับ filter
@@ -528,6 +531,9 @@ export default function DebtReport() {
     setSelectedSnapshotMonth(month);
     setTargetViewMode("snapshot");
     setShowSnapshotLog(false);
+    // auto-set statusFilter เป็น SNAPSHOT_DEFAULT_STATUSES (6 สถานะ) เมื่อเข้า snapshot mode
+    // เพื่อให้ badge เป้าเก็บหนี้ (targetSummary.total) และ filter สถานะหนี้ใน main table ตรงกัน
+    setStatusFilter(new Set(SNAPSHOT_DEFAULT_STATUSES));
     // auto-restore filter state จาก snapshot metadata
     const meta = (availableTargetSnapshotsQuery.data as any[])?.find(
       (m: any) => m.snapshotMonth === month,
@@ -536,7 +542,7 @@ export default function DebtReport() {
       try {
         const fs = JSON.parse(meta.filterState);
         if (typeof fs.search === "string") setSearch(fs.search);
-        if (Array.isArray(fs.statusFilter)) setStatusFilter(new Set(fs.statusFilter));
+        // ไม่ restore statusFilter จาก metadata เพราะใช้ SNAPSHOT_DEFAULT_STATUSES เสมอ
         if (Array.isArray(fs.approveDateFilter)) setApproveDateFilter(new Set(fs.approveDateFilter));
         if (Array.isArray(fs.dueDateFilter)) setDueDateFilter(new Set(fs.dueDateFilter));
         if (Array.isArray(fs.productTypeFilter)) setProductTypeFilter(new Set(fs.productTypeFilter));
@@ -548,7 +554,7 @@ export default function DebtReport() {
         // ถ้า parse ไม่ได้ ไม่ต้องทำอะไร — ใช้ filter เดิม
       }
     }
-  }, [availableTargetSnapshotsQuery.data, setSearch, setStatusFilter, setApproveDateFilter, setDueDateFilter, setProductTypeFilter, setDueDateExact, setDebtSetMode, setDebtSetCutoffMode, setPrincipalOnly]);
+  }, [availableTargetSnapshotsQuery.data, setSearch, setStatusFilter, setApproveDateFilter, setDueDateFilter, setProductTypeFilter, setDueDateExact, setDebtSetMode, setDebtSetCutoffMode, setPrincipalOnly, SNAPSHOT_DEFAULT_STATUSES]);
   // helper: กลับมา live
   const handleBackToLive = React.useCallback(() => {
     setTargetViewMode("live");
@@ -1456,9 +1462,11 @@ export default function DebtReport() {
                           </div>
                           {/* Table Rows */}
                           {(monthlyDebtSummaryQuery.data as any[]).map((row: any) => {
-                            // เป้าเก็บหนี้: ดึงจาก monthly_target_detail_snapshot (freeze ณ วันที่ 1)
+                            // เป้าเก็บหนี้: ใช้ targetByRange กรองตาม SNAPSHOT_DEFAULT_STATUSES (6 สถานะ)
                             // ยอดเก็บหนี้: collectedAmount จาก debt_collected_cache (ค่างวดเท่านั้น ไม่รวมขายเครื่อง)
-                            const targetAmt = row.targetAmount ?? 0;
+                            const targetByRange: Record<string, number> = (typeof row.targetByRange === 'object' && row.targetByRange) ? row.targetByRange : {};
+                            // SUM เฉพาะ 6 สถานะ default (ไม่รวม "เกิน >90")
+                            const targetAmt = SNAPSHOT_DEFAULT_STATUSES.reduce((s, rng) => s + (targetByRange[rng] ?? 0), 0) || (row.targetAmount ?? 0);
                             const collectedAmt = Math.max(row.collectedAmount ?? 0, 0);
                             const pct = targetAmt > 0 ? (collectedAmt / targetAmt) * 100 : 0;
                             const pctColor = pct >= 100 ? "text-emerald-600 font-bold" : pct >= 80 ? "text-yellow-600 font-semibold" : "text-red-600 font-semibold";
@@ -1505,6 +1513,8 @@ export default function DebtReport() {
                                     title={`ดูยอดรายวัน ${monthLabel}`}
                                     onClick={(e) => {
                                       e.stopPropagation();
+                                      // reset filter เป็น global default (6 สถานะ) ทุกครั้งที่เปิด popup
+                                      setDailyBreakdownStatuses(SNAPSHOT_DEFAULT_STATUSES);
                                       setDailyBreakdownMonth(monthStr);
                                     }}
                                   >
