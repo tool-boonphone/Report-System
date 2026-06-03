@@ -1205,6 +1205,7 @@ export async function getDailyBreakdown(
         AND due_date IS NOT NULL
         AND due_date::date >= DATE_TRUNC('month', '${snapshotMonth}-01'::date)
         AND due_date::date <= (DATE_TRUNC('month', '${snapshotMonth}-01'::date) + INTERVAL '1 month - 1 day')
+        AND is_paid IS NOT TRUE
         AND contract_status NOT IN (${excludedStatuses})
       GROUP BY due_date::date, COALESCE(debt_range, 'ปกติ')
     ),
