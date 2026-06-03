@@ -2985,25 +2985,28 @@ export default function DebtReport() {
       <Dialog open={!!dailyBreakdownMonth} onOpenChange={(open) => { if (!open) setDailyBreakdownMonth(null); }}>
         <DialogContent className="max-w-lg w-full p-0 overflow-hidden rounded-2xl">
           <DialogHeader className="px-5 pt-4 pb-3 bg-amber-50 border-b border-amber-200">
-            <DialogTitle className="text-base font-bold text-amber-900 flex items-center gap-2">
-              <BarChart2 className="w-4 h-4 text-amber-600" />
-              <span className="flex-1">
-                {
-                  (() => {
-                    if (!dailyBreakdownMonth) return "ยอดรายวัน";
-                    const [yr, mo] = dailyBreakdownMonth.split("-").map(Number);
-                    const TM = ["ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."];
-                    const label = (mo >= 1 && mo <= 12) ? (TM[mo - 1] + " " + yr) : dailyBreakdownMonth;
-                    return `ยอดรายวัน — ${label}`;
-                  })()
-                }
-              </span>
-              {/* ปุ่ม Export Excel */}
+            {/* Row: title ซ้าย + Excel กลาง-ขวา (X ของ Shadcn จะอยู่ขวาสุด absolute) */}
+            <div className="flex items-center gap-2 pr-8">
+              <DialogTitle className="text-base font-bold text-amber-900 flex items-center gap-2 flex-1 min-w-0">
+                <BarChart2 className="w-4 h-4 text-amber-600 shrink-0" />
+                <span className="truncate">
+                  {
+                    (() => {
+                      if (!dailyBreakdownMonth) return "ยอดรายวัน";
+                      const [yr, mo] = dailyBreakdownMonth.split("-").map(Number);
+                      const TM = ["ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."];
+                      const label = (mo >= 1 && mo <= 12) ? (TM[mo - 1] + " " + yr) : dailyBreakdownMonth;
+                      return `ยอดรายวัน — ${label}`;
+                    })()
+                  }
+                </span>
+              </DialogTitle>
+              {/* ปุ่ม Export Excel — อยู่ซ้ายของปุ่ม X */}
               {dailyBreakdownQuery.data && (dailyBreakdownQuery.data as Array<unknown>).length > 0 && (
                 <button
                   type="button"
                   title="Export Excel"
-                  className="ml-auto flex items-center gap-1 px-2 py-1 rounded text-xs font-medium bg-emerald-100 text-emerald-700 hover:bg-emerald-200 transition-colors"
+                  className="shrink-0 flex items-center gap-1 px-2 py-1 rounded text-xs font-medium bg-emerald-100 text-emerald-700 hover:bg-emerald-200 transition-colors"
                   onClick={() => {
                     const rows = (dailyBreakdownQuery.data ?? []) as Array<{ date: string; targetAmount: number; collectedAmount: number; percentage: number }>;
                     const TM2 = ["ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."];
@@ -3039,7 +3042,7 @@ export default function DebtReport() {
                   Excel
                 </button>
               )}
-            </DialogTitle>
+            </div>
           </DialogHeader>
           <div className="overflow-y-auto relative" style={{ maxHeight: 'calc(80vh - 80px)' }}>
             {dailyBreakdownQuery.isLoading ? (
