@@ -1081,8 +1081,9 @@ export async function getMonthlyDebtSummary(
         mcs.target_amount,
         SUM(GREATEST(COALESCE(t.total_amount, 0) - COALESCE(t.paid_amount, 0), 0))
       ) AS target_amount,
-      -- ยอดเก็บหนี้: ใช้จาก monthly_collection_snapshot ถ้ามี, ไม่งั้น SUM จาก debt_collected_cache
-      COALESCE(mcs.collected_amount, COALESCE(c.collected_amount, 0)) AS collected_amount
+      -- ยอดเก็บหนี้: ใช้จาก monthly_collection_snapshot ถ้ามี (และไม่ใช่ 0), ไม่งั้น fallback ไป debt_collected_cache
+      -- ใช้ NULLIF เพื่อให้ค่า 0 ใน snapshot ถูก fallback ไปใช้ live cache แทน
+      COALESCE(NULLIF(mcs.collected_amount, 0), COALESCE(c.collected_amount, 0)) AS collected_amount
     FROM monthly_target_detail_snapshot t
     LEFT JOIN monthly_collection_snapshot mcs
       ON mcs.section = '${section}'
