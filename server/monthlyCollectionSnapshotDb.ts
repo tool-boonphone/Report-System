@@ -111,6 +111,7 @@ export async function populateMonthlyCollectionSnapshot(
   // เพื่อให้ตรงกับ badge ยอดหนี้รวมใน UI ที่คำนวณจาก SUM(principal + interest + fee) ของทุกงวดที่ due ≤ cutoff
   // ตัด contract_status พิเศษออก เพื่อให้ตรงกับ filteredRows ใน client (debtSetMode)
   // client ตัด: ระงับสัญญา, สิ้นสุดสัญญา, หนี้เสีย, ยกเลิกสัญญา
+  // *** ตัด debt_range = 'เกิน >90' ออก เพื่อให้ตรงกับ 6 สถานะ default ใน UI ***
   const excludedStatuses = `'ระงับสัญญา','สิ้นสุดสัญญา','หนี้เสีย','ยกเลิกสัญญา'`;
 
   const targetResult = await db.execute(sql`
@@ -134,6 +135,7 @@ export async function populateMonthlyCollectionSnapshot(
       AND is_bad_debt IS NOT TRUE
       AND is_paid IS NOT TRUE
       AND contract_status NOT IN (${sql.raw(excludedStatuses)})
+      AND (debt_range IS NULL OR debt_range != 'เกิน >90')
     GROUP BY TO_CHAR(due_date, 'YYYY-MM')
     ORDER BY due_month
   `);
@@ -166,6 +168,7 @@ export async function populateMonthlyCollectionSnapshot(
       AND is_bad_debt IS NOT TRUE
       AND is_paid IS NOT TRUE
       AND contract_status NOT IN (${sql.raw(excludedStatuses)})
+      AND (debt_range IS NULL OR debt_range != 'เกิน >90')
   `);
   const cumulativeRows: any[] = pgRows(currentMonthCumulativeResult);
   const cumulativeRow = cumulativeRows[0] ?? null;
@@ -531,13 +534,14 @@ export async function getMonthlyCollectionSnapshots(
   const db = await getDb(section);
   if (!db) return [];
 
-  // JOIN monthly_target_detail_snapshot เพื่อดึง target_amount ที่ freeze ณ วันที่ 1 ของเดือน
-  // (GREATEST(total_amount - paid_amount, 0) = ยอดหนี้คงเหลือ ณ วันที่ 1 เดือนนั้น)
+  // ดึง target_amount จาก monthly_collection_snapshot โดยตรง
+  // ไม่ JOIN monthly_target_detail_snapshot เพราะ target_amount ใน monthly_collection_snapshot
+  // คือยอดที่คำนวณด้วย filter ที่ถูกต้องแล้ว (freeze ณ วันที่ 1 ของเดือน)
   const result = await db.execute(sql`
     SELECT
       c.collection_month,
-      -- เป้าเก็บหนี้: ใช้จาก monthly_target_detail_snapshot (freeze ณ วันที่ 1) ถ้ามี, ไม่งั้นใช้ live target_amount
-      COALESCE(t.snapshot_target_amount, c.target_amount) AS target_amount,
+      -- เป้าเก็บหนี้: ใช้จาก monthly_collection_snapshot โดยตรง (freeze ณ วันที่ 1)
+      c.target_amount,
       c.target_contract_count,
       c.target_principal,
       c.target_interest,
@@ -565,17 +569,6 @@ export async function getMonthlyCollectionSnapshots(
       c.target_by_range,
       c.daily_breakdown
     FROM monthly_collection_snapshot c
-    LEFT JOIN (
-      SELECT
-        section,
-        snapshot_month,
-        -- กรองเฉพาะ due_date ที่อยู่ในเดือนเดียวกับ snapshot_month (ตั้งหนี้เดือนนั้น)
-        SUM(GREATEST(COALESCE(total_amount, 0) - COALESCE(paid_amount, 0), 0)) AS snapshot_target_amount
-      FROM monthly_target_detail_snapshot
-      WHERE section = ${section}
-        AND TO_CHAR(due_date::date, 'YYYY-MM') = snapshot_month
-      GROUP BY section, snapshot_month
-    ) t ON t.section = c.section AND t.snapshot_month = c.collection_month
     WHERE c.section = ${section}
     ORDER BY c.collection_month DESC
   `);
@@ -1073,6 +1066,8 @@ export async function backfillFrozenBreakdown(
 
   const excludedStatuses = `'ระงับสัญญา','สิ้นสุดสัญญา','หนี้เสีย','ยกเลิกสัญญา'`;
   const ALL_DEBT_RANGES = ["ปกติ", "เกิน 1-7", "เกิน 8-14", "เกิน 15-30", "เกิน 31-60", "เกิน 61-90", "เกิน >90"];
+  // 6 สถานะ default (ไม่รวม "เกิน >90") ใช้คำนวณ target แต่ละวันใน daily_breakdown
+  const DEFAULT_6_RANGES = ["ปกติ", "เกิน 1-7", "เกิน 8-14", "เกิน 15-30", "เกิน 31-60", "เกิน 61-90"];
 
   let updatedCount = 0;
 
@@ -1216,49 +1211,27 @@ export async function backfillFrozenBreakdown(
       `));
       const dailyRows = pgRows(dailyResult);
 
-      // ดึง mcs target_amount เพื่อ adjustment (เหมือน getDailyBreakdown)
-      const mcsResult2 = await db.execute(sql.raw(`
-        SELECT target_amount FROM monthly_collection_snapshot
-        WHERE section = '${section}' AND collection_month = '${month}'
-      `));
-      const mcsRow = pgRows(mcsResult2)[0];
-      let mcsTargetAmount: number | null = mcsRow?.target_amount != null ? n(mcsRow.target_amount) : null;
-
-      // คำนวณ adjustment
-      let mcsAdjustment = 0;
-      if (mcsTargetAmount !== null && dailyRows.length > 0) {
-        const currentTotal = dailyRows.reduce((sum: number, r: any) => sum + n(r.target_amount), 0);
-        mcsAdjustment = mcsTargetAmount - currentTotal;
-      }
-
       // Build daily_breakdown JSON: { "1": { target, targetByRange, collected }, ... }
+      // target แต่ละวัน = SUM targetByRange 6 สถานะ default (ไม่รวม "เกิน >90")
+      // ซึ่งตรงกับ filter ที่ใช้ populate mcs.target_amount
       const dailyBreakdown: Record<string, { target: number; targetByRange: Record<string, number>; collected: number }> = {};
       for (let idx = 0; idx < dailyRows.length; idx++) {
         const r: any = dailyRows[idx];
         const rangeJson: Record<string, number> = typeof r.range_json === 'object' && r.range_json ? r.range_json : {};
         const carryJson: Record<string, number> = typeof r.carry_json === 'object' && r.carry_json ? r.carry_json : {};
 
+        // เก็บ targetByRange ทุก 7 สถานะ (เพื่อให้ frontend filter ได้)
         const dayTargetByRange: Record<string, number> = {};
         for (const rng of ALL_DEBT_RANGES) {
           const total = n(rangeJson[rng]) + n(carryJson[rng]);
           if (total > 0) dayTargetByRange[rng] = total;
         }
 
-        let targetAmount = Math.max(n(r.target_amount), 0);
-        if (idx === 0 && mcsAdjustment !== 0) {
-          targetAmount = Math.max(targetAmount + mcsAdjustment, 0);
-          const oldRangeTotal = Object.values(dayTargetByRange).reduce((s, v) => s + v, 0);
-          if (oldRangeTotal > 0) {
-            const ratio = targetAmount / oldRangeTotal;
-            for (const rng of ALL_DEBT_RANGES) {
-              if (dayTargetByRange[rng] != null) {
-                dayTargetByRange[rng] = Math.max(dayTargetByRange[rng] * ratio, 0);
-              }
-            }
-          } else if (oldRangeTotal === 0 && targetAmount > 0) {
-            dayTargetByRange['ปกติ'] = targetAmount;
-          }
-        }
+        // target = SUM 6 สถานะ default (ไม่รวม "เกิน >90") เท่านั้น
+        const targetAmount = Math.max(
+          DEFAULT_6_RANGES.reduce((s, rng) => s + (dayTargetByRange[rng] ?? 0), 0),
+          0
+        );
 
         // ใช้วันที่เป็น key (1-31)
         const dayNum = String(parseInt(String(r.date ?? "").slice(8, 10), 10));
