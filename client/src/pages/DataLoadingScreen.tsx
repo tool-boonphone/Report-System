@@ -656,7 +656,7 @@ export default function DataLoadingScreen() {
       const memCache = debtCache.getCache(section as SectionKey);
       if (memCache.target && memCache.collected) {
         if (needsMdm) {
-          // มีข้อมูลใน cache แต่ MDM stale -> ให้ดึงแค่ MDM
+          // มีข้อมูลใน cache แต่ MDM stale -> ให้ดึงแค่ MDM แล้วค่อย navigate
           startedRef.current = true;
           // แสดงจำนวนจริงจาก memory cache
           const contractCount = memCache.target.rows.length;
@@ -672,6 +672,8 @@ export default function DataLoadingScreen() {
           setStatus("target", "done");
           setStatus("collected", "done");
           await fetchMdm(section as SectionKey, mdmStaleCount);
+          // navigate หลัง fetchMdm เสร็จเท่านั้น (useEffect allDone จะ trigger)
+          return;
         }
         navigate(popReturnPath() ?? "/contracts", { replace: true });
         return;
@@ -686,7 +688,7 @@ export default function DataLoadingScreen() {
           debtCache.setCollectedRows(section as SectionKey, idbEntry.collectedRows, idbEntry.hasPrincipalBreakdown);
           
           if (needsMdm) {
-            // IDB มีข้อมูล แต่ MDM stale -> ให้ดึงแค่ MDM
+            // IDB มีข้อมูล แต่ MDM stale -> ให้ดึงแค่ MDM แล้วค่อย navigate
             startedRef.current = true;
             // แสดงจำนวนจริงจาก IDB cache
             const targetCount = idbEntry.targetRows.length;
@@ -701,6 +703,8 @@ export default function DataLoadingScreen() {
             setStatus("target", "done");
             setStatus("collected", "done");
             await fetchMdm(section as SectionKey, mdmStaleCount);
+            // navigate หลัง fetchMdm เสร็จเท่านั้น (useEffect allDone จะ trigger)
+            return;
           }
           navigate(popReturnPath() ?? "/contracts", { replace: true });
         } else {
