@@ -10,9 +10,10 @@ import {
   clearStuckSyncLogs,
 } from "../sync/syncLog";
 import { desc, eq, and, gt, lt, sql } from "drizzle-orm";
-import { syncLogs, contracts } from "../../drizzle/schema";
+import { syncLogs, contracts, deviceLocationLogs } from "../../drizzle/schema";
 import { getDb } from "../db";
 import { sectionSchema, type SectionKey } from "../../shared/const";
+import { getDeviceLocation } from "../services/mdm";
 
 // sectionSchema imported from shared/const — normalizes any case to canonical SectionKey
 
@@ -367,6 +368,61 @@ export const syncRouter = router({
       }
 
       console.log(`[saveMdmData] ${section}: updated ${updated}/${matchedRows.length} matched contracts (bulk SQL, with mdm_device_id)`);
+
+      // ─── GPS Loop: ดึง GPS เฉพาะเครื่องที่ online (days=0) และถูกล็อก (deviceLock=true) ───
+      // กรอง matchedRows เฉพาะที่ online วันนี้ (days=0) และ deviceLock=true
+      const gpsTargets = matchedRows.filter(
+        (r) => r.days === 0 && r.deviceLock === true && r.mdmDeviceId != null
+      );
+
+      if (gpsTargets.length > 0) {
+        console.log(`[saveMdmData][GPS] ${section}: ${gpsTargets.length} devices to fetch GPS (online today + locked)`);
+
+        // สร้าง Map<externalId, serialNo> เพื่อ lookup serialNo ตอน insert log
+        const externalIdToSerial = new Map<string, string>();
+        for (const r of validRows) {
+          if (r.serialNo) externalIdToSerial.set(r.externalId, r.serialNo);
+        }
+
+        // ดึง GPS แบบ sequential (ไม่ parallel เพื่อไม่ให้ MDM rate limit)
+        // ใช้ delay 200ms ระหว่างแต่ละ request
+        const GPS_DELAY_MS = 200;
+        let gpsSuccess = 0;
+        let gpsFail = 0;
+
+        for (const target of gpsTargets) {
+          try {
+            const loc = await getDeviceLocation(target.mdmDeviceId!, section);
+            if (loc && loc.latitude && loc.longitude) {
+              const serialNo = externalIdToSerial.get(target.externalId) ?? "";
+              // Insert ลง device_location_logs
+              await db.insert(deviceLocationLogs).values({
+                section,
+                serialNo,
+                mdmDeviceId: target.mdmDeviceId!,
+                latitude: loc.latitude,
+                longitude: loc.longitude,
+                altitude: loc.altitude ?? null,
+                speed: loc.speed ?? null,
+              });
+              gpsSuccess++;
+            } else {
+              gpsFail++;
+            }
+          } catch (gpsErr) {
+            gpsFail++;
+            console.warn(`[saveMdmData][GPS] ${section}: mdmDeviceId=${target.mdmDeviceId} error:`, (gpsErr as Error).message);
+          }
+          // delay เพื่อไม่ให้ MDM rate limit
+          await new Promise((res) => setTimeout(res, GPS_DELAY_MS));
+        }
+
+        console.log(`[saveMdmData][GPS] ${section}: GPS done — success=${gpsSuccess}, fail/offline=${gpsFail}`);
+      } else {
+        console.log(`[saveMdmData][GPS] ${section}: no devices qualify for GPS fetch (need online today + locked)`);
+      }
+      // ─────────────────────────────────────────────────────────────────────────────────
+
       return { section, updated, total: validRows.length };
     }),
 
