@@ -538,6 +538,7 @@ export default function DataLoadingScreen() {
               lastTime: d.lastTime,
               deviceLock: isLocked,
               lastType: typeof d.lastType === 'number' ? d.lastType : null, // 0=offline, 1=online
+              mdmId: typeof d.id === 'number' ? d.id : null, // MDM internal ID — ใช้ดึง GPS
             });
           }
         }
@@ -566,6 +567,7 @@ export default function DataLoadingScreen() {
         lastOnlineAt: d.lastTime,
         deviceLock: d.deviceLock,
         lastType: d.lastType ?? null, // 0=offline, 1=online ณ ขณะ sync
+        mdmDeviceId: d.mdmId ?? null, // MDM internal ID — ใช้ดึง GPS location
       }));
 
       // 4. บันทึกลง DB

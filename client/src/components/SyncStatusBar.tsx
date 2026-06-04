@@ -578,7 +578,7 @@ export function SyncStatusBar({
       // Step 2: Fetch MDM devices ทั้งหมด (pagination)
       const PAGE_SIZE = 1000;
       // เพิ่ม deviceLock ใน type
-      const allDevices: Array<{ deviceId: string; lastTime: string; deviceLock: boolean | null; lastType: number | null }> = [];
+      const allDevices: Array<{ deviceId: string; lastTime: string; deviceLock: boolean | null; lastType: number | null; mdmId: number | null }> = [];
       let pageNum = 1;
       let total = 0;
       let fetched = 0;
@@ -598,7 +598,7 @@ export function SyncStatusBar({
           throw new Error(`MDM API ตอบกลับ ${res.status}: ${body.slice(0, 200)}`);
         }
         const json = await res.json();
-        const devices: Array<{ deviceId?: string; lastTime?: string; deviceLock?: number | string | boolean; lastType?: number }> =
+        const devices: Array<{ deviceId?: string; lastTime?: string; deviceLock?: number | string | boolean; lastType?: number; id?: number }> =
           Array.isArray(json) ? json : (json?.rows ?? json?.data ?? json?.devices ?? []);
         if (pageNum === 1) total = json?.total ?? devices.length;
         for (const d of devices) {
@@ -608,7 +608,7 @@ export function SyncStatusBar({
             const isLocked = lockVal === 1 || lockVal === "1" || lockVal === true ? true
               : lockVal === 0 || lockVal === "0" || lockVal === false ? false
               : null;
-            allDevices.push({ deviceId: d.deviceId, lastTime: d.lastTime, deviceLock: isLocked, lastType: typeof d.lastType === 'number' ? d.lastType : null });
+            allDevices.push({ deviceId: d.deviceId, lastTime: d.lastTime, deviceLock: isLocked, lastType: typeof d.lastType === 'number' ? d.lastType : null, mdmId: typeof d.id === 'number' ? d.id : null });
           }
         }
         fetched += devices.length;
@@ -628,13 +628,14 @@ export function SyncStatusBar({
         return Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
       };
 
-      // เพิ่ม deviceLock + lastType ใน payload
+      // เพิ่ม deviceLock + lastType + mdmDeviceId ใน payload
       const devicePayload = allDevices.map((d) => ({
         serialNo: d.deviceId,
         lastOnlineDays: calcDays(d.lastTime),
         lastOnlineAt: d.lastTime,
         deviceLock: d.deviceLock,
         lastType: d.lastType, // 0=offline, 1=online ณ ขณะ sync
+        mdmDeviceId: d.mdmId, // MDM internal ID — ใช้ดึง GPS location
       }));
 
       // Step 4: ส่งผลกลับ server เพื่อบันทึกลง DB
