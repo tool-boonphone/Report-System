@@ -121,7 +121,11 @@ async function main() {
           paidAmount: String(Number(inst.paid ?? 0)),
           overpaidApplied: String(Number(inst.overpaidApplied ?? 0)),
           baselineAmount: String(Number(inst.baselineAmount ?? 0)),
-          isPaid: !!inst.isPaid,
+          // Override isPaid=true เมื่อ effective_paid >= baseline_amount
+          isPaid: !!inst.isPaid || (
+            Number(inst.paid ?? 0) + Number(inst.overpaidApplied ?? 0) >= Number(inst.baselineAmount ?? 0)
+            && Number(inst.baselineAmount ?? 0) > 0
+          ),
           isPartialPaid: !!inst.isPartialPaid,
           isClosed: !!inst.isClosed,
           isSuspended: !!inst.isSuspended,

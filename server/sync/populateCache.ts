@@ -141,7 +141,12 @@ export async function populateDebtCache(
           paidAmount: String(Number(inst.paid ?? 0)),
           overpaidApplied: String(Number(inst.overpaidApplied ?? 0)),
           baselineAmount: String(Number(inst.baselineAmount ?? 0)),
-          isPaid: !!inst.isPaid,
+          // Override isPaid=true เมื่อ effective_paid >= baseline_amount
+          // เพื่อแก้กรณีที่ API ส่ง isPaid=false แม้ชำระครบแล้ว (เช่น มีค่าปรับค้างอยู่)
+          isPaid: !!inst.isPaid || (
+            Number(inst.paid ?? 0) + Number(inst.overpaidApplied ?? 0) >= Number(inst.baselineAmount ?? 0)
+            && Number(inst.baselineAmount ?? 0) > 0
+          ),
           isPartialPaid: !!inst.isPartialPaid,
           isClosed: !!inst.isClosed,
           isSuspended: !!inst.isSuspended,
