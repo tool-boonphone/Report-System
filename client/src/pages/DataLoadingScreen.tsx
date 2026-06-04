@@ -539,6 +539,7 @@ export default function DataLoadingScreen() {
               deviceLock: isLocked,
               lastType: typeof d.lastType === 'number' ? d.lastType : null, // 0=offline, 1=online
               mdmId: typeof d.id === 'number' ? d.id : null, // MDM internal ID — ใช้ดึง GPS
+              lossStatus: typeof d.lossStatus === 'number' ? d.lossStatus : null, // 0=ปกติ, 1=Lost Mode
             });
           }
         }
@@ -566,8 +567,9 @@ export default function DataLoadingScreen() {
         lastOnlineDays: calcDays(d.lastTime),
         lastOnlineAt: d.lastTime,
         deviceLock: d.deviceLock,
-        lastType: d.lastType ?? null, // 0=offline, 1=online ณ ขณะ sync
-        mdmDeviceId: d.mdmId ?? null, // MDM internal ID — ใช้ดึง GPS location
+        lastType: d.lastType ?? null,       // 0=offline, 1=online ณ ขณะ sync
+        mdmDeviceId: d.mdmId ?? null,       // MDM internal ID — ใช้ดึง GPS location
+        lossStatus: d.lossStatus ?? null,   // 0=ปกติ, 1=Lost Mode (ดึง GPS ได้)
       }));
 
       // 4. บันทึกลง DB

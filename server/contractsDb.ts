@@ -122,6 +122,7 @@ export async function listAllContracts(params: {
       lastOnlineDays: contracts.lastOnlineDays,
       lastOnlineAt: contracts.lastOnlineAt,
       deviceLock: contracts.deviceLock,
+      lossStatus: contracts.lossStatus,     // MDM Lost Mode (0=ปกติ, 1=Lost Mode — ดึง GPS ได้)
       mdmDeviceId: contracts.mdmDeviceId,   // MDM internal ID สำหรับดึง GPS location
       downPayment: contracts.downPayment,
       financeAmount: contracts.financeAmount,
@@ -202,6 +203,7 @@ export async function listContractChunk(params: {
       lastOnlineDays: contracts.lastOnlineDays,
       lastOnlineAt: contracts.lastOnlineAt,
       deviceLock: contracts.deviceLock,
+      lossStatus: contracts.lossStatus,     // MDM Lost Mode (0=ปกติ, 1=Lost Mode — ดึง GPS ได้)
       mdmDeviceId: contracts.mdmDeviceId,   // MDM internal ID สำหรับดึง GPS location
       downPayment: contracts.downPayment,
       financeAmount: contracts.financeAmount,

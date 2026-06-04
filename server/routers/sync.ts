@@ -252,6 +252,7 @@ export const syncRouter = router({
             lastOnlineAt: z.string().nullable(), // "YYYY-MM-DD HH:mm:ss"
             deviceLock: z.boolean().nullable().optional(), // true=ล็อค, false=ปลดล็อค, null/undefined=ไม่มีข้อมูล
             lastType: z.number().int().nullable().optional(), // 0=offline, 1=online ณ ขณะ sync
+            lossStatus: z.number().int().nullable().optional(), // 0=ปกติ, 1=Lost Mode (ดึง GPS ได้)
           })
         ).max(20000), // เพิ่มจาก 10,000 เป็น 20,000 รองรับ dataset ขนาดใหญ่
       })
@@ -263,7 +264,7 @@ export const syncRouter = router({
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB not available" });
 
       // สร้าง Map<serialNo (uppercase), { mdmDeviceId, days, lastOnlineAt, deviceLock }> จาก input
-      const snMap = new Map<string, { mdmDeviceId: number | null; days: number | null; lastOnlineAt: string | null; deviceLock: boolean | null; lastType: number | null }>();
+      const snMap = new Map<string, { mdmDeviceId: number | null; days: number | null; lastOnlineAt: string | null; deviceLock: boolean | null; lastType: number | null; lossStatus: number | null }>();
       for (const d of input.devices) {
         if (d.serialNo) {
           snMap.set(d.serialNo.trim().toUpperCase(), {
@@ -272,6 +273,7 @@ export const syncRouter = router({
             lastOnlineAt: d.lastOnlineAt,
             deviceLock: d.deviceLock ?? null,
             lastType: d.lastType ?? null,
+            lossStatus: d.lossStatus ?? null,
           });
         }
       }
@@ -292,7 +294,7 @@ export const syncRouter = router({
       // สร้าง Map<externalId, MDM data> จาก validRows + snMap
       // เพื่อให้ UPDATE เฉพาะ row ที่พบใน MDM เท่านั้น
       // (ไม่ reset row ที่ไม่พบใน batch นี้ให้เป็น NULL)
-      const matchedRows: { externalId: string; mdmDeviceId: number | null; days: number | null; lastOnlineAt: string | null; deviceLock: boolean | null; lastType: number | null }[] = [];
+      const matchedRows: { externalId: string; mdmDeviceId: number | null; days: number | null; lastOnlineAt: string | null; deviceLock: boolean | null; lastType: number | null; lossStatus: number | null }[] = [];
       for (const r of validRows) {
         const key = r.serialNo!.trim().toUpperCase();
         const mdm = snMap.get(key);
@@ -304,6 +306,7 @@ export const syncRouter = router({
             lastOnlineAt: mdm.lastOnlineAt ?? null,
             deviceLock: mdm.deviceLock ?? null,
             lastType: mdm.lastType ?? null,
+            lossStatus: mdm.lossStatus ?? null,
           });
         }
       }
@@ -330,6 +333,7 @@ export const syncRouter = router({
         const daysWhenClauses: string[] = [];
         const atWhenClauses: string[] = [];
         const lockWhenClauses: string[] = [];
+        const lossStatusWhenClauses: string[] = [];
         const inPlaceholders: string[] = [];
         const params: (string | number | boolean | null)[] = [];
         let paramIdx = 1;
@@ -340,13 +344,15 @@ export const syncRouter = router({
           const daysIdx = paramIdx++;
           const atIdx = paramIdx++;
           const lockIdx = paramIdx++;
+          const lossIdx = paramIdx++;
 
-          params.push(r.externalId, r.mdmDeviceId, r.days, r.lastOnlineAt, r.deviceLock);
+          params.push(r.externalId, r.mdmDeviceId, r.days, r.lastOnlineAt, r.deviceLock, r.lossStatus);
 
           mdmIdWhenClauses.push(`WHEN external_id = $${eidIdx} THEN $${mdmIdIdx}::integer`);
           daysWhenClauses.push(`WHEN external_id = $${eidIdx} THEN $${daysIdx}::integer`);
           atWhenClauses.push(`WHEN external_id = $${eidIdx} THEN $${atIdx}::varchar`);
           lockWhenClauses.push(`WHEN external_id = $${eidIdx} THEN $${lockIdx}::boolean`);
+          lossStatusWhenClauses.push(`WHEN external_id = $${eidIdx} THEN $${lossIdx}::integer`);
           inPlaceholders.push(`$${eidIdx}`);
 
           if (r.days !== null) updated++;
@@ -362,7 +368,8 @@ export const syncRouter = router({
             mdm_device_id    = CASE ${mdmIdWhenClauses.join(" ")} ELSE mdm_device_id END,
             last_online_days = CASE ${daysWhenClauses.join(" ")} ELSE last_online_days END,
             last_online_at   = CASE ${atWhenClauses.join(" ")} ELSE last_online_at END,
-            device_lock      = CASE ${lockWhenClauses.join(" ")} ELSE device_lock END
+            device_lock      = CASE ${lockWhenClauses.join(" ")} ELSE device_lock END,
+            loss_status      = CASE ${lossStatusWhenClauses.join(" ")} ELSE loss_status END
           WHERE section = $${sectionIdx}
             AND external_id IN (${inPlaceholders.join(", ")})
         `;
@@ -376,12 +383,13 @@ export const syncRouter = router({
       // กรอง matchedRows เฉพาะที่ online วันนี้ (days=0) และ deviceLock=true
       // lastType=1 = MDM รายงานว่าเครื่องออนไลน์อยู่ ณ ขณะที่ sync → ดึง GPS ได้
       // lastType=0 = offline → ข้ามไปเลย ไม่ดึงซ้ำ
+      // เงื่อนไข GPS: lastType=1 (online ณ ขณะ sync) + lossStatus=1 (Lost Mode เปิดอยู่ — MDM ดึง GPS ได้)
       const gpsTargets = matchedRows.filter(
-        (r) => r.lastType === 1 && r.deviceLock === true && r.mdmDeviceId != null
+        (r) => r.lastType === 1 && r.lossStatus === 1 && r.mdmDeviceId != null
       );
 
       if (gpsTargets.length > 0) {
-        console.log(`[saveMdmData][GPS] ${section}: ${gpsTargets.length} devices to fetch GPS (lastType=1 online + locked)`);
+        console.log(`[saveMdmData][GPS] ${section}: ${gpsTargets.length} devices to fetch GPS (lastType=1 online + lossStatus=1 Lost Mode)`);
 
         // สร้าง Map<externalId, serialNo> เพื่อ lookup serialNo ตอน insert log
         const externalIdToSerial = new Map<string, string>();

@@ -186,6 +186,7 @@ export const contracts = pgTable(
     lastOnlineDays: integer("last_online_days"),            // จำนวนวันที่ออนไลน์ล่าสุดจาก MDM (0=วันนี้, null=ไม่พบ)
     lastOnlineAt: varchar("last_online_at", { length: 32 }), // "YYYY-MM-DD HH:mm:ss" จาก MDM lastTime
     deviceLock: boolean("device_lock"),                       // สถานะล็อคเครื่องจาก MDM (true=ล็อค, false=ปลดล็อค, null=ไม่พบ)
+    lossStatus: integer("loss_status"),                        // MDM Lost Mode (0=ปกติ, 1=Lost Mode เปิดอยู่ — ดึง GPS ได้)
     mdmDeviceId: integer("mdm_device_id"),                    // MDM internal ID (ใช้ดึง GPS location โดยตรง)
   },
   (t) => ({

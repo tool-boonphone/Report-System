@@ -578,7 +578,7 @@ export function SyncStatusBar({
       // Step 2: Fetch MDM devices ทั้งหมด (pagination)
       const PAGE_SIZE = 1000;
       // เพิ่ม deviceLock ใน type
-      const allDevices: Array<{ deviceId: string; lastTime: string; deviceLock: boolean | null; lastType: number | null; mdmId: number | null }> = [];
+      const allDevices: Array<{ deviceId: string; lastTime: string; deviceLock: boolean | null; lastType: number | null; mdmId: number | null; lossStatus: number | null }> = [];
       let pageNum = 1;
       let total = 0;
       let fetched = 0;
@@ -608,7 +608,7 @@ export function SyncStatusBar({
             const isLocked = lockVal === 1 || lockVal === "1" || lockVal === true ? true
               : lockVal === 0 || lockVal === "0" || lockVal === false ? false
               : null;
-            allDevices.push({ deviceId: d.deviceId, lastTime: d.lastTime, deviceLock: isLocked, lastType: typeof d.lastType === 'number' ? d.lastType : null, mdmId: typeof d.id === 'number' ? d.id : null });
+            allDevices.push({ deviceId: d.deviceId, lastTime: d.lastTime, deviceLock: isLocked, lastType: typeof d.lastType === 'number' ? d.lastType : null, mdmId: typeof d.id === 'number' ? d.id : null, lossStatus: typeof (d as any).lossStatus === 'number' ? (d as any).lossStatus : null });
           }
         }
         fetched += devices.length;
@@ -628,14 +628,15 @@ export function SyncStatusBar({
         return Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
       };
 
-      // เพิ่ม deviceLock + lastType + mdmDeviceId ใน payload
+      // เพิ่ม deviceLock + lastType + mdmDeviceId + lossStatus ใน payload
       const devicePayload = allDevices.map((d) => ({
         serialNo: d.deviceId,
         lastOnlineDays: calcDays(d.lastTime),
         lastOnlineAt: d.lastTime,
         deviceLock: d.deviceLock,
-        lastType: d.lastType, // 0=offline, 1=online ณ ขณะ sync
-        mdmDeviceId: d.mdmId, // MDM internal ID — ใช้ดึง GPS location
+        lastType: d.lastType,       // 0=offline, 1=online ณ ขณะ sync
+        mdmDeviceId: d.mdmId,       // MDM internal ID — ใช้ดึง GPS location
+        lossStatus: d.lossStatus,   // 0=ปกติ, 1=Lost Mode (ดึง GPS ได้)
       }));
 
       // Step 4: ส่งผลกลับ server เพื่อบันทึกลง DB

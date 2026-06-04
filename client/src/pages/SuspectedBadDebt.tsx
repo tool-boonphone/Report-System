@@ -18,9 +18,10 @@ import {
   ChevronsUpDown,
   Download,
   Lock,
-  LockOpen,
   MapPin,
   Search,
+  ShieldCheck,
+  ShieldOff,
   X,
 } from "lucide-react";
 import { LocationDialog, useLocationDialog } from "@/components/LocationDialog";
@@ -141,6 +142,7 @@ type Row = {
   lastOnlineDays: number | null;
   lastOnlineAt: string | null;   // "YYYY-MM-DD HH:mm:ss" เวลาออนไลน์ล่าสุด (ใช้แสดงใน tooltip)
   deviceLock: boolean | null;
+  lossStatus: number | null;      // 0=ปกติ, 1=Lost Mode (ล็อกเครื่อง)
   mdmDeviceId: number | null;    // MDM internal ID สำหรับดึง GPS location
   model: string | null;
   device: string | null;
@@ -991,11 +993,17 @@ export default function SuspectedBadDebt() {
                           <td className="px-3 py-1.5 text-center whitespace-nowrap">
                             {(() => {
                               const days = r.lastOnlineDays;
-                              // ไอคอนกุญแจ: true=ล็อค (สีแดง), false=ปลดล็อค (สีเขียว), null=ไม่แสดง
-                              const lockIcon = r.deviceLock === true ? (
-                                <Lock className="inline-block w-3 h-3 text-red-500 ml-1 flex-shrink-0" />
+                              // ไอคอน Lost Mode (lossStatus): 1=ล็อกเครื่อง (สีแดง), 0=ไม่ล็อค (สีเขียว), null=ไม่แสดง
+                              const lockIcon = r.lossStatus === 1 ? (
+                                <Lock className="inline-block w-3 h-3 text-red-500 ml-1 flex-shrink-0" title="Lost Mode: ล็อกเครื่อง" />
+                              ) : r.lossStatus === 0 ? (
+                                <Lock className="inline-block w-3 h-3 text-green-500 ml-1 flex-shrink-0" title="Lost Mode: ไม่ล็อก" />
+                              ) : null;
+                              // ไอคอน MDM Control (deviceLock): true=อยู่ภายใต้ MDM (สีเขียว), false=หลุดจาก MDM (สีเทา), null=ไม่แสดง
+                              const shieldIcon = r.deviceLock === true ? (
+                                <ShieldCheck className="inline-block w-3 h-3 text-green-500 ml-0.5 flex-shrink-0" title="MDM: อยู่ภายใต้การควบคุม" />
                               ) : r.deviceLock === false ? (
-                                <LockOpen className="inline-block w-3 h-3 text-green-500 ml-1 flex-shrink-0" />
+                                <ShieldOff className="inline-block w-3 h-3 text-gray-400 ml-0.5 flex-shrink-0" title="MDM: หลุดจากการควบคุม" />
                               ) : null;
                               // ปุ่ม GPS MapPin: แสดงเฉพาะเมื่อมี mdmDeviceId
                               const mapPinBtn = r.mdmDeviceId ? (
@@ -1019,6 +1027,7 @@ export default function SuspectedBadDebt() {
                               if (days == null) return (
                                 <span className="inline-flex items-center gap-0.5">
                                   <span className="text-gray-400 text-xs">–</span>
+                                  {shieldIcon}
                                   {lockIcon}
                                   {mapPinBtn}
                                 </span>
@@ -1030,6 +1039,7 @@ export default function SuspectedBadDebt() {
                               if (days === 0) return (
                                 <span className="inline-flex items-center gap-0.5">
                                   <span title={tooltipText} className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-green-100 text-green-700 cursor-default">• วันนี้</span>
+                                  {shieldIcon}
                                   {lockIcon}
                                   {mapPinBtn}
                                 </span>
@@ -1037,6 +1047,7 @@ export default function SuspectedBadDebt() {
                               if (days <= 3) return (
                                 <span className="inline-flex items-center gap-0.5">
                                   <span title={tooltipText} className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-yellow-100 text-yellow-700 cursor-default">{days} วัน</span>
+                                  {shieldIcon}
                                   {lockIcon}
                                   {mapPinBtn}
                                 </span>
@@ -1044,6 +1055,7 @@ export default function SuspectedBadDebt() {
                               if (days <= 7) return (
                                 <span className="inline-flex items-center gap-0.5">
                                   <span title={tooltipText} className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-orange-100 text-orange-700 cursor-default">{days} วัน</span>
+                                  {shieldIcon}
                                   {lockIcon}
                                   {mapPinBtn}
                                 </span>
@@ -1051,6 +1063,7 @@ export default function SuspectedBadDebt() {
                               return (
                                 <span className="inline-flex items-center gap-0.5">
                                   <span title={tooltipText} className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-100 text-red-700 cursor-default">{days} วัน</span>
+                                  {shieldIcon}
                                   {lockIcon}
                                   {mapPinBtn}
                                 </span>

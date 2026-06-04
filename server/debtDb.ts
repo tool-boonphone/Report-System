@@ -4186,6 +4186,7 @@ export async function listSuspectedBadDebt(params: { section: SectionKey }): Pro
     lastOnlineDays: number | null;
     lastOnlineAt: string | null;    // "YYYY-MM-DD HH:mm:ss" เวลาออนไลน์ล่าสุด
     deviceLock: boolean | null;
+    lossStatus: number | null;        // 0=ปกติ, 1=Lost Mode (ล็อกเครื่อง)
     mdmDeviceId: number | null;      // MDM internal ID สำหรับดึง GPS location
     model: string | null;
     device: string | null;
@@ -4268,6 +4269,7 @@ export async function listSuspectedBadDebt(params: { section: SectionKey }): Pro
         last_online_days,
         last_online_at,
         device_lock,
+        loss_status,
         mdm_device_id,
         CAST(sell_price AS DECIMAL(18,2))     AS sell_price,
         CAST(multiplier AS DECIMAL(18,4))     AS multiplier,
@@ -4357,6 +4359,8 @@ export async function listSuspectedBadDebt(params: { section: SectionKey }): Pro
       lastOnlineAt: cInfo?.last_online_at ?? null,
       // deviceLock: true=ล็อค, false=ปลดล็อค, null=ไม่พบใน MDM
       deviceLock: cInfo?.device_lock != null ? Boolean(cInfo.device_lock) : null,
+      // lossStatus: 0=ปกติ, 1=Lost Mode (ล็อกเครื่อง), null=ไม่พบใน MDM
+      lossStatus: cInfo?.loss_status != null ? Number(cInfo.loss_status) : null,
       mdmDeviceId: cInfo?.mdm_device_id != null ? Number(cInfo.mdm_device_id) : null,
       model: s.model ?? null,
       device: s.device ?? null,
@@ -4412,6 +4416,7 @@ export async function listWatchGroup(params: {
     lastOnlineDays: number | null;
     lastOnlineAt: string | null;    // "YYYY-MM-DD HH:mm:ss" เวลาออนไลน์ล่าสุด
     deviceLock: boolean | null;
+    lossStatus: number | null;        // 0=ปกติ, 1=Lost Mode (ล็อกเครื่อง)
     mdmDeviceId: number | null;      // MDM internal ID สำหรับดึง GPS location
     model: string | null;
     device: string | null;
@@ -4563,6 +4568,7 @@ export async function listWatchGroup(params: {
         last_online_days,
         last_online_at,
         device_lock,
+        loss_status,
         mdm_device_id,
         CAST(sell_price AS DECIMAL(18,2))        AS sell_price,
         CAST(multiplier AS DECIMAL(18,4))         AS multiplier,
@@ -4726,6 +4732,8 @@ export async function listWatchGroup(params: {
       lastOnlineAt: cInfo?.last_online_at ?? null,
       // deviceLock: true=ล็อค, false=ปลดล็อค, null=ไม่พบใน MDM
       deviceLock: cInfo?.device_lock != null ? Boolean(cInfo.device_lock) : null,
+      // lossStatus: 0=ปกติ, 1=Lost Mode (ล็อกเครื่อง), null=ไม่พบใน MDM
+      lossStatus: cInfo?.loss_status != null ? Number(cInfo.loss_status) : null,
       mdmDeviceId: cInfo?.mdm_device_id != null ? Number(cInfo.mdm_device_id) : null,
       model: s.model ?? null,
       device: s.device ?? null,
