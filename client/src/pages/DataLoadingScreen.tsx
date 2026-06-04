@@ -456,9 +456,28 @@ export default function DataLoadingScreen() {
     
     try {
       // 1. ขอ API Key
-      const keyResult = await getMdmApiKeyQuery.refetch();
+      // user ที่ไม่มี sync_api permission จะได้รับ FORBIDDEN → ข้าม MDM โดยไม่ error
+      let keyResult: Awaited<ReturnType<typeof getMdmApiKeyQuery.refetch>>;
+      try {
+        keyResult = await getMdmApiKeyQuery.refetch();
+      } catch (keyErr: any) {
+        // FORBIDDEN = ไม่มีสิทธิ์ sync → ข้าม MDM อย่างเงียบๆ
+        const isForbidden =
+          keyErr?.data?.code === "FORBIDDEN" ||
+          keyErr?.message?.includes("FORBIDDEN") ||
+          keyErr?.message?.includes("ไม่มีสิทธิ์");
+        if (isForbidden) {
+          setStatus("mdm", "done");
+          return;
+        }
+        throw keyErr;
+      }
       const apiKey = keyResult.data?.apiKey;
-      if (!apiKey) throw new Error("ไม่พบ MDM API Key");
+      if (!apiKey) {
+        // ไม่มี API key → ข้าม MDM อย่างเงียบๆ (ไม่ error)
+        setStatus("mdm", "done");
+        return;
+      }
 
       // 2. ดึงข้อมูล MDM
       const PAGE_SIZE = 1000;
@@ -565,6 +584,15 @@ export default function DataLoadingScreen() {
 
       setStatus("mdm", "done");
     } catch (err: any) {
+      // FORBIDDEN = ไม่มีสิทธิ์ sync → ข้าม MDM อย่างเงียบๆ ไม่แสดง error
+      const isForbidden =
+        err?.data?.code === "FORBIDDEN" ||
+        err?.message?.includes("FORBIDDEN") ||
+        err?.message?.includes("ไม่มีสิทธิ์");
+      if (isForbidden) {
+        setStatus("mdm", "done");
+        return;
+      }
       const msg = err?.message ?? "เกิดข้อผิดพลาดในการดึงข้อมูล MDM";
       setItemError("mdm", msg);
       setStatus("mdm", "error"); // ให้ข้ามไปได้แม้ MDM จะ error
