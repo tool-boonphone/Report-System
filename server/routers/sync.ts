@@ -224,15 +224,8 @@ export const syncRouter = router({
    */
   getMdmApiKey: appProcedure
     .input(z.object({ section: sectionSchema }))
-    .query(async ({ input, ctx }) => {
-      // Permission check — เฉพาะ user ที่มีสิทธิ์ sync เท่านั้น
-      const { checkPermission } = await import("../authDb");
-      if (ctx.appUser) {
-        const allowed = checkPermission(ctx.appUser, "sync_api", "sync");
-        if (!allowed) {
-          throw new TRPCError({ code: "FORBIDDEN", message: "ไม่มีสิทธิ์ใช้งาน Sync" });
-        }
-      }
+    .query(async ({ input }) => {
+      // ไม่ต้องตรวจ permission — ทุก user ที่ login แล้วใช้งาน MDM ได้
       const section = input.section as SectionKey;
       const apiKey =
         section === "Boonphone"
@@ -261,15 +254,8 @@ export const syncRouter = router({
         ).max(20000), // เพิ่มจาก 10,000 เป็น 20,000 รองรับ dataset ขนาดใหญ่
       })
     )
-    .mutation(async ({ input, ctx }) => {
-      // Permission check
-      const { checkPermission } = await import("../authDb");
-      if (ctx.appUser) {
-        const allowed = checkPermission(ctx.appUser, "sync_api", "sync");
-        if (!allowed) {
-          throw new TRPCError({ code: "FORBIDDEN", message: "ไม่มีสิทธิ์ใช้งาน Sync" });
-        }
-      }
+    .mutation(async ({ input }) => {
+      // ไม่ต้องตรวจ permission — ทุก user ที่ login แล้วใช้งาน MDM ได้
       const section = input.section as SectionKey;
       const db = await getDb(section);
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB not available" });
