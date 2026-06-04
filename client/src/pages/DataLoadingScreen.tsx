@@ -577,9 +577,10 @@ export default function DataLoadingScreen() {
             devices: batch,
           });
         }
-        // Invalidate contracts.listAll เพื่อให้หน้า Contracts re-fetch ข้อมูลใหม่
-        // พร้อม lastOnlineDays ที่อัปเดตแล้ว
+        // Refetch contracts.listAll เพื่อบังคับดึงข้อมูลใหม่จาก DB ทันทีในหน้า Contracts
+        // ใช้ refetch แทน invalidate เพราะ staleTime: Infinity ทำให้ invalidate ไม่ trigger refetch อัตโนมัติ
         await utils.contracts.listAll.invalidate({ section: sec });
+        await utils.contracts.listAll.refetch({ section: sec });
       }
 
       setStatus("mdm", "done");
