@@ -299,19 +299,41 @@ export const syncRouter = router({
         return { section, updated: 0, total: 0 };
       }
 
+      // สร้าง Map<externalId, MDM data> จาก validRows + snMap
+      // เพื่อให้ UPDATE เฉพาะ row ที่พบใน MDM เท่านั้น
+      // (ไม่ reset row ที่ไม่พบใน batch นี้ให้เป็น NULL)
+      const matchedRows: { externalId: string; days: number | null; lastOnlineAt: string | null; deviceLock: boolean | null }[] = [];
+      for (const r of validRows) {
+        const key = r.serialNo!.trim().toUpperCase();
+        const mdm = snMap.get(key);
+        if (mdm !== undefined) {
+          matchedRows.push({
+            externalId: r.externalId,
+            days: mdm.days ?? null,
+            lastOnlineAt: mdm.lastOnlineAt ?? null,
+            deviceLock: mdm.deviceLock ?? null,
+          });
+        }
+      }
+
+      console.log(`[saveMdmData] ${section}: matched ${matchedRows.length}/${validRows.length} contracts to MDM devices`);
+
+      if (matchedRows.length === 0) {
+        // ไม่มี contract ใดที่ตรงกับ MDM เลย ไม่ต้อง UPDATE
+        return { section, updated: 0, total: validRows.length };
+      }
+
       // Bulk UPDATE ด้วย raw parameterized SQL CASE WHEN
-      // ใช้ db.$client (pg.Pool) เพื่อรองรับ parameterized query
-      // แบ่ง batch 500 rows เพื่อป้องกัน query ใหญ่เกินไป
+      // UPDATE เฉพาะ row ที่ match เท่านั้น ไม่แตะต้อง row ที่ไม่พบ
       const BULK_BATCH = 500;
       let updated = 0;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const pool = (db as any).$client as import("pg").Pool;
 
-      for (let i = 0; i < validRows.length; i += BULK_BATCH) {
-        const batchRows = validRows.slice(i, i + BULK_BATCH);
+      for (let i = 0; i < matchedRows.length; i += BULK_BATCH) {
+        const batchRows = matchedRows.slice(i, i + BULK_BATCH);
 
-        // สร้าง CASE WHEN และ params array
-        // params layout: [eid1, days1, at1, lock1, eid2, days2, at2, lock2, ...]
+        // params layout: [eid1, days1, at1, lock1, eid2, days2, at2, lock2, ..., section]
         const daysWhenClauses: string[] = [];
         const atWhenClauses: string[] = [];
         const lockWhenClauses: string[] = [];
@@ -320,25 +342,19 @@ export const syncRouter = router({
         let paramIdx = 1;
 
         for (const r of batchRows) {
-          const key = r.serialNo!.trim().toUpperCase();
-          const mdm = snMap.get(key);
-          const days = mdm !== undefined ? (mdm.days ?? null) : null;
-          const lastOnlineAt = mdm?.lastOnlineAt ?? null;
-          const deviceLock = mdm !== undefined ? (mdm.deviceLock ?? null) : null;
-
           const eidIdx = paramIdx++;
           const daysIdx = paramIdx++;
           const atIdx = paramIdx++;
           const lockIdx = paramIdx++;
 
-          params.push(r.externalId, days, lastOnlineAt, deviceLock);
+          params.push(r.externalId, r.days, r.lastOnlineAt, r.deviceLock);
 
           daysWhenClauses.push(`WHEN external_id = $${eidIdx} THEN $${daysIdx}::integer`);
           atWhenClauses.push(`WHEN external_id = $${eidIdx} THEN $${atIdx}::varchar`);
           lockWhenClauses.push(`WHEN external_id = $${eidIdx} THEN $${lockIdx}::boolean`);
           inPlaceholders.push(`$${eidIdx}`);
 
-          if (days !== null) updated++;
+          if (r.days !== null) updated++;
         }
 
         // เพิ่ม section param สุดท้าย
@@ -348,9 +364,9 @@ export const syncRouter = router({
         const bulkSql = `
           UPDATE contracts
           SET
-            last_online_days = CASE ${daysWhenClauses.join(" ")} ELSE NULL END,
-            last_online_at   = CASE ${atWhenClauses.join(" ")} ELSE NULL END,
-            device_lock      = CASE ${lockWhenClauses.join(" ")} ELSE NULL END
+            last_online_days = CASE ${daysWhenClauses.join(" ")} ELSE last_online_days END,
+            last_online_at   = CASE ${atWhenClauses.join(" ")} ELSE last_online_at END,
+            device_lock      = CASE ${lockWhenClauses.join(" ")} ELSE device_lock END
           WHERE section = $${sectionIdx}
             AND external_id IN (${inPlaceholders.join(", ")})
         `;
@@ -358,7 +374,7 @@ export const syncRouter = router({
         await pool.query(bulkSql, params);
       }
 
-      console.log(`[saveMdmData] ${section}: updated ${updated}/${validRows.length} contracts (bulk SQL)`);
+      console.log(`[saveMdmData] ${section}: updated ${updated}/${matchedRows.length} matched contracts (bulk SQL)`);
       return { section, updated, total: validRows.length };
     }),
 
