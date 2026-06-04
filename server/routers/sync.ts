@@ -292,34 +292,70 @@ export const syncRouter = router({
       const validRows = rows.filter((r: { externalId: string; serialNo: string | null }) => r.serialNo);
       console.log(`[saveMdmData] ${section}: ${validRows.length} contracts with serial_no, ${snMap.size} MDM devices`);
 
-      // Bulk update ทีละ 200 rows (เพิ่มจาก 100 เพื่อลดจำนวน round-trips)
-      let updated = 0;
-      const BATCH = 200;
-      for (let i = 0; i < validRows.length; i += BATCH) {
-        const batch = validRows.slice(i, i + BATCH);
-        await Promise.all(
-          batch.map(async (r: { externalId: string; serialNo: string | null }) => {
-            const key = r.serialNo!.trim().toUpperCase();
-            const mdm = snMap.get(key);
-            // ถ้าเจอใน MDM ใช้ค่าจริง, ถ้าไม่เจอ set null
-            const days = mdm !== undefined ? (mdm.days ?? null) : null;
-            const lastOnlineAt = mdm?.lastOnlineAt ?? null;
-            // deviceLock: ถ้า SN เจอใน MDM ให้ใช้ค่าจริง, ถ้าไม่เจอให้ set null
-            const deviceLock = mdm !== undefined ? (mdm.deviceLock ?? null) : null;
-            await db
-              .update(contracts)
-              .set({
-                lastOnlineDays: days,
-                lastOnlineAt: lastOnlineAt,
-                deviceLock: deviceLock,
-              })
-              .where(and(eq(contracts.section, section), eq(contracts.externalId, r.externalId)));
-            if (days !== null) updated++;
-          })
-        );
+      if (validRows.length === 0) {
+        return { section, updated: 0, total: 0 };
       }
 
-      console.log(`[saveMdmData] ${section}: updated ${updated}/${validRows.length} contracts (with deviceLock)`);
+      // Bulk UPDATE ด้วย raw parameterized SQL CASE WHEN
+      // ใช้ db.$client (pg.Pool) เพื่อรองรับ parameterized query
+      // แบ่ง batch 500 rows เพื่อป้องกัน query ใหญ่เกินไป
+      const BULK_BATCH = 500;
+      let updated = 0;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const pool = (db as any).$client as import("pg").Pool;
+
+      for (let i = 0; i < validRows.length; i += BULK_BATCH) {
+        const batchRows = validRows.slice(i, i + BULK_BATCH);
+
+        // สร้าง CASE WHEN และ params array
+        // params layout: [eid1, days1, at1, lock1, eid2, days2, at2, lock2, ...]
+        const daysWhenClauses: string[] = [];
+        const atWhenClauses: string[] = [];
+        const lockWhenClauses: string[] = [];
+        const inPlaceholders: string[] = [];
+        const params: (string | number | boolean | null)[] = [];
+        let paramIdx = 1;
+
+        for (const r of batchRows) {
+          const key = r.serialNo!.trim().toUpperCase();
+          const mdm = snMap.get(key);
+          const days = mdm !== undefined ? (mdm.days ?? null) : null;
+          const lastOnlineAt = mdm?.lastOnlineAt ?? null;
+          const deviceLock = mdm !== undefined ? (mdm.deviceLock ?? null) : null;
+
+          const eidIdx = paramIdx++;
+          const daysIdx = paramIdx++;
+          const atIdx = paramIdx++;
+          const lockIdx = paramIdx++;
+
+          params.push(r.externalId, days, lastOnlineAt, deviceLock);
+
+          daysWhenClauses.push(`WHEN external_id = $${eidIdx} THEN $${daysIdx}::integer`);
+          atWhenClauses.push(`WHEN external_id = $${eidIdx} THEN $${atIdx}::varchar`);
+          lockWhenClauses.push(`WHEN external_id = $${eidIdx} THEN $${lockIdx}::boolean`);
+          inPlaceholders.push(`$${eidIdx}`);
+
+          if (days !== null) updated++;
+        }
+
+        // เพิ่ม section param สุดท้าย
+        const sectionIdx = paramIdx++;
+        params.push(section);
+
+        const bulkSql = `
+          UPDATE contracts
+          SET
+            last_online_days = CASE ${daysWhenClauses.join(" ")} ELSE NULL END,
+            last_online_at   = CASE ${atWhenClauses.join(" ")} ELSE NULL END,
+            device_lock      = CASE ${lockWhenClauses.join(" ")} ELSE NULL END
+          WHERE section = $${sectionIdx}
+            AND external_id IN (${inPlaceholders.join(", ")})
+        `;
+
+        await pool.query(bulkSql, params);
+      }
+
+      console.log(`[saveMdmData] ${section}: updated ${updated}/${validRows.length} contracts (bulk SQL)`);
       return { section, updated, total: validRows.length };
     }),
 
