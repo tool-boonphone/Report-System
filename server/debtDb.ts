@@ -4188,6 +4188,7 @@ export async function listSuspectedBadDebt(params: { section: SectionKey }): Pro
     deviceLock: boolean | null;
     lossStatus: number | null;        // 0=ปกติ, 1=Lost Mode (ล็อกเครื่อง)
     mdmDeviceId: number | null;      // MDM internal ID สำหรับดึง GPS location
+    locationLogCount: number;          // จำนวน location log (0=ไม่มี, >0=มี → MapPin สีเขียว)
     model: string | null;
     device: string | null;
     sellPrice: number | null;
@@ -4273,10 +4274,14 @@ export async function listSuspectedBadDebt(params: { section: SectionKey }): Pro
         mdm_device_id,
         CAST(sell_price AS DECIMAL(18,2))     AS sell_price,
         CAST(multiplier AS DECIMAL(18,4))     AS multiplier,
-        CAST(commission_net AS DECIMAL(18,2)) AS commission_net
+        CAST(commission_net AS DECIMAL(18,2)) AS commission_net,
+        -- จำนวน location log (สำหรับ MapPin สีเขียว/เทา)
+        (SELECT COUNT(*) FROM device_location_logs dll
+         WHERE dll.section = '${params.section}'
+           AND dll.serial_no = contracts.serial_no) AS location_log_count
       FROM contracts
       WHERE section = '${params.section}'
-        AND external_id IN (${contractIds.map((id) => `'${id.replace(/'/g, "''")}'`).join(",")})
+        AND external_id IN (${contractIds.map((id) => `'${id.replace(/'/g, "''")}' `).join(",")})
     `)
   );
   const contractInfoArr: Array<any> = pgRows(contractInfoRaw2);
@@ -4362,6 +4367,7 @@ export async function listSuspectedBadDebt(params: { section: SectionKey }): Pro
       // lossStatus: 0=ปกติ, 1=Lost Mode (ล็อกเครื่อง), null=ไม่พบใน MDM
       lossStatus: cInfo?.loss_status != null ? Number(cInfo.loss_status) : null,
       mdmDeviceId: cInfo?.mdm_device_id != null ? Number(cInfo.mdm_device_id) : null,
+      locationLogCount: cInfo?.location_log_count != null ? Number(cInfo.location_log_count) : 0,
       model: s.model ?? null,
       device: s.device ?? null,
       sellPrice: cInfo?.sell_price != null ? Number(cInfo.sell_price) : null,
@@ -4418,6 +4424,7 @@ export async function listWatchGroup(params: {
     deviceLock: boolean | null;
     lossStatus: number | null;        // 0=ปกติ, 1=Lost Mode (ล็อกเครื่อง)
     mdmDeviceId: number | null;      // MDM internal ID สำหรับดึง GPS location
+    locationLogCount: number;          // จำนวน location log (0=ไม่มี, >0=มี → MapPin สีเขียว)
     model: string | null;
     device: string | null;
     productType: string | null;
@@ -4576,10 +4583,14 @@ export async function listWatchGroup(params: {
         CAST(installment_amount AS DECIMAL(18,2)) AS installment_amount,
         partner_code,
         partner_name,
-        product_type
+        product_type,
+        -- จำนวน location log (สำหรับ MapPin สีเขียว/เทา)
+        (SELECT COUNT(*) FROM device_location_logs dll
+         WHERE dll.section = '${params.section}'
+           AND dll.serial_no = contracts.serial_no) AS location_log_count
       FROM contracts
       WHERE section = '${params.section}'
-        AND external_id IN (${filteredIds.map((id) => `'${id.replace(/'/g, "''")}'`).join(",")})
+        AND external_id IN (${filteredIds.map((id) => `'${id.replace(/'/g, "''")}' `).join(",")})
     `)
   );
   const contractInfoMap = new Map<string, any>();
@@ -4735,6 +4746,7 @@ export async function listWatchGroup(params: {
       // lossStatus: 0=ปกติ, 1=Lost Mode (ล็อกเครื่อง), null=ไม่พบใน MDM
       lossStatus: cInfo?.loss_status != null ? Number(cInfo.loss_status) : null,
       mdmDeviceId: cInfo?.mdm_device_id != null ? Number(cInfo.mdm_device_id) : null,
+      locationLogCount: cInfo?.location_log_count != null ? Number(cInfo.location_log_count) : 0,
       model: s.model ?? null,
       device: s.device ?? null,
       productType,

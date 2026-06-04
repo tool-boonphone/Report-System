@@ -992,24 +992,34 @@ export default function Contracts() {
                                 ) : row.deviceLock === false ? (
                                   <ShieldOff className="inline-block w-3 h-3 text-gray-400 ml-0.5 flex-shrink-0" title="MDM: หลุดจากการควบคุม" />
                                 ) : null;
-                                // ปุ่ม GPS MapPin: แสดงเฉพาะเมื่อมี mdmDeviceId
-                                const mapPinBtn = row.mdmDeviceId ? (
-                                  <button
-                                    type="button"
-                                    title="ดูตำแหน่ง GPS"
-                                    className="inline-flex items-center justify-center w-4 h-4 ml-0.5 text-teal-500 hover:text-teal-700 transition-colors flex-shrink-0"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      openDialog({
-                                        mdmDeviceId: row.mdmDeviceId,
-                                        customerName: row.customerName,
-                                        contractNo: row.contractNo,
-                                        serialNo: row.serialNo,
-                                      });
-                                    }}
-                                  >
-                                    <MapPin className="w-3 h-3" />
-                                  </button>
+                                // ปุ่ม GPS MapPin: สีเขียว=มี location log (กดได้), สีเทา=ไม่มี log (กดไม่ได้)
+                                const hasLocationLog = !!(row as any).locationLogCount && (row as any).locationLogCount > 0;
+                                const mapPinBtn = row.serialNo ? (
+                                  hasLocationLog ? (
+                                    <button
+                                      type="button"
+                                      title="ดูประวัติตำแหน่ง GPS"
+                                      className="inline-flex items-center justify-center w-4 h-4 ml-0.5 text-green-500 hover:text-green-700 transition-colors flex-shrink-0"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        openDialog({
+                                          mdmDeviceId: row.mdmDeviceId,
+                                          customerName: row.customerName,
+                                          contractNo: row.contractNo,
+                                          serialNo: row.serialNo,
+                                        });
+                                      }}
+                                    >
+                                      <MapPin className="w-3 h-3" />
+                                    </button>
+                                  ) : (
+                                    <span
+                                      title="ยังไม่มีประวัติตำแหน่ง GPS"
+                                      className="inline-flex items-center justify-center w-4 h-4 ml-0.5 text-gray-300 flex-shrink-0 cursor-default"
+                                    >
+                                      <MapPin className="w-3 h-3" />
+                                    </span>
+                                  )
                                 ) : null;
                                 if (days == null) return (
                                   <span className="inline-flex items-center gap-0.5">

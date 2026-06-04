@@ -6,7 +6,7 @@
  * set of helpers works for both.
  */
 import { and, asc, desc, eq, like, or, sql } from "drizzle-orm";
-import { contracts, type Contract } from "../drizzle/schema";
+import { contracts, deviceLocationLogs, type Contract } from "../drizzle/schema";
 import type { SectionKey } from "../shared/const";
 import { getDb } from "./db";
 
@@ -124,6 +124,12 @@ export async function listAllContracts(params: {
       deviceLock: contracts.deviceLock,
       lossStatus: contracts.lossStatus,     // MDM Lost Mode (0=ปกติ, 1=Lost Mode — ดึง GPS ได้)
       mdmDeviceId: contracts.mdmDeviceId,   // MDM internal ID สำหรับดึง GPS location
+      // จำนวน location log ที่มีอยู่ (0 = ไม่มี, >0 = มี → ไอคอน MapPin สีเขียว)
+      locationLogCount: sql<number>`(
+        SELECT COUNT(*) FROM device_location_logs dll
+        WHERE dll.section = ${params.section}
+          AND dll.serial_no = contracts.serial_no
+      )`,
       downPayment: contracts.downPayment,
       financeAmount: contracts.financeAmount,
       commissionNet: contracts.commissionNet,
@@ -205,6 +211,12 @@ export async function listContractChunk(params: {
       deviceLock: contracts.deviceLock,
       lossStatus: contracts.lossStatus,     // MDM Lost Mode (0=ปกติ, 1=Lost Mode — ดึง GPS ได้)
       mdmDeviceId: contracts.mdmDeviceId,   // MDM internal ID สำหรับดึง GPS location
+      // จำนวน location log ที่มีอยู่ (0 = ไม่มี, >0 = มี → ไอคอน MapPin สีเขียว)
+      locationLogCount: sql<number>`(
+        SELECT COUNT(*) FROM device_location_logs dll
+        WHERE dll.section = ${params.section}
+          AND dll.serial_no = contracts.serial_no
+      )`,
       downPayment: contracts.downPayment,
       financeAmount: contracts.financeAmount,
       commissionNet: contracts.commissionNet,
