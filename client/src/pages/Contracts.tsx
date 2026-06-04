@@ -969,6 +969,10 @@ export default function Contracts() {
                               (() => {
                                 if (!row.serialNo) return <span className="text-gray-300 text-xs">-</span>;
                                 const days = row.lastOnlineDays;
+                                // tooltip: แสดงวันที่และเวลาออนไลน์ล่าสุดเมื่อ hover
+                                const tooltipText = (row as any).lastOnlineAt
+                                  ? `ออนไลน์ล่าสุด: ${(row as any).lastOnlineAt}`
+                                  : undefined;
                                 // ไอคอนกุญแจ: true=ล็อค (สีแดง), false=ปลดล็อค (สีเขียว), null=ไม่แสดง
                                 const lockIcon = row.deviceLock === true ? (
                                   <Lock className="inline-block w-3 h-3 text-red-500 ml-1 flex-shrink-0" />
@@ -983,25 +987,25 @@ export default function Contracts() {
                                 );
                                 if (days === 0) return (
                                   <span className="inline-flex items-center gap-0.5">
-                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-green-100 text-green-700">• วันนี้</span>
+                                    <span title={tooltipText} className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-green-100 text-green-700 cursor-default">• วันนี้</span>
                                     {lockIcon}
                                   </span>
                                 );
                                 if (days <= 3) return (
                                   <span className="inline-flex items-center gap-0.5">
-                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-yellow-100 text-yellow-700">{days} วัน</span>
+                                    <span title={tooltipText} className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-yellow-100 text-yellow-700 cursor-default">{days} วัน</span>
                                     {lockIcon}
                                   </span>
                                 );
                                 if (days <= 7) return (
                                   <span className="inline-flex items-center gap-0.5">
-                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-orange-100 text-orange-700">{days} วัน</span>
+                                    <span title={tooltipText} className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-orange-100 text-orange-700 cursor-default">{days} วัน</span>
                                     {lockIcon}
                                   </span>
                                 );
                                 return (
                                   <span className="inline-flex items-center gap-0.5">
-                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-100 text-red-700">{days} วัน</span>
+                                    <span title={tooltipText} className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-100 text-red-700 cursor-default">{days} วัน</span>
                                     {lockIcon}
                                   </span>
                                 );
