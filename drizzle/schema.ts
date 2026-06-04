@@ -186,6 +186,7 @@ export const contracts = pgTable(
     lastOnlineDays: integer("last_online_days"),            // จำนวนวันที่ออนไลน์ล่าสุดจาก MDM (0=วันนี้, null=ไม่พบ)
     lastOnlineAt: varchar("last_online_at", { length: 32 }), // "YYYY-MM-DD HH:mm:ss" จาก MDM lastTime
     deviceLock: boolean("device_lock"),                       // สถานะล็อคเครื่องจาก MDM (true=ล็อค, false=ปลดล็อค, null=ไม่พบ)
+    mdmDeviceId: integer("mdm_device_id"),                    // MDM internal ID (ใช้ดึง GPS location โดยตรง)
   },
   (t) => ({
     sectionExternalIdx: uniqueIndex("contracts_section_external_idx").on(
@@ -717,3 +718,26 @@ export const monthlyTargetDetailSnapshot = pgTable(
   }),
 );
 export type MonthlyTargetDetailSnapshot = typeof monthlyTargetDetailSnapshot.$inferSelect;
+
+// ─── Device Location Logs (GPS History) ──────────────────────────────────────
+// เก็บประวัติตำแหน่ง GPS ของอุปกรณ์ที่ online+locked ระหว่าง MDM sync
+// append-only: ไม่ลบของเก่า ไม่ล้างเมื่อ sync ใหม่
+export const deviceLocationLogs = pgTable(
+  "device_location_logs",
+  {
+    id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+    section: varchar("section", { length: 64 }).notNull(),
+    serialNo: varchar("serial_no", { length: 64 }).notNull(),
+    mdmDeviceId: integer("mdm_device_id").notNull(),
+    latitude: varchar("latitude", { length: 32 }).notNull(),
+    longitude: varchar("longitude", { length: 32 }).notNull(),
+    altitude: varchar("altitude", { length: 32 }),
+    speed: varchar("speed", { length: 32 }),
+    recordedAt: timestamp("recorded_at").defaultNow().notNull(),
+  },
+  (t) => ({
+    sectionSerialIdx: index("dll_section_serial_idx").on(t.section, t.serialNo),
+    sectionRecordedIdx: index("dll_section_recorded_idx").on(t.section, t.recordedAt),
+  }),
+);
+export type DeviceLocationLog = typeof deviceLocationLogs.$inferSelect;

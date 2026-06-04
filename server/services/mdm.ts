@@ -1,14 +1,14 @@
 /**
- * MDM Service — Phase 140 (v4)
+ * MDM Service — Phase 141 (GPS Location)
  *
- * ดึงข้อมูล last online และ deviceLock จาก MDM API (PJ-Soft / mdm-th.com)
+ * ดึงข้อมูล last online, deviceLock และ MDM internal ID จาก MDM API (PJ-Soft / mdm-th.com)
  * โดยใช้ Serial Number (deviceId ใน MDM = serial_no ใน contracts table) เป็น key
  *
  * Design:
  *   - แต่ละ section (Boonphone / Fastfone365) ใช้ API Key แยกกัน
  *   - ใช้ in-memory cache แยกต่างหากสำหรับแต่ละ section (TTL 5 นาที)
  *   - เรียก MDM API เพียงครั้งเดียวต่อ section ต่อ 5 นาที แล้ว cache device list
- *   - getBatchMdmData รับ serials + section แล้วคืน Map<SN, { days, lastTime, deviceLock }>
+ *   - getBatchMdmData รับ serials + section แล้วคืน Map<SN, { id, days, lastTime, deviceLock }>
  *
  * API Keys:
  *   - Boonphone   : MDM_API_KEY_BOONPHONE  (env var)
@@ -16,9 +16,10 @@
  *
  * Auth: X-API-Key: <API_KEY>
  * Endpoint: GET /api/mdm/devices?pageNum=1&pageSize=1000
- * Response: { total: number, rows: [{ deviceId, lastTime, deviceLock, ... }] }
+ * Response: { total: number, rows: [{ id, deviceId, lastTime, deviceLock, ... }] }
  *
  * MDM field mapping:
+ *   id         = MDM internal ID (integer) — ใช้ดึง GPS location
  *   deviceId   = Serial Number (ตรงกับ serial_no ใน contracts table)
  *   lastTime   = เวลาออนไลน์ล่าสุด "YYYY-MM-DD HH:mm:ss"
  *   deviceLock = สถานะล็อคเครื่อง: 1 = ล็อค, 0 = ปลดล็อค (number หรือ string)
@@ -35,7 +36,7 @@ const CACHE_TTL_MS = 5 * 60 * 1000;
  * ดึง API Key ตาม section
  * ใช้ environment variable เป็นหลัก — fallback ไปยัง hardcode key
  */
-function getApiKey(section: SectionKey): string {
+export function getApiKey(section: SectionKey): string {
   if (section === "Boonphone") {
     return (
       process.env.MDM_API_KEY_BOONPHONE ??
@@ -53,10 +54,12 @@ function getApiKey(section: SectionKey): string {
 
 /**
  * ข้อมูลที่เก็บต่อ device ใน cache
+ * id         = MDM internal ID (integer) — ใช้ดึง GPS location
  * lastTime   = เวลาออนไลน์ล่าสุด (string)
  * deviceLock = สถานะล็อคเครื่อง (true=ล็อค, false=ปลดล็อค)
  */
-type DeviceInfo = {
+export type DeviceInfo = {
+  id: number;
   lastTime: string;
   deviceLock: boolean;
 };
@@ -77,10 +80,11 @@ const deviceListCacheMap = new Map<
  * MDM API:
  *   GET /api/mdm/devices?pageNum=1&pageSize=1000
  *   X-API-Key: <API_KEY>
- *   Response: { total: number, rows: [{ deviceId, lastTime, deviceLock, ... }] }
+ *   Response: { total: number, rows: [{ id, deviceId, lastTime, deviceLock, ... }] }
+ *   id       = MDM internal ID (integer) — ใช้ดึง GPS location
  *   deviceId = Serial Number ของอุปกรณ์
  */
-async function fetchDeviceListMap(
+export async function fetchDeviceListMap(
   section: SectionKey,
 ): Promise<Map<string, DeviceInfo>> {
   const now = Date.now();
@@ -131,6 +135,7 @@ async function fetchDeviceListMap(
 
     // response format: { total: number, rows: [...] }
     const devices: Array<{
+      id?: number | string;
       deviceId?: string;
       lastTime?: string;
       deviceLock?: number | string | boolean;
@@ -150,7 +155,10 @@ async function fetchDeviceListMap(
         // normalize เป็น boolean: true = ล็อค, false = ปลดล็อค
         const lockVal = d.deviceLock;
         const isLocked = lockVal === 1 || lockVal === "1" || lockVal === true;
+        // id: MDM internal ID — ใช้ดึง GPS location
+        const mdmId = d.id != null ? Number(d.id) : 0;
         snMap.set(d.deviceId.trim().toUpperCase(), {
+          id: mdmId,
           lastTime: d.lastTime,
           deviceLock: isLocked,
         });
@@ -174,7 +182,7 @@ async function fetchDeviceListMap(
  *
  * @returns 0 = วันนี้, 1 = เมื่อวาน, N = เมื่อ N วันที่แล้ว, null = ไม่มีข้อมูล
  */
-function calcDaysSince(lastTime: string): number | null {
+export function calcDaysSince(lastTime: string): number | null {
   // lastTime format: "2026-05-27 13:16:45"
   const datePart = lastTime.split(" ")[0]; // "2026-05-27"
   if (!datePart || !/^\d{4}-\d{2}-\d{2}$/.test(datePart)) return null;
@@ -258,19 +266,19 @@ export async function getBatchLastOnlineDays(
 }
 
 /**
- * ดึง lastOnlineDays + lastTime + deviceLock สำหรับ SN หลายตัวพร้อมกัน (batch)
- * คืน Map<SN, { days: number | null; lastTime: string | null; deviceLock: boolean | null }>
- * ใช้ใน syncMdmOnlineDays เพื่อให้ได้ lastTime และ deviceLock จริงๆ
+ * ดึง lastOnlineDays + lastTime + deviceLock + id สำหรับ SN หลายตัวพร้อมกัน (batch)
+ * คืน Map<SN, { id, days, lastTime, deviceLock }>
+ * ใช้ใน syncMdmOnlineDays เพื่อให้ได้ lastTime, deviceLock และ MDM id จริงๆ
  *
  * @param serials - array ของ Serial Number
  * @param section - Section ที่ต้องการดึงข้อมูล
- * @returns Map<SN, { days, lastTime, deviceLock }> — เฉพาะ SN ที่เจอใน MDM เท่านั้น (ไม่มี entry สำหรับ SN ที่ไม่เจอ)
+ * @returns Map<SN, { id, days, lastTime, deviceLock }> — เฉพาะ SN ที่เจอใน MDM เท่านั้น (ไม่มี entry สำหรับ SN ที่ไม่เจอ)
  */
 export async function getBatchMdmData(
   serials: string[],
   section: SectionKey,
-): Promise<Map<string, { days: number | null; lastTime: string | null; deviceLock: boolean | null }>> {
-  const result = new Map<string, { days: number | null; lastTime: string | null; deviceLock: boolean | null }>();
+): Promise<Map<string, { id: number; days: number | null; lastTime: string | null; deviceLock: boolean | null }>> {
+  const result = new Map<string, { id: number; days: number | null; lastTime: string | null; deviceLock: boolean | null }>();
   if (!serials.length) return result;
 
   try {
@@ -282,6 +290,7 @@ export async function getBatchMdmData(
       // เฉพาะ SN ที่เจอใน MDM เท่านั้น — SN ที่ไม่เจอจะไม่มี entry (ไม่ set null)
       if (info !== undefined) {
         result.set(serial, {
+          id: info.id,
           days: calcDaysSince(info.lastTime),
           lastTime: info.lastTime,
           deviceLock: info.deviceLock,
@@ -294,6 +303,55 @@ export async function getBatchMdmData(
   }
 
   return result;
+}
+
+/**
+ * ดึง GPS location ของ device จาก MDM API
+ * ต้องรู้ MDM internal id ก่อน (ไม่ใช่ Serial Number)
+ *
+ * @param mdmDeviceId - MDM internal ID (integer)
+ * @param section     - Section ที่ต้องการดึงข้อมูล
+ * @returns { latitude, longitude, altitude, speed } หรือ null ถ้า offline/error
+ */
+export async function getDeviceLocation(
+  mdmDeviceId: number,
+  section: SectionKey,
+): Promise<{ latitude: string; longitude: string; altitude: string | null; speed: string | null } | null> {
+  if (!mdmDeviceId || mdmDeviceId <= 0) return null;
+  const apiKey = getApiKey(section);
+  if (!apiKey) return null;
+
+  try {
+    const url = `${MDM_BASE_URL}/devices/location?id=${mdmDeviceId}`;
+    const res = await fetch(url, {
+      headers: {
+        "X-API-Key": apiKey,
+        "Accept": "application/json, text/plain, */*",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Referer": "https://mdm-th.com/",
+        "Origin": "https://mdm-th.com",
+      },
+      signal: AbortSignal.timeout(15_000), // timeout 15 วินาที (GPS อาจช้า)
+    });
+
+    const json = await res.json();
+
+    // Error response: { msg: "ไม่สามารถดึงข้อมูลตำแหน่งได้...", code: 500 }
+    if (json?.code === 500 || json?.msg || !json?.latitude) {
+      return null; // device offline หรือไม่มี GPS
+    }
+
+    return {
+      latitude: String(json.latitude),
+      longitude: String(json.longitude),
+      altitude: json.altitude != null ? String(json.altitude) : null,
+      speed: json.speed != null ? String(json.speed) : null,
+    };
+  } catch (err) {
+    // timeout หรือ network error → device ไม่ตอบสนอง
+    console.warn(`[MDM][${section}] getDeviceLocation id=${mdmDeviceId} error:`, (err as Error).message);
+    return null;
+  }
 }
 
 /**

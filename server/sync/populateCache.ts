@@ -21,7 +21,7 @@ import { debtTargetCache, debtCollectedCache } from "../../drizzle/schema";
 import { listDebtTargetStream, listDebtCollectedStream } from "../debtDb";
 import type { SectionKey } from "../../shared/const";
 
-const BATCH = 100;
+const BATCH = 20; // ลดจาก 100 เพื่อรองรับ DB copy ที่มี resource จำกัด
 
 // ─── Helper ───────────────────────────────────────────────────────────────────
 function bucketFromDays(days: number): string {
@@ -156,11 +156,22 @@ export async function populateDebtCache(
       }
     }
 
-    // Batch insert
+    // Batch insert with retry
     for (let i = 0; i < insertRows.length; i += BATCH) {
       const batch = insertRows.slice(i, i + BATCH);
       if (batch.length > 0) {
-        await db.insert(debtTargetCache).values(batch);
+        let retries = 3;
+        while (retries > 0) {
+          try {
+            await db.insert(debtTargetCache).values(batch);
+            break;
+          } catch (insertErr: any) {
+            retries--;
+            if (retries === 0) throw insertErr;
+            console.warn(`[populateCache] target insert retry (${3 - retries}/3)...`);
+            await new Promise<void>((r) => setTimeout(r, 2000));
+          }
+        }
         targetCount += batch.length;
         if (onProgress) onProgress("target", targetCount, 0);
       }
@@ -291,11 +302,22 @@ export async function populateDebtCache(
       }
     }
 
-    // Batch insert
+    // Batch insert with retry
     for (let i = 0; i < insertRows.length; i += BATCH) {
       const batch = insertRows.slice(i, i + BATCH);
       if (batch.length > 0) {
-        await db.insert(debtCollectedCache).values(batch);
+        let retries = 3;
+        while (retries > 0) {
+          try {
+            await db.insert(debtCollectedCache).values(batch);
+            break;
+          } catch (insertErr: any) {
+            retries--;
+            if (retries === 0) throw insertErr;
+            console.warn(`[populateCache] collected insert retry (${3 - retries}/3)...`);
+            await new Promise<void>((r) => setTimeout(r, 2000));
+          }
+        }
         collectedCount += batch.length;
         if (onProgress) onProgress("collected", collectedCount, estimatedCollected);
       }

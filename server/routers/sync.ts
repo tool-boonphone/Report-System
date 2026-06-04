@@ -246,6 +246,7 @@ export const syncRouter = router({
         devices: z.array(
           z.object({
             serialNo: z.string(),
+            mdmDeviceId: z.number().int().nullable().optional(), // MDM internal ID — ใช้ดึง GPS location
             lastOnlineDays: z.number().int().nullable(),
             lastOnlineAt: z.string().nullable(), // "YYYY-MM-DD HH:mm:ss"
             deviceLock: z.boolean().nullable().optional(), // true=ล็อค, false=ปลดล็อค, null/undefined=ไม่มีข้อมูล
@@ -259,11 +260,12 @@ export const syncRouter = router({
       const db = await getDb(section);
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB not available" });
 
-      // สร้าง Map<serialNo (uppercase), { days, lastOnlineAt, deviceLock }> จาก input
-      const snMap = new Map<string, { days: number | null; lastOnlineAt: string | null; deviceLock: boolean | null }>();
+      // สร้าง Map<serialNo (uppercase), { mdmDeviceId, days, lastOnlineAt, deviceLock }> จาก input
+      const snMap = new Map<string, { mdmDeviceId: number | null; days: number | null; lastOnlineAt: string | null; deviceLock: boolean | null }>();
       for (const d of input.devices) {
         if (d.serialNo) {
           snMap.set(d.serialNo.trim().toUpperCase(), {
+            mdmDeviceId: d.mdmDeviceId ?? null,
             days: d.lastOnlineDays,
             lastOnlineAt: d.lastOnlineAt,
             deviceLock: d.deviceLock ?? null,
@@ -287,13 +289,14 @@ export const syncRouter = router({
       // สร้าง Map<externalId, MDM data> จาก validRows + snMap
       // เพื่อให้ UPDATE เฉพาะ row ที่พบใน MDM เท่านั้น
       // (ไม่ reset row ที่ไม่พบใน batch นี้ให้เป็น NULL)
-      const matchedRows: { externalId: string; days: number | null; lastOnlineAt: string | null; deviceLock: boolean | null }[] = [];
+      const matchedRows: { externalId: string; mdmDeviceId: number | null; days: number | null; lastOnlineAt: string | null; deviceLock: boolean | null }[] = [];
       for (const r of validRows) {
         const key = r.serialNo!.trim().toUpperCase();
         const mdm = snMap.get(key);
         if (mdm !== undefined) {
           matchedRows.push({
             externalId: r.externalId,
+            mdmDeviceId: mdm.mdmDeviceId ?? null,
             days: mdm.days ?? null,
             lastOnlineAt: mdm.lastOnlineAt ?? null,
             deviceLock: mdm.deviceLock ?? null,
@@ -318,7 +321,8 @@ export const syncRouter = router({
       for (let i = 0; i < matchedRows.length; i += BULK_BATCH) {
         const batchRows = matchedRows.slice(i, i + BULK_BATCH);
 
-        // params layout: [eid1, days1, at1, lock1, eid2, days2, at2, lock2, ..., section]
+        // params layout: [eid1, mdmId1, days1, at1, lock1, eid2, mdmId2, days2, at2, lock2, ..., section]
+        const mdmIdWhenClauses: string[] = [];
         const daysWhenClauses: string[] = [];
         const atWhenClauses: string[] = [];
         const lockWhenClauses: string[] = [];
@@ -328,12 +332,14 @@ export const syncRouter = router({
 
         for (const r of batchRows) {
           const eidIdx = paramIdx++;
+          const mdmIdIdx = paramIdx++;
           const daysIdx = paramIdx++;
           const atIdx = paramIdx++;
           const lockIdx = paramIdx++;
 
-          params.push(r.externalId, r.days, r.lastOnlineAt, r.deviceLock);
+          params.push(r.externalId, r.mdmDeviceId, r.days, r.lastOnlineAt, r.deviceLock);
 
+          mdmIdWhenClauses.push(`WHEN external_id = $${eidIdx} THEN $${mdmIdIdx}::integer`);
           daysWhenClauses.push(`WHEN external_id = $${eidIdx} THEN $${daysIdx}::integer`);
           atWhenClauses.push(`WHEN external_id = $${eidIdx} THEN $${atIdx}::varchar`);
           lockWhenClauses.push(`WHEN external_id = $${eidIdx} THEN $${lockIdx}::boolean`);
@@ -349,6 +355,7 @@ export const syncRouter = router({
         const bulkSql = `
           UPDATE contracts
           SET
+            mdm_device_id    = CASE ${mdmIdWhenClauses.join(" ")} ELSE mdm_device_id END,
             last_online_days = CASE ${daysWhenClauses.join(" ")} ELSE last_online_days END,
             last_online_at   = CASE ${atWhenClauses.join(" ")} ELSE last_online_at END,
             device_lock      = CASE ${lockWhenClauses.join(" ")} ELSE device_lock END
@@ -359,7 +366,7 @@ export const syncRouter = router({
         await pool.query(bulkSql, params);
       }
 
-      console.log(`[saveMdmData] ${section}: updated ${updated}/${matchedRows.length} matched contracts (bulk SQL)`);
+      console.log(`[saveMdmData] ${section}: updated ${updated}/${matchedRows.length} matched contracts (bulk SQL, with mdm_device_id)`);
       return { section, updated, total: validRows.length };
     }),
 

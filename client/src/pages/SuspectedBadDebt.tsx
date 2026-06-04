@@ -137,7 +137,9 @@ type Row = {
   phone: string | null;
   serialNo: string | null;
   lastOnlineDays: number | null;
+  lastOnlineAt: string | null;   // "YYYY-MM-DD HH:mm:ss" เวลาออนไลน์ล่าสุด (ใช้แสดงใน tooltip)
   deviceLock: boolean | null;
+  mdmDeviceId: number | null;    // MDM internal ID สำหรับดึง GPS location
   model: string | null;
   device: string | null;
   sellPrice: number | null;
@@ -996,27 +998,31 @@ export default function SuspectedBadDebt() {
                                   {lockIcon}
                                 </span>
                               );
+                              // tooltip: แสดงวันที่และเวลาออนไลน์ล่าสุดเมื่อ hover
+                              const tooltipText = r.lastOnlineAt
+                                ? `ออนไลน์ล่าสุด: ${r.lastOnlineAt}`
+                                : undefined;
                               if (days === 0) return (
                                 <span className="inline-flex items-center gap-0.5">
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-green-100 text-green-700">• วันนี้</span>
+                                  <span title={tooltipText} className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-green-100 text-green-700 cursor-default">• วันนี้</span>
                                   {lockIcon}
                                 </span>
                               );
                               if (days <= 3) return (
                                 <span className="inline-flex items-center gap-0.5">
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-yellow-100 text-yellow-700">{days} วัน</span>
+                                  <span title={tooltipText} className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-yellow-100 text-yellow-700 cursor-default">{days} วัน</span>
                                   {lockIcon}
                                 </span>
                               );
                               if (days <= 7) return (
                                 <span className="inline-flex items-center gap-0.5">
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-orange-100 text-orange-700">{days} วัน</span>
+                                  <span title={tooltipText} className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-orange-100 text-orange-700 cursor-default">{days} วัน</span>
                                   {lockIcon}
                                 </span>
                               );
                               return (
                                 <span className="inline-flex items-center gap-0.5">
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-100 text-red-700">{days} วัน</span>
+                                  <span title={tooltipText} className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-100 text-red-700 cursor-default">{days} วัน</span>
                                   {lockIcon}
                                 </span>
                               );

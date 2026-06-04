@@ -9,8 +9,11 @@
  */
 import { z } from "zod";
 import { requirePermission, router } from "../_core/trpc";
-import { sectionSchema } from "../../shared/const";
-import { getBatchLastOnlineDays } from "../services/mdm";
+import { sectionSchema, type SectionKey } from "../../shared/const";
+import { getBatchLastOnlineDays, getDeviceLocation } from "../services/mdm";
+import { getDb } from "../db";
+import { deviceLocationLogs } from "../../drizzle/schema";
+import { eq, and, desc } from "drizzle-orm";
 
 /**
  * ใช้ permission watch_group/view เป็น baseline
@@ -50,5 +53,61 @@ export const mdmRouter = router({
         result[sn] = days;
       });
       return result;
+    }),
+
+  /**
+   * ดึงประวัติ GPS location จาก device_location_logs table
+   * (append-only log ที่บันทึกระหว่าง MDM sync)
+   *
+   * @param section  - Section ที่ต้องการดึงข้อมูล
+   * @param serialNo - Serial Number ของอุปกรณ์
+   * @param limit    - จำนวน record สูงสุดที่ต้องการ (default 20, max 100)
+   */
+  getLocationLogs: viewProcedure
+    .input(
+      z.object({
+        section: sectionSchema,
+        serialNo: z.string().min(1),
+        limit: z.number().int().min(1).max(100).default(20),
+      })
+    )
+    .query(async ({ input }) => {
+      const section = input.section as SectionKey;
+      const db = await getDb(section);
+      if (!db) return [];
+
+      const logs = await db
+        .select()
+        .from(deviceLocationLogs)
+        .where(
+          and(
+            eq(deviceLocationLogs.section, section),
+            eq(deviceLocationLogs.serialNo, input.serialNo.trim().toUpperCase()),
+          )
+        )
+        .orderBy(desc(deviceLocationLogs.recordedAt))
+        .limit(input.limit);
+
+      return logs;
+    }),
+
+  /**
+   * ดึง GPS location ปัจจุบันของ device จาก MDM API โดยตรง (real-time)
+   * ใช้ mdmDeviceId (MDM internal ID) ไม่ใช่ Serial Number
+   *
+   * @param section     - Section ที่ต้องการดึงข้อมูล
+   * @param mdmDeviceId - MDM internal ID ของอุปกรณ์
+   */
+  fetchLiveLocation: viewProcedure
+    .input(
+      z.object({
+        section: sectionSchema,
+        mdmDeviceId: z.number().int().positive(),
+      })
+    )
+    .query(async ({ input }) => {
+      const section = input.section as SectionKey;
+      const location = await getDeviceLocation(input.mdmDeviceId, section);
+      return location; // null ถ้า device offline หรือไม่มี GPS
     }),
 });

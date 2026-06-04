@@ -1156,6 +1156,7 @@ export async function rebuildIncomeMonthlySummary(section: SectionKey): Promise<
   // Fast path: ดึงจาก pt.income_type ที่ populateIncomeType() Populate ไว้แล้วโดยตรง
   // Fallback: ถ้า income_type ยังเป็น NULL ให้คำนวณสดด้วย Logic 2 ระดับ
   const sourceWherePt2 = secEsc === 'Fastfone365' ? 'TRUE' : `(pt2.raw_json::jsonb->>'source') IS NULL`;
+  const sourceWherePt3 = secEsc === 'Fastfone365' ? 'TRUE' : `(pt3.raw_json::jsonb->>'source') IS NULL`;
   const insertSql = `
     WITH bad_debt_last AS (
       -- Fallback CTE: ใช้เฉพาะแถวที่ income_type ยังเป็น NULL
@@ -1181,7 +1182,7 @@ export async function rebuildIncomeMonthlySummary(section: SectionKey): Promise<
       FROM payment_transactions pt3
       INNER JOIN bad_debt_last bdl ON bdl.contract_no = pt3.contract_no
       WHERE pt3.section = '${secEsc}'
-        AND ${sourceWherePt2}
+        AND ${sourceWherePt3}
         AND DATE(pt3.paid_at) = bdl.last_paid_date
         AND pt3.updated_by = bdl.last_updated_by_paid
       GROUP BY pt3.contract_no
@@ -1267,6 +1268,7 @@ export async function populateIncomeType(section: SectionKey): Promise<number> {
   const secEsc = esc(section);
 
   const sourceWherePt2 = secEsc === 'Fastfone365' ? 'TRUE' : `(pt2.raw_json::jsonb->>'source') IS NULL`;
+  const sourceWherePt3 = secEsc === 'Fastfone365' ? 'TRUE' : `(pt3.raw_json::jsonb->>'source') IS NULL`;
   const sourceWherePt  = secEsc === 'Fastfone365' ? 'TRUE' : `(pt.raw_json::jsonb->>'source') IS NULL`;
 
   // UPDATE income_type ใน payment_transactions โดยใช้ Logic 2 ระดับ
@@ -1293,7 +1295,7 @@ export async function populateIncomeType(section: SectionKey): Promise<number> {
       FROM payment_transactions pt3
       INNER JOIN bad_debt_last bdl ON bdl.contract_no = pt3.contract_no
       WHERE pt3.section = '${secEsc}'
-        AND ${sourceWherePt2}
+        AND ${sourceWherePt3}
         AND DATE(pt3.paid_at) = bdl.last_paid_date
         AND pt3.updated_by = bdl.last_updated_by_paid
       GROUP BY pt3.contract_no
