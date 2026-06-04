@@ -592,6 +592,14 @@ export default function DebtReport() {
       } catch {
         // ถ้า parse ไม่ได้ ไม่ต้องทำอะไร — ใช้ filter เดิม
       }
+    } else {
+      // filterState เป็น null → fallback ใช้ค่าจาก snapshot metadata โดยตรง
+      // (snapshot ที่สร้างโดย Auto Snapshot วันที่ 1 จะมี filter_debt_only/filter_principal_only แต่ไม่มี filterState)
+      if (typeof meta?.filterDebtOnly === "boolean") setDebtSetMode(meta.filterDebtOnly);
+      if (typeof meta?.filterPrincipalOnly === "boolean") setPrincipalOnly(meta.filterPrincipalOnly);
+      // restore debtSetCutoffMode จาก snapshotMode
+      if (meta?.snapshotMode === "end_of_month") setDebtSetCutoffMode("end_of_month");
+      else if (meta?.snapshotMode === "today") setDebtSetCutoffMode("today");
     }
   }, [availableTargetSnapshotsQuery.data, setSearch, setStatusFilter, setApproveDateFilter, setDueDateFilter, setProductTypeFilter, setDueDateExact, setDebtSetMode, setDebtSetCutoffMode, setPrincipalOnly, SNAPSHOT_DEFAULT_STATUSES]);
   // helper: กลับมา live
