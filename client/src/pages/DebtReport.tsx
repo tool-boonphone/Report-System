@@ -1509,13 +1509,14 @@ export default function DebtReport() {
                           </div>
                           {/* Table Rows */}
                           {(monthlyDebtSummaryQuery.data as any[]).map((row: any) => {
-                            // เป้าเก็บหนี้: ใช้ targetAmount จาก monthly_collection_snapshot โดยตรง
-                            // (ไม่ SUM targetByRange เพราะ target_amount ใน DB คือยอดที่ถูกต้องแล้ว)
+                            // เป้าเก็บหนี้: ใช้ frozen targetByRange จาก monthly_collection_snapshot ถ้ามี ไม่งั้น fallback ไป row.targetByRange
                             const monthStr = String(row.snapshotMonth ?? "");
-                            // ดึง targetAmount จาก monthlySnapshotsQuery (monthly_collection_snapshot) ถ้ามี
-                            // ไม่งั้น fallback ไป row.targetAmount จาก getMonthlyDebtSummary
-                            const frozenSnapshotRow = (monthlySnapshotsQuery.data ?? []).find((r: any) => r.collectionMonth === monthStr);
-                            const targetAmt: number = frozenSnapshotRow?.targetAmount ?? (row.targetAmount ?? 0);
+                            const frozenRange = getFrozenTargetByRange(monthStr);
+                            const targetByRange: Record<string, number> = frozenRange
+                              ? frozenRange
+                              : (typeof row.targetByRange === 'object' && row.targetByRange) ? row.targetByRange : {};
+                            // SUM เฉพาะ 6 สถานะ default (ไม่รวม "เกิน >90")
+                            const targetAmt = SNAPSHOT_DEFAULT_STATUSES.reduce((s, rng) => s + (targetByRange[rng] ?? 0), 0) || (row.targetAmount ?? 0);
                             const collectedAmt = Math.max(row.collectedAmount ?? 0, 0);
                             const pct = targetAmt > 0 ? (collectedAmt / targetAmt) * 100 : 0;
                             const pctColor = pct >= 100 ? "text-emerald-600 font-bold" : pct >= 80 ? "text-yellow-600 font-semibold" : "text-red-600 font-semibold";
@@ -3167,23 +3168,16 @@ export default function DebtReport() {
                 const rawRows = (frozenDaily ?? dailyBreakdownQuery.data ?? []) as DailyRow[];
 
                 // Client-side filter: คำนวณ displayTargetAmount ตาม dailyBreakdownStatuses
-                // r.targetAmount ถูก populate ด้วย SUM 6 สถานะ default (ไม่รวม "เกิน >90") แล้ว
-                // ดังนั้น:
-                //   - ถ้าเลือก 6 สถานะ default หรือไม่ได้ filter → ใช้ r.targetAmount โดยตรง (ถูกต้องและตรงกับ mcs.target_amount)
-                //   - ถ้าเลือกสถานะอื่น (เช่น รวม "เกิน >90" หรือเลือกบางสถานะ) → SUM จาก targetByRange
-                const isDefaultStatuses = (
-                  dailyBreakdownStatuses.length === 0 ||
-                  (dailyBreakdownStatuses.length === SNAPSHOT_DEFAULT_STATUSES.length &&
-                    SNAPSHOT_DEFAULT_STATUSES.every(s => dailyBreakdownStatuses.includes(s)))
-                );
+                // ถ้าไม่ได้ filter (ทุกสถานะ) → ใช้ targetAmount จาก server (ซึ่งตรงกับ mcs target แล้ว)
+                const isFilteringStatuses = dailyBreakdownStatuses.length > 0;
                 const rows = rawRows.map(r => {
                   let displayTarget: number;
-                  if (isDefaultStatuses) {
-                    // 6 สถานะ default หรือทุกสถานะ → ใช้ targetAmount จาก server (ตรงกับ mcs.target_amount)
-                    displayTarget = r.targetAmount;
-                  } else {
-                    // user เลือก filter พิเศษ → SUM เฉพาะ range ที่เลือก
+                  if (isFilteringStatuses) {
+                    // SUM เฉพาะ range ที่เลือก
                     displayTarget = dailyBreakdownStatuses.reduce((s, rng) => s + (r.targetByRange[rng] ?? 0), 0);
+                  } else {
+                    // ทุกสถานะ → ใช้ targetAmount จาก server (ตรงกับ mcs target)
+                    displayTarget = r.targetAmount;
                   }
                   const pct = displayTarget > 0 ? (r.collectedAmount / displayTarget) * 100 : 0;
                   return { ...r, displayTarget, displayPct: pct };
