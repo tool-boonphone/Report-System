@@ -87,7 +87,7 @@ function n(v: unknown): number {
 export async function populateMonthlyCollectionSnapshot(
   section: SectionKey,
   onProgress?: (current: number, total: number) => void,
-  cutoffMode: "today" | "end_of_month" = "today",
+  cutoffMode: "today" | "end_of_month" = "end_of_month", // default = end_of_month เสมอ
 ): Promise<number> {
   const db = await getDb(section);
   if (!db) throw new Error("[monthlySnapshot] DB not available");
@@ -95,29 +95,35 @@ export async function populateMonthlyCollectionSnapshot(
   const nowStr = new Date().toISOString();
   const currentMonth = nowStr.slice(0, 7); // YYYY-MM
 
-  // เมื่อ cutoffMode='end_of_month' → ใช้ due_date <= วันสุดท้ายของแต่ละเดือน (นับงวดทั้งเดือน)
-  // เมื่อ cutoffMode='today' → ใช้ is_future_period IS NOT TRUE (นับแค่งวดถึงวันนี้)
-  // cutoffMode='end_of_month' ใช้สำหรับ Auto Snapshot วันที่ 1 เพื่อให้ target_amount ครบทั้งเดือน
+  // cutoffMode='end_of_month' (default): ใช้ due_date <= วันสุดท้ายของแต่ละเดือน (นับงวดทั้งเดือน)
+  // cutoffMode='today': ใช้ is_future_period IS NOT TRUE (นับแค่งวดถึงวันนี้)
   const futurePeriodFilter = cutoffMode === "end_of_month"
     ? sql`AND due_date::date <= (DATE_TRUNC('month', due_date::date) + INTERVAL '1 month' - INTERVAL '1 day')::date`
     : sql`AND is_future_period IS NOT TRUE`;
 
+  // ── Default conditions (ตรงกับ UI default) ──────────────────────────────────
+  // filterDebtOnly = true: เฉพาะสัญญาที่ตั้งหนี้แล้ว (due_date อยู่ในเดือนนั้น ตั้งแต่วันที่ 1 ถึงสิ้นเดือน)
+  // filterPrincipalOnly = true: เฉพาะเงินต้น (principal only)
+  // Filter 6 สถานะ: ปกติ, เกิน 1-7, เกิน 8-14, เกิน 15-30, เกิน 31-60, เกิน 61-90 (ไม่รวม เกิน >90)
+  // debtSetMode: true, debtSetCutoffMode: 'end_of_month', principalOnly: true
+  // ตั้งหนี้ตั้งแต่วันที่ 1 ถึงสิ้นเดือน (due_date อยู่ใน collection_month)
+  const DEFAULT_DEBT_RANGES_6 = `'ปกติ','เกิน 1-7','เกิน 8-14','เกิน 15-30','เกิน 31-60','เกิน 61-90'`;
+
   console.log(`[monthlySnapshot] ${section}: starting populate (cutoffMode=${cutoffMode})`);
 
   // ── 1. Query target aggregates per due_month from debt_target_cache ──────────
-  // ยอดเป้าเก็บหนี้: ตัดออก is_closed, is_future_period (หรือ due_date > สิ้นเดือน), is_suspended, is_bad_debt
-  // (ตรงกับ logic toggle ตั้งหนี้: เหลือแค่ยอดถึงกำหนดชำระ + ค้างชำระ)
-  // *** target_amount ใช้ SUM(total_amount) ไม่หัก paid_amount ***
-  // เพื่อให้ตรงกับ badge ยอดหนี้รวมใน UI ที่คำนวณจาก SUM(principal + interest + fee) ของทุกงวดที่ due ≤ cutoff
   // ตัด contract_status พิเศษออก เพื่อให้ตรงกับ filteredRows ใน client (debtSetMode)
   // client ตัด: ระงับสัญญา, สิ้นสุดสัญญา, หนี้เสีย, ยกเลิกสัญญา
   const excludedStatuses = `'ระงับสัญญา','สิ้นสุดสัญญา','หนี้เสีย','ยกเลิกสัญญา'`;
 
+  // ── 1. Query target aggregates per due_month (filterPrincipalOnly + 6 debt_range) ──
+  // *** target_amount ใช้ SUM(principal) เท่านั้น (filterPrincipalOnly=true) ***
+  // *** filter 6 สถานะ: ปกติ, เกิน 1-7, เกิน 8-14, เกิน 15-30, เกิน 31-60, เกิน 61-90 (ไม่รวม เกิน >90) ***
   const targetResult = await db.execute(sql`
     SELECT
       TO_CHAR(due_date, 'YYYY-MM') AS due_month,
       COUNT(DISTINCT contract_external_id) AS contract_count,
-      SUM(COALESCE(principal::numeric, 0) + COALESCE(interest::numeric, 0) + COALESCE(fee::numeric, 0)) AS target_amount,
+      SUM(COALESCE(principal::numeric, 0)) AS target_amount,
       SUM(COALESCE(principal::numeric, 0)) AS target_principal,
       SUM(interest::numeric) AS target_interest,
       SUM(fee::numeric) AS target_fee,
@@ -134,22 +140,22 @@ export async function populateMonthlyCollectionSnapshot(
       AND is_bad_debt IS NOT TRUE
       AND is_paid IS NOT TRUE
       AND contract_status NOT IN (${sql.raw(excludedStatuses)})
+      AND COALESCE(debt_range, 'ปกติ') IN (${sql.raw(DEFAULT_DEBT_RANGES_6)})
     GROUP BY TO_CHAR(due_date, 'YYYY-MM')
     ORDER BY due_month
   `);
     const targetRows: any[] = pgRows(targetResult);
 
-  // ── 1a. Cumulative query สำหรับ currentMonth ──────────────────────────────
+  // ── 1a. Cumulative query สำหรับ currentMonth (filterPrincipalOnly + 6 debt_range) ──
   // target_amount ของ currentMonth ต้องรวมงวดค้างจากทุกเดือนก่อน (due_date <= สิ้นเดือนปัจจุบัน)
-  // เพื่อให้ตรงกับ badge ยอดหนี้รวมใน UI ที่คำนวณจาก SUM(principal + interest + fee)
-  // ของทุกงวดที่ due_date <= สิ้นเดือน (ไม่ใช่แค่งวดที่ due ในเดือนนั้น)
+  // *** ใช้ principal เท่านั้น + filter 6 สถานะ ***
   const currentMonthEndDate = sql.raw(
     `DATE_TRUNC('month', '${currentMonth}-01'::date) + INTERVAL '1 month' - INTERVAL '1 day'`
   );
   const currentMonthCumulativeResult = await db.execute(sql`
     SELECT
       COUNT(DISTINCT contract_external_id) AS contract_count,
-      SUM(COALESCE(principal::numeric, 0) + COALESCE(interest::numeric, 0) + COALESCE(fee::numeric, 0)) AS target_amount,
+      SUM(COALESCE(principal::numeric, 0)) AS target_amount,
       SUM(COALESCE(principal::numeric, 0)) AS target_principal,
       SUM(interest::numeric) AS target_interest,
       SUM(fee::numeric) AS target_fee,
@@ -166,22 +172,22 @@ export async function populateMonthlyCollectionSnapshot(
       AND is_bad_debt IS NOT TRUE
       AND is_paid IS NOT TRUE
       AND contract_status NOT IN (${sql.raw(excludedStatuses)})
+      AND COALESCE(debt_range, 'ปกติ') IN (${sql.raw(DEFAULT_DEBT_RANGES_6)})
   `);
   const cumulativeRows: any[] = pgRows(currentMonthCumulativeResult);
   const cumulativeRow = cumulativeRows[0] ?? null;
   console.log(`[monthlySnapshot] ${section}: currentMonth=${currentMonth} cumulative target_amount=${cumulativeRow?.target_amount ?? 'N/A'}`);
 
-  // ── 1b. Query overdue_total per due_month ──────────────────────────────────
+  // ── 1b. Query overdue_total per due_month (filterPrincipalOnly + 6 debt_range) ──
   // ค้างชำระ: ยอดที่ค้างมาจากเดือนก่อนหน้า (due_date < เดือนนั้น)
-  // นับเฉพาะ rows ที่ยังไม่ชำระ (paid_amount < total_amount) และไม่ถูกตัดออกด้วย is_closed/is_suspended/is_bad_debt
-  // Group ตามเดือนถัดไปจาก due_month (คือเดือนที่ค้างจะไปปรากฏในตาราง)
+  // *** ใช้ principal เท่านั้น + filter 6 สถานะ ***
   const overdueResult = await db.execute(sql`
     SELECT
       TO_CHAR(
         (DATE_TRUNC('month', due_date::date) + INTERVAL '1 month')::date,
         'YYYY-MM'
       ) AS overdue_month,
-      SUM(GREATEST(COALESCE(total_amount::numeric, 0) - COALESCE(paid_amount::numeric, 0), 0)) AS overdue_total
+      SUM(GREATEST(COALESCE(principal::numeric, 0) - COALESCE(paid_amount::numeric, 0), 0)) AS overdue_total
     FROM debt_target_cache
     WHERE section = ${section}
       AND due_date IS NOT NULL
@@ -190,8 +196,9 @@ export async function populateMonthlyCollectionSnapshot(
       AND is_suspended IS NOT TRUE
       AND is_bad_debt IS NOT TRUE
       AND is_paid IS NOT TRUE
-      AND COALESCE(paid_amount::numeric, 0) < COALESCE(total_amount::numeric, 0)
+      AND COALESCE(paid_amount::numeric, 0) < COALESCE(principal::numeric, 0)
       AND contract_status NOT IN (${sql.raw(excludedStatuses)})
+      AND COALESCE(debt_range, 'ปกติ') IN (${sql.raw(DEFAULT_DEBT_RANGES_6)})
     GROUP BY DATE_TRUNC('month', due_date::date) + INTERVAL '1 month'
     ORDER BY overdue_month
   `);
@@ -1024,6 +1031,8 @@ export async function getMonthlyCollectionSnapshotsLive(
       financedTotal: data.financedTotal,
       overdueTotal: data.overdueTotal,
       collectedSale,
+      targetByRange: null,    // live mode ไม่มี frozen breakdown
+      dailyBreakdown: null,   // live mode ไม่มี frozen breakdown
       collectedIsFrozen: false, // live mode ไม่มี freeze
       targetFrozenAt: null,
       collectedFrozenAt: null,
