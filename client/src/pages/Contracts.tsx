@@ -30,9 +30,11 @@ import {
   Filter as FilterIcon,
   Lock,
   LockOpen,
+  MapPin,
   Search,
   X,
 } from "lucide-react";
+import { LocationDialog, useLocationDialog } from "@/components/LocationDialog";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -291,6 +293,9 @@ export default function Contracts() {
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [filterOpen, setFilterOpen] = useState(false);
   const [hoveredRow, setHoveredRow] = useState<number | null>(null);
+
+  // ----- GPS Location Dialog -----
+  const { dialogState, openDialog, closeDialog } = useLocationDialog();
 
   // Reset filters when section changes
   useEffect(() => {
@@ -979,34 +984,58 @@ export default function Contracts() {
                                 ) : row.deviceLock === false ? (
                                   <LockOpen className="inline-block w-3 h-3 text-green-500 ml-1 flex-shrink-0" />
                                 ) : null;
+                                // ปุ่ม GPS MapPin: แสดงเฉพาะเมื่อมี mdmDeviceId
+                                const mapPinBtn = row.mdmDeviceId ? (
+                                  <button
+                                    type="button"
+                                    title="ดูตำแหน่ง GPS"
+                                    className="inline-flex items-center justify-center w-4 h-4 ml-0.5 text-teal-500 hover:text-teal-700 transition-colors flex-shrink-0"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      openDialog({
+                                        mdmDeviceId: row.mdmDeviceId,
+                                        customerName: row.customerName,
+                                        contractNo: row.contractNo,
+                                        serialNo: row.serialNo,
+                                      });
+                                    }}
+                                  >
+                                    <MapPin className="w-3 h-3" />
+                                  </button>
+                                ) : null;
                                 if (days == null) return (
                                   <span className="inline-flex items-center gap-0.5">
                                     <span className="text-gray-400 text-xs">–</span>
                                     {lockIcon}
+                                    {mapPinBtn}
                                   </span>
                                 );
                                 if (days === 0) return (
                                   <span className="inline-flex items-center gap-0.5">
                                     <span title={tooltipText} className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-green-100 text-green-700 cursor-default">• วันนี้</span>
                                     {lockIcon}
+                                    {mapPinBtn}
                                   </span>
                                 );
                                 if (days <= 3) return (
                                   <span className="inline-flex items-center gap-0.5">
                                     <span title={tooltipText} className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-yellow-100 text-yellow-700 cursor-default">{days} วัน</span>
                                     {lockIcon}
+                                    {mapPinBtn}
                                   </span>
                                 );
                                 if (days <= 7) return (
                                   <span className="inline-flex items-center gap-0.5">
                                     <span title={tooltipText} className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-orange-100 text-orange-700 cursor-default">{days} วัน</span>
                                     {lockIcon}
+                                    {mapPinBtn}
                                   </span>
                                 );
                                 return (
                                   <span className="inline-flex items-center gap-0.5">
                                     <span title={tooltipText} className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-100 text-red-700 cursor-default">{days} วัน</span>
                                     {lockIcon}
+                                    {mapPinBtn}
                                   </span>
                                 );
                               })()
@@ -1037,6 +1066,16 @@ export default function Contracts() {
       </div>
       </div>
       )}
+      {/* GPS Location Dialog */}
+      <LocationDialog
+        open={dialogState.open}
+        onClose={closeDialog}
+        section={section!}
+        mdmDeviceId={dialogState.mdmDeviceId}
+        customerName={dialogState.customerName}
+        contractNo={dialogState.contractNo}
+        serialNo={dialogState.serialNo}
+      />
     </AppShell>
   );
 }

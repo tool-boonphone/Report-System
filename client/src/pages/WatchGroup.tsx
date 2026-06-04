@@ -22,9 +22,11 @@ import {
   Info,
   Lock,
   LockOpen,
+  MapPin,
   Search,
   X,
 } from "lucide-react";
+import { LocationDialog, useLocationDialog } from "@/components/LocationDialog";
 import { AppShell } from "@/components/AppShell";
 import { useNavActions } from "@/contexts/NavActionsContext";
 import { useAppAuth } from "@/hooks/useAppAuth";
@@ -413,6 +415,9 @@ export default function WatchGroup() {
   const [paymentFilter, setPaymentFilter] = useState<Set<string>>(new Set());
   // ออนไลน์ล่าสุด multi-select
   const [onlineFilter, setOnlineFilter] = useState<Set<string>>(new Set());
+
+  /* ── GPS Location Dialog ── */
+  const { dialogState, openDialog, closeDialog } = useLocationDialog();
 
   /* ── sort ── */
   const [sortKey, setSortKey] = useState<SortKey>("daysOverdue");
@@ -1166,10 +1171,30 @@ export default function WatchGroup() {
                               ) : r.deviceLock === false ? (
                                 <LockOpen className="inline-block w-3 h-3 text-green-500 ml-1 flex-shrink-0" />
                               ) : null;
+                              // ปุ่ม GPS MapPin: แสดงเฉพาะเมื่อมี mdmDeviceId
+                              const mapPinBtn = r.mdmDeviceId ? (
+                                <button
+                                  type="button"
+                                  title="ดูตำแหน่ง GPS"
+                                  className="inline-flex items-center justify-center w-4 h-4 ml-0.5 text-teal-500 hover:text-teal-700 transition-colors flex-shrink-0"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openDialog({
+                                      mdmDeviceId: r.mdmDeviceId,
+                                      customerName: r.customerName,
+                                      contractNo: r.contractNo,
+                                      serialNo: r.serialNo,
+                                    });
+                                  }}
+                                >
+                                  <MapPin className="w-3 h-3" />
+                                </button>
+                              ) : null;
                               if (days == null) return (
                                 <span className="inline-flex items-center gap-0.5">
                                   <span className="text-gray-400 text-xs">–</span>
                                   {lockIcon}
+                                  {mapPinBtn}
                                 </span>
                               );
                               // tooltip: แสดงวันที่และเวลาออนไลน์ล่าสุดเมื่อ hover
@@ -1180,24 +1205,28 @@ export default function WatchGroup() {
                                 <span className="inline-flex items-center gap-0.5">
                                   <span title={tooltipText} className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-green-100 text-green-700 cursor-default">• วันนี้</span>
                                   {lockIcon}
+                                  {mapPinBtn}
                                 </span>
                               );
                               if (days <= 3) return (
                                 <span className="inline-flex items-center gap-0.5">
                                   <span title={tooltipText} className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-yellow-100 text-yellow-700 cursor-default">{days} วัน</span>
                                   {lockIcon}
+                                  {mapPinBtn}
                                 </span>
                               );
                               if (days <= 7) return (
                                 <span className="inline-flex items-center gap-0.5">
                                   <span title={tooltipText} className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-orange-100 text-orange-700 cursor-default">{days} วัน</span>
                                   {lockIcon}
+                                  {mapPinBtn}
                                 </span>
                               );
                               return (
                                 <span className="inline-flex items-center gap-0.5">
                                   <span title={tooltipText} className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-100 text-red-700 cursor-default">{days} วัน</span>
                                   {lockIcon}
+                                  {mapPinBtn}
                                 </span>
                               );
                             })()}
@@ -1217,6 +1246,16 @@ export default function WatchGroup() {
           )}
         </div>
       </div>
+      {/* GPS Location Dialog */}
+      <LocationDialog
+        open={dialogState.open}
+        onClose={closeDialog}
+        section={section!}
+        mdmDeviceId={dialogState.mdmDeviceId}
+        customerName={dialogState.customerName}
+        contractNo={dialogState.contractNo}
+        serialNo={dialogState.serialNo}
+      />
     </AppShell>
   );
 }
