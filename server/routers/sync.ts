@@ -124,22 +124,21 @@ export const syncRouter = router({
       const db = await getDb(section);
       if (!db) return { stale: false, staleCount: 0 };
       
-      // ตรวจว่า MDM coverage ครบเพียงพอหรือไม่
-      // stale = true ถ้า NOT NULL < 50% ของ contracts ที่มี serial_no
-      // (ป้องกันกรณี sync ทำไปบางส่วนแล้วหยุด ทำให้มีข้อมูลบางส่วนแต่ไม่ครบ)
-      const { isNotNull: isNotNullFn } = await import("drizzle-orm");
+      // ตรวจว่ามีข้อมูล MDM ใน DB แล้วหรือยัง
+      // stale = true เฉพาะเมื่อ last_online_days เป็น NULL ทั้งหมด (ยังไม่เคย sync)
+      // ถ้ามีข้อมูลอยู่แม้แต่ 1 record → stale: false ไม่ต้องโหลดใหม่
       const [mdmRes, serialRes] = await Promise.all([
         db.select({ value: count() }).from(contracts).where(
           and(eq(contracts.section, section), isNotNull(contracts.lastOnlineDays))
         ),
         db.select({ value: count() }).from(contracts).where(
-          and(eq(contracts.section, section), isNotNullFn(contracts.serialNo))
+          and(eq(contracts.section, section), isNotNull(contracts.serialNo))
         ),
       ]);
-      const mdmCount = mdmRes[0]?.value ?? 0;
-      const serialCount = serialRes[0]?.value ?? 0;
-      // stale ถ้า: ไม่มี serial_no เลย, หรือ MDM coverage < 50%
-      const stale = serialCount === 0 ? false : (mdmCount / serialCount) < 0.5;
+      const mdmCount = Number(mdmRes[0]?.value ?? 0);
+      const serialCount = Number(serialRes[0]?.value ?? 0);
+      // stale = true เฉพาะเมื่อยังไม่มีข้อมูล MDM เลย
+      const stale = serialCount > 0 && mdmCount === 0;
       const staleCount = stale ? serialCount : 0;
       return { stale, staleCount };
     }),
