@@ -251,6 +251,7 @@ export const syncRouter = router({
             lastOnlineDays: z.number().int().nullable(),
             lastOnlineAt: z.string().nullable(), // "YYYY-MM-DD HH:mm:ss"
             deviceLock: z.boolean().nullable().optional(), // true=ล็อค, false=ปลดล็อค, null/undefined=ไม่มีข้อมูล
+            lastType: z.number().int().nullable().optional(), // 0=offline, 1=online ณ ขณะ sync
           })
         ).max(20000), // เพิ่มจาก 10,000 เป็น 20,000 รองรับ dataset ขนาดใหญ่
       })
@@ -262,7 +263,7 @@ export const syncRouter = router({
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB not available" });
 
       // สร้าง Map<serialNo (uppercase), { mdmDeviceId, days, lastOnlineAt, deviceLock }> จาก input
-      const snMap = new Map<string, { mdmDeviceId: number | null; days: number | null; lastOnlineAt: string | null; deviceLock: boolean | null }>();
+      const snMap = new Map<string, { mdmDeviceId: number | null; days: number | null; lastOnlineAt: string | null; deviceLock: boolean | null; lastType: number | null }>();
       for (const d of input.devices) {
         if (d.serialNo) {
           snMap.set(d.serialNo.trim().toUpperCase(), {
@@ -270,6 +271,7 @@ export const syncRouter = router({
             days: d.lastOnlineDays,
             lastOnlineAt: d.lastOnlineAt,
             deviceLock: d.deviceLock ?? null,
+            lastType: d.lastType ?? null,
           });
         }
       }
@@ -290,7 +292,7 @@ export const syncRouter = router({
       // สร้าง Map<externalId, MDM data> จาก validRows + snMap
       // เพื่อให้ UPDATE เฉพาะ row ที่พบใน MDM เท่านั้น
       // (ไม่ reset row ที่ไม่พบใน batch นี้ให้เป็น NULL)
-      const matchedRows: { externalId: string; mdmDeviceId: number | null; days: number | null; lastOnlineAt: string | null; deviceLock: boolean | null }[] = [];
+      const matchedRows: { externalId: string; mdmDeviceId: number | null; days: number | null; lastOnlineAt: string | null; deviceLock: boolean | null; lastType: number | null }[] = [];
       for (const r of validRows) {
         const key = r.serialNo!.trim().toUpperCase();
         const mdm = snMap.get(key);
@@ -301,6 +303,7 @@ export const syncRouter = router({
             days: mdm.days ?? null,
             lastOnlineAt: mdm.lastOnlineAt ?? null,
             deviceLock: mdm.deviceLock ?? null,
+            lastType: mdm.lastType ?? null,
           });
         }
       }
@@ -371,12 +374,14 @@ export const syncRouter = router({
 
       // ─── GPS Loop: ดึง GPS เฉพาะเครื่องที่ online (days=0) และถูกล็อก (deviceLock=true) ───
       // กรอง matchedRows เฉพาะที่ online วันนี้ (days=0) และ deviceLock=true
+      // lastType=1 = MDM รายงานว่าเครื่องออนไลน์อยู่ ณ ขณะที่ sync → ดึง GPS ได้
+      // lastType=0 = offline → ข้ามไปเลย ไม่ดึงซ้ำ
       const gpsTargets = matchedRows.filter(
-        (r) => r.days === 0 && r.deviceLock === true && r.mdmDeviceId != null
+        (r) => r.lastType === 1 && r.deviceLock === true && r.mdmDeviceId != null
       );
 
       if (gpsTargets.length > 0) {
-        console.log(`[saveMdmData][GPS] ${section}: ${gpsTargets.length} devices to fetch GPS (online today + locked)`);
+        console.log(`[saveMdmData][GPS] ${section}: ${gpsTargets.length} devices to fetch GPS (lastType=1 online + locked)`);
 
         // สร้าง Map<externalId, serialNo> เพื่อ lookup serialNo ตอน insert log
         const externalIdToSerial = new Map<string, string>();
@@ -410,8 +415,9 @@ export const syncRouter = router({
               gpsFail++;
             }
           } catch (gpsErr) {
+            // ดึงไม่ได้ → ข้ามไปเลย ไม่ retry
             gpsFail++;
-            console.warn(`[saveMdmData][GPS] ${section}: mdmDeviceId=${target.mdmDeviceId} error:`, (gpsErr as Error).message);
+            console.warn(`[saveMdmData][GPS] ${section}: mdmDeviceId=${target.mdmDeviceId} skip (no retry):`, (gpsErr as Error).message);
           }
           // delay เพื่อไม่ให้ MDM rate limit
           await new Promise((res) => setTimeout(res, GPS_DELAY_MS));
@@ -419,7 +425,7 @@ export const syncRouter = router({
 
         console.log(`[saveMdmData][GPS] ${section}: GPS done — success=${gpsSuccess}, fail/offline=${gpsFail}`);
       } else {
-        console.log(`[saveMdmData][GPS] ${section}: no devices qualify for GPS fetch (need online today + locked)`);
+        console.log(`[saveMdmData][GPS] ${section}: no devices qualify for GPS fetch (need lastType=1 online + locked)`);
       }
       // ─────────────────────────────────────────────────────────────────────────────────
 

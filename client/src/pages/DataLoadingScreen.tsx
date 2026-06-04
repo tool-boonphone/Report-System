@@ -537,6 +537,7 @@ export default function DataLoadingScreen() {
               deviceId: d.deviceId.trim().toUpperCase(),
               lastTime: d.lastTime,
               deviceLock: isLocked,
+              lastType: typeof d.lastType === 'number' ? d.lastType : null, // 0=offline, 1=online
             });
           }
         }
@@ -564,6 +565,7 @@ export default function DataLoadingScreen() {
         lastOnlineDays: calcDays(d.lastTime),
         lastOnlineAt: d.lastTime,
         deviceLock: d.deviceLock,
+        lastType: d.lastType ?? null, // 0=offline, 1=online ณ ขณะ sync
       }));
 
       // 4. บันทึกลง DB
