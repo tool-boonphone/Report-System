@@ -4819,8 +4819,9 @@ export async function listNewCustomerWatch(params: {
     daysUntilDue1: number;
   }>;
 }> {
-  const db = getDb(params.section);
+  const db = await getDb(params.section);
   const section = params.section;
+  if (!db) return { rows: [] };
   const { productTypes, partnerSearch } = params;
 
   const today = new Date();
