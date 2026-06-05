@@ -1129,6 +1129,7 @@ export async function backfillFrozenBreakdown(
       }
 
       // ── 2. คำนวณ daily_breakdown (target + collected แยกตามวัน) ──────────────
+      // ใช้ logic เดียวกับ getDailyBreakdown: ตัด debt_range 'เกิน >90' ออก, ไม่ใช้ mcsAdjustment
       const dailyResult = await db.execute(sql.raw(`
         WITH
         all_days AS (
@@ -1151,6 +1152,7 @@ export async function backfillFrozenBreakdown(
             AND due_date::date <= (DATE_TRUNC('month', '${month}-01'::date) + INTERVAL '1 month - 1 day')
             AND is_paid IS NOT TRUE
             AND contract_status NOT IN (${excludedStatuses})
+            AND debt_range IN ('ปกติ','เกิน 1-7','เกิน 8-14','เกิน 15-30','เกิน 31-60','เกิน 61-90')
           GROUP BY due_date::date, COALESCE(debt_range, 'ปกติ')
         ),
         target_by_day AS (
@@ -1160,28 +1162,6 @@ export async function backfillFrozenBreakdown(
             SUM(range_amount) AS target_amount
           FROM target_by_day_range
           GROUP BY day
-        ),
-        overdue_carry_range AS (
-          SELECT
-            COALESCE(debt_range, 'ปกติ') AS range_key,
-            SUM(COALESCE(principal::numeric, 0) + COALESCE(interest::numeric, 0) + COALESCE(fee::numeric, 0)) AS carry_amount
-          FROM monthly_target_detail_snapshot
-          WHERE section = '${section}'
-            AND snapshot_month = '${month}'
-            AND due_date IS NOT NULL
-            AND due_date::date < DATE_TRUNC('month', '${month}-01'::date)
-            AND is_closed IS NOT TRUE
-            AND is_suspended IS NOT TRUE
-            AND is_bad_debt IS NOT TRUE
-            AND is_paid IS NOT TRUE
-            AND contract_status NOT IN (${excludedStatuses})
-          GROUP BY COALESCE(debt_range, 'ปกติ')
-        ),
-        overdue_carry AS (
-          SELECT
-            json_object_agg(range_key, carry_amount) AS carry_json,
-            SUM(carry_amount) AS total_carry
-          FROM overdue_carry_range
         ),
         collected_by_day AS (
           SELECT
@@ -1196,17 +1176,8 @@ export async function backfillFrozenBreakdown(
         )
         SELECT
           TO_CHAR(d.day, 'YYYY-MM-DD') AS date,
-          CASE
-            WHEN d.day = DATE_TRUNC('month', '${month}-01'::date)::date
-            THEN COALESCE(t.target_amount, 0) + COALESCE((SELECT total_carry FROM overdue_carry), 0)
-            ELSE COALESCE(t.target_amount, 0)
-          END AS target_amount,
+          COALESCE(t.target_amount, 0) AS target_amount,
           t.range_json AS range_json,
-          CASE
-            WHEN d.day = DATE_TRUNC('month', '${month}-01'::date)::date
-            THEN (SELECT carry_json FROM overdue_carry)
-            ELSE NULL
-          END AS carry_json,
           COALESCE(c.collected_amount, 0) AS collected_amount
         FROM all_days d
         LEFT JOIN target_by_day t ON t.day = d.day
@@ -1214,21 +1185,6 @@ export async function backfillFrozenBreakdown(
         ORDER BY d.day ASC
       `));
       const dailyRows = pgRows(dailyResult);
-
-      // ดึง mcs target_amount เพื่อ adjustment (เหมือน getDailyBreakdown)
-      const mcsResult2 = await db.execute(sql.raw(`
-        SELECT target_amount FROM monthly_collection_snapshot
-        WHERE section = '${section}' AND collection_month = '${month}'
-      `));
-      const mcsRow = pgRows(mcsResult2)[0];
-      let mcsTargetAmount: number | null = mcsRow?.target_amount != null ? n(mcsRow.target_amount) : null;
-
-      // คำนวณ adjustment
-      let mcsAdjustment = 0;
-      if (mcsTargetAmount !== null && dailyRows.length > 0) {
-        const currentTotal = dailyRows.reduce((sum: number, r: any) => sum + n(r.target_amount), 0);
-        mcsAdjustment = mcsTargetAmount - currentTotal;
-      }
 
       // ── 2b. ดึงยอด overdue (ยกมา) แยกต่างหาก — ใช้ logic เดียวกับ getDailyBreakdown
       const overdueResult = await db.execute(sql.raw(`
@@ -1277,29 +1233,15 @@ export async function backfillFrozenBreakdown(
       for (let idx = 0; idx < dailyRows.length; idx++) {
         const r: any = dailyRows[idx];
         const rangeJson: Record<string, number> = typeof r.range_json === 'object' && r.range_json ? r.range_json : {};
-        const carryJson: Record<string, number> = typeof r.carry_json === 'object' && r.carry_json ? r.carry_json : {};
 
+        // targetByRange: เฉพาะ range ที่มีค่า > 0 (ตัด เกิน >90 ออกแล้วตั้งแต่ SQL)
         const dayTargetByRange: Record<string, number> = {};
         for (const rng of ALL_DEBT_RANGES) {
-          const total = n(rangeJson[rng]) + n(carryJson[rng]);
-          if (total > 0) dayTargetByRange[rng] = total;
+          const v = n(rangeJson[rng]);
+          if (v > 0) dayTargetByRange[rng] = v;
         }
 
-        let targetAmount = Math.max(n(r.target_amount), 0);
-        if (idx === 0 && mcsAdjustment !== 0) {
-          targetAmount = Math.max(targetAmount + mcsAdjustment, 0);
-          const oldRangeTotal = Object.values(dayTargetByRange).reduce((s, v) => s + v, 0);
-          if (oldRangeTotal > 0) {
-            const ratio = targetAmount / oldRangeTotal;
-            for (const rng of ALL_DEBT_RANGES) {
-              if (dayTargetByRange[rng] != null) {
-                dayTargetByRange[rng] = Math.max(dayTargetByRange[rng] * ratio, 0);
-              }
-            }
-          } else if (oldRangeTotal === 0 && targetAmount > 0) {
-            dayTargetByRange['ปกติ'] = targetAmount;
-          }
-        }
+        const targetAmount = Math.max(n(r.target_amount), 0);
 
         // ใช้วันที่เป็น key (1-31)
         const dayNum = String(parseInt(String(r.date ?? "").slice(8, 10), 10));
