@@ -13,11 +13,11 @@ COPY patches ./patches
 # Install dependencies
 RUN pnpm install
 
-# Cache bust argument - change to force full rebuild
-ARG CACHEBUST=1
-
 # Copy source code
 COPY . .
+
+# Cache bust - updated: 2026-06-05T10:29:00Z
+RUN echo "Build timestamp: 2026-06-05T10:29:00Z"
 
 # Build the application
 RUN pnpm run build
