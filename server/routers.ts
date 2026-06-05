@@ -10,6 +10,7 @@ import { aiRouter } from "./routers/ai";
 import { monthlySummaryRouter } from "./routers/monthlySummary";
 import { suspectedBadDebtRouter } from "./routers/suspectedBadDebt";
 import { watchGroupRouter } from "./routers/watchGroup";
+import { newCustomerWatchRouter } from "./routers/newCustomerWatch";
 import { cacheRouter } from "./routers/cache";
 import { accountingRouter } from "./routers/accounting";
 import { fillPeriodNosRouter } from "./routers/fillPeriodNosRouter";
@@ -25,6 +26,7 @@ export const appRouter = router({
   badDebt: badDebtRouter,
   ai: aiRouter,
   monthlySummary: monthlySummaryRouter,
+  newCustomerWatch: newCustomerWatchRouter,
   watchGroup: watchGroupRouter,
   suspectedBadDebt: suspectedBadDebtRouter,
   cache: cacheRouter,
