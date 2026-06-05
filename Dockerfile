@@ -13,6 +13,9 @@ COPY patches ./patches
 # Install dependencies
 RUN pnpm install
 
+# Cache bust argument - change to force full rebuild
+ARG CACHEBUST=1
+
 # Copy source code
 COPY . .
 
