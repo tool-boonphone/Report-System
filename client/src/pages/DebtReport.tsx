@@ -1243,6 +1243,38 @@ export default function DebtReport() {
   // Export handler (used inline in toolbar)
   const handleExport = React.useCallback(async () => {
     if (!section) return;
+    // ── Snapshot mode: ใช้ endpoint แยกต่างหาก ──────────────────────────────
+    if (tab === "target" && targetViewMode === "snapshot" && selectedSnapshotMonth) {
+      const snapshotParams = new URLSearchParams({ section, snapshotMonth: selectedSnapshotMonth });
+      if (search) snapshotParams.set("search", search);
+      if (productTypeFilter.size > 0) snapshotParams.set("productType", Array.from(productTypeFilter).join(","));
+      if (debtSetMode) snapshotParams.set("debtOnly", "1");
+      const toastIdSnap = toast.loading("กำลังเตรียมไฟล์ Excel (Snapshot)…");
+      try {
+        const resp = await fetch(`/api/export/target-snapshot-detail?${snapshotParams.toString()}`, {
+          credentials: "include",
+        });
+        if (!resp.ok) {
+          const { message } = await resp.json().catch(() => ({ message: "Export failed" }));
+          toast.error(message, { id: toastIdSnap });
+          return;
+        }
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `target_snapshot_${selectedSnapshotMonth}_${section}_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        toast.success("ดาวน์โหลดสำเร็จ", { id: toastIdSnap });
+      } catch (err) {
+        toast.error((err as Error).message ?? "Export failed", { id: toastIdSnap });
+      }
+      return;
+    }
+    // ── Live mode (default) ──────────────────────────────────────────────────
     const endpoint = tab === "target" ? "/api/export/debt-target" : "/api/export/debt-collected";
     const params = new URLSearchParams({ section });
     if (search) params.set("search", search);
@@ -1293,7 +1325,7 @@ export default function DebtReport() {
     } catch (err) {
       toast.error((err as Error).message ?? "Export failed", { id: toastId });
     }
-   }, [section, tab, search, statusFilter, dueDateExact, dueDateFilter, approveDateFilter, productTypeFilter, principalOnly, debtSetMode, badgeVisibility, updatedByFilter]);
+   }, [section, tab, search, statusFilter, dueDateExact, dueDateFilter, approveDateFilter, productTypeFilter, principalOnly, debtSetMode, badgeVisibility, updatedByFilter, targetViewMode, selectedSnapshotMonth]);
 
   // Phase 88: Super Admin can force-clear server-side debt cache
   const [isInvalidating, setIsInvalidating] = useState(false);
