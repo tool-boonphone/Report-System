@@ -156,6 +156,16 @@ const SORTABLE_FIELDS: ReadonlyArray<SortField> = [
 /** Format a cell value according to its column type. */
 function formatCell(key: ContractColumnKey, row: any, seq: number): string {
   if (key === "seq") return String(seq);
+  // mdmEnabled: แสดงสถานะ MDM (Yes=อยู่ใน MDM, No=ไม่อยู่)
+  if (key === "mdmEnabled") {
+    return row.deviceLock !== null && row.deviceLock !== undefined ? "Yes" : "No";
+  }
+  // deviceLock: แสดงสถานะล็อกเครื่อง
+  if (key === "deviceLock") {
+    if (row.deviceLock === true) return "ล็อก";
+    if (row.deviceLock === false) return "ปลดล็อก";
+    return "-";
+  }
   const v = row[key];
   if (v === null || v === undefined || v === "") return "-";
   const col = CONTRACT_COLUMNS.find((c) => c.key === key);
@@ -881,7 +891,7 @@ export default function Contracts() {
                   <th colSpan={6} className="px-3 py-1.5 bg-slate-600 text-white border-b border-slate-500 whitespace-nowrap">สินเชื่อ</th>
                   <th colSpan={4} className="px-3 py-1.5 bg-indigo-600 text-white border-b border-indigo-500 whitespace-nowrap">พาร์ทเนอร์</th>
                   <th colSpan={15} className="px-3 py-1.5 bg-teal-600 text-white border-b border-teal-500 whitespace-nowrap">ลูกค้า</th>
-                  <th colSpan={9} className="px-3 py-1.5 bg-amber-600 text-white border-b border-amber-500 whitespace-nowrap">สินค้า</th>
+                  <th colSpan={11} className="px-3 py-1.5 bg-amber-600 text-white border-b border-amber-500 whitespace-nowrap">สินค้า</th>
                   <th colSpan={7} className="px-3 py-1.5 bg-rose-600 text-white border-b border-rose-500 whitespace-nowrap">ไฟแนนซ์</th>
                   <th colSpan={1} className="px-3 py-1.5 bg-purple-600 text-white border-b border-purple-500 whitespace-nowrap">หนี้</th>
                 </tr>
@@ -892,8 +902,8 @@ export default function Contracts() {
                       idx < 6 ? "bg-slate-50" :
                       idx < 10 ? "bg-indigo-50" :
                       idx < 25 ? "bg-teal-50" :
-                      idx < 34 ? "bg-amber-50" :
-                      idx < 40 ? "bg-rose-50" :
+                      idx < 36 ? "bg-amber-50" :
+                      idx < 43 ? "bg-rose-50" :
                       "bg-purple-50";
                     const isSticky = idx === 1;
                     const sortable = SORTABLE_FIELDS.includes(col.key as SortField);

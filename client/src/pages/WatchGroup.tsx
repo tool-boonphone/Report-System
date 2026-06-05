@@ -701,11 +701,16 @@ export default function WatchGroup() {
         "#","วันที่อนุมัติ","เลขที่สัญญา","ชื่อ-นามสกุล","เบอร์โทร",
         "ประเภท","รุ่น","รหัสพาร์ทเนอร์","ชื่อพาร์ทเนอร์","ราคา","ยอดจัดไฟแนนซ์",
         "ค่าคอมมิชชั่น","Incentive","ต้นทุน","ยอดผ่อนรวม","ผ่อนงวดละ","ยอดชำระ",
-        "เกินกำหนด(วัน)","ชำระ(งวด)","Online (วันที่แล้ว)",
+        "เกินกำหนด(วัน)","ชำระ(งวด)","ออนไลน์","MDM","ล็อกเครื่อง",
       ];
       const dataRows = filteredRows.map((r, i) => {
         const onlineDays = r.lastOnlineDays;
+        // ออนไลน์: จำนวนวันที่ออนไลน์ล่าสุด
         const onlineLabel = onlineDays == null ? "-" : onlineDays === 0 ? "วันนี้" : `${onlineDays} วันที่แล้ว`;
+        // MDM (ไอคอนโล่): deviceLock=true → "Yes", false → "No", null → "-"
+        const mdmLabel = r.deviceLock === true ? "Yes" : r.deviceLock === false ? "No" : "-";
+        // ล็อกเครื่อง (ไอคอนกุญแจ): lossStatus=1 → "ล็อก", 0 → "ปลดล็อก", null → "-"
+        const lockLabel = r.lossStatus === 1 ? "ล็อก" : r.lossStatus === 0 ? "ปลดล็อก" : "-";
         return [
           i + 1,
           r.approveDate ? r.approveDate.slice(0, 10) : "",
@@ -727,6 +732,8 @@ export default function WatchGroup() {
           r.daysOverdue ?? 0,
           r.arrearsCount ?? 0,
           onlineLabel,
+          mdmLabel,
+          lockLabel,
         ];
       });
       const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
@@ -734,7 +741,7 @@ export default function WatchGroup() {
         { wch: 6 }, { wch: 14 }, { wch: 22 }, { wch: 22 }, { wch: 14 },
         { wch: 10 }, { wch: 24 }, { wch: 12 }, { wch: 24 }, { wch: 12 }, { wch: 14 },
         { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 12 },
-        { wch: 14 }, { wch: 14 }, { wch: 14 },
+        { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 8 }, { wch: 10 },
       ];
       // Style header row
       for (let C = 0; C < headers.length; C++) {

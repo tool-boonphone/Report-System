@@ -34,7 +34,7 @@ import {
 } from "../excelUtils";
 
 // ─── Contract group header definitions (mirrors Contracts.tsx UI) ─────────────
-// Contracts.tsx: colSpan 6/4/15/8/7/1 → total 41 columns
+// Contracts.tsx: colSpan 6/4/15/11/7/1 → total 44 columns (เพิ่ม mdmEnabled + deviceLock ใน group สินค้า)
 const CONTRACT_GROUPS: Array<{
   label: string;
   colCount: number;
@@ -44,7 +44,7 @@ const CONTRACT_GROUPS: Array<{
   { label: "สินเชื่อ",    colCount: 6,  argb: "FF475569", subArgb: "FFF8FAFC" }, // slate-600 / slate-50
   { label: "พาร์ทเนอร์", colCount: 4,  argb: "FF4F46E5", subArgb: "FFEEF2FF" }, // indigo-600 / indigo-50
   { label: "ลูกค้า",     colCount: 15, argb: "FF0D9488", subArgb: "FFF0FDFA" }, // teal-600 / teal-50
-  { label: "สินค้า",     colCount: 8,  argb: "FFD97706", subArgb: "FFFEFCE8" }, // amber-600 / amber-50
+  { label: "สินค้า",     colCount: 11, argb: "FFD97706", subArgb: "FFFEFCE8" }, // amber-600 / amber-50 (เพิ่ม mdmEnabled + deviceLock)
   { label: "ไฟแนนซ์",   colCount: 7,  argb: "FFE11D48", subArgb: "FFFFF1F2" }, // rose-600 / rose-50
   { label: "หนี้",       colCount: 1,  argb: "FF7C3AED", subArgb: "FFF5F3FF" }, // purple-600 / purple-50
 ];
@@ -200,11 +200,21 @@ export async function handleContractsExport(req: Request, res: Response) {
             } else {
               setIntCell(cell, days);
             }
+          } else if (col.key === "mdmEnabled") {
+            // MDM: deviceLock != null → อยู่ใน MDM (Yes), null → ไม่อยู่ใน MDM (No)
+            const dl = (row as any)["deviceLock"];
+            if (dl !== null && dl !== undefined) {
+              cell.value = "Yes";
+              cell.font = { color: { argb: "FF16A34A" } }; // green-600
+            } else {
+              cell.value = "No";
+              cell.font = { color: { argb: "FF6B7280" } }; // gray-500
+            }
           } else if (col.key === "deviceLock") {
-            // true = ล็อกเครื่อง, false = ปลดล็อก, null = ไม่พบใน MDM
+            // true = ล็อก, false = ปลดล็อก, null = ไม่พบใน MDM
             const dl = (row as any)["deviceLock"];
             if (dl === true) {
-              cell.value = "ล็อกเครื่อง";
+              cell.value = "ล็อก";
               cell.font = { color: { argb: "FFDC2626" } }; // red-600
             } else if (dl === false) {
               cell.value = "ปลดล็อก";

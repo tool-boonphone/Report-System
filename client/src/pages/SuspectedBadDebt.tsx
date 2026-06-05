@@ -583,11 +583,16 @@ export default function SuspectedBadDebt() {
       const headers = [
         "#","วันที่อนุมัติ","เลขที่สัญญา","ชื่อ-นามสกุล","เบอร์โทร",
         "รุ่น","ราคา","ยอดจัดไฟแนนซ์","ค่าคอมมิชชั่น","Incentive","ต้นทุน",
-        "งวดที่ชำระ","ยอดชำระ","มูลค่าหนี้","เกินกำหนด (วัน)","สถานะหนี้","Online (วันที่แล้ว)",
+        "งวดที่ชำระ","ยอดชำระ","มูลค่าหนี้","เกินกำหนด (วัน)","สถานะหนี้","ออนไลน์","MDM","ล็อกเครื่อง",
       ];
       const dataRows = filteredRows.map((r, i) => {
         const onlineDays = r.lastOnlineDays;
+        // ออนไลน์: จำนวนวันที่ออนไลน์ล่าสุด
         const onlineLabel = onlineDays == null ? "-" : onlineDays === 0 ? "วันนี้" : `${onlineDays} วันที่แล้ว`;
+        // MDM (ไอคอนโล่): deviceLock=true → "Yes", false → "No", null → "-"
+        const mdmLabel = r.deviceLock === true ? "Yes" : r.deviceLock === false ? "No" : "-";
+        // ล็อกเครื่อง (ไอคอนกุญแจ): lossStatus=1 → "ล็อก", 0 → "ปลดล็อก", null → "-"
+        const lockLabel = r.lossStatus === 1 ? "ล็อก" : r.lossStatus === 0 ? "ปลดล็อก" : "-";
         return [
           i + 1,
           r.approveDate ? r.approveDate.slice(0, 10) : "",
@@ -606,13 +611,15 @@ export default function SuspectedBadDebt() {
           r.daysOverdue ?? 0,
           r.debtStatus ?? "",
           onlineLabel,
+          mdmLabel,
+          lockLabel,
         ];
       });
       const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
       ws["!cols"] = [
         { wch: 6 }, { wch: 14 }, { wch: 22 }, { wch: 22 }, { wch: 14 },
         { wch: 24 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 12 },
-        { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 16 }, { wch: 14 }, { wch: 14 },
+        { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 8 }, { wch: 10 },
       ];
       // Style header row (amber-100 bg, mirrors SuspectedBadDebt.tsx UI)
       for (let C = 0; C < headers.length; C++) {
