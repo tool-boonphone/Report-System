@@ -1,3 +1,4 @@
+// build: 2026-06-05-v2
 /**
  * monthlyTargetDetailSnapshotDb.ts
  *
