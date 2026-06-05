@@ -1079,6 +1079,17 @@ export async function backfillFrozenBreakdown(
     if (!/^\d{4}-\d{2}$/.test(month)) continue;
 
     try {
+      // ── 0. Check target_frozen_at — skip ถ้า freeze ไปแล้ว ──
+      const frozenCheck = await db.execute(sql.raw(`
+        SELECT target_frozen_at FROM monthly_collection_snapshot
+        WHERE section = '${section}' AND collection_month = '${month}'
+      `));
+      const isFrozen = pgRows(frozenCheck)[0]?.target_frozen_at != null;
+      if (isFrozen) {
+        console.log(`[backfillFrozenBreakdown] ${section} ${month}: target_frozen_at IS NOT NULL — skipping`);
+        continue;
+      }
+
       // ── 1. คำนวณ target_by_range (SUM แยกตาม debt_range ทั้ง in_month + carry) ──
       const rangeResult = await db.execute(sql.raw(`
         WITH

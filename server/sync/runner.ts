@@ -511,15 +511,33 @@ async function doSync(
       });
       if (dayOfMonth === 1) {
         // วันที่ 1: Auto Snapshot ด้วย end_of_month mode (ตั้งหนี้เดือนนี้ = ณ เดือนปัจจุบัน)
-        const detailRows = await populateMonthlyTargetDetailSnapshot(
-          section,
-          currentMonth,
-          "end_of_month", // cutoff = วันสุดท้ายของเดือน
-          true,           // filterDebtOnly = true (ตั้งหนี้ ON)
-          true,           // filterPrincipalOnly = true (เฉพาะเงินต้น ON)
-          autoSnapshotFilterState,
-        );
-        console.log(`[sync] ${section}: monthly_target_detail_snapshot AUTO populated — ${detailRows} rows for ${currentMonth} (end_of_month mode, day-1 freeze, debtSetMode=true)`);
+        // ตรวจสอบก่อนว่า freeze ไปหรือยัง
+        const { getDb } = await import("../db");
+        const { sql } = await import("drizzle-orm");
+        const checkDb = await getDb(section);
+        let isTargetFrozen = false;
+        if (checkDb) {
+          const checkRes = await checkDb.execute(sql.raw(`
+            SELECT target_frozen_at FROM monthly_collection_snapshot
+            WHERE section = '${section}' AND collection_month = '${currentMonth}'
+          `));
+          const rows = checkRes.rows || checkRes; // Handle pgRows equivalent
+          isTargetFrozen = (rows as any[])[0]?.target_frozen_at != null;
+        }
+
+        if (isTargetFrozen) {
+          console.log(`[sync] ${section}: monthly_target_detail_snapshot already frozen for ${currentMonth} (target_frozen_at IS NOT NULL) — skipped day 1 auto-populate`);
+        } else {
+          const detailRows = await populateMonthlyTargetDetailSnapshot(
+            section,
+            currentMonth,
+            "end_of_month", // cutoff = วันสุดท้ายของเดือน
+            true,           // filterDebtOnly = true (ตั้งหนี้ ON)
+            true,           // filterPrincipalOnly = true (เฉพาะเงินต้น ON)
+            autoSnapshotFilterState,
+          );
+          console.log(`[sync] ${section}: monthly_target_detail_snapshot AUTO populated — ${detailRows} rows for ${currentMonth} (end_of_month mode, day-1 freeze, debtSetMode=true)`);
+        }
       } else {
         // วันอื่น: skip ถ้ามีข้อมูลเดือนนั้นอยู่แล้ว (skipIfExists=true — freeze ไม่ให้ overwrite)
         const detailRows = await populateMonthlyTargetDetailSnapshot(
