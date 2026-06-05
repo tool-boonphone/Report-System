@@ -493,29 +493,46 @@ export default function DebtReport() {
     { enabled: !!section && tab === "target", staleTime: 5 * 60 * 1000 },
   );
   // helper: ดึง frozen dailyBreakdown ของ snapshotMonth ที่ระบุ
-  // daily_breakdown ใน DB เก็บเป็น object {"1": {target, targetByRange, collected}, "2": {...}, ...}
-  // แปลงเป็น DailyBreakdownRow[] ที่ client ใช้ (array เรียง ASC ตามวันที่)
+  // daily_breakdown ใน DB เก็บเป็น object {"overdue": {target, targetByRange, collected, isOverdue}, "1": {...}, ...}
+  // แปลงเป็น DailyBreakdownRow[] ที่ client ใช้ (array เรียง ASC ตามวันที่ โดยแถว overdue อยู่บนสุด)
   const getFrozenDailyBreakdown = (snapshotMonth: string) => {
     const rows = (monthlySnapshotsQuery.data ?? []) as any[];
     const row = rows.find((r: any) => r.collectionMonth === snapshotMonth);
     const breakdown = row?.dailyBreakdown ?? null;
     if (!breakdown || typeof breakdown !== 'object' || Array.isArray(breakdown)) return null;
-    // แปลง object → array เรียงตามวันที่
     const [yr, mo] = snapshotMonth.split("-");
-    return Object.keys(breakdown)
+    const result: Array<{ date: string; targetAmount: number; targetByRange: Record<string, number>; collectedAmount: number; percentage: number; isOverdue?: boolean }> = [];
+    // แถว overdue ก่อน (ถ้ามี)
+    if (breakdown['overdue']) {
+      const d = breakdown['overdue'] as { target: number; targetByRange: Record<string, number>; collected: number; isOverdue?: boolean };
+      if ((d.target ?? 0) > 0) {
+        result.push({
+          date: 'overdue',
+          targetAmount: d.target ?? 0,
+          targetByRange: d.targetByRange ?? {},
+          collectedAmount: 0,
+          percentage: 0,
+          isOverdue: true,
+        });
+      }
+    }
+    // แถวรายวัน (key เป็นตัวเลข 1-31)
+    Object.keys(breakdown)
+      .filter(k => k !== 'overdue')
       .map(Number)
       .sort((a, b) => a - b)
-      .map((dayNum) => {
+      .forEach((dayNum) => {
         const d = breakdown[String(dayNum)] as { target: number; targetByRange: Record<string, number>; collected: number };
         const dateStr = `${yr}-${mo}-${String(dayNum).padStart(2, '0')}`;
-        return {
+        result.push({
           date: dateStr,
           targetAmount: d.target ?? 0,
           targetByRange: d.targetByRange ?? {},
           collectedAmount: d.collected ?? 0,
           percentage: d.target > 0 ? (d.collected / d.target) * 100 : 0,
-        };
+        });
       });
+    return result;
   };
   // helper: ดึง frozen targetByRange ของ snapshotMonth ที่ระบุ
   const getFrozenTargetByRange = (snapshotMonth: string) => {

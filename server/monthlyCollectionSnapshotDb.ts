@@ -55,7 +55,7 @@ export type MonthlyCollectionSnapshotRow = {
   collectedSale: number;   // ยอดขายเครื่อง
   // ── Frozen breakdown (freeze ไว้ตอน backfillFrozenBreakdown) ────────────────
   targetByRange: Record<string, number> | null;  // { "ปกติ": 1234, "เกิน 1-7": 5678, ... }
-  dailyBreakdown: Record<string, { target: number; targetByRange: Record<string, number>; collected: number }> | null;
+  dailyBreakdown: Record<string, { target: number; targetByRange: Record<string, number>; collected: number; isOverdue?: boolean }> | null;
   // ── Freeze status ────────────────────────────────────────────────────────────
   collectedIsFrozen: boolean;
   targetFrozenAt: string | null;
@@ -1230,8 +1230,50 @@ export async function backfillFrozenBreakdown(
         mcsAdjustment = mcsTargetAmount - currentTotal;
       }
 
-      // Build daily_breakdown JSON: { "1": { target, targetByRange, collected }, ... }
-      const dailyBreakdown: Record<string, { target: number; targetByRange: Record<string, number>; collected: number }> = {};
+      // ── 2b. ดึงยอด overdue (ยกมา) แยกต่างหาก — ใช้ logic เดียวกับ getDailyBreakdown
+      const overdueResult = await db.execute(sql.raw(`
+        WITH
+        overdue_by_range AS (
+          SELECT
+            COALESCE(debt_range, 'ปกติ') AS range_key,
+            SUM(COALESCE(principal::numeric, 0) + COALESCE(interest::numeric, 0) + COALESCE(fee::numeric, 0)) AS range_amount
+          FROM monthly_target_detail_snapshot
+          WHERE section = '${section}'
+            AND snapshot_month = '${month}'
+            AND due_date IS NOT NULL
+            AND due_date::date < DATE_TRUNC('month', '${month}-01'::date)
+            AND is_paid IS NOT TRUE
+            AND contract_status NOT IN (${excludedStatuses})
+            AND debt_range IN ('ปกติ','เกิน 1-7','เกิน 8-14','เกิน 15-30','เกิน 31-60','เกิน 61-90')
+          GROUP BY COALESCE(debt_range, 'ปกติ')
+        )
+        SELECT
+          json_object_agg(range_key, range_amount) AS range_json,
+          SUM(range_amount) AS target_amount
+        FROM overdue_by_range
+      `));
+      const overdueRow = pgRows(overdueResult)[0];
+      const overdueTargetAmount = Math.max(n(overdueRow?.target_amount), 0);
+      const overdueRangeJson: Record<string, number> = typeof overdueRow?.range_json === 'object' && overdueRow?.range_json ? overdueRow.range_json : {};
+      const overdueTargetByRange: Record<string, number> = {};
+      for (const rng of ALL_DEBT_RANGES) {
+        const v = n(overdueRangeJson[rng]);
+        if (v > 0) overdueTargetByRange[rng] = v;
+      }
+
+      // Build daily_breakdown JSON: { "overdue": { target, targetByRange, collected, isOverdue }, "1": { target, targetByRange, collected }, ... }
+      const dailyBreakdown: Record<string, { target: number; targetByRange: Record<string, number>; collected: number; isOverdue?: boolean }> = {};
+
+      // เพิ่มแถว overdue ถ้ามียอด
+      if (overdueTargetAmount > 0) {
+        dailyBreakdown['overdue'] = {
+          target: overdueTargetAmount,
+          targetByRange: overdueTargetByRange,
+          collected: 0,
+          isOverdue: true,
+        };
+      }
+
       for (let idx = 0; idx < dailyRows.length; idx++) {
         const r: any = dailyRows[idx];
         const rangeJson: Record<string, number> = typeof r.range_json === 'object' && r.range_json ? r.range_json : {};
@@ -1280,7 +1322,7 @@ export async function backfillFrozenBreakdown(
       `));
 
       updatedCount++;
-      console.log(`[backfillFrozenBreakdown] ${section} ${month}: target_by_range=${JSON.stringify(targetByRange)}, daily_breakdown days=${Object.keys(dailyBreakdown).length}`);
+      console.log(`[backfillFrozenBreakdown] ${section} ${month}: target_by_range=${JSON.stringify(targetByRange)}, daily_breakdown days=${Object.keys(dailyBreakdown).length}, overdue=${overdueTargetAmount}`);
     } catch (err: any) {
       console.error(`[backfillFrozenBreakdown] ${section} ${month}: failed:`, err?.message ?? err);
     }
