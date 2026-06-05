@@ -131,7 +131,8 @@ type SortKey =
   | "incentive"
   | "cost"
   | "installmentTotal"
-  | "daysUntilDue1";
+  | "daysUntilDue1"
+  | "daysSinceApprove";
 type SortDir = "asc" | "desc";
 
 type Row = {
@@ -163,6 +164,7 @@ type Row = {
   cost: number;
   dueDate1: string | null;
   daysUntilDue1: number;
+  daysSinceApprove: number;
 };
 
 /* ─── SummaryCard ─────────────────────────────────────────────────────────── */
@@ -388,12 +390,13 @@ export default function NewCustomerWatch() {
   const [productTypeFilter, setProductTypeFilter] = useState<Set<string>>(new Set());
   const [partnerFilter, setPartnerFilter] = useState<Set<string>>(new Set());
   const [onlineFilter, setOnlineFilter] = useState<Set<string>>(new Set());
+  const [contractAgeFilter, setContractAgeFilter] = useState<string>("all");
 
   /* ── GPS Location Dialog ── */
   const { dialogState, openDialog, closeDialog } = useLocationDialog();
 
   /* ── sort ── */
-  const [sortKey, setSortKey] = useState<SortKey>("daysUntilDue1");
+  const [sortKey, setSortKey] = useState<SortKey>("daysSinceApprove");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
 
   /* ── virtual scroll ref ── */
@@ -412,7 +415,18 @@ export default function NewCustomerWatch() {
     queryInput as any,
     { enabled: canView && !!section && !!queryInput, staleTime: 5 * 60 * 1000 },
   );
-  const allRows: Row[] = useMemo(() => (data?.rows ?? []) as unknown as Row[], [data?.rows]);
+  const today = useMemo(() => new Date(), []);
+  const allRows: Row[] = useMemo(() => {
+    const raw = (data?.rows ?? []) as unknown as Omit<Row, "daysSinceApprove">[];
+    return raw.map((r) => {
+      let daysSinceApprove = 0;
+      if (r.approveDate) {
+        const appDate = new Date(r.approveDate);
+        daysSinceApprove = Math.max(0, Math.floor((today.getTime() - appDate.getTime()) / (1000 * 60 * 60 * 24)));
+      }
+      return { ...r, daysSinceApprove } as Row;
+    });
+  }, [data?.rows, today]);
 
   /* ── approve month options ── */
   const approveMonthOptions = useMemo(() => {
@@ -526,6 +540,17 @@ export default function NewCustomerWatch() {
         return onlineFilter.has(bucket);
       });
     }
+    // กรอง ทำสัญญามาแล้ว
+    if (contractAgeFilter !== "all") {
+      rows = rows.filter((r) => {
+        const d = r.daysSinceApprove;
+        if (contractAgeFilter === "lte3")  return d <= 3;
+        if (contractAgeFilter === "lte7")  return d <= 7;
+        if (contractAgeFilter === "lte15") return d <= 15;
+        if (contractAgeFilter === "gt15")  return d > 15;
+        return true;
+      });
+    }
     rows = [...rows].sort((a, b) => {
       let av: any, bv: any;
       switch (sortKey) {
@@ -543,6 +568,7 @@ export default function NewCustomerWatch() {
         case "cost":             av = a.cost;                   bv = b.cost;                   break;
         case "installmentTotal": av = a.installmentTotal;       bv = b.installmentTotal;       break;
         case "daysUntilDue1":    av = a.daysUntilDue1;          bv = b.daysUntilDue1;          break;
+        case "daysSinceApprove": av = a.daysSinceApprove;       bv = b.daysSinceApprove;       break;
         default:                 av = 0;                        bv = 0;
       }
       if (av < bv) return sortDir === "asc" ? -1 : 1;
@@ -609,7 +635,8 @@ export default function NewCustomerWatch() {
     modelFilter.size > 0 ||
     productTypeFilter.size > 0 ||
     partnerFilter.size > 0 ||
-    onlineFilter.size > 0;
+    onlineFilter.size > 0 ||
+    contractAgeFilter !== "all";
 
   const clearFilters = () => {
     setSearch("");
@@ -619,6 +646,7 @@ export default function NewCustomerWatch() {
     setProductTypeFilter(new Set());
     setPartnerFilter(new Set());
     setOnlineFilter(new Set());
+    setContractAgeFilter("all");
   };
 
   /* ── export XLSX ── */
@@ -636,7 +664,7 @@ export default function NewCustomerWatch() {
         "#","วันที่อนุมัติ","เลขที่สัญญา","ชื่อ-นามสกุล","เบอร์โทร",
         "ประเภท","รุ่น","รหัสพาร์ทเนอร์","ชื่อพาร์ทเนอร์","ราคา","ยอดจัดไฟแนนซ์",
         "ค่าคอมมิชชั่น","Incentive","ต้นทุน","ยอดผ่อนรวม","ผ่อนงวดละ",
-        "กำหนดชำระงวดที่ 1","วันที่เหลือ(วัน)",
+        "ทำสัญญามาแล้ว(วัน)","กำหนดชำระงวดที่ 1","เหลืออีก(วัน)",
         "ออนไลน์","MDM","ล็อกเครื่อง",
       ];
       const dataRows = filteredRows.map((r, i) => {
@@ -664,6 +692,7 @@ export default function NewCustomerWatch() {
           r.cost ?? 0,
           r.installmentTotal ?? 0,
           r.installmentAmount ?? 0,
+          r.daysSinceApprove ?? 0,
           r.dueDate1 ? r.dueDate1.slice(0, 10) : "",
           r.daysUntilDue1 ?? 0,
           onlineLabel,
@@ -676,7 +705,7 @@ export default function NewCustomerWatch() {
         { wch: 6 }, { wch: 14 }, { wch: 22 }, { wch: 22 }, { wch: 14 },
         { wch: 10 }, { wch: 24 }, { wch: 12 }, { wch: 24 }, { wch: 12 }, { wch: 14 },
         { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 12 },
-        { wch: 16 }, { wch: 14 },
+        { wch: 16 }, { wch: 16 }, { wch: 14 },
         { wch: 14 }, { wch: 8 }, { wch: 10 },
       ];
       // Style header row
@@ -698,7 +727,7 @@ export default function NewCustomerWatch() {
           const addr = XLSX.utils.encode_cell({ r: R, c: C });
           if (ws[addr]) { ws[addr].t = "n"; ws[addr].z = "#,##0.00"; }
         }
-        for (const C of [15, 17]) {
+        for (const C of [15, 16, 18]) {
           const addr = XLSX.utils.encode_cell({ r: R, c: C });
           if (ws[addr]) { ws[addr].t = "n"; ws[addr].z = "#,##0"; }
         }
@@ -832,6 +861,23 @@ export default function NewCustomerWatch() {
                   placeholder="ทุกพาร์ทเนอร์"
                   formatOption={(code) => partnerOptions.find((p) => p.code === code)?.label ?? code}
                 />
+                {/* ทำสัญญามาแล้ว */}
+                <select
+                  value={contractAgeFilter}
+                  onChange={(e) => setContractAgeFilter(e.target.value)}
+                  className={cn(
+                    "h-9 px-3 py-2 rounded-md border text-xs transition-colors focus:outline-none focus:ring-2 focus:ring-teal-500 min-w-[160px] bg-white",
+                    contractAgeFilter !== "all"
+                      ? "border-teal-400 bg-teal-50 text-teal-800 font-medium"
+                      : "border-gray-200 text-gray-700 hover:bg-gray-50",
+                  )}
+                >
+                  <option value="all">ทำสัญญา: ทั้งหมด</option>
+                  <option value="lte3">ไม่เกิน 3 วัน</option>
+                  <option value="lte7">ไม่เกิน 7 วัน</option>
+                  <option value="lte15">ไม่เกิน 15 วัน</option>
+                  <option value="gt15">&gt;15 วัน</option>
+                </select>
                 {/* ออนไลน์ล่าสุด */}
                 <MultiSelectFilter
                   label="ออนไลน์ล่าสุด"
@@ -954,11 +1000,14 @@ export default function NewCustomerWatch() {
                       <th className="px-3 py-2 text-right text-xs font-semibold whitespace-nowrap min-w-[100px]">
                         ผ่อนงวดละ
                       </th>
+                      <Th col="daysSinceApprove" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="min-w-[110px] text-center">
+                        ทำสัญญามาแล้ว
+                      </Th>
                       <th className="px-3 py-2 text-center text-xs font-semibold whitespace-nowrap min-w-[130px]">
                         กำหนดชำระงวดที่ 1
                       </th>
                       <Th col="daysUntilDue1" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="min-w-[100px] text-center">
-                        วันที่เหลือ
+                        เหลืออีก
                       </Th>
                       <th className="px-3 py-2 text-center text-xs font-semibold whitespace-nowrap min-w-[90px]">
                         Online
@@ -968,7 +1017,7 @@ export default function NewCustomerWatch() {
                   <tbody>
                     {paddingTop > 0 && (
                       <tr>
-                        <td colSpan={18} style={{ height: paddingTop }} />
+                        <td colSpan={19} style={{ height: paddingTop }} />
                       </tr>
                     )}
                     {virtualRows.map((vRow) => {
@@ -1044,6 +1093,21 @@ export default function NewCustomerWatch() {
                           </td>
                           <td className="px-3 py-1.5 text-right whitespace-nowrap font-medium text-gray-800">
                             {fmtMoney(r.installmentAmount)}
+                          </td>
+                          {/* ทำสัญญามาแล้ว (วัน) */}
+                          <td className="px-3 py-1.5 text-center whitespace-nowrap">
+                            <span className={cn(
+                              "inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium",
+                              r.daysSinceApprove <= 3
+                                ? "bg-green-100 text-green-700"
+                                : r.daysSinceApprove <= 7
+                                  ? "bg-blue-100 text-blue-700"
+                                  : r.daysSinceApprove <= 15
+                                    ? "bg-amber-100 text-amber-700"
+                                    : "bg-gray-100 text-gray-600",
+                            )}>
+                              {r.daysSinceApprove} วัน
+                            </span>
                           </td>
                           {/* กำหนดชำระงวดที่ 1 */}
                           <td className="px-3 py-1.5 text-center whitespace-nowrap text-gray-700">
@@ -1157,7 +1221,7 @@ export default function NewCustomerWatch() {
                     })}
                     {paddingBottom > 0 && (
                       <tr>
-                        <td colSpan={18} style={{ height: paddingBottom }} />
+                        <td colSpan={19} style={{ height: paddingBottom }} />
                       </tr>
                     )}
                   </tbody>
