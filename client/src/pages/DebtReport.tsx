@@ -3101,33 +3101,33 @@ export default function DebtReport() {
                   className="shrink-0 flex items-center gap-1 px-2 py-1 rounded text-xs font-medium bg-emerald-100 text-emerald-700 hover:bg-emerald-200 transition-colors"
                   onClick={() => {
                     // คำนวณ displayTarget client-side เหมือนกับ render ตาราง
-                    type DailyRowExport = { date: string; targetAmount: number; targetByRange: Record<string, number>; collectedAmount: number };
+                    type DailyRowExport = { date: string; targetAmount: number; targetByRange: Record<string, number>; collectedAmount: number; isOverdue?: boolean };
                     const rawRows = (dailyBreakdownQuery.data ?? []) as DailyRowExport[];
                     const isFilteringExport = dailyBreakdownStatuses.length > 0;
                     const rows = rawRows.map(r => {
                       const displayTarget = isFilteringExport
                         ? dailyBreakdownStatuses.reduce((s, rng) => s + (r.targetByRange[rng] ?? 0), 0)
                         : r.targetAmount;
-                      const pct = displayTarget > 0 ? (r.collectedAmount / displayTarget) * 100 : 0;
+                      const pct = (!r.isOverdue && displayTarget > 0) ? (r.collectedAmount / displayTarget) * 100 : 0;
                       return { ...r, displayTarget, displayPct: pct };
                     });
                     const TM2 = ["ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."];
                     const [yr2, mo2] = (dailyBreakdownMonth ?? "").split("-").map(Number);
                     const monthLabel = (mo2 >= 1 && mo2 <= 12) ? (TM2[mo2 - 1] + " " + yr2) : (dailyBreakdownMonth ?? "");
-                    const totalTarget    = rows.reduce((s, r) => s + r.displayTarget,    0);
-                    const totalCollected = rows.reduce((s, r) => s + r.collectedAmount, 0);
+                    const totalTarget    = rows.reduce((s, r) => s + r.displayTarget, 0);
+                    const totalCollected = rows.filter(r => !r.isOverdue).reduce((s, r) => s + r.collectedAmount, 0);
                     const totalPct       = totalTarget > 0 ? (totalCollected / totalTarget) * 100 : 0;
                     // สร้าง worksheet data
                     const wsData: (string | number)[][] = [
                       [`ยอดรายวัน — ${monthLabel}`],
                       ["วันที่", "เป้าเก็บหนี้", "ยอดเก็บหนี้", "% เก็บหนี้"],
                       ...rows.map(r => {
-                        const dayNum = r.date ? parseInt(r.date.split("-")[2] ?? "0", 10) : 0;
+                        const dayLabel = r.isOverdue ? "ยกมา" : (r.date ? parseInt(r.date.split("-")[2] ?? "0", 10) : 0);
                         return [
-                          dayNum,
+                          dayLabel,
                           r.displayTarget > 0 ? r.displayTarget : 0,
-                          r.collectedAmount > 0 ? r.collectedAmount : 0,
-                          r.displayTarget > 0 ? parseFloat(r.displayPct.toFixed(2)) : 0,
+                          r.isOverdue ? "" : (r.collectedAmount > 0 ? r.collectedAmount : 0),
+                          r.isOverdue ? "" : (r.displayTarget > 0 ? parseFloat(r.displayPct.toFixed(2)) : 0),
                         ];
                       }),
                       ["รวม", totalTarget, totalCollected, totalTarget > 0 ? parseFloat(totalPct.toFixed(2)) : 0],
@@ -3163,7 +3163,7 @@ export default function DebtReport() {
             ) : (
               (() => {
                 // Type ใหม่ที่มี targetByRange สำหรับ client-side filter
-                type DailyRow = { date: string; targetAmount: number; targetByRange: Record<string, number>; collectedAmount: number; percentage: number };
+                type DailyRow = { date: string; targetAmount: number; targetByRange: Record<string, number>; collectedAmount: number; percentage: number; isOverdue?: boolean };
                 // ใช้ frozen data ถ้ามี ไม่งั้น fallback ไป real-time query
                 const rawRows = (frozenDaily ?? dailyBreakdownQuery.data ?? []) as DailyRow[];
 
@@ -3179,13 +3179,14 @@ export default function DebtReport() {
                     // ทุกสถานะ → ใช้ targetAmount จาก server (ตรงกับ mcs target)
                     displayTarget = r.targetAmount;
                   }
-                  const pct = displayTarget > 0 ? (r.collectedAmount / displayTarget) * 100 : 0;
+                  // แถว overdue ไม่มี collected/pct
+                  const pct = (!r.isOverdue && displayTarget > 0) ? (r.collectedAmount / displayTarget) * 100 : 0;
                   return { ...r, displayTarget, displayPct: pct };
                 });
 
-                // คำนวณยอดรวม
-                const totalTarget    = rows.reduce((s, r) => s + r.displayTarget,    0);
-                const totalCollected = rows.reduce((s, r) => s + r.collectedAmount, 0);
+                // คำนวณยอดรวม — % รวมต้องเทียบกับยอดรวมทั้งหมด (รวม overdue)
+                const totalTarget    = rows.reduce((s, r) => s + r.displayTarget, 0);
+                const totalCollected = rows.filter(r => !r.isOverdue).reduce((s, r) => s + r.collectedAmount, 0);
                 const totalPct       = totalTarget > 0 ? (totalCollected / totalTarget) * 100 : 0;
                 const totalPctColor  = totalPct >= 100 ? "text-emerald-600 font-bold" : totalPct >= 80 ? "text-yellow-600 font-semibold" : "text-red-600 font-semibold";
                 return (
@@ -3200,6 +3201,7 @@ export default function DebtReport() {
                     </thead>
                     <tbody>
                       {rows.map((row, idx) => {
+                        const isOvd = Boolean(row.isOverdue);
                         const pctColor = row.displayPct >= 100
                           ? "text-emerald-600 font-bold"
                           : row.displayPct >= 80
@@ -3207,29 +3209,43 @@ export default function DebtReport() {
                           : row.displayTarget > 0
                           ? "text-red-500"
                           : "text-gray-300";
-                        // แสดงเฉพาะวันที่ (DD) ไม่เอาปี-เดือน
-                        const dayNum = row.date ? parseInt(row.date.split("-")[2] ?? "0", 10) : idx + 1;
+                        // แถว overdue แสดง label "ยกมา" แทนวันที่
+                        const dayLabel = isOvd
+                          ? <span className="text-[11px] text-gray-500 font-normal">ยกมา</span>
+                          : (row.date ? parseInt(row.date.split("-")[2] ?? "0", 10) : idx);
                         return (
                           <tr
                             key={row.date}
                             className={`border-b border-gray-100 ${
-                              idx % 2 === 0 ? "bg-white" : "bg-gray-50"
+                              isOvd
+                                ? "bg-gray-100"
+                                : idx % 2 === 0 ? "bg-white" : "bg-gray-50"
                             } hover:bg-amber-50 transition-colors`}
                           >
-                            <td className="px-3 py-2 text-gray-700 tabular-nums font-medium text-[13px]">{dayNum}</td>
+                            <td className="px-3 py-2 text-gray-700 tabular-nums font-medium text-[13px]">{dayLabel}</td>
                             <td className="px-3 py-2 text-right tabular-nums text-gray-700 text-[13px]">
                               {row.displayTarget > 0
                                 ? row.displayTarget.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
                                 : <span className="text-gray-300">—</span>}
                             </td>
-                            <td className="px-3 py-2 text-right tabular-nums text-gray-700 text-[13px]">
-                              {row.collectedAmount > 0
-                                ? row.collectedAmount.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-                                : <span className="text-gray-300">—</span>}
-                            </td>
-                            <td className={`px-3 py-2 text-right tabular-nums text-[13px] ${pctColor}`}>
-                              {row.displayTarget > 0 ? `${row.displayPct.toFixed(1)}%` : <span className="text-gray-300">—</span>}
-                            </td>
+                            {/* แถว overdue: ช่องยอดเก็บและ % ใช้ bg ทึบ ไม่มีข้อความ */}
+                            {isOvd ? (
+                              <>
+                                <td className="px-3 py-2 bg-gray-300" />
+                                <td className="px-3 py-2 bg-gray-300" />
+                              </>
+                            ) : (
+                              <>
+                                <td className="px-3 py-2 text-right tabular-nums text-gray-700 text-[13px]">
+                                  {row.collectedAmount > 0
+                                    ? row.collectedAmount.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                                    : <span className="text-gray-300">—</span>}
+                                </td>
+                                <td className={`px-3 py-2 text-right tabular-nums text-[13px] ${pctColor}`}>
+                                  {row.displayTarget > 0 ? `${row.displayPct.toFixed(1)}%` : <span className="text-gray-300">—</span>}
+                                </td>
+                              </>
+                            )}
                           </tr>
                         );
                       })}

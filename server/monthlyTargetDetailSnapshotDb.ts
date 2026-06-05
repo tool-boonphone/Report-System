@@ -1148,11 +1148,12 @@ export async function getMonthlyDebtSummary(
  * - percentage:      % เก็บหนี้ (0-100+)
  */
 export interface DailyBreakdownRow {
-  date: string;           // YYYY-MM-DD
+  date: string;           // YYYY-MM-DD หรือ 'overdue' สำหรับแถวยอดยกมา
   targetAmount: number;   // เป้าเก็บหนี้วันนั้น (ทุกสถานะ)
   targetByRange: Record<string, number>; // เป้าเก็บหนี้แยกตาม debt_range
   collectedAmount: number; // ยอดเก็บหนี้วันนั้น
   percentage: number;     // % เก็บหนี้
+  isOverdue?: boolean;    // true = แถวยอดยกมาจากเดือนก่อน (ไม่แสดง collected/percentage)
 }
 
 /**
@@ -1201,12 +1202,12 @@ export async function getDailyBreakdown(
       )::date AS day
     ),
     -- เป้าเก็บหนี้แต่ละวัน แยกตาม debt_range
-    -- ใช้ SUM(principal - paid_amount) เพื่อให้ตรงกับ Tb
+    -- ใช้ SUM(principal+interest+fee) เพื่อให้ตรงกับ Tb
     target_by_day_range AS (
       SELECT
         due_date::date                                                                                                AS day,
         COALESCE(debt_range, 'ปกติ')                                                                                  AS range_key,
-        SUM(GREATEST(COALESCE(principal::numeric, 0) - COALESCE(paid_amount::numeric, 0), 0))                       AS range_amount
+        SUM(COALESCE(principal::numeric, 0) + COALESCE(interest::numeric, 0) + COALESCE(fee::numeric, 0))           AS range_amount
       FROM monthly_target_detail_snapshot
       WHERE section = '${section}'
         AND snapshot_month = '${snapshotMonth}'
@@ -1215,6 +1216,7 @@ export async function getDailyBreakdown(
         AND due_date::date <= (DATE_TRUNC('month', '${snapshotMonth}-01'::date) + INTERVAL '1 month - 1 day')
         AND is_paid IS NOT TRUE
         AND contract_status NOT IN (${excludedStatuses})
+        AND debt_range IN ('ปกติ','เกิน 1-7','เกิน 8-14','เกิน 15-30','เกิน 31-60','เกิน 61-90')
       GROUP BY due_date::date, COALESCE(debt_range, 'ปกติ')
     ),
     -- Pivot: รวม debt_range ต่อวันเป็น json_object_agg
@@ -1225,6 +1227,28 @@ export async function getDailyBreakdown(
         SUM(range_amount)                         AS target_amount
       FROM target_by_day_range
       GROUP BY day
+    ),
+    -- ยอดยกมาจากเดือนก่อน (due_date < วันที่ 1 ของเดือน) แยกตาม debt_range
+    -- Freeze ไว้ตาม snapshot ของเดือนนั้น ไม่เปลี่ยนตามข้อมูลปัจจุบัน
+    overdue_by_range AS (
+      SELECT
+        COALESCE(debt_range, 'ปกติ')                                                                                  AS range_key,
+        SUM(COALESCE(principal::numeric, 0) + COALESCE(interest::numeric, 0) + COALESCE(fee::numeric, 0))           AS range_amount
+      FROM monthly_target_detail_snapshot
+      WHERE section = '${section}'
+        AND snapshot_month = '${snapshotMonth}'
+        AND due_date IS NOT NULL
+        AND due_date::date < DATE_TRUNC('month', '${snapshotMonth}-01'::date)
+        AND is_paid IS NOT TRUE
+        AND contract_status NOT IN (${excludedStatuses})
+        AND debt_range IN ('ปกติ','เกิน 1-7','เกิน 8-14','เกิน 15-30','เกิน 31-60','เกิน 61-90')
+      GROUP BY COALESCE(debt_range, 'ปกติ')
+    ),
+    overdue_agg AS (
+      SELECT
+        json_object_agg(range_key, range_amount) AS range_json,
+        SUM(range_amount)                         AS target_amount
+      FROM overdue_by_range
     ),
     -- ยอดเก็บหนี้จริงแต่ละวัน (ไม่กรองตามสถานะหนี้)
     collected_by_day AS (
@@ -1238,15 +1262,29 @@ export async function getDailyBreakdown(
         AND TO_CHAR(paid_at, 'YYYY-MM') = '${snapshotMonth}'
       GROUP BY paid_at::date
     )
+    -- แถว overdue (ยอดยกมาจากเดือนก่อน) — date = 'overdue', is_overdue = true
+    SELECT
+      'overdue'                                AS date,
+      COALESCE(o.target_amount, 0)             AS target_amount,
+      o.range_json                             AS range_json,
+      0::numeric                               AS collected_amount,
+      true                                     AS is_overdue
+    FROM overdue_agg o
+    WHERE COALESCE(o.target_amount, 0) > 0
+
+    UNION ALL
+
+    -- แถวรายวัน (วันที่ 1-สิ้นเดือน)
     SELECT
       TO_CHAR(d.day, 'YYYY-MM-DD')            AS date,
       COALESCE(t.target_amount, 0)            AS target_amount,
       t.range_json                            AS range_json,
-      COALESCE(c.collected_amount, 0)         AS collected_amount
+      COALESCE(c.collected_amount, 0)         AS collected_amount,
+      false                                   AS is_overdue
     FROM all_days d
     LEFT JOIN target_by_day    t ON t.day = d.day
     LEFT JOIN collected_by_day c ON c.day = d.day
-    ORDER BY d.day ASC
+    ORDER BY is_overdue DESC, date ASC
   `));
 
   const rows = pgRows(result);
@@ -1262,9 +1300,11 @@ export async function getDailyBreakdown(
       if (v > 0) targetByRange[rng] = v;
     }
 
-    const targetAmount     = Math.max(n(r.target_amount), 0);
-    const collectedAmount  = Math.max(n(r.collected_amount), 0);
-    const percentage       = targetAmount > 0 ? (collectedAmount / targetAmount) * 100 : 0;
+    const isOverdue       = Boolean(r.is_overdue);
+    const targetAmount    = Math.max(n(r.target_amount), 0);
+    // แถว overdue ไม่มียอดเก็บหนี้ (collected = 0, percentage = 0)
+    const collectedAmount = isOverdue ? 0 : Math.max(n(r.collected_amount), 0);
+    const percentage      = (!isOverdue && targetAmount > 0) ? (collectedAmount / targetAmount) * 100 : 0;
 
     return {
       date: String(r.date ?? ""),
@@ -1272,6 +1312,7 @@ export async function getDailyBreakdown(
       targetByRange,
       collectedAmount,
       percentage,
+      isOverdue,
     };
   });
 }
