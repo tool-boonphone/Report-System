@@ -1,7 +1,6 @@
 /**
  * NewCustomerWatch — สังเกตการณ์ลูกค้าใหม่
- * แสดงสัญญาที่ไม่เคยชำระเลย (0 งวด) และเพิ่งเกินกำหนดชำระงวดแรก/งวดสอง
- * หลังผ่านช่วงผ่อนผัน N วัน
+ * แสดงรายการสัญญาที่ยังไม่ถึงกำหนดชำระงวดที่ 1 ทั้งหมด
  */
 import React, {
   useCallback,
@@ -34,7 +33,6 @@ import { useAppAuth } from "@/hooks/useAppAuth";
 import { useSection } from "@/contexts/SectionContext";
 import { trpc } from "@/lib/trpc";
 import { Spinner } from "@/components/ui/spinner";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Popover,
@@ -117,10 +115,7 @@ const fmtModelDisplay = (model: string | null) => {
   return model;
 };
 
-/** Format number as integer with comma */
-const fmtInt = (v: number | null | undefined) =>
-  v == null ? "-" : v.toLocaleString("th-TH");
-
+/* ─── Types ──────────────────────────────────────────────────────────────── */
 type SortKey =
   | "seq"
   | "approveDate"
@@ -136,8 +131,7 @@ type SortKey =
   | "incentive"
   | "cost"
   | "installmentTotal"
-  | "daysOverdue"
-  | "arrearsCount";
+  | "daysUntilDue1";
 type SortDir = "asc" | "desc";
 
 type Row = {
@@ -148,10 +142,11 @@ type Row = {
   phone: string | null;
   serialNo: string | null;
   lastOnlineDays: number | null;
-  lastOnlineAt: string | null;   // "YYYY-MM-DD HH:mm:ss" เวลาออนไลน์ล่าสุด (ใช้แสดงใน tooltip)
+  lastOnlineAt: string | null;
   deviceLock: boolean | null;
-  lossStatus: number | null;      // 0=ปกติ, 1=Lost Mode (ล็อกเครื่อง)
-  mdmDeviceId: number | null;    // MDM internal ID สำหรับดึง GPS location
+  lossStatus: number | null;
+  mdmDeviceId: number | null;
+  locationLogCount: number;
   model: string | null;
   device: string | null;
   productType: string | null;
@@ -162,15 +157,12 @@ type Row = {
   multiplier: number | null;
   commissionNet: number | null;
   incentive: number;
-  cost: number;
   installmentCount: number | null;
   installmentAmount: number | null;
   installmentTotal: number;
-  daysOverdue: number;
-  arrearsCount: number;
-  paidAmount1: number;  // ยอดชำระงวดที่ 1 (อาจเป็น 0 ถ้าไม่เคยชำระ)
-  totalPaid: number;     // ยอดชำระรวมทั้งหมดทุกงวด
-  totalAmountDue: number; // ยอดค้างชำระรวมทุกงวดที่ถึงกำหนดแล้ว
+  cost: number;
+  dueDate1: string | null;
+  daysUntilDue1: number;
 };
 
 /* ─── SummaryCard ─────────────────────────────────────────────────────────── */
@@ -206,7 +198,7 @@ function SortIcon({
   sortKey: SortKey;
   sortDir: SortDir;
 }) {
-  if (sortKey !== col)
+  if (col !== sortKey)
     return <ChevronsUpDown className="w-3.5 h-3.5 text-gray-400 ml-0.5 shrink-0" />;
   return sortDir === "asc" ? (
     <ChevronUp className="w-3.5 h-3.5 text-blue-600 ml-0.5 shrink-0" />
@@ -338,8 +330,8 @@ function MultiSelectFilter({
   );
 }
 
-/* ─── ArrearsInfoPopover ──────────────────────────────────────────────────── */
-function ArrearsInfoPopover() {
+/* ─── InfoPopover ──────────────────────────────────────────────────────────── */
+function InfoPopover() {
   const [open, setOpen] = useState(false);
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -356,26 +348,16 @@ function ArrearsInfoPopover() {
         <div className="space-y-3">
           <h4 className="font-semibold text-gray-800 flex items-center gap-1.5">
             <Eye className="w-4 h-4 text-teal-600" />
-            สังเกตการณ์ลูกค้าใหม่ — เงื่อนไขการจัดกลุ่ม
+            สังเกตการณ์ลูกค้าใหม่
           </h4>
-          <p className="text-xs text-gray-500 leading-relaxed">
-            แสดงเฉพาะสัญญาที่เกินช่วงผ่อนผันแล้ว แบ่งเป็น 2 กลุ่มตามยอดชำระงวดที่ 1
-            (ไม่จำกัดว่าปัจจุบันอยู่งวดที่เท่าไร)
+          <p className="text-xs text-gray-600 leading-relaxed">
+            รายการสัญญาที่ยังไม่ถึงกำหนดชำระงวดที่ 1 ทั้งหมด
           </p>
-          <div className="rounded-md border border-amber-200 bg-amber-50 p-3 space-y-1">
-            <p className="text-xs font-semibold text-amber-800">0 งวด — กลุ่มเร่งติดตามก่อนหลุด</p>
-            <p className="text-xs text-amber-700 leading-relaxed">
-              ถึงกำหนดชำระ<span className="font-medium">งวดที่ 1</span> แล้ว และเกินกำหนดมามากกว่าช่วงผ่อนผัน
-              แต่ยอดชำระงวดที่ 1 ยังไม่ครบ — ไม่ชำระเลย
-              หรือชำระมาแค่บางส่วนแต่ยังไม่ครบ
-            </p>
-          </div>
-          <div className="rounded-md border border-red-200 bg-red-50 p-3 space-y-1">
-            <p className="text-xs font-semibold text-red-800">1 งวด — กลุ่มเร่งลงพื้นที่ติดตามเครื่อง</p>
-            <p className="text-xs text-red-700 leading-relaxed">
-              ชำระ<span className="font-medium">งวดที่ 1</span> ครบแล้ว ถึงกำหนดชำระ<span className="font-medium">งวดที่ 2</span> แล้ว
-              และเกินกำหนดมามากกว่าช่วงผ่อนผัน แต่ยอดชำระงวดที่ 2 ยังไม่ครบ
-              — ไม่ชำระเลย หรือชำระมาแค่บางส่วนแต่ยังไม่ครบ
+          <div className="rounded-md border border-teal-200 bg-teal-50 p-3 space-y-1">
+            <p className="text-xs font-semibold text-teal-800">เงื่อนไขการแสดงผล</p>
+            <p className="text-xs text-teal-700 leading-relaxed">
+              แสดงเฉพาะสัญญาที่วันครบกำหนดชำระงวดที่ 1 ยังไม่มาถึง
+              (กำหนดชำระงวดที่ 1 &gt; วันนี้)
             </p>
           </div>
           <div className="rounded-md border border-gray-200 bg-gray-50 p-3 space-y-1">
@@ -384,10 +366,6 @@ function ArrearsInfoPopover() {
               ระงับสัญญา / หนี้เสีย / ยกเลิกสัญญา / สิ้นสุดสัญญา
             </p>
           </div>
-          <p className="text-[11px] text-gray-400 leading-relaxed">
-            * ช่วงผ่อนผัน คือจำนวนวันที่ยอมให้เกินกำหนดได้โดยยังไม่นับว่าผิดนัด
-            ปรับได้จากฟิลเตอร์ "ช่วงผ่อนผัน"
-          </p>
         </div>
       </PopoverContent>
     </Popover>
@@ -409,21 +387,14 @@ export default function NewCustomerWatch() {
   const [modelFilter, setModelFilter] = useState<Set<string>>(new Set());
   const [productTypeFilter, setProductTypeFilter] = useState<Set<string>>(new Set());
   const [partnerFilter, setPartnerFilter] = useState<Set<string>>(new Set());
-  // ช่วงผ่อนผัน N วัน (default 15)
-  const [gracePeriod, setGracePeriod] = useState<string>("15");
-  // ค้างชำระ multi-select: Set ของ "0" | "1" (ว่าง = ทั้งหมด)
-  const [arrearsFilter, setArrearsFilter] = useState<Set<string>>(new Set());
-  // ยอดชำระ: "" = ทั้งหมด, "none" = ไม่ชำระเลย, "partial" = ชำระบางส่วน
-  const [paymentFilter, setPaymentFilter] = useState<Set<string>>(new Set());
-  // ออนไลน์ล่าสุด multi-select
   const [onlineFilter, setOnlineFilter] = useState<Set<string>>(new Set());
 
   /* ── GPS Location Dialog ── */
   const { dialogState, openDialog, closeDialog } = useLocationDialog();
 
   /* ── sort ── */
-  const [sortKey, setSortKey] = useState<SortKey>("daysOverdue");
-  const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [sortKey, setSortKey] = useState<SortKey>("daysUntilDue1");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
 
   /* ── virtual scroll ref ── */
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -433,23 +404,15 @@ export default function NewCustomerWatch() {
     if (!section) return undefined;
     return {
       section,
-      gracePeriod: gracePeriod !== "" && !isNaN(Number(gracePeriod)) ? Number(gracePeriod) : 15,
-      // ส่ง arrearsFilter เป็น scalar เฉพาะเมื่อเลือกค่าเดียว (server รับ "0"|"1"|undefined)
-      arrearsFilter:
-        arrearsFilter.size === 1
-          ? (Array.from(arrearsFilter)[0] as "0" | "1")
-          : undefined,
       productTypes: productTypeFilter.size > 0 ? Array.from(productTypeFilter) : undefined,
     };
-  }, [section, gracePeriod, arrearsFilter, productTypeFilter]);
+  }, [section, productTypeFilter]);
 
   const { data, isLoading } = trpc.newCustomerWatch.list.useQuery(
     queryInput as any,
     { enabled: canView && !!section && !!queryInput, staleTime: 5 * 60 * 1000 },
   );
   const allRows: Row[] = useMemo(() => (data?.rows ?? []) as unknown as Row[], [data?.rows]);
-
-  /* ── MDM online days: ดึงจาก row.lastOnlineDays (map จาก contracts table) ── */
 
   /* ── approve month options ── */
   const approveMonthOptions = useMemo(() => {
@@ -465,18 +428,17 @@ export default function NewCustomerWatch() {
 
   /* ── partner options ── */
   const partnerOptions = useMemo(() => {
-    const map = new Map<string, string>(); // key: partnerCode, value: display label
+    const map = new Map<string, string>();
     for (const r of allRows) {
       if (!r.partnerCode) continue;
-      const label = r.partnerCode;
-      map.set(r.partnerCode, label);
+      map.set(r.partnerCode, r.partnerCode);
     }
     return Array.from(map.entries())
       .sort((a, b) => a[0].localeCompare(b[0], "th"))
       .map(([code, label]) => ({ code, label }));
   }, [allRows]);
 
-  /* ── productType options (Sure+ only for Boonphone) ── */
+  /* ── productType options ── */
   const productTypeOptions = useMemo(() => {
     const base = ["มือ 1", "มือ 2"];
     if (section === "Boonphone") base.push("Sure+");
@@ -520,10 +482,9 @@ export default function NewCustomerWatch() {
     });
   }, [modelOptions]);
 
-  /* ── filtered + sorted rows (client-side: search, month, os, model) ── */
+  /* ── filtered + sorted rows ── */
   const filteredRows = useMemo(() => {
     let rows = allRows;
-
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       rows = rows.filter(
@@ -533,18 +494,15 @@ export default function NewCustomerWatch() {
           r.phone?.toLowerCase().includes(q),
       );
     }
-
     if (approveMonthFilter.size > 0) {
       rows = rows.filter((r) => r.approveDate && approveMonthFilter.has(r.approveDate.slice(0, 7)));
     }
-
     if (osFilter.size > 0) {
       rows = rows.filter((r) => {
         const os = deriveOS(r.model);
         return os && osFilter.has(os);
       });
     }
-
     if (modelFilter.size > 0) {
       rows = rows.filter((r) => {
         if (!r.model) return false;
@@ -552,23 +510,9 @@ export default function NewCustomerWatch() {
         return base != null && modelFilter.has(base.toLowerCase());
       });
     }
-
-    // filter พาร์ทเนอร์ (client-side multi-select)
     if (partnerFilter.size > 0) {
       rows = rows.filter((r) => r.partnerCode && partnerFilter.has(r.partnerCode));
     }
-
-    // filter ยอดชำระ (client-side)
-    if (paymentFilter.size > 0) {
-      rows = rows.filter((r) => {
-        const paid = r.totalPaid ?? 0; // ใช้ totalPaid แทน paidAmount1 เพื่อ filter ยอดชำระทั้งหมด
-        if (paymentFilter.has("none") && paid === 0) return true;
-        if (paymentFilter.has("partial") && paid > 0) return true;
-        return false;
-      });
-    }
-
-    // filter ออนไลน์ล่าสุด (5 bucket)
     if (onlineFilter.size > 0) {
       rows = rows.filter((r) => {
         const days = r.lastOnlineDays;
@@ -582,7 +526,6 @@ export default function NewCustomerWatch() {
         return onlineFilter.has(bucket);
       });
     }
-
     rows = [...rows].sort((a, b) => {
       let av: any, bv: any;
       switch (sortKey) {
@@ -599,15 +542,13 @@ export default function NewCustomerWatch() {
         case "incentive":        av = a.incentive ?? 0;         bv = b.incentive ?? 0;         break;
         case "cost":             av = a.cost;                   bv = b.cost;                   break;
         case "installmentTotal": av = a.installmentTotal;       bv = b.installmentTotal;       break;
-        case "daysOverdue":      av = a.daysOverdue;            bv = b.daysOverdue;            break;
-        case "arrearsCount":     av = a.arrearsCount;           bv = b.arrearsCount;           break;
+        case "daysUntilDue1":    av = a.daysUntilDue1;          bv = b.daysUntilDue1;          break;
         default:                 av = 0;                        bv = 0;
       }
       if (av < bv) return sortDir === "asc" ? -1 : 1;
       if (av > bv) return sortDir === "asc" ? 1 : -1;
       return 0;
     });
-
     return rows;
   }, [
     allRows,
@@ -616,7 +557,6 @@ export default function NewCustomerWatch() {
     osFilter,
     modelFilter,
     partnerFilter,
-    paymentFilter,
     onlineFilter,
     sortKey,
     sortDir,
@@ -669,10 +609,7 @@ export default function NewCustomerWatch() {
     modelFilter.size > 0 ||
     productTypeFilter.size > 0 ||
     partnerFilter.size > 0 ||
-    onlineFilter.size > 0 ||
-    paymentFilter.size > 0 ||
-    gracePeriod !== "15" ||
-    arrearsFilter.size > 0;
+    onlineFilter.size > 0;
 
   const clearFilters = () => {
     setSearch("");
@@ -681,9 +618,6 @@ export default function NewCustomerWatch() {
     setModelFilter(new Set());
     setProductTypeFilter(new Set());
     setPartnerFilter(new Set());
-    setGracePeriod("15");
-    setArrearsFilter(new Set());
-    setPaymentFilter(new Set());
     setOnlineFilter(new Set());
   };
 
@@ -697,15 +631,22 @@ export default function NewCustomerWatch() {
     try {
       const XLSX = await import("xlsx");
       const wb = XLSX.utils.book_new();
+      // คอลัมน์ Online แยกเป็น 3 คอลัมน์: ออนไลน์ / MDM / ล็อกเครื่อง
       const headers = [
         "#","วันที่อนุมัติ","เลขที่สัญญา","ชื่อ-นามสกุล","เบอร์โทร",
         "ประเภท","รุ่น","รหัสพาร์ทเนอร์","ชื่อพาร์ทเนอร์","ราคา","ยอดจัดไฟแนนซ์",
-        "ค่าคอมมิชชั่น","Incentive","ต้นทุน","ยอดผ่อนรวม","ผ่อนงวดละ","ยอดชำระ",
-        "เกินกำหนด(วัน)","ชำระ(งวด)","Online (วันที่แล้ว)",
+        "ค่าคอมมิชชั่น","Incentive","ต้นทุน","ยอดผ่อนรวม","ผ่อนงวดละ",
+        "กำหนดชำระงวดที่ 1","วันที่เหลือ(วัน)",
+        "ออนไลน์","MDM","ล็อกเครื่อง",
       ];
       const dataRows = filteredRows.map((r, i) => {
         const onlineDays = r.lastOnlineDays;
+        // ออนไลน์: จำนวนวันที่ออนไลน์ล่าสุด
         const onlineLabel = onlineDays == null ? "-" : onlineDays === 0 ? "วันนี้" : `${onlineDays} วันที่แล้ว`;
+        // MDM (ไอคอนโล่): deviceLock=true → "Yes", false → "No", null → "-"
+        const mdmLabel = r.deviceLock === true ? "Yes" : r.deviceLock === false ? "No" : "-";
+        // ล็อกเครื่อง (ไอคอนกุญแจ): lossStatus=1 → "ล็อก", 0 → "ปลดล็อก", null → "-"
+        const lockLabel = r.lossStatus === 1 ? "ล็อก" : r.lossStatus === 0 ? "ปลดล็อก" : "-";
         return [
           i + 1,
           r.approveDate ? r.approveDate.slice(0, 10) : "",
@@ -723,18 +664,20 @@ export default function NewCustomerWatch() {
           r.cost ?? 0,
           r.installmentTotal ?? 0,
           r.installmentAmount ?? 0,
-          r.totalPaid ?? 0,
-          r.daysOverdue ?? 0,
-          r.arrearsCount ?? 0,
+          r.dueDate1 ? r.dueDate1.slice(0, 10) : "",
+          r.daysUntilDue1 ?? 0,
           onlineLabel,
+          mdmLabel,
+          lockLabel,
         ];
       });
       const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
       ws["!cols"] = [
         { wch: 6 }, { wch: 14 }, { wch: 22 }, { wch: 22 }, { wch: 14 },
         { wch: 10 }, { wch: 24 }, { wch: 12 }, { wch: 24 }, { wch: 12 }, { wch: 14 },
-        { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 12 },
-        { wch: 14 }, { wch: 14 }, { wch: 14 },
+        { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 12 },
+        { wch: 16 }, { wch: 14 },
+        { wch: 14 }, { wch: 8 }, { wch: 10 },
       ];
       // Style header row
       for (let C = 0; C < headers.length; C++) {
@@ -755,7 +698,7 @@ export default function NewCustomerWatch() {
           const addr = XLSX.utils.encode_cell({ r: R, c: C });
           if (ws[addr]) { ws[addr].t = "n"; ws[addr].z = "#,##0.00"; }
         }
-        for (const C of [15, 16]) {
+        for (const C of [15, 17]) {
           const addr = XLSX.utils.encode_cell({ r: R, c: C });
           if (ws[addr]) { ws[addr].t = "n"; ws[addr].z = "#,##0"; }
         }
@@ -834,9 +777,8 @@ export default function NewCustomerWatch() {
         {/* ── filter bar ── */}
         <div className="px-4 pb-2">
           <div className="flex flex-col gap-2">
-            {/* row 1: search + filters */}
             <div className="flex flex-col md:flex-row md:items-center gap-2 flex-wrap">
-              {/* search — ขยาย 10% จาก 210px → 231px */}
+              {/* search */}
               <div className="relative flex-1 min-w-0 max-w-[231px]">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <Input
@@ -846,8 +788,6 @@ export default function NewCustomerWatch() {
                   onChange={(e) => setSearch(e.target.value)}
                 />
               </div>
-
-              {/* filter dropdowns */}
               <div className="flex flex-wrap items-center gap-2">
                 {/* เดือน-ปีที่อนุมัติ */}
                 <MultiSelectFilter
@@ -858,7 +798,6 @@ export default function NewCustomerWatch() {
                   placeholder="ทุกเดือน-ปีที่อนุมัติ"
                   formatOption={fmtMonthLabel}
                 />
-
                 {/* ประเภท */}
                 <MultiSelectFilter
                   label="ประเภท"
@@ -867,18 +806,24 @@ export default function NewCustomerWatch() {
                   options={productTypeOptions}
                   placeholder="ทุกประเภท"
                 />
-
-                {/* รุ่นเครื่อง */}
+                {/* OS */}
                 <MultiSelectFilter
-                  label="รุ่นเครื่อง"
+                  label="OS"
+                  selected={osFilter}
+                  onChange={setOsFilter}
+                  options={["iOS", "Android"]}
+                  placeholder="ทุก OS"
+                />
+                {/* รุ่น */}
+                <MultiSelectFilter
+                  label="รุ่น"
                   selected={modelFilter}
                   onChange={setModelFilter}
                   options={modelOptions}
                   placeholder="ทุกรุ่น"
                   formatOption={(k) => modelCanonicalMap.get(k) ?? k}
                 />
-
-                {/* พาร์ทเนอร์ — Multi-Select with search */}
+                {/* พาร์ทเนอร์ */}
                 <MultiSelectFilter
                   label="พาร์ทเนอร์"
                   selected={partnerFilter}
@@ -887,28 +832,7 @@ export default function NewCustomerWatch() {
                   placeholder="ทุกพาร์ทเนอร์"
                   formatOption={(code) => partnerOptions.find((p) => p.code === code)?.label ?? code}
                 />
-
-                {/* ชำระ (0งวด/1งวด) — Multi-Select */}
-                <MultiSelectFilter
-                  label="ชำระ"
-                  selected={arrearsFilter}
-                  onChange={setArrearsFilter}
-                  options={["0", "1"]}
-                  placeholder="ชำระ: ทั้งหมด"
-                  formatOption={(v) => `${v} งวด`}
-                />
-
-                {/* ยอดชำระ — Multi-Select */}
-                <MultiSelectFilter
-                  label="ยอดชำระ"
-                  selected={paymentFilter}
-                  onChange={setPaymentFilter}
-                  options={["none", "partial"]}
-                  placeholder="ยอดชำระ: ทั้งหมด"
-                  formatOption={(v) => v === "none" ? "ไม่ชำระเลย" : "ชำระบางส่วน"}
-                />
-
-                {/* ออนไลน์ล่าสุด — Multi-Select (5 ตัวเลือก) */}
+                {/* ออนไลน์ล่าสุด */}
                 <MultiSelectFilter
                   label="ออนไลน์ล่าสุด"
                   selected={onlineFilter}
@@ -923,21 +847,6 @@ export default function NewCustomerWatch() {
                     return "> 15 วันที่แล้ว";
                   }}
                 />
-
-                {/* ช่วงผ่อนผัน N วัน — หลังสุด */}
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs text-gray-500 whitespace-nowrap">ช่วงผ่อนผัน</span>
-                  <Input
-                    type="number"
-                    min={0}
-                    max={365}
-                    value={gracePeriod}
-                    onChange={(e) => setGracePeriod(e.target.value)}
-                    className="h-9 text-xs w-16 text-center"
-                  />
-                  <span className="text-xs text-gray-500">วัน</span>
-                </div>
-
                 {/* ล้างตัวกรอง */}
                 {hasFilter && (
                   <button
@@ -948,10 +857,9 @@ export default function NewCustomerWatch() {
                     ล้างตัวกรอง
                   </button>
                 )}
-
-                {/* Info popover + Export Excel */}
+                {/* Info + Export */}
                 <div className="ml-auto flex items-center gap-2">
-                  <ArrearsInfoPopover />
+                  <InfoPopover />
                   {canExport && (
                     <button
                       type="button"
@@ -965,8 +873,7 @@ export default function NewCustomerWatch() {
                 </div>
               </div>
             </div>
-
-            {/* row 2: result count */}
+            {/* result count */}
             <div className="flex items-center gap-2 text-xs text-gray-500">
               <span>
                 แสดง{" "}
@@ -1047,14 +954,11 @@ export default function NewCustomerWatch() {
                       <th className="px-3 py-2 text-right text-xs font-semibold whitespace-nowrap min-w-[100px]">
                         ผ่อนงวดละ
                       </th>
-                      <th className="px-3 py-2 text-right text-xs font-semibold whitespace-nowrap min-w-[100px]">
-                        ยอดชำระ
+                      <th className="px-3 py-2 text-center text-xs font-semibold whitespace-nowrap min-w-[130px]">
+                        กำหนดชำระงวดที่ 1
                       </th>
-                      <Th col="daysOverdue" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="min-w-[110px] text-right">
-                        เกินกำหนด(วัน)
-                      </Th>
-                      <Th col="arrearsCount" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="min-w-[110px] text-center">
-                        ชำระ(งวด)
+                      <Th col="daysUntilDue1" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="min-w-[100px] text-center">
+                        วันที่เหลือ
                       </Th>
                       <th className="px-3 py-2 text-center text-xs font-semibold whitespace-nowrap min-w-[90px]">
                         Online
@@ -1064,13 +968,12 @@ export default function NewCustomerWatch() {
                   <tbody>
                     {paddingTop > 0 && (
                       <tr>
-                        <td colSpan={19} style={{ height: paddingTop }} />
+                        <td colSpan={18} style={{ height: paddingTop }} />
                       </tr>
                     )}
                     {virtualRows.map((vRow) => {
                       const r = filteredRows[vRow.index];
                       const isOdd = vRow.index % 2 === 0;
-                      const isHighRisk = r.arrearsCount >= 1;
                       return (
                         <tr
                           key={r.contractExternalId}
@@ -1110,77 +1013,73 @@ export default function NewCustomerWatch() {
                               </span>
                             ) : "-"}
                           </td>
-                          <td className="px-3 py-1.5 whitespace-nowrap">
+                          <td className="px-3 py-1.5 whitespace-nowrap max-w-[200px] truncate" title={r.model ?? undefined}>
                             {fmtModelDisplay(r.model)}
                           </td>
-                          <td className="px-3 py-1.5 whitespace-nowrap text-gray-600">
-                            {r.partnerCode ?? "-"}
+                          <td className="px-3 py-1.5 whitespace-nowrap">
+                            <div className="flex flex-col">
+                              <span className="font-medium text-gray-800">{r.partnerCode ?? "-"}</span>
+                              {r.partnerName && r.partnerName !== r.partnerCode && (
+                                <span className="text-[10px] text-gray-500 truncate max-w-[140px]">{r.partnerName}</span>
+                              )}
+                            </div>
                           </td>
-                          <td className="px-3 py-1.5 text-right whitespace-nowrap">
+                          <td className="px-3 py-1.5 text-right whitespace-nowrap text-gray-700">
                             {fmtMoney(r.sellPrice)}
                           </td>
-                          <td className="px-3 py-1.5 text-right whitespace-nowrap">
+                          <td className="px-3 py-1.5 text-right whitespace-nowrap font-medium text-gray-800">
                             {fmtMoney(r.financeAmount)}
                           </td>
-                          <td className="px-3 py-1.5 text-right whitespace-nowrap">
+                          <td className="px-3 py-1.5 text-right whitespace-nowrap text-gray-700">
                             {fmtMoney(r.commissionNet)}
                           </td>
-                          <td className="px-3 py-1.5 text-right whitespace-nowrap">
+                          <td className="px-3 py-1.5 text-right whitespace-nowrap text-gray-700">
                             {fmtMoney(r.incentive)}
                           </td>
-                          <td className="px-3 py-1.5 text-right whitespace-nowrap font-semibold">
+                          <td className="px-3 py-1.5 text-right whitespace-nowrap text-gray-700">
                             {fmtMoney(r.cost)}
                           </td>
-                          <td className="px-3 py-1.5 text-right whitespace-nowrap text-green-700">
+                          <td className="px-3 py-1.5 text-right whitespace-nowrap text-gray-700">
                             {fmtMoney(r.installmentTotal)}
                           </td>
-                          {/* ผ่อนงวดละ = ค่างวดต่องวด (installmentAmount) */}
                           <td className="px-3 py-1.5 text-right whitespace-nowrap font-medium text-gray-800">
                             {fmtMoney(r.installmentAmount)}
                           </td>
-                          {/* ยอดชำระ = ยอดชำระรวมทั้งหมดทุกงวด */}
-                          <td className="px-3 py-1.5 text-right whitespace-nowrap">
-                            <span className={cn(
-                              "font-medium",
-                              r.totalPaid > 0 ? "text-blue-700" : "text-red-600",
-                            )}>
-                              {fmtMoney(r.totalPaid)}
-                            </span>
+                          {/* กำหนดชำระงวดที่ 1 */}
+                          <td className="px-3 py-1.5 text-center whitespace-nowrap text-gray-700">
+                            {fmtDate(r.dueDate1)}
                           </td>
-                          <td className={cn(
-                            "px-3 py-1.5 text-right whitespace-nowrap font-semibold",
-                            r.daysOverdue > 30 ? "text-red-600" : "text-amber-600",
-                          )}>
-                            {fmtInt(r.daysOverdue)}
-                          </td>
+                          {/* วันที่เหลือก่อนถึงกำหนด: สีแดง ≤7 วัน, สีเหลือง ≤14 วัน, สีเขียว >14 วัน */}
                           <td className="px-3 py-1.5 text-center whitespace-nowrap">
                             <span className={cn(
                               "inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium",
-                              isHighRisk
+                              r.daysUntilDue1 <= 7
                                 ? "bg-red-100 text-red-700"
-                                : "bg-amber-100 text-amber-700",
+                                : r.daysUntilDue1 <= 14
+                                  ? "bg-amber-100 text-amber-700"
+                                  : "bg-green-100 text-green-700",
                             )}>
-                              {r.arrearsCount} งวด
+                              {r.daysUntilDue1} วัน
                             </span>
                           </td>
-                          {/* Online column: วันที่ออนไลน์ล่าสุดจาก MDM + ไอคอนกุญแจ */}
+                          {/* Online: วันที่ออนไลน์ล่าสุด + ไอคอนโล่ (MDM) + ไอคอนกุญแจ (ล็อกเครื่อง) */}
                           <td className="px-3 py-1.5 text-center whitespace-nowrap">
                             {(() => {
                               const days = r.lastOnlineDays;
-                              // ไอคอน Lost Mode (lossStatus): 1=ล็อกเครื่อง (สีแดง), 0=ไม่ล็อค (สีเขียว), null=ไม่แสดง
+                              // ไอคอนกุญแจ (lossStatus): 1=ล็อก (แดง), 0=ปลดล็อก (เขียว), null=ไม่แสดง
                               const lockIcon = r.lossStatus === 1 ? (
                                 <Lock className="inline-block w-3 h-3 text-red-500 ml-1 flex-shrink-0" title="Lost Mode: ล็อกเครื่อง" />
                               ) : r.lossStatus === 0 ? (
                                 <Lock className="inline-block w-3 h-3 text-green-500 ml-1 flex-shrink-0" title="Lost Mode: ไม่ล็อก" />
                               ) : null;
-                              // ไอคอน MDM Control (deviceLock): true=อยู่ภายใต้ MDM (สีเขียว), false=หลุดจาก MDM (สีเทา), null=ไม่แสดง
+                              // ไอคอนโล่ (deviceLock): true=MDM ควบคุม (เขียว), false=หลุด MDM (เทา), null=ไม่แสดง
                               const shieldIcon = r.deviceLock === true ? (
                                 <ShieldCheck className="inline-block w-3 h-3 text-green-500 ml-0.5 flex-shrink-0" title="MDM: อยู่ภายใต้การควบคุม" />
                               ) : r.deviceLock === false ? (
                                 <ShieldOff className="inline-block w-3 h-3 text-gray-400 ml-0.5 flex-shrink-0" title="MDM: หลุดจากการควบคุม" />
                               ) : null;
-                              // ปุ่ม GPS MapPin: สีเขียว=มี location log (กดได้), สีเทา=ไม่มี log (กดไม่ได้)
-                              const hasLocationLog = !!(r as any).locationLogCount && (r as any).locationLogCount > 0;
+                              // ปุ่ม GPS MapPin
+                              const hasLocationLog = r.locationLogCount > 0;
                               const mapPinBtn = r.serialNo ? (
                                 hasLocationLog ? (
                                   <button
@@ -1216,7 +1115,6 @@ export default function NewCustomerWatch() {
                                   {mapPinBtn}
                                 </span>
                               );
-                              // tooltip: แสดงวันที่และเวลาออนไลน์ล่าสุดเมื่อ hover
                               const tooltipText = r.lastOnlineAt
                                 ? `ออนไลน์ล่าสุด: ${r.lastOnlineAt}`
                                 : undefined;
@@ -1259,7 +1157,7 @@ export default function NewCustomerWatch() {
                     })}
                     {paddingBottom > 0 && (
                       <tr>
-                        <td colSpan={19} style={{ height: paddingBottom }} />
+                        <td colSpan={18} style={{ height: paddingBottom }} />
                       </tr>
                     )}
                   </tbody>

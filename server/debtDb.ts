@@ -4775,3 +4775,242 @@ export async function listWatchGroup(params: {
 
   return { rows };
 }
+
+/**
+ * listNewCustomerWatch — สังเกตการณ์ลูกค้าใหม่
+ *
+ * ดึงสัญญาที่ยังไม่ถึงกำหนดชำระงวดที่ 1 ทั้งหมด
+ * เงื่อนไข: due_date ของงวดที่ 1 > TODAY (ยังไม่ถึงกำหนด)
+ * ตัดออก: ระงับสัญญา / หนี้เสีย / ยกเลิกสัญญา / สิ้นสุดสัญญา
+ */
+export async function listNewCustomerWatch(params: {
+  section: SectionKey;
+  productTypes?: string[] | null;
+  partnerSearch?: string | null;
+}): Promise<{
+  rows: Array<{
+    contractExternalId: string;
+    contractNo: string | null;
+    approveDate: string | null;
+    customerName: string | null;
+    phone: string | null;
+    serialNo: string | null;
+    lastOnlineDays: number | null;
+    lastOnlineAt: string | null;
+    deviceLock: boolean | null;
+    lossStatus: number | null;
+    mdmDeviceId: number | null;
+    locationLogCount: number;
+    model: string | null;
+    device: string | null;
+    productType: string | null;
+    partnerCode: string | null;
+    partnerName: string | null;
+    sellPrice: number | null;
+    financeAmount: number | null;
+    multiplier: number | null;
+    commissionNet: number | null;
+    incentive: number;
+    installmentCount: number | null;
+    installmentAmount: number | null;
+    installmentTotal: number;
+    cost: number;
+    dueDate1: string | null;
+    daysUntilDue1: number;
+  }>;
+}> {
+  const db = getDb(params.section);
+  const section = params.section;
+  const { productTypes, partnerSearch } = params;
+
+  const today = new Date();
+  const todayStr = today.toISOString().slice(0, 10); // YYYY-MM-DD
+
+  // --- Step 1: ดึงสัญญาที่ยังไม่ถึงกำหนดชำระงวดที่ 1 ---
+  const rawContracts = await db.execute(sql.raw(`
+    SELECT
+      dtc.contract_external_id,
+      dtc.contract_no,
+      dtc.customer_name,
+      dtc.approve_date,
+      dtc.model,
+      dtc.device,
+      dtc.finance_amount,
+      dtc.installment_count,
+      MAX(dtc.serial_no) AS serial_no,
+      MIN(CASE WHEN dtc.period = 1 THEN dtc.due_date END) AS due_date_1
+    FROM debt_target_cache dtc
+    WHERE dtc.section = '${section}'
+      AND COALESCE(dtc.contract_status, '') NOT IN ('หนี้เสีย', 'ระงับสัญญา', 'ยกเลิกสัญญา', 'สิ้นสุดสัญญา')
+    GROUP BY
+      dtc.contract_external_id,
+      dtc.contract_no,
+      dtc.customer_name,
+      dtc.approve_date,
+      dtc.model,
+      dtc.device,
+      dtc.finance_amount,
+      dtc.installment_count
+    HAVING
+      MIN(CASE WHEN dtc.period = 1 THEN dtc.due_date END) IS NOT NULL
+      AND MIN(CASE WHEN dtc.period = 1 THEN dtc.due_date END) > '${todayStr}'
+  `));
+  const contractRows: Array<any> = pgRows(rawContracts);
+  console.log(`[NewCustomerWatch] ${section} Step1: contractRows=${contractRows.length}, today=${todayStr}`);
+
+  if (contractRows.length === 0) return { rows: [] };
+
+  const contractIds = contractRows.map((r: any) => r.contract_external_id as string);
+  const contractNos = contractRows.map((r: any) => r.contract_no as string).filter(Boolean);
+
+  // --- Step 2: JOIN contracts สำหรับ phone, sell_price, commission_net, partner, product_type, installment_amount ---
+  const contractInfoRaw = await db.execute(
+    sql.raw(`
+      SELECT
+        external_id,
+        phone,
+        serial_no,
+        last_online_days,
+        last_online_at,
+        device_lock,
+        loss_status,
+        mdm_device_id,
+        CAST(sell_price AS DECIMAL(18,2))        AS sell_price,
+        CAST(multiplier AS DECIMAL(18,4))         AS multiplier,
+        CAST(commission_net AS DECIMAL(18,2))     AS commission_net,
+        CAST(installment_amount AS DECIMAL(18,2)) AS installment_amount,
+        partner_code,
+        partner_name,
+        product_type,
+        (SELECT COUNT(*) FROM device_location_logs dll
+         WHERE dll.section = '${section}'
+           AND dll.serial_no = contracts.serial_no) AS location_log_count
+      FROM contracts
+      WHERE section = '${section}'
+        AND external_id IN (${contractIds.map((id: string) => `'${id.replace(/'/g, "''")}' `).join(",")})
+    `)
+  );
+  const contractInfoMap = new Map<string, any>();
+  for (const r of (pgRows(contractInfoRaw) as any[])) {
+    contractInfoMap.set(r.external_id, r);
+  }
+
+  // --- Step 3: incentive จาก commissions table ---
+  const incentiveMap = new Map<string, number>();
+  if (contractNos.length > 0) {
+    const incentiveRaw = await db.execute(
+      sql.raw(`
+        SELECT contract_no, SUM(COALESCE(incentive, 0)) AS inc
+        FROM commissions
+        WHERE section = '${section}'
+          AND contract_no IN (${contractNos.map((n: string) => `'${n.replace(/'/g, "''")}'`).join(",")})
+        GROUP BY contract_no
+      `)
+    );
+    for (const r of (pgRows(incentiveRaw) as any[])) {
+      if (r.contract_no) incentiveMap.set(r.contract_no, Number(r.inc ?? 0));
+    }
+  }
+
+  // --- Step 4: Assemble rows ---
+  const rows: Array<{
+    contractExternalId: string;
+    contractNo: string | null;
+    approveDate: string | null;
+    customerName: string | null;
+    phone: string | null;
+    serialNo: string | null;
+    lastOnlineDays: number | null;
+    lastOnlineAt: string | null;
+    deviceLock: boolean | null;
+    lossStatus: number | null;
+    mdmDeviceId: number | null;
+    locationLogCount: number;
+    model: string | null;
+    device: string | null;
+    productType: string | null;
+    partnerCode: string | null;
+    partnerName: string | null;
+    sellPrice: number | null;
+    financeAmount: number | null;
+    multiplier: number | null;
+    commissionNet: number | null;
+    incentive: number;
+    installmentCount: number | null;
+    installmentAmount: number | null;
+    installmentTotal: number;
+    cost: number;
+    dueDate1: string | null;
+    daysUntilDue1: number;
+  }> = [];
+
+  for (const s of contractRows) {
+    const extId = s.contract_external_id as string;
+    const cInfo = contractInfoMap.get(extId);
+
+    // กรอง productType
+    const productType = cInfo?.product_type ?? null;
+    if (productTypes && productTypes.length > 0) {
+      if (!productType || !productTypes.includes(productType)) continue;
+    }
+
+    // กรอง partnerSearch
+    const partnerCode = cInfo?.partner_code ?? null;
+    const partnerName = cInfo?.partner_name ?? null;
+    if (partnerSearch && partnerSearch.trim()) {
+      const q = partnerSearch.trim().toLowerCase();
+      const matchCode = partnerCode?.toLowerCase().includes(q) ?? false;
+      const matchName = partnerName?.toLowerCase().includes(q) ?? false;
+      if (!matchCode && !matchName) continue;
+    }
+
+    const financeAmount = s.finance_amount != null ? Number(s.finance_amount) : null;
+    const installmentAmount = cInfo?.installment_amount != null ? Number(cInfo.installment_amount) : null;
+    const installmentCount = s.installment_count != null ? Number(s.installment_count) : null;
+    const totalInstallmentValue = (installmentAmount ?? 0) * (installmentCount ?? 0);
+    const incentive = incentiveMap.get(s.contract_no ?? "") ?? 0;
+
+    // คำนวณ daysUntilDue1 = จำนวนวันที่เหลือก่อนถึงกำหนดงวดที่ 1
+    const dueDate1Str = s.due_date_1 as string | null;
+    let daysUntilDue1 = 0;
+    if (dueDate1Str) {
+      const dueDate1 = new Date(dueDate1Str);
+      daysUntilDue1 = Math.max(0, Math.floor((dueDate1.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)));
+    }
+
+    rows.push({
+      contractExternalId: extId,
+      contractNo: s.contract_no ?? null,
+      approveDate: s.approve_date ?? null,
+      customerName: s.customer_name ?? null,
+      phone: cInfo?.phone ?? null,
+      serialNo: s.serial_no ?? cInfo?.serial_no ?? null,
+      lastOnlineDays: cInfo?.last_online_days != null ? Number(cInfo.last_online_days) : null,
+      lastOnlineAt: cInfo?.last_online_at ?? null,
+      deviceLock: cInfo?.device_lock != null ? Boolean(cInfo.device_lock) : null,
+      lossStatus: cInfo?.loss_status != null ? Number(cInfo.loss_status) : null,
+      mdmDeviceId: cInfo?.mdm_device_id != null ? Number(cInfo.mdm_device_id) : null,
+      locationLogCount: cInfo?.location_log_count != null ? Number(cInfo.location_log_count) : 0,
+      model: s.model ?? null,
+      device: s.device ?? null,
+      productType,
+      partnerCode,
+      partnerName,
+      sellPrice: cInfo?.sell_price != null ? Number(cInfo.sell_price) : null,
+      financeAmount,
+      multiplier: cInfo?.multiplier != null ? Number(cInfo.multiplier) : null,
+      commissionNet: cInfo?.commission_net != null ? Number(cInfo.commission_net) : null,
+      incentive,
+      installmentCount,
+      installmentAmount,
+      installmentTotal: totalInstallmentValue,
+      cost: (financeAmount ?? 0) + (cInfo?.commission_net != null ? Number(cInfo.commission_net) : 0) + incentive,
+      dueDate1: dueDate1Str,
+      daysUntilDue1,
+    });
+  }
+
+  // เรียงตาม daysUntilDue1 น้อยสุดก่อน (ใกล้ถึงกำหนดก่อน)
+  rows.sort((a, b) => a.daysUntilDue1 - b.daysUntilDue1);
+  return { rows };
+}
