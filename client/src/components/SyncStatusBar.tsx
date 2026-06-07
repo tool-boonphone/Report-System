@@ -468,6 +468,9 @@ export function SyncStatusBar({
             utils.sync.lastSyncedAt.invalidate();
             utils.sync.lastRunSummary.invalidate();
             if (section) incomeCache.invalidateIncomeCache(section as SectionKey);
+            // Fix: clear debt cache เพื่อให้ยอดเก็บหนี้ (collected) อัปเดตทุกครั้งที่ sync
+            // (เป้าเก็บหนี้ยังคง freeze ตามปกติ เฉพาะ collected rows ที่ต้อง re-fetch)
+            if (section) debtCache.clearCache(section as SectionKey);
             es.close();
             sseRef.current = null;
           } else if (msg.type === "error") {
