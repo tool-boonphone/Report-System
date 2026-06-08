@@ -313,6 +313,192 @@ export async function handleContractsExport(req: Request, res: Response) {
 }
 
 /* ----------------------------------------------------------------------- */
+/*  Contracts "สำหรับติดตามเครื่อง" export                                  */
+/* ----------------------------------------------------------------------- */
+
+/**
+ * Columns for tracking export (BP_PJConnectionReport.xlsx order)
+ * + 6 extra blank columns for manual fill
+ */
+const TRACKING_COLUMNS: Array<{
+  key: string;
+  header: string;
+  width: number;
+  type: "text" | "money" | "number" | "date";
+}> = [
+  { key: "seq",              header: "ลำดับ",                         width: 6,  type: "number" },
+  { key: "contractNo",       header: "เลขที่สัญญา",                   width: 22, type: "text"   },
+  { key: "approveDate",      header: "วันอนุมัติสัญญา",               width: 14, type: "date"   },
+  { key: "partnerCode",      header: "รหัสพาร์ทเนอร์",                width: 20, type: "text"   },
+  { key: "partnerName",      header: "ชื่อพาร์ทเนอร์",                width: 28, type: "text"   },
+  { key: "partnerProvince",  header: "จังหวัดพาร์ทเนอร์",             width: 14, type: "text"   },
+  { key: "customerName",     header: "ชื่อลูกค้า",                    width: 24, type: "text"   },
+  { key: "workplace",        header: "บริษัท/สถานที่ทำงาน",           width: 24, type: "text"   },
+  { key: "phone",            header: "โทรศัพท์",                      width: 14, type: "text"   },
+  { key: "idDistrict",       header: "อำเภอ (ตามบัตร ปชช.)",         width: 16, type: "text"   },
+  { key: "idProvince",       header: "จังหวัด (ตามบัตร ปชช.)",       width: 14, type: "text"   },
+  { key: "addrDistrict",     header: "อำเภอ (ที่อยู่ปัจจุบัน)",      width: 16, type: "text"   },
+  { key: "addrProvince",     header: "จังหวัด (ที่อยู่ปัจจุบัน)",    width: 14, type: "text"   },
+  { key: "workDistrict",     header: "อำเภอ (ที่ทำงาน)",             width: 16, type: "text"   },
+  { key: "workProvince",     header: "จังหัด (ที่ทำงาน)",           width: 14, type: "text"   },
+  { key: "productType",      header: "ประเภทสินค้า",                  width: 14, type: "text"   },
+  { key: "model",            header: "รุ่น",                          width: 20, type: "text"   },
+  { key: "imei",             header: "Imei",                          width: 18, type: "text"   },
+  { key: "serialNo",         header: "Serial No",                     width: 18, type: "text"   },
+  { key: "sellPrice",        header: "ราคาขาย",                       width: 12, type: "money"  },
+  { key: "downPayment",      header: "ยอดดาวน์",                      width: 12, type: "money"  },
+  { key: "financeAmount",    header: "ยอดจัดไฟแนนซ์",                width: 14, type: "money"  },
+  { key: "installmentCount", header: "จำนวนงวดผ่อน",                 width: 12, type: "number" },
+  { key: "installmentAmount",header: "ผ่อนงวดละ",                     width: 12, type: "money"  },
+  { key: "paidInstallments", header: "งวดที่ชำระแล้ว",                width: 12, type: "number" },
+  { key: "debtStatus",       header: "สถานะ หนี้",                    width: 14, type: "text"   },
+  { key: "overdueDays",      header: "เกินกำหนด",                     width: 12, type: "number" },
+  { key: "lastOnlineDays",   header: "ออนไลน์ล่าสุด (วัน)",           width: 16, type: "number" },
+  { key: "mdmEnabled",       header: "MDM",                           width: 8,  type: "text"   },
+  { key: "deviceLock",       header: "ล็อกเครื่อง",                    width: 10, type: "text"   },
+  { key: "itAlert",          header: "แจ้งเตือน IT",                   width: 12, type: "text"   },
+  // extra columns — blank for manual fill
+  { key: "itInspector",      header: "IT-ผู้ตรวจสอบ",                width: 18, type: "text"   },
+  { key: "itResult",         header: "IT-ผลตรวจสอบ",                 width: 18, type: "text"   },
+  { key: "collectorName",    header: "ทวงถาม-ชื่อ",                   width: 18, type: "text"   },
+  { key: "collectorResult",  header: "ทวงถาม-ผลสรุป",                width: 18, type: "text"   },
+  { key: "trackerName",      header: "ติดตามเครื่อง-ชื่อ",            width: 18, type: "text"   },
+  { key: "trackerResult",    header: "ติดตามเครื่อง-ผล",              width: 18, type: "text"   },
+];
+
+const EXTRA_TRACKING_KEYS = new Set([
+  "itInspector", "itResult", "collectorName", "collectorResult", "trackerName", "trackerResult",
+]);
+
+export async function handleContractsTrackingExport(req: Request, res: Response) {
+  try {
+    const sid = parseCookies(req.headers.cookie)[APP_SESSION_COOKIE];
+    const appUser = sid ? await getUserFromSession(sid) : null;
+    if (!appUser) { res.status(401).json({ message: "Please login (10001)" }); return; }
+    if (!checkPermission(appUser, "contract", "export")) {
+      res.status(403).json({ message: "ไม่มีสิทธิ์ Export ข้อมูลสัญญา" }); return;
+    }
+    const sectionRaw = String(req.query.section ?? "");
+    let section: SectionKey;
+    try { section = normalizeSectionKey(sectionRaw); }
+    catch { res.status(400).json({ message: "ต้องระบุ section" }); return; }
+
+    const filters: ContractFilters = {
+      search:      req.query.search      ? String(req.query.search)      : undefined,
+      status:      req.query.status      ? String(req.query.status)      : undefined,
+      debtStatus:  req.query.debtStatus  ? String(req.query.debtStatus)  : undefined,
+      debtType:    req.query.debtType    ? String(req.query.debtType)    : undefined,
+      partnerCode: req.query.partnerCode ? String(req.query.partnerCode) : undefined,
+      dateField:
+        req.query.dateField === "submitDate"  ? "submitDate"  :
+        req.query.dateField === "approveDate" ? "approveDate" : undefined,
+      dateFrom: req.query.dateFrom ? String(req.query.dateFrom) : undefined,
+      dateTo:   req.query.dateTo   ? String(req.query.dateTo)   : undefined,
+    };
+    const sort: ContractSort = {
+      field: (req.query.sortField as any) ?? undefined,
+      dir:   (req.query.sortDir   as any) ?? undefined,
+    };
+
+    const fileName = `contracts_tracking_${section}_${new Date()
+      .toISOString().slice(0, 19).replace(/[:T]/g, "-")}.xlsx`;
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+    res.flushHeaders();
+
+    const wb = new ExcelJS.stream.xlsx.WorkbookWriter({ stream: res });
+    const ws = wb.addWorksheet("ติดตามเครื่อง");
+    ws.columns = TRACKING_COLUMNS.map((c) => ({ key: c.key, width: c.width }));
+
+    // ── Row 1: header row (single row, purple background) ─────────────────────
+    const row1 = ws.getRow(1);
+    TRACKING_COLUMNS.forEach((col, i) => {
+      const cell = row1.getCell(i + 1);
+      cell.value = col.header;
+      cell.fill  = { type: "pattern", pattern: "solid", fgColor: { argb: "FF7C3AED" } };
+      cell.font  = { bold: true, color: { argb: "FFFFFFFF" }, size: 10 };
+      cell.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
+      cell.border = { bottom: { style: "thin", color: { argb: "FFD1D5DB" } } };
+    });
+    row1.height = 30;
+    row1.commit();
+
+    // ── Data rows ────────────────────────────────────────────────────────────
+    const TERMINAL_STATUSES_TRK = new Set(["ระงับสัญญา", "สิ้นสุดสัญญา", "หนี้เสีย", "ยกเลิกสัญญา"]);
+    const bucketTrk = (r: any): string => {
+      const dt: string = r.debtType ?? r.debtStatus ?? "";
+      if (TERMINAL_STATUSES_TRK.has(dt)) return dt;
+      const n = Number(r.overdueDays ?? 0);
+      if (n <= 0)  return "ปกติ";
+      if (n <= 7)  return "เกิน 1-7";
+      if (n <= 14) return "เกิน 8-14";
+      if (n <= 30) return "เกิน 15-30";
+      if (n <= 60) return "เกิน 31-60";
+      if (n <= 90) return "เกิน 61-90";
+      return "เกิน >90";
+    };
+    const debtStatusFilter = filters.debtStatus
+      ? new Set(filters.debtStatus.split(",").map((s) => s.trim()).filter(Boolean))
+      : null;
+    const filtersForDb: ContractFilters = { ...filters, debtStatus: undefined, debtType: undefined };
+
+    let seq = 0;
+    for await (const batch of iterateContracts({ section, filters: filtersForDb, sort })) {
+      for (const row of batch) {
+        if (debtStatusFilter && debtStatusFilter.size > 0) {
+          if (!debtStatusFilter.has(bucketTrk(row))) continue;
+        }
+        seq += 1;
+        const exRow = ws.addRow({});
+        TRACKING_COLUMNS.forEach((col, i) => {
+          const cell = exRow.getCell(i + 1);
+          const key = col.key;
+          if (key === "seq") {
+            cell.value = seq; cell.numFmt = INT_FORMAT; cell.alignment = { horizontal: "center" };
+          } else if (key === "debtStatus") {
+            cell.value = bucketTrk(row);
+          } else if (key === "overdueDays") {
+            const days = (row as any)["overdueDays"];
+            if (days == null || days === 0) { cell.value = days === 0 ? 0 : ""; if (days === 0) cell.numFmt = INT_FORMAT; }
+            else { setIntCell(cell, Number(days)); if (Number(days) > 4) cell.font = { color: { argb: "FFDC2626" } }; }
+          } else if (key === "lastOnlineDays") {
+            const sn = (row as any)["serialNo"]; const days = (row as any)["lastOnlineDays"];
+            if (!sn || days == null) cell.value = "-"; else setIntCell(cell, days);
+          } else if (key === "mdmEnabled") {
+            const dl = (row as any)["deviceLock"];
+            if (dl !== null && dl !== undefined) { cell.value = "Y"; cell.font = { bold: true, color: { argb: "FF16A34A" } }; }
+            else { cell.value = "N"; cell.font = { bold: true, color: { argb: "FF6B7280" } }; }
+          } else if (key === "deviceLock") {
+            const dl = (row as any)["deviceLock"];
+            if (dl === true)        { cell.value = "Y"; cell.font = { bold: true, color: { argb: "FFDC2626" } }; }
+            else if (dl === false)  { cell.value = "N"; cell.font = { bold: true, color: { argb: "FF16A34A" } }; }
+            else                    { cell.value = "-"; }
+          } else if (key === "itAlert") {
+            const sn = (row as any)["serialNo"]; const onlineDays = (row as any)["lastOnlineDays"];
+            const dl = (row as any)["deviceLock"];
+            const isAlert = (dl === null || dl === undefined) || (sn && onlineDays != null && Number(onlineDays) > 4);
+            if (isAlert) { cell.value = "Y"; cell.font = { bold: true, color: { argb: "FFDC2626" } }; }
+            else         { cell.value = "N"; cell.font = { color: { argb: "FF16A34A" } }; }
+          } else if (EXTRA_TRACKING_KEYS.has(key)) {
+            cell.value = ""; // blank for manual fill
+          } else if (col.type === "money")  { setMoneyCell(cell, (row as any)[key]); }
+          else if (col.type === "number") { setIntCell(cell, (row as any)[key]); }
+          else if (col.type === "date")   { setDateCell(cell, (row as any)[key]); }
+          else { const v = (row as any)[key]; cell.value = v != null ? String(v) : ""; }
+        });
+        exRow.commit();
+      }
+    }
+    ws.commit();
+    await wb.commit();
+  } catch (err) {
+    console.error("[export] contracts-tracking failed:", err);
+    if (!res.headersSent) res.status(500).json({ message: "Export failed" });
+    else res.end();
+  }
+}
+
+/* ----------------------------------------------------------------------- */
 /*  Debt report export                                                      */
 /* ----------------------------------------------------------------------- */
 

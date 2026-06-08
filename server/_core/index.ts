@@ -10,7 +10,7 @@ import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
 import { seedSuperAdmin } from "../authDb";
 import { runStartupMigrations } from "../db";
-import { handleContractsExport, handleDebtTargetExport, handleDebtCollectedExport, handleBadDebtExport, handleMonthlySummaryExport, handleYearlySummaryExport, handleBadDebtSummaryExport, handleIncomeExport, handleExpenseExport, handleMonthlyTargetDetailExport, handleMonthlyCollectedDetailExport, handleTargetSnapshotDetailExport } from "../routers/exportExcel";
+import { handleContractsExport, handleContractsTrackingExport, handleDebtTargetExport, handleDebtCollectedExport, handleBadDebtExport, handleMonthlySummaryExport, handleYearlySummaryExport, handleBadDebtSummaryExport, handleIncomeExport, handleExpenseExport, handleMonthlyTargetDetailExport, handleMonthlyCollectedDetailExport, handleTargetSnapshotDetailExport } from "../routers/exportExcel";
 
 import { handleSyncStream } from "../routers/syncStream";
 import { startScheduler } from "../sync/scheduler";
@@ -49,6 +49,7 @@ async function startServer() {
   registerOAuthRoutes(app);
   // Excel export (streams large files so it's outside of tRPC)
   app.get("/api/export/contracts", handleContractsExport);
+  app.get("/api/export/contracts-tracking", handleContractsTrackingExport);
 
   app.get("/api/export/debt-target", handleDebtTargetExport);
   app.get("/api/export/debt-collected", handleDebtCollectedExport);

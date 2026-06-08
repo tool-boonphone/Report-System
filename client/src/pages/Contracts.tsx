@@ -543,9 +543,9 @@ export default function Contracts() {
     return n;
   }, [filters]);
 
-  // ----- Export -----
-  const handleExport = async () => {
-    if (!section) return;
+  // ----- Export helpers -----
+  const buildExportParams = () => {
+    if (!section) return null;
     const params = new URLSearchParams({ section });
     if (filters.search) params.set("search", filters.search);
     for (const key of CAT_KEYS) {
@@ -557,36 +557,34 @@ export default function Contracts() {
     if (filters.dateTo) params.set("dateTo", filters.dateTo);
     params.set("sortField", sortField);
     params.set("sortDir", sortDir);
+    return params;
+  };
 
-    const toastId = toast.loading("กำลังเตรียมไฟล์ Excel…");
+  const doExport = async (endpoint: string, filePrefix: string, label: string) => {
+    const params = buildExportParams();
+    if (!params) return;
+    const toastId = toast.loading(`กำลังเตรียมไฟล์ Excel (${label})…`);
     try {
-      const resp = await fetch(`/api/export/contracts?${params.toString()}`, {
-        credentials: "include",
-      });
+      const resp = await fetch(`${endpoint}?${params.toString()}`, { credentials: "include" });
       if (!resp.ok) {
-        const { message } = await resp
-          .json()
-          .catch(() => ({ message: "Export failed" }));
-        toast.error(message, { id: toastId });
-        return;
+        const { message } = await resp.json().catch(() => ({ message: "Export failed" }));
+        toast.error(message, { id: toastId }); return;
       }
       const blob = await resp.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `contracts_${section}_${new Date()
-        .toISOString()
-        .slice(0, 19)
-        .replace(/[:T]/g, "-")}.xlsx`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
+      a.download = `${filePrefix}_${section}_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.xlsx`;
+      document.body.appendChild(a); a.click(); a.remove();
       URL.revokeObjectURL(url);
       toast.success("ดาวน์โหลดสำเร็จ", { id: toastId });
     } catch (err) {
       toast.error((err as Error).message ?? "Export failed", { id: toastId });
     }
   };
+
+  const handleExport = () => doExport("/api/export/contracts", "contracts", "ทั้งหมด");
+  const handleExportTracking = () => doExport("/api/export/contracts-tracking", "contracts_tracking", "สำหรับติดตามเครื่อง");
 
   // ----- Register TopNav actions -----
   const exportRef = useRef(handleExport);
@@ -680,13 +678,31 @@ export default function Contracts() {
 
           <div className="flex items-center gap-2">
             {canExport && (
-              <Button
-                className="bg-green-600 hover:bg-green-700 text-white"
-                onClick={() => exportRef.current()}
-              >
-                <Download className="w-4 h-4 mr-1.5" />
-                Export Excel
-              </Button>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button className="bg-green-600 hover:bg-green-700 text-white">
+                    <Download className="w-4 h-4 mr-1.5" />
+                    Export Excel
+                    <ChevronDown className="w-3.5 h-3.5 ml-1" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-52 p-1" align="end">
+                  <button
+                    type="button"
+                    className="w-full text-left px-3 py-2 text-sm rounded hover:bg-gray-100 transition-colors"
+                    onClick={() => handleExport()}
+                  >
+                    ทั้งหมด
+                  </button>
+                  <button
+                    type="button"
+                    className="w-full text-left px-3 py-2 text-sm rounded hover:bg-gray-100 transition-colors"
+                    onClick={() => handleExportTracking()}
+                  >
+                    สำหรับติดตามเครื่อง
+                  </button>
+                </PopoverContent>
+              </Popover>
             )}
           </div>
         </div>
