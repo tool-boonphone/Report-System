@@ -13,6 +13,8 @@ import { getDb } from "./db";
 export type ContractFilters = {
   search?: string; // free-text across contract_no / customer / partner / phone / imei
   status?: string;
+  debtStatus?: string; // กรองตาม debtType field (alias เป็น debtStatus ใน UI)
+  /** @deprecated ใช้ debtStatus แทน — ยังคงรองรับเพื่อ backward compatibility */
   debtType?: string;
   partnerCode?: string;
   dateField?: "submitDate" | "approveDate";
@@ -31,6 +33,39 @@ export type ContractSort = {
     | "partnerCode";
   dir?: "asc" | "desc";
 };
+
+/**
+ * คำนวณ overdueDays (วันเกินกำหนดนับจากงวดแรกที่ค้าง) จาก approveDate + paymentDay + paidInstallments
+ *
+ * Logic:
+ * - firstDueDate = วันที่ paymentDay ของเดือนถัดจาก approveDate
+ * - ถ้า paidInstallments > 0 → เลื่อน firstDueDate ไปข้างหน้า paidInstallments เดือน
+ * - overdueDays = วันปัจจุบัน - firstDueDate (ถ้า > 0 แสดงว่าเกินกำหนด)
+ * - ถ้า debtType เป็น terminal status → overdueDays = 0
+ *
+ * หมายเหตุ: ใช้ SQL expression เพื่อคำนวณใน DB โดยตรง
+ */
+const OVERDUE_DAYS_SQL = sql<number | null>`
+  CASE
+    -- Terminal statuses: ไม่มีวันเกินกำหนด
+    WHEN contracts.debt_type IN ('ระงับสัญญา', 'สิ้นสุดสัญญา', 'หนี้เสีย', 'ยกเลิกสัญญา') THEN NULL
+    -- ต้องมี approve_date และ payment_day
+    WHEN contracts.approve_date IS NULL OR contracts.payment_day IS NULL THEN NULL
+    ELSE
+      GREATEST(0,
+        CURRENT_DATE - (
+          -- หา due_date ของงวดแรกที่ยังค้าง
+          -- firstDueDate = วันที่ paymentDay ของเดือนถัดจาก approveDate
+          -- แล้วเลื่อนไปข้างหน้า paidInstallments เดือน
+          (
+            DATE_TRUNC('month', TO_DATE(contracts.approve_date, 'YYYY-MM-DD')) +
+            INTERVAL '1 month' * (COALESCE(contracts.paid_installments, 0) + 1) +
+            (contracts.payment_day - 1) * INTERVAL '1 day'
+          )::date
+        )
+      )
+  END
+`;
 
 function buildWhere(section: SectionKey, f: ContractFilters) {
   const clauses = [eq(contracts.section, section)];
@@ -51,7 +86,9 @@ function buildWhere(section: SectionKey, f: ContractFilters) {
     );
   }
   if (f.status) clauses.push(eq(contracts.status, f.status));
-  if (f.debtType) clauses.push(eq(contracts.debtType, f.debtType));
+  // debtStatus (ใหม่) หรือ debtType (เก่า) กรองจาก field เดียวกัน (debt_type)
+  const debtFilter = f.debtStatus ?? f.debtType;
+  if (debtFilter) clauses.push(eq(contracts.debtType, debtFilter));
   if (f.partnerCode) clauses.push(eq(contracts.partnerCode, f.partnerCode));
 
   if (f.dateField && (f.dateFrom || f.dateTo)) {
@@ -92,7 +129,7 @@ function resolveOrder(sort: ContractSort | undefined) {
  */
 export async function listAllContracts(params: {
   section: SectionKey;
-}): Promise<Array<Omit<Contract, "rawJson">>> {
+}): Promise<Array<Omit<Contract, "rawJson"> & { debtStatus: string | null; overdueDays: number | null }>> {
   const { section } = params;
   const db = await getDb(section);
   if (!db) return [];
@@ -111,6 +148,10 @@ export async function listAllContracts(params: {
       channel: contracts.channel,
       status: contracts.status,
       debtType: contracts.debtType,
+      // debtStatus: alias ของ debtType สำหรับ UI ใหม่
+      debtStatus: contracts.debtType,
+      // overdueDays: คำนวณจาก approveDate + paymentDay + paidInstallments
+      overdueDays: OVERDUE_DAYS_SQL,
       promotionName: contracts.promotionName,
       device: contracts.device,
       productType: contracts.productType,
@@ -158,7 +199,7 @@ export async function listAllContracts(params: {
     .from(contracts)
     .where(eq(contracts.section, params.section))
     .orderBy(desc(contracts.approveDate));
-  return rows as Array<Omit<Contract, "rawJson">>;
+  return rows as any;
 }
 
 /**
@@ -171,7 +212,7 @@ export async function listContractChunk(params: {
   section: SectionKey;
   offset: number;
   limit: number;
-}): Promise<{ rows: Array<Omit<Contract, "rawJson">>; total: number; hasMore: boolean }> {
+}): Promise<{ rows: Array<Omit<Contract, "rawJson"> & { debtStatus: string | null; overdueDays: number | null }>; total: number; hasMore: boolean }> {
   const { section } = params;
   const db = await getDb(section);
   if (!db) return { rows: [], total: 0, hasMore: false };
@@ -198,6 +239,10 @@ export async function listContractChunk(params: {
       channel: contracts.channel,
       status: contracts.status,
       debtType: contracts.debtType,
+      // debtStatus: alias ของ debtType สำหรับ UI ใหม่
+      debtStatus: contracts.debtType,
+      // overdueDays: คำนวณจาก approveDate + paymentDay + paidInstallments
+      overdueDays: OVERDUE_DAYS_SQL,
       promotionName: contracts.promotionName,
       device: contracts.device,
       productType: contracts.productType,
@@ -248,7 +293,7 @@ export async function listContractChunk(params: {
     .limit(params.limit)
     .offset(params.offset);
   return {
-    rows: rows as Array<Omit<Contract, "rawJson">>,
+    rows: rows as any,
     total,
     hasMore: params.offset + rows.length < total,
   };
@@ -291,13 +336,14 @@ export async function listContracts(params: {
 /**
  * Stream contracts in batches — used by the Excel exporter to avoid loading
  * hundreds of thousands of rows into memory at once.
+ * ส่งคืน debtStatus (alias ของ debtType) และ overdueDays (computed) ด้วย
  */
 export async function* iterateContracts(params: {
   section: SectionKey;
   filters?: ContractFilters;
   sort?: ContractSort;
   batchSize?: number;
-}): AsyncGenerator<Contract[]> {
+}): AsyncGenerator<Array<Contract & { debtStatus: string | null; overdueDays: number | null }>> {
   const { section } = params;
   const db = await getDb(section);
   if (!db) return;
@@ -309,14 +355,73 @@ export async function* iterateContracts(params: {
   let offset = 0;
   while (true) {
     const batch = await db
-      .select()
+      .select({
+        id: contracts.id,
+        section: contracts.section,
+        externalId: contracts.externalId,
+        contractNo: contracts.contractNo,
+        submitDate: contracts.submitDate,
+        approveDate: contracts.approveDate,
+        partnerCode: contracts.partnerCode,
+        partnerName: contracts.partnerName,
+        partnerProvince: contracts.partnerProvince,
+        partnerStatus: contracts.partnerStatus,
+        channel: contracts.channel,
+        status: contracts.status,
+        debtType: contracts.debtType,
+        debtStatus: contracts.debtType, // alias สำหรับ export
+        overdueDays: OVERDUE_DAYS_SQL,  // computed field
+        promotionName: contracts.promotionName,
+        device: contracts.device,
+        productType: contracts.productType,
+        model: contracts.model,
+        imei: contracts.imei,
+        serialNo: contracts.serialNo,
+        sellPrice: contracts.sellPrice,
+        deviceStatus: contracts.deviceStatus,
+        lastOnlineDays: contracts.lastOnlineDays,
+        lastOnlineAt: contracts.lastOnlineAt,
+        deviceLock: contracts.deviceLock,
+        lossStatus: contracts.lossStatus,
+        mdmDeviceId: contracts.mdmDeviceId,
+        downPayment: contracts.downPayment,
+        financeAmount: contracts.financeAmount,
+        commissionNet: contracts.commissionNet,
+        installmentCount: contracts.installmentCount,
+        multiplier: contracts.multiplier,
+        installmentAmount: contracts.installmentAmount,
+        paymentDay: contracts.paymentDay,
+        paidInstallments: contracts.paidInstallments,
+        customerName: contracts.customerName,
+        nationality: contracts.nationality,
+        citizenId: contracts.citizenId,
+        gender: contracts.gender,
+        age: contracts.age,
+        occupation: contracts.occupation,
+        salary: contracts.salary,
+        workplace: contracts.workplace,
+        phone: contracts.phone,
+        idDistrict: contracts.idDistrict,
+        idProvince: contracts.idProvince,
+        addrDistrict: contracts.addrDistrict,
+        addrProvince: contracts.addrProvince,
+        workDistrict: contracts.workDistrict,
+        workProvince: contracts.workProvince,
+        syncedAt: contracts.syncedAt,
+        rawJson: contracts.rawJson,
+        badDebtAmount: contracts.badDebtAmount,
+        badDebtDate: contracts.badDebtDate,
+        suspendedFromPeriod: contracts.suspendedFromPeriod,
+        badDebtUpdatedBy: contracts.badDebtUpdatedBy,
+        badDebtUpdatedAt: contracts.badDebtUpdatedAt,
+      })
       .from(contracts)
       .where(where)
       .orderBy(orderBy)
       .limit(batchSize)
       .offset(offset);
     if (!batch.length) return;
-    yield batch;
+    yield batch as any;
     if (batch.length < batchSize) return;
     offset += batchSize;
   }
@@ -325,7 +430,7 @@ export async function* iterateContracts(params: {
 /** Distinct picker values for filter dropdowns (cheap thanks to indexes). */
 export async function listContractFilterOptions(section: SectionKey) {
   const db = await getDb(section);
-  if (!db) return { statuses: [], debtTypes: [], partnerCodes: [] };
+  if (!db) return { statuses: [], debtTypes: [], debtStatuses: [], partnerCodes: [] };
   const [statuses, debtTypes, partnerCodes] = await Promise.all([
     db
       .selectDistinct({ v: contracts.status })
@@ -345,9 +450,11 @@ export async function listContractFilterOptions(section: SectionKey) {
       .map((r) => r.v)
       .filter((v): v is string => !!v && v.trim() !== "")
       .sort((a, b) => a.localeCompare(b, "th"));
+  const cleanedDebtTypes = clean(debtTypes);
   return {
     statuses: clean(statuses),
-    debtTypes: clean(debtTypes),
+    debtTypes: cleanedDebtTypes,
+    debtStatuses: cleanedDebtTypes, // alias ใหม่ (ชื่อเดียวกับ debtTypes แต่ใช้ key ใหม่)
     partnerCodes: clean(partnerCodes),
   };
 }

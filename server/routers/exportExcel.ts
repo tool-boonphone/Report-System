@@ -34,7 +34,9 @@ import {
 } from "../excelUtils";
 
 // ─── Contract group header definitions (mirrors Contracts.tsx UI) ─────────────
-// Contracts.tsx: colSpan 6/4/15/11/7/1 → total 44 columns (เพิ่ม mdmEnabled + deviceLock ใน group สินค้า)
+// Contracts.tsx: colSpan 6/4/15/8/7/6 → total 46 columns
+// group สินค้า: 11→8 (ย้าย lastOnlineDays/mdmEnabled/deviceLock ไป group หนี้)
+// group หนี้: 1→6 (เพิ่ม debtStatus/overdueDays/lastOnlineDays/mdmEnabled/deviceLock/itAlert)
 const CONTRACT_GROUPS: Array<{
   label: string;
   colCount: number;
@@ -44,9 +46,9 @@ const CONTRACT_GROUPS: Array<{
   { label: "สินเชื่อ",    colCount: 6,  argb: "FF475569", subArgb: "FFF8FAFC" }, // slate-600 / slate-50
   { label: "พาร์ทเนอร์", colCount: 4,  argb: "FF4F46E5", subArgb: "FFEEF2FF" }, // indigo-600 / indigo-50
   { label: "ลูกค้า",     colCount: 15, argb: "FF0D9488", subArgb: "FFF0FDFA" }, // teal-600 / teal-50
-  { label: "สินค้า",     colCount: 11, argb: "FFD97706", subArgb: "FFFEFCE8" }, // amber-600 / amber-50 (เพิ่ม mdmEnabled + deviceLock)
+  { label: "สินค้า",     colCount: 8,  argb: "FFD97706", subArgb: "FFFEFCE8" }, // amber-600 / amber-50
   { label: "ไฟแนนซ์",   colCount: 7,  argb: "FFE11D48", subArgb: "FFFFF1F2" }, // rose-600 / rose-50
-  { label: "หนี้",       colCount: 1,  argb: "FF7C3AED", subArgb: "FFF5F3FF" }, // purple-600 / purple-50
+  { label: "หนี้",       colCount: 6,  argb: "FF7C3AED", subArgb: "FFF5F3FF" }, // purple-600 / purple-50
 ];
 
 function parseCookies(header: string | undefined): Record<string, string> {
@@ -85,6 +87,8 @@ export async function handleContractsExport(req: Request, res: Response) {
     const filters: ContractFilters = {
       search: req.query.search ? String(req.query.search) : undefined,
       status: req.query.status ? String(req.query.status) : undefined,
+      // รองรับทั้ง debtStatus (ใหม่) และ debtType (เก่า) เพื่อ backward compatibility
+      debtStatus: req.query.debtStatus ? String(req.query.debtStatus) : undefined,
       debtType: req.query.debtType ? String(req.query.debtType) : undefined,
       partnerCode: req.query.partnerCode
         ? String(req.query.partnerCode)
@@ -191,6 +195,23 @@ export async function handleContractsExport(req: Request, res: Response) {
             cell.value = seq;
             cell.numFmt = INT_FORMAT;
             cell.alignment = { horizontal: "center" };
+          } else if (col.key === "debtStatus") {
+            // debtStatus: alias ของ debtType
+            const v = (row as any)["debtStatus"] ?? (row as any)["debtType"];
+            cell.value = v != null ? String(v) : "";
+          } else if (col.key === "overdueDays") {
+            // overdueDays: computed field (วันเกินกำหนด)
+            const days = (row as any)["overdueDays"];
+            if (days == null || days === 0) {
+              cell.value = days === 0 ? 0 : "";
+              if (days === 0) cell.numFmt = INT_FORMAT;
+            } else {
+              setIntCell(cell, Number(days));
+              // ถ้าเกิน 4 วัน ให้ highlight สีแดง
+              if (Number(days) > 4) {
+                cell.font = { color: { argb: "FFDC2626" } }; // red-600
+              }
+            }
           } else if (col.key === "lastOnlineDays") {
             // ถ้าไม่มี serialNo หรือ lastOnlineDays เป็น null ให้แสดง "-" (ไม่ใช่ 0 เพราะจะซ้ำกับคนที่ออนไลน์วันนี้)
             const sn = (row as any)["serialNo"];
@@ -201,26 +222,41 @@ export async function handleContractsExport(req: Request, res: Response) {
               setIntCell(cell, days);
             }
           } else if (col.key === "mdmEnabled") {
-            // MDM: deviceLock != null → อยู่ใน MDM (Yes), null → ไม่อยู่ใน MDM (No)
+            // MDM: deviceLock != null → Y (อยู่ใน MDM), null → N (ไม่อยู่ใน MDM)
             const dl = (row as any)["deviceLock"];
             if (dl !== null && dl !== undefined) {
-              cell.value = "Yes";
-              cell.font = { color: { argb: "FF16A34A" } }; // green-600
+              cell.value = "Y";
+              cell.font = { bold: true, color: { argb: "FF16A34A" } }; // green-600
             } else {
-              cell.value = "No";
-              cell.font = { color: { argb: "FF6B7280" } }; // gray-500
+              cell.value = "N";
+              cell.font = { bold: true, color: { argb: "FF6B7280" } }; // gray-500
             }
           } else if (col.key === "deviceLock") {
-            // true = ล็อก, false = ปลดล็อก, null = ไม่พบใน MDM
+            // true = ล็อก (Y), false = ปลดล็อก (N), null = ไม่พบใน MDM (-)
             const dl = (row as any)["deviceLock"];
             if (dl === true) {
-              cell.value = "ล็อก";
-              cell.font = { color: { argb: "FFDC2626" } }; // red-600
+              cell.value = "Y";
+              cell.font = { bold: true, color: { argb: "FFDC2626" } }; // red-600 (ล็อก=อันตราย)
             } else if (dl === false) {
-              cell.value = "ปลดล็อก";
-              cell.font = { color: { argb: "FF16A34A" } }; // green-600
+              cell.value = "N";
+              cell.font = { bold: true, color: { argb: "FF16A34A" } }; // green-600 (ปลดล็อก=ปกติ)
             } else {
               cell.value = "-";
+            }
+          } else if (col.key === "itAlert") {
+            // itAlert: Y ถ้า lastOnlineDays > 4 หรือ MDM = N (deviceLock == null)
+            const sn = (row as any)["serialNo"];
+            const onlineDays = (row as any)["lastOnlineDays"];
+            const dl = (row as any)["deviceLock"];
+            const mdmN = dl === null || dl === undefined; // MDM = N
+            const onlineOver4 = sn && onlineDays != null && Number(onlineDays) > 4;
+            const isAlert = onlineOver4 || mdmN;
+            if (isAlert) {
+              cell.value = "Y";
+              cell.font = { bold: true, color: { argb: "FFDC2626" } }; // red-600
+            } else {
+              cell.value = "N";
+              cell.font = { color: { argb: "FF16A34A" } }; // green-600
             }
           } else if (col.type === "money") {
             setMoneyCell(cell, (row as any)[col.key]);

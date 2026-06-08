@@ -45,7 +45,7 @@ type Filters = {
   search: string;
   // categorical (multi-select)
   status: Set<string>;
-  debtType: Set<string>;
+  debtStatus: Set<string>; // เปลี่ยนจาก debtType → debtStatus
   partnerCode: Set<string>;
   partnerProvince: Set<string>;
   partnerStatus: Set<string>;
@@ -72,7 +72,7 @@ type Filters = {
 const EMPTY_FILTERS: Filters = {
   search: "",
   status: new Set(),
-  debtType: new Set(),
+  debtStatus: new Set(),
   partnerCode: new Set(),
   partnerProvince: new Set(),
   partnerStatus: new Set(),
@@ -97,7 +97,7 @@ const EMPTY_FILTERS: Filters = {
 // Categorical filter keys
 const CAT_KEYS: Array<keyof Omit<Filters, "search" | "dateField" | "dateFrom" | "dateTo">> = [
   "status",
-  "debtType",
+  "debtStatus",
   "partnerCode",
   "partnerProvince",
   "partnerStatus",
@@ -118,7 +118,7 @@ const CAT_KEYS: Array<keyof Omit<Filters, "search" | "dateField" | "dateFrom" | 
 // Label mapping for categorical filters
 const CAT_LABELS: Record<string, string> = {
   status: "สถานะสัญญา",
-  debtType: "ประเภทหนี้",
+  debtStatus: "สถานะหนี้",
   partnerCode: "รหัสพาร์ทเนอร์",
   partnerProvince: "จังหวัดพาร์ทเนอร์",
   partnerStatus: "สถานะพาร์ทเนอร์",
@@ -156,15 +156,35 @@ const SORTABLE_FIELDS: ReadonlyArray<SortField> = [
 /** Format a cell value according to its column type. */
 function formatCell(key: ContractColumnKey, row: any, seq: number): string {
   if (key === "seq") return String(seq);
-  // mdmEnabled: แสดงสถานะ MDM (Yes=อยู่ใน MDM, No=ไม่อยู่)
+  // mdmEnabled: แสดงสถานะ MDM (Y=อยู่ใน MDM, N=ไม่อยู่)
   if (key === "mdmEnabled") {
-    return row.deviceLock !== null && row.deviceLock !== undefined ? "Yes" : "No";
+    return row.deviceLock !== null && row.deviceLock !== undefined ? "Y" : "N";
   }
-  // deviceLock: แสดงสถานะล็อกเครื่อง
+  // deviceLock: แสดงสถานะล็อกเครื่อง (Y=ล็อก, N=ปลดล็อก)
   if (key === "deviceLock") {
-    if (row.deviceLock === true) return "ล็อก";
-    if (row.deviceLock === false) return "ปลดล็อก";
+    if (row.deviceLock === true) return "Y";
+    if (row.deviceLock === false) return "N";
     return "-";
+  }
+  // debtStatus: alias ของ debtType
+  if (key === "debtStatus") {
+    const v = row.debtStatus ?? row.debtType;
+    return v != null ? String(v) : "-";
+  }
+  // overdueDays: วันเกินกำหนด
+  if (key === "overdueDays") {
+    const d = row.overdueDays;
+    if (d == null) return "-";
+    return Number(d).toLocaleString("th-TH");
+  }
+  // itAlert: Y ถ้า lastOnlineDays > 4 หรือ MDM = N
+  if (key === "itAlert") {
+    const sn = row.serialNo;
+    const onlineDays = row.lastOnlineDays;
+    const dl = row.deviceLock;
+    const mdmN = dl === null || dl === undefined;
+    const onlineOver4 = sn && onlineDays != null && Number(onlineDays) > 4;
+    return (onlineOver4 || mdmN) ? "Y" : "N";
   }
   const v = row[key];
   if (v === null || v === undefined || v === "") return "-";
@@ -350,7 +370,9 @@ export default function Contracts() {
       for (const key of CAT_KEYS) {
         if (key === excludeKey) continue;
         const fv = filters[key as keyof Filters] as Set<string>;
-        if (fv.size > 0 && !fv.has(r[key])) return false;
+        // debtStatus filter ใช้ field debtStatus (หรือ debtType) ใน row
+        const rowVal = key === "debtStatus" ? (r.debtStatus ?? r.debtType) : r[key];
+        if (fv.size > 0 && !fv.has(rowVal)) return false;
       }
       // date range
       const dateFrom = filters.dateFrom || "";
@@ -368,7 +390,12 @@ export default function Contracts() {
     const result: Record<string, string[]> = {};
     for (const key of CAT_KEYS) {
       const subset = allRows.filter((r: any) => rowPassesExcept(r, key));
-      result[key] = Array.from(new Set(subset.map((r: any) => String(r[key]))))
+      // debtStatus: ดึงจาก field debtStatus หรือ debtType
+      const getVal = (r: any) =>
+        key === "debtStatus"
+          ? String(r.debtStatus ?? r.debtType ?? "")
+          : String(r[key]);
+      result[key] = Array.from(new Set(subset.map(getVal)))
         .filter((v) => v && v !== "null" && v !== "undefined")
         .sort();
     }
@@ -386,7 +413,9 @@ export default function Contracts() {
       // categorical multi-select
       for (const key of CAT_KEYS) {
         const fv = f[key as keyof Filters] as Set<string>;
-        if (fv.size > 0 && !fv.has(r[key])) return false;
+        // debtStatus filter ใช้ field debtStatus (หรือ debtType) ใน row
+        const rowVal = key === "debtStatus" ? (r.debtStatus ?? r.debtType) : r[key];
+        if (fv.size > 0 && !fv.has(rowVal)) return false;
       }
       // date range
       if (dateFrom || dateTo) {
@@ -439,21 +468,24 @@ export default function Contracts() {
       if (Number.isFinite(an) && Number.isFinite(bn) && an !== bn) {
         return sortDir === "asc" ? an - bn : bn - an;
       }
-      const cmp = String(av).localeCompare(String(bv), "th");
-      return sortDir === "asc" ? cmp : -cmp;
+      const as_ = String(av);
+      const bs_ = String(bv);
+      return sortDir === "asc"
+        ? as_.localeCompare(bs_, "th")
+        : bs_.localeCompare(as_, "th");
     });
 
     return rows;
   }, [allRows, filters, sortField, sortDir]);
 
-  // ----- Badge sums (computed from filteredRows) -----
+  // ----- Summary badges -----
   const badgeSums = useMemo(() => {
     let sellPrice = 0;
     let downPayment = 0;
     let financeAmount = 0;
     let commission = 0;
     let totalInstallment = 0;
-    for (const r of filteredRows) {
+    for (const r of filteredRows as any[]) {
       sellPrice += Number(r.sellPrice ?? 0);
       downPayment += Number(r.downPayment ?? 0);
       financeAmount += Number(r.financeAmount ?? 0);
@@ -841,7 +873,7 @@ export default function Contracts() {
                 </span>
               </div>
               <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200">
-                <span className="text-xs font-medium text-emerald-600">ยอดดาวน์</span>
+                <span className="text-xs font-medium text-emerald-600">ดาวน์</span>
                 <span className="text-xs font-bold text-emerald-800">
                   {fmtMoney(badgeSums.downPayment)}
                 </span>
@@ -852,16 +884,15 @@ export default function Contracts() {
                   {fmtMoney(badgeSums.financeAmount)}
                 </span>
               </div>
-              {/* Badge ยอดผ่อนรวม (ใหม่) */}
-              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-50 border border-purple-200">
-                <span className="text-xs font-medium text-purple-600">ยอดผ่อนรวม</span>
-                <span className="text-xs font-bold text-purple-800">
+              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 border border-amber-200">
+                <span className="text-xs font-medium text-amber-600">ยอดผ่อนรวม</span>
+                <span className="text-xs font-bold text-amber-800">
                   {fmtMoney(badgeSums.totalInstallment)}
                 </span>
               </div>
-              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 border border-amber-200">
-                <span className="text-xs font-medium text-amber-600">ค่าคอมมิชชั่น</span>
-                <span className="text-xs font-bold text-amber-800">
+              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-50 border border-rose-200">
+                <span className="text-xs font-medium text-rose-600">Commission</span>
+                <span className="text-xs font-bold text-rose-800">
                   {fmtMoney(badgeSums.commission)}
                 </span>
               </div>
@@ -886,24 +917,26 @@ export default function Contracts() {
               </colgroup>
               {/* thead sticky — ติดด้านบนเมื่อ scroll ลง, scroll ซ้าย-ขวาพร้อมกับ body อัตโนมัติ */}
               <thead className="sticky top-0 z-30">
-                {/* Group header row */}
+                {/* Group header row
+                    สินเชื่อ(6) | พาร์ทเนอร์(4) | ลูกค้า(15) | สินค้า(8) | ไฟแนนซ์(7) | หนี้(6) = 46 */}
                 <tr className="text-xs font-semibold text-center">
-                  <th colSpan={6} className="px-3 py-1.5 bg-slate-600 text-white border-b border-slate-500 whitespace-nowrap">สินเชื่อ</th>
-                  <th colSpan={4} className="px-3 py-1.5 bg-indigo-600 text-white border-b border-indigo-500 whitespace-nowrap">พาร์ทเนอร์</th>
-                  <th colSpan={15} className="px-3 py-1.5 bg-teal-600 text-white border-b border-teal-500 whitespace-nowrap">ลูกค้า</th>
-                  <th colSpan={11} className="px-3 py-1.5 bg-amber-600 text-white border-b border-amber-500 whitespace-nowrap">สินค้า</th>
-                  <th colSpan={7} className="px-3 py-1.5 bg-rose-600 text-white border-b border-rose-500 whitespace-nowrap">ไฟแนนซ์</th>
-                  <th colSpan={1} className="px-3 py-1.5 bg-purple-600 text-white border-b border-purple-500 whitespace-nowrap">หนี้</th>
+                  <th colSpan={6}  className="px-3 py-1.5 bg-slate-600  text-white border-b border-slate-500  whitespace-nowrap">สินเชื่อ</th>
+                  <th colSpan={4}  className="px-3 py-1.5 bg-indigo-600 text-white border-b border-indigo-500 whitespace-nowrap">พาร์ทเนอร์</th>
+                  <th colSpan={15} className="px-3 py-1.5 bg-teal-600   text-white border-b border-teal-500   whitespace-nowrap">ลูกค้า</th>
+                  <th colSpan={8}  className="px-3 py-1.5 bg-amber-600  text-white border-b border-amber-500  whitespace-nowrap">สินค้า</th>
+                  <th colSpan={7}  className="px-3 py-1.5 bg-rose-600   text-white border-b border-rose-500   whitespace-nowrap">ไฟแนนซ์</th>
+                  <th colSpan={6}  className="px-3 py-1.5 bg-purple-600 text-white border-b border-purple-500 whitespace-nowrap">หนี้</th>
                 </tr>
                 {/* Column header row */}
                 <tr className="text-gray-700">
                   {CONTRACT_COLUMNS.map((col, idx) => {
+                    // group boundaries: 6/4/15/8/7/6 = 46
                     const groupBg =
-                      idx < 6 ? "bg-slate-50" :
+                      idx < 6  ? "bg-slate-50"  :
                       idx < 10 ? "bg-indigo-50" :
-                      idx < 25 ? "bg-teal-50" :
-                      idx < 36 ? "bg-amber-50" :
-                      idx < 43 ? "bg-rose-50" :
+                      idx < 25 ? "bg-teal-50"   :
+                      idx < 33 ? "bg-amber-50"  :
+                      idx < 40 ? "bg-rose-50"   :
                       "bg-purple-50";
                     const isSticky = idx === 1;
                     const sortable = SORTABLE_FIELDS.includes(col.key as SortField);
@@ -992,15 +1025,15 @@ export default function Contracts() {
                                 // ไอคอน Lost Mode (lossStatus): 1=ล็อกเครื่อง (สีแดง), 0=ไม่ล็อค (สีเขียว), null=ไม่แสดง
                                 const lossStatusVal = (row as any).lossStatus;
                                 const lockIcon = lossStatusVal === 1 ? (
-                                  <Lock className="inline-block w-3 h-3 text-red-500 ml-1 flex-shrink-0" title="Lost Mode: ล็อกเครื่อง" />
+                                  <Lock className="inline-block w-3 h-3 text-red-500 ml-1 flex-shrink-0" aria-label="Lost Mode: ล็อกเครื่อง" />
                                 ) : lossStatusVal === 0 ? (
-                                  <Lock className="inline-block w-3 h-3 text-green-500 ml-1 flex-shrink-0" title="Lost Mode: ไม่ล็อก" />
+                                  <Lock className="inline-block w-3 h-3 text-green-500 ml-1 flex-shrink-0" aria-label="Lost Mode: ไม่ล็อก" />
                                 ) : null;
                                 // ไอคอน MDM Control (deviceLock): true=อยู่ภายใต้ MDM (สีเขียว), false=หลุดจาก MDM (สีเทา), null=ไม่แสดง
                                 const shieldIcon = row.deviceLock === true ? (
-                                  <ShieldCheck className="inline-block w-3 h-3 text-green-500 ml-0.5 flex-shrink-0" title="MDM: อยู่ภายใต้การควบคุม" />
+                                  <ShieldCheck className="inline-block w-3 h-3 text-green-500 ml-0.5 flex-shrink-0" aria-label="MDM: อยู่ภายใต้การควบคุม" />
                                 ) : row.deviceLock === false ? (
-                                  <ShieldOff className="inline-block w-3 h-3 text-gray-400 ml-0.5 flex-shrink-0" title="MDM: หลุดจากการควบคุม" />
+                                  <ShieldOff className="inline-block w-3 h-3 text-gray-400 ml-0.5 flex-shrink-0" aria-label="MDM: หลุดจากการควบคุม" />
                                 ) : null;
                                 // ปุ่ม GPS MapPin: สีเขียว=มี location log (กดได้), สีเทา=ไม่มี log (กดไม่ได้)
                                 const hasLocationLog = !!(row as any).locationLogCount && (row as any).locationLogCount > 0;
@@ -1070,6 +1103,44 @@ export default function Contracts() {
                                     {lockIcon}
                                     {mapPinBtn}
                                   </span>
+                                );
+                              })()
+                            ) : col.key === "overdueDays" ? (
+                              // overdueDays: วันเกินกำหนดชำระ (นับจากงวดแรกที่ค้าง)
+                              (() => {
+                                const d = row.overdueDays;
+                                if (d == null) return <span className="text-gray-300 text-xs">-</span>;
+                                const n = Number(d);
+                                if (n === 0) return <span className="text-gray-400 text-xs">0</span>;
+                                // สีตาม severity
+                                const cls =
+                                  n <= 7   ? "text-yellow-700 bg-yellow-50" :
+                                  n <= 14  ? "text-orange-700 bg-orange-50" :
+                                  n <= 30  ? "text-orange-700 bg-orange-100" :
+                                  n <= 60  ? "text-red-700 bg-red-50" :
+                                  n <= 90  ? "text-red-700 bg-red-100" :
+                                  "text-red-900 bg-red-200 font-bold";
+                                return (
+                                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${cls}`}>
+                                    {n.toLocaleString("th-TH")} วัน
+                                  </span>
+                                );
+                              })()
+                            ) : col.key === "itAlert" ? (
+                              // itAlert: Y ถ้า lastOnlineDays > 4 หรือ MDM = N
+                              (() => {
+                                const sn = row.serialNo;
+                                const onlineDays = row.lastOnlineDays;
+                                const dl = row.deviceLock;
+                                const mdmN = dl === null || dl === undefined;
+                                const onlineOver4 = sn && onlineDays != null && Number(onlineDays) > 4;
+                                const isAlert = onlineOver4 || mdmN;
+                                return isAlert ? (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-700">
+                                    Y
+                                  </span>
+                                ) : (
+                                  <span className="text-gray-400 text-xs">N</span>
                                 );
                               })()
                             ) : formatCell(col.key, row, seq)}

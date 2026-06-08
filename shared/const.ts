@@ -124,7 +124,7 @@ export const SYNC_STATUSES = ["in_progress", "success", "error"] as const;
 export type SyncStatus = (typeof SYNC_STATUSES)[number];
 
 /* =============================================================================
- * Contract report — 41 ordered columns (see docs/contract-columns.md)
+ * Contract report — 46 ordered columns
  * ============================================================================= */
 
 export type ContractColumnKey =
@@ -161,9 +161,6 @@ export type ContractColumnKey =
   | "serialNo"
   | "sellPrice"
   | "deviceStatus"
-  | "lastOnlineDays"
-  | "mdmEnabled"
-  | "deviceLock"
   | "downPayment"
   | "financeAmount"
   | "installmentCount"
@@ -171,7 +168,12 @@ export type ContractColumnKey =
   | "installmentAmount"
   | "paymentDay"
   | "paidInstallments"
-  | "debtType";
+  | "debtStatus"
+  | "overdueDays"
+  | "lastOnlineDays"
+  | "mdmEnabled"
+  | "deviceLock"
+  | "itAlert";
 
 export type ContractColumnType = "text" | "number" | "money" | "date";
 
@@ -215,9 +217,6 @@ export const CONTRACT_COLUMNS: Array<{
   { key: "serialNo",         label: "Serial No",                   type: "text",   width: 18, colWidth: 150 },
   { key: "sellPrice",        label: "ราคาขาย",                     type: "money",  width: 12, colWidth: 110 },
   { key: "deviceStatus",     label: "สถานะอุปกรณ์",               type: "text",   width: 12, colWidth: 110 },
-  { key: "lastOnlineDays",   label: "ออนไลน์ล่าสุด (วัน)",        type: "number", width: 14, colWidth: 140 },
-  { key: "mdmEnabled",       label: "MDM",                         type: "text",   width: 8,  colWidth: 70  },
-  { key: "deviceLock",       label: "ล็อกเครื่อง",                    type: "text",   width: 10, colWidth: 90  },
   { key: "downPayment",      label: "ยอดดาวน์",                    type: "money",  width: 12, colWidth: 110 },
   { key: "financeAmount",    label: "ยอดจัดไฟแนนซ์",              type: "money",  width: 14, colWidth: 130 },
   { key: "installmentCount", label: "จำนวนงวดผ่อน",               type: "number", width: 12, colWidth: 120 },
@@ -225,10 +224,15 @@ export const CONTRACT_COLUMNS: Array<{
   { key: "installmentAmount",label: "ผ่อนงวดละ",                   type: "money",  width: 12, colWidth: 110 },
   { key: "paymentDay",       label: "ชำระทุกวันที่(ของทุกเดือน)", type: "number", width: 12, colWidth: 180 },
   { key: "paidInstallments", label: "งวดที่ชำระแล้ว",              type: "number", width: 12, colWidth: 120 },
-  { key: "debtType",         label: "ประเภทหนี้",                  type: "text",   width: 12, colWidth: 110 },
+  { key: "debtStatus",      label: "สถานะหนี้",                   type: "text",   width: 14, colWidth: 130 },
+  { key: "overdueDays",     label: "เกินกำหนด (วัน)",              type: "number", width: 12, colWidth: 120 },
+  { key: "lastOnlineDays",  label: "ออนไลน์ล่าสุด (วัน)",         type: "number", width: 14, colWidth: 140 },
+  { key: "mdmEnabled",      label: "MDM",                          type: "text",   width: 8,  colWidth: 70  },
+  { key: "deviceLock",      label: "ล็อกเครื่อง",                   type: "text",   width: 10, colWidth: 90  },
+  { key: "itAlert",         label: "แจ้งเตือน IT",                  type: "text",   width: 10, colWidth: 100 },
 ];
 
-export const CONTRACT_COLUMN_COUNT = CONTRACT_COLUMNS.length; // must be 44
+export const CONTRACT_COLUMN_COUNT = CONTRACT_COLUMNS.length; // must be 46
 
 /** Columns exposed to the filter form (subset). */
 export const CONTRACT_FILTER_KEYS: ContractColumnKey[] = [
@@ -236,5 +240,5 @@ export const CONTRACT_FILTER_KEYS: ContractColumnKey[] = [
   "status",
   "customerName",
   "partnerCode",
-  "debtType",
+  "debtStatus",
 ];
