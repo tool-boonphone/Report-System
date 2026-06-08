@@ -45,27 +45,7 @@ export type ContractSort = {
  *
  * หมายเหตุ: ใช้ SQL expression เพื่อคำนวณใน DB โดยตรง
  */
-const OVERDUE_DAYS_SQL = sql<number | null>`
-  CASE
-    -- Terminal statuses: ไม่มีวันเกินกำหนด
-    WHEN contracts.debt_type IN ('ระงับสัญญา', 'สิ้นสุดสัญญา', 'หนี้เสีย', 'ยกเลิกสัญญา') THEN NULL
-    -- ต้องมี approve_date และ payment_day
-    WHEN contracts.approve_date IS NULL OR contracts.payment_day IS NULL THEN NULL
-    ELSE
-      GREATEST(0,
-        CURRENT_DATE - (
-          -- หา due_date ของงวดแรกที่ยังค้าง
-          -- firstDueDate = วันที่ paymentDay ของเดือนถัดจาก approveDate
-          -- แล้วเลื่อนไปข้างหน้า paidInstallments เดือน
-          (
-            DATE_TRUNC('month', TO_DATE(contracts.approve_date, 'YYYY-MM-DD')) +
-            INTERVAL '1 month' * (COALESCE(contracts.paid_installments, 0) + 1) +
-            (contracts.payment_day - 1) * INTERVAL '1 day'
-          )::date
-        )
-      )
-  END
-`;
+const OVERDUE_DAYS_SQL = sql<number | null>`CASE WHEN contracts.debt_type IN ('ระงับสัญญา', 'สิ้นสุดสัญญา', 'หนี้เสีย', 'ยกเลิกสัญญา') THEN NULL WHEN contracts.approve_date IS NULL OR contracts.payment_day IS NULL THEN NULL ELSE GREATEST(0, CURRENT_DATE - (DATE_TRUNC('month', TO_DATE(contracts.approve_date, 'YYYY-MM-DD')) + INTERVAL '1 month' * (COALESCE(contracts.paid_installments, 0) + 1) + (contracts.payment_day - 1) * INTERVAL '1 day')::date) END`;
 
 function buildWhere(section: SectionKey, f: ContractFilters) {
   const clauses = [eq(contracts.section, section)];
