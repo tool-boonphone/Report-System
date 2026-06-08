@@ -94,6 +94,16 @@ const EMPTY_FILTERS: Filters = {
   dateTo: "",
 };
 
+// Static list สำหรับ debtStatus filter (เหมือนเมนูสรุปรายเดือน)
+const DEBT_STATUS_OPTIONS = [
+  "ปกติ", "เกิน 1-7", "เกิน 8-14", "เกิน 15-30",
+  "เกิน 31-60", "เกิน 61-90", "เกิน >90",
+  "ระงับสัญญา", "สิ้นสุดสัญญา", "หนี้เสีย", "ยกเลิกสัญญา",
+] as const;
+
+// Columns ที่ซ่อนใน UI table (แต่ยังคง export ได้)
+const UI_HIDDEN_COLS = new Set<string>(["mdmEnabled", "deviceLock", "itAlert"]);
+
 // Categorical filter keys
 const CAT_KEYS: Array<keyof Omit<Filters, "search" | "dateField" | "dateFrom" | "dateTo">> = [
   "status",
@@ -715,7 +725,7 @@ export default function Contracts() {
                     label={CAT_LABELS[key] ?? key}
                     selected={filters[key as keyof Filters] as Set<string>}
                     onChange={(v) => setCatFilter(key as keyof Filters, v)}
-                    options={dynamicOptions[key] ?? []}
+                    options={key === "debtStatus" ? [...DEBT_STATUS_OPTIONS] : (dynamicOptions[key] ?? [])}
                   />
                 ))}
               </div>
@@ -911,26 +921,27 @@ export default function Contracts() {
           >
             <table className="min-w-full text-[13px] border-separate border-spacing-0">
               <colgroup>
-                {CONTRACT_COLUMNS.map((col) => (
+                  {CONTRACT_COLUMNS.filter((col) => !UI_HIDDEN_COLS.has(col.key)).map((col) => (
                   <col key={col.key} style={{ width: col.colWidth, minWidth: col.colWidth }} />
                 ))}
               </colgroup>
               {/* thead sticky — ติดด้านบนเมื่อ scroll ลง, scroll ซ้าย-ขวาพร้อมกับ body อัตโนมัติ */}
               <thead className="sticky top-0 z-30">
                 {/* Group header row
-                    สินเชื่อ(6) | พาร์ทเนอร์(4) | ลูกค้า(15) | สินค้า(8) | ไฟแนนซ์(7) | หนี้(6) = 46 */}
+                    สินเชื่อ(6) | พาร์ทเนอร์(4) | ลูกค้า(15) | สินค้า(8) | ไฟแนนซ์(7) | หนี้(3) = 43
+                    (ซ่อน mdmEnabled/deviceLock/itAlert ใน UI แต่ยังคง export ได้) */}
                 <tr className="text-xs font-semibold text-center">
                   <th colSpan={6}  className="px-3 py-1.5 bg-slate-600  text-white border-b border-slate-500  whitespace-nowrap">สินเชื่อ</th>
                   <th colSpan={4}  className="px-3 py-1.5 bg-indigo-600 text-white border-b border-indigo-500 whitespace-nowrap">พาร์ทเนอร์</th>
                   <th colSpan={15} className="px-3 py-1.5 bg-teal-600   text-white border-b border-teal-500   whitespace-nowrap">ลูกค้า</th>
                   <th colSpan={8}  className="px-3 py-1.5 bg-amber-600  text-white border-b border-amber-500  whitespace-nowrap">สินค้า</th>
                   <th colSpan={7}  className="px-3 py-1.5 bg-rose-600   text-white border-b border-rose-500   whitespace-nowrap">ไฟแนนซ์</th>
-                  <th colSpan={6}  className="px-3 py-1.5 bg-purple-600 text-white border-b border-purple-500 whitespace-nowrap">หนี้</th>
+                  <th colSpan={3}  className="px-3 py-1.5 bg-purple-600 text-white border-b border-purple-500 whitespace-nowrap">หนี้</th>
                 </tr>
                 {/* Column header row */}
                 <tr className="text-gray-700">
-                  {CONTRACT_COLUMNS.map((col, idx) => {
-                    // group boundaries: 6/4/15/8/7/6 = 46
+                  {CONTRACT_COLUMNS.filter((col) => !UI_HIDDEN_COLS.has(col.key)).map((col, idx) => {
+                    // group boundaries (UI only, hidden cols excluded): 6/4/15/8/7/3 = 43
                     const groupBg =
                       idx < 6  ? "bg-slate-50"  :
                       idx < 10 ? "bg-indigo-50" :
@@ -964,21 +975,21 @@ export default function Contracts() {
               <tbody>
                 {listQuery.isLoading && (
                   <tr>
-                    <td colSpan={CONTRACT_COLUMNS.length} className="text-center py-10 text-gray-500">
+                    <td colSpan={CONTRACT_COLUMNS.filter((c) => !UI_HIDDEN_COLS.has(c.key)).length} className="text-center py-10 text-gray-500">
                       <Spinner className="inline-block mr-2" /> กำลังโหลด…
                     </td>
                   </tr>
                 )}
                 {!listQuery.isLoading && filteredRows.length === 0 && (
                   <tr>
-                    <td colSpan={CONTRACT_COLUMNS.length} className="text-center py-10 text-gray-500">
+                    <td colSpan={CONTRACT_COLUMNS.filter((c) => !UI_HIDDEN_COLS.has(c.key)).length} className="text-center py-10 text-gray-500">
                       ไม่พบข้อมูลที่ตรงเงื่อนไข
                     </td>
                   </tr>
                 )}
                 {virtualRows.length > 0 && (
                   <tr style={{ height: `${virtualRows[0].start}px` }} aria-hidden="true">
-                    <td colSpan={CONTRACT_COLUMNS.length} />
+                    <td colSpan={CONTRACT_COLUMNS.filter((c) => !UI_HIDDEN_COLS.has(c.key)).length} />
                   </tr>
                 )}
                 {virtualRows.map((virtualRow) => {
@@ -997,7 +1008,7 @@ export default function Contracts() {
                       onMouseEnter={() => setHoveredRow(virtualRow.index)}
                       onMouseLeave={() => setHoveredRow(null)}
                     >
-                      {CONTRACT_COLUMNS.map((col, idx) => {
+                      {CONTRACT_COLUMNS.filter((col) => !UI_HIDDEN_COLS.has(col.key)).map((col, idx) => {
                         const isSticky = idx === 1;
                         const stickyBg = isHovered ? "bg-blue-50" : "bg-white";
                         return (
@@ -1160,7 +1171,7 @@ export default function Contracts() {
                     }}
                     aria-hidden="true"
                   >
-                    <td colSpan={CONTRACT_COLUMNS.length} />
+                    <td colSpan={CONTRACT_COLUMNS.filter((c) => !UI_HIDDEN_COLS.has(c.key)).length} />
                   </tr>
                 )}
               </tbody>
