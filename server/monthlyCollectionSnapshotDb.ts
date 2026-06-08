@@ -1079,18 +1079,75 @@ export async function backfillFrozenBreakdown(
     if (!/^\d{4}-\d{2}$/.test(month)) continue;
 
     try {
-      // ── 0. Check target_frozen_at — skip ถ้า freeze ไปแล้ว ──
+      // ── 0. Check target_frozen_at — ถ้า freeze แล้ว ให้ update เฉพาะ collected (ไม่ recalc target) ──
       const frozenCheck = await db.execute(sql.raw(`
         SELECT target_frozen_at FROM monthly_collection_snapshot
         WHERE section = '${section}' AND collection_month = '${month}'
       `));
       const isFrozen = pgRows(frozenCheck)[0]?.target_frozen_at != null;
-      if (isFrozen) {
-        console.log(`[backfillFrozenBreakdown] ${section} ${month}: target_frozen_at IS NOT NULL — skipping`);
-        continue;
-      }
+      // NOTE: ถ้า freeze แล้ว ยังต้อง update collected ใน daily_breakdown ทุกครั้งที่ sync
+      // (เป้าเก็บหนี้ freeze แต่ยอดเก็บหนี้ต้องอัปเดตเสมอ)
 
-      // ── 1. คำนวณ target_by_range (SUM แยกตาม debt_range ทั้ง in_month + carry) ──
+      // ── 1. คำนวณ target_by_range (SUM แยกตาม debt_range ทั้ง in_month + carry) ── (skip ถ้า freeze แล้ว)
+      // ถ้า freeze แล้ว ใช้ target_by_range เดิมจาก DB (ไม่ recalc)
+      let targetByRange: Record<string, number> = {};
+      if (isFrozen) {
+        // ดึง target_by_range เดิมจาก DB
+        const existingResult = await db.execute(sql.raw(`
+          SELECT target_by_range, daily_breakdown FROM monthly_collection_snapshot
+          WHERE section = '${section}' AND collection_month = '${month}'
+        `));
+        const existingRow = pgRows(existingResult)[0];
+        targetByRange = (typeof existingRow?.target_by_range === 'object' && existingRow?.target_by_range)
+          ? existingRow.target_by_range as Record<string, number>
+          : {};
+        // ── 2. คำนวณ collected_by_day ใหม่ และ merge เข้า existing daily_breakdown ──
+        const existingBreakdown: Record<string, any> = (typeof existingRow?.daily_breakdown === 'object' && existingRow?.daily_breakdown)
+          ? existingRow.daily_breakdown as Record<string, any>
+          : {};
+        const collectedResult = await db.execute(sql.raw(`
+          SELECT
+            TO_CHAR(paid_at::date, 'YYYY-MM-DD') AS date,
+            SUM(total_amount::numeric) AS collected_amount
+          FROM debt_collected_cache
+          WHERE section = '${section}'
+            AND paid_at IS NOT NULL
+            AND is_bad_debt_row IS NOT TRUE
+            AND TO_CHAR(paid_at, 'YYYY-MM') = '${month}'
+          GROUP BY paid_at::date
+          ORDER BY paid_at::date ASC
+        `));
+        const collectedRows = pgRows(collectedResult);
+        // Build collected_by_day map: { '5': 765369, '6': 204601, '7': 160998 }
+        const collectedByDay: Record<string, number> = {};
+        for (const cr of collectedRows) {
+          const dayNum = String(parseInt(String((cr as any).date ?? '').slice(8, 10), 10));
+          collectedByDay[dayNum] = Math.max(n((cr as any).collected_amount), 0);
+        }
+        // Merge collected into existing breakdown (keep target/targetByRange frozen, update collected only)
+        const mergedBreakdown: Record<string, any> = {};
+        for (const [key, val] of Object.entries(existingBreakdown)) {
+          if (key === 'overdue') {
+            mergedBreakdown[key] = val; // overdue collected ยังคง 0 (ไม่ track รายวัน)
+          } else {
+            const dayCollected = collectedByDay[key] ?? 0;
+            mergedBreakdown[key] = { ...val, collected: dayCollected };
+          }
+        }
+        // UPDATE เฉพาะ daily_breakdown (ไม่แตะ target_by_range)
+        await db.execute(sql.raw(`
+          UPDATE monthly_collection_snapshot
+          SET
+            daily_breakdown = '${JSON.stringify(mergedBreakdown)}'::jsonb,
+            updated_at      = NOW()
+          WHERE section = '${section}'
+            AND collection_month = '${month}'
+        `));
+        updatedCount++;
+        console.log(`[backfillFrozenBreakdown] ${section} ${month}: FROZEN — updated collected only, days=${Object.keys(mergedBreakdown).length}`);
+        continue; // ข้ามไปเดือนถัดไป
+      }
+      // ── 1. คำนวณ target_by_range (SUM แยกตาม debt_range ทั้ง in_month + carry) ── (เดือนที่ยังไม่ freeze)
       const rangeResult = await db.execute(sql.raw(`
         WITH
         in_month AS (
@@ -1133,7 +1190,6 @@ export async function backfillFrozenBreakdown(
       `));
       const rangeRows = pgRows(rangeResult);
       const rawRange = rangeRows[0]?.target_by_range ?? {};
-      const targetByRange: Record<string, number> = {};
       for (const rng of ALL_DEBT_RANGES) {
         const v = n(rawRange[rng]);
         if (v > 0) targetByRange[rng] = v;
