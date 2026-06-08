@@ -94,6 +94,27 @@ const EMPTY_FILTERS: Filters = {
   dateTo: "",
 };
 
+/**
+ * derive debtStatus label จาก row เหมือน debtDb.ts bucketFromDays
+ * - terminal statuses (ระงับสัญญา/สิ้นสุดสัญญา/หนี้เสีย/ยกเลิกสัญญา) → ใช้ debtType โดยตรง
+ * - อื่นๆ → derive จาก overdueDays ที่คำนวณจาก SQL
+ */
+function bucketFromRow(row: any): string {
+  const dt: string = row.debtType ?? row.debtStatus ?? "";
+  const TERMINAL = ["ระงับสัญญา", "สิ้นสุดสัญญา", "หนี้เสีย", "ยกเลิกสัญญา"];
+  if (TERMINAL.includes(dt)) return dt;
+  const days = row.overdueDays;
+  if (days == null) return "ปกติ";
+  const n = Number(days);
+  if (n <= 0)  return "ปกติ";
+  if (n <= 7)  return "เกิน 1-7";
+  if (n <= 14) return "เกิน 8-14";
+  if (n <= 30) return "เกิน 15-30";
+  if (n <= 60) return "เกิน 31-60";
+  if (n <= 90) return "เกิน 61-90";
+  return "เกิน >90";
+}
+
 // Static list สำหรับ debtStatus filter (เหมือนเมนูสรุปรายเดือน)
 const DEBT_STATUS_OPTIONS = [
   "ปกติ", "เกิน 1-7", "เกิน 8-14", "เกิน 15-30",
@@ -380,8 +401,8 @@ export default function Contracts() {
       for (const key of CAT_KEYS) {
         if (key === excludeKey) continue;
         const fv = filters[key as keyof Filters] as Set<string>;
-        // debtStatus filter ใช้ field debtStatus (หรือ debtType) ใน row
-        const rowVal = key === "debtStatus" ? (r.debtStatus ?? r.debtType) : r[key];
+        // debtStatus filter: derive จาก overdueDays + debtType (เหมือน debtDb.ts)
+        const rowVal = key === "debtStatus" ? bucketFromRow(r) : r[key];
         if (fv.size > 0 && !fv.has(rowVal)) return false;
       }
       // date range
@@ -403,7 +424,7 @@ export default function Contracts() {
       // debtStatus: ดึงจาก field debtStatus หรือ debtType
       const getVal = (r: any) =>
         key === "debtStatus"
-          ? String(r.debtStatus ?? r.debtType ?? "")
+          ? bucketFromRow(r)
           : String(r[key]);
       result[key] = Array.from(new Set(subset.map(getVal)))
         .filter((v) => v && v !== "null" && v !== "undefined")
@@ -424,7 +445,7 @@ export default function Contracts() {
       for (const key of CAT_KEYS) {
         const fv = f[key as keyof Filters] as Set<string>;
         // debtStatus filter ใช้ field debtStatus (หรือ debtType) ใน row
-        const rowVal = key === "debtStatus" ? (r.debtStatus ?? r.debtType) : r[key];
+        const rowVal = key === "debtStatus" ? bucketFromRow(r) : r[key];
         if (fv.size > 0 && !fv.has(rowVal)) return false;
       }
       // date range
