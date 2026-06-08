@@ -183,9 +183,37 @@ export async function handleContractsExport(req: Request, res: Response) {
     row2.commit();
 
     // ── Data rows ────────────────────────────────────────────────────────────
+    // debtStatus filter ต้อง post-filter ใน server เพราะ DB เก็บ debt_type = 'ปกติ' เสมอ
+    // ต้อง derive จาก overdueDays เหมือน client-side bucketFromRow()
+    const TERMINAL_STATUSES_EXP = new Set(['ระงับสัญญา', 'สิ้นสุดสัญญา', 'หนี้เสีย', 'ยกเลิกสัญญา']);
+    const bucketFromRowExp = (r: any): string => {
+      const dt: string = r.debtType ?? r.debtStatus ?? '';
+      if (TERMINAL_STATUSES_EXP.has(dt)) return dt;
+      const days = r.overdueDays;
+      if (days == null) return 'ปกติ';
+      const n = Number(days);
+      if (n <= 0)  return 'ปกติ';
+      if (n <= 7)  return 'เกิน 1-7';
+      if (n <= 14) return 'เกิน 8-14';
+      if (n <= 30) return 'เกิน 15-30';
+      if (n <= 60) return 'เกิน 31-60';
+      if (n <= 90) return 'เกิน 61-90';
+      return 'เกิน >90';
+    };
+    // parse debtStatus filter จาก query (comma-separated)
+    const debtStatusFilterExp = filters.debtStatus
+      ? new Set(filters.debtStatus.split(',').map((s) => s.trim()).filter(Boolean))
+      : null;
+    // ส่ง filters ไปยัง DB โดยไม่มี debtStatus/debtType (จะ post-filter เอง)
+    const filtersForDb: ContractFilters = { ...filters, debtStatus: undefined, debtType: undefined };
     let seq = 0;
-    for await (const batch of iterateContracts({ section, filters, sort })) {
+    for await (const batch of iterateContracts({ section, filters: filtersForDb, sort })) {
       for (const row of batch) {
+        // post-filter debtStatus ด้วย bucketFromRowExp
+        if (debtStatusFilterExp && debtStatusFilterExp.size > 0) {
+          const bucket = bucketFromRowExp(row);
+          if (!debtStatusFilterExp.has(bucket)) continue;
+        }
         seq += 1;
         const exRow = ws.addRow({});
         let ci = 1;
@@ -196,9 +224,8 @@ export async function handleContractsExport(req: Request, res: Response) {
             cell.numFmt = INT_FORMAT;
             cell.alignment = { horizontal: "center" };
           } else if (col.key === "debtStatus") {
-            // debtStatus: alias ของ debtType
-            const v = (row as any)["debtStatus"] ?? (row as any)["debtType"];
-            cell.value = v != null ? String(v) : "";
+            // debtStatus: derive จาก overdueDays + debtType (เหมือน client bucketFromRow)
+            cell.value = bucketFromRowExp(row);
           } else if (col.key === "overdueDays") {
             // overdueDays: computed field (วันเกินกำหนด)
             const days = (row as any)["overdueDays"];
