@@ -197,10 +197,9 @@ function formatCell(key: ContractColumnKey, row: any, seq: number): string {
     if (row.deviceLock === false) return "N";
     return "-";
   }
-  // debtStatus: alias ของ debtType
+  // debtStatus: derive จาก overdueDays + debtType (เหมือน debtDb.ts bucketFromDays)
   if (key === "debtStatus") {
-    const v = row.debtStatus ?? row.debtType;
-    return v != null ? String(v) : "-";
+    return bucketFromRow(row);
   }
   // overdueDays: วันเกินกำหนด
   if (key === "overdueDays") {
