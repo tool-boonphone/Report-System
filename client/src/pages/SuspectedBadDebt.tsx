@@ -738,7 +738,7 @@ export default function SuspectedBadDebt() {
                   selected={osFilter}
                   onChange={setOsFilter}
                   options={["iPhone", "iPad", "Android"]}
-                  placeholder="ทั้งหมด"
+                  placeholder="ทุก Device"
                 />
 
                 {/* รุ่นเครื่อง — options คือ base model (ยุบรวมแล้ว) ไม่ต้อง format เพิ่มเติม */}

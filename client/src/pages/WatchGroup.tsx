@@ -875,7 +875,7 @@ export default function WatchGroup() {
                   selected={osFilter}
                   onChange={setOsFilter}
                   options={["iPhone", "iPad", "Android"]}
-                  placeholder="ทั้งหมด"
+                  placeholder="ทุก Device"
                 />
                 {/* รุ่นเครื่อง */}
                 <MultiSelectFilter

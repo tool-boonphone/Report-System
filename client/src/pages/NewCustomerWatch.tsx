@@ -836,7 +836,7 @@ export default function NewCustomerWatch() {
                   selected={osFilter}
                   onChange={setOsFilter}
                   options={["iPhone", "iPad", "Android"]}
-                  placeholder="ทั้งหมด"
+                  placeholder="ทุก Device"
                 />
                 {/* รุ่น */}
                 <MultiSelectFilter

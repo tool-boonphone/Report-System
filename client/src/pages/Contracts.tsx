@@ -782,6 +782,7 @@ export default function Contracts() {
                       key === "device" ? [...DEVICE_OPTIONS] :
                       (dynamicOptions[key] ?? [])
                     }
+                    placeholder={key === "device" ? "ทุก Device" : "ทั้งหมด"}
                   />
                 ))}
               </div>
