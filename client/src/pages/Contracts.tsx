@@ -116,7 +116,16 @@ function bucketFromRow(row: any): string {
 }
 
 // Static list สำหรับ device filter
-const DEVICE_OPTIONS = ["iPad", "iPhone", "Android"] as const;
+const DEVICE_OPTIONS = ["iPhone", "iPad", "Android"] as const;
+
+/** Classify device จาก model field (ขึ้นต้น iPhone = iPhone, iPad = iPad, อื่นๆ = Android) */
+function classifyDevice(model: string | null): "iPhone" | "iPad" | "Android" | null {
+  if (!model) return null;
+  const m = model.toLowerCase();
+  if (m.startsWith("iphone")) return "iPhone";
+  if (m.startsWith("ipad"))   return "iPad";
+  return "Android";
+}
 
 // Static list สำหรับ debtStatus filter (เหมือนเมนูสรุปรายเดือน)
 const DEBT_STATUS_OPTIONS = [
@@ -404,7 +413,9 @@ export default function Contracts() {
         if (key === excludeKey) continue;
         const fv = filters[key as keyof Filters] as Set<string>;
         // debtStatus filter: derive จาก overdueDays + debtType (เหมือน debtDb.ts)
-        const rowVal = key === "debtStatus" ? bucketFromRow(r) : r[key];
+        const rowVal = key === "debtStatus" ? bucketFromRow(r) :
+                        key === "device"     ? classifyDevice(r.model) :
+                        r[key];
         if (fv.size > 0 && !fv.has(rowVal)) return false;
       }
       // date range
@@ -425,9 +436,9 @@ export default function Contracts() {
       const subset = allRows.filter((r: any) => rowPassesExcept(r, key));
       // debtStatus: ดึงจาก field debtStatus หรือ debtType
       const getVal = (r: any) =>
-        key === "debtStatus"
-          ? bucketFromRow(r)
-          : String(r[key]);
+        key === "debtStatus" ? bucketFromRow(r) :
+        key === "device"     ? (classifyDevice(r.model) ?? "") :
+        String(r[key]);
       result[key] = Array.from(new Set(subset.map(getVal)))
         .filter((v) => v && v !== "null" && v !== "undefined")
         .sort();
@@ -447,7 +458,9 @@ export default function Contracts() {
       for (const key of CAT_KEYS) {
         const fv = f[key as keyof Filters] as Set<string>;
         // debtStatus filter ใช้ field debtStatus (หรือ debtType) ใน row
-        const rowVal = key === "debtStatus" ? bucketFromRow(r) : r[key];
+        const rowVal = key === "debtStatus" ? bucketFromRow(r) :
+                        key === "device"     ? classifyDevice(r.model) :
+                        r[key];
         if (fv.size > 0 && !fv.has(rowVal)) return false;
       }
       // date range

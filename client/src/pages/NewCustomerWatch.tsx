@@ -82,17 +82,12 @@ const fmtMonthLabel = (ym: string) => {
   return `${monthNames[mIdx] ?? m} ${buddhistYear}`;
 };
 
-/** Derive iOS/Android from model string */
-const deriveOS = (model: string | null): "iOS" | "Android" | null => {
+/** Classify device จาก model field (iPhone / iPad / Android) */
+const deriveOS = (model: string | null): "iPhone" | "iPad" | "Android" | null => {
   if (!model) return null;
   const m = model.toLowerCase();
-  if (
-    m.startsWith("iphone") ||
-    m.startsWith("ipad") ||
-    m.startsWith("ไอโฟน") ||
-    m.startsWith("ไอแพด")
-  )
-    return "iOS";
+  if (m.startsWith("iphone")) return "iPhone";
+  if (m.startsWith("ipad"))   return "iPad";
   return "Android";
 };
 
@@ -840,7 +835,7 @@ export default function NewCustomerWatch() {
                   label="OS"
                   selected={osFilter}
                   onChange={setOsFilter}
-                  options={["iOS", "Android"]}
+                  options={["iPhone", "iPad", "Android"]}
                   placeholder="ทุก OS"
                 />
                 {/* รุ่น */}
