@@ -434,7 +434,7 @@ const TAB_INFO_CONTENT: {title:string;items:{label:string;desc:string;color?:str
   items: [
     {label:"สัญญา",    desc:"จำนวนสัญญาทั้งหมดที่อนุมัติ จัดกลุ่มตามสถานะหนี้ปัจจุบัน (ปกติ / เกินกำหนด / ระงับ / สิ้นสุด / หนี้เสีย)",color:"text-slate-700"},
     {label:"ยอดผ่อนรวม",     desc:"ยอดที่ลูกค้าต้องผ่อนทั้งหมด = SUM(net_amount) ทุกงวดตั้งแต่งวดแรกถึงงวดสุดท้าย (เงินต้น + ดอกเบี้ย + ค่าดำเนินการ ไม่รวมค่าปรับ/ค่าปลดล็อก) เช่น ผ่อนงวดละ 2,000 × 12 งวด = 24,000",color:"text-purple-700"},
-    {label:"เป้าเก็บหนี้",     desc:"ยอดค่างวด (เงินต้น + ดอกเบี้ย + ค่าดำเนินการ + ค่าปรับ + ค่าปลดล็อก) ตั้งแต่งวดแรกถึงงวดปัจจุบัน (เฉพาะงวดที่ถึงกำหนดแล้ว)",color:"text-indigo-700"},
+    {label:"ตั้งหนี้",     desc:"ยอดค่างวด (เงินต้น + ดอกเบี้ย + ค่าดำเนินการ) ตั้งแต่งวดแรกถึงงวดปัจจุบันที่ถึงกำหนดชำระแล้ว ส่วนค่าปรับและค่าปลดล็อกสามารถเปิด/ปิด Badge เพิ่มคำนวณยอดส่วนนี้เพิ่มเติมได้",color:"text-indigo-700"},
     {label:"ยอดเก็บหนี้",      desc:"ยอดเงินที่ลูกค้าชำระจริง แยกตามประเภท (เงินต้น / ดอกเบี้ย / ค่าดำเนินการ / ค่าปรับ / ค่าปลดล็อก / ชำระเกิน / หนี้เสีย)",color:"text-green-700"},
     {label:"หนี้ค้างชำระ",   desc:"ยอดค้างชำระจากงวดก่อนหน้าจนถึงงวดปัจจุบัน + (ค่าปรับ + ค่าปลดล็อกของงวดล่าสุด) ไม่รวมยอดที่ชำระเข้ามาแล้ว",color:"text-orange-700"},
     {label:"ยังไม่ถึงกำหนด", desc:"ยอดค่างวด (เฉพาะเงินต้น + ดอกเบี้ย + ค่าดำเนินการ ไม่รวมค่าปรับ/ค่าปลดล็อก) ของงวดที่ยังไม่ถึงกำหนดชำระ",color:"text-blue-700"},
@@ -484,20 +484,20 @@ const INFO_CONTENT: Record<string,{title:string;items:{label:string;desc:string}
     ]
   },
   target: {
-    title: "ยอดที่ต้องชำระ — ที่มาของตัวเลขในคอลัมน์",
+    title: "ตั้งหนี้ — ที่มาของตัวเลขในคอลัมน์",
     items: [
       {label:"เดือน-ปีที่อนุมัติ",desc:"เดือนและปีที่อนุมัติสัญญา"},
-      {label:"ยอดที่ต้องชำระ",desc:"ยอดเป้าเก็บหนี้ที่ต้องชำระในเดือนนั้นๆ (รวมทุกรายการ)"},
-      {label:"ปกติ",desc:"เป้าเก็บหนี้ของสัญญาที่ไม่ค้างชำระ"},
-      {label:"เกิน 1-7",desc:"เป้าเก็บหนี้ของสัญญาที่ค้างชำระ 1–7 วัน"},
-      {label:"เกิน 8-14",desc:"เป้าเก็บหนี้ของสัญญาที่ค้างชำระ 8–14 วัน"},
-      {label:"เกิน 15-30",desc:"เป้าเก็บหนี้ของสัญญาที่ค้างชำระ 15–30 วัน"},
-      {label:"เกิน 31-60",desc:"เป้าเก็บหนี้ของสัญญาที่ค้างชำระ 31–60 วัน"},
-      {label:"เกิน 61-90",desc:"เป้าเก็บหนี้ของสัญญาที่ค้างชำระ 61–90 วัน"},
-      {label:"เกิน >90",desc:"เป้าเก็บหนี้ของสัญญาที่ค้างชำระมากกว่า 90 วัน"},
-      {label:"ระงับสัญญา",desc:"เป้าเก็บหนี้ของสัญญาที่ถูกระงับชั่วคราว"},
-      {label:"สิ้นสุดสัญญา",desc:"เป้าเก็บหนี้ของสัญญาที่สิ้นสุดอายุแล้ว"},
-      {label:"หนี้เสีย",desc:"เป้าเก็บหนี้ของสัญญาที่ถูกจัดเป็นหนี้เสีย"},
+      {label:"ตั้งหนี้",desc:"ยอดค่างวด (เงินต้น + ดอกเบี้ย + ค่าดำเนินการ) ตั้งแต่งวดแรกถึงงวดปัจจุบันที่ถึงกำหนดชำระแล้ว ส่วนค่าปรับและค่าปลดล็อกสามารถเปิด/ปิด Badge เพิ่มคำนวณยอดส่วนนี้เพิ่มเติมได้"},
+      {label:"ปกติ",desc:"ยอดตั้งหนี้ของสัญญาที่ไม่ค้างชำระ"},
+      {label:"เกิน 1-7",desc:"ยอดตั้งหนี้ของสัญญาที่ค้างชำระ 1–7 วัน"},
+      {label:"เกิน 8-14",desc:"ยอดตั้งหนี้ของสัญญาที่ค้างชำระ 8–14 วัน"},
+      {label:"เกิน 15-30",desc:"ยอดตั้งหนี้ของสัญญาที่ค้างชำระ 15–30 วัน"},
+      {label:"เกิน 31-60",desc:"ยอดตั้งหนี้ของสัญญาที่ค้างชำระ 31–60 วัน"},
+      {label:"เกิน 61-90",desc:"ยอดตั้งหนี้ของสัญญาที่ค้างชำระ 61–90 วัน"},
+      {label:"เกิน >90",desc:"ยอดตั้งหนี้ของสัญญาที่ค้างชำระมากกว่า 90 วัน"},
+      {label:"ระงับสัญญา",desc:"ยอดตั้งหนี้ของสัญญาที่ถูกระงับชั่วคราว"},
+      {label:"สิ้นสุดสัญญา",desc:"ยอดตั้งหนี้ของสัญญาที่สิ้นสุดอายุแล้ว"},
+      {label:"หนี้เสีย",desc:"ยอดตั้งหนี้ของสัญญาที่ถูกจัดเป็นหนี้เสีย"},
     ]
   },
   paid: {
@@ -1030,7 +1030,7 @@ export default function MonthlySummary() {
         // ── DueMonth sheet ────────────────────────────────────────────────────────────────────────────────
         // โครงสร้าง: เดือนอนุมัติ | หัวข้อ | รวม | due_month1 | due_month2 | ...
         type DueSubKey="count"|"financeTotal"|"installTotal"|"target"|"paid"|"due"|"notYetDue";
-        const dueSubRows:[string,DueSubKey][]=[["สัญญา","count"],["ยอดจัดฯ","financeTotal"],["ยอดผ่อนรวม","installTotal"],["เป้าเก็บหนี้","target"],["ยอดเก็บหนี้","paid"],["หนี้ค้างชำระ","due"],["ยังไม่ถึงกำหนด","notYetDue"]];
+        const dueSubRows:[string,DueSubKey][]=[["สัญญา","count"],["ยอดจัดฯ","financeTotal"],["ยอดผ่อนรวม","installTotal"],["ตั้งหนี้","target"],["ยอดเก็บหนี้","paid"],["หนี้ค้างชำระ","due"],["ยังไม่ถึงกำหนด","notYetDue"]];
         const visDueSubRows=dueSubRows.filter(([,k])=>!hiddenSubRows.has(k as TabKey));
         const visibleDueRows=dueMonthRows.filter(r=>!hiddenRows.has(r.approveMonth));
         const dueHdr:(string|number|null)[]=["เดือน-ปีที่อนุมัติ","หัวข้อ","รวม",...allDueMonths.map(dm=>fmtMonthYear(dm))];
@@ -1080,7 +1080,7 @@ export default function MonthlySummary() {
       } else if(tab==="combined"){
         // ── Combined sheet ────────────────────────────────────────────────────────────────────────────────
         // โครงสร้าง: เดือน | หัวข้อ | bucket1 | bucket2 | ... | รวม | % columns
-        const subRows:[string,TabKey][]=[["สัญญา","count"],["ยอดผ่อนรวม","installTotal"],["เป้าเก็บหนี้","target"],["ยอดเก็บหนี้","paid"],["หนี้ค้างชำระ","due"],["ยังไม่ถึงกำหนด","notYetDue"]];
+        const subRows:[string,TabKey][]=[["สัญญา","count"],["ยอดผ่อนรวม","installTotal"],["ตั้งหนี้","target"],["ยอดเก็บหนี้","paid"],["หนี้ค้างชำระ","due"],["ยังไม่ถึงกำหนด","notYetDue"]];
         // header row 1: group labels
         const hdr1:string[][]=[["เดือน-ปีที่อนุมัติ"],["หัวข้อ"]];
         for(const g of visGroups){
@@ -1095,7 +1095,7 @@ export default function MonthlySummary() {
           for(const b of g.buckets)hdr2.push([b]);
           if(g.hasSubtotal)hdr2.push([g.label+" รวม"]);
         }
-        hdr2.push(["รวม"],["รวม % ของยอดผ่อนรวม"],["รวม % ของเป้าเก็บหนี้"]);
+        hdr2.push(["รวม"],["รวม % ของยอดผ่อนรวม"],["รวม % ของตั้งหนี้"]);
         // hdr1 ต้องมีคอลัมน์เท่ากับ hdr2
         while(hdr1.length<hdr2.length)hdr1.push([""]);
         const wsData:(string|number|null)[][]=[hdr1.map(x=>x[0]),hdr2.map(x=>x[0])];
@@ -1239,7 +1239,7 @@ export default function MonthlySummary() {
   const TAB_CONFIG: Array<{key:TabKey;label:string;activeClass:string;filterCount:number}> = [
     {key:"count",        label:"สัญญา",       activeClass:"border-slate-600 text-slate-700",   filterCount:countFilterCount},
     {key:"installTotal", label:"ยอดผ่อนรวม",       activeClass:"border-purple-600 text-purple-700", filterCount:[installApproveMonths.size>0,installApproveYears.size>0,installProductType.size>0,installDeviceFamily].filter(Boolean).length},
-    {key:"target",       label:"เป้าเก็บหนี้",       activeClass:"border-indigo-600 text-indigo-700", filterCount:targetFilterCount},
+    {key:"target",       label:"ตั้งหนี้",       activeClass:"border-indigo-600 text-indigo-700", filterCount:targetFilterCount},
     {key:"paid",         label:"ยอดเก็บหนี้",     activeClass:"border-green-600 text-green-700",   filterCount:paidFilterCount},
     {key:"due",          label:"หนี้ค้างชำระ",   activeClass:"border-orange-600 text-orange-700", filterCount:dueFilterCount},
     {key:"notYetDue",    label:"ยังไม่ถึงกำหนด", activeClass:"border-blue-600 text-blue-700",     filterCount:notYetDueFilterCount},
@@ -1875,7 +1875,7 @@ function SummaryTable({tab,rows,grandTotal,hiddenBuckets,toggleBucket,toggleGrou
   const SortIcon=sortDir==="asc"?ArrowUp:ArrowDown;
 
   // second column label by tab
-  const col2Label=tab==="count"?"สัญญา":tab==="installTotal"?"ยอดผ่อนรวม":tab==="target"?"เป้าเก็บหนี้":tab==="paid"?"ยอดชำระ":tab==="due"?"หนี้ค้างชำระ":"ยังไม่ถึงกำหนด";
+  const col2Label=tab==="count"?"สัญญา":tab==="installTotal"?"ยอดผ่อนรวม":tab==="target"?"ตั้งหนี้":tab==="paid"?"ยอดชำระ":tab==="due"?"หนี้ค้างชำระ":"ยังไม่ถึงกำหนด";
   const col2Color=tab==="count"?"bg-slate-700":tab==="installTotal"?"bg-purple-700":tab==="target"?"bg-indigo-700":tab==="paid"?"bg-green-700":tab==="due"?"bg-orange-700":"bg-blue-700";
 
   const minWidth=useMemo(()=>{

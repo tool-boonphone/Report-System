@@ -540,7 +540,7 @@ export default function DebtReport() {
     const row = rows.find((r: any) => r.collectionMonth === snapshotMonth);
     return row?.targetByRange ?? null;
   };
-  // query getMonthlyDebtSummary สำหรับ dropdown "เป้าเก็บหนี้รายเดือน" (ตาราง 4 คอลัมน์)
+  // query getMonthlyDebtSummary สำหรับ dropdown "ตั้งหนี้รายเดือน" (ตาราง 4 คอลัมน์)
   // ดึงจาก monthly_target_detail_snapshot (freeze ณ วันที่ 1) + debt_collected_cache (ค่างวดเท่านั้น)
   // fallback เมื่อ frozen data ยังไม่มี (snapshot เก่าก่อน backfill)
   const monthlyDebtSummaryQuery = trpc.debt.getMonthlyDebtSummary.useQuery(
@@ -1440,7 +1440,7 @@ export default function DebtReport() {
             { key: "penalty", label: "ค่าปรับ", width: 80, align: "right" },
             { key: "unlockFee", label: "ค่าปลดล็อก", width: 90, align: "right" },
           ] : []),
-          { key: "amount", label: "ยอดหนี้รวม", width: 115, align: "right" },
+          { key: "amount", label: "ตั้งหนี้", width: 115, align: "right" },
         ]
       : [
           // collected tab: ซ่อน closeInstallmentAmount (ซ้ำซ้อนกับ principal+interest+fee)
@@ -1505,10 +1505,10 @@ export default function DebtReport() {
 
           </div>
           <div className="flex items-center gap-2">
-            {/* ปุ่ม Log Snapshot (target tab only) — เปลี่ยนเป็น "เป้าเก็บหนี้รายเดือน" */}
+            {/* ปุ่ม Log Snapshot (target tab only) — เปลี่ยนเป็น "ตั้งหนี้รายเดือน" */}
             {tab === "target" && (
               <div className="flex items-center gap-1.5 relative">
-                {/* ปุ่ม Log Snapshot (เปลี่ยนชื่อเป็น "เป้าเก็บหนี้รายเดือน") */}
+                {/* ปุ่ม Log Snapshot (เปลี่ยนชื่อเป็น "ตั้งหนี้รายเดือน") */}
                 <div className="relative snapshot-log-dropdown">
                   <Button
                     variant="outline"
@@ -1519,7 +1519,7 @@ export default function DebtReport() {
                     title="ดูรายการ Snapshot เป้าเก็บหนี้ที่บันทึกไว้"
                   >
                     <Target className="w-3.5 h-3.5 mr-1.5" />
-                    เป้าเก็บหนี้รายเดือน
+                    ตั้งหนี้รายเดือน
                     {targetViewMode === "snapshot" && selectedSnapshotMonth && (
                       <span className="ml-1.5 bg-amber-600 text-white text-[10px] px-1.5 py-0.5 rounded-full">
                         {selectedSnapshotMonth}
@@ -1551,7 +1551,7 @@ export default function DebtReport() {
                           {/* Table Header */}
                           <div className="grid gap-0 bg-amber-50 border-b border-amber-200 text-[11px] font-semibold text-amber-800" style={{ gridTemplateColumns: '1fr 1fr 1fr 1fr auto' }}>
                             <div className="px-3 py-2">เดือน-ปี</div>
-                            <div className="px-3 py-2 text-right">เป้าเก็บหนี้</div>
+                            <div className="px-3 py-2 text-right">ตั้งหนี้</div>
                             <div className="px-3 py-2 text-right">ยอดเก็บหนี้</div>
                             <div className="px-3 py-2 text-right">% เก็บหนี้</div>
                             <div className="px-2 py-2 text-center w-9"></div>
@@ -1874,7 +1874,7 @@ export default function DebtReport() {
               )}
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
                 <Target className="w-3 h-3" />
-                ยอดหนี้รวม: {fmtMoney(targetSummary.total)}
+                เป้าเก็บหนี้: {fmtMoney(targetSummary.total)}
               </span>
             </div>
           )}
@@ -2023,7 +2023,7 @@ export default function DebtReport() {
                         className="border-r text-center flex items-center justify-center text-white"
                         style={{ width: GROUP_WIDTH, height: 28, background: "#b45309" }}
                       >
-                        ข้อมูลชำระงวดที่ {i + 1}
+                        ตั้งหนี้งวดที่่ {i + 1}
                       </div>
                     ))
                   )}
@@ -3169,7 +3169,7 @@ export default function DebtReport() {
                     // สร้าง worksheet data
                     const wsData: (string | number)[][] = [
                       [`ยอดรายวัน — ${monthLabel}`],
-                      ["วันที่", "เป้าเก็บหนี้", "ยอดเก็บหนี้", "% เก็บหนี้"],
+                      ["วันที่", "ตั้งหนี้", "ยอดเก็บหนี้", "% เก็บหนี้"],
                       ...rows.map(r => {
                         const dayLabel = r.isOverdue ? "ยกมา" : (r.date ? parseInt(r.date.split("-")[2] ?? "0", 10) : 0);
                         return [
@@ -3243,7 +3243,7 @@ export default function DebtReport() {
                     <thead className="sticky top-0 z-10">
                       <tr className="bg-amber-100 text-amber-900 text-[12px] font-semibold">
                         <th className="px-3 py-2 text-left border-b border-amber-200 w-16">วันที่</th>
-                        <th className="px-3 py-2 text-right border-b border-amber-200">เป้าเก็บหนี้</th>
+                        <th className="px-3 py-2 text-right border-b border-amber-200">ตั้งหนี้</th>
                         <th className="px-3 py-2 text-right border-b border-amber-200">ยอดเก็บหนี้</th>
                         <th className="px-3 py-2 text-right border-b border-amber-200">% เก็บหนี้</th>
                       </tr>
