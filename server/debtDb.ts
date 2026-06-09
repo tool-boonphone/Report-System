@@ -4666,13 +4666,17 @@ export async function listWatchGroup(params: {
     //      (ไม่จำกัดว่าปัจจุบันอยู่งวดที่เท่าไร ขอแค่งวด 1 ยังไม่ครบ)
     //   1 งวด: ชำระงวด 1 ครบแล้ว + ถึงกำหนดงวด 2 แล้ว + งวด 2 ยังไม่ครบ
     //      (ไม่จำกัดว่าปัจจุบันอยู่งวดที่เท่าไร ขอแค่งวด 2 ยังไม่ครบ)
-    const paid1  = inst1PaidMap.get(extId)  ?? 0;
-    const total1 = inst1TotalMap.get(extId) ?? 0;
-    const paid2  = inst2PaidMap.get(extId)  ?? 0;
-    const total2 = inst2TotalMap.get(extId) ?? 0;
-    const inst1Done    = total1 > 0 && paid1 >= total1 - 0.5;   // ชำระงวด 1 ครบแล้ว
-    const inst1NotDone = total1 <= 0 || paid1 < total1 - 0.5;  // งวด 1 ยังไม่ครบ
-    const inst2NotDone = total2 <= 0 || paid2 < total2 - 0.5;  // งวด 2 ยัງไม่ครบ
+    // Fix: ใช้ยอดชำระรวมทั้งหมด (total_paid_all) เทียบกับ installment_amount ของสัญญา
+    // ไม่สนใจว่าเงินที่จ่ายมาเป็นค่าอะไร (ค่างวด/ค่าปรับ/ค่าธรรมเนียม)
+    // ถ้ายอดรวม >= installment_amount × N → ถือว่าชำระครบ N งวดแล้ว
+    const totalPaidAll = totalPaidAllMap.get(extId) ?? 0;
+    const installmentAmount = cInfo?.installment_amount != null ? Number(cInfo.installment_amount) : 0;
+    // inst1Done: ยอดชำระรวม >= ค่างวด 1 งวด
+    const inst1Done    = installmentAmount > 0 && totalPaidAll >= installmentAmount - 0.5;
+    const inst1NotDone = !inst1Done;
+    // inst2Done: ยอดชำระรวม >= ค่างวด 2 งวด
+    const inst2Done    = installmentAmount > 0 && totalPaidAll >= (installmentAmount * 2) - 0.5;
+    const inst2NotDone = !inst2Done;
     const due1Reached  = dueDate1 != null && dueDate1 <= today;
     const due2Reached  = dueDate2 != null && dueDate2 <= today;
 
@@ -4726,9 +4730,9 @@ export async function listWatchGroup(params: {
     }
 
     const financeAmount = s.finance_amount != null ? Number(s.finance_amount) : null;
-    const installmentAmount = cInfo?.installment_amount != null ? Number(cInfo.installment_amount) : null;
+    const installmentAmountVal = cInfo?.installment_amount != null ? Number(cInfo.installment_amount) : null;
     const installmentCount = s.installment_count != null ? Number(s.installment_count) : null;
-    const totalInstallmentValue = (installmentAmount ?? 0) * (installmentCount ?? 0);
+    const totalInstallmentValue = (installmentAmountVal ?? 0) * (installmentCount ?? 0);
     const incentive = incentiveMap.get(s.contract_no ?? "") ?? 0;
 
     rows.push({
