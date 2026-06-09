@@ -1076,10 +1076,10 @@ export default function DebtOverview() {
               {
                 label: "ยอดผ่อนรวม",
                 color: "bg-purple-50 text-purple-700",
-                desc: "ยอดรวมที่ลูกค้าต้องชำระตลอดสัญญา (เงินต้น + ดอกเบี้ย + ค่าดำเนินการ ทุกงวด) หากเปิดสวิตช์ 'ตั้งหนี้' จะแสดงเฉพาะยอดของงวดที่ถึงกำหนดชำระแล้ว",
+                desc: "ยอดรวมที่ลูกค้าต้องชำระตลอดสัญญา (เงินต้น + ดอกเบี้ย + ค่าดำเนินการ ทุกงวด) หากเปิดสวิตช์ 'เป้าเก็บหนี้' จะแสดงเฉพาะยอดของงวดที่ถึงกำหนดชำระแล้ว",
               },
               {
-                label: "ตั้งหนี้",
+                label: "เป้าเก็บหนี้",
                 color: "bg-orange-50 text-orange-700",
                 desc: "ยอดค่างวด (เงินต้น + ดอกเบี้ย + ค่าดำเนินการ) ตั้งแต่งวดแรกถึงงวดปัจจุบันที่ถึงกำหนดชำระแล้ว ส่วนค่าปรับและค่าปลดล็อกสามารถเปิด/ปิด Badge เพื่อคำนวณยอดส่วนนี้เพิ่มเติมได้",
               },
@@ -1123,7 +1123,7 @@ export default function DebtOverview() {
               <p className="text-xs text-gray-500 font-medium mb-2">เคล็ดลับการใช้งาน</p>
               <ul className="text-xs text-gray-500 space-y-1 list-disc list-inside">
                 <li>กดไอคอนตาที่หัวแถวเดือน เพื่อซ่อนเดือนนั้นออกจากยอดรวม</li>
-                <li>เปิดสวิตช์ 'ตั้งหนี้' เพื่อดูเฉพาะยอดที่ถึงกำหนดชำระแล้ว</li>
+                <li>เปิดสวิตช์ 'เป้าเก็บหนี้' เพื่อดูเฉพาะยอดที่ถึงกำหนดชำระแล้ว</li>
                 <li>กด Badge ยอดเก็บหนี้ เพื่อเลือกว่าจะรวมค่าปรับ/ค่าปลดล็อกหรือไม่</li>
                 <li>% ในแต่ละช่อง ชี้เมาส์ค้างไว้เพื่อดูรายละเอียดการคำนวณ</li>
               </ul>
@@ -1213,10 +1213,10 @@ export default function DebtOverview() {
             {/* เป้าเก็บหนี้ toggle */}
             <div className={["flex items-center gap-1.5 h-9 px-3 rounded-md border cursor-pointer select-none", principalOnly ? "border-blue-400 bg-blue-100" : "border-blue-200 bg-blue-50"].join(" ")}
               onClick={() => setPrincipalOnly((v) => !v)}
-              title="เปิด: แสดงเฉพาะยอดที่ถึงกำหนดชำระแล้ว (ตั้งหนี้) | ปิด: แสดงยอดผ่อนรวมทั้งหมดตามสัญญา"
+              title="เปิด: แสดงเฉพาะยอดที่ถึงกำหนดชำระแล้ว (เป้าเก็บหนี้) | ปิด: แสดงยอดผ่อนรวมทั้งหมดตามสัญญา"
             >
               <Switch checked={principalOnly} onCheckedChange={setPrincipalOnly} id="principalOnly" onClick={(e) => e.stopPropagation()} />
-              <label htmlFor="principalOnly" className="text-xs text-blue-700 font-medium cursor-pointer">ตั้งหนี้</label>
+              <label htmlFor="principalOnly" className="text-xs text-blue-700 font-medium cursor-pointer">เป้าเก็บหนี้</label>
             </div>
             {/* Export Excel */}
             {hasData && (
