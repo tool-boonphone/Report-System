@@ -1705,8 +1705,13 @@ async function getMonthlySummaryFromCache(
 
   // ตรวจว่า cache มีข้อมูลสำหรับ query_type หลัก (count) ไหม
   // และตรวจสอบเฉพาะเจาะจงตาม filter พื้นฐาน (productType, deviceFamily)
+  // Phase Fix: ตรวจสอบด้วยว่า target cache ถูก populate วันนี้หรือยัง
+  //   เพราะ target ใช้ due_date <= CURRENT_DATE ซึ่งเปลี่ยนทุกวัน
+  //   ถ้า cache ถูก populate เมื่อวาน → ตัวเลข target จะ stale (ขาดงวดที่ครบกำหนดวันนี้)
   const checkSql = `
-    SELECT COUNT(*) AS cnt 
+    SELECT 
+      COUNT(*) AS cnt,
+      MAX(updated_at) AS last_updated
     FROM monthly_summary_cache 
     WHERE section = '${section}' 
       AND query_type = 'count'
@@ -1715,8 +1720,19 @@ async function getMonthlySummaryFromCache(
       AND date_month IS NULL
   `;
   const checkRows = await db.execute(sql.raw(checkSql));
-  const cnt = parseInt(String((pgRows(checkRows)[0] as any)?.cnt ?? "0"), 10);
+  const checkRow = pgRows(checkRows)[0] as any;
+  const cnt = parseInt(String(checkRow?.cnt ?? "0"), 10);
   if (cnt === 0) return null; // ไม่มีข้อมูลใน cache สำหรับ filter นี้ → fallback ไป live query
+
+  // ตรวจสอบว่า cache ถูก populate วันนี้หรือยัง (สำหรับ target ที่เปลี่ยนทุกวัน)
+  // ถ้า last_updated < วันนี้ 00:00 → cache stale → fallback ไป live query
+  const lastUpdated = checkRow?.last_updated ? new Date(checkRow.last_updated) : null;
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  if (!lastUpdated || lastUpdated < todayStart) {
+    console.log(`[getMonthlySummaryFromCache] STALE CACHE — last_updated=${lastUpdated?.toISOString() ?? 'null'}, today=${todayStart.toISOString()} → fallback to live query`);
+    return null; // cache เก่ากว่าวันนี้ → fallback ไป live query เพื่อให้ตัวเลข target ถูกต้อง
+  }
 
   // ดึงแต่ละ query_type พร้อมกัน
   const [countRows, targetRows, paidRows, dueRows, notYetDueRows, installTotalRows] = await Promise.all([
