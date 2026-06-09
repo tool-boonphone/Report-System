@@ -732,13 +732,13 @@ export default function SuspectedBadDebt() {
                   placeholder="ทุกสถานะหนี้"
                 />
 
-                {/* iOS/Android */}
+                {/* Device */}
                 <MultiSelectFilter
-                  label="ประเภทเครื่อง"
+                  label="Device"
                   selected={osFilter}
                   onChange={setOsFilter}
                   options={["iPhone", "iPad", "Android"]}
-                  placeholder="ทุกประเภท"
+                  placeholder="ทั้งหมด"
                 />
 
                 {/* รุ่นเครื่อง — options คือ base model (ยุบรวมแล้ว) ไม่ต้อง format เพิ่มเติม */}

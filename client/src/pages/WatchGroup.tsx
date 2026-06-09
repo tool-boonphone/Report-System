@@ -869,13 +869,13 @@ export default function WatchGroup() {
                   options={productTypeOptions}
                   placeholder="ทุกประเภท"
                 />
-                {/* ประเภทเครื่อง */}
+                {/* Device */}
                 <MultiSelectFilter
-                  label="ประเภทเครื่อง"
+                  label="Device"
                   selected={osFilter}
                   onChange={setOsFilter}
                   options={["iPhone", "iPad", "Android"]}
-                  placeholder="ทุกประเภทเครื่อง"
+                  placeholder="ทั้งหมด"
                 />
                 {/* รุ่นเครื่อง */}
                 <MultiSelectFilter

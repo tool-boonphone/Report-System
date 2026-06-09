@@ -830,13 +830,13 @@ export default function NewCustomerWatch() {
                   options={productTypeOptions}
                   placeholder="ทุกประเภท"
                 />
-                {/* OS */}
+                {/* Device */}
                 <MultiSelectFilter
-                  label="OS"
+                  label="Device"
                   selected={osFilter}
                   onChange={setOsFilter}
                   options={["iPhone", "iPad", "Android"]}
-                  placeholder="ทุก OS"
+                  placeholder="ทั้งหมด"
                 />
                 {/* รุ่น */}
                 <MultiSelectFilter
