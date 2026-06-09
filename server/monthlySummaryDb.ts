@@ -2095,6 +2095,18 @@ async function queryDueMonthTarget(
       WHERE ${baseWhere}
         AND DATE(dtc.due_date) <= CURRENT_DATE
         AND dtc.due_date IS NOT NULL
+        AND dtc.is_closed IS NOT TRUE
+        AND COALESCE(dtc.is_suspended, false) IS NOT TRUE
+        AND COALESCE(dtc.contract_status, \'\') NOT IN (\'ระงับสัญญา\', \'สิ้นสุดสัญญา\', \'หนี้เสีย\', \'ยกเลิกสัญญา\')
+        AND dtc.is_closed IS NOT TRUE
+        AND COALESCE(dtc.is_suspended, false) IS NOT TRUE
+        AND COALESCE(dtc.contract_status, \'\') NOT IN (\'ระงับสัญญา\', \'สิ้นสุดสัญญา\', \'หนี้เสีย\', \'ยกเลิกสัญญา\')
+        AND dtc.is_closed IS NOT TRUE
+        AND COALESCE(dtc.is_suspended, false) IS NOT TRUE
+        AND COALESCE(dtc.contract_status, \'\') NOT IN (\'ระงับสัญญา\', \'สิ้นสุดสัญญา\', \'หนี้เสีย\', \'ยกเลิกสัญญา\')
+        AND dtc.is_closed IS NOT TRUE
+        AND COALESCE(dtc.is_suspended, false) IS NOT TRUE
+        AND COALESCE(dtc.contract_status, '') NOT IN ('ระงับสัญญา', 'สิ้นสุดสัญญา', 'หนี้เสีย', 'ยกเลิกสัญญา')
       GROUP BY dtc.section, dtc.contract_external_id, TO_CHAR(dtc.due_date, 'YYYY-MM')
     ) latest ON latest.section = base.section
              AND latest.contract_external_id = base.contract_external_id
@@ -2102,6 +2114,15 @@ async function queryDueMonthTarget(
     WHERE ${baseWhereForOuter}
       AND DATE(base.due_date) <= CURRENT_DATE
       AND base.due_date IS NOT NULL
+      AND base.is_closed IS NOT TRUE
+      AND COALESCE(base.is_suspended, false) IS NOT TRUE
+      AND COALESCE(base.contract_status, \'\') NOT IN (\'ระงับสัญญา\', \'สิ้นสุดสัญญา\', \'หนี้เสีย\', \'ยกเลิกสัญญา\')
+      AND base.is_closed IS NOT TRUE
+      AND COALESCE(base.is_suspended, false) IS NOT TRUE
+      AND COALESCE(base.contract_status, \'\') NOT IN (\'ระงับสัญญา\', \'สิ้นสุดสัญญา\', \'หนี้เสีย\', \'ยกเลิกสัญญา\')
+      AND base.is_closed IS NOT TRUE
+      AND COALESCE(base.is_suspended, false) IS NOT TRUE
+      AND COALESCE(base.contract_status, \'\') NOT IN (\'ระงับสัญญา\', \'สิ้นสุดสัญญา\', \'หนี้เสีย\', \'ยกเลิกสัญญา\')
     GROUP BY 1, 2
     ORDER BY 1 DESC, 2 ASC
   `;
@@ -2205,7 +2226,6 @@ async function queryDueMonthNotYetDue(
       WHERE ${baseWhere}
         AND dtc.due_date > CURRENT_DATE
         AND dtc.is_closed IS NOT TRUE
-        AND dtc.is_paid IS NOT TRUE
         AND COALESCE(dtc.is_suspended, false) IS NOT TRUE
         AND COALESCE(dtc.contract_status, '') NOT IN ('ระงับสัญญา', 'สิ้นสุดสัญญา', 'หนี้เสีย', 'ยกเลิกสัญญา')
       GROUP BY dtc.section, dtc.contract_external_id, TO_CHAR(dtc.due_date, 'YYYY-MM')
@@ -2938,16 +2958,29 @@ export async function getDueMonthSummaryFromCache(
   // ถ้ายอด cache row เป็น 0 (เช่น เพิ่งเพิ่ม productType ใหม่ หรือ filter นี้ยังไม่ถูก populate)
   // ให้ return { rows: [], allDueMonths: [] } เพื่อให้ fallback ไปใช้ live query ทันที
   const countQ = `
-    SELECT COUNT(1) AS cnt
+    SELECT COUNT(1) AS cnt, MAX(updated_at) AS last_updated
     FROM monthly_summary_due_month_cache
     WHERE section = '${section}'
       ${ptFilter}
       ${dfFilter}
   `;
   const cntRes = await db.execute(sql.raw(countQ));
-  const cacheCount = Number(pgRows(cntRes)[0]?.cnt || 0);
+  const checkRow = pgRows(cntRes)[0] as any;
+  const cacheCount = Number(checkRow?.cnt || 0);
   if (cacheCount === 0) {
     return { rows: [], allDueMonths: [] };
+  }
+
+  // ตรวจสอบว่า cache ถูก populate วันนี้หรือยัง
+  // ถ้า updated_at < วันนี้ (stale) → fallback ไป live query
+  const lastUpdated = checkRow?.last_updated ? new Date(checkRow.last_updated) : null;
+  if (lastUpdated) {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    if (lastUpdated < todayStart) {
+      console.log(`[getDueMonthSummaryFromCache] STALE CACHE detected for section=${section} — last_updated=${lastUpdated.toISOString()}, falling back to live query`);
+      return { rows: [], allDueMonths: [] }; // cache stale → fallback ไป live query
+    }
   }
 
   const baseQ = `
