@@ -753,7 +753,7 @@ export default function SuspectedBadDebt() {
                   <tr>
                     <th className="w-10 px-2 py-2 text-center text-[10px] font-bold text-gray-500 uppercase tracking-wider">#</th>
                     <Th col="approveDate" sortKey={sortKey} sortDir={sortDir} onSort={onSort} className="w-24">วันที่อนุมัติ</Th>
-                    <Th col="contractNo" sortKey={sortKey} sortDir={sortDir} onSort={onSort} className="w-28">เลขที่สัญญา</Th>
+                    <Th col="contractNo" sortKey={sortKey} sortDir={sortDir} onSort={onSort} className="w-36">เลขที่สัญญา</Th>
                     <Th col="customerName" sortKey={sortKey} sortDir={sortDir} onSort={onSort} className="w-40">ชื่อลูกค้า / เบอร์โทร</Th>
                     <Th col="model" sortKey={sortKey} sortDir={sortDir} onSort={onSort} className="w-44">รุ่น / ความจุ</Th>
                     <Th col="sellPrice" sortKey={sortKey} sortDir={sortDir} onSort={onSort} className="w-24 text-right">ราคาขาย</Th>
@@ -797,7 +797,7 @@ export default function SuspectedBadDebt() {
                       <div
                         key={r.contractExternalId}
                         className={cn(
-                          "absolute top-0 left-0 w-full flex border-b border-gray-100 hover:bg-blue-50/30 transition-colors group",
+                          "absolute top-0 left-0 w-full flex border-b border-gray-100 hover:bg-blue-50/30 transition-colors group min-w-[1400px]",
                           virtualRow.index % 2 === 1 ? "bg-gray-50/50" : "bg-white",
                         )}
                         style={{
@@ -811,8 +811,8 @@ export default function SuspectedBadDebt() {
                         <div className="w-24 shrink-0 flex items-center px-3 text-xs text-gray-600">
                           {fmtDate(r.approveDate)}
                         </div>
-                        <div className="w-28 shrink-0 flex items-center px-3 text-xs font-bold text-blue-600">
-                          {r.contractNo}
+                        <div className="w-36 shrink-0 flex items-center px-3 min-w-0 overflow-hidden">
+                          <span className="text-xs font-bold text-blue-600 truncate block w-full">{r.contractNo}</span>
                         </div>
                         <div className="w-40 shrink-0 flex flex-col justify-center px-3 min-w-0">
                           <span className="text-xs font-bold text-gray-800 truncate">{r.customerName}</span>
