@@ -539,7 +539,7 @@ export default function DataLoadingScreen() {
               deviceLock: isLocked,
               lastType: typeof d.lastType === 'number' ? d.lastType : null, // 0=offline, 1=online
               mdmId: typeof d.id === 'number' ? d.id : null, // MDM internal ID — ใช้ดึง GPS
-              lossStatus: typeof d.lossStatus === 'number' ? d.lossStatus : null, // 0=ปกติ, 1=Lost Mode
+              lossStatus: d.lossStatus != null ? Number(d.lossStatus) : null, // 0=ปกติ, 1=Lost Mode
             });
           }
         }

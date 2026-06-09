@@ -611,7 +611,14 @@ export function SyncStatusBar({
             const isLocked = lockVal === 1 || lockVal === "1" || lockVal === true ? true
               : lockVal === 0 || lockVal === "0" || lockVal === false ? false
               : null;
-            allDevices.push({ deviceId: d.deviceId, lastTime: d.lastTime, deviceLock: isLocked, lastType: typeof d.lastType === 'number' ? d.lastType : null, mdmId: typeof d.id === 'number' ? d.id : null, lossStatus: typeof (d as any).lossStatus === 'number' ? (d as any).lossStatus : null });
+            allDevices.push({ 
+              deviceId: d.deviceId, 
+              lastTime: d.lastTime, 
+              deviceLock: isLocked, 
+              lastType: typeof d.lastType === 'number' ? d.lastType : null, 
+              mdmId: typeof d.id === 'number' ? d.id : null, 
+              lossStatus: (d as any).lossStatus != null ? Number((d as any).lossStatus) : null 
+            });
           }
         }
         fetched += devices.length;
