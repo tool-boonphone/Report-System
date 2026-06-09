@@ -115,6 +115,9 @@ function bucketFromRow(row: any): string {
   return "เกิน >90";
 }
 
+// Static list สำหรับ device filter
+const DEVICE_OPTIONS = ["iPad", "iPhone", "Android"] as const;
+
 // Static list สำหรับ debtStatus filter (เหมือนเมนูสรุปรายเดือน)
 const DEBT_STATUS_OPTIONS = [
   "ปกติ", "เกิน 1-7", "เกิน 8-14", "เกิน 15-30",
@@ -761,7 +764,11 @@ export default function Contracts() {
                     label={CAT_LABELS[key] ?? key}
                     selected={filters[key as keyof Filters] as Set<string>}
                     onChange={(v) => setCatFilter(key as keyof Filters, v)}
-                    options={key === "debtStatus" ? [...DEBT_STATUS_OPTIONS] : (dynamicOptions[key] ?? [])}
+                    options={
+                      key === "debtStatus" ? [...DEBT_STATUS_OPTIONS] :
+                      key === "device" ? [...DEVICE_OPTIONS] :
+                      (dynamicOptions[key] ?? [])
+                    }
                   />
                 ))}
               </div>
