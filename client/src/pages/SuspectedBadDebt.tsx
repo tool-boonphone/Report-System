@@ -22,6 +22,7 @@ import {
   Search,
   ShieldCheck,
   ShieldOff,
+  Smartphone,
   X,
 } from "lucide-react";
 import { LocationDialog, useLocationDialog } from "@/components/LocationDialog";
@@ -893,6 +894,18 @@ export default function SuspectedBadDebt() {
                               )}>
                                 {isToday ? "ออนไลน์วันนี้" : r.lastOnlineDays ? `${r.lastOnlineDays} วันที่แล้ว` : "ไม่พบข้อมูล"}
                               </span>
+                              {/* ไอคอน Lost Mode (lossStatus): 1=ล็อกเครื่อง (สีแดง), 0=ไม่ล็อค (สีเขียว) */}
+                              {r.lossStatus === 1 ? (
+                                <Lock className="inline-block w-3 h-3 text-red-500 ml-0.5 flex-shrink-0" title="Lost Mode: ล็อกเครื่อง" />
+                              ) : r.lossStatus === 0 ? (
+                                <Lock className="inline-block w-3 h-3 text-green-500 ml-0.5 flex-shrink-0" title="Lost Mode: ไม่ล็อก" />
+                              ) : null}
+                              {/* ไอคอน MDM Control (deviceLock): true=อยู่ภายใต้ MDM (สีเขียว), false=หลุดจาก MDM (สีเทา) */}
+                              {r.deviceLock === true ? (
+                                <ShieldCheck className="inline-block w-3 h-3 text-green-500 ml-0.5 flex-shrink-0" title="MDM: อยู่ภายใต้การควบคุม" />
+                              ) : r.deviceLock === false ? (
+                                <ShieldOff className="inline-block w-3 h-3 text-gray-400 ml-0.5 flex-shrink-0" title="MDM: หลุดจากการควบคุม" />
+                              ) : null}
                             </div>
                           </div>
                         </div>
