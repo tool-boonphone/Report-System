@@ -2153,6 +2153,13 @@ async function queryDueMonthDue(
   });
   // Bug fix: outer query ต้องใช้ filter เดียวกับ subquery
   const baseWhereForOuter = baseWhere.replace(/\bdtc\./g, "base.");
+  // เมื่อมี buckets filter แล้ว ไม่ต้องมี NOT IN condition เพราะ bucket filter ครอบคลุมแล้ว
+  const notInFilter = (opts.buckets && opts.buckets.length > 0)
+    ? ''
+    : `AND COALESCE(dtc.contract_status, '') NOT IN ('ระงับสัญญา', 'สิ้นสุดสัญญา', 'หนี้เสีย', 'ยกเลิกสัญญา')`;
+  const notInFilterOuter = (opts.buckets && opts.buckets.length > 0)
+    ? ''
+    : `AND COALESCE(base.contract_status, '') NOT IN ('ระงับสัญญา', 'สิ้นสุดสัญญา', 'หนี้เสีย', 'ยกเลิกสัญญา')`;
   const q = `
     SELECT
       TO_CHAR(base.approve_date, 'YYYY-MM') AS approve_month,
@@ -2177,7 +2184,7 @@ async function queryDueMonthDue(
         AND DATE(dtc.due_date) <= CURRENT_DATE
         AND dtc.is_closed = false
         AND COALESCE(dtc.is_suspended, false) = false
-        AND COALESCE(dtc.contract_status, '') NOT IN ('ระงับสัญญา', 'สิ้นสุดสัญญา', 'หนี้เสีย', 'ยกเลิกสัญญา')
+        ${notInFilter}
         AND dtc.due_date IS NOT NULL
       GROUP BY dtc.section, dtc.contract_external_id, TO_CHAR(dtc.due_date, 'YYYY-MM')
     ) latest ON latest.section = base.section
@@ -2188,7 +2195,7 @@ async function queryDueMonthDue(
       AND DATE(base.due_date) <= CURRENT_DATE
       AND base.is_closed = false
       AND COALESCE(base.is_suspended, false) = false
-      AND COALESCE(base.contract_status, '') NOT IN ('ระงับสัญญา', 'สิ้นสุดสัญญา', 'หนี้เสีย', 'ยกเลิกสัญญา')
+      ${notInFilterOuter}
       AND base.due_date IS NOT NULL
     GROUP BY 1, 2
     ORDER BY 1 DESC, 2 ASC
