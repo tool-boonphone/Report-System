@@ -2521,28 +2521,35 @@ export async function getDueMonthSummary(
   };
   // เรียก getMonthlySummary ด้วยเพื่อดึง totalInstallTotal และ totalNotYetDue ที่ถูกต้อง
   // (ใช้ logic เดียวกับ mode สถานะหนี้ — baseline_amount × installment_count)
-  const monthlySummaryParams: MonthlySummaryParams = {
-    section,
-    countApproveMonths:          opts.approveMonths,
-    countProductType:            opts.productType,
-    countDeviceFamily:           opts.deviceFamily,
-    targetApproveMonths:         opts.approveMonths,
-    targetProductType:           opts.productType,
-    targetDeviceFamily:          opts.deviceFamily,
-    paidApproveMonths:           opts.approveMonths,
-    paidProductType:             opts.productType,
-    paidDeviceFamily:            opts.deviceFamily,
-    dueProductType:              opts.productType,
-    dueDeviceFamily:             opts.deviceFamily,
-    notYetDueApproveMonths:      opts.approveMonths,
-    notYetDueProductType:        opts.productType,
-    notYetDueDeviceFamily:       opts.deviceFamily,
-    installTotalApproveMonths:   opts.approveMonths,
-    installTotalProductType:     opts.productType,
-    installTotalDeviceFamily:    opts.deviceFamily,
-    search:                      opts.search,
-  };
-  const [countRows, targetRows, dueRows, notYetDueRows, installTotalRows, paidRows, approvedCountRows, financeTotalRows, monthlySummaryRows] = await Promise.all([
+  // ⚠️ เมื่อมี buckets filter ให้ข้าม getMonthlySummary เพราะ MonthlySummaryParams ไม่รับ buckets
+  //    ให้ใช้ยอดจาก queryDueMonthInstallTotal/NotYetDue โดยตรงแทน (ซึ่งส่ง buckets ไปแล้ว)
+  const hasBuckets = opts.buckets && opts.buckets.length > 0;
+  let monthlySummaryRows: MonthlySummaryRow[] = [];
+  if (!hasBuckets) {
+    const monthlySummaryParams: MonthlySummaryParams = {
+      section,
+      countApproveMonths:          opts.approveMonths,
+      countProductType:            opts.productType,
+      countDeviceFamily:           opts.deviceFamily,
+      targetApproveMonths:         opts.approveMonths,
+      targetProductType:           opts.productType,
+      targetDeviceFamily:          opts.deviceFamily,
+      paidApproveMonths:           opts.approveMonths,
+      paidProductType:             opts.productType,
+      paidDeviceFamily:            opts.deviceFamily,
+      dueProductType:              opts.productType,
+      dueDeviceFamily:             opts.deviceFamily,
+      notYetDueApproveMonths:      opts.approveMonths,
+      notYetDueProductType:        opts.productType,
+      notYetDueDeviceFamily:       opts.deviceFamily,
+      installTotalApproveMonths:   opts.approveMonths,
+      installTotalProductType:     opts.productType,
+      installTotalDeviceFamily:    opts.deviceFamily,
+      search:                      opts.search,
+    };
+    monthlySummaryRows = (await getMonthlySummary(monthlySummaryParams)) ?? [];
+  }
+  const [countRows, targetRows, dueRows, notYetDueRows, installTotalRows, paidRows, approvedCountRows, financeTotalRows] = await Promise.all([
     queryDueMonthCount(section, opts),
     queryDueMonthTarget(section, opts),
     queryDueMonthDue(section, opts),
@@ -2551,9 +2558,9 @@ export async function getDueMonthSummary(
     queryDueMonthPaid(section, opts),
     queryDueMonthApprovedCount(section, opts),
     queryDueMonthFinanceTotal(section, opts), // ยอดจัดฯรวมต่อ approve_month (ไม่กระจาย) เพื่อให้ตรงกับ mode สถานะหนี้
-    getMonthlySummary(monthlySummaryParams),  // ดึง totalInstallTotal/totalNotYetDue ที่ถูกต้อง
   ]);
   // สร้าง Map จาก getMonthlySummary เพื่อ lookup ต่อ approveMonth
+  // (ใช้เฉพาะกรณีไม่มี buckets filter — ถ้ามี buckets ให้ใช้ยอดจาก queryDueMonth* โดยตรง)
   const msInstallTotalMap = new Map<string, MoneyBreakdown>();
   const msNotYetDueMap    = new Map<string, MoneyBreakdown>();
   for (const r of monthlySummaryRows) {
@@ -2710,8 +2717,9 @@ export async function getDueMonthSummary(
     }
 
     const approvedCount = approvedCountMap.get(approveMonth) ?? 0;
-    // Override totalInstallTotal และ totalNotYetDue ด้วยค่าจาก getMonthlySummary
+    // Override totalInstallTotal และ totalNotYetDue ด้วยค่าจาก getMonthlySummary (เฉพาะกรณีไม่มี buckets filter)
     // เพื่อให้ใช้ logic เดียวกับ mode สถานะหนี้ (baseline_amount × installment_count)
+    // ⚠️ ถ้ามี buckets filter: msMap จะว่าง → fallback ใช้ยอดจาก queryDueMonth* โดยตรง (ซึ่งส่ง buckets ไปแล้ว)
     const correctInstallTotal = msInstallTotalMap.get(approveMonth) ?? totalInstallTotal;
     const correctNotYetDue    = msNotYetDueMap.get(approveMonth) ?? totalNotYetDue;
     return { approveMonth, dueMonths, totalCount, approvedCount, totalPaid, totalDue, totalTarget, totalNotYetDue: correctNotYetDue, totalInstallTotal: correctInstallTotal, totalFinanceTotal };
