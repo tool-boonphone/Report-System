@@ -286,7 +286,7 @@ export const monthlySummaryRouter = router({
       let summaryRows: Awaited<ReturnType<typeof getDueMonthSummary>>;
       let allDueMonths: string[];
 
-      if (!params.search) {
+      if (!params.search && !params.buckets) {
         const cached = await getDueMonthSummaryFromCache(params);
         if (cached.rows.length > 0) {
           console.log(`[getDueMonthSummary] CACHE HIT — section=${params.section} rows=${cached.rows.length}`);

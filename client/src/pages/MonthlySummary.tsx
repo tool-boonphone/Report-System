@@ -1550,6 +1550,10 @@ export default function MonthlySummary() {
                   <MultiSelectFilter label="ประเภทสินค้า" selected={combinedProductType} onChange={setCombinedProductType} options={productTypes} placeholder="ทุกประเภทสินค้า"/>
                   {/* Sub-Row Multi-Select — เลือกหัวข้อที่ต้องการแสดง */}
                   <SubRowMultiSelect hiddenSubRows={hiddenSubRows} setHiddenSubRows={setHiddenSubRows}/>
+                  {/* Filter สถานะหนี้ — แสดงเฉพาะเมื่อ mode=dueMonth (อยู่ข้างหน้า pill tab) */}
+                  {combinedViewMode==="dueMonth"&&(
+                    <BucketMultiSelect selected={dueMonthBuckets} onChange={setDueMonthBuckets}/>
+                  )}
                   {/* Pill Tab: สถานะหนี้ / เดือนที่ต้องชำระ */}
                   <div className="flex items-center gap-0.5 ml-1 bg-gray-100 rounded-full p-0.5">
                     <button type="button" onClick={()=>setCombinedViewMode("bucket")}
@@ -1561,10 +1565,6 @@ export default function MonthlySummary() {
                       เดือนที่ต้องชำระ
                     </button>
                   </div>
-                  {/* Filter สถานะหนี้ — แสดงเฉพาะเมื่อ mode=dueMonth */}
-                  {combinedViewMode==="dueMonth"&&(
-                    <BucketMultiSelect selected={dueMonthBuckets} onChange={setDueMonthBuckets}/>
-                  )}
                   {[combinedApproveMonths.size>0,combinedApproveYears.size>0,combinedProductType.size>0,combinedDeviceFamily,combinedViewMode==="dueMonth"&&dueMonthBuckets.size>0].filter(Boolean).length>0&&(
                     <button type="button" onClick={()=>{setSearchInput("");setSearch("");setCombinedApproveMonths(new Set());setCombinedApproveYears(new Set());setCombinedProductType(new Set());setCombinedDeviceFamily("");setDueMonthBuckets(new Set());}}
                       className="flex items-center gap-1 h-9 px-2.5 rounded-md border border-red-200 bg-red-50 text-red-600 text-xs hover:bg-red-100 transition-colors">
