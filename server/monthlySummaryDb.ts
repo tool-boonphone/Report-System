@@ -1442,7 +1442,7 @@ export async function populateMonthlySummaryCache(
   }
 
   // ── Query 4: due (BATCH) — ใช้ SQL เดียวกับ queryDue live query เป๊ะๆ ──────────────
-  // MAX(period) WHERE is_arrears = true ต่อสัญญา (ไม่แยก per due_month — ตรงกับ live query)
+  // MAX(period) WHERE is_paid=false AND due_date<=CURRENT_DATE (ตรงกับ queryDue live query)
   {
     const baseWhere = `dtc.section = '${section}' AND dtc.approve_date IS NOT NULL`;
     const q = `
@@ -1472,19 +1472,25 @@ export async function populateMonthlySummaryCache(
         SUM(GREATEST(CAST(base.total_amount AS DECIMAL(18,2)) - CAST(base.paid_amount AS DECIMAL(18,2)), 0)) AS total_due
       FROM debt_target_cache base
       JOIN (
-        -- MAX(period) WHERE is_arrears = true ต่อสัญญา — ตรงกับ queryDue live query
+        -- MAX(period) WHERE is_paid=false AND due_date<=CURRENT_DATE — ตรงกับ queryDue live query
         SELECT dtc.section, dtc.contract_external_id, MAX(dtc.period) AS max_period
         FROM debt_target_cache dtc
         WHERE ${baseWhere}
-          AND dtc.is_arrears = true
-          AND dtc.due_date IS NOT NULL
+          AND dtc.is_paid = false
+          AND DATE(dtc.due_date) <= CURRENT_DATE
+          AND dtc.is_closed = false
+          AND COALESCE(dtc.is_suspended, false) = false
+          AND COALESCE(dtc.contract_status, '') NOT IN ('ระงับสัญญา', 'สิ้นสุดสัญญา', 'หนี้เสีย', 'ยกเลิกสัญญา')
         GROUP BY dtc.section, dtc.contract_external_id
       ) latest ON latest.section = base.section
                AND latest.contract_external_id = base.contract_external_id
       WHERE base.section = '${section}'
         AND base.approve_date IS NOT NULL
-        AND base.is_arrears = true
-        AND base.due_date IS NOT NULL
+        AND base.is_paid = false
+        AND DATE(base.due_date) <= CURRENT_DATE
+        AND base.is_closed = false
+        AND COALESCE(base.is_suspended, false) = false
+        AND COALESCE(base.contract_status, '') NOT IN ('ระงับสัญญา', 'สิ้นสุดสัญญา', 'หนี้เสีย', 'ยกเลิกสัญญา')
       GROUP BY 1, 2, 3, 4
       ORDER BY 1 DESC
     `;
