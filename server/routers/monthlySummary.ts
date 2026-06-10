@@ -269,6 +269,8 @@ export const monthlySummaryRouter = router({
       productType: z.string().optional(),
       deviceFamily: z.enum(["iOS", "Android"]).optional(),
       search: z.string().max(100).optional(),
+      /** กรองเฉพาะ bucket (สถานะหนี้) ที่เลือก */
+      buckets: z.array(z.string()).optional(),
     }))
     .query(async ({ input }) => {
       const params = {
@@ -277,6 +279,7 @@ export const monthlySummaryRouter = router({
         productType: input.productType,
         deviceFamily: input.deviceFamily,
         search: input.search || undefined,
+        buckets: input.buckets && input.buckets.length > 0 ? input.buckets : undefined,
       };
 
       // Fast path: ดึงจาก cache ก่อน (ถ้า cache ว่าง → fallback live query)

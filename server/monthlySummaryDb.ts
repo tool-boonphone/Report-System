@@ -160,6 +160,8 @@ function dtcWhere(section: string, opts: {
   approveDate?: string;
   approveMonths?: string[];
   search?: string;
+  /** กรองเฉพาะ bucket ที่เลือก (สถานะหนี้) — ใช้ใน DueMonth mode */
+  buckets?: string[];
 }): string {
   let w = `dtc.section = '${section}'
     AND dtc.approve_date IS NOT NULL`;
@@ -184,9 +186,13 @@ function dtcWhere(section: string, opts: {
     // (ไม่ใช้ phone subquery เพราะ contracts table ใน Fastfone365 DB อาจไม่มี phone column)
     w += `\n    AND (dtc.contract_no LIKE '%${s}%' OR dtc.customer_name LIKE '%${s}%')`;
   }
+  if (opts.buckets && opts.buckets.length > 0) {
+    // กรองตาม bucket (สถานะหนี้) โดยใช้ CASE expression เดียวกับ BUCKET_CASE_DTC
+    const bucketList = opts.buckets.map((b) => `'${b.replace(/'/g, "''")}'`).join(",");
+    w += `\n    AND (CASE\n      WHEN dtc.contract_status = 'หนี้เสีย'      THEN 'หนี้เสีย'\n      WHEN dtc.contract_status = 'ระงับสัญญา'   THEN 'ระงับสัญญา'\n      WHEN dtc.contract_status = 'สิ้นสุดสัญญา' THEN 'สิ้นสุดสัญญา'\n      WHEN dtc.contract_status = 'ยกเลิกสัญญา' THEN 'ยกเลิกสัญญา'\n      ELSE COALESCE(dtc.debt_range, 'ปกติ')\n    END) IN (${bucketList})`;
+  }
   return w;
 }
-
 /** Build WHERE clause for debt_collected_cache */
 function dccWhere(section: string, opts: {
   productType?: string;
@@ -293,6 +299,7 @@ async function queryTarget(
     deviceFamily: opts.deviceFamily,
     approveMonths: opts.approveMonths,
     search: opts.search,
+    buckets: opts.buckets,
   });
   // baseWhere ใช้ alias dtc. → แปลงเป็น base. สำหรับ outer query
   const baseWhereForOuter = baseWhere.replace(/\bdtc\./g, "base.");
@@ -535,13 +542,21 @@ async function queryDue(
       SELECT dtc.section, dtc.contract_external_id, MAX(dtc.period) AS max_period
       FROM debt_target_cache dtc
       WHERE ${baseWhere}
-        AND dtc.is_arrears = true
+        AND dtc.is_paid = false
+        AND DATE(dtc.due_date) <= CURRENT_DATE
+        AND dtc.is_closed = false
+        AND COALESCE(dtc.is_suspended, false) = false
+        AND COALESCE(dtc.contract_status, '') NOT IN ('ระงับสัญญา', 'สิ้นสุดสัญญา', 'หนี้เสีย', 'ยกเลิกสัญญา')
         ${dueDateFilter}
       GROUP BY dtc.section, dtc.contract_external_id
     ) latest ON latest.section = base.section
              AND latest.contract_external_id = base.contract_external_id
     WHERE base.section = '${section}'
-      AND base.is_arrears = true
+      AND base.is_paid = false
+      AND DATE(base.due_date) <= CURRENT_DATE
+      AND base.is_closed = false
+      AND COALESCE(base.is_suspended, false) = false
+      AND COALESCE(base.contract_status, '') NOT IN ('ระงับสัญญา', 'สิ้นสุดสัญญา', 'หนี้เสีย', 'ยกเลิกสัญญา')
       ${dueDateFilter.replace(/dtc\./g, "base.")}
     GROUP BY 1, 2
     ORDER BY 1 DESC
@@ -584,6 +599,7 @@ async function queryNotYetDue(
     deviceFamily: opts.deviceFamily,
     approveMonths: opts.approveMonths,
     search: opts.search,
+    buckets: opts.buckets,
   });
 
   // due_date filter
@@ -684,6 +700,7 @@ async function queryInstallTotal(
     deviceFamily: opts.deviceFamily,
     approveMonths: opts.approveMonths,
     search: opts.search,
+    buckets: opts.buckets,
   });
 
   /*
@@ -1982,12 +1999,14 @@ export type DueMonthParams = {
   productType?: string;
   deviceFamily?: string;
   search?: string;
+  /** กรองเฉพาะ bucket (สถานะหนี้) ที่เลือก */
+  buckets?: string[];
 };
 
 /** Query Count แยกตาม approve_month × due_month */
 async function queryDueMonthCount(
   section: SectionKey,
-  opts: { approveMonths?: string[]; productType?: string; deviceFamily?: string; search?: string },
+  opts: { approveMonths?: string[]; productType?: string; deviceFamily?: string; search?: string; buckets?: string[] },
 ): Promise<Array<{ approve_month: string; due_month: string; contract_count: number }>> {
   const db = await getDb(section);
   if (!db) return [];
@@ -1996,6 +2015,7 @@ async function queryDueMonthCount(
     deviceFamily: opts.deviceFamily,
     approveMonths: opts.approveMonths,
     search: opts.search,
+    buckets: opts.buckets,
   });
   const q = `
     SELECT
@@ -2015,7 +2035,7 @@ async function queryDueMonthCount(
 /** Query Approved Count แยกตาม approve_month เท่านั้น (DISTINCT contract per approve month) */
 async function queryDueMonthApprovedCount(
   section: SectionKey,
-  opts: { approveMonths?: string[]; productType?: string; deviceFamily?: string; search?: string },
+  opts: { approveMonths?: string[]; productType?: string; deviceFamily?: string; search?: string; buckets?: string[] },
 ): Promise<Array<{ approve_month: string; approved_count: number }>> {
   const db = await getDb(section);
   if (!db) return [];
@@ -2024,6 +2044,7 @@ async function queryDueMonthApprovedCount(
     deviceFamily: opts.deviceFamily,
     approveMonths: opts.approveMonths,
     search: opts.search,
+    buckets: opts.buckets,
   });
   const q = `
     SELECT
@@ -2041,7 +2062,7 @@ async function queryDueMonthApprovedCount(
 /** Query Target แยกตาม approve_month × due_month */
 async function queryDueMonthTarget(
   section: SectionKey,
-  opts: { approveMonths?: string[]; productType?: string; deviceFamily?: string; search?: string },
+  opts: { approveMonths?: string[]; productType?: string; deviceFamily?: string; search?: string; buckets?: string[] },
 ): Promise<Array<{
   approve_month: string; due_month: string; contract_count: number;
   principal_target: number; interest_target: number; fee_target: number;
@@ -2054,6 +2075,7 @@ async function queryDueMonthTarget(
     deviceFamily: opts.deviceFamily,
     approveMonths: opts.approveMonths,
     search: opts.search,
+    buckets: opts.buckets,
   });
   // Bug fix: outer query ต้องใช้ filter เดียวกับ subquery
   const baseWhereForOuter = baseWhere.replace(/\bdtc\./g, "base.");
@@ -2123,7 +2145,7 @@ async function queryDueMonthTarget(
 /** Query Due แยกตาม approve_month × due_month */
 async function queryDueMonthDue(
   section: SectionKey,
-  opts: { approveMonths?: string[]; productType?: string; deviceFamily?: string; search?: string },
+  opts: { approveMonths?: string[]; productType?: string; deviceFamily?: string; search?: string; buckets?: string[] },
 ): Promise<Array<{
   approve_month: string; due_month: string; contract_count: number;
   principal_due: number; interest_due: number; fee_due: number;
@@ -2136,6 +2158,7 @@ async function queryDueMonthDue(
     deviceFamily: opts.deviceFamily,
     approveMonths: opts.approveMonths,
     search: opts.search,
+    buckets: opts.buckets,
   });
   // Bug fix: outer query ต้องใช้ filter เดียวกับ subquery
   const baseWhereForOuter = baseWhere.replace(/\bdtc\./g, "base.");
@@ -2159,14 +2182,22 @@ async function queryDueMonthDue(
              MAX(dtc.period) AS max_period
       FROM debt_target_cache dtc
       WHERE ${baseWhere}
-        AND dtc.is_arrears = true
+        AND dtc.is_paid = false
+        AND DATE(dtc.due_date) <= CURRENT_DATE
+        AND dtc.is_closed = false
+        AND COALESCE(dtc.is_suspended, false) = false
+        AND COALESCE(dtc.contract_status, '') NOT IN ('ระงับสัญญา', 'สิ้นสุดสัญญา', 'หนี้เสีย', 'ยกเลิกสัญญา')
         AND dtc.due_date IS NOT NULL
       GROUP BY dtc.section, dtc.contract_external_id, TO_CHAR(dtc.due_date, 'YYYY-MM')
     ) latest ON latest.section = base.section
              AND latest.contract_external_id = base.contract_external_id
              AND TO_CHAR(base.due_date, 'YYYY-MM') = latest.due_month_grp
     WHERE ${baseWhereForOuter}
-      AND base.is_arrears = true
+      AND base.is_paid = false
+      AND DATE(base.due_date) <= CURRENT_DATE
+      AND base.is_closed = false
+      AND COALESCE(base.is_suspended, false) = false
+      AND COALESCE(base.contract_status, '') NOT IN ('ระงับสัญญา', 'สิ้นสุดสัญญา', 'หนี้เสีย', 'ยกเลิกสัญญา')
       AND base.due_date IS NOT NULL
     GROUP BY 1, 2
     ORDER BY 1 DESC, 2 ASC
@@ -2178,7 +2209,7 @@ async function queryDueMonthDue(
 /** Query NotYetDue แยกตาม approve_month × due_month */
 async function queryDueMonthNotYetDue(
   section: SectionKey,
-  opts: { approveMonths?: string[]; productType?: string; deviceFamily?: string; search?: string },
+  opts: { approveMonths?: string[]; productType?: string; deviceFamily?: string; search?: string; buckets?: string[] },
 ): Promise<Array<{
   approve_month: string; due_month: string; contract_count: number;
   principal_notyet: number; interest_notyet: number; fee_notyet: number;
@@ -2191,6 +2222,7 @@ async function queryDueMonthNotYetDue(
     deviceFamily: opts.deviceFamily,
     approveMonths: opts.approveMonths,
     search: opts.search,
+    buckets: opts.buckets,
   });
   // Bug fix: outer query ต้องใช้ filter เดียวกับ subquery
   const baseWhereForOuter = baseWhere.replace(/\bdtc\./g, "base.");
@@ -2238,7 +2270,7 @@ async function queryDueMonthNotYetDue(
 /** Query InstallTotal แยกตาม approve_month × due_month (ใช้ due_date ของแต่ละงวด) */
 async function queryDueMonthInstallTotal(
   section: SectionKey,
-  opts: { approveMonths?: string[]; productType?: string; deviceFamily?: string; search?: string },
+  opts: { approveMonths?: string[]; productType?: string; deviceFamily?: string; search?: string; buckets?: string[] },
 ): Promise<Array<{
   approve_month: string; due_month: string; contract_count: number;
   principal_install: number; interest_install: number; fee_install: number; total_install: number;
@@ -2251,6 +2283,7 @@ async function queryDueMonthInstallTotal(
     deviceFamily: opts.deviceFamily,
     approveMonths: opts.approveMonths,
     search: opts.search,
+    buckets: opts.buckets,
   });
   // finance_total logic:
   // - คอลัมน์รวม (__total__): แสดง finance_amount เต็ม (1 ครั้งต่อสัญญา)
@@ -2322,7 +2355,7 @@ async function queryDueMonthInstallTotal(
  */
 async function queryDueMonthPaid(
   section: SectionKey,
-  opts: { approveMonths?: string[]; productType?: string; deviceFamily?: string; search?: string },
+  opts: { approveMonths?: string[]; productType?: string; deviceFamily?: string; search?: string; buckets?: string[] },
 ): Promise<Array<{
   approve_month: string; due_month: string; contract_count: number;
   principal_paid: number; interest_paid: number; fee_paid: number;
@@ -2351,7 +2384,11 @@ async function queryDueMonthPaid(
     const s = escapeLike(opts.search);
     dccFilter += `\n    AND (dcc.contract_no LIKE '%${s}%' OR dcc.customer_name LIKE '%${s}%')`;
   }
-
+  if (opts.buckets && opts.buckets.length > 0) {
+    // กรองตาม bucket (สถานะหนี้) โดยใช้ CASE expression เดียวกับ dtcWhere
+    const bucketList = opts.buckets.map((b) => `'${b.replace(/'/g, "''")}'`).join(",");
+    dccFilter += `\n    AND (CASE\n      WHEN dcc.contract_status = 'หนี้เสีย'      THEN 'หนี้เสีย'\n      WHEN dcc.contract_status = 'ระงับสัญญา'   THEN 'ระงับสัญญา'\n      WHEN dcc.contract_status = 'สิ้นสุดสัญญา' THEN 'สิ้นสุดสัญญา'\n      WHEN dcc.contract_status = 'ยกเลิกสัญญา' THEN 'ยกเลิกสัญญา'\n      ELSE COALESCE(dcc.debt_range, 'ปกติ')\n    END) IN (${bucketList})`;
+  }
   // ยอดเก็บหนี้ลงตามเดือนที่ชำระจริง (paid_at) ไม่ใช่เดือนที่งวดถึงกำหนด (due_date)
   // approve_month = เดือนที่อนุมัติสัญญา (จาก dcc.approve_date)
   // due_month     = เดือนที่ชำระจริง (จาก dcc.paid_at) — ไม่สนใจว่างวดนั้น due เดือนไหน
@@ -2417,7 +2454,7 @@ async function queryDueMonthPaid(
  */
 async function queryDueMonthFinanceTotal(
   section: SectionKey,
-  opts: { approveMonths?: string[]; productType?: string; deviceFamily?: string; search?: string },
+  opts: { approveMonths?: string[]; productType?: string; deviceFamily?: string; search?: string; buckets?: string[] },
 ): Promise<Array<{ approve_month: string; finance_total: number }>> {
   const db = await getDb(section);
   if (!db) return [];
@@ -2426,6 +2463,7 @@ async function queryDueMonthFinanceTotal(
     deviceFamily: opts.deviceFamily,
     approveMonths: opts.approveMonths,
     search: opts.search,
+    buckets: opts.buckets,
   });
   // ดึง finance_amount 1 ครั้งต่อสัญญา (MAX เพื่อ DISTINCT per contract)
   // แล้ว SUM รวมต่อ approve_month — เหมือน queryInstallTotal ใน mode สถานะหนี้
@@ -2462,13 +2500,13 @@ export async function getDueMonthSummary(
   params: DueMonthParams,
 ): Promise<DueMonthRow[]> {
   const { section } = params;
-  const opts = {
+    const opts = {
     approveMonths: params.approveMonths,
     productType: params.productType,
     deviceFamily: params.deviceFamily,
     search: params.search,
+    buckets: params.buckets,
   };
-
   // เรียก getMonthlySummary ด้วยเพื่อดึง totalInstallTotal และ totalNotYetDue ที่ถูกต้อง
   // (ใช้ logic เดียวกับ mode สถานะหนี้ — baseline_amount × installment_count)
   const monthlySummaryParams: MonthlySummaryParams = {
@@ -2936,6 +2974,10 @@ export async function getDueMonthSummaryFromCache(
   const { section } = params;
   const db = await getDb(section);
   if (!db) return { rows: [], allDueMonths: [] };
+  // Cache table ไม่มี bucket column — fallback ไป live query เมื่อมี buckets filter
+  if (params.buckets && params.buckets.length > 0) {
+    return { rows: [], allDueMonths: [] };
+  }
 
   const ptFilter = params.productType
     ? `AND product_type = '${params.productType.replace(/'/g, "''")}'`
