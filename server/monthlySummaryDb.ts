@@ -2116,15 +2116,6 @@ async function queryDueMonthTarget(
         AND dtc.is_closed IS NOT TRUE
         AND COALESCE(dtc.is_suspended, false) IS NOT TRUE
         AND COALESCE(dtc.contract_status, \'\') NOT IN (\'ระงับสัญญา\', \'สิ้นสุดสัญญา\', \'หนี้เสีย\', \'ยกเลิกสัญญา\')
-        AND dtc.is_closed IS NOT TRUE
-        AND COALESCE(dtc.is_suspended, false) IS NOT TRUE
-        AND COALESCE(dtc.contract_status, \'\') NOT IN (\'ระงับสัญญา\', \'สิ้นสุดสัญญา\', \'หนี้เสีย\', \'ยกเลิกสัญญา\')
-        AND dtc.is_closed IS NOT TRUE
-        AND COALESCE(dtc.is_suspended, false) IS NOT TRUE
-        AND COALESCE(dtc.contract_status, \'\') NOT IN (\'ระงับสัญญา\', \'สิ้นสุดสัญญา\', \'หนี้เสีย\', \'ยกเลิกสัญญา\')
-        AND dtc.is_closed IS NOT TRUE
-        AND COALESCE(dtc.is_suspended, false) IS NOT TRUE
-        AND COALESCE(dtc.contract_status, '') NOT IN ('ระงับสัญญา', 'สิ้นสุดสัญญา', 'หนี้เสีย', 'ยกเลิกสัญญา')
       GROUP BY dtc.section, dtc.contract_external_id, TO_CHAR(dtc.due_date, 'YYYY-MM')
     ) latest ON latest.section = base.section
              AND latest.contract_external_id = base.contract_external_id
@@ -2132,12 +2123,6 @@ async function queryDueMonthTarget(
     WHERE ${baseWhereForOuter}
       AND DATE(base.due_date) <= CURRENT_DATE
       AND base.due_date IS NOT NULL
-      AND base.is_closed IS NOT TRUE
-      AND COALESCE(base.is_suspended, false) IS NOT TRUE
-      AND COALESCE(base.contract_status, \'\') NOT IN (\'ระงับสัญญา\', \'สิ้นสุดสัญญา\', \'หนี้เสีย\', \'ยกเลิกสัญญา\')
-      AND base.is_closed IS NOT TRUE
-      AND COALESCE(base.is_suspended, false) IS NOT TRUE
-      AND COALESCE(base.contract_status, \'\') NOT IN (\'ระงับสัญญา\', \'สิ้นสุดสัญญา\', \'หนี้เสีย\', \'ยกเลิกสัญญา\')
       AND base.is_closed IS NOT TRUE
       AND COALESCE(base.is_suspended, false) IS NOT TRUE
       AND COALESCE(base.contract_status, \'\') NOT IN (\'ระงับสัญญา\', \'สิ้นสุดสัญญา\', \'หนี้เสีย\', \'ยกเลิกสัญญา\')
