@@ -61,6 +61,12 @@ function fmtMonthYear(period: string): string {
   return `${MONTH_NAMES[mIdx] ?? m} ${thYear}`;
 }
 
+/** คำนวณคอมมิชชั่นสุทธิ: หัก 3% แล้วลบ 100 */
+function commNet(raw: number | null | undefined): number {
+  const v = Number(raw ?? 0);
+  return v * (1 - 0.03) - 100;
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function Expense() {
   const { section } = useSection();
@@ -226,7 +232,7 @@ export default function Expense() {
     if (!summaryData) return 0;
     let t = 0;
     if (badgeVisible.financeAmount) t += summaryData.financeAmount;
-    if (badgeVisible.commAmount) t += summaryData.commAmount;
+    if (badgeVisible.commAmount) t += commNet(summaryData.commAmount);
     if (badgeVisible.incentive) t += summaryData.incentive;
     return t;
   }, [summaryData, badgeVisible]);
@@ -263,10 +269,10 @@ export default function Expense() {
   const handleExportYearly = () => {
     if (!yearlyData?.length) { toast.error("ไม่มีข้อมูล"); return; }
     const wsData = [
-      ["ปี", "ยอดจัดไฟแนนซ์", "ค่าคอมมิชชั่น", "Incentive", "รวมยอดโอน"],
+      ["ปี", "ยอดจัดไฟแนนซ์", "คอมมิชชั่นสุทธิ", "Incentive", "รวมยอดโอน"],
       ...(yearlyData ?? []).map((r) => [
         parseInt(r.period, 10) + 543,
-        r.financeAmount, r.commAmount, r.incentive, r.totalTransfer,
+        r.financeAmount, commNet(r.commAmount), r.incentive, r.totalTransfer,
       ]),
     ];
     const ws = XLSX.utils.aoa_to_sheet(wsData);
@@ -279,10 +285,10 @@ export default function Expense() {
   const handleExportMonthly = () => {
     if (!monthlyData?.length) { toast.error("ไม่มีข้อมูล"); return; }
     const wsData = [
-      ["เดือน-ปี", "ยอดจัดไฟแนนซ์", "ค่าคอมมิชชั่น", "Incentive", "รวมยอดโอน"],
+      ["เดือน-ปี", "ยอดจัดไฟแนนซ์", "คอมมิชชั่นสุทธิ", "Incentive", "รวมยอดโอน"],
       ...(monthlyData ?? []).map((r) => [
         fmtMonthYear(r.period),
-        r.financeAmount, r.commAmount, r.incentive, r.totalTransfer,
+        r.financeAmount, commNet(r.commAmount), r.incentive, r.totalTransfer,
       ]),
     ];
     const ws = XLSX.utils.aoa_to_sheet(wsData);
@@ -330,7 +336,7 @@ export default function Expense() {
   // ── Summary table columns ──
   const summaryColumns = [
     { key: "financeAmount" as const, label: "ยอดจัดไฟแนนซ์", color: "text-blue-700" },
-    { key: "commAmount" as const, label: "ค่าคอมมิชชั่น", color: "text-red-700" },
+    { key: "commAmount" as const, label: "คอมมิชชั่นสุทธิ", color: "text-red-700" },
     { key: "incentive" as const, label: "Incentive", color: "text-orange-600" },
     { key: "totalTransfer" as const, label: "รวมยอดโอน", color: "text-gray-900 font-bold" },
   ];
@@ -399,7 +405,7 @@ export default function Expense() {
                         {[
                           { label: "ปี", cls: "w-20 text-left" },
                           { label: "ยอดจัดไฟแนนซ์", cls: "text-right" },
-                          { label: "ค่าคอมมิชชั่น", cls: "text-right" },
+                          { label: "คอมมิชชั่นสุทธิ", cls: "text-right" },
                           { label: "Incentive", cls: "text-right" },
                           { label: "รวมยอดโอน", cls: "text-right font-bold" },
                         ].map(({ label, cls }) => (
@@ -412,7 +418,7 @@ export default function Expense() {
                         <tr key={row.period} className={`border-b border-gray-100 hover:bg-red-50 transition-colors ${idx % 2 === 1 ? "bg-gray-50" : ""}`}>
                           <td className="px-4 py-2.5 font-semibold text-gray-800">{parseInt(row.period, 10) + 543}</td>
                           <td className="px-4 py-2.5 text-right text-blue-700">{fmtMoney(row.financeAmount)}</td>
-                          <td className="px-4 py-2.5 text-right text-red-700">{fmtMoney(row.commAmount)}</td>
+                          <td className="px-4 py-2.5 text-right text-red-700">{fmtMoney(commNet(row.commAmount))}</td>
                           <td className="px-4 py-2.5 text-right text-orange-600">{fmtMoney(row.incentive)}</td>
                           <td className="px-4 py-2.5 text-right font-bold text-gray-900">{fmtMoney(row.totalTransfer)}</td>
                         </tr>
@@ -422,7 +428,7 @@ export default function Expense() {
                       <tr className="bg-gray-100 border-t-2 border-gray-300 font-bold text-sm">
                         <td className="px-4 py-2.5 text-gray-700">รวมทั้งหมด</td>
                         <td className="px-4 py-2.5 text-right text-blue-700">{fmtMoney(yearlyData.reduce((s, r) => s + r.financeAmount, 0))}</td>
-                        <td className="px-4 py-2.5 text-right text-red-700">{fmtMoney(yearlyData.reduce((s, r) => s + r.commAmount, 0))}</td>
+                        <td className="px-4 py-2.5 text-right text-red-700">{fmtMoney(yearlyData.reduce((s, r) => s + commNet(r.commAmount), 0))}</td>
                         <td className="px-4 py-2.5 text-right text-orange-600">{fmtMoney(yearlyData.reduce((s, r) => s + r.incentive, 0))}</td>
                         <td className="px-4 py-2.5 text-right text-gray-900">{fmtMoney(yearlyData.reduce((s, r) => s + r.totalTransfer, 0))}</td>
                       </tr>
@@ -480,7 +486,7 @@ export default function Expense() {
                         {[
                           { label: "เดือน-ปี", cls: "w-28 text-left" },
                           { label: "ยอดจัดไฟแนนซ์", cls: "text-right" },
-                          { label: "ค่าคอมมิชชั่น", cls: "text-right" },
+                          { label: "คอมมิชชั่นสุทธิ", cls: "text-right" },
                           { label: "Incentive", cls: "text-right" },
                           { label: "รวมยอดโอน", cls: "text-right font-bold" },
                         ].map(({ label, cls }) => (
@@ -493,7 +499,7 @@ export default function Expense() {
                         <tr key={row.period} className={`border-b border-gray-100 hover:bg-red-50 transition-colors ${idx % 2 === 1 ? "bg-gray-50" : ""}`}>
                           <td className="px-4 py-2.5 font-semibold text-gray-800 whitespace-nowrap">{fmtMonthYear(row.period)}</td>
                           <td className="px-4 py-2.5 text-right text-blue-700">{fmtMoney(row.financeAmount)}</td>
-                          <td className="px-4 py-2.5 text-right text-red-700">{fmtMoney(row.commAmount)}</td>
+                          <td className="px-4 py-2.5 text-right text-red-700">{fmtMoney(commNet(row.commAmount))}</td>
                           <td className="px-4 py-2.5 text-right text-orange-600">{fmtMoney(row.incentive)}</td>
                           <td className="px-4 py-2.5 text-right font-bold text-gray-900">{fmtMoney(row.totalTransfer)}</td>
                         </tr>
@@ -503,7 +509,7 @@ export default function Expense() {
                       <tr className="bg-gray-100 border-t-2 border-gray-300 font-bold text-sm">
                         <td className="px-4 py-2.5 text-gray-700">รวมทั้งหมด</td>
                         <td className="px-4 py-2.5 text-right text-blue-700">{fmtMoney(monthlyData.reduce((s, r) => s + r.financeAmount, 0))}</td>
-                        <td className="px-4 py-2.5 text-right text-red-700">{fmtMoney(monthlyData.reduce((s, r) => s + r.commAmount, 0))}</td>
+                        <td className="px-4 py-2.5 text-right text-red-700">{fmtMoney(monthlyData.reduce((s, r) => s + commNet(r.commAmount), 0))}</td>
                         <td className="px-4 py-2.5 text-right text-orange-600">{fmtMoney(monthlyData.reduce((s, r) => s + r.incentive, 0))}</td>
                         <td className="px-4 py-2.5 text-right text-gray-900">{fmtMoney(monthlyData.reduce((s, r) => s + r.totalTransfer, 0))}</td>
                       </tr>
@@ -581,7 +587,7 @@ export default function Expense() {
                 <span>ยอดจัดไฟแนนซ์</span>
                 <span className={badgeVisible.financeAmount ? "" : "text-gray-400"}>{fmtMoney(summaryData?.financeAmount)}</span>
               </button>
-              {/* Badge: ค่าคอมมิชชั่น */}
+              {/* Badge: คอมมิชชั่นสุทธิ */}
               <button type="button" onClick={() => toggleBadge("commAmount")}
                 title="คลิกเพื่อ toggle"
                 className={[
@@ -590,8 +596,8 @@ export default function Expense() {
                     ? "bg-red-600 text-white"
                     : "bg-gray-100 text-gray-400",
                 ].join(" ")}>
-                <span>ค่าคอมมิชชั่น</span>
-                <span className={badgeVisible.commAmount ? "" : "text-gray-400"}>{fmtMoney(summaryData?.commAmount)}</span>
+                <span>คอมมิชชั่นสุทธิ</span>
+                <span className={badgeVisible.commAmount ? "" : "text-gray-400"}>{fmtMoney(commNet(summaryData?.commAmount))}</span>
               </button>
               {/* Badge: Incentive */}
               <button type="button" onClick={() => toggleBadge("incentive")}
@@ -631,7 +637,7 @@ export default function Expense() {
                           { key: "contractNo" as SortKey, label: "เลขที่สัญญา", cls: "w-40" },
                           { key: "approvedAt" as SortKey, label: "วันที่อนุมัติ", cls: "w-28" },
                           { key: "financeAmount" as SortKey, label: "ยอดจัดไฟแนนซ์", cls: "w-32 text-right" },
-                          { key: "commAmount" as SortKey, label: "ค่าคอมมิชชั่น", cls: "w-32 text-right" },
+                          { key: "commAmount" as SortKey, label: "คอมมิชชั่นสุทธิ", cls: "w-32 text-right" },
                           { key: "incentive" as SortKey, label: "Incentive", cls: "w-28 text-right" },
                           { key: "totalTransfer" as SortKey, label: "รวมยอดโอน", cls: "w-32 text-right" },
                           { key: "paymentBy" as SortKey, label: "ผู้จ่าย", cls: "w-28" },
@@ -659,7 +665,7 @@ export default function Expense() {
                             <td className="px-3 py-2 font-mono text-xs text-gray-700">{row.contractNo}</td>
                             <td className="px-3 py-2 whitespace-nowrap text-gray-500 text-xs">{fmtDate(row.approvedAt)}</td>
                             <td className={`px-3 py-2 text-right font-semibold ${finOff ? "text-gray-300" : "text-blue-700"}`}>{fmtMoney(row.financeAmount)}</td>
-                            <td className={`px-3 py-2 text-right font-semibold ${commOff ? "text-gray-300" : "text-red-700"}`}>{fmtMoney(row.commAmount)}</td>
+                            <td className={`px-3 py-2 text-right font-semibold ${commOff ? "text-gray-300" : "text-red-700"}`}>{fmtMoney(commNet(row.commAmount))}</td>
                             <td className={`px-3 py-2 text-right font-semibold ${incOff ? "text-gray-300" : "text-orange-600"}`}>{fmtMoney(row.incentive)}</td>
                             <td className={`px-3 py-2 text-right font-bold ${(commOff && incOff) ? "text-gray-300" : "text-gray-900"}`}>{fmtMoney(row.totalTransfer)}</td>
                             <td className="px-3 py-2 text-gray-600 text-xs">{row.paymentBy ?? "-"}</td>
