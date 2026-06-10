@@ -938,6 +938,8 @@ export default function MonthlySummary() {
       return Array.from(monthMap.values()).sort((a,b)=>sortDir==="asc"?a.approveMonth.localeCompare(b.approveMonth):b.approveMonth.localeCompare(a.approveMonth));
     }catch{return[];}
   },[dueMonthQuery.data,sortDir]);
+  // grand total สำหรับ dueMonth mode — คำนวณจาก dueMonthRows โดยตรง (รองรับ buckets filter)
+  const dueMonthGrandTotal=useMemo(():GrandTotal=>{const bt:Record<string,{count:number;paid:MoneyBreakdown;due:MoneyBreakdown;target:MoneyBreakdown;notYetDue:MoneyBreakdown;installTotal:MoneyBreakdown;financeTotal:number}>={};for(const b of DEBT_BUCKETS)bt[b]={count:0,paid:emptyMoney(),due:emptyMoney(),target:emptyMoney(),notYetDue:emptyMoney(),installTotal:emptyMoney(),financeTotal:0};let totalCount=0;const totalPaid=emptyMoney();const totalDue=emptyMoney();const totalTarget=emptyMoney();const totalNotYetDue=emptyMoney();const totalInstallTotal=emptyMoney();let totalFinanceTotal=0;for(const row of dueMonthRows){if(hiddenRows.has(row.approveMonth))continue;totalCount+=row.approvedCount;totalFinanceTotal+=(row.totalFinanceTotal??0);for(const k of Object.keys(totalPaid)as(keyof MoneyBreakdown)[]){totalPaid[k]+=row.totalPaid[k];totalDue[k]+=row.totalDue[k];totalTarget[k]+=row.totalTarget[k];totalNotYetDue[k]+=row.totalNotYetDue[k];totalInstallTotal[k]+=(row.totalInstallTotal?.[k]??0);}}return{bucketTotals:bt,totalCount,totalPaid,totalDue,totalTarget,totalNotYetDue,totalInstallTotal,totalFinanceTotal};},[dueMonthRows,hiddenRows]);
 
   const rows=useMemo(()=>{
     return [...rawRows].sort((a,b)=>sortDir==="asc"?a.approveMonth.localeCompare(b.approveMonth):b.approveMonth.localeCompare(a.approveMonth));
@@ -1728,7 +1730,7 @@ export default function MonthlySummary() {
               dueVis={dueVis} notYetDueVis={notYetDueVis}
               installVis={installVis}
               showStickyTotal={showStickyTotal}
-              overallGrandTotal={combinedGrandTotal}
+              overallGrandTotal={dueMonthGrandTotal}
             />)
           ):tab==="combined"?(
             <CombinedTable
