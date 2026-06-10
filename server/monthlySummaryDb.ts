@@ -1593,8 +1593,8 @@ export async function populateMonthlySummaryCache(
         END AS bucket,
         l.product_type,
         CASE
-          WHEN l.model ILIKE 'iPhone%' OR l.model ILIKE 'iPad%' THEN 'iOS'
-          WHEN l.model IS NOT NULL AND l.model != '' THEN 'Android'
+          WHEN l.device ILIKE 'iPhone%' OR l.device ILIKE 'iPad%' THEN 'iOS'
+          WHEN l.device IS NOT NULL AND l.device != '' THEN 'Android'
           ELSE NULL
         END AS device_family,
         COUNT(DISTINCT l.contract_external_id) AS contract_count,
