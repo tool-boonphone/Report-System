@@ -180,10 +180,9 @@ function dtcWhere(section: string, opts: {
   }
   if (opts.search) {
     const s = escapeLike(opts.search);
-    // เพิ่มค้นหาเบอร์โทรศัพท์ (ค้นหาจากตาราง contracts ผ่าน subquery หรือ join)
-    // แต่เนื่องจากเรา query จาก debt_target_cache (dtc) ซึ่งอาจจะไม่มีเบอร์โทรใน cache
-    // เราสามารถ join กับ contracts เพื่อค้นหาเบอร์โทรได้
-    w += `\n    AND (dtc.contract_no LIKE '%${s}%' OR dtc.customer_name LIKE '%${s}%' OR dtc.contract_external_id IN (SELECT c.external_id FROM contracts c WHERE c.phone LIKE '%${s}%'))`;
+    // ค้นหาจาก contract_no และ customer_name ใน cache โดยตรง
+    // (ไม่ใช้ phone subquery เพราะ contracts table ใน Fastfone365 DB อาจไม่มี phone column)
+    w += `\n    AND (dtc.contract_no LIKE '%${s}%' OR dtc.customer_name LIKE '%${s}%')`;
   }
   return w;
 }
@@ -221,7 +220,9 @@ function dccWhere(section: string, opts: {
   }
   if (opts.search) {
     const s = escapeLike(opts.search);
-    w += `\n    AND (dcc.contract_no LIKE '%${s}%' OR dcc.customer_name LIKE '%${s}%' OR dcc.contract_external_id IN (SELECT c.external_id FROM contracts c WHERE c.phone LIKE '%${s}%'))`;
+    // ค้นหาจาก contract_no และ customer_name ใน cache โดยตรง
+    // (ไม่ใช้ phone subquery เพราะ contracts table ใน Fastfone365 DB อาจไม่มี phone column)
+    w += `\n    AND (dcc.contract_no LIKE '%${s}%' OR dcc.customer_name LIKE '%${s}%')`;
   }
   return w;
 }
