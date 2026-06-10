@@ -441,11 +441,11 @@ export default function DebtReport() {
   };
   // Switch: true = เฉพาะเงินต้น (แสดง penalty/unlockFee = 0 ทุกงวด), false = รวมค่าปรับ+ค่าปลดล็อก
   const [principalOnly, setPrincipalOnly] = useState(true);
-  // สวิต "ตั้งหนี้" (target tab only): เมื่อเปิด ซ่อนแถวที่ชำระครบ/ล่วงหน้า/ระงับ/สิ้นสุด/หนี้เสีย/ยังไม่ถึงดิว
+  // สวิต "ตั้งเป้า" (target tab only): เมื่อเปิด ซ่อนแถวที่ชำระครบ/ล่วงหน้า/ระงับ/สิ้นสุด/หนี้เสีย/ยังไม่ถึงดิว
   const [debtSetMode, setDebtSetMode] = useState(false);
   // cutoff mode สำหรับ debtSetMode: 'today' = ณ วันที่ปัจจุบัน, 'end_of_month' = ณ เดือนปัจจุบัน
   const [debtSetCutoffMode, setDebtSetCutoffMode] = useState<"today" | "end_of_month">("today");
-  // Dialog เลือก cutoff mode ตอนกด toggle ตั้งหนี้
+  // Dialog เลือก cutoff mode ตอนกด toggle ตั้งเป้า
   const [showDebtSetDialog, setShowDebtSetDialog] = useState(false);
   // pending cutoff mode ที่เลือกใน Dialog (ก่อน confirm)
   const [pendingDebtSetCutoffMode, setPendingDebtSetCutoffMode] = useState<"today" | "end_of_month">("today");
@@ -540,7 +540,7 @@ export default function DebtReport() {
     const row = rows.find((r: any) => r.collectionMonth === snapshotMonth);
     return row?.targetByRange ?? null;
   };
-  // query getMonthlyDebtSummary สำหรับ dropdown "ตั้งหนี้รายเดือน" (ตาราง 4 คอลัมน์)
+  // query getMonthlyDebtSummary สำหรับ dropdown "ตั้งเป้ารายเดือน" (ตาราง 4 คอลัมน์)
   // ดึงจาก monthly_target_detail_snapshot (freeze ณ วันที่ 1) + debt_collected_cache (ค่างวดเท่านั้น)
   // fallback เมื่อ frozen data ยังไม่มี (snapshot เก่าก่อน backfill)
   const monthlyDebtSummaryQuery = trpc.debt.getMonthlyDebtSummary.useQuery(
@@ -1014,9 +1014,9 @@ export default function DebtReport() {
         const hasMatch = (r as CollectedRow).payments?.some((p) => p.updatedBy === updatedByFilter) ?? false;
         if (!hasMatch) return false;
       }
-      // 7. ตั้งหนี้ (target tab only) — ซ่อน row ที่ทุก installment เป็น paid/closed/suspended/future
+      // 7. ตั้งเป้า (target tab only) — ซ่อน row ที่ทุก installment เป็น paid/closed/suspended/future
       if (tab === "target" && debtSetMode) {
-        // ใช้ debtSetCutoffMode ที่เลือกตอนกด toggle ตั้งหนี้
+        // ใช้ debtSetCutoffMode ที่เลือกตอนกด toggle ตั้งเป้า
         // today = วันนี้, end_of_month = วันสุดท้ายของเดือน
         const _now = new Date();
         const cutoffStr = debtSetCutoffMode === "end_of_month"
@@ -1025,7 +1025,7 @@ export default function DebtReport() {
         // Row ผ่านถ้ามี installment อย่างน้อย 1 งวดที่ต้องเก็บ (ส้มหรือดำ)
         // = ไม่ใช่ closed, ไม่ใช่ suspended, ไม่ใช่ paid, ไม่ใช่ future (dueDate > cutoff)
         // และ contract status ไม่ใช่ ระงับสัญญา / สิ้นสุดสัญญา / หนี้เสีย
-        const specialStatus = r.debtStatus === "ระงับสัญญา" || r.debtStatus === "สิ้นสุดสัญญา" || r.debtStatus === "หนี้เสีย" || r.debtStatus === "ยกเลิกสัญญา"; // ยกเลิกสัญญา ยังคงอยู่ใน specialStatus เพื่อไม่แสดงใน debtSetMode (ตั้งหนี้)
+        const specialStatus = r.debtStatus === "ระงับสัญญา" || r.debtStatus === "สิ้นสุดสัญญา" || r.debtStatus === "หนี้เสีย" || r.debtStatus === "ยกเลิกสัญญา"; // ยกเลิกสัญญา ยังคงอยู่ใน specialStatus เพื่อไม่แสดงใน debtSetMode (ตั้งเป้า)
         if (specialStatus) return false;
         const hasCollectableInst = r.installments.some((inst) => {
           if (inst.isClosed || inst.isSuspended) return false;
@@ -1052,7 +1052,7 @@ export default function DebtReport() {
     if (!section) return;
     const now = new Date();
     const snapshotMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-    // cutoffMode: ใช้ debtSetCutoffMode ที่เลือกไว้ตอนกด toggle ตั้งหนี้
+    // cutoffMode: ใช้ debtSetCutoffMode ที่เลือกไว้ตอนกด toggle ตั้งเป้า
     const mode = debtSetCutoffMode;
     // serialize filter state เพื่อ auto-restore ตอนเปิดดู Snapshot
     const filterStateObj = {
@@ -1134,7 +1134,7 @@ export default function DebtReport() {
   /* ---- Summary totals (computed from filteredRows, respects all filters) ---- */
   const targetSummary = useMemo(() => {
     if (tab !== "target") return null;
-    // ใช้ debtSetCutoffMode ที่เลือกตอนกด toggle ตั้งหนี้ (Live mode)
+    // ใช้ debtSetCutoffMode ที่เลือกตอนกด toggle ตั้งเป้า (Live mode)
     // Snapshot mode: ใช้ cutoffDate ของ snapshot
     const _now2 = new Date();
     const cutoffStr = targetViewMode === "snapshot" && (selectedSnapshotMeta as any)?.cutoffDate
@@ -1440,7 +1440,7 @@ export default function DebtReport() {
             { key: "penalty", label: "ค่าปรับ", width: 80, align: "right" },
             { key: "unlockFee", label: "ค่าปลดล็อก", width: 90, align: "right" },
           ] : []),
-          { key: "amount", label: "ตั้งหนี้", width: 115, align: "right" },
+          { key: "amount", label: "ตั้งเป้า", width: 115, align: "right" },
         ]
       : [
           // collected tab: ซ่อน closeInstallmentAmount (ซ้ำซ้อนกับ principal+interest+fee)
@@ -1505,10 +1505,10 @@ export default function DebtReport() {
 
           </div>
           <div className="flex items-center gap-2">
-            {/* ปุ่ม Log Snapshot (target tab only) — เปลี่ยนเป็น "ตั้งหนี้รายเดือน" */}
+            {/* ปุ่ม Log Snapshot (target tab only) — เปลี่ยนเป็น "ตั้งเป้ารายเดือน" */}
             {tab === "target" && (
               <div className="flex items-center gap-1.5 relative">
-                {/* ปุ่ม Log Snapshot (เปลี่ยนชื่อเป็น "ตั้งหนี้รายเดือน") */}
+                {/* ปุ่ม Log Snapshot (เปลี่ยนชื่อเป็น "ตั้งเป้ารายเดือน") */}
                 <div className="relative snapshot-log-dropdown">
                   <Button
                     variant="outline"
@@ -1519,7 +1519,7 @@ export default function DebtReport() {
                     title="ดูรายการ Snapshot เป้าเก็บหนี้ที่บันทึกไว้"
                   >
                     <Target className="w-3.5 h-3.5 mr-1.5" />
-                    ตั้งหนี้รายเดือน
+                    ตั้งเป้ารายเดือน
                     {targetViewMode === "snapshot" && selectedSnapshotMonth && (
                       <span className="ml-1.5 bg-amber-600 text-white text-[10px] px-1.5 py-0.5 rounded-full">
                         {selectedSnapshotMonth}
@@ -1551,7 +1551,7 @@ export default function DebtReport() {
                           {/* Table Header */}
                           <div className="grid gap-0 bg-amber-50 border-b border-amber-200 text-[11px] font-semibold text-amber-800" style={{ gridTemplateColumns: '1fr 1fr 1fr 1fr auto' }}>
                             <div className="px-3 py-2">เดือน-ปี</div>
-                            <div className="px-3 py-2 text-right">ตั้งหนี้</div>
+                            <div className="px-3 py-2 text-right">ตั้งเป้า</div>
                             <div className="px-3 py-2 text-right">ยอดเก็บหนี้</div>
                             <div className="px-3 py-2 text-right">% เก็บหนี้</div>
                             <div className="px-2 py-2 text-center w-9"></div>
@@ -1656,7 +1656,7 @@ export default function DebtReport() {
           </div>
         </div>
 
-        {/* Toolbar: Search > ApproveDate > Date > DueDate > Status > ProductType > PrincipalOnly > ตั้งหนี้ (target) | บันทึกโดย (collected) */}
+        {/* Toolbar: Search > ApproveDate > Date > DueDate > Status > ProductType > PrincipalOnly > ตั้งเป้า (target) | บันทึกโดย (collected) */}
         {<div className="flex flex-col gap-2 mb-2">
           <div className="flex flex-col md:flex-row md:items-center gap-2">
             <div className="relative flex-1 min-w-0">
@@ -1728,7 +1728,7 @@ export default function DebtReport() {
                   </label>
                 </div>
               )}
-              {/* ตั้งหนี้ (target tab only) — เมื่อเปิด ขึ้น Dialog เลือก cutoff mode */}
+              {/* ตั้งเป้า (target tab only) — เมื่อเปิด ขึ้น Dialog เลือก cutoff mode */}
               {tab === "target" && (
                 <div
                   className={`flex items-center gap-2 border rounded-md px-3 py-1.5 cursor-pointer select-none transition-colors ${
@@ -1765,7 +1765,7 @@ export default function DebtReport() {
                   <label htmlFor="debt-set-mode" className={`text-xs cursor-pointer whitespace-nowrap ${
                     debtSetMode ? "text-orange-700 font-medium" : "text-gray-600"
                   }`}>
-                    ตั้งหนี้
+                    ตั้งเป้า
                     {debtSetMode && (
                       <span className={`ml-1 text-[10px] px-1 py-0.5 rounded ${
                         debtSetCutoffMode === "end_of_month"
@@ -2023,7 +2023,7 @@ export default function DebtReport() {
                         className="border-r text-center flex items-center justify-center text-white"
                         style={{ width: GROUP_WIDTH, height: 28, background: "#b45309" }}
                       >
-                        ตั้งหนี้งวดที่่ {i + 1}
+                        ตั้งเป้างวดที่่ {i + 1}
                       </div>
                     ))
                   )}
@@ -2287,7 +2287,7 @@ export default function DebtReport() {
                             // เป้าเก็บหนี้: ใช้ค่า N/M จากยอดเก็บหนี้โดยตรง (collectedPaidPeriodMap)
                             // ไม่คำนวณเองจาก installments เพราะยอดเก็บหนี้มีค่าที่ถูกต้องอยู่แล้ว
                             // Cap: N ≤ installmentCount (สัญญาที่ชำระเกินงวด เช่น 9/8 → 8/8)
-                            // N+1 rule ถูกยกเลิก — server จัดการ suspendedFromPeriod ≥ 2 แล้ว (งวดที่ 1 ตั้งหนี้เสมอ)
+                            // N+1 rule ถูกยกเลิก — server จัดการ suspendedFromPeriod ≥ 2 แล้ว (งวดที่ 1 ตั้งเป้าเสมอ)
                             const rawN = collectedPaidPeriodMap.get(r.contractExternalId);
                             if (rawN != null && r.installmentCount != null) {
                               const cappedN = Math.min(rawN, r.installmentCount);
@@ -2575,7 +2575,7 @@ export default function DebtReport() {
                           const dueDateExactMasked =
                             !!dueDateExact &&
                             inst?.dueDate?.slice(0, 10) !== dueDateExact;
-                          // ตั้งหนี้ masking: ซ่อน installment ที่เป็น dimmed/isPaid/isFuturePeriod/advance
+                          // ตั้งเป้า masking: ซ่อน installment ที่เป็น dimmed/isPaid/isFuturePeriod/advance
                           const debtSetMasked = debtSetMode && tab === "target" && (
                             dimmed || // isClosed / isSuspended
                             _isPaidPre || // ชำระครบแล้ว (เขียว)
@@ -2657,7 +2657,7 @@ export default function DebtReport() {
                               }
                             }
                             // Phase 93: งวดที่ชำระล่วงหน้าครบแล้ว (isFuturePeriod + isPaid) → แสดง 0.00 ทุกคอลัมน์
-                            // เพราะถูกหักออกจากการตั้งหนี้แล้ว (ไม่ใช่ dimmed เพราะยังต้องแสดงวันที่)
+                            // เพราะถูกหักออกจากการตั้งเป้าแล้ว (ไม่ใช่ dimmed เพราะยังต้องแสดงวันที่)
                             if (_isFuturePeriodPre && _isPaidPre && gc.key !== "period" && gc.key !== "dueDate") {
                               v = "0.00";
                               annotation = null;
@@ -2798,13 +2798,13 @@ export default function DebtReport() {
         {/* Phase 125: Pagination removed — ใช้ Virtual Scroll กับ filteredRows ทั้งหมด */}
       </div>
 
-      {/* ── DebtSet Cutoff Mode Dialog — ขึ้นตอนกด Toggle ตั้งหนี้ ────────────────────────────── */}
+      {/* ── DebtSet Cutoff Mode Dialog — ขึ้นตอนกด Toggle ตั้งเป้า ────────────────────────────── */}
       <Dialog open={showDebtSetDialog} onOpenChange={setShowDebtSetDialog}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Target className="w-4 h-4 text-orange-600" />
-              ตั้งหนี้ — เลือกช่วงข้อมูล
+              ตั้งเป้า — เลือกช่วงข้อมูล
             </DialogTitle>
           </DialogHeader>
           <div className="py-2 space-y-3">
@@ -2874,7 +2874,7 @@ export default function DebtReport() {
                 }}
               >
                 <Target className="w-3.5 h-3.5 mr-1.5" />
-                ตั้งหนี้
+                ตั้งเป้า
               </Button>
             </div>
           </div>
@@ -3169,7 +3169,7 @@ export default function DebtReport() {
                     // สร้าง worksheet data
                     const wsData: (string | number)[][] = [
                       [`ยอดรายวัน — ${monthLabel}`],
-                      ["วันที่", "ตั้งหนี้", "ยอดเก็บหนี้", "% เก็บหนี้"],
+                      ["วันที่", "ตั้งเป้า", "ยอดเก็บหนี้", "% เก็บหนี้"],
                       ...rows.map(r => {
                         const dayLabel = r.isOverdue ? "ยกมา" : (r.date ? parseInt(r.date.split("-")[2] ?? "0", 10) : 0);
                         return [
@@ -3243,7 +3243,7 @@ export default function DebtReport() {
                     <thead className="sticky top-0 z-10">
                       <tr className="bg-amber-100 text-amber-900 text-[12px] font-semibold">
                         <th className="px-3 py-2 text-left border-b border-amber-200 w-16">วันที่</th>
-                        <th className="px-3 py-2 text-right border-b border-amber-200">ตั้งหนี้</th>
+                        <th className="px-3 py-2 text-right border-b border-amber-200">ตั้งเป้า</th>
                         <th className="px-3 py-2 text-right border-b border-amber-200">ยอดเก็บหนี้</th>
                         <th className="px-3 py-2 text-right border-b border-amber-200">% เก็บหนี้</th>
                       </tr>
