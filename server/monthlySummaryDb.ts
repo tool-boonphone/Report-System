@@ -168,9 +168,9 @@ function dtcWhere(section: string, opts: {
     w += `\n    AND dtc.product_type = '${opts.productType.replace(/'/g, "''")}'`;
   }
   if (opts.deviceFamily === "iOS") {
-    w += `\n    AND (dtc.model ILIKE 'iPhone%' OR dtc.model ILIKE 'iPad%')`;
+    w += `\n    AND (dtc.device ILIKE 'iPhone%' OR dtc.device ILIKE 'iPad%')`;
   } else if (opts.deviceFamily === "Android") {
-    w += `\n    AND dtc.model IS NOT NULL AND dtc.model != '' AND dtc.model NOT ILIKE 'iPhone%' AND dtc.model NOT ILIKE 'iPad%'`;
+    w += `\n    AND dtc.device IS NOT NULL AND dtc.device != '' AND dtc.device NOT ILIKE 'iPhone%' AND dtc.device NOT ILIKE 'iPad%'`;
   }
   if (opts.approveDate) {
     w += `\n    AND DATE(dtc.approve_date) = '${opts.approveDate}'`;
@@ -205,9 +205,9 @@ function dccWhere(section: string, opts: {
     w += `\n    AND dcc.product_type = '${opts.productType.replace(/'/g, "''")}'`;
   }
   if (opts.deviceFamily === "iOS") {
-    w += `\n    AND (dcc.model ILIKE 'iPhone%' OR dcc.model ILIKE 'iPad%')`;
+    w += `\n    AND (dcc.device ILIKE 'iPhone%' OR dcc.device ILIKE 'iPad%')`;
   } else if (opts.deviceFamily === "Android") {
-    w += `\n    AND dcc.model IS NOT NULL AND dcc.model != '' AND dcc.model NOT ILIKE 'iPhone%' AND dcc.model NOT ILIKE 'iPad%'`;
+    w += `\n    AND dcc.device IS NOT NULL AND dcc.device != '' AND dcc.device NOT ILIKE 'iPhone%' AND dcc.device NOT ILIKE 'iPad%'`;
   }
   if (opts.paidAtDate) {
     w += `\n    AND DATE(dcc.paid_at) = '${opts.paidAtDate}'`;
@@ -1231,8 +1231,8 @@ export async function populateMonthlySummaryCache(
         ${BUCKET_CASE_DTC} AS bucket,
         dtc.product_type,
         CASE
-          WHEN dtc.model ILIKE 'iPhone%' OR dtc.model ILIKE 'iPad%' THEN 'iOS'
-          WHEN dtc.model IS NOT NULL AND dtc.model != '' THEN 'Android'
+          WHEN dtc.device ILIKE 'iPhone%' OR dtc.device ILIKE 'iPad%' THEN 'iOS'
+          WHEN dtc.device IS NOT NULL AND dtc.device != '' THEN 'Android'
           ELSE NULL
         END AS device_family,
         COUNT(DISTINCT dtc.contract_external_id) AS contract_count
@@ -1352,8 +1352,8 @@ export async function populateMonthlySummaryCache(
         END AS bucket,
         dcc.product_type,
         CASE
-          WHEN dcc.model ILIKE 'iPhone%' OR dcc.model ILIKE 'iPad%' THEN 'iOS'
-          WHEN dcc.model IS NOT NULL AND dcc.model != '' THEN 'Android'
+          WHEN dcc.device ILIKE 'iPhone%' OR dcc.device ILIKE 'iPad%' THEN 'iOS'
+          WHEN dcc.device IS NOT NULL AND dcc.device != '' THEN 'Android'
           ELSE NULL
         END AS device_family,
         COUNT(DISTINCT dcc.contract_external_id) AS contract_count,
@@ -2336,9 +2336,9 @@ async function queryDueMonthPaid(
     dccFilter += `\n    AND dcc.product_type = '${opts.productType.replace(/'/g, "''")}'`;
   }
   if (opts.deviceFamily === "iOS") {
-    dccFilter += `\n    AND (dcc.model ILIKE 'iPhone%' OR dcc.model ILIKE 'iPad%')`;
+    dccFilter += `\n    AND (dcc.device ILIKE 'iPhone%' OR dcc.device ILIKE 'iPad%')`;
   } else if (opts.deviceFamily === "Android") {
-    dccFilter += `\n    AND dcc.model IS NOT NULL AND dcc.model != '' AND dcc.model NOT ILIKE 'iPhone%' AND dcc.model NOT ILIKE 'iPad%'`;
+    dccFilter += `\n    AND dcc.device IS NOT NULL AND dcc.device != '' AND dcc.device NOT ILIKE 'iPhone%' AND dcc.device NOT ILIKE 'iPad%'`;
   }
   if (opts.approveMonths && opts.approveMonths.length > 0) {
     const list = opts.approveMonths.map((m) => `'${m}'`).join(",");
