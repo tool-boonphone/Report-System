@@ -1661,6 +1661,7 @@ export default function MonthlySummary() {
               dueVis={dueVis} notYetDueVis={notYetDueVis}
               installVis={installVis}
               showStickyTotal={showStickyTotal}
+              overallGrandTotal={combinedGrandTotal}
             />)
           ):tab==="combined"?(
             <CombinedTable
@@ -2920,6 +2921,7 @@ function DueMonthTable({
   stickyTop,
   paidVis, targetVis, dueVis, notYetDueVis, installVis,
   showStickyTotal,
+  overallGrandTotal,
 }:{
   rows: DueMonthRowLocal[];
   allDueMonths: string[];
@@ -2935,6 +2937,8 @@ function DueMonthTable({
   notYetDueVis: Record<NotYetDueBadgeKey,boolean>;
   installVis: Record<"principal"|"interest"|"fee",boolean>;
   showStickyTotal?: boolean;
+  /** ยอดรวมทั้งหมดจาก combinedGrandTotal (สถานะหนี้) เพื่อให้แถว 'รวมทั้งหมด' ตรงกัน */
+  overallGrandTotal?: GrandTotal;
 }) {
   const SortIcon = sortDir==="asc"?ArrowUp:ArrowDown;
 
@@ -3126,18 +3130,21 @@ function DueMonthTable({
               {sr.label}
             </td>
             <td className={["sticky left-[220px] z-10 px-3 py-1.5 text-right border-r border-slate-300 min-w-[150px]",sr.totalBg].join(" ")}>
-              {renderVal(sr.key,
-                sr.key==="count"?grandTotalOverall.totalCount:
-                sr.key==="financeTotal"?grandTotalOverall.totalFinanceTotal:
-                sr.key==="installTotal"?(installVis.principal?grandTotalOverall.totalInstallTotal.principal:0)+(installVis.interest?grandTotalOverall.totalInstallTotal.interest:0)+(installVis.fee?grandTotalOverall.totalInstallTotal.fee:0):
-                sr.key==="target"?computeMoneyTotal(grandTotalOverall.totalTarget,{...targetVis,discount:false,overpaid:false}):
-                sr.key==="paid"?computeMoneyTotal(grandTotalOverall.totalPaid,paidVis):
-                sr.key==="due"?computeDueTotal(grandTotalOverall.totalDue,dueVis):
-                computeNotYetDueTotal(grandTotalOverall.totalNotYetDue,notYetDueVis),
-                sr.textColor,
-                (installVis.principal?grandTotalOverall.totalInstallTotal.principal:0)+(installVis.interest?grandTotalOverall.totalInstallTotal.interest:0)+(installVis.fee?grandTotalOverall.totalInstallTotal.fee:0),
-                computeMoneyTotal(grandTotalOverall.totalTarget,{...targetVis,discount:false,overpaid:false})
-              )}
+              {(()=>{
+                // ใช้ overallGrandTotal (จาก combinedGrandTotal/สถานะหนี้) เป็นหลัก เพื่อให้ตรงกัน
+                const gt = overallGrandTotal ?? grandTotalOverall;
+                const installGtVal=(installVis.principal?gt.totalInstallTotal.principal:0)+(installVis.interest?gt.totalInstallTotal.interest:0)+(installVis.fee?gt.totalInstallTotal.fee:0);
+                const targetGtVal=computeMoneyTotal(gt.totalTarget,{...targetVis,discount:false,overpaid:false});
+                const val=
+                  sr.key==="count"?gt.totalCount:
+                  sr.key==="financeTotal"?gt.totalFinanceTotal:
+                  sr.key==="installTotal"?installGtVal:
+                  sr.key==="target"?targetGtVal:
+                  sr.key==="paid"?computeMoneyTotal(gt.totalPaid,paidVis):
+                  sr.key==="due"?computeDueTotal(gt.totalDue,dueVis):
+                  computeNotYetDueTotal(gt.totalNotYetDue,notYetDueVis);
+                return renderVal(sr.key, val, sr.textColor, installGtVal, targetGtVal);
+              })()}
             </td>
             {/* per-dueMonth grand total — ซ่อนชั่วคราวเมื่อ HIDE_BUCKET_COLS=true */}
             {!HIDE_BUCKET_COLS && allDueMonths.map((dm)=>{
