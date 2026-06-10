@@ -1722,19 +1722,6 @@ async function getMonthlySummaryFromCache(
   const cnt = parseInt(String(checkRow?.cnt ?? "0"), 10);
   if (cnt === 0) return null; // ไม่มีข้อมูลใน cache สำหรับ filter นี้ → fallback ไป live query
 
-  // ตรวจสอบว่า cache ถูก populate วันนี้หรือยัง
-  // ถ้า updated_at < วันนี้ (stale) → fallback ไป live query
-  // เพราะ target ใช้ CURRENT_DATE ซึ่งเปลี่ยนทุกวันเมื่อมีงวดใหม่ครบกำหนด
-  const lastUpdated = checkRow?.last_updated ? new Date(checkRow.last_updated) : null;
-  if (lastUpdated) {
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-    if (lastUpdated < todayStart) {
-      console.log(`[getMonthlySummaryFromCache] STALE CACHE detected for section=${section} — last_updated=${lastUpdated.toISOString()}, falling back to live query`);
-      return null; // cache stale → fallback ไป live query
-    }
-  }
-
   // ดึงแต่ละ query_type พร้อมกัน
   const [countRows, targetRows, paidRows, dueRows, notYetDueRows, installTotalRows] = await Promise.all([
     // count: ไม่มี dateMonth filter
@@ -2969,18 +2956,6 @@ export async function getDueMonthSummaryFromCache(
   const cacheCount = Number(checkRow?.cnt || 0);
   if (cacheCount === 0) {
     return { rows: [], allDueMonths: [] };
-  }
-
-  // ตรวจสอบว่า cache ถูก populate วันนี้หรือยัง
-  // ถ้า updated_at < วันนี้ (stale) → fallback ไป live query
-  const lastUpdated = checkRow?.last_updated ? new Date(checkRow.last_updated) : null;
-  if (lastUpdated) {
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-    if (lastUpdated < todayStart) {
-      console.log(`[getDueMonthSummaryFromCache] STALE CACHE detected for section=${section} — last_updated=${lastUpdated.toISOString()}, falling back to live query`);
-      return { rows: [], allDueMonths: [] }; // cache stale → fallback ไป live query
-    }
   }
 
   const baseQ = `
