@@ -676,10 +676,13 @@ async function queryInstallTotal(
   const db = await getDb(section);
   if (!db) return [];
 
+  // Phase 9AK-fix3: pass search ไปใน dtcWhere เพื่อใช้ dtc.contract_no/customer_name แทน contracts.contract_no
+  // (ป้องกัน error: column contracts.contract_no does not exist ใน Fastfone365 DB)
   const baseWhere = dtcWhere(section, {
     productType: opts.productType,
     deviceFamily: opts.deviceFamily,
     approveMonths: opts.approveMonths,
+    search: opts.search,
   });
 
   /*
@@ -756,7 +759,6 @@ async function queryInstallTotal(
       SUM(COALESCE(l.finance_amount, 0)) AS finance_total
     FROM latest l
     WHERE l.rn = 1
-      ${opts.search ? `AND (l.contract_external_id IN (SELECT c.external_id FROM contracts c WHERE c.contract_no LIKE '%${escapeLike(opts.search)}%' OR c.customer_name LIKE '%${escapeLike(opts.search)}%' OR c.phone LIKE '%${escapeLike(opts.search)}%'))` : ''}
     GROUP BY 1, 2
     ORDER BY 1 DESC
   `;
