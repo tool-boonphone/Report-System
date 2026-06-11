@@ -373,7 +373,7 @@ function BucketMultiSelect({
               </CommandItem>
               {DEBT_BUCKETS.map((b) => (
                 <CommandItem key={b} value={b} onSelect={() => toggle(b)}>
-                  <Check className={`mr-2 h-3.5 w-3.5 ${selected.has(b) ? "opacity-100 text-teal-600" : "opacity-0"}`} />
+                  <Check className={`mr-2 h-3.5 w-3.5 ${(isAll || selected.has(b)) ? "opacity-100 text-teal-600" : "opacity-0"}`} />
                   <span className={["text-xs px-1.5 py-0.5 rounded border", bucketPillClasses(b)].join(" ")}>{b}</span>
                 </CommandItem>
               ))}
