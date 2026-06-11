@@ -14,6 +14,9 @@ import type { SectionKey } from "../shared/const";
 let _boonphoneDb: any = null;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let _fastfoneDb: any = null;
+// ถ้า connection เคย fail เพราะ env ยังไม่พร้อม ให้ retry ได้ใหม่
+let _fastfoneDbFailed = false;
+let _boonphoneDbFailed = false;
 
 function createPool(connectionString: string) {
   return new pg.Pool({
@@ -36,11 +39,18 @@ function createPool(connectionString: string) {
  */
 export async function getDb(section?: SectionKey) {
   if (section === "Fastfone365") {
+    // retry ถ้า _fastfoneDb ยังไม่มี (เช่น env ยังไม่พร้อมตอน startup)
     if (!_fastfoneDb) {
       const url = process.env.FASTFONE_DATABASE_URL || process.env.FASTFONE365_DATABASE_URL || process.env.DATABASE_URL;
-      if (!url) return null;
+      if (!url) {
+        if (!_fastfoneDbFailed) console.warn("[Database] FASTFONE_DATABASE_URL not set — Fastfone365 DB unavailable");
+        _fastfoneDbFailed = true;
+        return null;
+      }
       try {
         _fastfoneDb = drizzle(createPool(url));
+        _fastfoneDbFailed = false;
+        console.log("[Database] Connected to fastfone-db ✓");
       } catch (error) {
         console.warn("[Database] Failed to connect to fastfone-db:", error);
         return null;
@@ -52,9 +62,14 @@ export async function getDb(section?: SectionKey) {
   // Default: Boonphone (also used as auth DB)
   if (!_boonphoneDb) {
     const url = process.env.BOONPHONE_DATABASE_URL || process.env.DATABASE_URL_BOONPHONE || process.env.DATABASE_URL;
-    if (!url) return null;
+    if (!url) {
+      if (!_boonphoneDbFailed) console.warn("[Database] DATABASE_URL not set — Boonphone DB unavailable");
+      _boonphoneDbFailed = true;
+      return null;
+    }
     try {
       _boonphoneDb = drizzle(createPool(url));
+      _boonphoneDbFailed = false;
     } catch (error) {
       console.warn("[Database] Failed to connect to boonphone-db:", error);
       return null;
