@@ -859,8 +859,11 @@ export async function syncMdmOnlineDays(
 }
 
 /**
- * Stage 3b: Enrich IMEI / Serial No — ดึง detail endpoint ทุกสัญญา แบบ parallel 5 req
+ * Stage 3b: Enrich IMEI / Serial No — ดึง detail endpoint ทุกสัญญา แบบ parallel 20 req
  * เพื่อให้ imei และ serialNo ใน contracts table ถูกต้องและ up-to-date ทุกรอบ sync
+ *
+ * Fix: เพิ่ม CONCURRENCY จาก 5 → 20 เพื่อให้เสร็จเร็วขึ้น
+ * Fix: เพิ่ม keepalive query ทุก 500 รายการ เพื่อป้องกัน Render Postgres ตัด idle connection
  */
 async function enrichContractDeviceIds(
   client: PartnerClient,
@@ -882,12 +885,13 @@ async function enrichContractDeviceIds(
   const total = contractIds.length;
   console.log(`[enrichDeviceIds] ${section}: enriching ${total} contracts...`);
 
-  const CONCURRENCY = 5;
+  const CONCURRENCY = 20; // เพิ่มจาก 5 เป็น 20 เพื่อให้เสร็จเร็วขึ้น
   let idx = 0;
   let done = 0;
   let enriched = 0;
   let errors = 0;
   const startTime = Date.now();
+  let lastKeepalive = 0; // track จำนวน done ล่าสุดที่ keepalive
 
   const worker = async () => {
     while (idx < contractIds.length) {
@@ -923,6 +927,16 @@ async function enrichContractDeviceIds(
         const elapsed = Math.round((Date.now() - startTime) / 1000);
         console.log(`[enrichDeviceIds] ${section}: ${done}/${total} done (enriched=${enriched}, errors=${errors}, elapsed=${elapsed}s)`);
         setSubProgress(section, "imei_enrich", done, total);
+      }
+      // Keepalive: ping DB ทุก 500 รายการ เพื่อป้องกัน Render Postgres ตัด idle connection
+      if (done - lastKeepalive >= 500) {
+        lastKeepalive = done;
+        try {
+          await db.execute(sql`SELECT 1`);
+          console.log(`[enrichDeviceIds] ${section}: keepalive ping at ${done}/${total}`);
+        } catch (pingErr: any) {
+          console.warn(`[enrichDeviceIds] ${section}: keepalive failed: ${pingErr?.message ?? pingErr}`);
+        }
       }
     }
   };
