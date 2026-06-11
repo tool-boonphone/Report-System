@@ -18,7 +18,7 @@ import {
 } from "../../drizzle/schema";
 import { normalizeSectionKey, type SectionKey } from "../../shared/const";
 
-const BATCH_SIZE = 200;
+const BATCH_SIZE = 1000; // เพิ่มจาก 200 เป็น 1000 เพื่อเร่งความเร็วในการ Upsert ลง DB
 
 type AnyRow = Record<string, any>;
 

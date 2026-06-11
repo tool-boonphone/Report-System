@@ -21,7 +21,7 @@ import { debtTargetCache, debtCollectedCache } from "../../drizzle/schema";
 import { listDebtTargetStream, listDebtCollectedStream } from "../debtDb";
 import type { SectionKey } from "../../shared/const";
 
-const BATCH = 20; // ลดจาก 100 เพื่อรองรับ DB copy ที่มี resource จำกัด
+const BATCH = 500; // ปรับเพิ่มจาก 20 เป็น 500 เพื่อเร่งความเร็วในการ Insert ลง DB (Render Postgres รองรับได้สบายๆ)
 
 // ─── Helper ───────────────────────────────────────────────────────────────────
 function bucketFromDays(days: number): string {

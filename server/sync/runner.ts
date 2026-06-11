@@ -946,7 +946,8 @@ async function syncInstallments(
     let totalInstRows = 0;
 
     try {
-      await client.forEachPage<any>(
+      // Use forEachPageParallel for installments to speed up sync
+      await client.forEachPageParallel<any>(
         "contract",
         (d) => d?.installments,
         { action: "installments" },
@@ -956,7 +957,11 @@ async function syncInstallments(
           if (buffer.length >= 1000) rowCount += await upsertInstallments(buffer.splice(0, buffer.length), section);
           setSubProgress(section, "installments", page * 500, totalInstRows);
         },
-        500,
+        500, // limit per page
+        30_000, // timeoutMs
+        1, // startPage
+        5, // batchSize (parallel requests)
+        200, // delayMs between batches
       );
     } catch (err) {
       if (err instanceof PartnerApiError && err.status === 404) {
@@ -990,7 +995,8 @@ async function syncPayments(
   try {
     const buffer: any[] = [];
 
-    await client.forEachPage<any>(
+    // Use forEachPageParallel for payments to speed up sync
+    await client.forEachPageParallel<any>(
       "payment",
       (d) => d?.transactions,
       { action: "transactions" },
@@ -999,8 +1005,11 @@ async function syncPayments(
         if (buffer.length >= 1000) rowCount += await upsertPayments(buffer.splice(0, buffer.length), section);
         setSubProgress(section, "payments", page * 1000, totalPages * 1000);
       },
-      1000, // page size 1000
-      30_000, // 30s per-request timeout
+      1000, // limit per page
+      30_000, // timeoutMs
+      1, // startPage
+      5, // batchSize (parallel requests)
+      200, // delayMs between batches
     );
 
     if (buffer.length) rowCount += await upsertPayments(buffer, section);
