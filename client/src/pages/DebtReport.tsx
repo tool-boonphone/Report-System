@@ -316,6 +316,83 @@ function StatusMultiSelect({
   );
 }
 
+/** InstallmentCountFilter — simple button-based dropdown (avoids CommandItem lowercase issue) */
+function InstallmentCountFilter({
+  selected,
+  onChange,
+  options,
+}: {
+  selected: Set<string>;
+  onChange: (v: Set<string>) => void;
+  options: string[];
+}) {
+  const [open, setOpen] = React.useState(false);
+  const ref = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+  const toggle = (s: string) => {
+    const next = new Set(selected);
+    if (next.has(s)) next.delete(s);
+    else next.add(s);
+    onChange(next);
+  };
+  const label =
+    selected.size === 0
+      ? "ทุกงวดผ่อน"
+      : selected.size === 1
+        ? Array.from(selected)[0]
+        : `${selected.size} งวด`;
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className={`flex items-center gap-2 h-9 px-3 py-2 rounded-md border text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[150px] justify-between transition-colors ${
+          selected.size > 0
+            ? "border-indigo-400 bg-indigo-50 text-indigo-800 font-medium"
+            : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
+        }`}
+      >
+        <span className="truncate">{label}</span>
+        <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+      </button>
+      {open && (
+        <div className="absolute z-50 mt-1 w-[160px] bg-white border border-gray-200 rounded-md shadow-lg py-1 max-h-72 overflow-y-auto">
+          <button
+            type="button"
+            onClick={() => { onChange(new Set()); setOpen(false); }}
+            className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-gray-50 text-gray-700"
+          >
+            <span className={"w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 " + (selected.size === 0 ? "bg-blue-500 border-blue-500" : "border-gray-300")}>
+              {selected.size === 0 && <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
+            </span>
+            ทุกงวดผ่อน
+          </button>
+          <div className="border-t border-gray-100 my-1" />
+          {options.map((opt) => (
+            <button
+              key={opt}
+              type="button"
+              onClick={() => toggle(opt)}
+              className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-gray-50 text-gray-700"
+            >
+              <span className={"w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 " + (selected.has(opt) ? "bg-blue-500 border-blue-500" : "border-gray-300")}>
+                {selected.has(opt) && <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
+              </span>
+              {opt}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** Generic multi-select filter using Popover + Command pattern */
 function MultiSelectFilter({
   label,
@@ -1728,12 +1805,10 @@ export default function DebtReport() {
                 placeholder={tab === "collected" ? "ทุกเดือน-ปีที่ชำระ" : "ทุกเดือน-ปีที่ต้องชำระ"}
               />
               {/* งวดผ่อน */}
-              <MultiSelectFilter
-                label="งวดผ่อน"
+              <InstallmentCountFilter
                 selected={installmentCountFilter}
                 onChange={setInstallmentCountFilter}
                 options={installmentCountOptions}
-                placeholder="ทุกงวดผ่อน"
               />
               {/* สถานะหนี้ */}
               <StatusMultiSelect selected={statusFilter} onChange={setStatusFilter} />
