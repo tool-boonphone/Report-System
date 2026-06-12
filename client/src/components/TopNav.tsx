@@ -12,6 +12,7 @@ import {
   CalendarDays,
   ChevronDown,
   ChevronRight,
+  ExternalLink,
   FileText,
   KeyRound,
   LayoutDashboard,
@@ -92,6 +93,15 @@ const MAIN_NAV: NavEntry[] = [
       { kind: "leaf", label: "รายรับ", path: "/income", icon: Receipt, menuCode: "income" },
       { kind: "leaf", label: "รายจ่าย", path: "/expense", icon: TrendingDown, menuCode: "expense" },
     ],
+  },
+];
+
+/** External link ที่แสดงต่อจาก MAIN_NAV เสมอ (ไม่ผ่านระบบ permission) */
+const EXTERNAL_NAV = [
+  {
+    label: "Stock Sure+",
+    url: "https://report.boonphone.co.th/",
+    icon: ExternalLink,
   },
 ];
 
@@ -277,6 +287,17 @@ export function TopNav() {
                 }
                 return <DesktopGroupMenu key={entry.label} entry={entry} location={location} />;
               })}
+              {/* External links — แสดงต่อจาก MAIN_NAV เสมอ */}
+              {EXTERNAL_NAV.map((ext) => {
+                const Icon = ext.icon;
+                return (
+                  <a key={ext.url} href={ext.url} target="_blank" rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors text-gray-600 hover:bg-gray-100 hover:text-gray-900">
+                    <Icon className="w-4 h-4" />
+                    {ext.label}
+                  </a>
+                );
+              })}
             </div>
           </div>
 
@@ -401,6 +422,19 @@ export function TopNav() {
                       </div>
                     )}
                   </div>
+                );
+              })}
+
+              {/* External links — แสดงต่อจาก MAIN_NAV ใน mobile เสมอ */}
+              {EXTERNAL_NAV.map((ext) => {
+                const Icon = ext.icon;
+                return (
+                  <a key={ext.url} href={ext.url} target="_blank" rel="noopener noreferrer"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100">
+                    <Icon className="w-4 h-4" />
+                    {ext.label}
+                  </a>
                 );
               })}
 
