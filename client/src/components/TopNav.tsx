@@ -100,7 +100,7 @@ const MAIN_NAV: NavEntry[] = [
 const EXTERNAL_NAV = [
   {
     label: "Stock Sure+",
-    url: "https://report.boonphone.co.th/",
+    url: "https://stock.boonphone.co.th/",
     icon: ExternalLink,
   },
 ];
