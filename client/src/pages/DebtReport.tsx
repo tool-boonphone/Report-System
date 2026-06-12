@@ -1137,7 +1137,7 @@ export default function DebtReport() {
         (r.phone ?? "").toLowerCase().includes(q)
       );
     });
-  }, [activeRows, search, statusFilter, approveDateFilter, dueDateFilter, productTypeFilter, dueDateExact, tab, updatedByFilter, debtSetMode, debtSetCutoffMode, targetViewMode, selectedSnapshotMeta]);
+  }, [activeRows, search, statusFilter, approveDateFilter, dueDateFilter, productTypeFilter, installmentCountFilter, dueDateExact, tab, updatedByFilter, debtSetMode, debtSetCutoffMode, targetViewMode, selectedSnapshotMeta]);
 
   // helper: กด Snapshot → ให้ server ดึงข้อมูลจาก debt_target_cache โดยตรง (Server-Side Snapshot)
   // เปลี่ยนจาก saveClientSnapshot (ส่ง rows จาก client) → populateTargetDetailSnapshot (server ดึงเอง)
