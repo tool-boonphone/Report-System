@@ -416,6 +416,7 @@ export default function DebtReport() {
   // New filters: month-year approve date, month-year due date, product type
   const [approveDateFilter, setApproveDateFilter] = useState<Set<string>>(new Set());
   const [dueDateFilter, setDueDateFilter] = useState<Set<string>>(new Set());
+  const [installmentCountFilter, setInstallmentCountFilter] = useState<Set<string>>(new Set());
   const [productTypeFilter, setProductTypeFilter] = useState<Set<string>>(new Set());
   // Phase 23: exact date filter (YYYY-MM-DD)
   // target tab = วันที่ที่ต้องชำระ (dueDate), collected tab = วันที่ที่ชำระ (paidAt)
@@ -601,6 +602,7 @@ export default function DebtReport() {
         // ไม่ restore statusFilter จาก metadata เพราะใช้ SNAPSHOT_DEFAULT_STATUSES เสมอ
         if (Array.isArray(fs.approveDateFilter)) setApproveDateFilter(new Set(fs.approveDateFilter));
         if (Array.isArray(fs.dueDateFilter)) setDueDateFilter(new Set(fs.dueDateFilter));
+        if (Array.isArray(fs.installmentCountFilter)) setInstallmentCountFilter(new Set(fs.installmentCountFilter));
         if (Array.isArray(fs.productTypeFilter)) setProductTypeFilter(new Set(fs.productTypeFilter));
         if (fs.dueDateExact !== undefined) setDueDateExact(fs.dueDateExact);
         if (typeof fs.debtSetMode === "boolean") setDebtSetMode(fs.debtSetMode);
@@ -966,6 +968,16 @@ export default function DebtReport() {
     return Array.from(s).sort();
   }, [activeRows]);
 
+  const installmentCountOptions = useMemo(() => {
+    const s = new Set<number>();
+    for (const r of activeRows) {
+      if (r.installmentCount != null) s.add(r.installmentCount);
+    }
+    return Array.from(s)
+      .sort((a, b) => a - b)
+      .map((n) => `${n} งวด`);
+  }, [activeRows]);
+
   /* ---- Filter (client-side) ---- */
   // Priority: approveDateFilter > dueDateExact > dueDateFilter > statusFilter > productTypeFilter
   const filteredRows = useMemo(() => {
@@ -1005,9 +1017,14 @@ export default function DebtReport() {
               );
         if (!hasMatch) return false;
       }
-      // 4. สถานะหนี้
+      // 4. งวดผ่อน
+      if (installmentCountFilter.size > 0) {
+        const label = `${r.installmentCount} งวด`;
+        if (!installmentCountFilter.has(label)) return false;
+      }
+      // 5. สถานะหนี้
       if (statusFilter.size > 0 && !statusFilter.has(r.debtStatus)) return false;
-      // 5. ประเภทเครื่อง
+      // 6. ประเภทเครื่อง
       if (productTypeFilter.size > 0 && !productTypeFilter.has(r.productType ?? "")) return false;
       // 6. บันทึกโดย (collected tab only) — กรองระดับ row: แสดงเฉพาะ row ที่มี payment ของคนนั้น
       if (tab === "collected" && updatedByFilter) {
@@ -1060,6 +1077,7 @@ export default function DebtReport() {
       statusFilter: Array.from(statusFilter),
       approveDateFilter: Array.from(approveDateFilter),
       dueDateFilter: Array.from(dueDateFilter),
+      installmentCountFilter: Array.from(installmentCountFilter),
       productTypeFilter: Array.from(productTypeFilter),
       dueDateExact,
       debtSetMode,
@@ -1709,6 +1727,14 @@ export default function DebtReport() {
                 options={dueDateOptions}
                 placeholder={tab === "collected" ? "ทุกเดือน-ปีที่ชำระ" : "ทุกเดือน-ปีที่ต้องชำระ"}
               />
+              {/* งวดผ่อน */}
+              <MultiSelectFilter
+                label="งวดผ่อน"
+                selected={installmentCountFilter}
+                onChange={setInstallmentCountFilter}
+                options={installmentCountOptions}
+                placeholder="ทุกงวดผ่อน"
+              />
               {/* สถานะหนี้ */}
               <StatusMultiSelect selected={statusFilter} onChange={setStatusFilter} />
               {/* ประเภทเครื่อง */}
@@ -1808,10 +1834,19 @@ export default function DebtReport() {
                   )}
                 </div>
               )}
-              {(statusFilter.size > 0 || approveDateFilter.size > 0 || dueDateFilter.size > 0 || productTypeFilter.size > 0 || dueDateExact || updatedByFilter || debtSetMode) && (
+              {(statusFilter.size > 0 || approveDateFilter.size > 0 || dueDateFilter.size > 0 || installmentCountFilter.size > 0 || productTypeFilter.size > 0 || dueDateExact || updatedByFilter || debtSetMode) && (
                 <button
                   type="button"
-                  onClick={() => { setStatusFilter(new Set()); setApproveDateFilter(new Set()); setDueDateFilter(new Set()); setProductTypeFilter(new Set()); setDueDateExact(null); setUpdatedByFilter(null); setDebtSetMode(false); }}
+                  onClick={() => {
+                    setStatusFilter(new Set());
+                    setApproveDateFilter(new Set());
+                    setDueDateFilter(new Set());
+                    setInstallmentCountFilter(new Set());
+                    setProductTypeFilter(new Set());
+                    setDueDateExact(null);
+                    setUpdatedByFilter(null);
+                    setDebtSetMode(false);
+                  }}
                   className="text-xs text-gray-400 hover:text-red-500 underline"
                 >
                   ล้างฟิลเตอร์
