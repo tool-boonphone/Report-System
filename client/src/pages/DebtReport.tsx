@@ -1019,8 +1019,8 @@ export default function DebtReport() {
       }
       // 4. งวดผ่อน
       if (installmentCountFilter.size > 0) {
-        const label = `${r.installmentCount} งวด`;
-        if (!installmentCountFilter.has(label)) return false;
+        const val = r.installmentCount != null ? `${r.installmentCount} งวด` : "";
+        if (!installmentCountFilter.has(val)) return false;
       }
       // 5. สถานะหนี้
       if (statusFilter.size > 0 && !statusFilter.has(r.debtStatus)) return false;
