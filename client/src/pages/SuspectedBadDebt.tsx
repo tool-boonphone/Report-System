@@ -402,7 +402,7 @@ export default function SuspectedBadDebt() {
   /* ── filters ── */
   const [search, setSearch] = useState("");
   const [approveMonthFilter, setApproveMonthFilter] = useState<Set<string>>(new Set());
-  const [debtStatusFilter, setDebtStatusFilter] = useState<Set<string>>(new Set(["เกิน 61-90", "เกิน >90"]));
+  const [debtStatusFilter, setDebtStatusFilter] = useState<Set<string>>(new Set());
   const [osFilter, setOsFilter] = useState<Set<string>>(new Set());
   const [modelFilter, setModelFilter] = useState<Set<string>>(new Set());
   const [debtValueMin, setDebtValueMin] = useState("");
