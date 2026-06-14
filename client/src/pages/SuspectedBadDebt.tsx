@@ -335,7 +335,7 @@ export default function SuspectedBadDebt() {
   /* ── filters ── */
   const [search, setSearch] = useState("");
   const [approveMonthFilter, setApproveMonthFilter] = useState<Set<string>>(new Set());
-  const [debtStatusFilter, setDebtStatusFilter] = useState<Set<string>>(new Set());
+  const [debtStatusFilter, setDebtStatusFilter] = useState<Set<string>>(new Set(["เกิน 61-90", "เกิน >90"]));
   const [osFilter, setOsFilter] = useState<Set<string>>(new Set());
   const [modelFilter, setModelFilter] = useState<Set<string>>(new Set());
   const [debtValueMin, setDebtValueMin] = useState("");
@@ -707,7 +707,7 @@ export default function SuspectedBadDebt() {
                 />
                 <MultiSelectFilter
                   label="สถานะหนี้"
-                  options={["ปกติ", "เกิน 31-60", "เกิน 61-90", "เกิน >90", "ระงับสัญญา", "หนี้เสีย"]}
+                  options={["เกิน 31-60", "เกิน 61-90", "เกิน >90"]}
                   selected={debtStatusFilter}
                   onChange={setDebtStatusFilter}
                   placeholder="ทุกสถานะหนี้"
