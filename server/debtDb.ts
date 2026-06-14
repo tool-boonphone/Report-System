@@ -4239,7 +4239,7 @@ export async function listSuspectedBadDebt(params: { section: SectionKey }): Pro
                THEN dtc.due_date END) AS earliest_arrears_due
     FROM debt_target_cache dtc
     WHERE dtc.section = ${params.section}
-      AND dtc.debt_range IN ('เกิน 61-90', 'เกิน >90')
+      AND dtc.debt_range IN ('เกิน 31-60', 'เกิน 61-90', 'เกิน >90')
       -- กรองสถานะสัญญาที่ไม่ควรแสดงในกลุ่มหนี้สงสัยจะเสีย
       AND COALESCE(dtc.contract_status, '') NOT IN ('หนี้เสีย', 'ระงับสัญญา', 'ยกเลิกสัญญา', 'สิ้นสุดสัญญา')
     GROUP BY
