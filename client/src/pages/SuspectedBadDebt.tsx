@@ -230,6 +230,73 @@ function Th({
   );
 }
 
+/* ─── DebtStatusFilter (button-based, ไม่ใช้ CommandItem เพื่อหลีกเลี่ยงปัญหา lowercase) ─── */
+const DEBT_STATUS_OPTIONS = ["เกิน 31-60", "เกิน 61-90", "เกิน >90"] as const;
+function DebtStatusFilter({
+  selected,
+  onChange,
+}: {
+  selected: Set<string>;
+  onChange: (v: Set<string>) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const toggle = (s: string) => {
+    const next = new Set(selected);
+    if (next.has(s)) next.delete(s);
+    else next.add(s);
+    onChange(next);
+  };
+  const labelText =
+    selected.size === 0
+      ? "ทุกสถานะหนี้"
+      : selected.size === 1
+        ? Array.from(selected)[0]
+        : `${selected.size} รายการ`;
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className={cn(
+            "flex items-center gap-1.5 h-9 px-3 py-2 rounded-md border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[140px] justify-between",
+            selected.size > 0
+              ? "border-indigo-400 bg-indigo-50 text-indigo-800 font-medium"
+              : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50",
+          )}
+        >
+          <span className="truncate text-xs">{labelText}</span>
+          <ChevronsUpDown className="w-3.5 h-3.5 flex-shrink-0 text-gray-400" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-52 p-1" align="start">
+        <div className="flex flex-col gap-0.5">
+          <button
+            type="button"
+            className={cn("flex items-center gap-2 px-3 py-1.5 rounded text-xs w-full text-left hover:bg-gray-100",
+              selected.size === 0 ? "text-indigo-600 font-medium" : "text-gray-500")}
+            onClick={() => { onChange(new Set()); setOpen(false); }}
+          >
+            <Check className={cn("h-3.5 w-3.5", selected.size === 0 ? "opacity-100 text-indigo-600" : "opacity-0")} />
+            ทุกสถานะหนี้
+          </button>
+          {DEBT_STATUS_OPTIONS.map((opt) => (
+            <button
+              key={opt}
+              type="button"
+              className={cn("flex items-center gap-2 px-3 py-1.5 rounded text-xs w-full text-left hover:bg-gray-100",
+                selected.has(opt) ? "text-indigo-600 font-medium" : "text-gray-700")}
+              onClick={() => toggle(opt)}
+            >
+              <Check className={cn("h-3.5 w-3.5", selected.has(opt) ? "opacity-100 text-indigo-600" : "opacity-0")} />
+              {opt}
+            </button>
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 /* ─── MultiSelectFilter ──────────────────────────────────────────────────── */
 function MultiSelectFilter({
   label,
@@ -705,12 +772,9 @@ export default function SuspectedBadDebt() {
                   placeholder="ทุกเดือน-ปีที่อนุมัติ"
                   formatOption={fmtMonthLabel}
                 />
-                <MultiSelectFilter
-                  label="สถานะหนี้"
-                  options={["เกิน 31-60", "เกิน 61-90", "เกิน >90"]}
+                <DebtStatusFilter
                   selected={debtStatusFilter}
                   onChange={setDebtStatusFilter}
-                  placeholder="ทุกสถานะหนี้"
                 />
                 <MultiSelectFilter
                   label="Device"
