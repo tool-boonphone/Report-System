@@ -101,8 +101,10 @@ const EMPTY_FILTERS: Filters = {
  */
 function bucketFromRow(row: any): string {
   const dt: string = row.debtType ?? row.debtStatus ?? "";
+  const status: string = row.status ?? "";
   const TERMINAL = ["ระงับสัญญา", "สิ้นสุดสัญญา", "หนี้เสีย", "ยกเลิกสัญญา"];
   if (TERMINAL.includes(dt)) return dt;
+  if (TERMINAL.includes(status)) return status;
   const days = row.overdueDays;
   if (days == null) return "ปกติ";
   const n = Number(days);

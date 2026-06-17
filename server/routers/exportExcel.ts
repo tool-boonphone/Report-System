@@ -188,7 +188,9 @@ export async function handleContractsExport(req: Request, res: Response) {
     const TERMINAL_STATUSES_EXP = new Set(['ระงับสัญญา', 'สิ้นสุดสัญญา', 'หนี้เสีย', 'ยกเลิกสัญญา']);
     const bucketFromRowExp = (r: any): string => {
       const dt: string = r.debtType ?? r.debtStatus ?? '';
+      const status: string = r.status ?? '';
       if (TERMINAL_STATUSES_EXP.has(dt)) return dt;
+      if (TERMINAL_STATUSES_EXP.has(status)) return status;
       const days = r.overdueDays;
       if (days == null) return 'ปกติ';
       const n = Number(days);
