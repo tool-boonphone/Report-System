@@ -335,11 +335,15 @@ async function doSync(
     // ── Stage 3b: Enrich IMEI / Serial No (best-effort) ──────────────────
     await checkCancel();
     setStage(section, 3); // imei_enrich
-    try {
-      await enrichContractDeviceIds(client, section);
-      console.log(`[sync] ${section}: IMEI/Serial No enrichment done`);
-    } catch (enrichErr: any) {
-      console.warn(`[sync] ${section}: IMEI enrichment failed (non-fatal):`, enrichErr?.message ?? enrichErr);
+    if (section === "Fastfone365") {
+      console.log(`[sync] ${section}: Skipping imei_enrich (performance optimization)`);
+    } else {
+      try {
+        await enrichContractDeviceIds(client, section);
+        console.log(`[sync] ${section}: IMEI/Serial No enrichment done`);
+      } catch (enrichErr: any) {
+        console.warn(`[sync] ${section}: IMEI enrichment failed (non-fatal):`, enrichErr?.message ?? enrichErr);
+      }
     }
 
     // ── Stage 5: Installments (best-effort) ───────────────────────────────
