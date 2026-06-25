@@ -50,12 +50,15 @@ export async function seedSuperAdmin(): Promise<void> {
 
   let groupId: number;
   if (existing.length === 0) {
-    const [res] = await db.insert(appGroups).values({
-      name: SUPER_ADMIN_GROUP,
-      description: "Full access to every menu and action.",
-      isSuperAdmin: true,
-    });
-    groupId = Number((res as { insertId: number }).insertId);
+    const [group] = await db
+      .insert(appGroups)
+      .values({
+        name: SUPER_ADMIN_GROUP,
+        description: "Full access to every menu and action.",
+        isSuperAdmin: true,
+      })
+      .returning({ id: appGroups.id });
+    groupId = group.id;
     console.log(`[authDb] Created Super Admin group id=${groupId}`);
   } else {
     groupId = existing[0].id;
@@ -69,8 +72,8 @@ export async function seedSuperAdmin(): Promise<void> {
       .where(
         and(
           eq(appGroupPermissions.groupId, groupId),
-          eq(appGroupPermissions.menuCode, menu),
-        ),
+          eq(appGroupPermissions.menuCode, menu)
+        )
       )
       .limit(1);
 
@@ -115,7 +118,7 @@ export async function seedSuperAdmin(): Promise<void> {
 
 export async function authenticate(
   username: string,
-  password: string,
+  password: string
 ): Promise<AppUser | null> {
   const db = await getAuthDb();
   if (!db) return null;
@@ -153,7 +156,7 @@ export async function createSession(userId: number): Promise<string> {
 }
 
 export async function getUserFromSession(
-  sessionId: string,
+  sessionId: string
 ): Promise<AppUserWithGroup | null> {
   const db = await getAuthDb();
   if (!db) return null;
@@ -161,7 +164,9 @@ export async function getUserFromSession(
   const rows = await db
     .select()
     .from(appSessions)
-    .where(and(eq(appSessions.id, sessionId), gt(appSessions.expiresAt, new Date())))
+    .where(
+      and(eq(appSessions.id, sessionId), gt(appSessions.expiresAt, new Date()))
+    )
     .limit(1);
 
   const session = rows[0];
@@ -204,11 +209,11 @@ export async function destroySession(sessionId: string): Promise<void> {
 export function checkPermission(
   user: AppUserWithGroup,
   menu: MenuCode,
-  action: PermissionAction,
+  action: PermissionAction
 ): boolean {
   if (user.group.isSuperAdmin) return true;
 
-  const perm = user.permissions.find((p) => p.menuCode === menu);
+  const perm = user.permissions.find(p => p.menuCode === menu);
   if (!perm) return false;
 
   switch (action) {
@@ -281,7 +286,7 @@ export async function updateUser(
     email: string | null;
     groupId: number;
     isActive: boolean;
-  }>,
+  }>
 ) {
   const db = await getAuthDb();
   if (!db) throw new Error("Database unavailable");
@@ -310,8 +315,8 @@ export async function listGroupsWithPermissions() {
   if (!db) return [];
   const groups = await db.select().from(appGroups).orderBy(appGroups.id);
   const permissions = await db.select().from(appGroupPermissions);
-  type GroupRow = typeof groups[number];
-  type PermRow = typeof permissions[number];
+  type GroupRow = (typeof groups)[number];
+  type PermRow = (typeof permissions)[number];
   return groups.map((g: GroupRow) => ({
     ...g,
     permissions: permissions.filter((p: PermRow) => p.groupId === g.id),
@@ -325,13 +330,16 @@ export async function createGroup(input: {
 }) {
   const db = await getAuthDb();
   if (!db) throw new Error("Database unavailable");
-  const [res] = await db.insert(appGroups).values({
-    name: input.name,
-    description: input.description ?? null,
-    isSuperAdmin: false,
-    allowedSections: input.allowedSections ?? "",
-  });
-  const id = Number((res as { insertId: number }).insertId);
+  const [group] = await db
+    .insert(appGroups)
+    .values({
+      name: input.name,
+      description: input.description ?? null,
+      isSuperAdmin: false,
+      allowedSections: input.allowedSections ?? "",
+    })
+    .returning({ id: appGroups.id });
+  const id = group.id;
 
   // default: all permissions = false
   for (const menu of MENU_CODES) {
@@ -345,7 +353,11 @@ export async function createGroup(input: {
 
 export async function updateGroup(
   id: number,
-  patch: { name?: string; description?: string | null; allowedSections?: string },
+  patch: {
+    name?: string;
+    description?: string | null;
+    allowedSections?: string;
+  }
 ) {
   const db = await getAuthDb();
   if (!db) throw new Error("Database unavailable");
@@ -356,11 +368,17 @@ export async function deleteGroup(id: number) {
   const db = await getAuthDb();
   if (!db) throw new Error("Database unavailable");
   // Protect super admin
-  const rows = await db.select().from(appGroups).where(eq(appGroups.id, id)).limit(1);
+  const rows = await db
+    .select()
+    .from(appGroups)
+    .where(eq(appGroups.id, id))
+    .limit(1);
   if (rows[0]?.isSuperAdmin) {
     throw new Error("Cannot delete Super Admin group");
   }
-  await db.delete(appGroupPermissions).where(eq(appGroupPermissions.groupId, id));
+  await db
+    .delete(appGroupPermissions)
+    .where(eq(appGroupPermissions.groupId, id));
   await db.delete(appGroups).where(eq(appGroups.id, id));
 }
 
@@ -375,7 +393,7 @@ export async function updateGroupPermission(
     canApprove: boolean;
     canExport: boolean;
     canSync: boolean;
-  }>,
+  }>
 ) {
   const db = await getAuthDb();
   if (!db) throw new Error("Database unavailable");
@@ -387,8 +405,8 @@ export async function updateGroupPermission(
     .where(
       and(
         eq(appGroupPermissions.groupId, groupId),
-        eq(appGroupPermissions.menuCode, menuCode),
-      ),
+        eq(appGroupPermissions.menuCode, menuCode)
+      )
     )
     .limit(1);
 
@@ -411,8 +429,8 @@ export async function updateGroupPermission(
       .where(
         and(
           eq(appGroupPermissions.groupId, groupId),
-          eq(appGroupPermissions.menuCode, menuCode),
-        ),
+          eq(appGroupPermissions.menuCode, menuCode)
+        )
       );
   }
 }
