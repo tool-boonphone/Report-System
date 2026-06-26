@@ -15,18 +15,12 @@ import { appUsers } from "../../drizzle/schema";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { getAuthDb } from "../db";
+import { getSessionCookieOptions } from "../_core/cookies";
 import { appProcedure, publicProcedure, router } from "../_core/trpc";
 
-function cookieOptions(req: { protocol?: string; headers: Record<string, unknown> }) {
-  const forwardedProto = req.headers["x-forwarded-proto"] as string | undefined;
-  const secure =
-    req.protocol === "https" ||
-    (typeof forwardedProto === "string" && forwardedProto.includes("https"));
+function cookieOptions(req: Parameters<typeof getSessionCookieOptions>[0]) {
   return {
-    httpOnly: true,
-    path: "/",
-    sameSite: "none" as const,
-    secure,
+    ...getSessionCookieOptions(req),
     maxAge: APP_SESSION_TTL_MS,
   };
 }

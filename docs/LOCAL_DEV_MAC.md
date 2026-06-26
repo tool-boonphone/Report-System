@@ -117,6 +117,15 @@ Default login (from seed / restored DB):
 - Username: `Sadmin`
 - Password: `Aa123456+`
 
+If you restored a **production dump**, the password is whatever production uses — reset for local dev:
+
+```bash
+node scripts/reset-local-sadmin-password.mjs
+# or: node scripts/reset-local-sadmin-password.mjs 'YourNewPassword'
+```
+
+If login succeeds but you bounce back to the login page on `http://localhost`, pull the latest code (session cookie fix for local HTTP).
+
 ## 6. Daily commands
 
 ```bash
