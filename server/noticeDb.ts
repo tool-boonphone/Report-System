@@ -72,7 +72,8 @@ export type NoticeSort = {
 };
 
 export type NoticeRow = {
-  id: number;
+  /** external_id (unique ต่อ section, NOT NULL) — ใช้เป็น key/selection identity ฝั่ง client */
+  externalId: string;
   contractNo: string;
   approveDate: string | null;
   customerName: string | null;
@@ -150,7 +151,7 @@ export async function listNoticeContracts(params: {
   const [rows, [countRow]] = await Promise.all([
     db
       .select({
-        id: contracts.id,
+        externalId: contracts.externalId,
         contractNo: contracts.contractNo,
         approveDate: contracts.approveDate,
         customerName: contracts.customerName,
@@ -167,7 +168,7 @@ export async function listNoticeContracts(params: {
 
   const total = Number(countRow?.c ?? 0);
   type RawRow = {
-    id: number;
+    externalId: string;
     contractNo: string;
     approveDate: string | null;
     customerName: string | null;
@@ -175,7 +176,7 @@ export async function listNoticeContracts(params: {
     isReturned: boolean | null;
   };
   const mapped: NoticeRow[] = (rows as RawRow[]).map((r) => ({
-    id: r.id,
+    externalId: r.externalId,
     contractNo: r.contractNo,
     approveDate: r.approveDate ?? null,
     customerName: r.customerName ?? null,

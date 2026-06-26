@@ -57,7 +57,7 @@ export default function Notice() {
   const [sortField, setSortField] = useState<SortField>("approveDate");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [page, setPage] = useState(1);
-  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   // ── Debounce search ──
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -131,19 +131,19 @@ export default function Notice() {
     !r.isReturned && r.sentCount < MAX_NOTICE_ROUNDS;
 
   const selectableOnPage = displayRows.filter(isSelectable);
-  const allOnPageSelected = selectableOnPage.length > 0 && selectableOnPage.every((r) => selected.has(r.id));
+  const allOnPageSelected = selectableOnPage.length > 0 && selectableOnPage.every((r) => selected.has(r.externalId));
 
-  const toggleOne = (id: number, checked: boolean) => {
+  const toggleOne = (key: string, checked: boolean) => {
     setSelected((prev) => {
       const next = new Set(prev);
-      if (checked) next.add(id); else next.delete(id);
+      if (checked) next.add(key); else next.delete(key);
       return next;
     });
   };
   const toggleAll = (checked: boolean) => {
     setSelected((prev) => {
       const next = new Set(prev);
-      selectableOnPage.forEach((r) => { if (checked) next.add(r.id); else next.delete(r.id); });
+      selectableOnPage.forEach((r) => { if (checked) next.add(r.externalId); else next.delete(r.externalId); });
       return next;
     });
   };
@@ -322,15 +322,15 @@ export default function Notice() {
                           : "bg-blue-50 text-blue-700";
                     const currentRound = row.isReturned || done >= MAX_NOTICE_ROUNDS ? -1 : done; // index ของรอบถัดไป
                     return (
-                      <tr key={row.id}
+                      <tr key={row.externalId}
                         className={[
                           "[&>td]:px-3 [&>td]:py-3 [&>td]:border-b [&>td]:border-gray-100 [&>td]:align-top [&>td]:text-[13px]",
                           row.isReturned ? "bg-green-50/70 hover:bg-green-100/70" : "hover:bg-orange-50/70",
                         ].join(" ")}>
                         <td className="!text-center">
-                          <input type="checkbox" checked={selected.has(row.id)} disabled={disabled}
+                          <input type="checkbox" checked={selected.has(row.externalId)} disabled={disabled}
                             title={disabled ? (row.isReturned ? "ได้เครื่องคืนแล้ว" : "ส่งครบ 3 ครั้งแล้ว") : undefined}
-                            onChange={(e) => toggleOne(row.id, e.target.checked)}
+                            onChange={(e) => toggleOne(row.externalId, e.target.checked)}
                             className="accent-orange-500 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed" />
                         </td>
                         <td className="whitespace-nowrap text-gray-700">{fmtDateOnly(row.approveDate)}</td>
