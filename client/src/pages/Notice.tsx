@@ -3,15 +3,18 @@
  *
  * UI อิงจาก mockup `notice_printing_dashboard_v12.html`:
  *  - การ์ดสรุป 5 ใบ (เข้าเงื่อนไข / ยังไม่เคยส่ง / ส่ง 1-2 ครั้ง / ส่งครบ 3 / ได้เครื่องคืน)
- *  - แถบฟิลเตอร์ + ปุ่ม "ดูสถิติรายเดือน"
+ *  - แถบฟิลเตอร์ 8 ช่อง + ปุ่ม "ดูสถิติรายเดือน"
  *  - แถบปุ่มพิมพ์รายการที่เลือก + ล้างรายการ + ตัวนับที่เลือก
  *  - ตาราง 8 คอลัมน์: checkbox, วันที่อนุมัติ, เลขที่สัญญา, ชื่อ-นามสกุล,
  *    ค้างชำระ(วัน), ส่งแล้ว (badge + round dots + restore), Log การพิมพ์, Log การแก้ไข
- *  - Pagination 10 รายการ/หน้า (server-side)
+ *  - Pagination เลือกจำนวนแถว/หน้าได้ (server-side)
  *
- * Phase 1 (อ่านอย่างเดียว): ยังไม่มีตาราง log จึงแสดง sentCount = 0 ทุกแถว
- * การพิมพ์ PDF/Excel, การนับรอบ, Restore และ Modal สถิติ จะทำในเฟสถัดไป
- * — ปุ่มที่เกี่ยวข้องจึงแสดงผลแต่ยังไม่ทำงานจริง (แจ้งเตือนว่ารอเฟสถัดไป)
+ * Phase 2: นับรอบส่งจริงจากตาราง log
+ *  - sentCount / Log การพิมพ์ / Log การแก้ไข มาจาก notice_print_logs + notice_restore_logs
+ *  - ปุ่ม "พิมพ์รายการที่เลือก" บันทึกรอบส่ง (recordPrint) — Phase 3 จะ generate PDF/Excel ก่อน
+ *  - ปุ่ม ↺ Restore ยกเลิกรอบล่าสุด (มี popup ยืนยัน)
+ *
+ * ยังไม่รวม: Generate PDF/Excel จริง (Phase 3), Modal สถิติรายเดือน (Phase 4)
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { SectionKey } from "@shared/const";
@@ -20,13 +23,27 @@ import { useSection } from "@/contexts/SectionContext";
 import { useAppAuth } from "@/hooks/useAppAuth";
 import { trpc } from "@/lib/trpc";
 import { Spinner } from "@/components/ui/spinner";
-import { BarChart3, Printer, RotateCcw, Search } from "lucide-react";
+import { BarChart3, Printer, RotateCcw, Search, X } from "lucide-react";
 import { toast } from "sonner";
 
-type SortField = "approveDate" | "overdueDays";
+type SortField = "approveDate" | "overdueDays" | "sentCount";
 type SortDir = "asc" | "desc";
 type ReturnedFilter = "all" | "hide" | "only";
 type SentFilter = "all" | "0" | "1" | "2" | "3";
+
+type PrintLogEntry = { round: number; printedAt: string; printedBy: string };
+type RestoreLogEntry = { round: number; restoredAt: string; restoredBy: string };
+type NoticeRow = {
+  externalId: string;
+  contractNo: string;
+  approveDate: string | null;
+  customerName: string | null;
+  overdueDays: number | null;
+  isReturned: boolean;
+  sentCount: number;
+  printLogs: PrintLogEntry[];
+  restoreLogs: RestoreLogEntry[];
+};
 
 const MAX_NOTICE_ROUNDS = 3;
 const PAGE_SIZE_OPTIONS = [25, 50, 100, 300, 500, 1000];
@@ -37,11 +54,19 @@ function fmtDateOnly(s: string | null | undefined): string {
   if (isNaN(d.getTime())) return s;
   return d.toLocaleDateString("th-TH", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
+function fmtDateTime(s: string | null | undefined): string {
+  if (!s) return "-";
+  const d = new Date(s);
+  if (isNaN(d.getTime())) return s;
+  return d.toLocaleString("th-TH", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+}
 
 export default function Notice() {
   const { section } = useSection();
   const { can } = useAppAuth();
   const canView = can("notice", "view");
+  const canEdit = can("notice", "edit");
+  const utils = trpc.useUtils();
 
   // ── Filter state ──
   const [searchInput, setSearchInput] = useState("");
@@ -61,6 +86,9 @@ export default function Notice() {
   const [pageSize, setPageSize] = useState(25);
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
+  // ── Restore modal ──
+  const [pendingRestore, setPendingRestore] = useState<NoticeRow | null>(null);
+
   // ── Debounce search ──
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
@@ -77,66 +105,83 @@ export default function Notice() {
     () => ({
       search: search || undefined,
       returned: returnedFilter,
+      sent: sentFilter,
+      admin: adminFilter !== "all" ? adminFilter : undefined,
       approveDateFrom: approveFrom || undefined,
       approveDateTo: approveTo || undefined,
       overdueMin: overdueMin ? Math.max(60, parseInt(overdueMin, 10) || 0) : undefined,
       overdueMax: overdueMax ? parseInt(overdueMax, 10) || undefined : undefined,
     }),
-    [search, returnedFilter, approveFrom, approveTo, overdueMin, overdueMax],
+    [search, returnedFilter, sentFilter, adminFilter, approveFrom, approveTo, overdueMin, overdueMax],
   );
 
   const sectionKey = (section ?? "Boonphone") as SectionKey;
 
-  const { data: listData, isLoading, error } = trpc.notice.list.useQuery(
-    {
-      section: sectionKey,
-      filters,
-      sort: { field: sortField, dir: sortDir },
-      page,
-      pageSize,
-    },
+  const listQuery = trpc.notice.list.useQuery(
+    { section: sectionKey, filters, sort: { field: sortField, dir: sortDir }, page, pageSize },
     { enabled: !!section && canView },
   );
+  const { data: listData, isLoading, error } = listQuery;
 
   const { data: summaryData } = trpc.notice.summary.useQuery(
     { section: sectionKey, filters },
     { enabled: !!section && canView },
   );
 
-  const rows = listData?.rows ?? [];
+  const { data: adminOptionsData } = trpc.notice.adminOptions.useQuery(
+    { section: sectionKey },
+    { enabled: !!section && canView },
+  );
+  const adminOptions = adminOptionsData ?? [];
+
+  const rows = (listData?.rows ?? []) as NoticeRow[];
   const total = listData?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
-  // รายชื่อแอดมินสำหรับ dropdown — Phase 1 ยังไม่มีประวัติการพิมพ์ จึงเป็นรายการว่าง
-  // (Phase 2 จะดึงจาก notice_print_logs / notice_restore_logs)
-  const adminOptions: string[] = [];
+  const refetchAll = () => {
+    utils.notice.list.invalidate();
+    utils.notice.summary.invalidate();
+    utils.notice.adminOptions.invalidate();
+  };
 
-  // sentFilter เป็น client-side guard — Phase 1 ทุกรายการมีค่า sentCount = 0
-  const displayRows = useMemo(() => {
-    if (sentFilter === "all") return rows;
-    const target = parseInt(sentFilter, 10);
-    return rows.filter((r) => r.sentCount === target);
-  }, [rows, sentFilter]);
+  const recordPrintMut = trpc.notice.recordPrint.useMutation({
+    onSuccess: (res) => {
+      clearSelection();
+      refetchAll();
+      if (res.printedCount > 0) {
+        toast.success(
+          `บันทึกการส่ง Notice ${res.printedCount} รายการแล้ว` +
+            (res.skipped.length > 0 ? ` (ข้าม ${res.skipped.length} รายการที่พิมพ์ไม่ได้)` : ""),
+        );
+      } else {
+        toast.error("ไม่มีรายการที่สามารถพิมพ์ได้ (คืนเครื่องแล้ว/ส่งครบ 3 ครั้ง)");
+      }
+    },
+    onError: (e) => toast.error(e.message),
+  });
 
-  // ── Metrics (Phase 1: รายการ active ทั้งหมดยังไม่เคยส่ง) ──
-  const metrics = useMemo(() => {
-    const eligible = summaryData?.eligible ?? 0;
-    const returned = summaryData?.returned ?? 0;
-    const active = Math.max(0, eligible - returned);
-    return {
-      eligible,
-      returned,
-      never: active,   // Phase 1: active ทุกรายการ sentCount = 0
-      inProgress: 0,   // Phase 2 จะคำนวณจาก log จริง
-      maxed: 0,
-    };
-  }, [summaryData]);
+  const restoreMut = trpc.notice.restoreLatest.useMutation({
+    onSuccess: (res) => {
+      setPendingRestore(null);
+      refetchAll();
+      if (res.ok) toast.success(`ยกเลิกการส่ง Notice รอบที่ ${res.restoredRound} แล้ว`);
+      else toast.error(res.message ?? "ยกเลิกไม่สำเร็จ");
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  // ── Metrics ──
+  const metrics = {
+    eligible: summaryData?.eligible ?? 0,
+    returned: summaryData?.returned ?? 0,
+    never: summaryData?.never ?? 0,
+    inProgress: summaryData?.inProgress ?? 0,
+    maxed: summaryData?.maxed ?? 0,
+  };
 
   // ── Selection helpers ──
-  const isSelectable = (r: { isReturned: boolean; sentCount: number }) =>
-    !r.isReturned && r.sentCount < MAX_NOTICE_ROUNDS;
-
-  const selectableOnPage = displayRows.filter(isSelectable);
+  const isSelectable = (r: NoticeRow) => !r.isReturned && r.sentCount < MAX_NOTICE_ROUNDS;
+  const selectableOnPage = rows.filter(isSelectable);
   const allOnPageSelected = selectableOnPage.length > 0 && selectableOnPage.every((r) => selected.has(r.externalId));
 
   const toggleOne = (key: string, checked: boolean) => {
@@ -156,22 +201,21 @@ export default function Notice() {
   const clearSelection = () => setSelected(new Set());
 
   const handlePrint = () => {
+    if (!canEdit) { toast.error("คุณไม่มีสิทธิ์พิมพ์ Notice"); return; }
     if (selected.size === 0) { toast.error("กรุณาเลือกรายการก่อน"); return; }
-    toast.info("การพิมพ์ PDF + Excel จ่าหน้าซองจะเปิดใช้งานในเฟสถัดไป");
+    recordPrintMut.mutate({ section: sectionKey, externalIds: Array.from(selected) });
   };
-  const handleStats = () => {
-    toast.info("สถิติรายเดือนจะเปิดใช้งานในเฟสถัดไป");
-  };
-  const handleRestore = () => {
-    toast.info("การ Restore รอบล่าสุดจะเปิดใช้งานในเฟสถัดไป");
+  const handleStats = () => toast.info("สถิติรายเดือนจะเปิดใช้งานในเฟสถัดไป");
+  const confirmRestore = () => {
+    if (!pendingRestore) return;
+    restoreMut.mutate({ section: sectionKey, externalId: pendingRestore.externalId });
   };
 
   const handleSort = (field: SortField) => {
     if (sortField === field) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
     else { setSortField(field); setSortDir("desc"); }
   };
-  const sortMark = (field: SortField) =>
-    sortField === field ? (sortDir === "asc" ? "▲" : "▼") : "";
+  const sortMark = (field: SortField) => (sortField === field ? (sortDir === "asc" ? "▲" : "▼") : "");
 
   const inputCls =
     "w-full h-10 px-3 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15";
@@ -271,7 +315,7 @@ export default function Notice() {
               <label className={labelCls}>ชื่อแอดมิน</label>
               <select value={adminFilter} onChange={(e) => setAdminFilter(e.target.value)}
                 disabled={adminOptions.length === 0}
-                title={adminOptions.length === 0 ? "จะมีตัวเลือกเมื่อมีประวัติการพิมพ์ (Phase ถัดไป)" : undefined}
+                title={adminOptions.length === 0 ? "จะมีตัวเลือกเมื่อมีประวัติการพิมพ์" : undefined}
                 className={inputCls + (adminOptions.length === 0 ? " opacity-60 cursor-not-allowed" : "")}>
                 <option value="all">ทั้งหมด</option>
                 {adminOptions.map((name) => <option key={name} value={name}>{name}</option>)}
@@ -281,8 +325,8 @@ export default function Notice() {
 
           {/* Actions */}
           <div className="px-4 sm:px-[18px] py-3.5 border-b border-gray-200 flex items-center gap-2.5 flex-wrap">
-            <button onClick={handlePrint}
-              className="inline-flex items-center gap-2 rounded-xl px-3.5 py-2.5 text-sm font-bold bg-orange-500 text-white hover:bg-orange-600 transition-colors">
+            <button onClick={handlePrint} disabled={!canEdit || recordPrintMut.isPending}
+              className="inline-flex items-center gap-2 rounded-xl px-3.5 py-2.5 text-sm font-bold bg-orange-500 text-white hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
               <Printer className="w-4 h-4" /> พิมพ์รายการที่เลือก
             </button>
             <button onClick={clearSelection}
@@ -300,7 +344,7 @@ export default function Notice() {
               <div className="flex items-center justify-center py-20"><Spinner className="w-6 h-6 text-orange-500" /></div>
             ) : error ? (
               <div className="py-7 text-center text-red-500 text-sm">เกิดข้อผิดพลาด: {error.message}</div>
-            ) : displayRows.length === 0 ? (
+            ) : rows.length === 0 ? (
               <div className="py-7 text-center text-gray-400 text-sm">ไม่พบรายการตามเงื่อนไขที่กรอง</div>
             ) : (
               <table className="w-full border-separate border-spacing-0 min-w-[1100px]">
@@ -323,13 +367,17 @@ export default function Notice() {
                         ค้างชำระ(วัน) <span className="text-orange-500 font-black">{sortMark("overdueDays")}</span>
                       </button>
                     </th>
-                    <th className="w-[255px]">ส่งแล้ว</th>
+                    <th className="w-[255px]">
+                      <button onClick={() => handleSort("sentCount")} className="font-bold text-gray-700 hover:text-orange-500">
+                        ส่งแล้ว <span className="text-orange-500 font-black">{sortMark("sentCount")}</span>
+                      </button>
+                    </th>
                     <th className="w-[260px]">Log การพิมพ์</th>
                     <th className="w-[200px]">Log การแก้ไข</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {displayRows.map((row) => {
+                  {rows.map((row) => {
                     const disabled = !isSelectable(row);
                     const done = row.sentCount;
                     const sentBadgeCls =
@@ -337,6 +385,7 @@ export default function Notice() {
                         : done === 0 ? "bg-gray-100 text-gray-700"
                           : "bg-blue-50 text-blue-700";
                     const currentRound = row.isReturned || done >= MAX_NOTICE_ROUNDS ? -1 : done; // index ของรอบถัดไป
+                    const logByRound = new Map(row.printLogs.map((l) => [l.round, l]));
                     return (
                       <tr key={row.externalId}
                         className={[
@@ -366,9 +415,12 @@ export default function Notice() {
                               {[0, 1, 2].map((i) => {
                                 const isDone = i < done;
                                 const isCurrent = i === currentRound;
+                                const lg = logByRound.get(i + 1);
+                                const tip = lg
+                                  ? `ส่งครั้งที่ ${i + 1}: ${fmtDateTime(lg.printedAt)} โดย ${lg.printedBy}`
+                                  : `รอบ ${i + 1}: ยังไม่เคยส่ง`;
                                 return (
-                                  <span key={i}
-                                    title={isDone ? `ส่งครั้งที่ ${i + 1} แล้ว` : `รอบ ${i + 1}: ยังไม่เคยส่ง`}
+                                  <span key={i} title={tip}
                                     className={[
                                       "inline-grid place-items-center w-6 h-6 rounded-full border text-[11px] font-black",
                                       isDone ? "bg-emerald-100 text-emerald-700 border-emerald-200"
@@ -379,9 +431,9 @@ export default function Notice() {
                                   </span>
                                 );
                               })}
-                              {done > 0 && (
-                                <button onClick={handleRestore} title="ยกเลิกรอบส่งล่าสุด"
-                                  className="ml-1 inline-grid place-items-center w-[26px] h-[26px] rounded-full border border-gray-200 bg-gray-100 text-gray-700 hover:bg-gray-200 text-[15px] font-black">
+                              {done > 0 && canEdit && (
+                                <button onClick={() => setPendingRestore(row)} title="ยกเลิกรอบส่งล่าสุด"
+                                  className="ml-1 inline-grid place-items-center w-[26px] h-[26px] rounded-full border border-gray-200 bg-gray-100 text-gray-700 hover:bg-gray-200">
                                   <RotateCcw className="w-3.5 h-3.5" />
                                 </button>
                               )}
@@ -389,12 +441,17 @@ export default function Notice() {
                           </div>
                         </td>
                         <td className="text-gray-600">
-                          {done === 0 && !row.isReturned ? (
+                          {row.printLogs.length === 0 && !row.isReturned ? (
                             <span className="text-gray-400">ยังไม่มี log</span>
                           ) : (
                             <div className="grid gap-1">
+                              {row.printLogs.map((l) => (
+                                <div key={l.round} className="text-xs leading-relaxed text-gray-700">
+                                  <strong className="text-gray-900">{l.round}</strong> : {fmtDateTime(l.printedAt)} โดย {l.printedBy}
+                                </div>
+                              ))}
                               {row.isReturned && (
-                                <div className="flex items-center gap-2 flex-wrap">
+                                <div className="mt-0.5">
                                   <span className="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold bg-emerald-50 text-emerald-700">
                                     ได้เครื่องคืนแล้ว
                                   </span>
@@ -403,7 +460,19 @@ export default function Notice() {
                             </div>
                           )}
                         </td>
-                        <td className="text-gray-600"><span className="text-gray-400">-</span></td>
+                        <td className="text-gray-600">
+                          {row.restoreLogs.length === 0 ? (
+                            <span className="text-gray-400">-</span>
+                          ) : (
+                            <div className="grid gap-1">
+                              {row.restoreLogs.map((l, idx) => (
+                                <div key={idx} className="text-xs leading-relaxed text-gray-700">
+                                  <strong className="text-gray-900">Restore รอบ {l.round}</strong> : {fmtDateTime(l.restoredAt)} โดย {l.restoredBy}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </td>
                       </tr>
                     );
                   })}
@@ -462,11 +531,61 @@ export default function Notice() {
           </div>
 
           <div className="px-4 sm:px-[18px] py-3 bg-[#fafafa] text-gray-500 text-xs leading-relaxed border-t border-gray-200">
-            หมายเหตุ: การพิมพ์ PDF + Excel จ่าหน้าซอง, การนับรอบส่ง, Log การพิมพ์/แก้ไข และการ Restore
-            จะเปิดใช้งานในเฟสถัดไป — ขณะนี้แสดงเฉพาะรายการที่เข้าเงื่อนไขเท่านั้น
+            หมายเหตุ: ปุ่ม "พิมพ์รายการที่เลือก" จะบันทึกรอบส่ง Notice ทันที (Phase 2) — การ Generate PDF + Excel จ่าหน้าซองจริง
+            และ Modal สถิติรายเดือน จะเพิ่มในเฟสถัดไป
           </div>
         </section>
       </div>
+
+      {/* ── Restore confirm modal ── */}
+      {pendingRestore && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-5 bg-black/45"
+          onClick={() => setPendingRestore(null)}>
+          <div className="w-full max-w-[560px] bg-white rounded-[22px] shadow-2xl border border-gray-200 overflow-hidden"
+            onClick={(e) => e.stopPropagation()}>
+            <div className="px-[18px] py-4 border-b border-gray-200 flex items-start justify-between gap-3">
+              <div>
+                <div className="text-lg font-black text-gray-900">ยกเลิกรอบการส่ง Notice</div>
+                <div className="text-[13px] text-gray-500 mt-1">ใช้สำหรับกรณีสั่งพิมพ์ซ้ำหรือบันทึกผิดรอบ</div>
+              </div>
+              <button onClick={() => setPendingRestore(null)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-[18px]">
+              <div className="border border-gray-200 bg-gray-50 rounded-2xl p-3.5 grid gap-1.5 text-[13px] text-gray-700">
+                <div><strong>เลขที่สัญญา:</strong> {pendingRestore.contractNo}</div>
+                <div><strong>ชื่อ-นามสกุล:</strong> {pendingRestore.customerName ?? "-"}</div>
+                <div><strong>รอบที่จะยกเลิก:</strong> ครั้งที่ {pendingRestore.sentCount}</div>
+                {(() => {
+                  const last = pendingRestore.printLogs.find((l) => l.round === pendingRestore.sentCount);
+                  return last ? (
+                    <>
+                      <div><strong>วันที่/เวลา:</strong> {fmtDateTime(last.printedAt)}</div>
+                      <div><strong>ผู้สั่งพิมพ์:</strong> {last.printedBy}</div>
+                    </>
+                  ) : null;
+                })()}
+              </div>
+              <div className="mt-3 border border-orange-200 bg-orange-50 text-orange-800 rounded-2xl p-3 text-[13px] leading-relaxed">
+                <strong>ยืนยันก่อนยกเลิก</strong><br />
+                ระบบจะยกเลิกเฉพาะ <strong>รอบล่าสุด</strong> เพื่อไม่ให้ลำดับ 1 / 2 / 3 ข้ามกัน
+                หลังยกเลิกแล้วรายการนี้จะกลับไปพิมพ์รอบเดิมได้อีกครั้ง
+              </div>
+            </div>
+            <div className="px-[18px] pb-[18px] flex justify-end gap-2.5 flex-wrap">
+              <button onClick={() => setPendingRestore(null)}
+                className="rounded-xl px-3.5 py-2.5 text-sm font-bold bg-gray-100 text-gray-900 hover:bg-gray-200">
+                ไม่ยกเลิก
+              </button>
+              <button onClick={confirmRestore} disabled={restoreMut.isPending}
+                className="rounded-xl px-3.5 py-2.5 text-sm font-bold bg-red-600 text-white hover:bg-red-700 disabled:opacity-50">
+                ยืนยัน Restore รอบล่าสุด
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AppShell>
   );
 }
