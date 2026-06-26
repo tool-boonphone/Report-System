@@ -225,12 +225,12 @@ export default function Notice() {
 
           {/* Filters */}
           <div className="px-4 sm:px-[18px] py-4 border-b border-gray-200 grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
-            <div className="xl:col-span-2">
+            <div>
               <label className={labelCls}>ค้นหา</label>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
                 <input value={searchInput} onChange={(e) => setSearchInput(e.target.value)}
-                  placeholder="ชื่อ-นามสกุล / เลขที่สัญญา" className={inputCls + " pl-8"} />
+                  placeholder="ชื่อ / เลขสัญญา" className={inputCls + " pl-8"} />
               </div>
             </div>
             <div>
