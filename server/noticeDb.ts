@@ -145,7 +145,7 @@ export async function listNoticeContracts(params: {
 
   const where = buildNoticeWhere(section, params.filters ?? {});
   const orderBy = resolveNoticeOrder(params.sort);
-  const pageSize = Math.max(1, Math.min(200, params.pageSize));
+  const pageSize = Math.max(1, Math.min(1000, params.pageSize));
   const offset = Math.max(0, (params.page - 1) * pageSize);
 
   const [rows, [countRow]] = await Promise.all([

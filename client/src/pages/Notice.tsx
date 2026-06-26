@@ -29,7 +29,7 @@ type ReturnedFilter = "all" | "hide" | "only";
 type SentFilter = "all" | "0" | "1" | "2" | "3";
 
 const MAX_NOTICE_ROUNDS = 3;
-const PAGE_SIZE = 10;
+const PAGE_SIZE_OPTIONS = [25, 50, 100, 300, 500, 1000];
 
 function fmtDateOnly(s: string | null | undefined): string {
   if (!s) return "-";
@@ -52,11 +52,13 @@ export default function Notice() {
   const [approveTo, setApproveTo] = useState("");
   const [overdueMin, setOverdueMin] = useState("");
   const [overdueMax, setOverdueMax] = useState("");
+  const [adminFilter, setAdminFilter] = useState("all");
 
   // ── Sort / pagination / selection ──
   const [sortField, setSortField] = useState<SortField>("approveDate");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
   // ── Debounce search ──
@@ -69,7 +71,7 @@ export default function Notice() {
 
   useEffect(() => {
     setPage(1);
-  }, [search, sentFilter, returnedFilter, approveFrom, approveTo, overdueMin, overdueMax, sortField, sortDir]);
+  }, [search, sentFilter, returnedFilter, approveFrom, approveTo, overdueMin, overdueMax, adminFilter, sortField, sortDir, pageSize]);
 
   const filters = useMemo(
     () => ({
@@ -91,7 +93,7 @@ export default function Notice() {
       filters,
       sort: { field: sortField, dir: sortDir },
       page,
-      pageSize: PAGE_SIZE,
+      pageSize,
     },
     { enabled: !!section && canView },
   );
@@ -103,7 +105,11 @@ export default function Notice() {
 
   const rows = listData?.rows ?? [];
   const total = listData?.total ?? 0;
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+
+  // รายชื่อแอดมินสำหรับ dropdown — Phase 1 ยังไม่มีประวัติการพิมพ์ จึงเป็นรายการว่าง
+  // (Phase 2 จะดึงจาก notice_print_logs / notice_restore_logs)
+  const adminOptions: string[] = [];
 
   // sentFilter เป็น client-side guard — Phase 1 ทุกรายการมีค่า sentCount = 0
   const displayRows = useMemo(() => {
@@ -261,6 +267,16 @@ export default function Notice() {
                 <option value="only">แสดงเฉพาะได้เครื่องคืน</option>
               </select>
             </div>
+            <div>
+              <label className={labelCls}>ชื่อแอดมิน</label>
+              <select value={adminFilter} onChange={(e) => setAdminFilter(e.target.value)}
+                disabled={adminOptions.length === 0}
+                title={adminOptions.length === 0 ? "จะมีตัวเลือกเมื่อมีประวัติการพิมพ์ (Phase ถัดไป)" : undefined}
+                className={inputCls + (adminOptions.length === 0 ? " opacity-60 cursor-not-allowed" : "")}>
+                <option value="all">ทั้งหมด</option>
+                {adminOptions.map((name) => <option key={name} value={name}>{name}</option>)}
+              </select>
+            </div>
           </div>
 
           {/* Actions */}
@@ -398,10 +414,21 @@ export default function Notice() {
 
           {/* Pagination */}
           <div className="px-4 sm:px-[18px] py-3.5 bg-[#fafafa] border-t border-gray-200 flex items-center justify-between gap-3 flex-wrap">
-            <div className="text-[13px] text-gray-500">
-              {total > 0
-                ? `แสดง ${(page - 1) * PAGE_SIZE + 1}-${Math.min(page * PAGE_SIZE, total)} จาก ${total.toLocaleString()} รายการ`
-                : "แสดง 0 รายการ"}
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="flex items-center gap-1.5 text-[13px] text-gray-500">
+                <span>แสดง</span>
+                <select value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))}
+                  className="h-8 px-2 rounded-lg border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:border-orange-500">
+                  {PAGE_SIZE_OPTIONS.map((n) => <option key={n} value={n}>{n}</option>)}
+                </select>
+                <span>รายการ/หน้า</span>
+              </div>
+              <span className="text-gray-300">|</span>
+              <div className="text-[13px] text-gray-500">
+                {total > 0
+                  ? `แสดง ${(page - 1) * pageSize + 1}-${Math.min(page * pageSize, total)} จาก ${total.toLocaleString()} รายการ`
+                  : "แสดง 0 รายการ"}
+              </div>
             </div>
             {total > 0 && (
               <div className="flex items-center gap-1.5 flex-wrap">

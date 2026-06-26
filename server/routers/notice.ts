@@ -41,7 +41,7 @@ export const noticeRouter = router({
         filters: filtersInput,
         sort: sortInput,
         page: z.number().int().min(1).default(1),
-        pageSize: z.number().int().min(1).max(200).default(10),
+        pageSize: z.number().int().min(1).max(1000).default(25),
       }),
     )
     .query(({ input }) =>
