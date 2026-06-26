@@ -66,7 +66,8 @@ tar -xzf ~/Downloads/2026-06-25T17_29Z.dir.tar.gz -C dumps/boonphone-render-dir
 export BOONPHONE_DUMP_DIR="$PWD/dumps/boonphone-render-dir/2026-06-25T17:29Z/boonphone_db"
 ```
 
-Fastfone still needs its own dump file (custom or directory format).
+Fastfone dump is **optional** for local dev. Schema is copied from Boonphone automatically;
+use Boonphone section for feature work (same code paths / tables).
 
 Then:
 

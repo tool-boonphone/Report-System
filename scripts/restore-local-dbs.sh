@@ -37,9 +37,10 @@ else
   exit 1
 fi
 
-if [[ ! -f "$FASTFONE_DUMP_FILE" ]]; then
-  echo "ERROR: Fastfone dump file not found: $FASTFONE_DUMP_FILE"
-  exit 1
+if [[ -f "$FASTFONE_DUMP_FILE" ]]; then
+  FASTFONE_SOURCE="$FASTFONE_DUMP_FILE"
+else
+  FASTFONE_SOURCE=""
 fi
 
 echo "[restore] waiting for postgres in container..."
@@ -71,10 +72,21 @@ restore_db() {
 }
 
 restore_db boonphone_db "$BOONPHONE_SOURCE"
-restore_db fastfone_db "$FASTFONE_DUMP_FILE"
+
+if [[ -n "$FASTFONE_SOURCE" ]]; then
+  restore_db fastfone_db "$FASTFONE_SOURCE"
+else
+  echo "[restore] fastfone_db: no dump — copying schema only from boonphone_db"
+  "${DOCKER[@]}" exec "$CONTAINER_NAME" psql -U report -d fastfone_db -v ON_ERROR_STOP=1 \
+    -c "DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public;"
+  "${DOCKER[@]}" exec "$CONTAINER_NAME" pg_dump -U report -d boonphone_db --schema-only \
+    | "${DOCKER[@]}" exec -i "$CONTAINER_NAME" psql -U report -d fastfone_db -v ON_ERROR_STOP=1
+fi
 
 echo "[restore] done"
 "${DOCKER[@]}" exec "$CONTAINER_NAME" psql -U report -d boonphone_db -c \
   "SELECT 'boonphone_db' AS db, COUNT(*) AS tables FROM information_schema.tables WHERE table_schema = 'public';"
 "${DOCKER[@]}" exec "$CONTAINER_NAME" psql -U report -d fastfone_db -c \
   "SELECT 'fastfone_db' AS db, COUNT(*) AS tables FROM information_schema.tables WHERE table_schema = 'public';"
+"${DOCKER[@]}" exec "$CONTAINER_NAME" psql -U report -d boonphone_db -tAc \
+  "SELECT COUNT(*) FROM contracts;" | xargs -I{} echo "boonphone contracts: {}"
