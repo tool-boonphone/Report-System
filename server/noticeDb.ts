@@ -311,6 +311,91 @@ export async function getNoticeAdminOptions(section: SectionKey): Promise<string
   return Array.from(names).sort((a, b) => a.localeCompare(b, "th"));
 }
 
+export type NoticePrintData = {
+  externalId: string;
+  contractNo: string;
+  customerName: string | null;
+  phone: string | null;
+  addrDistrict: string | null;
+  addrProvince: string | null;
+  model: string | null;
+  imei: string | null;
+  serialNo: string | null;
+  approveDate: string | null;
+  installmentAmount: number | null;
+  installmentCount: number | null;
+  paidInstallments: number | null;
+  overdueDays: number | null;
+  sentCount: number;
+};
+
+/**
+ * ดึงข้อมูลรายสัญญาสำหรับ generate เอกสาร Notice + Excel จ่าหน้าซอง
+ * คืนเฉพาะรายการที่ "พิมพ์ได้จริง" (≥60 วัน, ไม่คืนเครื่อง, ยังส่งไม่ครบ 3)
+ * เรียงตามเลขที่สัญญาเพื่อให้ลำดับใน PDF/Excel คงที่
+ */
+export async function getNoticePrintData(params: {
+  section: SectionKey;
+  externalIds: string[];
+}): Promise<NoticePrintData[]> {
+  const { section } = params;
+  const db = await getDb(section);
+  if (!db) return [];
+  const ids = Array.from(new Set(params.externalIds)).filter(Boolean);
+  if (ids.length === 0) return [];
+
+  const sc = sentCountSql(section);
+  const rows = (await db
+    .select({
+      externalId: contracts.externalId,
+      contractNo: contracts.contractNo,
+      customerName: contracts.customerName,
+      phone: contracts.phone,
+      addrDistrict: contracts.addrDistrict,
+      addrProvince: contracts.addrProvince,
+      model: contracts.model,
+      imei: contracts.imei,
+      serialNo: contracts.serialNo,
+      approveDate: contracts.approveDate,
+      installmentAmount: contracts.installmentAmount,
+      installmentCount: contracts.installmentCount,
+      paidInstallments: contracts.paidInstallments,
+      overdueDays: NOTICE_OVERDUE_DAYS_SQL,
+      sentCount: sc,
+    })
+    .from(contracts)
+    .where(
+      and(
+        eq(contracts.section, section),
+        inArray(contracts.externalId, ids),
+        sql`COALESCE(contracts.status, '') NOT IN ('สิ้นสุดสัญญา', 'ยกเลิกสัญญา')`,
+        sql`COALESCE(contracts.debt_type, '') NOT IN ('สิ้นสุดสัญญา', 'ยกเลิกสัญญา')`,
+        sql`NOT ${IS_RETURNED_SQL}`,
+        sql`${NOTICE_OVERDUE_DAYS_SQL} >= ${NOTICE_MIN_OVERDUE_DAYS}`,
+        sql`${sc} < ${MAX_NOTICE_ROUNDS}`,
+      ),
+    )
+    .orderBy(asc(contracts.contractNo))) as Array<Record<string, unknown>>;
+
+  return rows.map((r) => ({
+    externalId: String(r.externalId),
+    contractNo: String(r.contractNo),
+    customerName: (r.customerName as string) ?? null,
+    phone: (r.phone as string) ?? null,
+    addrDistrict: (r.addrDistrict as string) ?? null,
+    addrProvince: (r.addrProvince as string) ?? null,
+    model: (r.model as string) ?? null,
+    imei: (r.imei as string) ?? null,
+    serialNo: (r.serialNo as string) ?? null,
+    approveDate: (r.approveDate as string) ?? null,
+    installmentAmount: r.installmentAmount != null ? Number(r.installmentAmount) : null,
+    installmentCount: r.installmentCount != null ? Number(r.installmentCount) : null,
+    paidInstallments: r.paidInstallments != null ? Number(r.paidInstallments) : null,
+    overdueDays: r.overdueDays != null ? Number(r.overdueDays) : null,
+    sentCount: Number(r.sentCount ?? 0),
+  }));
+}
+
 /**
  * บันทึกการพิมพ์ Notice (นับรอบ) ของหลายสัญญาในครั้งเดียว
  * - ตรวจ server-side: ต้องค้างชำระ ≥ 60 วัน, ยังไม่คืนเครื่อง, ยังส่งไม่ครบ 3 ครั้ง
