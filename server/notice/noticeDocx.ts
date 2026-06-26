@@ -1,32 +1,66 @@
 /**
- * noticeDocx.ts — สร้างเอกสารหนังสือแจ้งเตือน (Notice) เป็นไฟล์ DOCX
+ * noticeDocx.ts — สร้างหนังสือแจ้งเตือน (Notice) เป็น DOCX ให้ "หน้าตาเหมือนเอกสารตัวอย่าง"
  *
- * สร้างด้วย library `docx` (pure-Node, render ภาษาไทยถูกต้องเมื่อเปิดด้วย Word/LibreOffice)
- * 1 สัญญา = 1 หน้า (ขึ้นหน้าใหม่ด้วย pageBreakBefore), A4 แนวตั้ง, ฟอนต์ TH Sarabun New
+ * เลย์เอาต์อิงจากเอกสารต้นฉบับของบริษัท (หัวจดหมาย + โลโก้ตาม section, ตารางทรัพย์สิน/ยอด,
+ * เนื้อความบอกเลิกสัญญา, ช่องทางชำระเงิน, ข้อมูลติดต่อ, footer อัตโนมัติ)
+ * 1 สัญญา = 1 หน้า A4 แนวตั้ง, ฟอนต์ TH Sarabun New
  *
- * ยอดเงินอิงตามที่ผู้ใช้ระบุ:
+ * ยอดเงิน (ตามที่ผู้ใช้กำหนด):
  *   ราคาเช่าซื้อทั้งสิ้น = จำนวนงวด × ค่างวด
  *   ยอดชำระแล้ว        = งวดที่ชำระแล้ว × ค่างวด
  *   ยอดค้างชำระ        = ราคาเช่าซื้อทั้งสิ้น − ยอดชำระแล้ว
  */
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   AlignmentType,
   BorderStyle,
   Document,
+  ImageRun,
   Packer,
   Paragraph,
   Table,
   TableCell,
   TableRow,
   TextRun,
+  VerticalAlign,
   WidthType,
 } from "docx";
 import { bahtText } from "./bahtText";
 import type { NoticePrintData } from "../noticeDb";
+import type { SectionKey } from "../../shared/const";
 
 const FONT = "TH Sarabun New";
-const COMPANY_NAME = "บริษัท ฟาสต์โฟน365 จำกัด";
-const COMPANY_PHONE = "02-028-7777";
+
+type CompanyConfig = {
+  companyName: string;
+  logoFile: string; // ไฟล์ใน client/public
+  bankLine: string;
+  bankAccount: string;
+  phone: string;
+  address: string;
+};
+
+/** ข้อมูลบริษัทแยกตาม section (Fastfone อ้างอิงจากเอกสารตัวอย่าง) */
+const COMPANY: Record<SectionKey, CompanyConfig> = {
+  Fastfone365: {
+    companyName: "บริษัท ฟาสต์โฟน365 จำกัด",
+    logoFile: "logo-fastfone365.png",
+    bankLine: "ธนาคารกสิกรไทย สาขาโรบินสันไลฟ์สไตล์ ราชพฤกษ์",
+    bankAccount: "187-8-36503-4",
+    phone: "02-028-7777",
+    address: "29-89 หมู่ที่ 2 ตำบลลำโพ อำเภอบางบัวทอง จังหวัดนนทบุรี 11110",
+  },
+  Boonphone: {
+    companyName: "บริษัท บุญโฟน จำกัด",
+    logoFile: "logo-boonphone.png",
+    // หมายเหตุ: ข้อมูลธนาคาร/เบอร์/ที่อยู่ของ Boonphone รอยืนยันจากผู้ใช้
+    bankLine: "",
+    bankAccount: "",
+    phone: "",
+    address: "",
+  },
+};
 
 const THAI_MONTHS = [
   "มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน",
@@ -36,144 +70,244 @@ const THAI_MONTHS = [
 function fmtMoney(n: number): string {
   return n.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
-
 function fmtThaiDate(s: string | null | undefined): string {
   if (!s) return "-";
   const d = new Date(s);
   if (isNaN(d.getTime())) return s;
   return `${d.getDate()} ${THAI_MONTHS[d.getMonth()]} ${d.getFullYear() + 543}`;
 }
-
-function composeAddress(r: NoticePrintData): string {
-  const parts: string[] = [];
-  if (r.addrDistrict) parts.push(`อำเภอ/เขต ${r.addrDistrict}`);
-  if (r.addrProvince) parts.push(`จังหวัด ${r.addrProvince}`);
-  return parts.length ? parts.join(" ") : "-";
+function todayThai(): string {
+  const d = new Date();
+  return `${d.getDate()} ${THAI_MONTHS[d.getMonth()]} ${d.getFullYear() + 543}`;
 }
 
-function run(text: string, opts: { bold?: boolean; size?: number } = {}): TextRun {
-  return new TextRun({ text, font: FONT, bold: opts.bold, size: opts.size ?? 30 });
+/** โหลดโลโก้ section + อ่านขนาดจาก PNG header (IHDR) */
+function loadLogo(section: SectionKey): { data: Buffer; width: number; height: number } | null {
+  const cfg = COMPANY[section];
+  const candidates = [
+    join(process.cwd(), "client", "public", cfg.logoFile),
+    join(process.cwd(), "public", cfg.logoFile),
+    join(process.cwd(), "dist", "public", cfg.logoFile),
+  ];
+  for (const p of candidates) {
+    try {
+      const data = readFileSync(p);
+      // PNG: width = bytes 16..19, height = bytes 20..23 (big-endian)
+      const width = data.readUInt32BE(16);
+      const height = data.readUInt32BE(20);
+      if (width > 0 && height > 0) return { data, width, height };
+    } catch {
+      /* try next */
+    }
+  }
+  return null;
 }
 
-function para(children: TextRun[], opts: { align?: (typeof AlignmentType)[keyof typeof AlignmentType]; spacingAfter?: number; pageBreakBefore?: boolean } = {}): Paragraph {
+function run(text: string, opts: { bold?: boolean; italics?: boolean; size?: number; color?: string } = {}): TextRun {
+  return new TextRun({ text, font: FONT, bold: opts.bold, italics: opts.italics, size: opts.size ?? 30, color: opts.color });
+}
+function para(children: TextRun[], opts: { align?: (typeof AlignmentType)[keyof typeof AlignmentType]; spacingAfter?: number; pageBreakBefore?: boolean; spacingBefore?: number } = {}): Paragraph {
   return new Paragraph({
     children,
     alignment: opts.align,
     pageBreakBefore: opts.pageBreakBefore,
-    spacing: { after: opts.spacingAfter ?? 120, line: 320 },
+    spacing: { after: opts.spacingAfter ?? 100, before: opts.spacingBefore ?? 0, line: 300 },
   });
 }
 
-function cell(text: string, opts: { bold?: boolean; header?: boolean } = {}): TableCell {
+const NO_BORDER = { style: BorderStyle.NONE, size: 0, color: "FFFFFF" } as const;
+const NO_BORDERS = { top: NO_BORDER, bottom: NO_BORDER, left: NO_BORDER, right: NO_BORDER, insideHorizontal: NO_BORDER, insideVertical: NO_BORDER };
+const LINE = { style: BorderStyle.SINGLE, size: 6, color: "111111" } as const;
+const BOX_BORDERS = { top: LINE, bottom: LINE, left: LINE, right: LINE, insideHorizontal: LINE, insideVertical: LINE };
+
+/** เซลล์ในตารางข้อมูล (มีกรอบ) */
+function dcell(text: string, widthPct: number, opts: { header?: boolean; bold?: boolean } = {}): TableCell {
   return new TableCell({
-    width: { size: 33.33, type: WidthType.PERCENTAGE },
-    shading: opts.header ? { fill: "F3F4F6" } : undefined,
-    children: [
-      new Paragraph({
-        alignment: AlignmentType.CENTER,
-        spacing: { before: 40, after: 40 },
-        children: [run(text, { bold: opts.bold || opts.header })],
-      }),
-    ],
+    width: { size: widthPct, type: WidthType.PERCENTAGE },
+    verticalAlign: VerticalAlign.CENTER,
+    shading: opts.header ? { fill: "EFEFEF" } : undefined,
+    margins: { top: 30, bottom: 30, left: 60, right: 60 },
+    children: [new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 0, line: 260 }, children: [run(text, { bold: opts.header || opts.bold, size: 28 })] })],
+  });
+}
+/** เซลล์ label/value แบบไม่มีกรอบ */
+function lvCell(children: TextRun[], widthPct: number, align?: (typeof AlignmentType)[keyof typeof AlignmentType]): TableCell {
+  return new TableCell({
+    width: { size: widthPct, type: WidthType.PERCENTAGE },
+    borders: NO_BORDERS,
+    margins: { top: 10, bottom: 10, left: 0, right: 60 },
+    children: [new Paragraph({ alignment: align, spacing: { after: 0, line: 300 }, children })],
   });
 }
 
-function buildContractParagraphs(r: NoticePrintData, index: number): (Paragraph | Table)[] {
+function buildContract(r: NoticePrintData, cfg: CompanyConfig, logo: ReturnType<typeof loadLogo>): (Paragraph | Table)[] {
   const round = r.sentCount + 1;
   const docNo = `${r.contractNo}-N${round}`;
   const inst = r.installmentAmount ?? 0;
   const hpTotal = (r.installmentCount ?? 0) * inst;
   const paid = (r.paidInstallments ?? 0) * inst;
   const due = Math.max(0, hpTotal - paid);
-  const today = new Date();
-  const todayStr = `${today.getDate()} ${THAI_MONTHS[today.getMonth()]} ${today.getFullYear() + 543}`;
-
-  const border = { style: BorderStyle.SINGLE, size: 6, color: "111111" };
-  const tableBorders = {
-    top: border, bottom: border, left: border, right: border,
-    insideHorizontal: border, insideVertical: border,
-  };
 
   const out: (Paragraph | Table)[] = [];
 
-  // หัวเรื่อง
-  out.push(para([run("FASTFONE 365", { bold: true, size: 32 })], { align: AlignmentType.LEFT, spacingAfter: 60, pageBreakBefore: index > 0 }));
-  out.push(para([run("หนังสือติดตามค่าเช่าซื้อ", { bold: true, size: 34 })], { align: AlignmentType.CENTER, spacingAfter: 40 }));
-  out.push(para([run("บอกเลิกสัญญาและขอให้คืนทรัพย์สินที่เช่าซื้อ", { bold: true, size: 34 })], { align: AlignmentType.CENTER, spacingAfter: 180 }));
+  // ── หัวจดหมาย: โลโก้ (ซ้าย) + ชื่อเอกสาร (ขวา) ──
+  const logoChildren = logo
+    ? [new Paragraph({ children: [new ImageRun({ type: "png", data: logo.data, transformation: { width: 150, height: Math.round((150 * logo.height) / logo.width) } })] })]
+    : [new Paragraph({ children: [run(cfg.companyName, { bold: true, size: 32 })] })];
 
-  // meta
-  out.push(para([run("หนังสือเลขที่ ", { bold: true }), run(docNo)]));
-  out.push(para([run("วันที่ ", { bold: true }), run(todayStr)]));
-  out.push(para([run("สัญญาเช่าซื้อเลขที่ ", { bold: true }), run(r.contractNo)], { spacingAfter: 160 }));
-
-  // เรื่อง / เรียน / ที่อยู่
-  out.push(para([run("เรื่อง ", { bold: true }), run("ขอให้ชำระหนี้ค่าเช่าซื้อค้างชำระ บอกเลิกสัญญาและขอให้คืนทรัพย์สินที่เช่าซื้อ")]));
-  out.push(para([run("เรียน ", { bold: true }), run(r.customerName ?? "-")]));
-  out.push(para([run("ที่อยู่ ", { bold: true }), run(composeAddress(r))], { spacingAfter: 160 }));
-
-  out.push(para([run("ตามที่ท่านได้ทำสัญญาเช่าซื้อกับบริษัทฯ โดยมีรายละเอียดทรัพย์สินที่เช่าซื้อตามตารางด้านล่างนี้")], { spacingAfter: 100 }));
-
-  // ตารางทรัพย์สิน + ยอด
   out.push(
     new Table({
       width: { size: 100, type: WidthType.PERCENTAGE },
-      borders: tableBorders,
+      borders: NO_BORDERS,
       rows: [
-        new TableRow({ children: [cell("โทรศัพท์มือถือ / รุ่น", { header: true }), cell("หมายเลข IMEI", { header: true }), cell("หมายเลข Serial", { header: true })] }),
-        new TableRow({ children: [cell(r.model ?? "-"), cell(r.imei ?? "-"), cell(r.serialNo ?? "-")] }),
-        new TableRow({ children: [cell("วันที่อนุมัติสัญญา", { header: true }), cell("ค่างวดต่อเดือน", { header: true }), cell("ยอดค้างชำระ", { header: true })] }),
-        new TableRow({ children: [cell(fmtThaiDate(r.approveDate)), cell(`${fmtMoney(inst)} บาท`), cell(`${fmtMoney(due)} บาท`)] }),
+        new TableRow({
+          children: [
+            new TableCell({ width: { size: 38, type: WidthType.PERCENTAGE }, borders: NO_BORDERS, verticalAlign: VerticalAlign.CENTER, children: logoChildren }),
+            new TableCell({
+              width: { size: 62, type: WidthType.PERCENTAGE },
+              borders: NO_BORDERS,
+              verticalAlign: VerticalAlign.CENTER,
+              children: [
+                new Paragraph({ alignment: AlignmentType.RIGHT, spacing: { after: 0, line: 300 }, children: [run("หนังสือติดตามค่าเช่าซื้อ -", { bold: true, size: 32 })] }),
+                new Paragraph({ alignment: AlignmentType.RIGHT, spacing: { after: 0, line: 300 }, children: [run("บอกเลิกสัญญาและขอให้คืนทรัพย์สินที่เช่าซื้อ", { bold: true, size: 32 })] }),
+              ],
+            }),
+          ],
+        }),
       ],
     }),
   );
   out.push(para([run("")], { spacingAfter: 60 }));
 
-  // เนื้อหา
+  // ── meta ──
+  out.push(
+    new Table({
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      borders: NO_BORDERS,
+      rows: [
+        new TableRow({ children: [lvCell([run("หนังสือเลขที่", { bold: true })], 22), lvCell([run(docNo)], 78)] }),
+        new TableRow({ children: [lvCell([run("วันที่", { bold: true })], 22), lvCell([run(todayThai())], 78)] }),
+        new TableRow({ children: [lvCell([run("สัญญาเช่าซื้อเลขที่", { bold: true })], 22), lvCell([run(r.contractNo)], 78)] }),
+      ],
+    }),
+  );
+  out.push(para([run("")], { spacingAfter: 40 }));
+
+  // ── เรื่อง / เรียน / อ้างถึง ──
+  out.push(
+    new Table({
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      borders: NO_BORDERS,
+      rows: [
+        new TableRow({ children: [lvCell([run("เรื่อง", { bold: true })], 14), lvCell([run("ขอให้ชำระหนี้ค่าเช่าซื้อค้างชำระ - บอกเลิกสัญญาและขอให้คืนทรัพย์สินที่เช่าซื้อ")], 86)] }),
+        new TableRow({ children: [lvCell([run("เรียน", { bold: true })], 14), lvCell([run(r.customerName ?? "-", { bold: true })], 86)] }),
+        new TableRow({ children: [lvCell([run("อ้างถึง", { bold: true })], 14), lvCell([run("ยอดค่าเช่าซื้อค้างชำระของ  "), run(r.customerName ?? "-", { bold: true })], 86)] }),
+      ],
+    }),
+  );
+  out.push(para([run("")], { spacingAfter: 20 }));
+
+  out.push(para([run(`ตามที่ท่านได้เข้าทำสัญญาเช่าซื้อ กับทางบริษัท ${cfg.companyName} ดังมีรายละเอียดดังนี้`)], { spacingAfter: 80 }));
+
+  // ── ตาราง A: อุปกรณ์ ──
+  out.push(
+    new Table({
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      borders: BOX_BORDERS,
+      rows: [
+        new TableRow({ children: [dcell("โทรศัพท์มือถือ รุ่น - หน่วยความจำ", 40, { header: true }), dcell("หมายเลข IMEI", 32, { header: true }), dcell("หมายเลข Serial", 28, { header: true })] }),
+        new TableRow({ children: [dcell(r.model ?? "-", 40), dcell(r.imei ?? "-", 32), dcell(r.serialNo ?? "-", 28)] }),
+      ],
+    }),
+  );
+  // ── ตาราง B: ยอด ──
+  out.push(
+    new Table({
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      borders: BOX_BORDERS,
+      rows: [
+        new TableRow({ children: [dcell("วันที่ทำสัญญา", 24, { header: true }), dcell("ราคาเช่าซื้อ(บาท)", 20, { header: true }), dcell("ผ่อนชำระเดือนละ", 20, { header: true }), dcell("จ.งวด", 12, { header: true }), dcell("ยอดที่ได้ชำระแล้ว", 24, { header: true })] }),
+        new TableRow({ children: [dcell(fmtThaiDate(r.approveDate), 24), dcell(fmtMoney(hpTotal), 20), dcell(fmtMoney(inst), 20), dcell(String(r.installmentCount ?? "-"), 12), dcell(fmtMoney(paid), 24)] }),
+      ],
+    }),
+  );
+  out.push(para([run("")], { spacingAfter: 40 }));
+
+  // ── เนื้อหา ──
   out.push(
     para([
-      run("ปัจจุบันท่านผิดนัดชำระค่าเช่าซื้อเป็นเวลา "),
+      run("บริษัทฯ ขอเรียนให้ท่านทราบว่า ปัจจุบันท่านได้ผิดนัดและค้างชำระค่าเช่าซื้อเป็นเวลา "),
       run(`${(r.overdueDays ?? 0).toLocaleString()}`, { bold: true }),
-      run(" วัน คงเหลือยอดค้างชำระจำนวน "),
-      run(`${fmtMoney(due)} บาท`, { bold: true }),
-      run(` (${bahtText(due)}) `),
-      run("บริษัทฯ จึงขอให้ท่านชำระหนี้ค่าเช่าซื้อที่ค้างชำระทั้งหมด หรือส่งมอบทรัพย์สินที่เช่าซื้อคืนแก่บริษัทฯ ภายในระยะเวลาที่บริษัทฯ กำหนด"),
+      run(" วัน อันเป็นการผิดสัญญา บริษัทฯ จึงมีความจำเป็นต้องบอกเลิกสัญญากับท่าน และขอให้ท่านชำระค่าเช่าซื้อที่ค้างชำระทั้งหมดจำนวน "),
+      run(`${fmtMoney(due)}`, { bold: true }),
+      run(" บาท "),
+      run(`(${bahtText(due)})`, { bold: true }),
+      run(" หรือขอให้ท่านส่งมอบทรัพย์สินที่เช่าซื้อคืนให้แก่บริษัทฯ ทันที"),
     ]),
   );
   out.push(
     para([
-      run("หากพ้นกำหนดระยะเวลาดังกล่าวแล้ว ท่านยังมิได้ชำระหนี้หรือส่งคืนทรัพย์สิน บริษัทฯ ขอสงวนสิทธิ์ในการดำเนินการตามสัญญาและตามกฎหมายทั้งทางแพ่งและทางอาญาต่อไป"),
-    ], { spacingAfter: 200 }),
+      run("จึงเรียนมายังท่านเพื่อโปรดชำระเงินจำนวนดังกล่าว หรือขอให้ท่านส่งมอบทรัพย์สินที่เช่าซื้อคืนแก่บริษัทฯ ภายใน 15 วัน นับแต่วันที่ลงในหนังสือฉบับนี้ เพื่อหลีกเลี่ยงการดำเนินคดีทั้งในทางแพ่งและทางอาญา หากพ้นกำหนดเวลาดังกล่าว บริษัทฯ ขอสงวนสิทธิ์ในการดำเนินคดีตามกฎหมายจนถึงที่สุด โดยท่านจะต้องรับผิดในค่าเสียหาย ค่าธรรมเนียมศาล และค่าทนายความเพิ่มเติม"),
+    ]),
+  );
+  out.push(
+    para([
+      run("อนึ่ง การที่ท่านได้รับทรัพย์สินไปโดยไม่ชำระเงิน และไม่คืนทรัพย์สิน อาจเข้าข่ายความผิดทางอาญาฐานฉ้อโกงและยักยอกทรัพย์ ซึ่งมีโทษตามกฎหมาย"),
+    ], { spacingAfter: 160 }),
   );
 
-  // ลงชื่อ
-  out.push(para([run("ขอแสดงความนับถือ")], { align: AlignmentType.CENTER, spacingAfter: 40 }));
-  out.push(para([run(COMPANY_NAME, { bold: true })], { align: AlignmentType.CENTER, spacingAfter: 200 }));
+  // ── ลงชื่อ ──
+  out.push(para([run("ขอแสดงความนับถือ")], { align: AlignmentType.CENTER, spacingAfter: 20 }));
+  out.push(para([run(cfg.companyName, { bold: true })], { align: AlignmentType.CENTER, spacingAfter: 140 }));
 
-  // footer
-  out.push(para([run("ติดต่อชำระเงิน / สอบถามเพิ่มเติม โทร. ", { bold: true }), run(COMPANY_PHONE), run(`  •  เลขที่สัญญา ${r.contractNo}  •  รอบส่ง Notice ครั้งที่ ${round}`)], { spacingAfter: 0 }));
+  // ── ช่องทางการชำระเงิน ──
+  if (cfg.bankLine || cfg.bankAccount) {
+    out.push(
+      new Table({
+        width: { size: 100, type: WidthType.PERCENTAGE },
+        borders: NO_BORDERS,
+        rows: [
+          new TableRow({ children: [lvCell([run("ช่องทางการชำระเงิน", { bold: true })], 26), lvCell([run(cfg.bankLine)], 74)] }),
+          new TableRow({ children: [lvCell([run("")], 26), lvCell([run(`เลขที่ ${cfg.bankAccount}`, { bold: true })], 74)] }),
+        ],
+      }),
+    );
+  }
+
+  // ── ติดต่อ ──
+  out.push(para([run("โปรดติดต่อ", { bold: true })], { spacingAfter: 0, spacingBefore: 60 }));
+  out.push(para([run(`${cfg.companyName}${cfg.phone ? `  โทร. ${cfg.phone}` : ""}`, { bold: true })], { spacingAfter: 0 }));
+  if (cfg.address) out.push(para([run(`ที่อยู่ ${cfg.address}`)], { spacingAfter: 120 }));
+
+  // ── footer อัตโนมัติ ──
+  out.push(para([run(`หนังสือฉบับนี้เป็นจดหมายอัตโนมัติ จากทางบริษัท ${cfg.companyName}`, { italics: true, size: 26, color: "555555" })], { spacingAfter: 0, spacingBefore: 120 }));
+  out.push(para([run("ทางบริษัทขออภัยหากท่านได้ชำระมาก่อนหน้านี้", { italics: true, size: 26, color: "555555" })], { spacingAfter: 0 }));
 
   return out;
 }
 
-/** สร้าง DOCX (ทุกสัญญารวมเป็นไฟล์เดียว) คืนเป็น Buffer */
-export async function buildNoticeDocx(records: NoticePrintData[]): Promise<Buffer> {
+/** สร้าง DOCX (ทุกสัญญารวมเป็นไฟล์เดียว, 1 หน้า/สัญญา) คืนเป็น Buffer */
+export async function buildNoticeDocx(records: NoticePrintData[], section: SectionKey): Promise<Buffer> {
+  const cfg = COMPANY[section] ?? COMPANY.Fastfone365;
+  const logo = loadLogo(section);
+
   const children: (Paragraph | Table)[] = [];
   records.forEach((r, i) => {
-    children.push(...buildContractParagraphs(r, i));
+    if (i > 0) {
+      // ขึ้นหน้าใหม่ก่อนเริ่มสัญญาถัดไป
+      children.push(new Paragraph({ pageBreakBefore: true, spacing: { after: 0 }, children: [] }));
+    }
+    children.push(...buildContract(r, cfg, logo));
   });
 
   const doc = new Document({
-    styles: {
-      default: {
-        document: { run: { font: FONT, size: 30 } },
-      },
-    },
+    styles: { default: { document: { run: { font: FONT, size: 30 } } } },
     sections: [
       {
         properties: {
           page: {
             size: { width: 11906, height: 16838 }, // A4 portrait (twips)
-            margin: { top: 1134, right: 1134, bottom: 1134, left: 1134 }, // ~2cm
+            margin: { top: 1021, right: 1021, bottom: 1021, left: 1021 }, // ~1.8cm
           },
         },
         children,

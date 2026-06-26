@@ -66,7 +66,7 @@ export async function handleNoticePrint(req: Request, res: Response) {
     }
 
     // 1) สร้าง DOCX → แปลงเป็น PDF (ถ้ามี LibreOffice)
-    const docxBuf = await buildNoticeDocx(records);
+    const docxBuf = await buildNoticeDocx(records, section);
     const pdfBuf = await convertDocxToPdf(docxBuf);
 
     // 2) สร้าง Excel จ่าหน้าซอง
