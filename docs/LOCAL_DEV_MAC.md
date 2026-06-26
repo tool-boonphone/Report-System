@@ -48,14 +48,25 @@ Edit `.env` and set at least:
 
 ### Option A — Full data from production dump (recommended)
 
-Place dump files in `dumps/` (not in git):
+Place dump files in `dumps/` (not in git).
+
+**Custom format** (from `pg_dump -Fc`):
 
 ```text
 dumps/boonphone_db_2026-06-25.dump   (~9 MB)
 dumps/fastfone_db_2026-06-25.dump    (~47 MB)
 ```
 
-Export from Render PostgreSQL shell, or copy from a machine that already has them.
+**Directory format from Render** (tar.gz export):
+
+```bash
+# Copy 2026-06-25T17_29Z.dir.tar.gz into project root or dumps/
+mkdir -p dumps/boonphone-render-dir
+tar -xzf ~/Downloads/2026-06-25T17_29Z.dir.tar.gz -C dumps/boonphone-render-dir
+export BOONPHONE_DUMP_DIR="$PWD/dumps/boonphone-render-dir/2026-06-25T17:29Z/boonphone_db"
+```
+
+Fastfone still needs its own dump file (custom or directory format).
 
 Then:
 
