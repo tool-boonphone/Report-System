@@ -144,21 +144,7 @@ export default function Notice() {
     utils.notice.adminOptions.invalidate();
   };
 
-  const recordPrintMut = trpc.notice.recordPrint.useMutation({
-    onSuccess: (res) => {
-      clearSelection();
-      refetchAll();
-      if (res.printedCount > 0) {
-        toast.success(
-          `บันทึกการส่ง Notice ${res.printedCount} รายการแล้ว` +
-            (res.skipped.length > 0 ? ` (ข้าม ${res.skipped.length} รายการที่พิมพ์ไม่ได้)` : ""),
-        );
-      } else {
-        toast.error("ไม่มีรายการที่สามารถพิมพ์ได้ (คืนเครื่องแล้ว/ส่งครบ 3 ครั้ง)");
-      }
-    },
-    onError: (e) => toast.error(e.message),
-  });
+  const [printing, setPrinting] = useState(false);
 
   const restoreMut = trpc.notice.restoreLatest.useMutation({
     onSuccess: (res) => {
@@ -200,10 +186,44 @@ export default function Notice() {
   };
   const clearSelection = () => setSelected(new Set());
 
-  const handlePrint = () => {
+  const handlePrint = async () => {
     if (!canEdit) { toast.error("คุณไม่มีสิทธิ์พิมพ์ Notice"); return; }
     if (selected.size === 0) { toast.error("กรุณาเลือกรายการก่อน"); return; }
-    recordPrintMut.mutate({ section: sectionKey, externalIds: Array.from(selected) });
+    setPrinting(true);
+    const toastId = toast.loading("กำลังสร้างเอกสาร PDF + Excel จ่าหน้าซอง...");
+    try {
+      const resp = await fetch("/api/notice/print", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ section: sectionKey, externalIds: Array.from(selected) }),
+      });
+      if (!resp.ok) {
+        const { message } = await resp.json().catch(() => ({ message: "สร้างเอกสารไม่สำเร็จ" }));
+        toast.error(message, { id: toastId });
+        return;
+      }
+      const printedCount = Number(resp.headers.get("X-Notice-Printed-Count") ?? "0");
+      const hasPdf = resp.headers.get("X-Notice-Pdf") === "1";
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `notice_${sectionKey}_${new Date().toISOString().slice(0, 10)}.zip`;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+      clearSelection();
+      refetchAll();
+      toast.success(
+        `สร้างเอกสาร ${printedCount} รายการและบันทึกการส่งแล้ว` +
+          (hasPdf ? "" : " (ระบบสร้างเป็น DOCX เพราะเซิร์ฟเวอร์ยังไม่มี LibreOffice)"),
+        { id: toastId },
+      );
+    } catch (e) {
+      toast.error((e as Error).message ?? "สร้างเอกสารไม่สำเร็จ", { id: toastId });
+    } finally {
+      setPrinting(false);
+    }
   };
   const handleStats = () => toast.info("สถิติรายเดือนจะเปิดใช้งานในเฟสถัดไป");
   const confirmRestore = () => {
@@ -325,9 +345,9 @@ export default function Notice() {
 
           {/* Actions */}
           <div className="px-4 sm:px-[18px] py-3.5 border-b border-gray-200 flex items-center gap-2.5 flex-wrap">
-            <button onClick={handlePrint} disabled={!canEdit || recordPrintMut.isPending}
+            <button onClick={handlePrint} disabled={!canEdit || printing}
               className="inline-flex items-center gap-2 rounded-xl px-3.5 py-2.5 text-sm font-bold bg-orange-500 text-white hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-              <Printer className="w-4 h-4" /> พิมพ์รายการที่เลือก
+              <Printer className="w-4 h-4" /> {printing ? "กำลังสร้างเอกสาร..." : "พิมพ์รายการที่เลือก"}
             </button>
             <button onClick={clearSelection}
               className="inline-flex items-center gap-2 rounded-xl px-3.5 py-2.5 text-sm font-bold bg-gray-100 text-gray-900 hover:bg-gray-200 transition-colors">
@@ -531,8 +551,9 @@ export default function Notice() {
           </div>
 
           <div className="px-4 sm:px-[18px] py-3 bg-[#fafafa] text-gray-500 text-xs leading-relaxed border-t border-gray-200">
-            หมายเหตุ: ปุ่ม "พิมพ์รายการที่เลือก" จะบันทึกรอบส่ง Notice ทันที (Phase 2) — การ Generate PDF + Excel จ่าหน้าซองจริง
-            และ Modal สถิติรายเดือน จะเพิ่มในเฟสถัดไป
+            หมายเหตุ: ปุ่ม "พิมพ์รายการที่เลือก" จะสร้างไฟล์ ZIP (เอกสาร Notice + Excel จ่าหน้าซองไปรษณีย์ไทย)
+            และนับรอบส่งให้อัตโนมัติเมื่อสร้างไฟล์สำเร็จ — ที่อยู่ในไฟล์ Excel มีเฉพาะ อำเภอ/จังหวัด/เบอร์โทร
+            (ช่องที่อยู่/ตำบล/รหัสไปรษณีย์เว้นว่างให้กรอกเพิ่ม) และ Modal สถิติรายเดือนจะเพิ่มในเฟสถัดไป
           </div>
         </section>
       </div>
