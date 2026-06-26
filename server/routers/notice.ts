@@ -1,24 +1,30 @@
 /**
  * notice.ts — tRPC router สำหรับระบบหนังสือแจ้งเตือน (Notice)
  *
- * Phase 1 (อ่านอย่างเดียว):
- *  - list: ดึงรายการลูกค้าค้างชำระ ≥ 60 วัน (server-side pagination)
- *  - summary: นับยอดรวม + ยอดได้เครื่องคืนสำหรับการ์ดด้านบน
+ * Phase 2:
+ *  - list / summary / adminOptions (อ่าน — guard view)
+ *  - recordPrint (นับรอบ) / restoreLatest (ยกเลิกรอบล่าสุด) (เขียน — guard edit)
  */
 import { z } from "zod";
 import { requirePermission, router } from "../_core/trpc";
 import {
   listNoticeContracts,
   getNoticeSummary,
+  getNoticeAdminOptions,
+  recordNoticePrint,
+  restoreLatestNoticeRound,
   type NoticeFilters,
   type NoticeSort,
 } from "../noticeDb";
 import { sectionSchema } from "../../shared/const";
+import type { AppUserWithGroup } from "../authDb";
 
 const filtersInput = z
   .object({
     search: z.string().optional(),
     returned: z.enum(["all", "hide", "only"]).optional(),
+    sent: z.enum(["all", "0", "1", "2", "3"]).optional(),
+    admin: z.string().optional(),
     approveDateFrom: z.string().optional(),
     approveDateTo: z.string().optional(),
     overdueMin: z.number().int().min(0).optional(),
@@ -28,10 +34,15 @@ const filtersInput = z
 
 const sortInput = z
   .object({
-    field: z.enum(["approveDate", "overdueDays"]).optional(),
+    field: z.enum(["approveDate", "overdueDays", "sentCount"]).optional(),
     dir: z.enum(["asc", "desc"]).optional(),
   })
   .optional();
+
+/** ชื่อผู้ทำรายการที่จะบันทึกใน log (ใช้ fullName ถ้ามี ไม่งั้น username) */
+function operatorName(appUser: AppUserWithGroup): string {
+  return (appUser.fullName?.trim() || appUser.username || "ไม่ทราบชื่อ").slice(0, 128);
+}
 
 export const noticeRouter = router({
   list: requirePermission("notice", "view")
@@ -60,6 +71,42 @@ export const noticeRouter = router({
       getNoticeSummary({
         section: input.section,
         filters: input.filters as NoticeFilters | undefined,
+      }),
+    ),
+
+  adminOptions: requirePermission("notice", "view")
+    .input(z.object({ section: sectionSchema }))
+    .query(({ input }) => getNoticeAdminOptions(input.section)),
+
+  /**
+   * บันทึกการพิมพ์ Notice (นับรอบ) ของรายการที่เลือก
+   * NOTE (Phase 2): ยังไม่ได้ gate ด้วยการ generate PDF/Excel จริง — Phase 3 จะ
+   * generate ไฟล์ก่อนแล้วจึงเรียก mutation นี้เมื่อสำเร็จทั้งคู่
+   */
+  recordPrint: requirePermission("notice", "edit")
+    .input(z.object({ section: sectionSchema, externalIds: z.array(z.string()).min(1) }))
+    .mutation(({ input, ctx }) =>
+      recordNoticePrint({
+        section: input.section,
+        externalIds: input.externalIds,
+        operator: operatorName(ctx.appUser),
+      }),
+    ),
+
+  restoreLatest: requirePermission("notice", "edit")
+    .input(
+      z.object({
+        section: sectionSchema,
+        externalId: z.string().min(1),
+        reason: z.string().optional(),
+      }),
+    )
+    .mutation(({ input, ctx }) =>
+      restoreLatestNoticeRound({
+        section: input.section,
+        externalId: input.externalId,
+        operator: operatorName(ctx.appUser),
+        reason: input.reason,
       }),
     ),
 });
