@@ -121,14 +121,14 @@ function loadLogo(section: SectionKey): { data: Buffer; width: number; height: n
 }
 
 function run(text: string, opts: { bold?: boolean; italics?: boolean; size?: number; color?: string } = {}): TextRun {
-  return new TextRun({ text, font: FONT, bold: opts.bold, italics: opts.italics, size: opts.size ?? 26, color: opts.color });
+  return new TextRun({ text, font: FONT, bold: opts.bold, italics: opts.italics, size: opts.size ?? 24, color: opts.color });
 }
 function para(children: TextRun[], opts: { align?: (typeof AlignmentType)[keyof typeof AlignmentType]; spacingAfter?: number; pageBreakBefore?: boolean; spacingBefore?: number } = {}): Paragraph {
   return new Paragraph({
     children,
     alignment: opts.align,
     pageBreakBefore: opts.pageBreakBefore,
-    spacing: { after: opts.spacingAfter ?? 80, before: opts.spacingBefore ?? 0, line: 312 },
+    spacing: { after: opts.spacingAfter ?? 72, before: opts.spacingBefore ?? 0, line: 296 },
   });
 }
 
@@ -174,25 +174,25 @@ function buildContract(r: NoticePrintData, cfg: CompanyConfig, logo: ReturnType<
 
   // ── หัวจดหมาย: โลโก้ (ซ้าย) + ชื่อเอกสาร (ขวา) ──
   const logoChildren = logo
-    ? [new Paragraph({ children: [new ImageRun({ type: "png", data: logo.data, transformation: { width: 150, height: Math.round((150 * logo.height) / logo.width) } })] })]
-    : [new Paragraph({ children: [run(cfg.companyName, { bold: true, size: 32 })] })];
+    ? [new Paragraph({ children: [new ImageRun({ type: "png", data: logo.data, transformation: { width: 132, height: Math.round((132 * logo.height) / logo.width) } })] })]
+    : [new Paragraph({ children: [run(cfg.companyName, { bold: true, size: 28 })] })];
 
   out.push(
     new Table({
       width: { size: 100, type: WidthType.PERCENTAGE },
-      columnWidths: [3750, 6114],
+      columnWidths: [3200, 5306],
       borders: NO_BORDERS,
       rows: [
         new TableRow({
           children: [
-            new TableCell({ width: { size: 3750, type: WidthType.DXA }, borders: NO_BORDERS, verticalAlign: VerticalAlign.CENTER, children: logoChildren }),
+            new TableCell({ width: { size: 3200, type: WidthType.DXA }, borders: NO_BORDERS, verticalAlign: VerticalAlign.CENTER, children: logoChildren }),
             new TableCell({
-              width: { size: 6114, type: WidthType.DXA },
+              width: { size: 5306, type: WidthType.DXA },
               borders: NO_BORDERS,
               verticalAlign: VerticalAlign.CENTER,
               children: [
-                new Paragraph({ alignment: AlignmentType.RIGHT, spacing: { after: 0, line: 288 }, children: [run("หนังสือติดตามค่าเช่าซื้อ -", { bold: true, size: 28 })] }),
-                new Paragraph({ alignment: AlignmentType.RIGHT, spacing: { after: 0, line: 288 }, children: [run("บอกเลิกสัญญาและขอให้คืนทรัพย์สินที่เช่าซื้อ", { bold: true, size: 28 })] }),
+                new Paragraph({ alignment: AlignmentType.RIGHT, spacing: { after: 0, line: 276 }, children: [run("หนังสือติดตามค่าเช่าซื้อ -", { bold: true, size: 26 })] }),
+                new Paragraph({ alignment: AlignmentType.RIGHT, spacing: { after: 0, line: 276 }, children: [run("บอกเลิกสัญญาและขอให้คืนทรัพย์สินที่เช่าซื้อ", { bold: true, size: 26 })] }),
               ],
             }),
           ],
@@ -206,12 +206,12 @@ function buildContract(r: NoticePrintData, cfg: CompanyConfig, logo: ReturnType<
   out.push(
     new Table({
       width: { size: 100, type: WidthType.PERCENTAGE },
-      columnWidths: [2300, 7564],
+      columnWidths: [2100, 6406],
       borders: NO_BORDERS,
       rows: [
-        new TableRow({ children: [lvCell([run("หนังสือเลขที่", { bold: true })], 2300), lvCell([run(docNo)], 7564)] }),
-        new TableRow({ children: [lvCell([run("วันที่", { bold: true })], 2300), lvCell([run(todayThai())], 7564)] }),
-        new TableRow({ children: [lvCell([run("สัญญาเช่าซื้อเลขที่", { bold: true })], 2300), lvCell([run(r.contractNo)], 7564)] }),
+        new TableRow({ children: [lvCell([run("หนังสือเลขที่", { bold: true })], 2100), lvCell([run(docNo)], 6406)] }),
+        new TableRow({ children: [lvCell([run("วันที่", { bold: true })], 2100), lvCell([run(todayThai())], 6406)] }),
+        new TableRow({ children: [lvCell([run("สัญญาเช่าซื้อเลขที่", { bold: true })], 2100), lvCell([run(r.contractNo)], 6406)] }),
       ],
     }),
   );
@@ -221,12 +221,12 @@ function buildContract(r: NoticePrintData, cfg: CompanyConfig, logo: ReturnType<
   out.push(
     new Table({
       width: { size: 100, type: WidthType.PERCENTAGE },
-      columnWidths: [1500, 8364],
+      columnWidths: [1400, 7106],
       borders: NO_BORDERS,
       rows: [
-        new TableRow({ children: [lvCell([run("เรื่อง", { bold: true })], 1500), lvCell([run("ขอให้ชำระหนี้ค่าเช่าซื้อค้างชำระ - บอกเลิกสัญญาและขอให้คืนทรัพย์สินที่เช่าซื้อ")], 8364)] }),
-        new TableRow({ children: [lvCell([run("เรียน", { bold: true })], 1500), lvCell([run(r.customerName ?? "-", { bold: true })], 8364)] }),
-        new TableRow({ children: [lvCell([run("อ้างถึง", { bold: true })], 1500), lvCell([run("ยอดค่าเช่าซื้อค้างชำระของ  "), run(r.customerName ?? "-", { bold: true })], 8364)] }),
+        new TableRow({ children: [lvCell([run("เรื่อง", { bold: true })], 1400), lvCell([run("ขอให้ชำระหนี้ค่าเช่าซื้อค้างชำระ - บอกเลิกสัญญาและขอให้คืนทรัพย์สินที่เช่าซื้อ")], 7106)] }),
+        new TableRow({ children: [lvCell([run("เรียน", { bold: true })], 1400), lvCell([run(r.customerName ?? "-", { bold: true })], 7106)] }),
+        new TableRow({ children: [lvCell([run("อ้างถึง", { bold: true })], 1400), lvCell([run("ยอดค่าเช่าซื้อค้างชำระของ  "), run(r.customerName ?? "-", { bold: true })], 7106)] }),
       ],
     }),
   );
@@ -290,11 +290,11 @@ function buildContract(r: NoticePrintData, cfg: CompanyConfig, logo: ReturnType<
     out.push(
       new Table({
         width: { size: 100, type: WidthType.PERCENTAGE },
-        columnWidths: [2900, 6964],
+        columnWidths: [2700, 5806],
         borders: NO_BORDERS,
         rows: [
-          new TableRow({ children: [lvCell([run("ช่องทางการชำระเงิน", { bold: true })], 2900), lvCell([run(cfg.bankName)], 6964)] }),
-          new TableRow({ children: [lvCell([run("")], 2900), lvCell([run(`เลขที่ ${cfg.bankAccount}  ชื่อบัญชี ${cfg.accountName}`, { bold: true })], 6964)] }),
+          new TableRow({ children: [lvCell([run("ช่องทางการชำระเงิน", { bold: true })], 2700), lvCell([run(cfg.bankName)], 5806)] }),
+          new TableRow({ children: [lvCell([run("")], 2700), lvCell([run(`เลขที่ ${cfg.bankAccount}  ชื่อบัญชี ${cfg.accountName}`, { bold: true })], 5806)] }),
         ],
       }),
     );
@@ -319,13 +319,13 @@ function buildContract(r: NoticePrintData, cfg: CompanyConfig, logo: ReturnType<
   out.push(
     new Table({
       width: { size: 100, type: WidthType.PERCENTAGE },
-      columnWidths: [7000, 2864],
+      columnWidths: [5900, 2606],
       borders: NO_BORDERS,
       rows: [
         new TableRow({
           children: [
-            new TableCell({ width: { size: 7000, type: WidthType.DXA }, borders: NO_BORDERS, verticalAlign: VerticalAlign.BOTTOM, margins: { top: 60, bottom: 0, left: 0, right: 0 }, children: contactCellChildren }),
-            new TableCell({ width: { size: 2864, type: WidthType.DXA }, borders: NO_BORDERS, verticalAlign: VerticalAlign.BOTTOM, children: qrCellChildren }),
+            new TableCell({ width: { size: 5900, type: WidthType.DXA }, borders: NO_BORDERS, verticalAlign: VerticalAlign.BOTTOM, margins: { top: 60, bottom: 0, left: 0, right: 0 }, children: contactCellChildren }),
+            new TableCell({ width: { size: 2606, type: WidthType.DXA }, borders: NO_BORDERS, verticalAlign: VerticalAlign.BOTTOM, children: qrCellChildren }),
           ],
         }),
       ],
@@ -361,14 +361,21 @@ export async function buildNoticeDocx(records: NoticePrintData[], section: Secti
     children.push(...buildContract(r, cfg, logo, qr));
   });
 
+  const frameBorder = { style: BorderStyle.SINGLE, size: 4, color: "333333", space: 22 } as const;
   const doc = new Document({
-    styles: { default: { document: { run: { font: FONT, size: 30 } } } },
+    styles: { default: { document: { run: { font: FONT, size: 24 } } } },
     sections: [
       {
         properties: {
           page: {
             size: { width: 11906, height: 16838 }, // A4 portrait (twips)
-            margin: { top: 1021, right: 1021, bottom: 1021, left: 1021 }, // ~1.8cm
+            margin: { top: 1200, right: 1700, bottom: 1200, left: 1700 }, // คอลัมน์แคบเหมือนตัวอย่าง (ซ้าย-ขวากว้าง, บน-ล่างกระชับ)
+            borders: {
+              pageBorderTop: frameBorder,
+              pageBorderRight: frameBorder,
+              pageBorderBottom: frameBorder,
+              pageBorderLeft: frameBorder,
+            },
           },
         },
         children,
