@@ -121,14 +121,14 @@ function loadLogo(section: SectionKey): { data: Buffer; width: number; height: n
 }
 
 function run(text: string, opts: { bold?: boolean; italics?: boolean; size?: number; color?: string } = {}): TextRun {
-  return new TextRun({ text, font: FONT, bold: opts.bold, italics: opts.italics, size: opts.size ?? 24, color: opts.color });
+  return new TextRun({ text, font: FONT, bold: opts.bold, italics: opts.italics, size: opts.size ?? 22, color: opts.color });
 }
 function para(children: TextRun[], opts: { align?: (typeof AlignmentType)[keyof typeof AlignmentType]; spacingAfter?: number; pageBreakBefore?: boolean; spacingBefore?: number } = {}): Paragraph {
   return new Paragraph({
     children,
     alignment: opts.align,
     pageBreakBefore: opts.pageBreakBefore,
-    spacing: { after: opts.spacingAfter ?? 72, before: opts.spacingBefore ?? 0, line: 296 },
+    spacing: { after: opts.spacingAfter ?? 150, before: opts.spacingBefore ?? 0, line: 320 },
   });
 }
 
@@ -143,13 +143,13 @@ const LINE = { style: BorderStyle.SINGLE, size: 6, color: "111111" } as const;
 const BOX_BORDERS = { top: LINE, bottom: LINE, left: LINE, right: LINE, insideHorizontal: LINE, insideVertical: LINE };
 
 /** เซลล์ในตารางข้อมูล (มีกรอบ) */
-function dcell(text: string, widthPct: number, opts: { header?: boolean; bold?: boolean } = {}): TableCell {
+function dcell(text: string, widthPct: number, opts: { header?: boolean; bold?: boolean; size?: number } = {}): TableCell {
   return new TableCell({
     width: { size: widthPct, type: WidthType.PERCENTAGE },
     verticalAlign: VerticalAlign.CENTER,
     shading: opts.header ? { fill: "EFEFEF" } : undefined,
-    margins: { top: 24, bottom: 24, left: 60, right: 60 },
-    children: [new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 0, line: 264 }, children: [run(text, { bold: opts.header || opts.bold, size: 24 })] })],
+    margins: { top: 26, bottom: 26, left: 30, right: 30 },
+    children: [new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 0, line: 248 }, children: [run(text, { bold: opts.header || opts.bold, size: opts.size ?? 19 })] })],
   });
 }
 /** เซลล์ label/value แบบไม่มีกรอบ (กำหนดความกว้างเป็น twips/DXA เพื่อให้ค่าชิดป้ายกำกับ) */
@@ -157,8 +157,8 @@ function lvCell(children: TextRun[], widthDxa: number, align?: (typeof Alignment
   return new TableCell({
     width: { size: widthDxa, type: WidthType.DXA },
     borders: NO_BORDERS,
-    margins: { top: 16, bottom: 16, left: 0, right: 80 },
-    children: [new Paragraph({ alignment: align, spacing: { after: 0, line: 312 }, children })],
+    margins: { top: 22, bottom: 22, left: 0, right: 80 },
+    children: [new Paragraph({ alignment: align, spacing: { after: 0, line: 320 }, children })],
   });
 }
 
@@ -191,8 +191,8 @@ function buildContract(r: NoticePrintData, cfg: CompanyConfig, logo: ReturnType<
               borders: NO_BORDERS,
               verticalAlign: VerticalAlign.CENTER,
               children: [
-                new Paragraph({ alignment: AlignmentType.RIGHT, spacing: { after: 0, line: 276 }, children: [run("หนังสือติดตามค่าเช่าซื้อ -", { bold: true, size: 26 })] }),
-                new Paragraph({ alignment: AlignmentType.RIGHT, spacing: { after: 0, line: 276 }, children: [run("บอกเลิกสัญญาและขอให้คืนทรัพย์สินที่เช่าซื้อ", { bold: true, size: 26 })] }),
+                new Paragraph({ alignment: AlignmentType.LEFT, spacing: { after: 0, line: 300 }, children: [run("หนังสือติดตามค่าเช่าซื้อ -", { bold: true, size: 26 })] }),
+                new Paragraph({ alignment: AlignmentType.LEFT, spacing: { after: 0, line: 300 }, children: [run("บอกเลิกสัญญาและขอให้คืนทรัพย์สินที่เช่าซื้อ", { bold: true, size: 26 })] }),
               ],
             }),
           ],
@@ -200,7 +200,7 @@ function buildContract(r: NoticePrintData, cfg: CompanyConfig, logo: ReturnType<
       ],
     }),
   );
-  out.push(spacer(80));
+  out.push(spacer(170));
 
   // ── meta ──
   out.push(
@@ -215,7 +215,7 @@ function buildContract(r: NoticePrintData, cfg: CompanyConfig, logo: ReturnType<
       ],
     }),
   );
-  out.push(spacer(50));
+  out.push(spacer(180));
 
   // ── เรื่อง / เรียน / อ้างถึง ──
   out.push(
@@ -230,9 +230,9 @@ function buildContract(r: NoticePrintData, cfg: CompanyConfig, logo: ReturnType<
       ],
     }),
   );
-  out.push(spacer(30));
+  out.push(spacer(150));
 
-  out.push(para([run(`ตามที่ท่านได้เข้าทำสัญญาเช่าซื้อ กับทางบริษัท ${cfg.companyName} ดังมีรายละเอียดดังนี้`)], { spacingAfter: 80 }));
+  out.push(para([run(`ตามที่ท่านได้เข้าทำสัญญาเช่าซื้อ กับทางบริษัท ${cfg.companyName} ดังมีรายละเอียดดังนี้`)], { spacingAfter: 140 }));
 
   // ── ตาราง A: อุปกรณ์ ──
   out.push(
@@ -240,8 +240,8 @@ function buildContract(r: NoticePrintData, cfg: CompanyConfig, logo: ReturnType<
       width: { size: 100, type: WidthType.PERCENTAGE },
       borders: BOX_BORDERS,
       rows: [
-        new TableRow({ children: [dcell("โทรศัพท์มือถือ รุ่น - หน่วยความจำ", 40, { header: true }), dcell("หมายเลข IMEI", 32, { header: true }), dcell("หมายเลข Serial", 28, { header: true })] }),
-        new TableRow({ children: [dcell(r.model ?? "-", 40), dcell(r.imei ?? "-", 32), dcell(r.serialNo ?? "-", 28)] }),
+        new TableRow({ children: [dcell("โทรศัพท์มือถือ รุ่น - หน่วยความจำ", 46, { header: true }), dcell("หมายเลข IMEI", 28, { header: true }), dcell("หมายเลข Serial", 26, { header: true })] }),
+        new TableRow({ children: [dcell(r.model ?? "-", 46), dcell(r.imei ?? "-", 28), dcell(r.serialNo ?? "-", 26)] }),
       ],
     }),
   );
@@ -251,12 +251,12 @@ function buildContract(r: NoticePrintData, cfg: CompanyConfig, logo: ReturnType<
       width: { size: 100, type: WidthType.PERCENTAGE },
       borders: BOX_BORDERS,
       rows: [
-        new TableRow({ children: [dcell("วันที่ทำสัญญา", 24, { header: true }), dcell("ราคาเช่าซื้อ(บาท)", 20, { header: true }), dcell("ผ่อนชำระเดือนละ", 20, { header: true }), dcell("จ.งวด", 12, { header: true }), dcell("ยอดที่ได้ชำระแล้ว", 24, { header: true })] }),
-        new TableRow({ children: [dcell(fmtThaiDate(r.approveDate), 24), dcell(fmtMoney(hpTotal), 20), dcell(fmtMoney(inst), 20), dcell(String(r.installmentCount ?? "-"), 12), dcell(fmtMoney(paid), 24)] }),
+        new TableRow({ children: [dcell("วันที่ทำสัญญา", 18, { header: true }), dcell("ราคาเช่าซื้อ(บาท)", 18, { header: true }), dcell("ผ่อนชำระเดือนละ", 18, { header: true }), dcell("จ.น.งวด", 9, { header: true }), dcell("ยอดที่ได้ชำระแล้ว", 37, { header: true })] }),
+        new TableRow({ children: [dcell(fmtThaiDate(r.approveDate), 18), dcell(fmtMoney(hpTotal), 18), dcell(fmtMoney(inst), 18), dcell(String(r.installmentCount ?? "-"), 9), dcell(fmtMoney(paid), 37)] }),
       ],
     }),
   );
-  out.push(spacer(70));
+  out.push(spacer(150));
 
   // ── เนื้อหา ──
   out.push(
@@ -281,9 +281,10 @@ function buildContract(r: NoticePrintData, cfg: CompanyConfig, logo: ReturnType<
     ], { spacingAfter: 160 }),
   );
 
-  // ── ลงชื่อ ──
-  out.push(para([run("ขอแสดงความนับถือ")], { align: AlignmentType.CENTER, spacingAfter: 20 }));
-  out.push(para([run(cfg.companyName, { bold: true })], { align: AlignmentType.CENTER, spacingAfter: 140 }));
+  // ── ลงชื่อ (เว้นที่ว่างด้านบนสำหรับเซ็น) ──
+  out.push(spacer(420));
+  out.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 20, line: 320 }, children: [run("ขอแสดงความนับถือ")] }));
+  out.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 180, line: 320 }, children: [run(cfg.companyName, { bold: true })] }));
 
   // ── ช่องทางการชำระเงิน ──
   if (cfg.bankAccount) {
@@ -363,13 +364,13 @@ export async function buildNoticeDocx(records: NoticePrintData[], section: Secti
 
   const frameBorder = { style: BorderStyle.SINGLE, size: 4, color: "333333", space: 22 } as const;
   const doc = new Document({
-    styles: { default: { document: { run: { font: FONT, size: 24 } } } },
+    styles: { default: { document: { run: { font: FONT, size: 22 } } } },
     sections: [
       {
         properties: {
           page: {
             size: { width: 11906, height: 16838 }, // A4 portrait (twips)
-            margin: { top: 1200, right: 1700, bottom: 1200, left: 1700 }, // คอลัมน์แคบเหมือนตัวอย่าง (ซ้าย-ขวากว้าง, บน-ล่างกระชับ)
+            margin: { top: 850, right: 1700, bottom: 850, left: 1700 }, // คอลัมน์แคบเหมือนตัวอย่าง (ซ้าย-ขวากว้าง, บน-ล่างกระชับ)
             borders: {
               pageBorderTop: frameBorder,
               pageBorderRight: frameBorder,
