@@ -16,8 +16,10 @@ import {
   AlignmentType,
   BorderStyle,
   Document,
+  Footer,
   ImageRun,
   Packer,
+  PageBorderOffsetFrom,
   Paragraph,
   Table,
   TableCell,
@@ -148,7 +150,7 @@ function dcell(text: string, widthPct: number, opts: { header?: boolean; bold?: 
     width: { size: widthPct, type: WidthType.PERCENTAGE },
     verticalAlign: VerticalAlign.CENTER,
     shading: opts.header ? { fill: "EFEFEF" } : undefined,
-    margins: { top: 28, bottom: 28, left: 28, right: 28 },
+    margins: { top: 80, bottom: 80, left: 28, right: 28 },
     children: [new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 0, line: 244 }, children: [run(text, { bold: opts.header || opts.bold, size: opts.size ?? 18 })] })],
   });
 }
@@ -172,7 +174,7 @@ function buildContract(r: NoticePrintData, cfg: CompanyConfig, logo: ReturnType<
 
   // ระยะช่องเซ็นเหนือ "ขอแสดงความนับถือ" — เว้นเยอะเพื่อดันส่วนท้ายให้ชิดขอบล่าง
   // (จูนให้กรณีชื่อรุ่นยาวตก 2 บรรทัดยังพอดี 1 หน้า A4)
-  const signatureGap = 1600;
+  const signatureGap = 1150;
 
   const out: (Paragraph | Table)[] = [];
 
@@ -338,15 +340,25 @@ function buildContract(r: NoticePrintData, cfg: CompanyConfig, logo: ReturnType<
     }),
   );
 
-  // ── footer อัตโนมัติ (บรรทัดเดียว ตัวเล็ก ชิดล่างสุด) ──
-  out.push(
-    new Paragraph({
-      spacing: { after: 0, before: 120, line: 240 },
-      children: [run(`หนังสือฉบับนี้เป็นจดหมายอัตโนมัติ จากทางบริษัท ${cfg.companyName} ทางบริษัทขออภัยหากท่านได้ชำระมาก่อนหน้านี้`, { italics: true, size: 15, color: "777777" })],
-    }),
-  );
-
+  // footer อัตโนมัติย้ายไปอยู่ใน page footer (ล็อกตำแหน่งชิดขอบล่าง) — ดู buildNoticeDocx
   return out;
+}
+
+/** Footer อัตโนมัติ (บรรทัดเดียว) วางในส่วนท้ายหน้า — ระยะจากขอบล่างเท่าขอบบน */
+function buildAutoFooter(cfg: CompanyConfig): Footer {
+  return new Footer({
+    children: [
+      new Paragraph({
+        spacing: { after: 0, before: 0, line: 240 },
+        children: [
+          run(
+            `หนังสือฉบับนี้เป็นจดหมายอัตโนมัติ จากทาง ${cfg.companyName} ทางบริษัทขออภัยหากท่านได้ชำระมาก่อนหน้านี้`,
+            { italics: true, size: 18, color: "777777" },
+          ),
+        ],
+      }),
+    ],
+  });
 }
 
 /** สร้าง DOCX (ทุกสัญญารวมเป็นไฟล์เดียว, 1 หน้า/สัญญา) คืนเป็น Buffer */
@@ -371,7 +383,8 @@ export async function buildNoticeDocx(records: NoticePrintData[], section: Secti
     children.push(...buildContract(r, cfg, logo, qr));
   });
 
-  const frameBorder = { style: BorderStyle.SINGLE, size: 4, color: "333333", space: 22 } as const;
+  // กรอบหน้าอ้างอิงจากขอบกระดาษ (offsetFrom page) เพื่อให้ footer ที่อยู่ใกล้ขอบล่างยังอยู่ในกรอบ
+  const frameBorder = { style: BorderStyle.SINGLE, size: 4, color: "333333", space: 28 } as const;
   const doc = new Document({
     styles: { default: { document: { run: { font: FONT, size: 20 } } } },
     sections: [
@@ -379,8 +392,10 @@ export async function buildNoticeDocx(records: NoticePrintData[], section: Secti
         properties: {
           page: {
             size: { width: 11906, height: 16838 }, // A4 portrait (twips)
-            margin: { top: 900, right: 900, bottom: 900, left: 900 }, // ขอบทั้ง 4 ด้านเท่ากัน
+            // top เท่ากับ footer (900) เพื่อให้ระยะหัว-ท้ายเท่ากัน; bottom เผื่อไม่ให้เนื้อหาทับ footer
+            margin: { top: 900, right: 900, bottom: 1300, left: 900, footer: 900 },
             borders: {
+              pageBorders: { offsetFrom: PageBorderOffsetFrom.PAGE },
               pageBorderTop: frameBorder,
               pageBorderRight: frameBorder,
               pageBorderBottom: frameBorder,
@@ -388,6 +403,7 @@ export async function buildNoticeDocx(records: NoticePrintData[], section: Secti
             },
           },
         },
+        footers: { default: buildAutoFooter(cfg) },
         children,
       },
     ],
