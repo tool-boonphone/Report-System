@@ -31,7 +31,9 @@ import { bahtText } from "./bahtText";
 import type { NoticePrintData } from "../noticeDb";
 import type { SectionKey } from "../../shared/const";
 
-const FONT = "TH Sarabun New";
+// ฟอนต์ Sarabun (OFL) — bundle ใน assets/fonts และติดตั้งใน Docker image
+// หน้าตาเหมือน TH Sarabun New แต่เป็นฟอนต์เสรีที่ติดตั้งบน server ได้แน่นอน
+const FONT = "Sarabun";
 
 type CompanyConfig = {
   companyName: string;
