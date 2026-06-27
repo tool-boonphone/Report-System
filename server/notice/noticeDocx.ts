@@ -121,14 +121,14 @@ function loadLogo(section: SectionKey): { data: Buffer; width: number; height: n
 }
 
 function run(text: string, opts: { bold?: boolean; italics?: boolean; size?: number; color?: string } = {}): TextRun {
-  return new TextRun({ text, font: FONT, bold: opts.bold, italics: opts.italics, size: opts.size ?? 22, color: opts.color });
+  return new TextRun({ text, font: FONT, bold: opts.bold, italics: opts.italics, size: opts.size ?? 20, color: opts.color });
 }
 function para(children: TextRun[], opts: { align?: (typeof AlignmentType)[keyof typeof AlignmentType]; spacingAfter?: number; pageBreakBefore?: boolean; spacingBefore?: number } = {}): Paragraph {
   return new Paragraph({
     children,
     alignment: opts.align,
     pageBreakBefore: opts.pageBreakBefore,
-    spacing: { after: opts.spacingAfter ?? 150, before: opts.spacingBefore ?? 0, line: 320 },
+    spacing: { after: opts.spacingAfter ?? 200, before: opts.spacingBefore ?? 0, line: 320 },
   });
 }
 
@@ -148,8 +148,8 @@ function dcell(text: string, widthPct: number, opts: { header?: boolean; bold?: 
     width: { size: widthPct, type: WidthType.PERCENTAGE },
     verticalAlign: VerticalAlign.CENTER,
     shading: opts.header ? { fill: "EFEFEF" } : undefined,
-    margins: { top: 26, bottom: 26, left: 30, right: 30 },
-    children: [new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 0, line: 248 }, children: [run(text, { bold: opts.header || opts.bold, size: opts.size ?? 19 })] })],
+    margins: { top: 28, bottom: 28, left: 28, right: 28 },
+    children: [new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 0, line: 244 }, children: [run(text, { bold: opts.header || opts.bold, size: opts.size ?? 18 })] })],
   });
 }
 /** เซลล์ label/value แบบไม่มีกรอบ (กำหนดความกว้างเป็น twips/DXA เพื่อให้ค่าชิดป้ายกำกับ) */
@@ -170,6 +170,10 @@ function buildContract(r: NoticePrintData, cfg: CompanyConfig, logo: ReturnType<
   const paid = (r.paidInstallments ?? 0) * inst;
   const due = Math.max(0, hpTotal - paid);
 
+  // ระยะช่องเซ็นเหนือ "ขอแสดงความนับถือ" — เว้นเยอะเพื่อดันส่วนท้ายให้ชิดขอบล่าง
+  // (จูนให้กรณีชื่อรุ่นยาวตก 2 บรรทัดยังพอดี 1 หน้า A4)
+  const signatureGap = 1600;
+
   const out: (Paragraph | Table)[] = [];
 
   // ── หัวจดหมาย: โลโก้ (ซ้าย) + ชื่อเอกสาร (ขวา) ──
@@ -180,19 +184,19 @@ function buildContract(r: NoticePrintData, cfg: CompanyConfig, logo: ReturnType<
   out.push(
     new Table({
       width: { size: 100, type: WidthType.PERCENTAGE },
-      columnWidths: [3200, 5306],
+      columnWidths: [3400, 6706],
       borders: NO_BORDERS,
       rows: [
         new TableRow({
           children: [
-            new TableCell({ width: { size: 3200, type: WidthType.DXA }, borders: NO_BORDERS, verticalAlign: VerticalAlign.CENTER, children: logoChildren }),
+            new TableCell({ width: { size: 3400, type: WidthType.DXA }, borders: NO_BORDERS, verticalAlign: VerticalAlign.CENTER, children: logoChildren }),
             new TableCell({
-              width: { size: 5306, type: WidthType.DXA },
+              width: { size: 6706, type: WidthType.DXA },
               borders: NO_BORDERS,
               verticalAlign: VerticalAlign.CENTER,
               children: [
-                new Paragraph({ alignment: AlignmentType.LEFT, spacing: { after: 0, line: 300 }, children: [run("หนังสือติดตามค่าเช่าซื้อ -", { bold: true, size: 26 })] }),
-                new Paragraph({ alignment: AlignmentType.LEFT, spacing: { after: 0, line: 300 }, children: [run("บอกเลิกสัญญาและขอให้คืนทรัพย์สินที่เช่าซื้อ", { bold: true, size: 26 })] }),
+                new Paragraph({ alignment: AlignmentType.LEFT, spacing: { after: 0, line: 288 }, children: [run("หนังสือติดตามค่าเช่าซื้อ -", { bold: true, size: 24 })] }),
+                new Paragraph({ alignment: AlignmentType.LEFT, spacing: { after: 0, line: 288 }, children: [run("บอกเลิกสัญญาและขอให้คืนทรัพย์สินที่เช่าซื้อ", { bold: true, size: 24 })] }),
               ],
             }),
           ],
@@ -200,48 +204,49 @@ function buildContract(r: NoticePrintData, cfg: CompanyConfig, logo: ReturnType<
       ],
     }),
   );
-  out.push(spacer(170));
+  out.push(spacer(240));
 
   // ── meta ──
   out.push(
     new Table({
       width: { size: 100, type: WidthType.PERCENTAGE },
-      columnWidths: [2100, 6406],
+      columnWidths: [2100, 8006],
       borders: NO_BORDERS,
       rows: [
-        new TableRow({ children: [lvCell([run("หนังสือเลขที่", { bold: true })], 2100), lvCell([run(docNo)], 6406)] }),
-        new TableRow({ children: [lvCell([run("วันที่", { bold: true })], 2100), lvCell([run(todayThai())], 6406)] }),
-        new TableRow({ children: [lvCell([run("สัญญาเช่าซื้อเลขที่", { bold: true })], 2100), lvCell([run(r.contractNo)], 6406)] }),
+        new TableRow({ children: [lvCell([run("หนังสือเลขที่", { bold: true })], 2100), lvCell([run(docNo)], 8006)] }),
+        new TableRow({ children: [lvCell([run("วันที่", { bold: true })], 2100), lvCell([run(todayThai())], 8006)] }),
+        new TableRow({ children: [lvCell([run("สัญญาเช่าซื้อเลขที่", { bold: true })], 2100), lvCell([run(r.contractNo)], 8006)] }),
       ],
     }),
   );
-  out.push(spacer(180));
+  out.push(spacer(260));
 
   // ── เรื่อง / เรียน / อ้างถึง ──
   out.push(
     new Table({
       width: { size: 100, type: WidthType.PERCENTAGE },
-      columnWidths: [1400, 7106],
+      columnWidths: [1400, 8706],
       borders: NO_BORDERS,
       rows: [
-        new TableRow({ children: [lvCell([run("เรื่อง", { bold: true })], 1400), lvCell([run("ขอให้ชำระหนี้ค่าเช่าซื้อค้างชำระ - บอกเลิกสัญญาและขอให้คืนทรัพย์สินที่เช่าซื้อ")], 7106)] }),
-        new TableRow({ children: [lvCell([run("เรียน", { bold: true })], 1400), lvCell([run(r.customerName ?? "-", { bold: true })], 7106)] }),
-        new TableRow({ children: [lvCell([run("อ้างถึง", { bold: true })], 1400), lvCell([run("ยอดค่าเช่าซื้อค้างชำระของ  "), run(r.customerName ?? "-", { bold: true })], 7106)] }),
+        new TableRow({ children: [lvCell([run("เรื่อง", { bold: true })], 1400), lvCell([run("ขอให้ชำระหนี้ค่าเช่าซื้อค้างชำระ - บอกเลิกสัญญาและขอให้คืนทรัพย์สินที่เช่าซื้อ")], 8706)] }),
+        new TableRow({ children: [lvCell([run("เรียน", { bold: true })], 1400), lvCell([run(r.customerName ?? "-", { bold: true })], 8706)] }),
+        new TableRow({ children: [lvCell([run("อ้างถึง", { bold: true })], 1400), lvCell([run("ยอดค่าเช่าซื้อค้างชำระของ  "), run(r.customerName ?? "-", { bold: true })], 8706)] }),
       ],
     }),
   );
-  out.push(spacer(150));
+  out.push(spacer(220));
 
-  out.push(para([run(`ตามที่ท่านได้เข้าทำสัญญาเช่าซื้อ กับทางบริษัท ${cfg.companyName} ดังมีรายละเอียดดังนี้`)], { spacingAfter: 140 }));
+  out.push(para([run(`ตามที่ท่านได้เข้าทำสัญญาเช่าซื้อ กับทางบริษัท ${cfg.companyName} ดังมีรายละเอียดดังนี้`)], { spacingAfter: 180 }));
 
-  // ── ตาราง A: อุปกรณ์ ──
+  // ── ตาราง A: อุปกรณ์ (คอลัมน์รุ่นกว้างเผื่อชื่อรุ่นยาว) ──
   out.push(
     new Table({
       width: { size: 100, type: WidthType.PERCENTAGE },
+      columnWidths: [5400, 2500, 2206],
       borders: BOX_BORDERS,
       rows: [
-        new TableRow({ children: [dcell("โทรศัพท์มือถือ รุ่น - หน่วยความจำ", 46, { header: true }), dcell("หมายเลข IMEI", 28, { header: true }), dcell("หมายเลข Serial", 26, { header: true })] }),
-        new TableRow({ children: [dcell(r.model ?? "-", 46), dcell(r.imei ?? "-", 28), dcell(r.serialNo ?? "-", 26)] }),
+        new TableRow({ children: [dcell("โทรศัพท์มือถือ รุ่น - หน่วยความจำ", 54, { header: true }), dcell("หมายเลข IMEI", 25, { header: true }), dcell("หมายเลข Serial", 21, { header: true })] }),
+        new TableRow({ children: [dcell(r.model ?? "-", 54), dcell(r.imei ?? "-", 25), dcell(r.serialNo ?? "-", 21)] }),
       ],
     }),
   );
@@ -256,7 +261,7 @@ function buildContract(r: NoticePrintData, cfg: CompanyConfig, logo: ReturnType<
       ],
     }),
   );
-  out.push(spacer(150));
+  out.push(spacer(220));
 
   // ── เนื้อหา ──
   out.push(
@@ -281,21 +286,22 @@ function buildContract(r: NoticePrintData, cfg: CompanyConfig, logo: ReturnType<
     ], { spacingAfter: 160 }),
   );
 
-  // ── ลงชื่อ (เว้นที่ว่างด้านบนสำหรับเซ็น) ──
-  out.push(spacer(420));
-  out.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 20, line: 320 }, children: [run("ขอแสดงความนับถือ")] }));
-  out.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 180, line: 320 }, children: [run(cfg.companyName, { bold: true })] }));
+  // ── ลงชื่อ (เว้นที่ว่างด้านบนเยอะ ๆ สำหรับเซ็น, จัดเยื้องขวา) ──
+  out.push(spacer(signatureGap));
+  out.push(new Paragraph({ alignment: AlignmentType.RIGHT, spacing: { after: 20, line: 300 }, indent: { right: 600 }, children: [run("ขอแสดงความนับถือ")] }));
+  out.push(new Paragraph({ alignment: AlignmentType.RIGHT, spacing: { after: 220, line: 300 }, indent: { right: 600 }, children: [run(cfg.companyName, { bold: true })] }));
 
-  // ── ช่องทางการชำระเงิน ──
+  // ── ช่องทางการชำระเงิน (ชื่อบัญชีตัดลงบรรทัดใหม่) ──
   if (cfg.bankAccount) {
     out.push(
       new Table({
         width: { size: 100, type: WidthType.PERCENTAGE },
-        columnWidths: [2700, 5806],
+        columnWidths: [2900, 7206],
         borders: NO_BORDERS,
         rows: [
-          new TableRow({ children: [lvCell([run("ช่องทางการชำระเงิน", { bold: true })], 2700), lvCell([run(cfg.bankName)], 5806)] }),
-          new TableRow({ children: [lvCell([run("")], 2700), lvCell([run(`เลขที่ ${cfg.bankAccount}  ชื่อบัญชี ${cfg.accountName}`, { bold: true })], 5806)] }),
+          new TableRow({ children: [lvCell([run("ช่องทางการชำระเงิน", { bold: true })], 2900), lvCell([run(cfg.bankName)], 7206)] }),
+          new TableRow({ children: [lvCell([run("")], 2900), lvCell([run(`เลขที่ ${cfg.bankAccount}`, { bold: true })], 7206)] }),
+          new TableRow({ children: [lvCell([run("")], 2900), lvCell([run(`ชื่อบัญชี ${cfg.accountName}`, { bold: true })], 7206)] }),
         ],
       }),
     );
@@ -303,39 +309,42 @@ function buildContract(r: NoticePrintData, cfg: CompanyConfig, logo: ReturnType<
 
   // ── ติดต่อ (ซ้าย) + QR LINE (ขวา) ──
   const contactCellChildren: Paragraph[] = [
-    new Paragraph({ spacing: { after: 0, line: 312 }, children: [run("โปรดติดต่อ", { bold: true })] }),
-    new Paragraph({ spacing: { after: 0, line: 312 }, children: [run(`${cfg.companyName}${cfg.phone ? `  โทร. ${cfg.phone}` : ""}`, { bold: true })] }),
+    new Paragraph({ spacing: { after: 0, line: 300 }, children: [run("โปรดติดต่อ", { bold: true })] }),
+    new Paragraph({ spacing: { after: 0, line: 300 }, children: [run(`${cfg.companyName}${cfg.phone ? `  โทร. ${cfg.phone}` : ""}`, { bold: true })] }),
   ];
-  if (cfg.address) contactCellChildren.push(new Paragraph({ spacing: { after: 0, line: 312 }, children: [run(`ที่อยู่ ${cfg.address}`)] }));
-  contactCellChildren.push(new Paragraph({ spacing: { after: 0, line: 312 }, children: [run(`เลขทะเบียนนิติบุคคล ${cfg.regNo}`, { size: 24, color: "555555" })] }));
+  if (cfg.address) contactCellChildren.push(new Paragraph({ spacing: { after: 0, line: 300 }, children: [run(`ที่อยู่ ${cfg.address}`)] }));
 
   const qrCellChildren: Paragraph[] = qr
     ? [
-        new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 0, line: 240 }, children: [run("ไลน์ติดต่อแอด / แนบสลิปโอนเงิน", { size: 24 })] }),
-        new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 0 }, children: [new ImageRun({ type: "png", data: qr, transformation: { width: 96, height: 96 } })] }),
-        new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 0, line: 240 }, children: [run(`LINE: ${cfg.lineId}`, { size: 24, bold: true })] }),
+        new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 0, line: 200 }, children: [run("ไลน์ติดต่อ / แนบสลิปโอนเงิน", { size: 15 })] }),
+        new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 0 }, children: [new ImageRun({ type: "png", data: qr, transformation: { width: 92, height: 92 } })] }),
+        new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 0, line: 200 }, children: [run(`LINE: ${cfg.lineId}`, { size: 17, bold: true })] }),
       ]
     : [new Paragraph({ children: [] })];
 
   out.push(
     new Table({
       width: { size: 100, type: WidthType.PERCENTAGE },
-      columnWidths: [5900, 2606],
+      columnWidths: [7100, 3006],
       borders: NO_BORDERS,
       rows: [
         new TableRow({
           children: [
-            new TableCell({ width: { size: 5900, type: WidthType.DXA }, borders: NO_BORDERS, verticalAlign: VerticalAlign.BOTTOM, margins: { top: 60, bottom: 0, left: 0, right: 0 }, children: contactCellChildren }),
-            new TableCell({ width: { size: 2606, type: WidthType.DXA }, borders: NO_BORDERS, verticalAlign: VerticalAlign.BOTTOM, children: qrCellChildren }),
+            new TableCell({ width: { size: 7100, type: WidthType.DXA }, borders: NO_BORDERS, verticalAlign: VerticalAlign.BOTTOM, margins: { top: 60, bottom: 0, left: 0, right: 0 }, children: contactCellChildren }),
+            new TableCell({ width: { size: 3006, type: WidthType.DXA }, borders: NO_BORDERS, verticalAlign: VerticalAlign.BOTTOM, children: qrCellChildren }),
           ],
         }),
       ],
     }),
   );
 
-  // ── footer อัตโนมัติ ──
-  out.push(para([run(`หนังสือฉบับนี้เป็นจดหมายอัตโนมัติ จากทางบริษัท ${cfg.companyName}`, { italics: true, size: 24, color: "555555" })], { spacingAfter: 0, spacingBefore: 140 }));
-  out.push(para([run("ทางบริษัทขออภัยหากท่านได้ชำระมาก่อนหน้านี้", { italics: true, size: 24, color: "555555" })], { spacingAfter: 0 }));
+  // ── footer อัตโนมัติ (บรรทัดเดียว ตัวเล็ก ชิดล่างสุด) ──
+  out.push(
+    new Paragraph({
+      spacing: { after: 0, before: 120, line: 240 },
+      children: [run(`หนังสือฉบับนี้เป็นจดหมายอัตโนมัติ จากทางบริษัท ${cfg.companyName} ทางบริษัทขออภัยหากท่านได้ชำระมาก่อนหน้านี้`, { italics: true, size: 15, color: "777777" })],
+    }),
+  );
 
   return out;
 }
@@ -364,13 +373,13 @@ export async function buildNoticeDocx(records: NoticePrintData[], section: Secti
 
   const frameBorder = { style: BorderStyle.SINGLE, size: 4, color: "333333", space: 22 } as const;
   const doc = new Document({
-    styles: { default: { document: { run: { font: FONT, size: 22 } } } },
+    styles: { default: { document: { run: { font: FONT, size: 20 } } } },
     sections: [
       {
         properties: {
           page: {
             size: { width: 11906, height: 16838 }, // A4 portrait (twips)
-            margin: { top: 850, right: 1700, bottom: 850, left: 1700 }, // คอลัมน์แคบเหมือนตัวอย่าง (ซ้าย-ขวากว้าง, บน-ล่างกระชับ)
+            margin: { top: 900, right: 900, bottom: 900, left: 900 }, // ขอบทั้ง 4 ด้านเท่ากัน
             borders: {
               pageBorderTop: frameBorder,
               pageBorderRight: frameBorder,
