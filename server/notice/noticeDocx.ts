@@ -26,6 +26,7 @@ import {
   VerticalAlign,
   WidthType,
 } from "docx";
+import QRCode from "qrcode";
 import { bahtText } from "./bahtText";
 import type { NoticePrintData } from "../noticeDb";
 import type { SectionKey } from "../../shared/const";
@@ -34,33 +35,47 @@ const FONT = "TH Sarabun New";
 
 type CompanyConfig = {
   companyName: string;
+  regNo: string;
   logoFile: string; // ไฟล์ใน client/public
-  bankLine: string;
+  bankName: string;
   bankAccount: string;
+  accountName: string;
   phone: string;
   address: string;
+  lineId: string;
 };
 
-/** ข้อมูลบริษัทแยกตาม section (Fastfone อ้างอิงจากเอกสารตัวอย่าง) */
+/** ข้อมูลบริษัทแยกตาม section */
 const COMPANY: Record<SectionKey, CompanyConfig> = {
   Fastfone365: {
     companyName: "บริษัท ฟาสต์โฟน365 จำกัด",
+    regNo: "0125567022106",
     logoFile: "logo-fastfone365.png",
-    bankLine: "ธนาคารกสิกรไทย สาขาโรบินสันไลฟ์สไตล์ ราชพฤกษ์",
+    bankName: "ธนาคารกสิกรไทย",
     bankAccount: "187-8-36503-4",
+    accountName: "บจก.ฟาสต์โฟน365",
     phone: "02-028-7777",
-    address: "29-89 หมู่ที่ 2 ตำบลลำโพ อำเภอบางบัวทอง จังหวัดนนทบุรี 11110",
+    address: "29/89 หมู่ที่ 2 ตำบลลำโพ อำเภอบางบัวทอง จังหวัดนนทบุรี 11110",
+    lineId: "@fastfone365",
   },
   Boonphone: {
     companyName: "บริษัท บุญโฟน จำกัด",
+    regNo: "0135568033136",
     logoFile: "logo-boonphone.png",
-    // หมายเหตุ: ข้อมูลธนาคาร/เบอร์/ที่อยู่ของ Boonphone รอยืนยันจากผู้ใช้
-    bankLine: "",
-    bankAccount: "",
-    phone: "",
-    address: "",
+    bankName: "ธนาคารกสิกรไทย",
+    bankAccount: "221-1-46917-2",
+    accountName: "บจก.บุญโฟน",
+    phone: "02 460 9999",
+    address: "459 ถนนบอนด์สตรีท ตำบลบางพูด อำเภอปากเกร็ด จังหวัดนนทบุรี 11120",
+    lineId: "@boonphone",
   },
 };
+
+/** LINE add-friend URL จาก LINE ID (เช่น @boonphone) */
+function lineAddUrl(lineId: string): string {
+  const id = lineId.startsWith("@") ? lineId.slice(1) : lineId;
+  return `https://line.me/R/ti/p/@${id}`;
+}
 
 const THAI_MONTHS = [
   "มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน",
@@ -104,14 +119,14 @@ function loadLogo(section: SectionKey): { data: Buffer; width: number; height: n
 }
 
 function run(text: string, opts: { bold?: boolean; italics?: boolean; size?: number; color?: string } = {}): TextRun {
-  return new TextRun({ text, font: FONT, bold: opts.bold, italics: opts.italics, size: opts.size ?? 30, color: opts.color });
+  return new TextRun({ text, font: FONT, bold: opts.bold, italics: opts.italics, size: opts.size ?? 28, color: opts.color });
 }
 function para(children: TextRun[], opts: { align?: (typeof AlignmentType)[keyof typeof AlignmentType]; spacingAfter?: number; pageBreakBefore?: boolean; spacingBefore?: number } = {}): Paragraph {
   return new Paragraph({
     children,
     alignment: opts.align,
     pageBreakBefore: opts.pageBreakBefore,
-    spacing: { after: opts.spacingAfter ?? 100, before: opts.spacingBefore ?? 0, line: 300 },
+    spacing: { after: opts.spacingAfter ?? 60, before: opts.spacingBefore ?? 0, line: 252 },
   });
 }
 
@@ -126,8 +141,8 @@ function dcell(text: string, widthPct: number, opts: { header?: boolean; bold?: 
     width: { size: widthPct, type: WidthType.PERCENTAGE },
     verticalAlign: VerticalAlign.CENTER,
     shading: opts.header ? { fill: "EFEFEF" } : undefined,
-    margins: { top: 30, bottom: 30, left: 60, right: 60 },
-    children: [new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 0, line: 260 }, children: [run(text, { bold: opts.header || opts.bold, size: 28 })] })],
+    margins: { top: 20, bottom: 20, left: 60, right: 60 },
+    children: [new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 0, line: 232 }, children: [run(text, { bold: opts.header || opts.bold, size: 26 })] })],
   });
 }
 /** เซลล์ label/value แบบไม่มีกรอบ */
@@ -135,12 +150,12 @@ function lvCell(children: TextRun[], widthPct: number, align?: (typeof Alignment
   return new TableCell({
     width: { size: widthPct, type: WidthType.PERCENTAGE },
     borders: NO_BORDERS,
-    margins: { top: 10, bottom: 10, left: 0, right: 60 },
-    children: [new Paragraph({ alignment: align, spacing: { after: 0, line: 300 }, children })],
+    margins: { top: 6, bottom: 6, left: 0, right: 60 },
+    children: [new Paragraph({ alignment: align, spacing: { after: 0, line: 252 }, children })],
   });
 }
 
-function buildContract(r: NoticePrintData, cfg: CompanyConfig, logo: ReturnType<typeof loadLogo>): (Paragraph | Table)[] {
+function buildContract(r: NoticePrintData, cfg: CompanyConfig, logo: ReturnType<typeof loadLogo>, qr: Buffer | null): (Paragraph | Table)[] {
   const round = r.sentCount + 1;
   const docNo = `${r.contractNo}-N${round}`;
   const inst = r.installmentAmount ?? 0;
@@ -168,8 +183,8 @@ function buildContract(r: NoticePrintData, cfg: CompanyConfig, logo: ReturnType<
               borders: NO_BORDERS,
               verticalAlign: VerticalAlign.CENTER,
               children: [
-                new Paragraph({ alignment: AlignmentType.RIGHT, spacing: { after: 0, line: 300 }, children: [run("หนังสือติดตามค่าเช่าซื้อ -", { bold: true, size: 32 })] }),
-                new Paragraph({ alignment: AlignmentType.RIGHT, spacing: { after: 0, line: 300 }, children: [run("บอกเลิกสัญญาและขอให้คืนทรัพย์สินที่เช่าซื้อ", { bold: true, size: 32 })] }),
+                new Paragraph({ alignment: AlignmentType.RIGHT, spacing: { after: 0, line: 276 }, children: [run("หนังสือติดตามค่าเช่าซื้อ -", { bold: true, size: 30 })] }),
+                new Paragraph({ alignment: AlignmentType.RIGHT, spacing: { after: 0, line: 276 }, children: [run("บอกเลิกสัญญาและขอให้คืนทรัพย์สินที่เช่าซื้อ", { bold: true, size: 30 })] }),
               ],
             }),
           ],
@@ -261,23 +276,49 @@ function buildContract(r: NoticePrintData, cfg: CompanyConfig, logo: ReturnType<
   out.push(para([run(cfg.companyName, { bold: true })], { align: AlignmentType.CENTER, spacingAfter: 140 }));
 
   // ── ช่องทางการชำระเงิน ──
-  if (cfg.bankLine || cfg.bankAccount) {
+  if (cfg.bankAccount) {
     out.push(
       new Table({
         width: { size: 100, type: WidthType.PERCENTAGE },
         borders: NO_BORDERS,
         rows: [
-          new TableRow({ children: [lvCell([run("ช่องทางการชำระเงิน", { bold: true })], 26), lvCell([run(cfg.bankLine)], 74)] }),
-          new TableRow({ children: [lvCell([run("")], 26), lvCell([run(`เลขที่ ${cfg.bankAccount}`, { bold: true })], 74)] }),
+          new TableRow({ children: [lvCell([run("ช่องทางการชำระเงิน", { bold: true })], 26), lvCell([run(cfg.bankName)], 74)] }),
+          new TableRow({ children: [lvCell([run("")], 26), lvCell([run(`เลขที่ ${cfg.bankAccount}  ชื่อบัญชี ${cfg.accountName}`, { bold: true })], 74)] }),
         ],
       }),
     );
   }
 
-  // ── ติดต่อ ──
-  out.push(para([run("โปรดติดต่อ", { bold: true })], { spacingAfter: 0, spacingBefore: 60 }));
-  out.push(para([run(`${cfg.companyName}${cfg.phone ? `  โทร. ${cfg.phone}` : ""}`, { bold: true })], { spacingAfter: 0 }));
-  if (cfg.address) out.push(para([run(`ที่อยู่ ${cfg.address}`)], { spacingAfter: 120 }));
+  // ── ติดต่อ (ซ้าย) + QR LINE (ขวา) ──
+  const contactCellChildren: Paragraph[] = [
+    new Paragraph({ spacing: { after: 0, line: 300 }, children: [run("โปรดติดต่อ", { bold: true })] }),
+    new Paragraph({ spacing: { after: 0, line: 300 }, children: [run(`${cfg.companyName}${cfg.phone ? `  โทร. ${cfg.phone}` : ""}`, { bold: true })] }),
+  ];
+  if (cfg.address) contactCellChildren.push(new Paragraph({ spacing: { after: 0, line: 300 }, children: [run(`ที่อยู่ ${cfg.address}`)] }));
+  contactCellChildren.push(new Paragraph({ spacing: { after: 0, line: 300 }, children: [run(`เลขทะเบียนนิติบุคคล ${cfg.regNo}`, { size: 26, color: "555555" })] }));
+
+  const qrCellChildren: Paragraph[] = qr
+    ? [
+        new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 0, line: 240 }, children: [run("ไลน์ติดต่อแอด / แนบสลิปโอนเงิน", { size: 24 })] }),
+        new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 0 }, children: [new ImageRun({ type: "png", data: qr, transformation: { width: 96, height: 96 } })] }),
+        new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 0, line: 240 }, children: [run(`LINE: ${cfg.lineId}`, { size: 24, bold: true })] }),
+      ]
+    : [new Paragraph({ children: [] })];
+
+  out.push(
+    new Table({
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      borders: NO_BORDERS,
+      rows: [
+        new TableRow({
+          children: [
+            new TableCell({ width: { size: 72, type: WidthType.PERCENTAGE }, borders: NO_BORDERS, verticalAlign: VerticalAlign.BOTTOM, margins: { top: 60, bottom: 0, left: 0, right: 0 }, children: contactCellChildren }),
+            new TableCell({ width: { size: 28, type: WidthType.PERCENTAGE }, borders: NO_BORDERS, verticalAlign: VerticalAlign.BOTTOM, children: qrCellChildren }),
+          ],
+        }),
+      ],
+    }),
+  );
 
   // ── footer อัตโนมัติ ──
   out.push(para([run(`หนังสือฉบับนี้เป็นจดหมายอัตโนมัติ จากทางบริษัท ${cfg.companyName}`, { italics: true, size: 26, color: "555555" })], { spacingAfter: 0, spacingBefore: 120 }));
@@ -291,13 +332,21 @@ export async function buildNoticeDocx(records: NoticePrintData[], section: Secti
   const cfg = COMPANY[section] ?? COMPANY.Fastfone365;
   const logo = loadLogo(section);
 
+  // สร้าง QR LINE add-friend (ครั้งเดียวต่อเอกสาร) — คมชัด สแกนได้
+  let qr: Buffer | null = null;
+  try {
+    qr = await QRCode.toBuffer(lineAddUrl(cfg.lineId), { type: "png", margin: 1, width: 240, errorCorrectionLevel: "M" });
+  } catch {
+    qr = null;
+  }
+
   const children: (Paragraph | Table)[] = [];
   records.forEach((r, i) => {
     if (i > 0) {
       // ขึ้นหน้าใหม่ก่อนเริ่มสัญญาถัดไป
       children.push(new Paragraph({ pageBreakBefore: true, spacing: { after: 0 }, children: [] }));
     }
-    children.push(...buildContract(r, cfg, logo));
+    children.push(...buildContract(r, cfg, logo, qr));
   });
 
   const doc = new Document({
