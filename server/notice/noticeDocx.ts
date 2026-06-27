@@ -121,15 +121,20 @@ function loadLogo(section: SectionKey): { data: Buffer; width: number; height: n
 }
 
 function run(text: string, opts: { bold?: boolean; italics?: boolean; size?: number; color?: string } = {}): TextRun {
-  return new TextRun({ text, font: FONT, bold: opts.bold, italics: opts.italics, size: opts.size ?? 28, color: opts.color });
+  return new TextRun({ text, font: FONT, bold: opts.bold, italics: opts.italics, size: opts.size ?? 26, color: opts.color });
 }
 function para(children: TextRun[], opts: { align?: (typeof AlignmentType)[keyof typeof AlignmentType]; spacingAfter?: number; pageBreakBefore?: boolean; spacingBefore?: number } = {}): Paragraph {
   return new Paragraph({
     children,
     alignment: opts.align,
     pageBreakBefore: opts.pageBreakBefore,
-    spacing: { after: opts.spacingAfter ?? 80, before: opts.spacingBefore ?? 0, line: 288 },
+    spacing: { after: opts.spacingAfter ?? 80, before: opts.spacingBefore ?? 0, line: 312 },
   });
+}
+
+/** ช่องว่างแนวตั้งเล็ก ๆ (สูงเท่ากับ after ที่กำหนด ไม่กินพื้นที่หนึ่งบรรทัดเต็ม) */
+function spacer(after: number): Paragraph {
+  return new Paragraph({ spacing: { after, before: 0, line: 1 }, children: [] });
 }
 
 const NO_BORDER = { style: BorderStyle.NONE, size: 0, color: "FFFFFF" } as const;
@@ -143,8 +148,8 @@ function dcell(text: string, widthPct: number, opts: { header?: boolean; bold?: 
     width: { size: widthPct, type: WidthType.PERCENTAGE },
     verticalAlign: VerticalAlign.CENTER,
     shading: opts.header ? { fill: "EFEFEF" } : undefined,
-    margins: { top: 20, bottom: 20, left: 60, right: 60 },
-    children: [new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 0, line: 232 }, children: [run(text, { bold: opts.header || opts.bold, size: 26 })] })],
+    margins: { top: 24, bottom: 24, left: 60, right: 60 },
+    children: [new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 0, line: 264 }, children: [run(text, { bold: opts.header || opts.bold, size: 24 })] })],
   });
 }
 /** เซลล์ label/value แบบไม่มีกรอบ (กำหนดความกว้างเป็น twips/DXA เพื่อให้ค่าชิดป้ายกำกับ) */
@@ -152,8 +157,8 @@ function lvCell(children: TextRun[], widthDxa: number, align?: (typeof Alignment
   return new TableCell({
     width: { size: widthDxa, type: WidthType.DXA },
     borders: NO_BORDERS,
-    margins: { top: 14, bottom: 14, left: 0, right: 80 },
-    children: [new Paragraph({ alignment: align, spacing: { after: 0, line: 276 }, children })],
+    margins: { top: 16, bottom: 16, left: 0, right: 80 },
+    children: [new Paragraph({ alignment: align, spacing: { after: 0, line: 312 }, children })],
   });
 }
 
@@ -186,8 +191,8 @@ function buildContract(r: NoticePrintData, cfg: CompanyConfig, logo: ReturnType<
               borders: NO_BORDERS,
               verticalAlign: VerticalAlign.CENTER,
               children: [
-                new Paragraph({ alignment: AlignmentType.RIGHT, spacing: { after: 0, line: 276 }, children: [run("หนังสือติดตามค่าเช่าซื้อ -", { bold: true, size: 30 })] }),
-                new Paragraph({ alignment: AlignmentType.RIGHT, spacing: { after: 0, line: 276 }, children: [run("บอกเลิกสัญญาและขอให้คืนทรัพย์สินที่เช่าซื้อ", { bold: true, size: 30 })] }),
+                new Paragraph({ alignment: AlignmentType.RIGHT, spacing: { after: 0, line: 288 }, children: [run("หนังสือติดตามค่าเช่าซื้อ -", { bold: true, size: 28 })] }),
+                new Paragraph({ alignment: AlignmentType.RIGHT, spacing: { after: 0, line: 288 }, children: [run("บอกเลิกสัญญาและขอให้คืนทรัพย์สินที่เช่าซื้อ", { bold: true, size: 28 })] }),
               ],
             }),
           ],
@@ -195,7 +200,7 @@ function buildContract(r: NoticePrintData, cfg: CompanyConfig, logo: ReturnType<
       ],
     }),
   );
-  out.push(para([run("")], { spacingAfter: 60 }));
+  out.push(spacer(80));
 
   // ── meta ──
   out.push(
@@ -210,7 +215,7 @@ function buildContract(r: NoticePrintData, cfg: CompanyConfig, logo: ReturnType<
       ],
     }),
   );
-  out.push(para([run("")], { spacingAfter: 40 }));
+  out.push(spacer(50));
 
   // ── เรื่อง / เรียน / อ้างถึง ──
   out.push(
@@ -225,7 +230,7 @@ function buildContract(r: NoticePrintData, cfg: CompanyConfig, logo: ReturnType<
       ],
     }),
   );
-  out.push(para([run("")], { spacingAfter: 20 }));
+  out.push(spacer(30));
 
   out.push(para([run(`ตามที่ท่านได้เข้าทำสัญญาเช่าซื้อ กับทางบริษัท ${cfg.companyName} ดังมีรายละเอียดดังนี้`)], { spacingAfter: 80 }));
 
@@ -251,7 +256,7 @@ function buildContract(r: NoticePrintData, cfg: CompanyConfig, logo: ReturnType<
       ],
     }),
   );
-  out.push(para([run("")], { spacingAfter: 40 }));
+  out.push(spacer(70));
 
   // ── เนื้อหา ──
   out.push(
@@ -297,11 +302,11 @@ function buildContract(r: NoticePrintData, cfg: CompanyConfig, logo: ReturnType<
 
   // ── ติดต่อ (ซ้าย) + QR LINE (ขวา) ──
   const contactCellChildren: Paragraph[] = [
-    new Paragraph({ spacing: { after: 0, line: 276 }, children: [run("โปรดติดต่อ", { bold: true })] }),
-    new Paragraph({ spacing: { after: 0, line: 276 }, children: [run(`${cfg.companyName}${cfg.phone ? `  โทร. ${cfg.phone}` : ""}`, { bold: true })] }),
+    new Paragraph({ spacing: { after: 0, line: 312 }, children: [run("โปรดติดต่อ", { bold: true })] }),
+    new Paragraph({ spacing: { after: 0, line: 312 }, children: [run(`${cfg.companyName}${cfg.phone ? `  โทร. ${cfg.phone}` : ""}`, { bold: true })] }),
   ];
-  if (cfg.address) contactCellChildren.push(new Paragraph({ spacing: { after: 0, line: 276 }, children: [run(`ที่อยู่ ${cfg.address}`)] }));
-  contactCellChildren.push(new Paragraph({ spacing: { after: 0, line: 276 }, children: [run(`เลขทะเบียนนิติบุคคล ${cfg.regNo}`, { size: 26, color: "555555" })] }));
+  if (cfg.address) contactCellChildren.push(new Paragraph({ spacing: { after: 0, line: 312 }, children: [run(`ที่อยู่ ${cfg.address}`)] }));
+  contactCellChildren.push(new Paragraph({ spacing: { after: 0, line: 312 }, children: [run(`เลขทะเบียนนิติบุคคล ${cfg.regNo}`, { size: 24, color: "555555" })] }));
 
   const qrCellChildren: Paragraph[] = qr
     ? [
@@ -328,8 +333,8 @@ function buildContract(r: NoticePrintData, cfg: CompanyConfig, logo: ReturnType<
   );
 
   // ── footer อัตโนมัติ ──
-  out.push(para([run(`หนังสือฉบับนี้เป็นจดหมายอัตโนมัติ จากทางบริษัท ${cfg.companyName}`, { italics: true, size: 26, color: "555555" })], { spacingAfter: 0, spacingBefore: 120 }));
-  out.push(para([run("ทางบริษัทขออภัยหากท่านได้ชำระมาก่อนหน้านี้", { italics: true, size: 26, color: "555555" })], { spacingAfter: 0 }));
+  out.push(para([run(`หนังสือฉบับนี้เป็นจดหมายอัตโนมัติ จากทางบริษัท ${cfg.companyName}`, { italics: true, size: 24, color: "555555" })], { spacingAfter: 0, spacingBefore: 140 }));
+  out.push(para([run("ทางบริษัทขออภัยหากท่านได้ชำระมาก่อนหน้านี้", { italics: true, size: 24, color: "555555" })], { spacingAfter: 0 }));
 
   return out;
 }
