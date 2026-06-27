@@ -128,7 +128,7 @@ function para(children: TextRun[], opts: { align?: (typeof AlignmentType)[keyof 
     children,
     alignment: opts.align,
     pageBreakBefore: opts.pageBreakBefore,
-    spacing: { after: opts.spacingAfter ?? 60, before: opts.spacingBefore ?? 0, line: 252 },
+    spacing: { after: opts.spacingAfter ?? 80, before: opts.spacingBefore ?? 0, line: 288 },
   });
 }
 
@@ -147,13 +147,13 @@ function dcell(text: string, widthPct: number, opts: { header?: boolean; bold?: 
     children: [new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 0, line: 232 }, children: [run(text, { bold: opts.header || opts.bold, size: 26 })] })],
   });
 }
-/** เซลล์ label/value แบบไม่มีกรอบ */
-function lvCell(children: TextRun[], widthPct: number, align?: (typeof AlignmentType)[keyof typeof AlignmentType]): TableCell {
+/** เซลล์ label/value แบบไม่มีกรอบ (กำหนดความกว้างเป็น twips/DXA เพื่อให้ค่าชิดป้ายกำกับ) */
+function lvCell(children: TextRun[], widthDxa: number, align?: (typeof AlignmentType)[keyof typeof AlignmentType]): TableCell {
   return new TableCell({
-    width: { size: widthPct, type: WidthType.PERCENTAGE },
+    width: { size: widthDxa, type: WidthType.DXA },
     borders: NO_BORDERS,
-    margins: { top: 6, bottom: 6, left: 0, right: 60 },
-    children: [new Paragraph({ alignment: align, spacing: { after: 0, line: 252 }, children })],
+    margins: { top: 14, bottom: 14, left: 0, right: 80 },
+    children: [new Paragraph({ alignment: align, spacing: { after: 0, line: 276 }, children })],
   });
 }
 
@@ -175,13 +175,14 @@ function buildContract(r: NoticePrintData, cfg: CompanyConfig, logo: ReturnType<
   out.push(
     new Table({
       width: { size: 100, type: WidthType.PERCENTAGE },
+      columnWidths: [3750, 6114],
       borders: NO_BORDERS,
       rows: [
         new TableRow({
           children: [
-            new TableCell({ width: { size: 38, type: WidthType.PERCENTAGE }, borders: NO_BORDERS, verticalAlign: VerticalAlign.CENTER, children: logoChildren }),
+            new TableCell({ width: { size: 3750, type: WidthType.DXA }, borders: NO_BORDERS, verticalAlign: VerticalAlign.CENTER, children: logoChildren }),
             new TableCell({
-              width: { size: 62, type: WidthType.PERCENTAGE },
+              width: { size: 6114, type: WidthType.DXA },
               borders: NO_BORDERS,
               verticalAlign: VerticalAlign.CENTER,
               children: [
@@ -200,11 +201,12 @@ function buildContract(r: NoticePrintData, cfg: CompanyConfig, logo: ReturnType<
   out.push(
     new Table({
       width: { size: 100, type: WidthType.PERCENTAGE },
+      columnWidths: [2300, 7564],
       borders: NO_BORDERS,
       rows: [
-        new TableRow({ children: [lvCell([run("หนังสือเลขที่", { bold: true })], 22), lvCell([run(docNo)], 78)] }),
-        new TableRow({ children: [lvCell([run("วันที่", { bold: true })], 22), lvCell([run(todayThai())], 78)] }),
-        new TableRow({ children: [lvCell([run("สัญญาเช่าซื้อเลขที่", { bold: true })], 22), lvCell([run(r.contractNo)], 78)] }),
+        new TableRow({ children: [lvCell([run("หนังสือเลขที่", { bold: true })], 2300), lvCell([run(docNo)], 7564)] }),
+        new TableRow({ children: [lvCell([run("วันที่", { bold: true })], 2300), lvCell([run(todayThai())], 7564)] }),
+        new TableRow({ children: [lvCell([run("สัญญาเช่าซื้อเลขที่", { bold: true })], 2300), lvCell([run(r.contractNo)], 7564)] }),
       ],
     }),
   );
@@ -214,11 +216,12 @@ function buildContract(r: NoticePrintData, cfg: CompanyConfig, logo: ReturnType<
   out.push(
     new Table({
       width: { size: 100, type: WidthType.PERCENTAGE },
+      columnWidths: [1500, 8364],
       borders: NO_BORDERS,
       rows: [
-        new TableRow({ children: [lvCell([run("เรื่อง", { bold: true })], 14), lvCell([run("ขอให้ชำระหนี้ค่าเช่าซื้อค้างชำระ - บอกเลิกสัญญาและขอให้คืนทรัพย์สินที่เช่าซื้อ")], 86)] }),
-        new TableRow({ children: [lvCell([run("เรียน", { bold: true })], 14), lvCell([run(r.customerName ?? "-", { bold: true })], 86)] }),
-        new TableRow({ children: [lvCell([run("อ้างถึง", { bold: true })], 14), lvCell([run("ยอดค่าเช่าซื้อค้างชำระของ  "), run(r.customerName ?? "-", { bold: true })], 86)] }),
+        new TableRow({ children: [lvCell([run("เรื่อง", { bold: true })], 1500), lvCell([run("ขอให้ชำระหนี้ค่าเช่าซื้อค้างชำระ - บอกเลิกสัญญาและขอให้คืนทรัพย์สินที่เช่าซื้อ")], 8364)] }),
+        new TableRow({ children: [lvCell([run("เรียน", { bold: true })], 1500), lvCell([run(r.customerName ?? "-", { bold: true })], 8364)] }),
+        new TableRow({ children: [lvCell([run("อ้างถึง", { bold: true })], 1500), lvCell([run("ยอดค่าเช่าซื้อค้างชำระของ  "), run(r.customerName ?? "-", { bold: true })], 8364)] }),
       ],
     }),
   );
@@ -282,10 +285,11 @@ function buildContract(r: NoticePrintData, cfg: CompanyConfig, logo: ReturnType<
     out.push(
       new Table({
         width: { size: 100, type: WidthType.PERCENTAGE },
+        columnWidths: [2900, 6964],
         borders: NO_BORDERS,
         rows: [
-          new TableRow({ children: [lvCell([run("ช่องทางการชำระเงิน", { bold: true })], 26), lvCell([run(cfg.bankName)], 74)] }),
-          new TableRow({ children: [lvCell([run("")], 26), lvCell([run(`เลขที่ ${cfg.bankAccount}  ชื่อบัญชี ${cfg.accountName}`, { bold: true })], 74)] }),
+          new TableRow({ children: [lvCell([run("ช่องทางการชำระเงิน", { bold: true })], 2900), lvCell([run(cfg.bankName)], 6964)] }),
+          new TableRow({ children: [lvCell([run("")], 2900), lvCell([run(`เลขที่ ${cfg.bankAccount}  ชื่อบัญชี ${cfg.accountName}`, { bold: true })], 6964)] }),
         ],
       }),
     );
@@ -293,11 +297,11 @@ function buildContract(r: NoticePrintData, cfg: CompanyConfig, logo: ReturnType<
 
   // ── ติดต่อ (ซ้าย) + QR LINE (ขวา) ──
   const contactCellChildren: Paragraph[] = [
-    new Paragraph({ spacing: { after: 0, line: 300 }, children: [run("โปรดติดต่อ", { bold: true })] }),
-    new Paragraph({ spacing: { after: 0, line: 300 }, children: [run(`${cfg.companyName}${cfg.phone ? `  โทร. ${cfg.phone}` : ""}`, { bold: true })] }),
+    new Paragraph({ spacing: { after: 0, line: 276 }, children: [run("โปรดติดต่อ", { bold: true })] }),
+    new Paragraph({ spacing: { after: 0, line: 276 }, children: [run(`${cfg.companyName}${cfg.phone ? `  โทร. ${cfg.phone}` : ""}`, { bold: true })] }),
   ];
-  if (cfg.address) contactCellChildren.push(new Paragraph({ spacing: { after: 0, line: 300 }, children: [run(`ที่อยู่ ${cfg.address}`)] }));
-  contactCellChildren.push(new Paragraph({ spacing: { after: 0, line: 300 }, children: [run(`เลขทะเบียนนิติบุคคล ${cfg.regNo}`, { size: 26, color: "555555" })] }));
+  if (cfg.address) contactCellChildren.push(new Paragraph({ spacing: { after: 0, line: 276 }, children: [run(`ที่อยู่ ${cfg.address}`)] }));
+  contactCellChildren.push(new Paragraph({ spacing: { after: 0, line: 276 }, children: [run(`เลขทะเบียนนิติบุคคล ${cfg.regNo}`, { size: 26, color: "555555" })] }));
 
   const qrCellChildren: Paragraph[] = qr
     ? [
@@ -310,12 +314,13 @@ function buildContract(r: NoticePrintData, cfg: CompanyConfig, logo: ReturnType<
   out.push(
     new Table({
       width: { size: 100, type: WidthType.PERCENTAGE },
+      columnWidths: [7000, 2864],
       borders: NO_BORDERS,
       rows: [
         new TableRow({
           children: [
-            new TableCell({ width: { size: 72, type: WidthType.PERCENTAGE }, borders: NO_BORDERS, verticalAlign: VerticalAlign.BOTTOM, margins: { top: 60, bottom: 0, left: 0, right: 0 }, children: contactCellChildren }),
-            new TableCell({ width: { size: 28, type: WidthType.PERCENTAGE }, borders: NO_BORDERS, verticalAlign: VerticalAlign.BOTTOM, children: qrCellChildren }),
+            new TableCell({ width: { size: 7000, type: WidthType.DXA }, borders: NO_BORDERS, verticalAlign: VerticalAlign.BOTTOM, margins: { top: 60, bottom: 0, left: 0, right: 0 }, children: contactCellChildren }),
+            new TableCell({ width: { size: 2864, type: WidthType.DXA }, borders: NO_BORDERS, verticalAlign: VerticalAlign.BOTTOM, children: qrCellChildren }),
           ],
         }),
       ],
