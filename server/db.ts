@@ -464,5 +464,59 @@ export async function runStartupMigrations(): Promise<void> {
     } catch (err: any) {
       console.error(`[migration] ${section}: monthly_collection_snapshot CREATE failed:`, err?.message ?? err);
     }
+    try {
+      // Migration 0023: Notice — print batches / print logs / restore logs
+      await db.execute(sql.raw(`
+        CREATE TABLE IF NOT EXISTS notice_print_batches (
+          id            INTEGER       PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+          section       VARCHAR(32)   NOT NULL,
+          printed_by    VARCHAR(128)  NOT NULL,
+          printed_at    TIMESTAMP     NOT NULL DEFAULT NOW(),
+          total_items   INTEGER       NOT NULL DEFAULT 0,
+          pdf_file_url  TEXT,
+          excel_file_url TEXT,
+          created_at    TIMESTAMP     NOT NULL DEFAULT NOW()
+        )
+      `));
+      await db.execute(sql.raw(`CREATE INDEX IF NOT EXISTS npb_section_printed_idx ON notice_print_batches (section, printed_at)`));
+
+      await db.execute(sql.raw(`
+        CREATE TABLE IF NOT EXISTS notice_print_logs (
+          id                   INTEGER       PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+          section              VARCHAR(32)   NOT NULL,
+          contract_external_id VARCHAR(64)   NOT NULL,
+          contract_no          VARCHAR(64),
+          notice_round         INTEGER       NOT NULL,
+          printed_by           VARCHAR(128)  NOT NULL,
+          printed_at           TIMESTAMP     NOT NULL DEFAULT NOW(),
+          batch_id             INTEGER,
+          pdf_file_url         TEXT,
+          excel_file_url       TEXT,
+          created_at           TIMESTAMP     NOT NULL DEFAULT NOW()
+        )
+      `));
+      await db.execute(sql.raw(`CREATE INDEX IF NOT EXISTS npl_section_contract_idx ON notice_print_logs (section, contract_external_id)`));
+      await db.execute(sql.raw(`CREATE INDEX IF NOT EXISTS npl_section_printed_by_idx ON notice_print_logs (section, printed_by)`));
+      await db.execute(sql.raw(`CREATE INDEX IF NOT EXISTS npl_section_printed_at_idx ON notice_print_logs (section, printed_at)`));
+
+      await db.execute(sql.raw(`
+        CREATE TABLE IF NOT EXISTS notice_restore_logs (
+          id                   INTEGER       PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+          section              VARCHAR(32)   NOT NULL,
+          contract_external_id VARCHAR(64)   NOT NULL,
+          contract_no          VARCHAR(64),
+          notice_round         INTEGER       NOT NULL,
+          restored_by          VARCHAR(128)  NOT NULL,
+          restored_at          TIMESTAMP     NOT NULL DEFAULT NOW(),
+          reason               TEXT,
+          created_at           TIMESTAMP     NOT NULL DEFAULT NOW()
+        )
+      `));
+      await db.execute(sql.raw(`CREATE INDEX IF NOT EXISTS nrl_section_contract_idx ON notice_restore_logs (section, contract_external_id)`));
+      await db.execute(sql.raw(`CREATE INDEX IF NOT EXISTS nrl_section_restored_by_idx ON notice_restore_logs (section, restored_by)`));
+      console.log(`[migration] ${section}: notice_print_batches / notice_print_logs / notice_restore_logs — OK`);
+    } catch (err: any) {
+      console.error(`[migration] ${section}: notice tables failed:`, err?.message ?? err);
+    }
   }
 }

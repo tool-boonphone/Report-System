@@ -742,3 +742,71 @@ export const deviceLocationLogs = pgTable(
   }),
 );
 export type DeviceLocationLog = typeof deviceLocationLogs.$inferSelect;
+
+// ─── Notice: Print Batches ───────────────────────────────────────────────────
+// บันทึกการกด "พิมพ์รายการที่เลือก" แต่ละครั้ง (1 batch = หลายสัญญา)
+export const noticePrintBatches = pgTable(
+  "notice_print_batches",
+  {
+    id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+    section: varchar("section", { length: 32 }).notNull(),
+    printedBy: varchar("printed_by", { length: 128 }).notNull(),
+    printedAt: timestamp("printed_at").defaultNow().notNull(),
+    totalItems: integer("total_items").notNull().default(0),
+    pdfFileUrl: text("pdf_file_url"),
+    excelFileUrl: text("excel_file_url"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => ({
+    sectionPrintedIdx: index("npb_section_printed_idx").on(t.section, t.printedAt),
+  }),
+);
+export type NoticePrintBatch = typeof noticePrintBatches.$inferSelect;
+
+// ─── Notice: Print Logs ──────────────────────────────────────────────────────
+// 1 แถว = การส่ง Notice 1 รอบของ 1 สัญญา (round 1/2/3)
+// sentCount ของสัญญา = จำนวนแถวที่เหลืออยู่ (การ Restore จะลบแถวรอบล่าสุดออก)
+export const noticePrintLogs = pgTable(
+  "notice_print_logs",
+  {
+    id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+    section: varchar("section", { length: 32 }).notNull(),
+    contractExternalId: varchar("contract_external_id", { length: 64 }).notNull(),
+    contractNo: varchar("contract_no", { length: 64 }),
+    noticeRound: integer("notice_round").notNull(),
+    printedBy: varchar("printed_by", { length: 128 }).notNull(),
+    printedAt: timestamp("printed_at").defaultNow().notNull(),
+    batchId: integer("batch_id"),
+    pdfFileUrl: text("pdf_file_url"),
+    excelFileUrl: text("excel_file_url"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => ({
+    sectionContractIdx: index("npl_section_contract_idx").on(t.section, t.contractExternalId),
+    sectionPrintedByIdx: index("npl_section_printed_by_idx").on(t.section, t.printedBy),
+    sectionPrintedAtIdx: index("npl_section_printed_at_idx").on(t.section, t.printedAt),
+  }),
+);
+export type NoticePrintLog = typeof noticePrintLogs.$inferSelect;
+
+// ─── Notice: Restore Logs (audit) ────────────────────────────────────────────
+// บันทึกการยกเลิก (Restore) รอบส่งล่าสุด — ใช้แสดงในคอลัมน์ "Log การแก้ไข"
+export const noticeRestoreLogs = pgTable(
+  "notice_restore_logs",
+  {
+    id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+    section: varchar("section", { length: 32 }).notNull(),
+    contractExternalId: varchar("contract_external_id", { length: 64 }).notNull(),
+    contractNo: varchar("contract_no", { length: 64 }),
+    noticeRound: integer("notice_round").notNull(),
+    restoredBy: varchar("restored_by", { length: 128 }).notNull(),
+    restoredAt: timestamp("restored_at").defaultNow().notNull(),
+    reason: text("reason"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => ({
+    sectionContractIdx: index("nrl_section_contract_idx").on(t.section, t.contractExternalId),
+    sectionRestoredByIdx: index("nrl_section_restored_by_idx").on(t.section, t.restoredBy),
+  }),
+);
+export type NoticeRestoreLog = typeof noticeRestoreLogs.$inferSelect;

@@ -11,6 +11,7 @@ import { appRouter } from "../routers";
 import { seedSuperAdmin } from "../authDb";
 import { runStartupMigrations } from "../db";
 import { handleContractsExport, handleContractsTrackingExport, handleDebtTargetExport, handleDebtCollectedExport, handleBadDebtExport, handleMonthlySummaryExport, handleYearlySummaryExport, handleBadDebtSummaryExport, handleIncomeExport, handleExpenseExport, handleMonthlyTargetDetailExport, handleMonthlyCollectedDetailExport, handleTargetSnapshotDetailExport } from "../routers/exportExcel";
+import { handleNoticePrint } from "../notice/printHandler";
 
 import { handleSyncStream } from "../routers/syncStream";
 import { startScheduler } from "../sync/scheduler";
@@ -64,6 +65,8 @@ async function startServer() {
   app.get("/api/export/monthly-collected-detail", handleMonthlyCollectedDetailExport);
   // Target Snapshot Lightbox export (freeze ณ วันที่ 1)
   app.get("/api/export/target-snapshot-detail", handleTargetSnapshotDetailExport);
+  // Notice — generate PDF/DOCX + Excel จ่าหน้าซอง (ZIP) และนับรอบส่ง
+  app.post("/api/notice/print", handleNoticePrint);
   // Phase 33: Streaming debt data endpoints — bypass tRPC buffering to avoid proxy 503 timeout
 
   // SSE sync stream — keeps Cloud Run connection alive during long sync
