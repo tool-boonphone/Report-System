@@ -16,7 +16,7 @@
  *   - cache.ts router (manual trigger via tRPC)
  */
 import { sql } from "drizzle-orm";
-import { getDb } from "../db";
+import { getDb, ensureSectionSchemaReady, pgRows } from "../db";
 import { debtTargetCache, debtCollectedCache } from "../../drizzle/schema";
 import { listDebtTargetStream, listDebtCollectedStream } from "../debtDb";
 import type { SectionKey } from "../../shared/const";
@@ -61,8 +61,30 @@ export async function populateDebtCache(
   const db = await getDb(section);
   if (!db) throw new Error("[populateCache] DB not available");
 
+  await ensureSectionSchemaReady(section);
+
   console.log(`[populateCache] Starting populate for section: ${section}`);
   const startMs = Date.now();
+
+  const countsRaw = await db.execute(sql`
+    SELECT
+      (SELECT COUNT(*)::int FROM contracts WHERE section = ${section}) AS contracts,
+      (SELECT COUNT(*)::int FROM installments WHERE section = ${section}) AS installments,
+      (SELECT COUNT(*)::int FROM payment_transactions WHERE section = ${section}) AS payments,
+      (SELECT COUNT(*)::int FROM debt_target_cache WHERE section = ${section}) AS target_cache
+  `);
+  const counts = pgRows(countsRaw)[0] ?? {};
+  const installmentsCount = Number(counts.installments ?? 0);
+  const prevTargetCache = Number(counts.target_cache ?? 0);
+  const skipTargetRebuild = installmentsCount === 0 && prevTargetCache > 0;
+  console.log(
+    `[populateCache] ${section}: source DB rows — contracts=${counts.contracts ?? 0}, installments=${installmentsCount}, payments=${counts.payments ?? 0}, target_cache=${prevTargetCache}`,
+  );
+  if (skipTargetRebuild) {
+    console.warn(
+      `[populateCache] ${section}: preserving existing debt_target_cache (${prevTargetCache} rows) — installments table is empty`,
+    );
+  }
 
   // ─── 0. Load extra contract metadata (not in stream output) ──────────────
   const metaRaw = await db.execute(sql`
@@ -85,15 +107,22 @@ export async function populateDebtCache(
   console.log(`[populateCache] ${section}: loaded ${contractMeta.size} contract metadata rows`);
 
   // ─── 1. Delete existing rows for this section ─────────────────────────────
-  await db.execute(sql`DELETE FROM debt_target_cache WHERE section = ${section}`);
+  if (!skipTargetRebuild) {
+    await db.execute(sql`DELETE FROM debt_target_cache WHERE section = ${section}`);
+  }
   await db.execute(sql`DELETE FROM debt_collected_cache WHERE section = ${section}`);
-  console.log(`[populateCache] ${section}: deleted existing cache rows`);
+  console.log(
+    `[populateCache] ${section}: deleted existing cache rows` +
+      (skipTargetRebuild ? " (target cache preserved)" : ""),
+  );
 
   // ─── 2. Populate debt_target_cache ────────────────────────────────────────
-  let targetCount = 0;
-  const targetStream = listDebtTargetStream({ section, batchSize: 200 });
+  let targetCount = skipTargetRebuild ? prevTargetCache : 0;
+  const targetStream = skipTargetRebuild
+    ? null
+    : listDebtTargetStream({ section, batchSize: 200 });
 
-  for await (const contractBatch of targetStream) {
+  if (targetStream) for await (const contractBatch of targetStream) {
     const insertRows: (typeof debtTargetCache.$inferInsert)[] = [];
 
     for (const contract of contractBatch) {
@@ -186,6 +215,13 @@ export async function populateDebtCache(
   console.log(
     `[populateCache] ${section}: inserted ${targetCount} target rows (${Date.now() - startMs}ms)`,
   );
+  if (targetCount === 0) {
+    console.warn(
+      `[populateCache] ${section}: WARNING — debt_target_cache is empty after populate. ` +
+        `installments=${counts.installments ?? 0} (เป้าเก็บหนี้ต้องมีข้อมูลใน installments). ` +
+        `Run full sync through installments stage or check listDebtTargetStream.`,
+    );
+  }
   // ─── 2.5 Load debt_range lookup from target cache (per contract) ────────────────
   // ใช้ debt_range ที่ populate ไว้ใน target cache เพื่อให้ collected cache แยก bucket ย่อยได้
   // ดึง debt_range ของ period ล่าสุดของแต่ละสัญญา (MAX period = สถานะปัจจุบัน)

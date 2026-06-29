@@ -7,7 +7,7 @@
  * IMPORTANT: In PostgreSQL, the `set` block must reference the incoming row values via `EXCLUDED.col`.
  */
 
-import { getDb } from "../db";
+import { getDb, ensureSectionSchemaReady } from "../db";
 import { sql, type SQL } from "drizzle-orm";
 import {
   contracts,
@@ -67,6 +67,7 @@ function normalizeRows(rows: AnyRow[]): AnyRow[] {
 
 export async function upsertContracts(rows: AnyRow[], section: SectionKey): Promise<number> {
   if (rows.length === 0) return 0;
+  await ensureSectionSchemaReady(section);
   const db = await getDb(section);
   if (!db) throw new Error("DB not available for upsertContracts");
   let total = 0;

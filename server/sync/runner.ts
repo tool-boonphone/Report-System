@@ -52,7 +52,7 @@ import type { SectionKey, SyncTrigger } from "../../shared/const";
 
 import { fillPeriodNosForSection } from "./fillPeriodNos";
 import { populateDebtCache } from "./populateCache";
-import { pgRows } from "../db";
+import { pgRows, ensureSectionSchemaReady } from "../db";
 import { rebuildIncomeMonthlySummary, populateIncomeType } from "../accountingDb";
 import { populateMonthlySummaryCache, populateDueMonthCache } from "../monthlySummaryDb";
 import { populateMonthlyCollectionSnapshot, backfillFrozenBreakdown } from "../monthlyCollectionSnapshotDb";
@@ -201,6 +201,14 @@ export async function runSectionSync(
   const client = buildClientFromEnv(section);
   if (!client || !client.isConfigured()) {
     return { ok: false, rowCount: 0, message: `[${section}] API credentials are not configured` };
+  }
+
+  try {
+    await ensureSectionSchemaReady(section);
+  } catch (schemaErr: any) {
+    const msg = schemaErr?.message ?? String(schemaErr);
+    console.error(`[sync] ${section}: schema ensure failed:`, msg);
+    return { ok: false, rowCount: 0, message: msg };
   }
 
   _locks[section] = {
