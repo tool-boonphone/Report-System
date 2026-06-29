@@ -258,6 +258,49 @@ export async function getDbSyncStatus(section: SectionKey): Promise<{
   return { running: false, startedAt: null, currentStage: null, progress: null };
 }
 
+/** Post-process job status (fillPeriodNos + populate) — separate from entity=all zombie detection. */
+export async function getPostProcessStatus(section: SectionKey): Promise<{
+  running: boolean;
+  startedAt: Date | null;
+  currentStage: string | null;
+  progress: number | null;
+}> {
+  const db = await getDb(section);
+  if (!db) {
+    return { running: false, startedAt: null, currentStage: null, progress: null };
+  }
+  const staleThreshold = new Date(Date.now() - 185 * 60 * 1000);
+  const rows = await db
+    .select({
+      startedAt: syncLogs.startedAt,
+      stageUpdatedAt: syncLogs.stageUpdatedAt,
+      currentStage: syncLogs.currentStage,
+      progress: syncLogs.progress,
+    })
+    .from(syncLogs)
+    .where(
+      and(
+        eq(syncLogs.section, section),
+        eq(syncLogs.entity, "post_process"),
+        eq(syncLogs.status, "in_progress"),
+        gt(syncLogs.startedAt, staleThreshold),
+      ),
+    )
+    .orderBy(desc(syncLogs.startedAt))
+    .limit(1);
+
+  if (rows.length === 0) {
+    return { running: false, startedAt: null, currentStage: null, progress: null };
+  }
+  const row = rows[0];
+  return {
+    running: true,
+    startedAt: row.startedAt,
+    currentStage: row.currentStage ?? null,
+    progress: row.progress ?? null,
+  };
+}
+
 /**
  * Force-clear all in_progress sync logs for a section.
  * Used when Cloud Run killed the process mid-sync, leaving orphaned rows.

@@ -2,11 +2,13 @@ import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { router, appProcedure } from "../_core/trpc";
 import { runSectionSync, isSyncRunning, getSyncStatus, requestCancelSync, SYNC_STAGES, syncMdmOnlineDays } from "../sync/runner";
+import { isPostProcessRunning, runPostSyncPipeline } from "../sync/postProcess";
 import {
   getLastSyncedAt,
   listSyncLogs,
   getRunningSyncs,
   getDbSyncStatus,
+  getPostProcessStatus,
   clearStuckSyncLogs,
 } from "../sync/syncLog";
 import { desc, eq, and, gt, lt, sql } from "drizzle-orm";
@@ -43,15 +45,50 @@ export const syncRouter = router({
     }),
 
   /**
+   * Resume post-sync only: fillPeriodNos + populate debt cache (no API re-download).
+   * Fire-and-forget; uses entity=post_process log (not auto-cleared by entity=all zombie check).
+   */
+  postProcess: appProcedure
+    .input(z.object({ section: sectionSchema }))
+    .mutation(async ({ input, ctx }) => {
+      const { checkPermission } = await import("../authDb");
+      if (ctx.appUser) {
+        const allowed = checkPermission(ctx.appUser, "sync_api", "sync");
+        if (!allowed) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "ไม่มีสิทธิ์ใช้งาน Re-Sync" });
+        }
+      }
+      const section = input.section as SectionKey;
+      if (isSyncRunning(section)) {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: `Sync สำหรับ ${section} ยังรันอยู่ — รอให้จบหรือยกเลิกก่อน`,
+        });
+      }
+      if (isPostProcessRunning(section)) {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: `Post-process สำหรับ ${section} กำลังรันอยู่แล้ว`,
+        });
+      }
+      runPostSyncPipeline(section).catch((err) => {
+        console.error(`[sync.postProcess] ${section} failed:`, err?.message ?? err);
+      });
+      return { queued: true, section };
+    }),
+
+  /**
    * Sync status — reads from DB (cross-instance safe for Cloud Run).
    * Falls back to in-memory lock if DB returns running=false but lock is set
    * (same-instance fast path).
    */
   status: appProcedure.query(async () => {
     // Fetch DB status for both sections in parallel
-    const [bpDb, ffDb] = await Promise.all([
+    const [bpDb, ffDb, bpPost, ffPost] = await Promise.all([
       getDbSyncStatus("Boonphone"),
       getDbSyncStatus("Fastfone365"),
+      getPostProcessStatus("Boonphone"),
+      getPostProcessStatus("Fastfone365"),
     ]);
 
     // In-memory fallback (same instance)
@@ -60,6 +97,8 @@ export const syncRouter = router({
 
     const bpRunning = (bpDb?.running ?? false) || isSyncRunning("Boonphone");
     const ffRunning = (ffDb?.running ?? false) || isSyncRunning("Fastfone365");
+    const bpPostRunning = (bpPost?.running ?? false) || isPostProcessRunning("Boonphone");
+    const ffPostRunning = (ffPost?.running ?? false) || isPostProcessRunning("Fastfone365");
 
     // Helper: derive stageIndex from currentStage when in-memory is unavailable (cross-instance)
     const deriveStageIndex = (stage: string | null | undefined): number | null => {
@@ -93,6 +132,12 @@ export const syncRouter = router({
         currentStage: bpCurrentStage,
         stageIndex: bpStageIndex,
         totalStages: bpTotalStages,
+        postProcess: {
+          running: bpPostRunning,
+          startedAt: bpPost?.startedAt?.getTime() ?? null,
+          progress: bpPost?.progress ?? null,
+          currentStage: bpPost?.currentStage ?? null,
+        },
       },
       Fastfone365: {
         running: ffRunning,
@@ -101,6 +146,12 @@ export const syncRouter = router({
         currentStage: ffCurrentStage,
         stageIndex: ffStageIndex,
         totalStages: ffTotalStages,
+        postProcess: {
+          running: ffPostRunning,
+          startedAt: ffPost?.startedAt?.getTime() ?? null,
+          progress: ffPost?.progress ?? null,
+          currentStage: ffPost?.currentStage ?? null,
+        },
       },
       active: await getRunningSyncs(),
     };
