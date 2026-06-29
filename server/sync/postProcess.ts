@@ -5,12 +5,12 @@
  * (e.g. zombie detection on entity=all). Uses entity=post_process sync log so UI
  * polling for entity=all does not auto-clear this job.
  */
-import { rebuildIncomeMonthlySummary } from "../accountingDb";
 import { ensureSectionSchemaReady } from "../db";
 import type { SectionKey } from "../../shared/const";
 import { fillPeriodNosForSection } from "./fillPeriodNos";
 import { populateDebtCache } from "./populateCache";
 import { isSyncRunning } from "./runner";
+import { runSummaryRefreshAfterPostProcess } from "./summaryRefresh";
 import { finishSyncLog, insertSyncLog, updateSyncLogStage } from "./syncLog";
 
 const _locks: Record<SectionKey, boolean> = { Boonphone: false, Fastfone365: false };
@@ -76,13 +76,7 @@ export async function runPostSyncPipeline(
       `[postProcess] ${section}: cache populated — target=${cache.targetRows}, collected=${cache.collectedRows}`,
     );
 
-    try {
-      const summaryRows = await rebuildIncomeMonthlySummary(section);
-      console.log(`[postProcess] ${section}: income_monthly_summary — ${summaryRows} rows`);
-    } catch (summaryErr: unknown) {
-      const msg = summaryErr instanceof Error ? summaryErr.message : String(summaryErr);
-      console.warn(`[postProcess] ${section}: income_monthly_summary failed (non-fatal):`, msg);
-    }
+    await runSummaryRefreshAfterPostProcess(section, logId);
 
     await finishSyncLog({
       id: logId,

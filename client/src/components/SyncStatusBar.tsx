@@ -228,6 +228,8 @@ function SyncDropdown({
   isRepopulating,
   onPostProcess,
   isPostProcessPending,
+  onRefreshSummaries,
+  isRefreshSummariesPending,
 }: {
   isRunning: boolean;
   isClearing: boolean;
@@ -242,6 +244,8 @@ function SyncDropdown({
   isRepopulating?: boolean;
   onPostProcess?: () => void;
   isPostProcessPending?: boolean;
+  onRefreshSummaries?: () => void;
+  isRefreshSummariesPending?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const dropRef = useRef<HTMLDivElement>(null);
@@ -258,7 +262,7 @@ function SyncDropdown({
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
 
-  const anyBusy = isRunning || isClearing || isTriggerPending || isMdmPending || isPostProcessPending;
+  const anyBusy = isRunning || isClearing || isTriggerPending || isMdmPending || isPostProcessPending || isRefreshSummariesPending;
 
   return (
     <div ref={dropRef} className="relative">
@@ -326,6 +330,20 @@ function SyncDropdown({
               <div className="text-left">
                 <div className="font-medium">ทำ Cache ต่อ</div>
                 <div className="text-xs text-emerald-500">fillPeriodNos + สร้าง cache (~30 นาที)</div>
+              </div>
+            </button>
+          )}
+
+          {onRefreshSummaries && (
+            <button
+              onClick={() => { onRefreshSummaries(); setOpen(false); }}
+              disabled={isRunning || isRefreshSummariesPending}
+              className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-sky-700 hover:bg-sky-50 disabled:opacity-40 transition-colors"
+            >
+              <RefreshCw className={`w-4 h-4 shrink-0 ${isRefreshSummariesPending ? "animate-spin" : ""}`} />
+              <div className="text-left">
+                <div className="font-medium">อัปเดตสรุปรายเดือน</div>
+                <div className="text-xs text-sky-500">ยอดเก็บหนี้ + ขายเครื่อง (~10 นาที)</div>
               </div>
             </button>
           )}
@@ -711,6 +729,14 @@ export function SyncStatusBar({
     onError: (err) => toast.error(err.message),
   });
 
+  const refreshSummaries = trpc.sync.refreshSummaries.useMutation({
+    onSuccess: () => {
+      toast.info("เริ่มอัปเดตสรุปรายเดือน — รอ ~10 นาที");
+      utils.sync.status.invalidate();
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
   const [isTriggerPending, setIsTriggerPending] = useState(false);
 
   useEffect(() => {
@@ -836,6 +862,12 @@ export function SyncStatusBar({
                 : undefined
             }
             isPostProcessPending={postProcess.isPending}
+            onRefreshSummaries={
+              canResync && section
+                ? () => refreshSummaries.mutate({ section: section as SectionKey })
+                : undefined
+            }
+            isRefreshSummariesPending={refreshSummaries.isPending}
           />
         ) : null}
       </div>

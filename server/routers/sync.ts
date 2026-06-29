@@ -3,6 +3,7 @@ import { TRPCError } from "@trpc/server";
 import { router, appProcedure } from "../_core/trpc";
 import { runSectionSync, isSyncRunning, getSyncStatus, requestCancelSync, SYNC_STAGES, syncMdmOnlineDays } from "../sync/runner";
 import { isPostProcessRunning, runPostSyncPipeline } from "../sync/postProcess";
+import { isSummaryRefreshRunning, runSummaryRefreshPipeline } from "../sync/summaryRefresh";
 import {
   getLastSyncedAt,
   listSyncLogs,
@@ -73,6 +74,39 @@ export const syncRouter = router({
       }
       runPostSyncPipeline(section).catch((err) => {
         console.error(`[sync.postProcess] ${section} failed:`, err?.message ?? err);
+      });
+      return { queued: true, section };
+    }),
+
+  /**
+   * Refresh monthly summary caches only (~5–15 min).
+   * Use when debt cache is ready but ยอดเก็บหนี้/ขายเครื่อง still show zero.
+   */
+  refreshSummaries: appProcedure
+    .input(z.object({ section: sectionSchema }))
+    .mutation(async ({ input, ctx }) => {
+      const { checkPermission } = await import("../authDb");
+      if (ctx.appUser) {
+        const allowed = checkPermission(ctx.appUser, "sync_api", "sync");
+        if (!allowed) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "ไม่มีสิทธิ์ใช้งาน Re-Sync" });
+        }
+      }
+      const section = input.section as SectionKey;
+      if (isSyncRunning(section) || isPostProcessRunning(section)) {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: `Sync/post-process สำหรับ ${section} ยังรันอยู่`,
+        });
+      }
+      if (isSummaryRefreshRunning(section)) {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: `อัปเดตสรุปรายเดือนสำหรับ ${section} กำลังรันอยู่แล้ว`,
+        });
+      }
+      runSummaryRefreshPipeline(section).catch((err) => {
+        console.error(`[sync.refreshSummaries] ${section} failed:`, err?.message ?? err);
       });
       return { queued: true, section };
     }),
