@@ -42,6 +42,18 @@ COPY --from=builder /app/shared ./shared
 # Install all dependencies (required because build-time plugins are referenced in runtime)
 RUN pnpm install
 
+# Notice feature: LibreOffice (headless DOCX->PDF) + Thai font coverage.
+# fonts-thai-tlwg provides Thai shaping; the Sarabun (OFL) font used by the
+# Notice document is copied in and registered below.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends \
+       libreoffice-writer-nogui \
+       fonts-thai-tlwg \
+       fontconfig \
+  && rm -rf /var/lib/apt/lists/*
+COPY assets/fonts/*.ttf /usr/share/fonts/truetype/sarabun/
+RUN fc-cache -f
+
 # Set environment variables
 ENV NODE_ENV=production
 ENV PORT=3000

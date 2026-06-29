@@ -15,6 +15,7 @@ import {
   ExternalLink,
   FileText,
   KeyRound,
+  Mail,
   LayoutDashboard,
   LogOut,
   Menu as MenuIcon,
@@ -40,6 +41,7 @@ type MenuCode =
   | "monthly_summary"
   | "income"
   | "expense"
+  | "notice"
   | "settings_users"
   | "settings_groups";
 
@@ -93,6 +95,13 @@ const MAIN_NAV: NavEntry[] = [
       { kind: "leaf", label: "รายรับ", path: "/income", icon: Receipt, menuCode: "income" },
       { kind: "leaf", label: "รายจ่าย", path: "/expense", icon: TrendingDown, menuCode: "expense" },
     ],
+  },
+  {
+    kind: "leaf",
+    label: "หนังสือแจ้งเตือน",
+    path: "/notice",
+    icon: Mail,
+    menuCode: "notice",
   },
 ];
 

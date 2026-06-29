@@ -464,5 +464,91 @@ export async function runStartupMigrations(): Promise<void> {
     } catch (err: any) {
       console.error(`[migration] ${section}: monthly_collection_snapshot CREATE failed:`, err?.message ?? err);
     }
+    try {
+      // Migration 0023: Notice — print batches / print logs / restore logs
+      await db.execute(sql.raw(`
+        CREATE TABLE IF NOT EXISTS notice_print_batches (
+          id            INTEGER       PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+          section       VARCHAR(32)   NOT NULL,
+          printed_by    VARCHAR(128)  NOT NULL,
+          printed_at    TIMESTAMP     NOT NULL DEFAULT NOW(),
+          total_items   INTEGER       NOT NULL DEFAULT 0,
+          pdf_file_url  TEXT,
+          excel_file_url TEXT,
+          created_at    TIMESTAMP     NOT NULL DEFAULT NOW()
+        )
+      `));
+      await db.execute(sql.raw(`CREATE INDEX IF NOT EXISTS npb_section_printed_idx ON notice_print_batches (section, printed_at)`));
+
+      await db.execute(sql.raw(`
+        CREATE TABLE IF NOT EXISTS notice_print_logs (
+          id                   INTEGER       PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+          section              VARCHAR(32)   NOT NULL,
+          contract_external_id VARCHAR(64)   NOT NULL,
+          contract_no          VARCHAR(64),
+          notice_round         INTEGER       NOT NULL,
+          printed_by           VARCHAR(128)  NOT NULL,
+          printed_at           TIMESTAMP     NOT NULL DEFAULT NOW(),
+          batch_id             INTEGER,
+          pdf_file_url         TEXT,
+          excel_file_url       TEXT,
+          created_at           TIMESTAMP     NOT NULL DEFAULT NOW()
+        )
+      `));
+      await db.execute(sql.raw(`CREATE INDEX IF NOT EXISTS npl_section_contract_idx ON notice_print_logs (section, contract_external_id)`));
+      await db.execute(sql.raw(`CREATE INDEX IF NOT EXISTS npl_section_printed_by_idx ON notice_print_logs (section, printed_by)`));
+      await db.execute(sql.raw(`CREATE INDEX IF NOT EXISTS npl_section_printed_at_idx ON notice_print_logs (section, printed_at)`));
+
+      await db.execute(sql.raw(`
+        CREATE TABLE IF NOT EXISTS notice_restore_logs (
+          id                   INTEGER       PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+          section              VARCHAR(32)   NOT NULL,
+          contract_external_id VARCHAR(64)   NOT NULL,
+          contract_no          VARCHAR(64),
+          notice_round         INTEGER       NOT NULL,
+          restored_by          VARCHAR(128)  NOT NULL,
+          restored_at          TIMESTAMP     NOT NULL DEFAULT NOW(),
+          reason               TEXT,
+          created_at           TIMESTAMP     NOT NULL DEFAULT NOW()
+        )
+      `));
+      await db.execute(sql.raw(`CREATE INDEX IF NOT EXISTS nrl_section_contract_idx ON notice_restore_logs (section, contract_external_id)`));
+      await db.execute(sql.raw(`CREATE INDEX IF NOT EXISTS nrl_section_restored_by_idx ON notice_restore_logs (section, restored_by)`));
+      console.log(`[migration] ${section}: notice_print_batches / notice_print_logs / notice_restore_logs — OK`);
+    } catch (err: any) {
+      console.error(`[migration] ${section}: notice tables failed:`, err?.message ?? err);
+    }
+    try {
+      // Migration 0024: contracts — loss_status + mdm_device_id (MDM/GPS; sync upsert references these columns)
+      await db.execute(sql.raw(`
+        ALTER TABLE contracts
+        ADD COLUMN IF NOT EXISTS loss_status INTEGER,
+        ADD COLUMN IF NOT EXISTS mdm_device_id INTEGER
+      `));
+      console.log(`[migration] ${section}: contracts.loss_status, mdm_device_id — OK`);
+    } catch (err: any) {
+      console.error(`[migration] ${section}: contracts.loss_status, mdm_device_id failed:`, err?.message ?? err);
+    }
+    try {
+      // Migration 0025: device_location_logs (GPS history; used by Suspected Bad Debt map)
+      await db.execute(sql.raw(`
+        CREATE TABLE IF NOT EXISTS device_location_logs (
+          id            INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+          section       VARCHAR(64)  NOT NULL,
+          serial_no     VARCHAR(64)  NOT NULL,
+          mdm_device_id INTEGER      NOT NULL,
+          latitude      VARCHAR(32)  NOT NULL,
+          longitude     VARCHAR(32)  NOT NULL,
+          altitude      VARCHAR(32),
+          speed         VARCHAR(32),
+          recorded_at   TIMESTAMP    NOT NULL DEFAULT NOW()
+        )
+      `));
+      await db.execute(sql.raw(`CREATE INDEX IF NOT EXISTS dll_section_serial_idx ON device_location_logs(section, serial_no)`));
+      await db.execute(sql.raw(`CREATE INDEX IF NOT EXISTS dll_section_recorded_idx ON device_location_logs(section, recorded_at)`));
+      console.log(`[migration] ${section}: device_location_logs — OK`);
+    } catch (err: any) {
+      console.error(`[migration] ${section}: device_location_logs failed:`, err?.message ?? err);
+    }
   }
 }

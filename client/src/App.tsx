@@ -25,6 +25,7 @@ import UsersSettings from "./pages/settings/Users";
 import GroupsSettings from "./pages/settings/Groups";
 import Income from "./pages/Income";
 import Expense from "./pages/Expense";
+import Notice from "./pages/Notice";
 
 function Router() {
   return (
@@ -45,6 +46,7 @@ function Router() {
       <Route path="/monthly-summary" component={MonthlySummary} />
       <Route path="/income" component={Income} />
       <Route path="/expense" component={Expense} />
+      <Route path="/notice" component={Notice} />
       <Route path="/settings/users" component={UsersSettings} />
       <Route path="/settings/groups" component={GroupsSettings} />
       <Route path="/404" component={NotFound} />

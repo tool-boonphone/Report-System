@@ -15,6 +15,7 @@ import { cacheRouter } from "./routers/cache";
 import { accountingRouter } from "./routers/accounting";
 import { fillPeriodNosRouter } from "./routers/fillPeriodNosRouter";
 import { mdmRouter } from "./routers/mdm";
+import { noticeRouter } from "./routers/notice";
 
 export const appRouter = router({
   system: systemRouter,
@@ -33,6 +34,7 @@ export const appRouter = router({
   accounting: accountingRouter,
   fillPeriodNos: fillPeriodNosRouter,
   mdm: mdmRouter,
+  notice: noticeRouter,
 });
 
 export type AppRouter = typeof appRouter;
