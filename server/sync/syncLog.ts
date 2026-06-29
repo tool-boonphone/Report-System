@@ -17,6 +17,7 @@ export async function insertSyncLog(params: {
     triggeredBy: params.triggeredBy,
     status: "in_progress",
     startedAt: now,
+    stageUpdatedAt: now,
   }).returning({ id: syncLogs.id });
   const id = res?.id;
   if (!id) {
@@ -72,10 +73,14 @@ export async function updateSyncLogStage(params: {
     .set({
       currentStage: params.currentStage,
       progress: params.progress,
+      stageUpdatedAt: new Date(),
       ...(params.resumePage !== undefined ? { resumePage: params.resumePage } : {}),
     })
     .where(eq(syncLogs.id, params.id));
 }
+
+/** No stage/progress heartbeat for this long → treat sync as zombie (process died). */
+const STALE_STAGE_MS = 15 * 60 * 1000;
 
 /**
  * Get the last successfully fetched customers page for a section.
@@ -174,6 +179,7 @@ export async function getDbSyncStatus(section: SectionKey): Promise<{
     .select({
       id: syncLogs.id,
       startedAt: syncLogs.startedAt,
+      stageUpdatedAt: syncLogs.stageUpdatedAt,
       currentStage: syncLogs.currentStage,
       progress: syncLogs.progress,
     })
@@ -191,6 +197,15 @@ export async function getDbSyncStatus(section: SectionKey): Promise<{
 
   if (allRows.length > 0) {
     const row = allRows[0];
+    const lastBeat = row.stageUpdatedAt ?? row.startedAt;
+    const staleMs = lastBeat ? Date.now() - lastBeat.getTime() : STALE_STAGE_MS + 1;
+    if (staleMs > STALE_STAGE_MS) {
+      console.warn(
+        `[syncLog] ${section}: zombie sync detected (no progress for ${Math.round(staleMs / 60000)} min) — auto-clearing`,
+      );
+      await clearStuckSyncLogs(section);
+      return { running: false, startedAt: null, currentStage: null, progress: null };
+    }
     return {
       running: true,
       startedAt: row.startedAt,

@@ -77,6 +77,8 @@ function SyncWaitingScreen({
   });
 
   const [showConfirm, setShowConfirm] = useState(false);
+  const [stuckHint, setStuckHint] = useState(false);
+  const lastProgressRef = useRef<{ value: number; stage: string; since: number } | null>(null);
 
   const handleCancelConfirm = () => {
     cancelSync.mutate({ section });
@@ -110,6 +112,28 @@ function SyncWaitingScreen({
     }
     prevRunning.current = isRunning;
   }, [isRunning, syncStatus.data, onSyncDone]);
+
+  // ตรวจจับ sync ค้าง: progress + stage ไม่เปลี่ยนนาน หรือใช้เวลาเกิน 20 นาทีที่ progress ต่ำ
+  useEffect(() => {
+    if (!isRunning) {
+      setStuckHint(false);
+      lastProgressRef.current = null;
+      return;
+    }
+    const stageKey = currentStage || "";
+    const now = Date.now();
+    const prev = lastProgressRef.current;
+    if (!prev || prev.value !== progress || prev.stage !== stageKey) {
+      lastProgressRef.current = { value: progress, stage: stageKey, since: now };
+      setStuckHint(false);
+      return;
+    }
+    const unchangedMs = now - prev.since;
+    const likelyStuck =
+      unchangedMs >= 10 * 60 * 1000 ||
+      (elapsed >= 20 * 60 && progress > 0 && progress < 35);
+    setStuckHint(likelyStuck);
+  }, [isRunning, progress, currentStage, elapsed]);
 
   const formatElapsed = (secs: number) => {
     const m = Math.floor(secs / 60);
@@ -186,6 +210,24 @@ function SyncWaitingScreen({
           <p className="text-xs text-gray-400 text-center mt-4">
             ใช้เวลาไปแล้ว {formatElapsed(elapsed)}
           </p>
+        )}
+
+        {stuckHint && (
+          <div className="mt-4 p-3 rounded-xl bg-amber-50 border border-amber-200 text-left">
+            <p className="text-sm font-medium text-amber-900">Sync อาจค้างแล้ว</p>
+            <p className="text-xs text-amber-800 mt-1 leading-relaxed">
+              ตัวเลขไม่ขยับนาน — มักเกิดเมื่อ server restart กลางทาง (ข้อมูลเดิมใน DB ยังอยู่)
+              กด「ยกเลิกและใช้งานต่อ」เพื่อข้ามไปใช้ข้อมูลที่มีอยู่
+            </p>
+            <button
+              type="button"
+              onClick={() => cancelSync.mutate({ section })}
+              disabled={cancelSync.isPending}
+              className="mt-3 w-full py-2 rounded-lg text-sm font-medium text-white bg-amber-600 hover:bg-amber-700 disabled:opacity-50"
+            >
+              {cancelSync.isPending ? "กำลังยกเลิก..." : "ยกเลิกและใช้งานต่อ"}
+            </button>
+          </div>
         )}
       </div>
 

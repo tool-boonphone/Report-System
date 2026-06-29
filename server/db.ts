@@ -518,5 +518,47 @@ export async function runStartupMigrations(): Promise<void> {
     } catch (err: any) {
       console.error(`[migration] ${section}: notice tables failed:`, err?.message ?? err);
     }
+    try {
+      // Migration 0024: contracts — loss_status + mdm_device_id (MDM/GPS; sync upsert references these columns)
+      await db.execute(sql.raw(`
+        ALTER TABLE contracts
+        ADD COLUMN IF NOT EXISTS loss_status INTEGER,
+        ADD COLUMN IF NOT EXISTS mdm_device_id INTEGER
+      `));
+      console.log(`[migration] ${section}: contracts.loss_status, mdm_device_id — OK`);
+    } catch (err: any) {
+      console.error(`[migration] ${section}: contracts.loss_status, mdm_device_id failed:`, err?.message ?? err);
+    }
+    try {
+      // Migration 0025: device_location_logs (GPS history)
+      await db.execute(sql.raw(`
+        CREATE TABLE IF NOT EXISTS device_location_logs (
+          id            INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+          section       VARCHAR(64)  NOT NULL,
+          serial_no     VARCHAR(64)  NOT NULL,
+          mdm_device_id INTEGER      NOT NULL,
+          latitude      VARCHAR(32)  NOT NULL,
+          longitude     VARCHAR(32)  NOT NULL,
+          altitude      VARCHAR(32),
+          speed         VARCHAR(32),
+          recorded_at   TIMESTAMP    NOT NULL DEFAULT NOW()
+        )
+      `));
+      await db.execute(sql.raw(`CREATE INDEX IF NOT EXISTS dll_section_serial_idx ON device_location_logs(section, serial_no)`));
+      await db.execute(sql.raw(`CREATE INDEX IF NOT EXISTS dll_section_recorded_idx ON device_location_logs(section, recorded_at)`));
+      console.log(`[migration] ${section}: device_location_logs — OK`);
+    } catch (err: any) {
+      console.error(`[migration] ${section}: device_location_logs failed:`, err?.message ?? err);
+    }
+    try {
+      // Migration 0026: sync_logs.stage_updated_at — heartbeat for zombie sync detection
+      await db.execute(sql.raw(`
+        ALTER TABLE sync_logs
+        ADD COLUMN IF NOT EXISTS stage_updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+      `));
+      console.log(`[migration] ${section}: sync_logs.stage_updated_at — OK`);
+    } catch (err: any) {
+      console.error(`[migration] ${section}: sync_logs.stage_updated_at failed:`, err?.message ?? err);
+    }
   }
 }
