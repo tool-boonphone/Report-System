@@ -34,8 +34,8 @@ function contractsInsertErrorMessage(err: unknown): string {
     const m = raw.match(/value too long for type character varying\((\d+)\)/i);
     return m ? `contracts: value too long for varchar(${m[1]})` : "contracts: varchar length exceeded";
   }
-  if (/Failed query:\s*insert into "contracts"/i.test(raw)) {
-    return "contracts INSERT failed (see server log for full SQL)";
+  if (/no unique or exclusion constraint matching the ON CONFLICT/i.test(raw)) {
+    return "missing UNIQUE index for ON CONFLICT upsert — run schema migration (contracts_section_external_idx)";
   }
   return raw.length > 300 ? `${raw.slice(0, 297)}...` : raw;
 }
@@ -203,6 +203,7 @@ function unionKeys(rows: AnyRow[]): AnyRow {
  */
 export async function upsertCachedCustomers(rows: AnyRow[], section: SectionKey): Promise<number> {
   if (rows.length === 0) return 0;
+  await ensureSectionSchemaReady(section);
   const db = await getDb(section);
   if (!db) throw new Error("DB not available for upsertCachedCustomers");
   let total = 0;
