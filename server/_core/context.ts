@@ -1,6 +1,6 @@
 import type { CreateExpressContextOptions } from "@trpc/server/adapters/express";
 import type { User } from "../../drizzle/schema";
-import { APP_SESSION_COOKIE } from "../../shared/const";
+import { APP_SESSION_COOKIE, COOKIE_NAME } from "../../shared/const";
 import { getUserFromSession, type AppUserWithGroup } from "../authDb";
 import { sdk } from "./sdk";
 
@@ -30,13 +30,16 @@ export async function createContext(
   let user: User | null = null;
   let appUser: AppUserWithGroup | null = null;
 
-  try {
-    user = await sdk.authenticateRequest(opts.req);
-  } catch {
-    user = null;
-  }
-
   const cookies = parseCookies(opts.req.headers.cookie);
+
+  // Legacy Manus OAuth cookie — only check when present (app auth uses report_session).
+  if (cookies[COOKIE_NAME]) {
+    try {
+      user = await sdk.authenticateRequest(opts.req);
+    } catch {
+      user = null;
+    }
+  }
   const sid = cookies[APP_SESSION_COOKIE];
   if (sid) {
     try {

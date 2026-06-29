@@ -10,11 +10,21 @@ function shortenSyncError(msg?: string): string | undefined {
   if (!msg) return undefined;
   let s = msg.trim();
 
-  // Peel outer sync_logs update wrapper: "Failed query: update sync_logs ... params: <inner>"
+  // Peel nested Drizzle wrappers (sync_logs update wrapping contracts insert)
+  while (/Failed query:\s*update "sync_logs"/i.test(s)) {
+    const parts = s.split(/\nparams:\s*/i);
+    if (parts.length < 2) break;
+    s = parts[parts.length - 1].trim();
+  }
   const paramsSplit = s.split(/\nparams:\s*/i);
   if (paramsSplit.length > 1) {
     const inner = paramsSplit[paramsSplit.length - 1].trim();
-    if (/Failed query:\s*insert/i.test(inner) || /column .* does not exist/i.test(inner)) {
+    if (
+      /Failed query:\s*insert/i.test(inner) ||
+      /column .* does not exist/i.test(inner) ||
+      /contracts INSERT failed/i.test(inner) ||
+      /contracts: column/i.test(inner)
+    ) {
       s = inner;
     }
   }
