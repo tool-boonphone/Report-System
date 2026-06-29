@@ -201,7 +201,12 @@ export async function populateDebtCache(
             break;
           } catch (insertErr: any) {
             retries--;
-            if (retries === 0) throw insertErr;
+            const pgMsg =
+              insertErr?.cause?.message ?? insertErr?.message ?? String(insertErr);
+            if (retries === 0) {
+              console.error(`[populateCache] ${section}: target insert failed:`, pgMsg.slice(0, 500));
+              throw insertErr;
+            }
             console.warn(`[populateCache] target insert retry (${3 - retries}/3)...`);
             await new Promise<void>((r) => setTimeout(r, 2000));
           }

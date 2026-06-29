@@ -260,7 +260,55 @@ export async function ensureSectionSchemaReady(section: SectionKey): Promise<voi
     // commissions table may not exist on older DBs — non-fatal until commissions sync runs
   }
 
-  console.log(`[schema] ${section}: sync-critical columns + upsert indexes verified (${CONTRACTS_SYNC_COLUMNS.length} cols)`);
+  // Migration 0002: debt_target_cache / debt_collected_cache columns (populate INSERT requires these)
+  await db.execute(sql.raw(`
+    ALTER TABLE debt_target_cache
+      ADD COLUMN IF NOT EXISTS partner_code VARCHAR(255),
+      ADD COLUMN IF NOT EXISTS partner_name VARCHAR(255),
+      ADD COLUMN IF NOT EXISTS device VARCHAR(64),
+      ADD COLUMN IF NOT EXISTS model VARCHAR(128),
+      ADD COLUMN IF NOT EXISTS serial_no VARCHAR(64),
+      ADD COLUMN IF NOT EXISTS finance_amount DECIMAL(12,2),
+      ADD COLUMN IF NOT EXISTS contract_status VARCHAR(32),
+      ADD COLUMN IF NOT EXISTS debt_range VARCHAR(32),
+      ADD COLUMN IF NOT EXISTS principal DECIMAL(12,2) NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS interest DECIMAL(12,2) NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS fee DECIMAL(12,2) NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS penalty DECIMAL(12,2) NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS unlock_fee DECIMAL(12,2) NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS total_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS net_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS paid_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS baseline_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS overpaid_applied DECIMAL(12,2) NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS is_paid BOOLEAN NOT NULL DEFAULT FALSE,
+      ADD COLUMN IF NOT EXISTS is_arrears BOOLEAN NOT NULL DEFAULT FALSE,
+      ADD COLUMN IF NOT EXISTS is_bad_debt BOOLEAN NOT NULL DEFAULT FALSE,
+      ADD COLUMN IF NOT EXISTS is_closed BOOLEAN NOT NULL DEFAULT FALSE,
+      ADD COLUMN IF NOT EXISTS is_suspended BOOLEAN NOT NULL DEFAULT FALSE,
+      ADD COLUMN IF NOT EXISTS is_current_period BOOLEAN NOT NULL DEFAULT FALSE,
+      ADD COLUMN IF NOT EXISTS is_future_period BOOLEAN NOT NULL DEFAULT FALSE,
+      ADD COLUMN IF NOT EXISTS is_partial_paid BOOLEAN NOT NULL DEFAULT FALSE;
+
+    ALTER TABLE debt_collected_cache
+      ADD COLUMN IF NOT EXISTS partner_code VARCHAR(255),
+      ADD COLUMN IF NOT EXISTS partner_name VARCHAR(255),
+      ADD COLUMN IF NOT EXISTS device VARCHAR(64),
+      ADD COLUMN IF NOT EXISTS model VARCHAR(128),
+      ADD COLUMN IF NOT EXISTS finance_amount DECIMAL(12,2),
+      ADD COLUMN IF NOT EXISTS installment_count INTEGER,
+      ADD COLUMN IF NOT EXISTS contract_status VARCHAR(32),
+      ADD COLUMN IF NOT EXISTS debt_range VARCHAR(32),
+      ADD COLUMN IF NOT EXISTS period INTEGER;
+
+    CREATE UNIQUE INDEX IF NOT EXISTS dtc_section_contract_period_idx
+      ON debt_target_cache (section, contract_external_id, period);
+    CREATE INDEX IF NOT EXISTS dtc_section_is_paid_idx ON debt_target_cache (section, is_paid);
+    CREATE INDEX IF NOT EXISTS dtc_section_is_arrears_idx ON debt_target_cache (section, is_arrears);
+    CREATE INDEX IF NOT EXISTS dtc_section_is_bad_debt_idx ON debt_target_cache (section, is_bad_debt);
+  `));
+
+  console.log(`[schema] ${section}: sync-critical columns + upsert indexes + debt cache cols verified`);
 }
 
 /**
@@ -693,6 +741,53 @@ export async function runStartupMigrations(): Promise<void> {
       console.log(`[migration] ${section}: upsert unique indexes — OK`);
     } catch (err: any) {
       console.error(`[migration] ${section}: upsert unique indexes failed:`, err?.message ?? err);
+    }
+    try {
+      // Migration 0029: debt cache columns required by populateDebtCache INSERT
+      await db.execute(sql.raw(`
+        ALTER TABLE debt_target_cache
+          ADD COLUMN IF NOT EXISTS partner_code VARCHAR(255),
+          ADD COLUMN IF NOT EXISTS partner_name VARCHAR(255),
+          ADD COLUMN IF NOT EXISTS device VARCHAR(64),
+          ADD COLUMN IF NOT EXISTS model VARCHAR(128),
+          ADD COLUMN IF NOT EXISTS serial_no VARCHAR(64),
+          ADD COLUMN IF NOT EXISTS finance_amount DECIMAL(12,2),
+          ADD COLUMN IF NOT EXISTS contract_status VARCHAR(32),
+          ADD COLUMN IF NOT EXISTS debt_range VARCHAR(32),
+          ADD COLUMN IF NOT EXISTS principal DECIMAL(12,2) NOT NULL DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS interest DECIMAL(12,2) NOT NULL DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS fee DECIMAL(12,2) NOT NULL DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS penalty DECIMAL(12,2) NOT NULL DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS unlock_fee DECIMAL(12,2) NOT NULL DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS total_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS net_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS paid_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS baseline_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS overpaid_applied DECIMAL(12,2) NOT NULL DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS is_paid BOOLEAN NOT NULL DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS is_arrears BOOLEAN NOT NULL DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS is_bad_debt BOOLEAN NOT NULL DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS is_closed BOOLEAN NOT NULL DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS is_suspended BOOLEAN NOT NULL DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS is_current_period BOOLEAN NOT NULL DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS is_future_period BOOLEAN NOT NULL DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS is_partial_paid BOOLEAN NOT NULL DEFAULT FALSE;
+        ALTER TABLE debt_collected_cache
+          ADD COLUMN IF NOT EXISTS partner_code VARCHAR(255),
+          ADD COLUMN IF NOT EXISTS partner_name VARCHAR(255),
+          ADD COLUMN IF NOT EXISTS device VARCHAR(64),
+          ADD COLUMN IF NOT EXISTS model VARCHAR(128),
+          ADD COLUMN IF NOT EXISTS finance_amount DECIMAL(12,2),
+          ADD COLUMN IF NOT EXISTS installment_count INTEGER,
+          ADD COLUMN IF NOT EXISTS contract_status VARCHAR(32),
+          ADD COLUMN IF NOT EXISTS debt_range VARCHAR(32),
+          ADD COLUMN IF NOT EXISTS period INTEGER;
+        CREATE UNIQUE INDEX IF NOT EXISTS dtc_section_contract_period_idx
+          ON debt_target_cache (section, contract_external_id, period);
+      `));
+      console.log(`[migration] ${section}: debt_target_cache / debt_collected_cache cols — OK`);
+    } catch (err: any) {
+      console.error(`[migration] ${section}: debt cache cols failed:`, err?.message ?? err);
     }
   }
 }

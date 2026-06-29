@@ -71,10 +71,11 @@ export const cacheRouter = router({
    */
   status: appProcedure.query(async () => {
     const rawRows: any[] = [];
+    const sourceBySection: Record<string, { contracts: number; installments: number; payments: number }> = {};
     for (const sec of SECTIONS) {
       const db = await getDb(sec);
       if (!db) continue;
-      const rows = await db.execute(sql`
+      const cacheRows = await db.execute(sql`
         SELECT
           'target' AS cache_type,
           section,
@@ -93,16 +94,31 @@ export const cacheRouter = router({
         WHERE section = ${sec}
         GROUP BY section
       `);
-      rawRows.push(...pgRows(rows));
+      rawRows.push(...pgRows(cacheRows));
+
+      const srcRows = await db.execute(sql`
+        SELECT
+          (SELECT COUNT(*)::int FROM contracts WHERE section = ${sec}) AS contracts,
+          (SELECT COUNT(*)::int FROM installments WHERE section = ${sec}) AS installments,
+          (SELECT COUNT(*)::int FROM payment_transactions WHERE section = ${sec}) AS payments
+      `);
+      const c = pgRows(srcRows)[0] ?? {};
+      sourceBySection[sec] = {
+        contracts: Number(c.contracts ?? 0),
+        installments: Number(c.installments ?? 0),
+        payments: Number(c.payments ?? 0),
+      };
     }
     const result: Record<string, {
       target: { rowCount: number; lastPopulatedAt: string | null };
       collected: { rowCount: number; lastPopulatedAt: string | null };
+      source: { contracts: number; installments: number; payments: number };
     }> = {};
     for (const section of SECTIONS) {
       result[section] = {
         target: { rowCount: 0, lastPopulatedAt: null },
         collected: { rowCount: 0, lastPopulatedAt: null },
+        source: sourceBySection[section] ?? { contracts: 0, installments: 0, payments: 0 },
       };
     }
     for (const r of rawRows) {

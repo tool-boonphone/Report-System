@@ -22,9 +22,49 @@
  *   // Replace listDebtTargetStream / listDebtCollectedStream in debtStream.ts
  */
 import { sql } from "drizzle-orm";
-import { getDb } from "../db";
+import { getDb, pgRows } from "../db";
 import type { SectionKey } from "../../shared/const";
-import { pgRows } from "../db";
+import { populateDebtCache } from "./populateCache";
+
+const repopulateLocks = new Map<string, Promise<void>>();
+
+/** If target cache is empty but installments exist, rebuild cache once (fastfone-db schema drift). */
+async function ensureTargetCachePopulated(section: SectionKey): Promise<void> {
+  const existing = repopulateLocks.get(section);
+  if (existing) {
+    await existing;
+    return;
+  }
+  const db = await getDb(section);
+  if (!db) return;
+  const check = await db.execute(sql`
+    SELECT
+      (SELECT COUNT(*)::int FROM debt_target_cache WHERE section = ${section}) AS target_cache,
+      (SELECT COUNT(*)::int FROM installments WHERE section = ${section}) AS installments
+  `);
+  const row = pgRows(check)[0] ?? {};
+  const targetCache = Number(row.target_cache ?? 0);
+  const installments = Number(row.installments ?? 0);
+  if (targetCache > 0 || installments === 0) return;
+
+  console.warn(
+    `[queryCacheDb] ${section}: debt_target_cache empty but installments=${installments} — auto-populating`,
+  );
+  const job = populateDebtCache(section)
+    .then((r) => {
+      console.log(
+        `[queryCacheDb] ${section}: auto-populate done — target=${r.targetRows}, collected=${r.collectedRows}`,
+      );
+    })
+    .catch((err: unknown) => {
+      console.error(`[queryCacheDb] ${section}: auto-populate failed:`, err);
+    })
+    .finally(() => {
+      repopulateLocks.delete(section);
+    });
+  repopulateLocks.set(section, job);
+  await job;
+}
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const TERMINAL_STATUSES = new Set(["ระงับสัญญา", "สิ้นสุดสัญญา", "หนี้เสีย", "ยกเลิกสัญญา"]);
@@ -661,6 +701,10 @@ export async function getTargetChunk(params: {
   const { section, offset, limit } = params;
   const db = await getDb(section);
   if (!db) return { rows: [], totalContracts: 0, hasMore: false };
+
+  if (offset === 0) {
+    await ensureTargetCachePopulated(section);
+  }
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
