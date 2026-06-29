@@ -792,7 +792,7 @@ async function syncContracts(
         }).catch(() => {});
       },
       200,
-      undefined, // default timeout
+      30_000, // 30s per-request timeout (same as customers — FF API can be slow)
       startPage,
     );
 

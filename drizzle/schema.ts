@@ -120,6 +120,8 @@ export const syncLogs = pgTable(
     resumePage: integer("resume_page").default(0),
     cancelRequested: boolean("cancel_requested").default(false),
     startedAt: timestamp("started_at").defaultNow().notNull(),
+    /** Last time currentStage/progress was updated — used to detect zombie sync rows */
+    stageUpdatedAt: timestamp("stage_updated_at").defaultNow().notNull(),
     finishedAt: timestamp("finished_at"),
   },
   (t) => ({
