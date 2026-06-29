@@ -161,6 +161,22 @@ export function pgRows(result: unknown): any[] {
   return [];
 }
 
+/** Columns Drizzle references on contracts INSERT — must exist on both DBs. */
+const CONTRACTS_SYNC_COLUMNS = [
+  "serial_no",
+  "imei",
+  "last_online_days",
+  "last_online_at",
+  "device_lock",
+  "loss_status",
+  "mdm_device_id",
+  "bad_debt_amount",
+  "bad_debt_date",
+  "suspended_from_period",
+  "bad_debt_updated_by",
+  "bad_debt_updated_at",
+] as const;
+
 /**
  * Critical DDL that sync/populate require — idempotent.
  * Called at sync start (not only startup) so fastfone-db is never missing columns
@@ -173,19 +189,40 @@ export async function ensureSectionSchemaReady(section: SectionKey): Promise<voi
   }
   await db.execute(sql.raw(`
     ALTER TABLE contracts
-    ADD COLUMN IF NOT EXISTS loss_status INTEGER,
-    ADD COLUMN IF NOT EXISTS mdm_device_id INTEGER,
+    ADD COLUMN IF NOT EXISTS serial_no VARCHAR(64),
+    ADD COLUMN IF NOT EXISTS imei VARCHAR(64),
     ADD COLUMN IF NOT EXISTS last_online_days INTEGER,
     ADD COLUMN IF NOT EXISTS last_online_at VARCHAR(32),
     ADD COLUMN IF NOT EXISTS device_lock BOOLEAN,
-    ADD COLUMN IF NOT EXISTS serial_no VARCHAR(64),
-    ADD COLUMN IF NOT EXISTS imei VARCHAR(64)
+    ADD COLUMN IF NOT EXISTS loss_status INTEGER,
+    ADD COLUMN IF NOT EXISTS mdm_device_id INTEGER,
+    ADD COLUMN IF NOT EXISTS bad_debt_amount DECIMAL(12,2),
+    ADD COLUMN IF NOT EXISTS bad_debt_date VARCHAR(20),
+    ADD COLUMN IF NOT EXISTS suspended_from_period INTEGER,
+    ADD COLUMN IF NOT EXISTS bad_debt_updated_by VARCHAR(128),
+    ADD COLUMN IF NOT EXISTS bad_debt_updated_at VARCHAR(32)
   `));
   await db.execute(sql.raw(`
     ALTER TABLE sync_logs
     ADD COLUMN IF NOT EXISTS stage_updated_at TIMESTAMP NOT NULL DEFAULT NOW()
   `));
-  console.log(`[schema] ${section}: sync-critical columns verified`);
+
+  const colList = CONTRACTS_SYNC_COLUMNS.map((c) => `'${c}'`).join(", ");
+  const colCheck = await db.execute(sql.raw(`
+    SELECT column_name
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'contracts'
+      AND column_name IN (${colList})
+  `));
+  const present = new Set(pgRows(colCheck).map((r: { column_name?: string }) => r.column_name));
+  const missing = CONTRACTS_SYNC_COLUMNS.filter((c) => !present.has(c));
+  if (missing.length > 0) {
+    throw new Error(
+      `[schema] ${section}: contracts still missing columns after ALTER: ${missing.join(", ")}`,
+    );
+  }
+  console.log(`[schema] ${section}: sync-critical columns verified (${CONTRACTS_SYNC_COLUMNS.length} cols)`);
 }
 
 /**
@@ -586,6 +623,20 @@ export async function runStartupMigrations(): Promise<void> {
       console.log(`[migration] ${section}: sync_logs.stage_updated_at — OK`);
     } catch (err: any) {
       console.error(`[migration] ${section}: sync_logs.stage_updated_at failed:`, err?.message ?? err);
+    }
+    try {
+      // Migration 0027: contracts bad_debt columns (Drizzle INSERT references these)
+      await db.execute(sql.raw(`
+        ALTER TABLE contracts
+        ADD COLUMN IF NOT EXISTS bad_debt_amount DECIMAL(12,2),
+        ADD COLUMN IF NOT EXISTS bad_debt_date VARCHAR(20),
+        ADD COLUMN IF NOT EXISTS suspended_from_period INTEGER,
+        ADD COLUMN IF NOT EXISTS bad_debt_updated_by VARCHAR(128),
+        ADD COLUMN IF NOT EXISTS bad_debt_updated_at VARCHAR(32)
+      `));
+      console.log(`[migration] ${section}: contracts.bad_debt_* — OK`);
+    } catch (err: any) {
+      console.error(`[migration] ${section}: contracts.bad_debt_* failed:`, err?.message ?? err);
     }
   }
 }
