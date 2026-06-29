@@ -726,8 +726,24 @@ export async function runStartupMigrations(): Promise<void> {
       console.error(`[migration] ${section}: contracts.bad_debt_* failed:`, err?.message ?? err);
     }
     try {
-      // Migration 0028: unique indexes for ON CONFLICT upserts (sync engine)
+      // Migration 0028: dedupe + unique indexes for ON CONFLICT upserts (runs once at startup)
       await db.execute(sql.raw(`
+        DELETE FROM contracts a
+        USING contracts b
+        WHERE a.id > b.id AND a.section = b.section AND a.external_id = b.external_id;
+
+        DELETE FROM cached_customers a
+        USING cached_customers b
+        WHERE a.id > b.id AND a.section = b.section AND a.customer_id = b.customer_id;
+
+        DELETE FROM installments a
+        USING installments b
+        WHERE a.id > b.id AND a.section = b.section AND a.external_id = b.external_id;
+
+        DELETE FROM payment_transactions a
+        USING payment_transactions b
+        WHERE a.id > b.id AND a.section = b.section AND a.external_id = b.external_id;
+
         CREATE UNIQUE INDEX IF NOT EXISTS contracts_section_external_idx
           ON contracts (section, external_id);
         CREATE UNIQUE INDEX IF NOT EXISTS cached_customers_section_customer_idx
