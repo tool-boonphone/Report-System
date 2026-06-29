@@ -177,12 +177,28 @@ const CONTRACTS_SYNC_COLUMNS = [
   "bad_debt_updated_at",
 ] as const;
 
+/** Per-process memo: heavy DDL (dedupe + indexes) runs once per section, not per upsert batch. */
+const _schemaReadyBySection = new Map<SectionKey, Promise<void>>();
+
 /**
  * Critical DDL that sync/populate require — idempotent.
  * Called at sync start (not only startup) so fastfone-db is never missing columns
  * if startup migration was skipped or FASTFONE_DATABASE_URL was late.
  */
 export async function ensureSectionSchemaReady(section: SectionKey): Promise<void> {
+  let pending = _schemaReadyBySection.get(section);
+  if (!pending) {
+    pending = ensureSectionSchemaReadyOnce(section).catch((err) => {
+      _schemaReadyBySection.delete(section);
+      throw err;
+    });
+    _schemaReadyBySection.set(section, pending);
+  }
+  return pending;
+}
+
+/** @internal — run DDL once; use ensureSectionSchemaReady() which memoizes per section. */
+async function ensureSectionSchemaReadyOnce(section: SectionKey): Promise<void> {
   const db = await getDb(section);
   if (!db) {
     throw new Error(`[schema] ${section}: database connection not available`);

@@ -385,7 +385,25 @@ async function doSync(
     // Fill period_no / sub_no หลัง payments sync สำเร็จ
     if (!payFailed) {
       try {
-        const fillCount = await fillPeriodNosForSection(section);
+        const fillCount = await fillPeriodNosForSection(section, (current, total) => {
+          const logId = _overallLogId[section];
+          if (!logId) return;
+          const paymentsIdx = SYNC_STAGES.indexOf("payments");
+          const commissionsIdx = SYNC_STAGES.indexOf("commissions");
+          const stageStart = Math.round(5 + (paymentsIdx / SYNC_STAGES.length) * 90);
+          const stageEnd = Math.round(5 + (commissionsIdx / SYNC_STAGES.length) * 90);
+          const subFraction = total > 0 ? current / total : 0;
+          const progress = Math.min(
+            stageEnd - 1,
+            Math.round(stageStart + subFraction * (stageEnd - stageStart)),
+          );
+          updateSyncLogStage({
+            id: logId,
+            section,
+            currentStage: `fill_period_nos (${current}/${total})`,
+            progress,
+          }).catch(() => {});
+        });
         console.log(`[sync] ${section}: filled period_no/sub_no for ${fillCount} payment rows`);
       } catch (fillErr: any) {
         console.warn(`[sync] ${section}: fillPeriodNos failed (non-fatal):`, fillErr?.message ?? fillErr);

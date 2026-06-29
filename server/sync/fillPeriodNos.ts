@@ -23,12 +23,15 @@ import { pgRows } from "../db";
 const CONTRACT_BATCH = 50;
 const UPDATE_BATCH = 500;
 
+export type FillPeriodNosProgressFn = (current: number, total: number) => void;
+
 /**
  * Fill period_no and sub_no for all payment_transactions of a given section.
  * Returns the number of rows updated.
  */
 export async function fillPeriodNosForSection(
   section: SectionKey,
+  onProgress?: FillPeriodNosProgressFn,
 ): Promise<number> {
   const db = await getDb(section);
   if (!db) throw new Error("[fillPeriodNos] DB not available");
@@ -138,10 +141,12 @@ export async function fillPeriodNosForSection(
       totalUpdated += chunk.length;
     }
 
-    const pct = Math.round(((batchStart + batchIds.length) / contractIds.length) * 100);
-    if (pct % 10 === 0 || batchStart + batchIds.length >= contractIds.length) {
+    const processed = batchStart + batchIds.length;
+    const pct = Math.round((processed / contractIds.length) * 100);
+    onProgress?.(processed, contractIds.length);
+    if (pct % 10 === 0 || processed >= contractIds.length) {
       console.log(
-        `[fillPeriodNos] ${section}: ${batchStart + batchIds.length}/${contractIds.length} contracts (${pct}%), ${totalUpdated} rows updated`,
+        `[fillPeriodNos] ${section}: ${processed}/${contractIds.length} contracts (${pct}%), ${totalUpdated} rows updated`,
       );
     }
   }
