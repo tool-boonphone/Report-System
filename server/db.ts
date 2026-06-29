@@ -222,7 +222,45 @@ export async function ensureSectionSchemaReady(section: SectionKey): Promise<voi
       `[schema] ${section}: contracts still missing columns after ALTER: ${missing.join(", ")}`,
     );
   }
-  console.log(`[schema] ${section}: sync-critical columns verified (${CONTRACTS_SYNC_COLUMNS.length} cols)`);
+
+  // Migration 0003 indexes — required for ON CONFLICT upserts (fastfone-db often missing these)
+  await db.execute(sql.raw(`
+    DELETE FROM contracts a
+    USING contracts b
+    WHERE a.id > b.id AND a.section = b.section AND a.external_id = b.external_id;
+
+    DELETE FROM cached_customers a
+    USING cached_customers b
+    WHERE a.id > b.id AND a.section = b.section AND a.customer_id = b.customer_id;
+
+    DELETE FROM installments a
+    USING installments b
+    WHERE a.id > b.id AND a.section = b.section AND a.external_id = b.external_id;
+
+    DELETE FROM payment_transactions a
+    USING payment_transactions b
+    WHERE a.id > b.id AND a.section = b.section AND a.external_id = b.external_id;
+
+    CREATE UNIQUE INDEX IF NOT EXISTS contracts_section_external_idx
+      ON contracts (section, external_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS cached_customers_section_customer_idx
+      ON cached_customers (section, customer_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS installments_section_external_idx
+      ON installments (section, external_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS payment_transactions_section_external_idx
+      ON payment_transactions (section, external_id);
+  `));
+
+  try {
+    await db.execute(sql.raw(`
+      CREATE UNIQUE INDEX IF NOT EXISTS commissions_section_external_idx
+        ON commissions (section, external_id);
+    `));
+  } catch {
+    // commissions table may not exist on older DBs — non-fatal until commissions sync runs
+  }
+
+  console.log(`[schema] ${section}: sync-critical columns + upsert indexes verified (${CONTRACTS_SYNC_COLUMNS.length} cols)`);
 }
 
 /**
@@ -637,6 +675,24 @@ export async function runStartupMigrations(): Promise<void> {
       console.log(`[migration] ${section}: contracts.bad_debt_* — OK`);
     } catch (err: any) {
       console.error(`[migration] ${section}: contracts.bad_debt_* failed:`, err?.message ?? err);
+    }
+    try {
+      // Migration 0028: unique indexes for ON CONFLICT upserts (sync engine)
+      await db.execute(sql.raw(`
+        CREATE UNIQUE INDEX IF NOT EXISTS contracts_section_external_idx
+          ON contracts (section, external_id);
+        CREATE UNIQUE INDEX IF NOT EXISTS cached_customers_section_customer_idx
+          ON cached_customers (section, customer_id);
+        CREATE UNIQUE INDEX IF NOT EXISTS installments_section_external_idx
+          ON installments (section, external_id);
+        CREATE UNIQUE INDEX IF NOT EXISTS payment_transactions_section_external_idx
+          ON payment_transactions (section, external_id);
+        CREATE UNIQUE INDEX IF NOT EXISTS commissions_section_external_idx
+          ON commissions (section, external_id);
+      `));
+      console.log(`[migration] ${section}: upsert unique indexes — OK`);
+    } catch (err: any) {
+      console.error(`[migration] ${section}: upsert unique indexes failed:`, err?.message ?? err);
     }
   }
 }
