@@ -117,6 +117,7 @@ export async function upsertContracts(rows: AnyRow[], section: SectionKey): Prom
 
 export async function upsertInstallments(rows: AnyRow[], section: SectionKey): Promise<number> {
   if (rows.length === 0) return 0;
+  await ensureSectionSchemaReady(section);
   const db = await getDb(section);
   if (!db) throw new Error("DB not available for upsertInstallments");
   let total = 0;
