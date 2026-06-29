@@ -25,6 +25,7 @@ import { sql } from "drizzle-orm";
 import { getDb, pgRows } from "../db";
 import type { SectionKey } from "../../shared/const";
 import { populateDebtCache } from "./populateCache";
+import { listDebtTargetStream, listDebtCollectedStream } from "../debtDb";
 
 const repopulateLocks = new Map<string, Promise<void>>();
 
@@ -64,6 +65,89 @@ async function ensureTargetCachePopulated(section: SectionKey): Promise<void> {
     });
   repopulateLocks.set(section, job);
   await job;
+}
+
+/** Paginate listDebtTargetStream when debt_target_cache is empty (slow but works). */
+async function getTargetChunkLive(params: {
+  section: SectionKey;
+  offset: number;
+  limit: number;
+}): Promise<{ rows: any[]; totalContracts: number; hasMore: boolean }> {
+  const { section, offset, limit } = params;
+  const db = await getDb(section);
+  if (!db) return { rows: [], totalContracts: 0, hasMore: false };
+
+  const countRes = await db.execute(sql`
+    SELECT COUNT(*)::int AS c FROM contracts WHERE section = ${section}
+  `);
+  const totalContracts = Number(pgRows(countRes)[0]?.c ?? 0);
+  if (totalContracts === 0) return { rows: [], totalContracts: 0, hasMore: false };
+
+  const rows: any[] = [];
+  let contractIdx = 0;
+  for await (const batch of listDebtTargetStream({ section, batchSize: 100 })) {
+    for (const contract of batch) {
+      if (contractIdx < offset) {
+        contractIdx++;
+        continue;
+      }
+      if (rows.length >= limit) break;
+      rows.push(contract);
+      contractIdx++;
+    }
+    if (rows.length >= limit) break;
+  }
+
+  return {
+    rows,
+    totalContracts,
+    hasMore: offset + rows.length < totalContracts,
+  };
+}
+
+/** Paginate listDebtCollectedStream when cache is empty. */
+async function getCollectedChunkLive(params: {
+  section: SectionKey;
+  offset: number;
+  limit: number;
+}): Promise<{ rows: any[]; totalContracts: number; hasPrincipalBreakdown: boolean; hasMore: boolean }> {
+  const { section, offset, limit } = params;
+  const db = await getDb(section);
+  if (!db) {
+    return { rows: [], totalContracts: 0, hasPrincipalBreakdown: true, hasMore: false };
+  }
+
+  const countRes = await db.execute(sql`
+    SELECT COUNT(*)::int AS c FROM contracts WHERE section = ${section}
+  `);
+  const totalContracts = Number(pgRows(countRes)[0]?.c ?? 0);
+  if (totalContracts === 0) {
+    return { rows: [], totalContracts: 0, hasPrincipalBreakdown: true, hasMore: false };
+  }
+
+  const rows: any[] = [];
+  let contractIdx = 0;
+  let hasPrincipalBreakdown = true;
+  for await (const chunk of listDebtCollectedStream({ section, batchSize: 100 })) {
+    for (const contract of chunk.rows ?? []) {
+      if (contractIdx < offset) {
+        contractIdx++;
+        continue;
+      }
+      if (rows.length >= limit) break;
+      rows.push(contract);
+      contractIdx++;
+    }
+    if (chunk.meta?.hasPrincipalBreakdown === false) hasPrincipalBreakdown = false;
+    if (rows.length >= limit) break;
+  }
+
+  return {
+    rows,
+    totalContracts,
+    hasPrincipalBreakdown,
+    hasMore: offset + rows.length < totalContracts,
+  };
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -719,6 +803,11 @@ export async function getTargetChunk(params: {
   `);
   const idRows: any[] = pgRows(idResult);
   if (idRows.length === 0) {
+    const live = await getTargetChunkLive(params);
+    if (live.rows.length > 0) {
+      console.log(`[getTargetChunk] ${section}: live fallback — ${live.rows.length} contracts`);
+      return live;
+    }
     const total = await getTargetContractCount(section);
     return { rows: [], totalContracts: total, hasMore: false };
   }
@@ -910,6 +999,11 @@ export async function getCollectedChunk(params: {
   `);
   const idRows: any[] = pgRows(idResult);
   if (idRows.length === 0) {
+    const live = await getCollectedChunkLive(params);
+    if (live.rows.length > 0) {
+      console.log(`[getCollectedChunk] ${section}: live fallback — ${live.rows.length} contracts`);
+      return live;
+    }
     const total = await getCollectedContractCount(section);
     return { rows: [], totalContracts: total, hasPrincipalBreakdown: true, hasMore: false };
   }

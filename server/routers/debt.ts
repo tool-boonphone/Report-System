@@ -19,8 +19,10 @@ import {
 import {
   getTargetChunk,
   getCollectedChunk,
-  getTargetContractCount,
 } from "../sync/queryCacheDb";
+import { populateDebtCache } from "../sync/populateCache";
+import { ensureSectionSchemaReady, getDb, pgRows } from "../db";
+import { sql } from "drizzle-orm";
 import { sectionSchema } from "../../shared/const";
 import {
   getMonthlyCollectionSnapshots,
@@ -102,6 +104,54 @@ export const debtRouter = router({
     }))
     .query(async ({ input }) => {
       return getCollectedChunk(input);
+    }),
+
+  /** Row counts — ใช้ดูว่าทำไมรายงานหนี้ว่าง (contracts / installments / cache) */
+  dataHealth: debtViewProcedure
+    .input(z.object({ section: SectionEnum }))
+    .query(async ({ input }) => {
+      const db = await getDb(input.section);
+      if (!db) {
+        return { ok: false, message: "Database not available" };
+      }
+      const raw = await db.execute(sql`
+        SELECT
+          (SELECT COUNT(*)::int FROM contracts WHERE section = ${input.section}) AS contracts,
+          (SELECT COUNT(*)::int FROM installments WHERE section = ${input.section}) AS installments,
+          (SELECT COUNT(*)::int FROM payment_transactions WHERE section = ${input.section}) AS payments,
+          (SELECT COUNT(*)::int FROM debt_target_cache WHERE section = ${input.section}) AS target_cache,
+          (SELECT COUNT(*)::int FROM debt_collected_cache WHERE section = ${input.section}) AS collected_cache
+      `);
+      const r = pgRows(raw)[0] ?? {};
+      const contracts = Number(r.contracts ?? 0);
+      const installments = Number(r.installments ?? 0);
+      const targetCache = Number(r.target_cache ?? 0);
+      let hint = "ok";
+      if (contracts === 0) hint = "ยังไม่มีสัญญา — ต้อง sync contracts";
+      else if (installments === 0) hint = "ยังไม่มีงวดผ่อน — ต้อง Re-sync ให้ผ่าน stage installments";
+      else if (targetCache === 0) hint = "cache ว่าง — ระบบจะ populate หรืออ่าน live อัตโนมัติ";
+      return {
+        ok: true,
+        contracts,
+        installments,
+        payments: Number(r.payments ?? 0),
+        targetCache,
+        collectedCache: Number(r.collected_cache ?? 0),
+        hint,
+      };
+    }),
+
+  /** บังคับ populate debt cache (เมื่อ sync เสร็จแต่ cache ยังว่าง) */
+  repopulateCache: debtViewProcedure
+    .input(z.object({ section: SectionEnum }))
+    .mutation(async ({ input }) => {
+      await ensureSectionSchemaReady(input.section);
+      const result = await populateDebtCache(input.section);
+      return {
+        targetRows: result.targetRows,
+        collectedRows: result.collectedRows,
+        populatedAt: new Date().toISOString(),
+      };
     }),
 
   /** Get pre-built export info (builtAt, rowCount) for a section+variant */
