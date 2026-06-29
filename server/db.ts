@@ -162,6 +162,33 @@ export function pgRows(result: unknown): any[] {
 }
 
 /**
+ * Critical DDL that sync/populate require — idempotent.
+ * Called at sync start (not only startup) so fastfone-db is never missing columns
+ * if startup migration was skipped or FASTFONE_DATABASE_URL was late.
+ */
+export async function ensureSectionSchemaReady(section: SectionKey): Promise<void> {
+  const db = await getDb(section);
+  if (!db) {
+    throw new Error(`[schema] ${section}: database connection not available`);
+  }
+  await db.execute(sql.raw(`
+    ALTER TABLE contracts
+    ADD COLUMN IF NOT EXISTS loss_status INTEGER,
+    ADD COLUMN IF NOT EXISTS mdm_device_id INTEGER,
+    ADD COLUMN IF NOT EXISTS last_online_days INTEGER,
+    ADD COLUMN IF NOT EXISTS last_online_at VARCHAR(32),
+    ADD COLUMN IF NOT EXISTS device_lock BOOLEAN,
+    ADD COLUMN IF NOT EXISTS serial_no VARCHAR(64),
+    ADD COLUMN IF NOT EXISTS imei VARCHAR(64)
+  `));
+  await db.execute(sql.raw(`
+    ALTER TABLE sync_logs
+    ADD COLUMN IF NOT EXISTS stage_updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+  `));
+  console.log(`[schema] ${section}: sync-critical columns verified`);
+}
+
+/**
  * runStartupMigrations — รัน DDL migrations ที่จำเป็นตอน startup
  * ใช้ CREATE TABLE IF NOT EXISTS เพื่อให้ idempotent (รันซ้ำได้ปลอดภัย)
  */

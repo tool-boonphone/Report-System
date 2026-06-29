@@ -3,6 +3,37 @@ import { syncLogs } from "../../drizzle/schema";
 import { getDb } from "../db";
 import { normalizeSectionKey, type SectionKey, type SyncTrigger } from "../../shared/const";
 
+const MAX_SYNC_ERROR_LEN = 2000;
+
+/** Trim nested Drizzle "Failed query" chains so sync_logs.error_message stays readable. */
+function shortenSyncError(msg?: string): string | undefined {
+  if (!msg) return undefined;
+  let s = msg.trim();
+
+  // Peel outer sync_logs update wrapper: "Failed query: update sync_logs ... params: <inner>"
+  const paramsSplit = s.split(/\nparams:\s*/i);
+  if (paramsSplit.length > 1) {
+    const inner = paramsSplit[paramsSplit.length - 1].trim();
+    if (/Failed query:\s*insert/i.test(inner) || /column .* does not exist/i.test(inner)) {
+      s = inner;
+    }
+  }
+
+  // Prefer Postgres column-missing / constraint errors over full INSERT SQL
+  const colMissing = s.match(/column "([^"]+)" of relation "[^"]+" does not exist/i);
+  if (colMissing) {
+    s = `column "${colMissing[1]}" does not exist`;
+  } else {
+    const pgErr = s.match(/(?:^|\n)(?:error|ERROR):\s*(.+?)(?:\n|$)/);
+    if (pgErr) s = pgErr[1].trim();
+  }
+
+  if (s.length > MAX_SYNC_ERROR_LEN) {
+    return `${s.slice(0, MAX_SYNC_ERROR_LEN - 3)}...`;
+  }
+  return s;
+}
+
 export async function insertSyncLog(params: {
   section: SectionKey;
   entity: string;
@@ -46,7 +77,7 @@ export async function finishSyncLog(params: {
     .set({
       status: params.status,
       rowCount: params.rowCount ?? 0,
-      errorMessage: params.errorMessage?.slice(0, 2000) ?? null,
+      errorMessage: shortenSyncError(params.errorMessage),
       finishedAt: new Date(),
       // Always set progress=100 + currentStage='done' on success
       // so UI shows 100% even if the last setSubProgress was < 100%
