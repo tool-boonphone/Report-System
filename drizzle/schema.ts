@@ -120,6 +120,8 @@ export const syncLogs = pgTable(
     resumePage: integer("resume_page").default(0),
     cancelRequested: boolean("cancel_requested").default(false),
     startedAt: timestamp("started_at").defaultNow().notNull(),
+    /** Last time currentStage/progress was updated — used to detect zombie sync rows */
+    stageUpdatedAt: timestamp("stage_updated_at").defaultNow().notNull(),
     finishedAt: timestamp("finished_at"),
   },
   (t) => ({
@@ -774,6 +776,7 @@ export const noticePrintLogs = pgTable(
     contractExternalId: varchar("contract_external_id", { length: 64 }).notNull(),
     contractNo: varchar("contract_no", { length: 64 }),
     noticeRound: integer("notice_round").notNull(),
+    documentNo: varchar("document_no", { length: 8 }),
     printedBy: varchar("printed_by", { length: 128 }).notNull(),
     printedAt: timestamp("printed_at").defaultNow().notNull(),
     batchId: integer("batch_id"),
@@ -799,6 +802,7 @@ export const noticeRestoreLogs = pgTable(
     contractExternalId: varchar("contract_external_id", { length: 64 }).notNull(),
     contractNo: varchar("contract_no", { length: 64 }),
     noticeRound: integer("notice_round").notNull(),
+    documentNo: varchar("document_no", { length: 8 }),
     restoredBy: varchar("restored_by", { length: 128 }).notNull(),
     restoredAt: timestamp("restored_at").defaultNow().notNull(),
     reason: text("reason"),
@@ -810,3 +814,26 @@ export const noticeRestoreLogs = pgTable(
   }),
 );
 export type NoticeRestoreLog = typeof noticeRestoreLogs.$inferSelect;
+
+// ─── Notice: Document Counters (per section) ─────────────────────────────────
+export const noticeDocumentCounters = pgTable("notice_document_counters", {
+  section: varchar("section", { length: 32 }).primaryKey(),
+  nextValue: integer("next_value").notNull().default(1),
+});
+export type NoticeDocumentCounter = typeof noticeDocumentCounters.$inferSelect;
+
+// ─── Notice: Contract → Document Number (one doc no per contract after go-live) ─
+export const noticeContractDoc = pgTable(
+  "notice_contract_doc",
+  {
+    id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+    section: varchar("section", { length: 32 }).notNull(),
+    contractExternalId: varchar("contract_external_id", { length: 64 }).notNull(),
+    documentNo: varchar("document_no", { length: 8 }).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => ({
+    sectionContractIdx: uniqueIndex("ncd_section_contract_idx").on(t.section, t.contractExternalId),
+  }),
+);
+export type NoticeContractDoc = typeof noticeContractDoc.$inferSelect;

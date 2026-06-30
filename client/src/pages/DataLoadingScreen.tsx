@@ -22,7 +22,7 @@ import { trpc } from "@/lib/trpc";
 import type { SectionKey } from "@shared/const";
 import { CheckCircle2, AlertCircle, Loader2, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { readIdbCache, writeIdbCache } from "@/lib/debtIdbCache";
+import { isCachePopulated, readIdbCache, writeIdbCache } from "@/lib/debtIdbCache";
 import { useLocation } from "wouter";
 
 type ItemStatus = "idle" | "loading" | "done" | "error";
@@ -77,6 +77,8 @@ function SyncWaitingScreen({
   });
 
   const [showConfirm, setShowConfirm] = useState(false);
+  const [stuckHint, setStuckHint] = useState(false);
+  const lastProgressRef = useRef<{ value: number; stage: string; since: number } | null>(null);
 
   const handleCancelConfirm = () => {
     cancelSync.mutate({ section });
@@ -110,6 +112,28 @@ function SyncWaitingScreen({
     }
     prevRunning.current = isRunning;
   }, [isRunning, syncStatus.data, onSyncDone]);
+
+  // ตรวจจับ sync ค้าง: progress + stage ไม่เปลี่ยนนาน หรือใช้เวลาเกิน 20 นาทีที่ progress ต่ำ
+  useEffect(() => {
+    if (!isRunning) {
+      setStuckHint(false);
+      lastProgressRef.current = null;
+      return;
+    }
+    const stageKey = currentStage || "";
+    const now = Date.now();
+    const prev = lastProgressRef.current;
+    if (!prev || prev.value !== progress || prev.stage !== stageKey) {
+      lastProgressRef.current = { value: progress, stage: stageKey, since: now };
+      setStuckHint(false);
+      return;
+    }
+    const unchangedMs = now - prev.since;
+    const likelyStuck =
+      unchangedMs >= 10 * 60 * 1000 ||
+      (elapsed >= 20 * 60 && progress > 0 && progress < 35);
+    setStuckHint(likelyStuck);
+  }, [isRunning, progress, currentStage, elapsed]);
 
   const formatElapsed = (secs: number) => {
     const m = Math.floor(secs / 60);
@@ -186,6 +210,24 @@ function SyncWaitingScreen({
           <p className="text-xs text-gray-400 text-center mt-4">
             ใช้เวลาไปแล้ว {formatElapsed(elapsed)}
           </p>
+        )}
+
+        {stuckHint && (
+          <div className="mt-4 p-3 rounded-xl bg-amber-50 border border-amber-200 text-left">
+            <p className="text-sm font-medium text-amber-900">Sync อาจค้างแล้ว</p>
+            <p className="text-xs text-amber-800 mt-1 leading-relaxed">
+              ตัวเลขไม่ขยับนาน — มักเกิดเมื่อ server restart กลางทาง (ข้อมูลเดิมใน DB ยังอยู่)
+              กด「ยกเลิกและใช้งานต่อ」เพื่อข้ามไปใช้ข้อมูลที่มีอยู่
+            </p>
+            <button
+              type="button"
+              onClick={() => cancelSync.mutate({ section })}
+              disabled={cancelSync.isPending}
+              className="mt-3 w-full py-2 rounded-lg text-sm font-medium text-white bg-amber-600 hover:bg-amber-700 disabled:opacity-50"
+            >
+              {cancelSync.isPending ? "กำลังยกเลิก..." : "ยกเลิกและใช้งานต่อ"}
+            </button>
+          </div>
         )}
       </div>
 
@@ -621,7 +663,12 @@ export default function DataLoadingScreen() {
     
     // บันทึกลง IndexedDB หลังโหลดครบทั้งหมด
     const cache = debtCache.getCache(sec);
-    if (cache.target && cache.collected) {
+    if (
+      cache.target &&
+      cache.collected &&
+      cache.target.rows.length > 0 &&
+      cache.collected.rows.length > 0
+    ) {
       writeIdbCache({
         section: sec,
         savedAt: Date.now(),
@@ -661,7 +708,10 @@ export default function DataLoadingScreen() {
 
       // ตรวจสอบว่า memory cache มีข้อมูลอยู่แล้วหรือไม่
       const memCache = debtCache.getCache(section as SectionKey);
-      if (memCache.target && memCache.collected) {
+      const memHasData =
+        (memCache.target?.rows.length ?? 0) > 0 &&
+        (memCache.collected?.rows.length ?? 0) > 0;
+      if (memHasData) {
         if (needsMdm) {
           // มีข้อมูลใน cache แต่ MDM stale -> ให้ดึงแค่ MDM แล้วค่อย navigate
           startedRef.current = true;
@@ -689,7 +739,7 @@ export default function DataLoadingScreen() {
       // ตรวจสอบ IndexedDB cache ก่อนโหลดจาก API
       try {
         const idbEntry = await readIdbCache(section as SectionKey);
-        if (idbEntry) {
+        if (idbEntry && isCachePopulated(idbEntry)) {
           // มี IDB cache ที่ยังไม่หมดอายุ → restore เข้า memory
           debtCache.setTargetRows(section as SectionKey, idbEntry.targetRows);
           debtCache.setCollectedRows(section as SectionKey, idbEntry.collectedRows, idbEntry.hasPrincipalBreakdown);

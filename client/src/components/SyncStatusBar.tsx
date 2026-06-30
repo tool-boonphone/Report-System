@@ -62,6 +62,9 @@ const STAGE_LABELS: Record<string, string> = {
   bad_debt: "คำนวณหนี้เสีย",
   mdm_online: "อัปเดตสถานะ MDM Online",
   populate: "สร้าง Cache รายงาน",
+  fill_period_nos: "คำนวณงวดชำระ",
+  post_process: "ทำ Cache ต่อ",
+  populate_cache: "สร้าง Cache รายงาน",
   finishing: "กำลังบันทึก",
   all: "ภาพรวม",
   เริ่มต้น: "กำลังเริ่มต้น",
@@ -223,6 +226,10 @@ function SyncDropdown({
   onClearCache,
   onRepopulate,
   isRepopulating,
+  onPostProcess,
+  isPostProcessPending,
+  onRefreshSummaries,
+  isRefreshSummariesPending,
 }: {
   isRunning: boolean;
   isClearing: boolean;
@@ -235,6 +242,10 @@ function SyncDropdown({
   /** callback สำหรับ Repopulate Summary — ถ้าไม่ส่งมา จะไม่แสดงปุ่ม */
   onRepopulate?: () => void;
   isRepopulating?: boolean;
+  onPostProcess?: () => void;
+  isPostProcessPending?: boolean;
+  onRefreshSummaries?: () => void;
+  isRefreshSummariesPending?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const dropRef = useRef<HTMLDivElement>(null);
@@ -251,7 +262,7 @@ function SyncDropdown({
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
 
-  const anyBusy = isRunning || isClearing || isTriggerPending || isMdmPending;
+  const anyBusy = isRunning || isClearing || isTriggerPending || isMdmPending || isPostProcessPending || isRefreshSummariesPending;
 
   return (
     <div ref={dropRef} className="relative">
@@ -307,6 +318,35 @@ function SyncDropdown({
               <div className="text-xs text-purple-400">ตรวจสอบการเชื่อมต่อ MDM API</div>
             </div>
           </button>
+
+          {/* ทำ Cache ต่อ — หลัง sync ดึงข้อมูลแล้วแต่ตายก่อน populate */}
+          {onPostProcess && (
+            <button
+              onClick={() => { onPostProcess(); setOpen(false); }}
+              disabled={isRunning || isPostProcessPending}
+              className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 transition-colors"
+            >
+              <RefreshCw className={`w-4 h-4 shrink-0 ${isPostProcessPending ? "animate-spin" : ""}`} />
+              <div className="text-left">
+                <div className="font-medium">ทำ Cache ต่อ</div>
+                <div className="text-xs text-emerald-500">fillPeriodNos + สร้าง cache (~30 นาที)</div>
+              </div>
+            </button>
+          )}
+
+          {onRefreshSummaries && (
+            <button
+              onClick={() => { onRefreshSummaries(); setOpen(false); }}
+              disabled={isRunning || isRefreshSummariesPending}
+              className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-sky-700 hover:bg-sky-50 disabled:opacity-40 transition-colors"
+            >
+              <RefreshCw className={`w-4 h-4 shrink-0 ${isRefreshSummariesPending ? "animate-spin" : ""}`} />
+              <div className="text-left">
+                <div className="font-medium">อัปเดตสรุปรายเดือน</div>
+                <div className="text-xs text-sky-500">ยอดเก็บหนี้ + ขายเครื่อง (~10 นาที)</div>
+              </div>
+            </button>
+          )}
 
           {/* Repopulate Summary — แสดงเฉพาะเมื่อมี onRepopulate callback (superAdmin only) */}
           {onRepopulate && (
@@ -377,27 +417,36 @@ export function SyncStatusBar({
       const d = q.state.data as any;
       if (!d) return 3000;
       const s = section ?? "Boonphone";
-      return d?.[s]?.running ? 2000 : 10000;
+      const sec = d?.[s];
+      return sec?.running || sec?.postProcess?.running ? 2000 : 10000;
     },
   });
 
   const sectionData = section ? (status.data as any)?.[section] : null;
   const isRunning = Boolean(sectionData?.running);
+  const postProcessData = sectionData?.postProcess;
+  const isPostProcessRunning = Boolean(postProcessData?.running);
 
   // Elapsed timer — ticks every second while running
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    if (!isRunning) return;
+    if (!isRunning && !isPostProcessRunning) return;
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
-  }, [isRunning]);
+  }, [isRunning, isPostProcessRunning]);
 
   // SSE stream ref — keeps Render/Cloud Run alive during sync
   const sseRef = useRef<EventSource | null>(null);
 
-  const progress: number = sectionData?.progress ?? 0;
-  const currentStage: string = sectionData?.currentStage ?? "";
-  const startedAt: number | null = sectionData?.startedAt ?? null;
+  const progress: number = isPostProcessRunning
+    ? (postProcessData?.progress ?? 0)
+    : (sectionData?.progress ?? 0);
+  const currentStage: string = isPostProcessRunning
+    ? (postProcessData?.currentStage ?? "post_process")
+    : (sectionData?.currentStage ?? "");
+  const startedAt: number | null = isPostProcessRunning
+    ? (postProcessData?.startedAt ?? null)
+    : (sectionData?.startedAt ?? null);
 
   // Parse sub-progress from stage string e.g. "customers (3/10)"
   const stageMatch = currentStage.match(/^(\w+)\s*\((\d+)\/(\d+)\)$/);
@@ -649,11 +698,60 @@ export function SyncStatusBar({
         lossStatus: d.lossStatus,   // 0=ปกติ, 1=Lost Mode (ดึง GPS ได้)
       }));
 
+      // Step 3b: ดึง GPS จาก browser (server ถูก Cloudflare block ที่ /devices/location)
+      const gpsTargets = devicePayload.filter(
+        (d) => d.lastType === 1 && d.lossStatus === 1 && d.mdmDeviceId != null,
+      );
+      const locations: Array<{
+        serialNo: string;
+        mdmDeviceId: number;
+        latitude: string;
+        longitude: string;
+        altitude: string | null;
+        speed: string | null;
+      }> = [];
+      if (gpsTargets.length > 0) {
+        toast.loading(`ดึง GPS ${gpsTargets.length} เครื่อง...`, { id: toastId });
+        for (const target of gpsTargets) {
+          try {
+            const locUrl = `https://mdm-th.com/api/mdm/devices/location?id=${target.mdmDeviceId}`;
+            const locRes = await fetch(locUrl, {
+              headers: { "X-API-Key": apiKey, Accept: "application/json, text/plain, */*" },
+              signal: AbortSignal.timeout(15_000),
+            });
+            const locRaw = await locRes.text();
+            if (locRes.ok && !locRaw.trimStart().startsWith("<")) {
+              const locJson = JSON.parse(locRaw) as {
+                code?: number;
+                latitude?: string | number;
+                longitude?: string | number;
+                altitude?: string | number | null;
+                speed?: string | number | null;
+              };
+              if (locJson.latitude != null && locJson.longitude != null && locJson.code !== 500) {
+                locations.push({
+                  serialNo: target.serialNo,
+                  mdmDeviceId: target.mdmDeviceId!,
+                  latitude: String(locJson.latitude),
+                  longitude: String(locJson.longitude),
+                  altitude: locJson.altitude != null ? String(locJson.altitude) : null,
+                  speed: locJson.speed != null ? String(locJson.speed) : null,
+                });
+              }
+            }
+          } catch {
+            // offline / no GPS — skip
+          }
+          await new Promise((r) => setTimeout(r, 200));
+        }
+      }
+
       // Step 4: ส่งผลกลับ server เพื่อบันทึกลง DB
       toast.loading(`บันทึกข้อมูล MDM ${devicePayload.length} devices (รวม deviceLock)...`, { id: toastId });
       await saveMdmDataMutation.mutateAsync({
         section: section as SectionKey,
         devices: devicePayload,
+        locations: locations.length > 0 ? locations : undefined,
       });
       toast.dismiss(toastId);
     } catch (err: any) {
@@ -672,13 +770,29 @@ export function SyncStatusBar({
     onError: (err) => toast.error(err.message),
   });
 
+  const postProcess = trpc.sync.postProcess.useMutation({
+    onSuccess: () => {
+      toast.info("เริ่มทำ Cache ต่อ — ดู progress ที่แถบ Sync");
+      utils.sync.status.invalidate();
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const refreshSummaries = trpc.sync.refreshSummaries.useMutation({
+    onSuccess: () => {
+      toast.info("เริ่มอัปเดตสรุปรายเดือน — รอ ~10 นาที");
+      utils.sync.status.invalidate();
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
   const [isTriggerPending, setIsTriggerPending] = useState(false);
 
   useEffect(() => {
-    if (isRunning) setIsSyncingLocally(false);
-  }, [isRunning]);
+    if (isRunning || isPostProcessRunning) setIsSyncingLocally(false);
+  }, [isRunning, isPostProcessRunning]);
 
-  const isShowingProgress = isRunning || isSyncingLocally;
+  const isShowingProgress = isRunning || isPostProcessRunning || isSyncingLocally;
 
   const handleResync = useCallback(() => {
     if (!section || isShowingProgress || isTriggerPending) return;
@@ -781,7 +895,7 @@ export function SyncStatusBar({
         ) : canResync ? (
           /* ---- Dropdown menu รวมปุ่ม Sync ทั้งหมด ---- */
           <SyncDropdown
-            isRunning={isRunning}
+            isRunning={isRunning || isPostProcessRunning}
             isClearing={isClearing}
             isTriggerPending={isTriggerPending}
             isMdmPending={isMdmSyncing || saveMdmDataMutation.isPending}
@@ -791,6 +905,18 @@ export function SyncStatusBar({
             onClearCache={handleClearCache}
             onRepopulate={onRepopulate}
             isRepopulating={isRepopulating}
+            onPostProcess={
+              canResync && section
+                ? () => postProcess.mutate({ section: section as SectionKey })
+                : undefined
+            }
+            isPostProcessPending={postProcess.isPending}
+            onRefreshSummaries={
+              canResync && section
+                ? () => refreshSummaries.mutate({ section: section as SectionKey })
+                : undefined
+            }
+            isRefreshSummariesPending={refreshSummaries.isPending}
           />
         ) : null}
       </div>

@@ -52,7 +52,7 @@ import type { SectionKey, SyncTrigger } from "../../shared/const";
 
 import { fillPeriodNosForSection } from "./fillPeriodNos";
 import { populateDebtCache } from "./populateCache";
-import { pgRows } from "../db";
+import { pgRows, ensureSectionSchemaReady } from "../db";
 import { rebuildIncomeMonthlySummary, populateIncomeType } from "../accountingDb";
 import { populateMonthlySummaryCache, populateDueMonthCache } from "../monthlySummaryDb";
 import { populateMonthlyCollectionSnapshot, backfillFrozenBreakdown } from "../monthlyCollectionSnapshotDb";
@@ -201,6 +201,14 @@ export async function runSectionSync(
   const client = buildClientFromEnv(section);
   if (!client || !client.isConfigured()) {
     return { ok: false, rowCount: 0, message: `[${section}] API credentials are not configured` };
+  }
+
+  try {
+    await ensureSectionSchemaReady(section);
+  } catch (schemaErr: any) {
+    const msg = schemaErr?.message ?? String(schemaErr);
+    console.error(`[sync] ${section}: schema ensure failed:`, msg);
+    return { ok: false, rowCount: 0, message: msg };
   }
 
   _locks[section] = {
@@ -377,7 +385,25 @@ async function doSync(
     // Fill period_no / sub_no หลัง payments sync สำเร็จ
     if (!payFailed) {
       try {
-        const fillCount = await fillPeriodNosForSection(section);
+        const fillCount = await fillPeriodNosForSection(section, (current, total) => {
+          const logId = _overallLogId[section];
+          if (!logId) return;
+          const paymentsIdx = SYNC_STAGES.indexOf("payments");
+          const commissionsIdx = SYNC_STAGES.indexOf("commissions");
+          const stageStart = Math.round(5 + (paymentsIdx / SYNC_STAGES.length) * 90);
+          const stageEnd = Math.round(5 + (commissionsIdx / SYNC_STAGES.length) * 90);
+          const subFraction = total > 0 ? current / total : 0;
+          const progress = Math.min(
+            stageEnd - 1,
+            Math.round(stageStart + subFraction * (stageEnd - stageStart)),
+          );
+          updateSyncLogStage({
+            id: logId,
+            section,
+            currentStage: `fill_period_nos (${current}/${total})`,
+            progress,
+          }).catch(() => {});
+        });
         console.log(`[sync] ${section}: filled period_no/sub_no for ${fillCount} payment rows`);
       } catch (fillErr: any) {
         console.warn(`[sync] ${section}: fillPeriodNos failed (non-fatal):`, fillErr?.message ?? fillErr);
@@ -792,7 +818,7 @@ async function syncContracts(
         }).catch(() => {});
       },
       200,
-      undefined, // default timeout
+      30_000, // 30s per-request timeout (same as customers — FF API can be slow)
       startPage,
     );
 

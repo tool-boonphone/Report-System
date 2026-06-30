@@ -847,11 +847,13 @@ export default function DebtReport() {
     setStreamLoading({ target: false, collected: false });
     setStreamProgress({ target: 0, collected: 0 });
     setStreamTotal({ target: 0, collected: 0 });
-    // Then trigger fetch if auth is ready
+    // Then trigger fetch if auth is ready (empty cache = treat as miss)
     if (isAuthLoading || !canView || !section) return;
-    if (tab === "target" && !streamData.target) {
+    const hasTargetData = (streamData.target?.rows.length ?? 0) > 0;
+    const hasCollectedData = (streamData.collected?.rows.length ?? 0) > 0;
+    if (tab === "target" && !hasTargetData && !streamLoading.target) {
       fetchStream("target");
-    } else if (tab === "collected" && !streamData.collected) {
+    } else if (tab === "collected" && !hasCollectedData && !streamLoading.collected) {
       fetchStream("collected");
     }
   }, [tab, section, canView, isAuthLoading]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -2897,8 +2899,13 @@ export default function DebtReport() {
                 })}
               </div>
               {filteredRows.length === 0 && (
-                <div className="text-center py-12 text-gray-500 text-sm">
-                  ไม่พบข้อมูล
+                <div className="text-center py-12 text-gray-500 text-sm space-y-2">
+                  <p>{activeRows.length === 0 ? "ยังไม่มีข้อมูลรายงานหนี้" : "ไม่พบข้อมูล"}</p>
+                  {activeRows.length === 0 && !isLoading && !isError && (
+                    <p className="text-xs text-gray-400 max-w-md mx-auto">
+                      ลองกด Sync → Clear Cache แล้วโหลดใหม่ หรือ Sync → ทำ Cache ต่อ หากเพิ่ง sync ข้อมูล
+                    </p>
+                  )}
                 </div>
               )}
             </div>

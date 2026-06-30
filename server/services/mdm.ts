@@ -331,10 +331,25 @@ export async function getDeviceLocation(
         "Referer": "https://mdm-th.com/",
         "Origin": "https://mdm-th.com",
       },
-      signal: AbortSignal.timeout(15_000), // timeout 15 วินาที (GPS อาจช้า)
+      signal: AbortSignal.timeout(15_000),
     });
 
-    const json = await res.json();
+    const raw = await res.text();
+    if (!res.ok || raw.trimStart().startsWith("<")) {
+      console.warn(
+        `[MDM][${section}] getDeviceLocation id=${mdmDeviceId}: non-JSON response status=${res.status} body=${raw.slice(0, 80)}`,
+      );
+      return null;
+    }
+
+    const json = JSON.parse(raw) as {
+      code?: number;
+      msg?: string;
+      latitude?: string | number;
+      longitude?: string | number;
+      altitude?: string | number | null;
+      speed?: string | number | null;
+    };
 
     // Error response: { msg: "ไม่สามารถดึงข้อมูลตำแหน่งได้...", code: 500 }
     if (json?.code === 500 || json?.msg || !json?.latitude) {

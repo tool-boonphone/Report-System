@@ -2,11 +2,14 @@ import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { router, appProcedure } from "../_core/trpc";
 import { runSectionSync, isSyncRunning, getSyncStatus, requestCancelSync, SYNC_STAGES, syncMdmOnlineDays } from "../sync/runner";
+import { isPostProcessRunning, runPostSyncPipeline } from "../sync/postProcess";
+import { isSummaryRefreshRunning, runSummaryRefreshPipeline } from "../sync/summaryRefresh";
 import {
   getLastSyncedAt,
   listSyncLogs,
   getRunningSyncs,
   getDbSyncStatus,
+  getPostProcessStatus,
   clearStuckSyncLogs,
 } from "../sync/syncLog";
 import { desc, eq, and, gt, lt, sql } from "drizzle-orm";
@@ -43,15 +46,83 @@ export const syncRouter = router({
     }),
 
   /**
+   * Resume post-sync only: fillPeriodNos + populate debt cache (no API re-download).
+   * Fire-and-forget; uses entity=post_process log (not auto-cleared by entity=all zombie check).
+   */
+  postProcess: appProcedure
+    .input(z.object({ section: sectionSchema }))
+    .mutation(async ({ input, ctx }) => {
+      const { checkPermission } = await import("../authDb");
+      if (ctx.appUser) {
+        const allowed = checkPermission(ctx.appUser, "sync_api", "sync");
+        if (!allowed) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "ไม่มีสิทธิ์ใช้งาน Re-Sync" });
+        }
+      }
+      const section = input.section as SectionKey;
+      if (isSyncRunning(section)) {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: `Sync สำหรับ ${section} ยังรันอยู่ — รอให้จบหรือยกเลิกก่อน`,
+        });
+      }
+      if (isPostProcessRunning(section)) {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: `Post-process สำหรับ ${section} กำลังรันอยู่แล้ว`,
+        });
+      }
+      runPostSyncPipeline(section).catch((err) => {
+        console.error(`[sync.postProcess] ${section} failed:`, err?.message ?? err);
+      });
+      return { queued: true, section };
+    }),
+
+  /**
+   * Refresh monthly summary caches only (~5–15 min).
+   * Use when debt cache is ready but ยอดเก็บหนี้/ขายเครื่อง still show zero.
+   */
+  refreshSummaries: appProcedure
+    .input(z.object({ section: sectionSchema }))
+    .mutation(async ({ input, ctx }) => {
+      const { checkPermission } = await import("../authDb");
+      if (ctx.appUser) {
+        const allowed = checkPermission(ctx.appUser, "sync_api", "sync");
+        if (!allowed) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "ไม่มีสิทธิ์ใช้งาน Re-Sync" });
+        }
+      }
+      const section = input.section as SectionKey;
+      if (isSyncRunning(section) || isPostProcessRunning(section)) {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: `Sync/post-process สำหรับ ${section} ยังรันอยู่`,
+        });
+      }
+      if (isSummaryRefreshRunning(section)) {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: `อัปเดตสรุปรายเดือนสำหรับ ${section} กำลังรันอยู่แล้ว`,
+        });
+      }
+      runSummaryRefreshPipeline(section).catch((err) => {
+        console.error(`[sync.refreshSummaries] ${section} failed:`, err?.message ?? err);
+      });
+      return { queued: true, section };
+    }),
+
+  /**
    * Sync status — reads from DB (cross-instance safe for Cloud Run).
    * Falls back to in-memory lock if DB returns running=false but lock is set
    * (same-instance fast path).
    */
   status: appProcedure.query(async () => {
     // Fetch DB status for both sections in parallel
-    const [bpDb, ffDb] = await Promise.all([
+    const [bpDb, ffDb, bpPost, ffPost] = await Promise.all([
       getDbSyncStatus("Boonphone"),
       getDbSyncStatus("Fastfone365"),
+      getPostProcessStatus("Boonphone"),
+      getPostProcessStatus("Fastfone365"),
     ]);
 
     // In-memory fallback (same instance)
@@ -60,6 +131,8 @@ export const syncRouter = router({
 
     const bpRunning = (bpDb?.running ?? false) || isSyncRunning("Boonphone");
     const ffRunning = (ffDb?.running ?? false) || isSyncRunning("Fastfone365");
+    const bpPostRunning = (bpPost?.running ?? false) || isPostProcessRunning("Boonphone");
+    const ffPostRunning = (ffPost?.running ?? false) || isPostProcessRunning("Fastfone365");
 
     // Helper: derive stageIndex from currentStage when in-memory is unavailable (cross-instance)
     const deriveStageIndex = (stage: string | null | undefined): number | null => {
@@ -93,6 +166,12 @@ export const syncRouter = router({
         currentStage: bpCurrentStage,
         stageIndex: bpStageIndex,
         totalStages: bpTotalStages,
+        postProcess: {
+          running: bpPostRunning,
+          startedAt: bpPost?.startedAt?.getTime() ?? null,
+          progress: bpPost?.progress ?? null,
+          currentStage: bpPost?.currentStage ?? null,
+        },
       },
       Fastfone365: {
         running: ffRunning,
@@ -101,6 +180,12 @@ export const syncRouter = router({
         currentStage: ffCurrentStage,
         stageIndex: ffStageIndex,
         totalStages: ffTotalStages,
+        postProcess: {
+          running: ffPostRunning,
+          startedAt: ffPost?.startedAt?.getTime() ?? null,
+          progress: ffPost?.progress ?? null,
+          currentStage: ffPost?.currentStage ?? null,
+        },
       },
       active: await getRunningSyncs(),
     };
@@ -255,6 +340,17 @@ export const syncRouter = router({
             lossStatus: z.number().int().nullable().optional(), // 0=ปกติ, 1=Lost Mode (ดึง GPS ได้)
           })
         ).max(20000), // เพิ่มจาก 10,000 เป็น 20,000 รองรับ dataset ขนาดใหญ่
+        /** GPS จาก client browser (Render server ถูก Cloudflare block ที่ /devices/location) */
+        locations: z.array(
+          z.object({
+            serialNo: z.string(),
+            mdmDeviceId: z.number().int(),
+            latitude: z.string(),
+            longitude: z.string(),
+            altitude: z.string().nullable().optional(),
+            speed: z.string().nullable().optional(),
+          }),
+        ).max(500).optional(),
       })
     )
     .mutation(async ({ input }) => {
@@ -379,7 +475,28 @@ export const syncRouter = router({
 
       console.log(`[saveMdmData] ${section}: updated ${updated}/${matchedRows.length} matched contracts (bulk SQL, with mdm_device_id)`);
 
-      // ─── GPS Loop: ดึง GPS เฉพาะเครื่องที่ online (days=0) และถูกล็อก (deviceLock=true) ───
+      // ─── GPS: ใช้ locations จาก client browser ก่อน (หลีกเลี่ยง Cloudflare block บน Render) ───
+      const clientLocations = input.locations ?? [];
+      if (clientLocations.length > 0) {
+        let gpsSuccess = 0;
+        for (const loc of clientLocations) {
+          if (!loc.latitude || !loc.longitude) continue;
+          await db.insert(deviceLocationLogs).values({
+            section,
+            serialNo: loc.serialNo.trim().toUpperCase(),
+            mdmDeviceId: loc.mdmDeviceId,
+            latitude: loc.latitude,
+            longitude: loc.longitude,
+            altitude: loc.altitude ?? null,
+            speed: loc.speed ?? null,
+          });
+          gpsSuccess++;
+        }
+        console.log(
+          `[saveMdmData][GPS] ${section}: saved ${gpsSuccess}/${clientLocations.length} locations from client`,
+        );
+      } else {
+      // ─── GPS Loop (server fallback — มักถูก Cloudflare block บน Render) ───
       // กรอง matchedRows เฉพาะที่ online วันนี้ (days=0) และ deviceLock=true
       // lastType=1 = MDM รายงานว่าเครื่องออนไลน์อยู่ ณ ขณะที่ sync → ดึง GPS ได้
       // lastType=0 = offline → ข้ามไปเลย ไม่ดึงซ้ำ
@@ -435,6 +552,7 @@ export const syncRouter = router({
       } else {
         console.log(`[saveMdmData][GPS] ${section}: no devices qualify for GPS fetch (need lastType=1 online + locked)`);
       }
+      } // end server GPS fallback when no client locations
       // ─────────────────────────────────────────────────────────────────────────────────
 
       return { section, updated, total: validRows.length };

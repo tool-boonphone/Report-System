@@ -11,6 +11,7 @@ import {
   listNoticeContracts,
   getNoticeSummary,
   getNoticeAdminOptions,
+  getNoticeMonthlyStats,
   recordNoticePrint,
   restoreLatestNoticeRound,
   type NoticeFilters,
@@ -77,6 +78,10 @@ export const noticeRouter = router({
   adminOptions: requirePermission("notice", "view")
     .input(z.object({ section: sectionSchema }))
     .query(({ input }) => getNoticeAdminOptions(input.section)),
+
+  monthlyStats: requirePermission("notice", "view")
+    .input(z.object({ section: sectionSchema }))
+    .query(({ input }) => getNoticeMonthlyStats(input.section)),
 
   /**
    * บันทึกการพิมพ์ Notice (นับรอบ) ของรายการที่เลือก

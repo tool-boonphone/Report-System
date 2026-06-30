@@ -161,6 +161,210 @@ export function pgRows(result: unknown): any[] {
   return [];
 }
 
+/** Columns Drizzle references on contracts INSERT — must exist on both DBs. */
+const CONTRACTS_SYNC_COLUMNS = [
+  "serial_no",
+  "imei",
+  "last_online_days",
+  "last_online_at",
+  "device_lock",
+  "loss_status",
+  "mdm_device_id",
+  "bad_debt_amount",
+  "bad_debt_date",
+  "suspended_from_period",
+  "bad_debt_updated_by",
+  "bad_debt_updated_at",
+] as const;
+
+/** Per-process memo: heavy DDL (dedupe + indexes) runs once per section, not per upsert batch. */
+const _schemaReadyBySection = new Map<SectionKey, Promise<void>>();
+
+/**
+ * Critical DDL that sync/populate require — idempotent.
+ * Called at sync start (not only startup) so fastfone-db is never missing columns
+ * if startup migration was skipped or FASTFONE_DATABASE_URL was late.
+ */
+export async function ensureSectionSchemaReady(section: SectionKey): Promise<void> {
+  let pending = _schemaReadyBySection.get(section);
+  if (!pending) {
+    pending = ensureSectionSchemaReadyOnce(section).catch((err) => {
+      _schemaReadyBySection.delete(section);
+      throw err;
+    });
+    _schemaReadyBySection.set(section, pending);
+  }
+  return pending;
+}
+
+/** @internal — run DDL once; use ensureSectionSchemaReady() which memoizes per section. */
+async function ensureSectionSchemaReadyOnce(section: SectionKey): Promise<void> {
+  const db = await getDb(section);
+  if (!db) {
+    throw new Error(`[schema] ${section}: database connection not available`);
+  }
+  await db.execute(sql.raw(`
+    ALTER TABLE contracts
+    ADD COLUMN IF NOT EXISTS serial_no VARCHAR(64),
+    ADD COLUMN IF NOT EXISTS imei VARCHAR(64),
+    ADD COLUMN IF NOT EXISTS last_online_days INTEGER,
+    ADD COLUMN IF NOT EXISTS last_online_at VARCHAR(32),
+    ADD COLUMN IF NOT EXISTS device_lock BOOLEAN,
+    ADD COLUMN IF NOT EXISTS loss_status INTEGER,
+    ADD COLUMN IF NOT EXISTS mdm_device_id INTEGER,
+    ADD COLUMN IF NOT EXISTS bad_debt_amount DECIMAL(12,2),
+    ADD COLUMN IF NOT EXISTS bad_debt_date VARCHAR(20),
+    ADD COLUMN IF NOT EXISTS suspended_from_period INTEGER,
+    ADD COLUMN IF NOT EXISTS bad_debt_updated_by VARCHAR(128),
+    ADD COLUMN IF NOT EXISTS bad_debt_updated_at VARCHAR(32)
+  `));
+  await db.execute(sql.raw(`
+    ALTER TABLE sync_logs
+    ADD COLUMN IF NOT EXISTS stage_updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+  `));
+
+  const colList = CONTRACTS_SYNC_COLUMNS.map((c) => `'${c}'`).join(", ");
+  const colCheck = await db.execute(sql.raw(`
+    SELECT column_name
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'contracts'
+      AND column_name IN (${colList})
+  `));
+  const present = new Set(pgRows(colCheck).map((r: { column_name?: string }) => r.column_name));
+  const missing = CONTRACTS_SYNC_COLUMNS.filter((c) => !present.has(c));
+  if (missing.length > 0) {
+    throw new Error(
+      `[schema] ${section}: contracts still missing columns after ALTER: ${missing.join(", ")}`,
+    );
+  }
+
+  // Unique indexes for ON CONFLICT upserts — CREATE IF NOT EXISTS only (no DELETE dedupe here;
+  // dedupe runs once at startup in runStartupMigrations to avoid scanning 170k+ rows per sync).
+  await db.execute(sql.raw(`
+    CREATE UNIQUE INDEX IF NOT EXISTS contracts_section_external_idx
+      ON contracts (section, external_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS cached_customers_section_customer_idx
+      ON cached_customers (section, customer_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS installments_section_external_idx
+      ON installments (section, external_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS payment_transactions_section_external_idx
+      ON payment_transactions (section, external_id);
+  `));
+
+  try {
+    await db.execute(sql.raw(`
+      CREATE UNIQUE INDEX IF NOT EXISTS commissions_section_external_idx
+        ON commissions (section, external_id);
+    `));
+  } catch {
+    // commissions table may not exist on older DBs — non-fatal until commissions sync runs
+  }
+
+  // Migration 0002: debt_target_cache / debt_collected_cache columns (populate INSERT requires these)
+  await db.execute(sql.raw(`
+    ALTER TABLE debt_target_cache
+      ADD COLUMN IF NOT EXISTS partner_code VARCHAR(255),
+      ADD COLUMN IF NOT EXISTS partner_name VARCHAR(255),
+      ADD COLUMN IF NOT EXISTS device VARCHAR(64),
+      ADD COLUMN IF NOT EXISTS model VARCHAR(128),
+      ADD COLUMN IF NOT EXISTS serial_no VARCHAR(64),
+      ADD COLUMN IF NOT EXISTS finance_amount DECIMAL(12,2),
+      ADD COLUMN IF NOT EXISTS contract_status VARCHAR(32),
+      ADD COLUMN IF NOT EXISTS debt_range VARCHAR(32),
+      ADD COLUMN IF NOT EXISTS principal DECIMAL(12,2) NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS interest DECIMAL(12,2) NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS fee DECIMAL(12,2) NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS penalty DECIMAL(12,2) NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS unlock_fee DECIMAL(12,2) NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS total_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS net_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS paid_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS baseline_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS overpaid_applied DECIMAL(12,2) NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS is_paid BOOLEAN NOT NULL DEFAULT FALSE,
+      ADD COLUMN IF NOT EXISTS is_arrears BOOLEAN NOT NULL DEFAULT FALSE,
+      ADD COLUMN IF NOT EXISTS is_bad_debt BOOLEAN NOT NULL DEFAULT FALSE,
+      ADD COLUMN IF NOT EXISTS is_closed BOOLEAN NOT NULL DEFAULT FALSE,
+      ADD COLUMN IF NOT EXISTS is_suspended BOOLEAN NOT NULL DEFAULT FALSE,
+      ADD COLUMN IF NOT EXISTS is_current_period BOOLEAN NOT NULL DEFAULT FALSE,
+      ADD COLUMN IF NOT EXISTS is_future_period BOOLEAN NOT NULL DEFAULT FALSE,
+      ADD COLUMN IF NOT EXISTS is_partial_paid BOOLEAN NOT NULL DEFAULT FALSE;
+
+    ALTER TABLE debt_collected_cache
+      ADD COLUMN IF NOT EXISTS partner_code VARCHAR(255),
+      ADD COLUMN IF NOT EXISTS partner_name VARCHAR(255),
+      ADD COLUMN IF NOT EXISTS device VARCHAR(64),
+      ADD COLUMN IF NOT EXISTS model VARCHAR(128),
+      ADD COLUMN IF NOT EXISTS finance_amount DECIMAL(12,2),
+      ADD COLUMN IF NOT EXISTS installment_count INTEGER,
+      ADD COLUMN IF NOT EXISTS contract_status VARCHAR(32),
+      ADD COLUMN IF NOT EXISTS debt_range VARCHAR(32),
+      ADD COLUMN IF NOT EXISTS period INTEGER;
+
+    CREATE UNIQUE INDEX IF NOT EXISTS dtc_section_contract_period_idx
+      ON debt_target_cache (section, contract_external_id, period);
+    CREATE INDEX IF NOT EXISTS dtc_section_is_paid_idx ON debt_target_cache (section, is_paid);
+    CREATE INDEX IF NOT EXISTS dtc_section_is_arrears_idx ON debt_target_cache (section, is_arrears);
+    CREATE INDEX IF NOT EXISTS dtc_section_is_bad_debt_idx ON debt_target_cache (section, is_bad_debt);
+  `));
+
+  await db.execute(sql.raw(`
+    ALTER TABLE payment_transactions
+      ADD COLUMN IF NOT EXISTS income_type VARCHAR(32);
+
+    CREATE TABLE IF NOT EXISTS income_monthly_summary (
+      id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+      section VARCHAR(32) NOT NULL,
+      year INTEGER NOT NULL,
+      month INTEGER NOT NULL,
+      income_type VARCHAR(32) NOT NULL,
+      total_amount DECIMAL(18,2) NOT NULL DEFAULT 0,
+      row_count INTEGER NOT NULL DEFAULT 0,
+      updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS ims_section_year_month_type_idx
+      ON income_monthly_summary (section, year, month, income_type);
+    CREATE INDEX IF NOT EXISTS ims_section_year_idx
+      ON income_monthly_summary (section, year);
+  `));
+
+  await db.execute(sql.raw(`
+    CREATE TABLE IF NOT EXISTS monthly_summary_cache (
+      id                   INTEGER          PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+      section              VARCHAR(32)      NOT NULL,
+      query_type           VARCHAR(32)      NOT NULL,
+      approve_month        VARCHAR(7)       NOT NULL,
+      bucket               VARCHAR(32)      NOT NULL,
+      product_type         VARCHAR(64),
+      device_family        VARCHAR(16),
+      date_month           VARCHAR(7),
+      contract_count       INTEGER          NOT NULL DEFAULT 0,
+      principal            DECIMAL(18,2)    NOT NULL DEFAULT 0,
+      interest             DECIMAL(18,2)    NOT NULL DEFAULT 0,
+      fee                  DECIMAL(18,2)    NOT NULL DEFAULT 0,
+      penalty              DECIMAL(18,2)    NOT NULL DEFAULT 0,
+      unlock_fee           DECIMAL(18,2)    NOT NULL DEFAULT 0,
+      discount             DECIMAL(18,2)    NOT NULL DEFAULT 0,
+      overpaid             DECIMAL(18,2)    NOT NULL DEFAULT 0,
+      bad_debt             DECIMAL(18,2)    NOT NULL DEFAULT 0,
+      bad_debt_installment DECIMAL(18,2)    NOT NULL DEFAULT 0,
+      total_amount         DECIMAL(18,2)    NOT NULL DEFAULT 0,
+      finance_total        DECIMAL(18,2)    NOT NULL DEFAULT 0,
+      updated_at           TIMESTAMP        NOT NULL DEFAULT NOW()
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS msc_unique_idx
+      ON monthly_summary_cache (
+        section, query_type, approve_month, bucket,
+        COALESCE(product_type, ''), COALESCE(device_family, ''), COALESCE(date_month, '')
+      );
+    CREATE INDEX IF NOT EXISTS msc_section_query_idx ON monthly_summary_cache (section, query_type);
+    CREATE INDEX IF NOT EXISTS msc_section_month_idx ON monthly_summary_cache (section, approve_month);
+  `));
+
+  console.log(`[schema] ${section}: sync-critical columns + upsert indexes + debt cache cols verified`);
+}
+
 /**
  * runStartupMigrations — รัน DDL migrations ที่จำเป็นตอน startup
  * ใช้ CREATE TABLE IF NOT EXISTS เพื่อให้ idempotent (รันซ้ำได้ปลอดภัย)
@@ -209,6 +413,72 @@ export async function runStartupMigrations(): Promise<void> {
       console.log(`[migration] ${section}: monthly_summary_due_month_cache — OK`);
     } catch (err: any) {
       console.error(`[migration] ${section}: monthly_summary_due_month_cache failed:`, err?.message ?? err);
+    }
+    try {
+      // Migration 0022: monthly_summary_cache (สรุปรายเดือน — fastfone-db มักยังไม่มีตารางนี้)
+      await db.execute(sql.raw(`
+        CREATE TABLE IF NOT EXISTS monthly_summary_cache (
+          id                   INTEGER          PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+          section              VARCHAR(32)      NOT NULL,
+          query_type           VARCHAR(32)      NOT NULL,
+          approve_month        VARCHAR(7)       NOT NULL,
+          bucket               VARCHAR(32)      NOT NULL,
+          product_type         VARCHAR(64),
+          device_family        VARCHAR(16),
+          date_month           VARCHAR(7),
+          contract_count       INTEGER          NOT NULL DEFAULT 0,
+          principal            DECIMAL(18,2)    NOT NULL DEFAULT 0,
+          interest             DECIMAL(18,2)    NOT NULL DEFAULT 0,
+          fee                  DECIMAL(18,2)    NOT NULL DEFAULT 0,
+          penalty              DECIMAL(18,2)    NOT NULL DEFAULT 0,
+          unlock_fee           DECIMAL(18,2)    NOT NULL DEFAULT 0,
+          discount             DECIMAL(18,2)    NOT NULL DEFAULT 0,
+          overpaid             DECIMAL(18,2)    NOT NULL DEFAULT 0,
+          bad_debt             DECIMAL(18,2)    NOT NULL DEFAULT 0,
+          bad_debt_installment DECIMAL(18,2)    NOT NULL DEFAULT 0,
+          total_amount         DECIMAL(18,2)    NOT NULL DEFAULT 0,
+          finance_total        DECIMAL(18,2)    NOT NULL DEFAULT 0,
+          updated_at           TIMESTAMP        NOT NULL DEFAULT NOW()
+        )
+      `));
+      await db.execute(sql.raw(`
+        CREATE UNIQUE INDEX IF NOT EXISTS msc_unique_idx
+          ON monthly_summary_cache (
+            section, query_type, approve_month, bucket,
+            COALESCE(product_type, ''), COALESCE(device_family, ''), COALESCE(date_month, '')
+          )
+      `));
+      await db.execute(sql.raw(`CREATE INDEX IF NOT EXISTS msc_section_query_idx ON monthly_summary_cache (section, query_type)`));
+      await db.execute(sql.raw(`CREATE INDEX IF NOT EXISTS msc_section_month_idx ON monthly_summary_cache (section, approve_month)`));
+      console.log(`[migration] ${section}: monthly_summary_cache — OK`);
+    } catch (err: any) {
+      console.error(`[migration] ${section}: monthly_summary_cache failed:`, err?.message ?? err);
+    }
+    try {
+      // Migration 0023: income_monthly_summary (ยอดขายเครื่อง/รายรับ — fastfone-db มักยังไม่มีตารางนี้)
+      await db.execute(sql.raw(`
+        CREATE TABLE IF NOT EXISTS income_monthly_summary (
+          id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+          section VARCHAR(32) NOT NULL,
+          year INTEGER NOT NULL,
+          month INTEGER NOT NULL,
+          income_type VARCHAR(32) NOT NULL,
+          total_amount DECIMAL(18,2) NOT NULL DEFAULT 0,
+          row_count INTEGER NOT NULL DEFAULT 0,
+          updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+        )
+      `));
+      await db.execute(sql.raw(`
+        CREATE UNIQUE INDEX IF NOT EXISTS ims_section_year_month_type_idx
+          ON income_monthly_summary (section, year, month, income_type)
+      `));
+      await db.execute(sql.raw(`
+        CREATE INDEX IF NOT EXISTS ims_section_year_idx
+          ON income_monthly_summary (section, year)
+      `));
+      console.log(`[migration] ${section}: income_monthly_summary — OK`);
+    } catch (err: any) {
+      console.error(`[migration] ${section}: income_monthly_summary failed:`, err?.message ?? err);
     }
     try {
       // Migration 0007: เพิ่ม finance_total column ใน monthly_summary_cache (ยอดจัดฯ)

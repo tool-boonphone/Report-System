@@ -5,16 +5,15 @@
  *  - การ์ดสรุป 5 ใบ (เข้าเงื่อนไข / ยังไม่เคยส่ง / ส่ง 1-2 ครั้ง / ส่งครบ 3 / ได้เครื่องคืน)
  *  - แถบฟิลเตอร์ 8 ช่อง + ปุ่ม "ดูสถิติรายเดือน"
  *  - แถบปุ่มพิมพ์รายการที่เลือก + ล้างรายการ + ตัวนับที่เลือก
- *  - ตาราง 8 คอลัมน์: checkbox, วันที่อนุมัติ, เลขที่สัญญา, ชื่อ-นามสกุล,
- *    ค้างชำระ(วัน), ส่งแล้ว (badge + round dots + restore), Log การพิมพ์, Log การแก้ไข
+ *  - ตาราง 9 คอลัมน์: checkbox, วันที่อนุมัติ, เลขที่สัญญา, ชื่อ-นามสกุล,
+ *    ค้างชำระ(วัน), ส่งแล้ว, เลขที่เอกสาร, Log การพิมพ์, Log การแก้ไข
  *  - Pagination เลือกจำนวนแถว/หน้าได้ (server-side)
  *
  * Phase 2: นับรอบส่งจริงจากตาราง log
  *  - sentCount / Log การพิมพ์ / Log การแก้ไข มาจาก notice_print_logs + notice_restore_logs
  *  - ปุ่ม "พิมพ์รายการที่เลือก" บันทึกรอบส่ง (recordPrint) — Phase 3 จะ generate PDF/Excel ก่อน
  *  - ปุ่ม ↺ Restore ยกเลิกรอบล่าสุด (มี popup ยืนยัน)
- *
- * ยังไม่รวม: Generate PDF/Excel จริง (Phase 3), Modal สถิติรายเดือน (Phase 4)
+ *  - Modal สถิติรายเดือน (Phase 4)
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { SectionKey } from "@shared/const";
@@ -31,7 +30,7 @@ type SortDir = "asc" | "desc";
 type ReturnedFilter = "all" | "hide" | "only";
 type SentFilter = "all" | "0" | "1" | "2" | "3";
 
-type PrintLogEntry = { round: number; printedAt: string; printedBy: string };
+type PrintLogEntry = { round: number; documentNo: string | null; printedAt: string; printedBy: string };
 type RestoreLogEntry = { round: number; restoredAt: string; restoredBy: string };
 type NoticeRow = {
   externalId: string;
@@ -41,6 +40,7 @@ type NoticeRow = {
   overdueDays: number | null;
   isReturned: boolean;
   sentCount: number;
+  documentNo: string | null;
   printLogs: PrintLogEntry[];
   restoreLogs: RestoreLogEntry[];
 };
@@ -88,6 +88,7 @@ export default function Notice() {
 
   // ── Restore modal ──
   const [pendingRestore, setPendingRestore] = useState<NoticeRow | null>(null);
+  const [statsOpen, setStatsOpen] = useState(false);
 
   // ── Debounce search ──
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -133,6 +134,11 @@ export default function Notice() {
     { enabled: !!section && canView },
   );
   const adminOptions = adminOptionsData ?? [];
+
+  const { data: monthlyStats, isLoading: statsLoading } = trpc.notice.monthlyStats.useQuery(
+    { section: sectionKey },
+    { enabled: !!section && canView && statsOpen },
+  );
 
   const rows = (listData?.rows ?? []) as NoticeRow[];
   const total = listData?.total ?? 0;
@@ -225,7 +231,7 @@ export default function Notice() {
       setPrinting(false);
     }
   };
-  const handleStats = () => toast.info("สถิติรายเดือนจะเปิดใช้งานในเฟสถัดไป");
+  const handleStats = () => setStatsOpen(true);
   const confirmRestore = () => {
     if (!pendingRestore) return;
     restoreMut.mutate({ section: sectionKey, externalId: pendingRestore.externalId });
@@ -294,7 +300,7 @@ export default function Notice() {
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
                 <input value={searchInput} onChange={(e) => setSearchInput(e.target.value)}
-                  placeholder="ชื่อ / เลขสัญญา" className={inputCls + " pl-8"} />
+                  placeholder="ชื่อ / เลขสัญญา / เลขที่เอกสาร" className={inputCls + " pl-8"} />
               </div>
             </div>
             <div>
@@ -367,7 +373,7 @@ export default function Notice() {
             ) : rows.length === 0 ? (
               <div className="py-7 text-center text-gray-400 text-sm">ไม่พบรายการตามเงื่อนไขที่กรอง</div>
             ) : (
-              <table className="w-full border-separate border-spacing-0 min-w-[1100px]">
+              <table className="w-full border-separate border-spacing-0 min-w-[1200px]">
                 <thead>
                   <tr className="[&>th]:sticky [&>th]:top-0 [&>th]:bg-[#fafafa] [&>th]:z-[2] [&>th]:text-xs [&>th]:text-gray-700 [&>th]:font-bold [&>th]:text-left [&>th]:whitespace-nowrap [&>th]:px-3 [&>th]:py-3 [&>th]:border-b [&>th]:border-gray-200">
                     <th className="!text-center !w-[42px]">
@@ -380,20 +386,21 @@ export default function Notice() {
                         วันที่อนุมัติ <span className="text-orange-500 font-black">{sortMark("approveDate")}</span>
                       </button>
                     </th>
-                    <th className="w-[190px]">เลขที่สัญญา</th>
-                    <th className="w-[180px]">ชื่อ-นามสกุล</th>
+                    <th className="w-[170px]">เลขที่สัญญา</th>
+                    <th className="w-[160px]">ชื่อ-นามสกุล</th>
                     <th className="w-[106px]">
                       <button onClick={() => handleSort("overdueDays")} className="font-bold text-gray-700 hover:text-orange-500">
                         ค้างชำระ(วัน) <span className="text-orange-500 font-black">{sortMark("overdueDays")}</span>
                       </button>
                     </th>
-                    <th className="w-[255px]">
+                    <th className="w-[230px]">
                       <button onClick={() => handleSort("sentCount")} className="font-bold text-gray-700 hover:text-orange-500">
                         ส่งแล้ว <span className="text-orange-500 font-black">{sortMark("sentCount")}</span>
                       </button>
                     </th>
-                    <th className="w-[260px]">Log การพิมพ์</th>
-                    <th className="w-[200px]">Log การแก้ไข</th>
+                    <th className="w-[90px]">เลขที่เอกสาร</th>
+                    <th className="w-[240px]">Log การพิมพ์</th>
+                    <th className="w-[180px]">Log การแก้ไข</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -459,6 +466,15 @@ export default function Notice() {
                               )}
                             </div>
                           </div>
+                        </td>
+                        <td className="whitespace-nowrap">
+                          {row.documentNo ? (
+                            <span className="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold bg-indigo-50 text-indigo-800">
+                              {row.documentNo}
+                            </span>
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
                         </td>
                         <td className="text-gray-600">
                           {row.printLogs.length === 0 && !row.isReturned ? (
@@ -552,11 +568,132 @@ export default function Notice() {
 
           <div className="px-4 sm:px-[18px] py-3 bg-[#fafafa] text-gray-500 text-xs leading-relaxed border-t border-gray-200">
             หมายเหตุ: ปุ่ม "พิมพ์รายการที่เลือก" จะสร้างไฟล์ ZIP (เอกสาร Notice + Excel จ่าหน้าซองไปรษณีย์ไทย)
-            และนับรอบส่งให้อัตโนมัติเมื่อสร้างไฟล์สำเร็จ — ที่อยู่ในไฟล์ Excel มีเฉพาะ อำเภอ/จังหวัด/เบอร์โทร
-            (ช่องที่อยู่/ตำบล/รหัสไปรษณีย์เว้นว่างให้กรอกเพิ่ม) และ Modal สถิติรายเดือนจะเพิ่มในเฟสถัดไป
+            และนับรอบส่งให้อัตโนมัติเมื่อสร้างไฟล์สำเร็จ — เลขที่เอกสารจัดสรรอัตโนมัติต่อสัญญา (รอบ 2–3 ใช้เลขเดิม)
           </div>
         </section>
       </div>
+
+      {/* ── Monthly stats modal (layout ตาม docs/stats-layout.png) ── */}
+      {statsOpen && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 sm:p-5 bg-black/45"
+          onClick={() => setStatsOpen(false)}>
+          <div
+            className="w-full max-w-[920px] max-h-[90vh] overflow-y-auto bg-white rounded-[18px] shadow-2xl border border-gray-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="px-5 sm:px-6 pt-5 pb-4 border-b border-gray-200 flex items-start justify-between gap-4">
+              <div>
+                <div className="text-xl font-extrabold text-gray-900">สถิติการส่ง Notice รายเดือน</div>
+                <div className="mt-1.5 text-sm text-gray-500">
+                  {monthlyStats?.subtitle ?? "กำลังโหลด..."}
+                </div>
+              </div>
+              <button
+                onClick={() => setStatsOpen(false)}
+                className="shrink-0 rounded-xl px-3.5 py-2 text-sm font-bold bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
+              >
+                ปิด
+              </button>
+            </div>
+
+            <div className="px-5 sm:px-6 py-5">
+              {statsLoading ? (
+                <div className="flex items-center justify-center py-16">
+                  <Spinner className="w-6 h-6 text-orange-500" />
+                </div>
+              ) : (
+                <>
+                  {/* Summary cards */}
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 mb-5">
+                    {[
+                      {
+                        label: "ส่งสะสมทั้งหมด",
+                        value: monthlyStats?.totalSent ?? 0,
+                        hint: "รายการ Notice",
+                      },
+                      {
+                        label: "เฉลี่ยต่อเดือน",
+                        value: monthlyStats?.avgPerMonth ?? 0,
+                        hint: monthlyStats?.months[0]?.monthLabel
+                          ? `ตั้งแต่ ${monthlyStats.months[0].monthLabel}`
+                          : "-",
+                      },
+                      {
+                        label: monthlyStats?.latestMonthLabel
+                          ? `เดือนล่าสุด (${monthlyStats.latestMonthLabel})`
+                          : "เดือนล่าสุด",
+                        value: monthlyStats?.latestMonthSent ?? 0,
+                        hint: monthlyStats?.latestMonthHint || "ยังไม่มีข้อมูล",
+                      },
+                      {
+                        label: "ได้เครื่องคืนสะสม",
+                        value: monthlyStats?.totalReturned ?? 0,
+                        hint: "รวมทุกเดือน",
+                      },
+                    ].map((card) => (
+                      <div
+                        key={card.label}
+                        className="bg-white border border-gray-200 rounded-xl p-4"
+                      >
+                        <div className="text-[13px] text-gray-500">{card.label}</div>
+                        <div className="text-[28px] font-extrabold text-gray-900 mt-1.5">
+                          {card.value.toLocaleString()}
+                        </div>
+                        <div className="text-xs text-gray-400 mt-1">{card.hint}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Monthly table */}
+                  {(monthlyStats?.months.length ?? 0) === 0 ? (
+                    <div className="py-10 text-center text-gray-400 text-sm">ยังไม่มีข้อมูลการส่ง Notice</div>
+                  ) : (
+                    <div className="border border-gray-200 rounded-xl overflow-hidden">
+                      <table className="w-full border-separate border-spacing-0">
+                        <thead>
+                          <tr className="bg-[#fafafa] [&>th]:text-xs [&>th]:font-bold [&>th]:text-gray-700 [&>th]:px-3 [&>th]:py-3 [&>th]:border-b [&>th]:border-gray-200 [&>th]:whitespace-nowrap">
+                            <th className="text-left">เดือน</th>
+                            <th className="text-left">ส่งทั้งหมด</th>
+                            <th className="text-center">รอบ 1</th>
+                            <th className="text-center">รอบ 2</th>
+                            <th className="text-center">รอบ 3</th>
+                            <th className="text-left">ได้เครื่องคืน</th>
+                            <th className="text-left min-w-[120px]">สัดส่วน</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {monthlyStats?.months.map((m) => (
+                            <tr
+                              key={m.monthKey}
+                              className="[&>td]:px-3 [&>td]:py-3 [&>td]:border-b [&>td]:border-gray-100 [&>td]:text-[13px] [&>td]:text-gray-700 hover:bg-orange-50/40"
+                            >
+                              <td className="font-semibold text-gray-900">{m.monthLabel}</td>
+                              <td>{m.totalSent.toLocaleString()} รายการ</td>
+                              <td className="text-center">{m.round1.toLocaleString()}</td>
+                              <td className="text-center">{m.round2.toLocaleString()}</td>
+                              <td className="text-center">{m.round3.toLocaleString()}</td>
+                              <td>{m.returned.toLocaleString()} เครื่อง</td>
+                              <td>
+                                <div className="h-2.5 w-full max-w-[140px] rounded-full bg-gray-100 overflow-hidden">
+                                  <div
+                                    className="h-full rounded-full bg-[#f27121] transition-all"
+                                    style={{ width: `${m.proportion}%` }}
+                                  />
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Restore confirm modal ── */}
       {pendingRestore && (

@@ -73,6 +73,22 @@ async function startServer() {
   app.get("/api/sync-stream/:section", handleSyncStream);
   // Keep-alive ping — frontend polls this every 10s during sync to prevent Cloud Run idle scale-down
   app.get("/api/ping", (_req, res) => res.json({ ok: true, ts: Date.now() }));
+
+  /** Public build fingerprint — verify deploy matches main (Render sets RENDER_GIT_COMMIT). */
+  app.get("/api/build-info", (_req, res) => {
+    const commit = process.env.RENDER_GIT_COMMIT ?? process.env.GIT_COMMIT ?? null;
+    const branch = process.env.RENDER_GIT_BRANCH ?? process.env.GIT_BRANCH ?? null;
+    const expectedLatest = "d30fb31";
+    const isLatest = commit ? commit.startsWith(expectedLatest) : null;
+    res.json({
+      commit,
+      branch,
+      expectedLatest,
+      isLatest,
+      nodeEnv: process.env.NODE_ENV ?? null,
+      features: ["postProcess", "fillPeriodNosHeartbeat", "schemaMemoize"],
+    });
+  });
   // Debug endpoint — test SQL query directly
   app.get("/api/debug/sql", async (req, res) => {
     try {
@@ -268,7 +284,8 @@ async function startServer() {
   server.requestTimeout = 300_000;   // 5 นาที — ป้องกัน request ค้างนาน
 
   server.listen(port, async () => {
-    console.log(`Server running on http://localhost:${port}/`);
+    const commit = process.env.RENDER_GIT_COMMIT ?? process.env.GIT_COMMIT ?? "unknown";
+    console.log(`Server running on http://localhost:${port}/ (commit ${commit})`);
     try {
       await runStartupMigrations();
     } catch (err) {

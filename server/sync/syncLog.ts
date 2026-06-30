@@ -3,6 +3,47 @@ import { syncLogs } from "../../drizzle/schema";
 import { getDb } from "../db";
 import { normalizeSectionKey, type SectionKey, type SyncTrigger } from "../../shared/const";
 
+const MAX_SYNC_ERROR_LEN = 2000;
+
+/** Trim nested Drizzle "Failed query" chains so sync_logs.error_message stays readable. */
+function shortenSyncError(msg?: string): string | undefined {
+  if (!msg) return undefined;
+  let s = msg.trim();
+
+  // Peel nested Drizzle wrappers (sync_logs update wrapping contracts insert)
+  while (/Failed query:\s*update "sync_logs"/i.test(s)) {
+    const parts = s.split(/\nparams:\s*/i);
+    if (parts.length < 2) break;
+    s = parts[parts.length - 1].trim();
+  }
+  const paramsSplit = s.split(/\nparams:\s*/i);
+  if (paramsSplit.length > 1) {
+    const inner = paramsSplit[paramsSplit.length - 1].trim();
+    if (
+      /Failed query:\s*insert/i.test(inner) ||
+      /column .* does not exist/i.test(inner) ||
+      /contracts INSERT failed/i.test(inner) ||
+      /contracts: column/i.test(inner)
+    ) {
+      s = inner;
+    }
+  }
+
+  // Prefer Postgres column-missing / constraint errors over full INSERT SQL
+  const colMissing = s.match(/column "([^"]+)" of relation "[^"]+" does not exist/i);
+  if (colMissing) {
+    s = `column "${colMissing[1]}" does not exist`;
+  } else {
+    const pgErr = s.match(/(?:^|\n)(?:error|ERROR):\s*(.+?)(?:\n|$)/);
+    if (pgErr) s = pgErr[1].trim();
+  }
+
+  if (s.length > MAX_SYNC_ERROR_LEN) {
+    return `${s.slice(0, MAX_SYNC_ERROR_LEN - 3)}...`;
+  }
+  return s;
+}
+
 export async function insertSyncLog(params: {
   section: SectionKey;
   entity: string;
@@ -17,6 +58,7 @@ export async function insertSyncLog(params: {
     triggeredBy: params.triggeredBy,
     status: "in_progress",
     startedAt: now,
+    stageUpdatedAt: now,
   }).returning({ id: syncLogs.id });
   const id = res?.id;
   if (!id) {
@@ -45,7 +87,7 @@ export async function finishSyncLog(params: {
     .set({
       status: params.status,
       rowCount: params.rowCount ?? 0,
-      errorMessage: params.errorMessage?.slice(0, 2000) ?? null,
+      errorMessage: shortenSyncError(params.errorMessage),
       finishedAt: new Date(),
       // Always set progress=100 + currentStage='done' on success
       // so UI shows 100% even if the last setSubProgress was < 100%
@@ -72,10 +114,14 @@ export async function updateSyncLogStage(params: {
     .set({
       currentStage: params.currentStage,
       progress: params.progress,
+      stageUpdatedAt: new Date(),
       ...(params.resumePage !== undefined ? { resumePage: params.resumePage } : {}),
     })
     .where(eq(syncLogs.id, params.id));
 }
+
+/** No stage/progress heartbeat for this long → treat sync as zombie (process died). */
+const STALE_STAGE_MS = 15 * 60 * 1000;
 
 /**
  * Get the last successfully fetched customers page for a section.
@@ -174,6 +220,7 @@ export async function getDbSyncStatus(section: SectionKey): Promise<{
     .select({
       id: syncLogs.id,
       startedAt: syncLogs.startedAt,
+      stageUpdatedAt: syncLogs.stageUpdatedAt,
       currentStage: syncLogs.currentStage,
       progress: syncLogs.progress,
     })
@@ -191,6 +238,15 @@ export async function getDbSyncStatus(section: SectionKey): Promise<{
 
   if (allRows.length > 0) {
     const row = allRows[0];
+    const lastBeat = row.stageUpdatedAt ?? row.startedAt;
+    const staleMs = lastBeat ? Date.now() - lastBeat.getTime() : STALE_STAGE_MS + 1;
+    if (staleMs > STALE_STAGE_MS) {
+      console.warn(
+        `[syncLog] ${section}: zombie sync detected (no progress for ${Math.round(staleMs / 60000)} min) — auto-clearing`,
+      );
+      await clearStuckSyncLogs(section);
+      return { running: false, startedAt: null, currentStage: null, progress: null };
+    }
     return {
       running: true,
       startedAt: row.startedAt,
@@ -200,6 +256,49 @@ export async function getDbSyncStatus(section: SectionKey): Promise<{
   }
 
   return { running: false, startedAt: null, currentStage: null, progress: null };
+}
+
+/** Post-process job status (fillPeriodNos + populate) — separate from entity=all zombie detection. */
+export async function getPostProcessStatus(section: SectionKey): Promise<{
+  running: boolean;
+  startedAt: Date | null;
+  currentStage: string | null;
+  progress: number | null;
+}> {
+  const db = await getDb(section);
+  if (!db) {
+    return { running: false, startedAt: null, currentStage: null, progress: null };
+  }
+  const staleThreshold = new Date(Date.now() - 185 * 60 * 1000);
+  const rows = await db
+    .select({
+      startedAt: syncLogs.startedAt,
+      stageUpdatedAt: syncLogs.stageUpdatedAt,
+      currentStage: syncLogs.currentStage,
+      progress: syncLogs.progress,
+    })
+    .from(syncLogs)
+    .where(
+      and(
+        eq(syncLogs.section, section),
+        eq(syncLogs.entity, "post_process"),
+        eq(syncLogs.status, "in_progress"),
+        gt(syncLogs.startedAt, staleThreshold),
+      ),
+    )
+    .orderBy(desc(syncLogs.startedAt))
+    .limit(1);
+
+  if (rows.length === 0) {
+    return { running: false, startedAt: null, currentStage: null, progress: null };
+  }
+  const row = rows[0];
+  return {
+    running: true,
+    startedAt: row.startedAt,
+    currentStage: row.currentStage ?? null,
+    progress: row.progress ?? null,
+  };
 }
 
 /**

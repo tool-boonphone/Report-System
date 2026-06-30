@@ -165,8 +165,7 @@ function lvCell(children: TextRun[], widthDxa: number, align?: (typeof Alignment
 }
 
 function buildContract(r: NoticePrintData, cfg: CompanyConfig, logo: ReturnType<typeof loadLogo>, qr: Buffer | null): (Paragraph | Table)[] {
-  const round = r.sentCount + 1;
-  const docNo = `${r.contractNo}-N${round}`;
+  const docNo = r.documentNo || `${r.contractNo}-N${r.sentCount + 1}`;
   const inst = r.installmentAmount ?? 0;
   const hpTotal = (r.installmentCount ?? 0) * inst;
   const paid = (r.paidInstallments ?? 0) * inst;
@@ -197,8 +196,13 @@ function buildContract(r: NoticePrintData, cfg: CompanyConfig, logo: ReturnType<
               borders: NO_BORDERS,
               verticalAlign: VerticalAlign.CENTER,
               children: [
-                new Paragraph({ alignment: AlignmentType.LEFT, spacing: { after: 0, line: 288 }, children: [run("หนังสือติดตามค่าเช่าซื้อ -", { bold: true, size: 24 })] }),
-                new Paragraph({ alignment: AlignmentType.LEFT, spacing: { after: 0, line: 288 }, children: [run("บอกเลิกสัญญาและขอให้คืนทรัพย์สินที่เช่าซื้อ", { bold: true, size: 24 })] }),
+                new Paragraph({
+                  alignment: AlignmentType.RIGHT,
+                  spacing: { after: 0, line: 288 },
+                  children: [
+                    run("หนังสือติดตามค่าเช่าซื้อ - บอกเลิกสัญญาและขอให้คืนทรัพย์สินที่เช่าซื้อ", { bold: true, size: 24 }),
+                  ],
+                }),
               ],
             }),
           ],
@@ -240,26 +244,57 @@ function buildContract(r: NoticePrintData, cfg: CompanyConfig, logo: ReturnType<
 
   out.push(para([run(`ตามที่ท่านได้เข้าทำสัญญาเช่าซื้อ กับทางบริษัท ${cfg.companyName} ดังมีรายละเอียดดังนี้`)], { spacingAfter: 180 }));
 
-  // ── ตาราง A: อุปกรณ์ (คอลัมน์รุ่นกว้างเผื่อชื่อรุ่นยาว) ──
+  // ── ตาราง A: อุปกรณ์ — คอล1 = รวม 3 คอลแรกของตาราง B, คอล2 = จ.น.งวด, คอล3 = ยอดชำระแล้ว
+  const TABLE_A_WIDTHS = [5457, 910, 3739];
   out.push(
     new Table({
-      width: { size: 100, type: WidthType.PERCENTAGE },
-      columnWidths: [5400, 2500, 2206],
+      width: { size: 10106, type: WidthType.DXA },
+      columnWidths: TABLE_A_WIDTHS,
       borders: BOX_BORDERS,
       rows: [
-        new TableRow({ children: [dcell("โทรศัพท์มือถือ รุ่น - หน่วยความจำ", 54, { header: true }), dcell("หมายเลข IMEI", 25, { header: true }), dcell("หมายเลข Serial", 21, { header: true })] }),
-        new TableRow({ children: [dcell(r.model ?? "-", 54), dcell(r.imei ?? "-", 25), dcell(r.serialNo ?? "-", 21)] }),
+        new TableRow({
+          children: [
+            dcell("โทรศัพท์มือถือ รุ่น - หน่วยความจำ", 54, { header: true }),
+            dcell("หมายเลข IMEI", 9, { header: true }),
+            dcell("หมายเลข Serial", 37, { header: true }),
+          ],
+        }),
+        new TableRow({
+          children: [
+            dcell(r.model ?? "-", 54),
+            dcell(r.imei ?? "-", 9),
+            dcell(r.serialNo ?? "-", 37),
+          ],
+        }),
       ],
     }),
   );
-  // ── ตาราง B: ยอด ──
+  // ── ตาราง B: ยอด — 18% + 18% + 18% + 9% + 37%
+  const TABLE_B_WIDTHS = [1819, 1819, 1819, 910, 3739];
   out.push(
     new Table({
-      width: { size: 100, type: WidthType.PERCENTAGE },
+      width: { size: 10106, type: WidthType.DXA },
+      columnWidths: TABLE_B_WIDTHS,
       borders: BOX_BORDERS,
       rows: [
-        new TableRow({ children: [dcell("วันที่ทำสัญญา", 18, { header: true }), dcell("ราคาเช่าซื้อ(บาท)", 18, { header: true }), dcell("ผ่อนชำระเดือนละ", 18, { header: true }), dcell("จ.น.งวด", 9, { header: true }), dcell("ยอดที่ได้ชำระแล้ว", 37, { header: true })] }),
-        new TableRow({ children: [dcell(fmtThaiDate(r.approveDate), 18), dcell(fmtMoney(hpTotal), 18), dcell(fmtMoney(inst), 18), dcell(String(r.installmentCount ?? "-"), 9), dcell(fmtMoney(paid), 37)] }),
+        new TableRow({
+          children: [
+            dcell("วันที่ทำสัญญา", 18, { header: true }),
+            dcell("ราคาเช่าซื้อ(บาท)", 18, { header: true }),
+            dcell("ผ่อนชำระเดือนละ", 18, { header: true }),
+            dcell("จ.น.งวด", 9, { header: true }),
+            dcell("ยอดที่ได้ชำระแล้ว", 37, { header: true }),
+          ],
+        }),
+        new TableRow({
+          children: [
+            dcell(fmtThaiDate(r.approveDate), 18),
+            dcell(fmtMoney(hpTotal), 18),
+            dcell(fmtMoney(inst), 18),
+            dcell(String(r.installmentCount ?? "-"), 9),
+            dcell(fmtMoney(paid), 37),
+          ],
+        }),
       ],
     }),
   );
@@ -353,7 +388,7 @@ function buildAutoFooter(cfg: CompanyConfig): Footer {
         children: [
           run(
             `หนังสือฉบับนี้เป็นจดหมายอัตโนมัติ จากทาง ${cfg.companyName} ทางบริษัทขออภัยหากท่านได้ชำระมาก่อนหน้านี้`,
-            { italics: true, size: 18, color: "777777" },
+            { italics: true, size: 24, color: "777777" },
           ),
         ],
       }),
