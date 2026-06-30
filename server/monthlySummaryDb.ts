@@ -1680,6 +1680,32 @@ export async function populateMonthlySummaryCache(
   return totalRows;
 }
 
+/** Walk Drizzle/PG error chain — outer message is often only "Failed query: SELECT ...". */
+function errorChainText(err: unknown): string {
+  const parts: string[] = [];
+  let cur: unknown = err;
+  for (let i = 0; i < 8 && cur != null; i++) {
+    if (typeof cur === "object" && cur !== null && "message" in cur) {
+      parts.push(String((cur as { message: unknown }).message));
+      cur = "cause" in cur ? (cur as { cause: unknown }).cause : undefined;
+    } else {
+      parts.push(String(cur));
+      break;
+    }
+  }
+  return parts.join(" ");
+}
+
+function isMissingRelation(err: unknown, relation: string): boolean {
+  const msg = errorChainText(err);
+  const rel = relation.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return (
+    new RegExp(`relation ["']?${rel}["']? does not exist`, "i").test(msg) ||
+    new RegExp(`${rel}.*does not exist`, "i").test(msg) ||
+    /42P01/.test(msg)
+  );
+}
+
 // ---------------------------------------------------------------------------
 // getMonthlySummaryFromCache — Fast path: ดึงจาก monthly_summary_cache
 // ใช้เมื่อไม่มี search filter
@@ -1748,16 +1774,17 @@ async function getMonthlySummaryFromCache(
     const checkRows = await db.execute(sql.raw(checkSql));
     checkRow = pgRows(checkRows)[0] as { cnt?: string | number; last_updated?: string };
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    if (/monthly_summary_cache.*does not exist|relation.*does not exist/i.test(msg)) {
+    if (isMissingRelation(err, "monthly_summary_cache")) {
       console.warn(`[getMonthlySummaryFromCache] ${section}: table missing — live query fallback`);
       return null;
     }
-    throw err;
+    console.warn(`[getMonthlySummaryFromCache] ${section}: cache read failed — live query fallback`, errorChainText(err));
+    return null;
   }
   const cnt = parseInt(String(checkRow?.cnt ?? "0"), 10);
   if (cnt === 0) return null; // ไม่มีข้อมูลใน cache สำหรับ filter นี้ → fallback ไป live query
 
+  try {
   // ดึงแต่ละ query_type พร้อมกัน
   const [countRows, targetRows, paidRows, dueRows, notYetDueRows, installTotalRows] = await Promise.all([
     // count: ไม่มี dateMonth filter
@@ -1851,6 +1878,13 @@ async function getMonthlySummaryFromCache(
     pgRows(notYetDueRows) as any[],
     pgRows(installTotalRows) as any[],
   );
+  } catch (err: unknown) {
+    console.warn(
+      `[getMonthlySummaryFromCache] ${section}: cache fetch failed — live query fallback`,
+      errorChainText(err),
+    );
+    return null;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -3026,9 +3060,19 @@ export async function getDueMonthSummaryFromCache(
       ${ptFilter}
       ${dfFilter}
   `;
-  const cntRes = await db.execute(sql.raw(countQ));
-  const checkRow = pgRows(cntRes)[0] as any;
-  const cacheCount = Number(checkRow?.cnt || 0);
+  let cacheCount = 0;
+  try {
+    const cntRes = await db.execute(sql.raw(countQ));
+    const checkRow = pgRows(cntRes)[0] as { cnt?: string | number };
+    cacheCount = Number(checkRow?.cnt || 0);
+  } catch (err: unknown) {
+    if (isMissingRelation(err, "monthly_summary_due_month_cache")) {
+      console.warn(`[getDueMonthSummaryFromCache] ${section}: due_month cache table missing — live fallback`);
+    } else {
+      console.warn(`[getDueMonthSummaryFromCache] Cache table not ready:`, errorChainText(err));
+    }
+    return { rows: [], allDueMonths: [] };
+  }
   if (cacheCount === 0) {
     return { rows: [], allDueMonths: [] };
   }
