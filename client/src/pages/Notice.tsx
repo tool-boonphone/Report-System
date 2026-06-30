@@ -373,7 +373,7 @@ export default function Notice() {
             ) : rows.length === 0 ? (
               <div className="py-7 text-center text-gray-400 text-sm">ไม่พบรายการตามเงื่อนไขที่กรอง</div>
             ) : (
-              <table className="w-full border-separate border-spacing-0 min-w-[1200px]">
+              <table className="w-full border-separate border-spacing-0 min-w-[1240px]">
                 <thead>
                   <tr className="[&>th]:sticky [&>th]:top-0 [&>th]:bg-[#fafafa] [&>th]:z-[2] [&>th]:text-xs [&>th]:text-gray-700 [&>th]:font-bold [&>th]:text-left [&>th]:whitespace-nowrap [&>th]:px-3 [&>th]:py-3 [&>th]:border-b [&>th]:border-gray-200">
                     <th className="!text-center !w-[42px]">
@@ -386,7 +386,7 @@ export default function Notice() {
                         วันที่อนุมัติ <span className="text-orange-500 font-black">{sortMark("approveDate")}</span>
                       </button>
                     </th>
-                    <th className="w-[170px]">เลขที่สัญญา</th>
+                    <th className="w-[210px] min-w-[210px]">เลขที่สัญญา</th>
                     <th className="w-[160px]">ชื่อ-นามสกุล</th>
                     <th className="w-[106px]">
                       <button onClick={() => handleSort("overdueDays")} className="font-bold text-gray-700 hover:text-orange-500">
@@ -426,7 +426,7 @@ export default function Notice() {
                             className="accent-orange-500 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed" />
                         </td>
                         <td className="whitespace-nowrap text-gray-700">{fmtDateOnly(row.approveDate)}</td>
-                        <td className="break-words"><strong className="text-gray-900">{row.contractNo}</strong></td>
+                        <td className="whitespace-nowrap"><strong className="text-gray-900">{row.contractNo}</strong></td>
                         <td className="break-words"><span className="font-extrabold text-gray-900">{row.customerName ?? "-"}</span></td>
                         <td className="whitespace-nowrap">
                           <span className="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold bg-red-50 text-red-700">
