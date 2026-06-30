@@ -754,3 +754,38 @@ export async function getNoticeMonthlyStats(section: SectionKey): Promise<Notice
     months,
   };
 }
+
+/**
+ * ล้างข้อมูล Notice ทั้งหมดของ section (สำหรับทดสอบ — ไม่แตะ contracts)
+ * ลบ print/restore logs, batches, contract doc mapping และรีเซ็ตเลขที่เอกสารเป็น 0001
+ */
+export async function clearAllNoticeData(section: SectionKey): Promise<{
+  printLogs: number;
+  restoreLogs: number;
+  batches: number;
+  contractDocs: number;
+}> {
+  await ensureNoticeSchema(section);
+  const db = await getDb(section);
+  if (!db) throw new Error("database unavailable");
+
+  const [printLogs, restoreLogs, batches, contractDocs] = await Promise.all([
+    db.delete(noticePrintLogs).where(eq(noticePrintLogs.section, section)).returning({ id: noticePrintLogs.id }),
+    db.delete(noticeRestoreLogs).where(eq(noticeRestoreLogs.section, section)).returning({ id: noticeRestoreLogs.id }),
+    db.delete(noticePrintBatches).where(eq(noticePrintBatches.section, section)).returning({ id: noticePrintBatches.id }),
+    db.delete(noticeContractDoc).where(eq(noticeContractDoc.section, section)).returning({ id: noticeContractDoc.id }),
+  ]);
+
+  await db.execute(sql`
+    INSERT INTO notice_document_counters (section, next_value)
+    VALUES (${section}, 1)
+    ON CONFLICT (section) DO UPDATE SET next_value = 1
+  `);
+
+  return {
+    printLogs: printLogs.length,
+    restoreLogs: restoreLogs.length,
+    batches: batches.length,
+    contractDocs: contractDocs.length,
+  };
+}
