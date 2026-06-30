@@ -329,6 +329,39 @@ async function ensureSectionSchemaReadyOnce(section: SectionKey): Promise<void> 
       ON income_monthly_summary (section, year);
   `));
 
+  await db.execute(sql.raw(`
+    CREATE TABLE IF NOT EXISTS monthly_summary_cache (
+      id                   INTEGER          PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+      section              VARCHAR(32)      NOT NULL,
+      query_type           VARCHAR(32)      NOT NULL,
+      approve_month        VARCHAR(7)       NOT NULL,
+      bucket               VARCHAR(32)      NOT NULL,
+      product_type         VARCHAR(64),
+      device_family        VARCHAR(16),
+      date_month           VARCHAR(7),
+      contract_count       INTEGER          NOT NULL DEFAULT 0,
+      principal            DECIMAL(18,2)    NOT NULL DEFAULT 0,
+      interest             DECIMAL(18,2)    NOT NULL DEFAULT 0,
+      fee                  DECIMAL(18,2)    NOT NULL DEFAULT 0,
+      penalty              DECIMAL(18,2)    NOT NULL DEFAULT 0,
+      unlock_fee           DECIMAL(18,2)    NOT NULL DEFAULT 0,
+      discount             DECIMAL(18,2)    NOT NULL DEFAULT 0,
+      overpaid             DECIMAL(18,2)    NOT NULL DEFAULT 0,
+      bad_debt             DECIMAL(18,2)    NOT NULL DEFAULT 0,
+      bad_debt_installment DECIMAL(18,2)    NOT NULL DEFAULT 0,
+      total_amount         DECIMAL(18,2)    NOT NULL DEFAULT 0,
+      finance_total        DECIMAL(18,2)    NOT NULL DEFAULT 0,
+      updated_at           TIMESTAMP        NOT NULL DEFAULT NOW()
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS msc_unique_idx
+      ON monthly_summary_cache (
+        section, query_type, approve_month, bucket,
+        COALESCE(product_type, ''), COALESCE(device_family, ''), COALESCE(date_month, '')
+      );
+    CREATE INDEX IF NOT EXISTS msc_section_query_idx ON monthly_summary_cache (section, query_type);
+    CREATE INDEX IF NOT EXISTS msc_section_month_idx ON monthly_summary_cache (section, approve_month);
+  `));
+
   console.log(`[schema] ${section}: sync-critical columns + upsert indexes + debt cache cols verified`);
 }
 
@@ -380,6 +413,72 @@ export async function runStartupMigrations(): Promise<void> {
       console.log(`[migration] ${section}: monthly_summary_due_month_cache — OK`);
     } catch (err: any) {
       console.error(`[migration] ${section}: monthly_summary_due_month_cache failed:`, err?.message ?? err);
+    }
+    try {
+      // Migration 0022: monthly_summary_cache (สรุปรายเดือน — fastfone-db มักยังไม่มีตารางนี้)
+      await db.execute(sql.raw(`
+        CREATE TABLE IF NOT EXISTS monthly_summary_cache (
+          id                   INTEGER          PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+          section              VARCHAR(32)      NOT NULL,
+          query_type           VARCHAR(32)      NOT NULL,
+          approve_month        VARCHAR(7)       NOT NULL,
+          bucket               VARCHAR(32)      NOT NULL,
+          product_type         VARCHAR(64),
+          device_family        VARCHAR(16),
+          date_month           VARCHAR(7),
+          contract_count       INTEGER          NOT NULL DEFAULT 0,
+          principal            DECIMAL(18,2)    NOT NULL DEFAULT 0,
+          interest             DECIMAL(18,2)    NOT NULL DEFAULT 0,
+          fee                  DECIMAL(18,2)    NOT NULL DEFAULT 0,
+          penalty              DECIMAL(18,2)    NOT NULL DEFAULT 0,
+          unlock_fee           DECIMAL(18,2)    NOT NULL DEFAULT 0,
+          discount             DECIMAL(18,2)    NOT NULL DEFAULT 0,
+          overpaid             DECIMAL(18,2)    NOT NULL DEFAULT 0,
+          bad_debt             DECIMAL(18,2)    NOT NULL DEFAULT 0,
+          bad_debt_installment DECIMAL(18,2)    NOT NULL DEFAULT 0,
+          total_amount         DECIMAL(18,2)    NOT NULL DEFAULT 0,
+          finance_total        DECIMAL(18,2)    NOT NULL DEFAULT 0,
+          updated_at           TIMESTAMP        NOT NULL DEFAULT NOW()
+        )
+      `));
+      await db.execute(sql.raw(`
+        CREATE UNIQUE INDEX IF NOT EXISTS msc_unique_idx
+          ON monthly_summary_cache (
+            section, query_type, approve_month, bucket,
+            COALESCE(product_type, ''), COALESCE(device_family, ''), COALESCE(date_month, '')
+          )
+      `));
+      await db.execute(sql.raw(`CREATE INDEX IF NOT EXISTS msc_section_query_idx ON monthly_summary_cache (section, query_type)`));
+      await db.execute(sql.raw(`CREATE INDEX IF NOT EXISTS msc_section_month_idx ON monthly_summary_cache (section, approve_month)`));
+      console.log(`[migration] ${section}: monthly_summary_cache — OK`);
+    } catch (err: any) {
+      console.error(`[migration] ${section}: monthly_summary_cache failed:`, err?.message ?? err);
+    }
+    try {
+      // Migration 0023: income_monthly_summary (ยอดขายเครื่อง/รายรับ — fastfone-db มักยังไม่มีตารางนี้)
+      await db.execute(sql.raw(`
+        CREATE TABLE IF NOT EXISTS income_monthly_summary (
+          id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+          section VARCHAR(32) NOT NULL,
+          year INTEGER NOT NULL,
+          month INTEGER NOT NULL,
+          income_type VARCHAR(32) NOT NULL,
+          total_amount DECIMAL(18,2) NOT NULL DEFAULT 0,
+          row_count INTEGER NOT NULL DEFAULT 0,
+          updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+        )
+      `));
+      await db.execute(sql.raw(`
+        CREATE UNIQUE INDEX IF NOT EXISTS ims_section_year_month_type_idx
+          ON income_monthly_summary (section, year, month, income_type)
+      `));
+      await db.execute(sql.raw(`
+        CREATE INDEX IF NOT EXISTS ims_section_year_idx
+          ON income_monthly_summary (section, year)
+      `));
+      console.log(`[migration] ${section}: income_monthly_summary — OK`);
+    } catch (err: any) {
+      console.error(`[migration] ${section}: income_monthly_summary failed:`, err?.message ?? err);
     }
     try {
       // Migration 0007: เพิ่ม finance_total column ใน monthly_summary_cache (ยอดจัดฯ)
