@@ -14,6 +14,7 @@ import {
   getNoticeMonthlyStats,
   recordNoticePrint,
   restoreLatestNoticeRound,
+  clearAllNoticeData,
   type NoticeFilters,
   type NoticeSort,
 } from "../noticeDb";
@@ -114,4 +115,9 @@ export const noticeRouter = router({
         reason: input.reason,
       }),
     ),
+
+  /** ล้างข้อมูล Notice ทั้งหมดของ section (ทดสอบ — ไม่แตะสัญญา) */
+  clearAll: requirePermission("notice", "edit")
+    .input(z.object({ section: sectionSchema }))
+    .mutation(({ input }) => clearAllNoticeData(input.section)),
 });

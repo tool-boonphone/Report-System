@@ -224,6 +224,8 @@ function SyncDropdown({
   onSyncMdm,
   onTestMdm,
   onClearCache,
+  onClearNotice,
+  isClearingNotice,
   onRepopulate,
   isRepopulating,
   onPostProcess,
@@ -239,6 +241,8 @@ function SyncDropdown({
   onSyncMdm: () => void;
   onTestMdm: () => void;
   onClearCache: () => void;
+  onClearNotice?: () => void;
+  isClearingNotice?: boolean;
   /** callback สำหรับ Repopulate Summary — ถ้าไม่ส่งมา จะไม่แสดงปุ่ม */
   onRepopulate?: () => void;
   isRepopulating?: boolean;
@@ -262,7 +266,7 @@ function SyncDropdown({
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
 
-  const anyBusy = isRunning || isClearing || isTriggerPending || isMdmPending || isPostProcessPending || isRefreshSummariesPending;
+  const anyBusy = isRunning || isClearing || isClearingNotice || isTriggerPending || isMdmPending || isPostProcessPending || isRefreshSummariesPending;
 
   return (
     <div ref={dropRef} className="relative">
@@ -280,7 +284,7 @@ function SyncDropdown({
 
       {/* Dropdown panel */}
       {open && (
-        <div className="absolute right-0 top-full mt-1.5 w-52 bg-white rounded-xl shadow-lg border border-gray-200 py-1.5 z-50">
+        <div className="absolute right-0 top-full mt-1.5 w-56 bg-white rounded-xl shadow-lg border border-gray-200 py-1.5 z-50">
           {/* Re-Sync API */}
           <button
             onClick={() => { onResync(); setOpen(false); }}
@@ -369,6 +373,20 @@ function SyncDropdown({
           {/* Divider */}
           <div className="my-1 border-t border-gray-100" />
 
+          {onClearNotice && (
+            <button
+              onClick={() => { onClearNotice(); setOpen(false); }}
+              disabled={isRunning || isClearingNotice}
+              className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-red-600 hover:bg-red-50 disabled:opacity-40 transition-colors"
+            >
+              <Trash2 className={`w-4 h-4 shrink-0 ${isClearingNotice ? "animate-pulse" : ""}`} />
+              <div className="text-left">
+                <div className="font-medium">Clear Notice</div>
+                <div className="text-xs text-red-400">ล้าง log / เลขที่เอกสาร ทดสอบ</div>
+              </div>
+            </button>
+          )}
+
           {/* Clear Cache */}
           <button
             onClick={() => { onClearCache(); setOpen(false); }}
@@ -403,6 +421,7 @@ export function SyncStatusBar({
   const [isClearing, setIsClearing] = useState(false);
   const { can } = useAppAuth();
   const canResync = can("sync_api", "sync");
+  const canClearNotice = can("notice", "edit");
   const [showLogPopup, setShowLogPopup] = useState(false);
 
   // Last synced time for the active section.
@@ -786,6 +805,19 @@ export function SyncStatusBar({
     onError: (err) => toast.error(err.message),
   });
 
+  const clearNotice = trpc.notice.clearAll.useMutation({
+    onSuccess: (data) => {
+      utils.notice.list.invalidate();
+      utils.notice.summary.invalidate();
+      utils.notice.monthlyStats.invalidate();
+      utils.notice.adminOptions.invalidate();
+      toast.success(
+        `ล้างข้อมูล Notice แล้ว (print ${data.printLogs}, restore ${data.restoreLogs}, batch ${data.batches})`,
+      );
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
   const [isTriggerPending, setIsTriggerPending] = useState(false);
 
   useEffect(() => {
@@ -822,6 +854,17 @@ export function SyncStatusBar({
     } finally {
       setIsClearing(false);
     }
+  };
+
+  const handleClearNotice = () => {
+    if (!section || clearNotice.isPending) return;
+    const ok = window.confirm(
+      `ล้างข้อมูล Notice ทั้งหมดของ ${section}?\n\n` +
+        "จะลบ: log การพิมพ์, log restore, batch, เลขที่เอกสาร\n" +
+        "ไม่แตะข้อมูลสัญญา — ใช้สำหรับทดสอบเท่านั้น",
+    );
+    if (!ok) return;
+    clearNotice.mutate({ section: section as SectionKey });
   };
 
   if (!section) return null;
@@ -903,6 +946,8 @@ export function SyncStatusBar({
             onSyncMdm={handleSyncMdm}
             onTestMdm={handleTestMdm}
             onClearCache={handleClearCache}
+            onClearNotice={canClearNotice ? handleClearNotice : undefined}
+            isClearingNotice={clearNotice.isPending}
             onRepopulate={onRepopulate}
             isRepopulating={isRepopulating}
             onPostProcess={
