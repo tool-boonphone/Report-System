@@ -55,7 +55,7 @@ import { populateDebtCache } from "./populateCache";
 import { pgRows, ensureSectionSchemaReady } from "../db";
 import { rebuildIncomeMonthlySummary, populateIncomeType } from "../accountingDb";
 import { populateMonthlySummaryCache, populateDueMonthCache } from "../monthlySummaryDb";
-import { populateMonthlyCollectionSnapshot, backfillFrozenBreakdown } from "../monthlyCollectionSnapshotDb";
+import { populateMonthlyCollectionSnapshot, backfillFrozenBreakdown, hasTargetDetailSnapshot, previousCalendarMonth } from "../monthlyCollectionSnapshotDb";
 import { populateTargetDetailSnapshot as populateMonthlyTargetDetailSnapshot } from "../monthlyTargetDetailSnapshotDb";
 
 /* ─────────────────────────────────────────────────────────────────────────── */
@@ -513,10 +513,9 @@ async function doSync(
       console.warn(`[sync] ${section}: populateMonthlyCollectionSnapshot failed (non-fatal):`, snapshotErr?.message ?? snapshotErr);
     }
 
-    // ── Auto Snapshot: ตั้งหนี้เดือนนี้ (end_of_month mode) ──
-    // วันที่ 1: populate snapshot เดือนนี้ด้วย snapshotMode='end_of_month'
-    //   → cutoff = วันสุดท้ายของเดือน — ณ เดือนปัจจุบัน (นับทั้งเดือน รวมงวดที่ยังไม่ถึง due)
-    // วันอื่น: เรียก populate แต่ function จะ skip เองถ้ามีข้อมูลแล้ว (กรณี retry)
+    // ── Auto Snapshot: dropdown "ตั้งเป้ารายเดือน > ตั้งหนี้" ──
+    // วันที่ 1 ของเดือนใหม่: สร้าง roll ใหม่ของเดือนนั้น (populate ครั้งเดียว แล้ว freeze)
+    // วันที่ 2-31: ไม่ populate — ใช้ roll ที่สร้างวันที่ 1
     try {
       const bangkokDate = new Intl.DateTimeFormat("en-CA", {
         timeZone: "Asia/Bangkok",
@@ -540,51 +539,42 @@ async function doSync(
         principalOnly: true,      // toggle เฉพาะเงินต้น = ON
       });
       if (dayOfMonth === 1) {
-        // วันที่ 1: Auto Snapshot ด้วย end_of_month mode (ตั้งหนี้เดือนนี้ = ณ เดือนปัจจุบัน)
-        // ตรวจสอบก่อนว่า freeze ไปหรือยัง
-        const { getDb } = await import("../db");
-        const { sql } = await import("drizzle-orm");
-        const checkDb = await getDb(section);
-        let isTargetFrozen = false;
-        if (checkDb) {
-          const checkRes = await checkDb.execute(sql.raw(`
-            SELECT target_frozen_at FROM monthly_collection_snapshot
-            WHERE section = '${section}' AND collection_month = '${currentMonth}'
-          `));
-          const rows = checkRes.rows || checkRes; // Handle pgRows equivalent
-          isTargetFrozen = (rows as any[])[0]?.target_frozen_at != null;
-        }
-
-        if (isTargetFrozen) {
-          console.log(`[sync] ${section}: monthly_target_detail_snapshot already frozen for ${currentMonth} (target_frozen_at IS NOT NULL) — skipped day 1 auto-populate`);
+        // วันที่ 1 เดือนใหม่: สร้าง roll ใหม่ของเดือนนี้ (ถ้ายังไม่มี)
+        const mtdsExists = await hasTargetDetailSnapshot(section, currentMonth);
+        if (mtdsExists) {
+          console.log(`[sync] ${section}: ${currentMonth} roll already exists — skipped day-1 populate (retry same day)`);
         } else {
           const detailRows = await populateMonthlyTargetDetailSnapshot(
             section,
             currentMonth,
-            "end_of_month", // cutoff = วันสุดท้ายของเดือน
-            true,           // filterDebtOnly = true (ตั้งหนี้ ON)
-            true,           // filterPrincipalOnly = true (เฉพาะเงินต้น ON)
+            "end_of_month",
+            true,
+            true,
             autoSnapshotFilterState,
+            undefined,
+            false, // สร้าง roll ใหม่ของเดือนนี้ — ห้าม skip
           );
-          console.log(`[sync] ${section}: monthly_target_detail_snapshot AUTO populated — ${detailRows} rows for ${currentMonth} (end_of_month mode, day-1 freeze, debtSetMode=true)`);
+          console.log(`[sync] ${section}: created new monthly roll — ${detailRows} rows for ${currentMonth} (dropdown ตั้งหนี้)`);
         }
       } else {
-        // วันอื่น: skip ถ้ามีข้อมูลเดือนนั้นอยู่แล้ว (skipIfExists=true — freeze ไม่ให้ overwrite)
-        const detailRows = await populateMonthlyTargetDetailSnapshot(
+        // วันที่ 2-31: roll ของเดือนนี้ freeze แล้ว — ไม่ populate ทับ
+        console.log(`[sync] ${section}: ${currentMonth} roll frozen — skipped populate (day ${dayOfMonth})`);
+      }
+
+      // Repair: เดือนปัจจุบันยังไม่มี roll (sync วันที่ 1 error / deploy ช้า) → สร้างให้
+      if (!(await hasTargetDetailSnapshot(section, currentMonth))) {
+        console.warn(`[sync] ${section}: ${currentMonth} roll MISSING — repair populate`);
+        const repaired = await populateMonthlyTargetDetailSnapshot(
           section,
           currentMonth,
           "end_of_month",
           true,
           true,
           autoSnapshotFilterState,
-          undefined, // clientTargetAmount
-          true,      // skipIfExists = true → ถ้ามีข้อมูลแล้วจะ skip ทันที
+          undefined,
+          false,
         );
-        if (detailRows > 0) {
-          console.log(`[sync] ${section}: monthly_target_detail_snapshot retry-populated — ${detailRows} rows for ${currentMonth} (end_of_month)`);
-        } else {
-          console.log(`[sync] ${section}: monthly_target_detail_snapshot already frozen for ${currentMonth} — skipped (skipIfExists)`);
-        }
+        console.log(`[sync] ${section}: repair created ${repaired} rows for ${currentMonth}`);
       }
     } catch (detailErr: any) {
       console.warn(`[sync] ${section}: populateMonthlyTargetDetailSnapshot failed (non-fatal):`, detailErr?.message ?? detailErr);
@@ -600,8 +590,13 @@ async function doSync(
         day: "2-digit",
       }).format(new Date());
       const currentMonthForBreakdown = bangkokDateForBreakdown.slice(0, 7);
-      const backfillRows = await backfillFrozenBreakdown(section, currentMonthForBreakdown);
-      console.log(`[sync] ${section}: backfillFrozenBreakdown — updated ${backfillRows} months`);
+      let backfillRows = await backfillFrozenBreakdown(section, currentMonthForBreakdown);
+      // อัปเดตยอดเก็บหนี้รายวันของเดือนก่อนหน้าด้วย (เช่น มิ.ย. 30 หลัง sync วันที่ 1 ก.ค.)
+      const prevMonth = previousCalendarMonth(currentMonthForBreakdown);
+      if (prevMonth) {
+        backfillRows += await backfillFrozenBreakdown(section, prevMonth);
+      }
+      console.log(`[sync] ${section}: backfillFrozenBreakdown — updated ${backfillRows} month(s)`);
     } catch (backfillErr: any) {
       console.warn(`[sync] ${section}: backfillFrozenBreakdown failed (non-fatal):`, backfillErr?.message ?? backfillErr);
     }
