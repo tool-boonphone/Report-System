@@ -320,6 +320,30 @@ export default function Notice() {
     e.target.value = "";
   };
 
+  const handleDownloadImportTemplate = async () => {
+    const toastId = toast.loading("กำลังดาวน์โหลด template...");
+    try {
+      const resp = await fetch("/api/notice/import-template", { credentials: "include" });
+      if (!resp.ok) {
+        const { message } = await resp.json().catch(() => ({ message: "ดาวน์โหลดไม่สำเร็จ" }));
+        toast.error(message, { id: toastId });
+        return;
+      }
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "notice_import_template.xlsx";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast.success("ดาวน์โหลด template สำเร็จ", { id: toastId });
+    } catch (e) {
+      toast.error((e as Error).message ?? "ดาวน์โหลดไม่สำเร็จ", { id: toastId });
+    }
+  };
+
   const handleImportConfirm = async () => {
     if (!importFile || importing) return;
     if (!window.confirm(`ยืนยันนำเข้าประวัติ Notice → ${sectionKey}?\n\nจะเพิ่ม ${importPreview?.toInsert ?? "?"} รายการ (ข้ามรายการซ้ำ)`)) return;
@@ -700,8 +724,8 @@ export default function Notice() {
           </div>
 
           <div className="px-4 sm:px-[18px] py-3 bg-[#fafafa] text-gray-500 text-xs leading-relaxed border-t border-gray-200">
-            หมายเหตุ: ปุ่ม "พิมพ์รายการที่เลือก" จะสร้างไฟล์ ZIP (เอกสาร Notice + Excel จ่าหน้าซองไปรษณีย์ไทย)
-            และนับรอบส่งให้อัตโนมัติเมื่อสร้างไฟล์สำเร็จ — เลขที่เอกสารจัดสรรอัตโนมัติต่อสัญญา (รอบ 2–3 ใช้เลขเดิม)
+            หมายเหตุ: Export Excel ส่งออกเฉพาะรายการที่มีประวัติส่งแล้ว — Import ใช้รูปแบบเดียวกับ template ประวัติ (section ปัจจุบัน)
+            · ปุ่ม "พิมพ์รายการที่เลือก" สร้าง ZIP และนับรอบส่งอัตโนมัติ
           </div>
         </section>
       </div>
@@ -844,9 +868,14 @@ export default function Notice() {
               </button>
             </div>
             <div className="p-5 space-y-4">
-              <div className="text-[13px] text-gray-600 leading-relaxed">
-                รูปแบบคอลัมน์ตาม template: เลขที่เอกสาร, เลขที่สัญญา, ส่งครั้งที่ 1–3 (วันที่/เวลา/โดย)
-                — ข้ามรายการที่มี log รอบนั้นแล้ว
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div className="text-[13px] text-gray-600 leading-relaxed flex-1 min-w-[200px]">
+                  กรอกข้อมูลใน template แล้วอัปโหลด — ข้ามรายการที่มี log รอบนั้นแล้ว
+                </div>
+                <button type="button" onClick={handleDownloadImportTemplate} disabled={importing}
+                  className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-bold bg-sky-50 text-sky-800 hover:bg-sky-100 transition-colors disabled:opacity-50 shrink-0">
+                  <Download className="w-4 h-4" /> ดาวน์โหลด template
+                </button>
               </div>
               <input ref={importInputRef} type="file" accept=".xlsx,.xls" className="hidden"
                 onChange={handleImportFileChange} />

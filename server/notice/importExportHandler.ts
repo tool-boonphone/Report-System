@@ -10,7 +10,7 @@ import {
   type NoticeFilters,
   type NoticeSort,
 } from "../noticeDb";
-import { buildNoticeHistoryExport, parseNoticeImportBuffer } from "./noticeHistoricalExcel";
+import { buildNoticeHistoryExport, buildNoticeImportTemplate, parseNoticeImportBuffer } from "./noticeHistoricalExcel";
 
 function parseCookies(header: string | undefined): Record<string, string> {
   const out: Record<string, string> = {};
@@ -106,6 +106,26 @@ export async function handleNoticeImport(req: Request, res: Response) {
   } catch (err) {
     console.error("[notice/import] failed:", err);
     res.status(500).json({ message: (err as Error).message ?? "นำเข้าไม่สำเร็จ" });
+  }
+}
+
+/** GET /api/notice/import-template — ดาวน์โหลดไฟล์ตัวอย่างสำหรับ import */
+export async function handleNoticeImportTemplate(req: Request, res: Response) {
+  try {
+    if (!(await requireNoticeUser(req, res, "edit"))) return;
+
+    const xlsx = await buildNoticeImportTemplate();
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader(
+      "Content-Disposition",
+      'attachment; filename="notice_import_template.xlsx"',
+    );
+    res.status(200).end(xlsx);
+  } catch (err) {
+    console.error("[notice/import-template] failed:", err);
+    if (!res.headersSent) {
+      res.status(500).json({ message: (err as Error).message ?? "ดาวน์โหลด template ไม่สำเร็จ" });
+    }
   }
 }
 
