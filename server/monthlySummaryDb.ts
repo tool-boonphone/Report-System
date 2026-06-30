@@ -1743,8 +1743,18 @@ async function getMonthlySummaryFromCache(
       AND ${deviceFamilyCond(params.countDeviceFamily)}
       AND date_month IS NULL
   `;
-  const checkRows = await db.execute(sql.raw(checkSql));
-  const checkRow = pgRows(checkRows)[0] as any;
+  let checkRow: { cnt?: string | number; last_updated?: string } | undefined;
+  try {
+    const checkRows = await db.execute(sql.raw(checkSql));
+    checkRow = pgRows(checkRows)[0] as { cnt?: string | number; last_updated?: string };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (/monthly_summary_cache.*does not exist|relation.*does not exist/i.test(msg)) {
+      console.warn(`[getMonthlySummaryFromCache] ${section}: table missing — live query fallback`);
+      return null;
+    }
+    throw err;
+  }
   const cnt = parseInt(String(checkRow?.cnt ?? "0"), 10);
   if (cnt === 0) return null; // ไม่มีข้อมูลใน cache สำหรับ filter นี้ → fallback ไป live query
 
