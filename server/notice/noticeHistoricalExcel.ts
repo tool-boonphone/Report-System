@@ -191,3 +191,67 @@ export async function buildNoticeHistoryExport(rows: NoticeRow[], section: strin
 
   return Buffer.from(await wb.xlsx.writeBuffer());
 }
+
+/** สร้างไฟล์ template สำหรับ import ประวัติ (คอลัมน์ 1–11 ตาม docs/import-sample.png) */
+export async function buildNoticeImportTemplate(): Promise<Buffer> {
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet("นำเข้าประวัติ Notice");
+
+  ws.columns = [
+    { width: 14 }, { width: 22 }, { width: 12 }, { width: 10 }, { width: 16 },
+    { width: 12 }, { width: 10 }, { width: 16 },
+    { width: 12 }, { width: 10 }, { width: 16 },
+  ];
+
+  ws.mergeCells("A1:A2");
+  ws.getCell("A1").value = "เลขที่เอกสาร";
+  ws.mergeCells("B1:B2");
+  ws.getCell("B1").value = "เลขที่สัญญา";
+  ws.mergeCells("C1:E1");
+  ws.getCell("C1").value = "ส่งครั้งที่ 1";
+  ws.mergeCells("F1:H1");
+  ws.getCell("F1").value = "ส่งครั้งที่ 2";
+  ws.mergeCells("I1:K1");
+  ws.getCell("I1").value = "ส่งครั้งที่ 3";
+
+  const subHeaders = ["วันที่", "เวลา", "โดย"];
+  [3, 6, 9].forEach((startCol) => {
+    subHeaders.forEach((label, i) => {
+      const c = ws.getRow(2).getCell(startCol + i);
+      c.value = label;
+    });
+  });
+
+  for (const addr of ["A1", "B1", "C1", "F1", "I1"]) {
+    const c = ws.getCell(addr);
+    c.font = { bold: true };
+    c.fill = HEADER_FILL;
+    c.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+    c.border = THIN_BORDER;
+  }
+  for (let col = 3; col <= 11; col++) {
+    const c = ws.getRow(2).getCell(col);
+    c.font = { bold: true };
+    c.fill = HEADER_FILL;
+    c.alignment = { horizontal: "center", vertical: "middle" };
+    c.border = THIN_BORDER;
+  }
+
+  // แถวตัวอย่าง (ลบหรือแก้ก่อนนำเข้าจริง)
+  const example = ws.getRow(3);
+  example.getCell(1).value = "0001";
+  example.getCell(2).value = "BPN-2024-00001";
+  example.getCell(3).value = "15/01/2568";
+  example.getCell(4).value = "09:30";
+  example.getCell(5).value = "Sadmin";
+  for (let col = 1; col <= 11; col++) {
+    example.getCell(col).border = THIN_BORDER;
+  }
+
+  ws.getRow(4).getCell(1).value =
+    "หมายเหตุ: 1 แถวต่อ 1 สัญญา — กรอกเฉพาะรอบที่ส่งแล้ว (วันที่+เวลา) คอลัมน์ A–K เท่านั้น";
+  ws.mergeCells("A4:K4");
+  ws.getRow(4).getCell(1).font = { italic: true, color: { argb: "FF666666" }, size: 10 };
+
+  return Buffer.from(await wb.xlsx.writeBuffer());
+}
