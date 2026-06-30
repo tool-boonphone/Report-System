@@ -55,7 +55,7 @@ import { populateDebtCache } from "./populateCache";
 import { pgRows, ensureSectionSchemaReady } from "../db";
 import { rebuildIncomeMonthlySummary, populateIncomeType } from "../accountingDb";
 import { populateMonthlySummaryCache, populateDueMonthCache } from "../monthlySummaryDb";
-import { populateMonthlyCollectionSnapshot, backfillFrozenBreakdown, hasTargetDetailSnapshot } from "../monthlyCollectionSnapshotDb";
+import { populateMonthlyCollectionSnapshot, backfillFrozenBreakdown, hasTargetDetailSnapshot, previousCalendarMonth } from "../monthlyCollectionSnapshotDb";
 import { populateTargetDetailSnapshot as populateMonthlyTargetDetailSnapshot } from "../monthlyTargetDetailSnapshotDb";
 
 /* ─────────────────────────────────────────────────────────────────────────── */
@@ -560,6 +560,22 @@ async function doSync(
         // วันที่ 2-31: roll ของเดือนนี้ freeze แล้ว — ไม่ populate ทับ
         console.log(`[sync] ${section}: ${currentMonth} roll frozen — skipped populate (day ${dayOfMonth})`);
       }
+
+      // Repair: เดือนปัจจุบันยังไม่มี roll (sync วันที่ 1 error / deploy ช้า) → สร้างให้
+      if (!(await hasTargetDetailSnapshot(section, currentMonth))) {
+        console.warn(`[sync] ${section}: ${currentMonth} roll MISSING — repair populate`);
+        const repaired = await populateMonthlyTargetDetailSnapshot(
+          section,
+          currentMonth,
+          "end_of_month",
+          true,
+          true,
+          autoSnapshotFilterState,
+          undefined,
+          false,
+        );
+        console.log(`[sync] ${section}: repair created ${repaired} rows for ${currentMonth}`);
+      }
     } catch (detailErr: any) {
       console.warn(`[sync] ${section}: populateMonthlyTargetDetailSnapshot failed (non-fatal):`, detailErr?.message ?? detailErr);
     }
@@ -574,8 +590,13 @@ async function doSync(
         day: "2-digit",
       }).format(new Date());
       const currentMonthForBreakdown = bangkokDateForBreakdown.slice(0, 7);
-      const backfillRows = await backfillFrozenBreakdown(section, currentMonthForBreakdown);
-      console.log(`[sync] ${section}: backfillFrozenBreakdown — updated ${backfillRows} months`);
+      let backfillRows = await backfillFrozenBreakdown(section, currentMonthForBreakdown);
+      // อัปเดตยอดเก็บหนี้รายวันของเดือนก่อนหน้าด้วย (เช่น มิ.ย. 30 หลัง sync วันที่ 1 ก.ค.)
+      const prevMonth = previousCalendarMonth(currentMonthForBreakdown);
+      if (prevMonth) {
+        backfillRows += await backfillFrozenBreakdown(section, prevMonth);
+      }
+      console.log(`[sync] ${section}: backfillFrozenBreakdown — updated ${backfillRows} month(s)`);
     } catch (backfillErr: any) {
       console.warn(`[sync] ${section}: backfillFrozenBreakdown failed (non-fatal):`, backfillErr?.message ?? backfillErr);
     }
