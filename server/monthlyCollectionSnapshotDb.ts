@@ -1046,6 +1046,14 @@ export async function hasTargetDetailSnapshot(
   return pgRows(result).length > 0;
 }
 
+/** คืน YYYY-MM ของเดือนก่อนหน้า (เช่น 2026-07 → 2026-06) */
+export function previousCalendarMonth(month: string): string | null {
+  if (!/^\d{4}-\d{2}$/.test(month)) return null;
+  const [y, m] = month.split("-").map(Number);
+  if (m === 1) return `${y - 1}-12`;
+  return `${y}-${String(m - 1).padStart(2, "0")}`;
+}
+
 // ─── Backfill: คำนวณ target_by_range และ daily_breakdown แล้ว freeze ใน mcs ──────
 /**
  * backfillFrozenBreakdown
@@ -1137,10 +1145,16 @@ export async function backfillFrozenBreakdown(
         const mergedBreakdown: Record<string, any> = {};
         for (const [key, val] of Object.entries(existingBreakdown)) {
           if (key === 'overdue') {
-            mergedBreakdown[key] = val; // overdue collected ยังคง 0 (ไม่ track รายวัน)
+            mergedBreakdown[key] = val;
           } else {
             const dayCollected = collectedByDay[key] ?? 0;
             mergedBreakdown[key] = { ...val, collected: dayCollected };
+          }
+        }
+        // เพิ่มวันที่มี collected แต่ไม่มีใน breakdown เดิม (เช่น วันสุดท้ายของเดือนที่ sync ก่อนหน้า)
+        for (const [dayKey, collectedAmt] of Object.entries(collectedByDay)) {
+          if (!mergedBreakdown[dayKey]) {
+            mergedBreakdown[dayKey] = { target: 0, targetByRange: {}, collected: collectedAmt };
           }
         }
         // UPDATE เฉพาะ daily_breakdown (ไม่แตะ target_by_range)
