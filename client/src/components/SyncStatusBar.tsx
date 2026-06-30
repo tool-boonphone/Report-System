@@ -284,7 +284,7 @@ function SyncDropdown({
 
       {/* Dropdown panel */}
       {open && (
-        <div className="absolute right-0 top-full mt-1.5 w-52 bg-white rounded-xl shadow-lg border border-gray-200 py-1.5 z-50">
+        <div className="absolute right-0 top-full mt-1.5 w-56 bg-white rounded-xl shadow-lg border border-gray-200 py-1.5 z-50">
           {/* Re-Sync API */}
           <button
             onClick={() => { onResync(); setOpen(false); }}
