@@ -340,6 +340,17 @@ export const syncRouter = router({
             lossStatus: z.number().int().nullable().optional(), // 0=ปกติ, 1=Lost Mode (ดึง GPS ได้)
           })
         ).max(20000), // เพิ่มจาก 10,000 เป็น 20,000 รองรับ dataset ขนาดใหญ่
+        /** GPS จาก client browser (Render server ถูก Cloudflare block ที่ /devices/location) */
+        locations: z.array(
+          z.object({
+            serialNo: z.string(),
+            mdmDeviceId: z.number().int(),
+            latitude: z.string(),
+            longitude: z.string(),
+            altitude: z.string().nullable().optional(),
+            speed: z.string().nullable().optional(),
+          }),
+        ).max(500).optional(),
       })
     )
     .mutation(async ({ input }) => {
@@ -464,7 +475,28 @@ export const syncRouter = router({
 
       console.log(`[saveMdmData] ${section}: updated ${updated}/${matchedRows.length} matched contracts (bulk SQL, with mdm_device_id)`);
 
-      // ─── GPS Loop: ดึง GPS เฉพาะเครื่องที่ online (days=0) และถูกล็อก (deviceLock=true) ───
+      // ─── GPS: ใช้ locations จาก client browser ก่อน (หลีกเลี่ยง Cloudflare block บน Render) ───
+      const clientLocations = input.locations ?? [];
+      if (clientLocations.length > 0) {
+        let gpsSuccess = 0;
+        for (const loc of clientLocations) {
+          if (!loc.latitude || !loc.longitude) continue;
+          await db.insert(deviceLocationLogs).values({
+            section,
+            serialNo: loc.serialNo.trim().toUpperCase(),
+            mdmDeviceId: loc.mdmDeviceId,
+            latitude: loc.latitude,
+            longitude: loc.longitude,
+            altitude: loc.altitude ?? null,
+            speed: loc.speed ?? null,
+          });
+          gpsSuccess++;
+        }
+        console.log(
+          `[saveMdmData][GPS] ${section}: saved ${gpsSuccess}/${clientLocations.length} locations from client`,
+        );
+      } else {
+      // ─── GPS Loop (server fallback — มักถูก Cloudflare block บน Render) ───
       // กรอง matchedRows เฉพาะที่ online วันนี้ (days=0) และ deviceLock=true
       // lastType=1 = MDM รายงานว่าเครื่องออนไลน์อยู่ ณ ขณะที่ sync → ดึง GPS ได้
       // lastType=0 = offline → ข้ามไปเลย ไม่ดึงซ้ำ
@@ -520,6 +552,7 @@ export const syncRouter = router({
       } else {
         console.log(`[saveMdmData][GPS] ${section}: no devices qualify for GPS fetch (need lastType=1 online + locked)`);
       }
+      } // end server GPS fallback when no client locations
       // ─────────────────────────────────────────────────────────────────────────────────
 
       return { section, updated, total: validRows.length };

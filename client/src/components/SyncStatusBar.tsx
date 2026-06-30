@@ -698,11 +698,60 @@ export function SyncStatusBar({
         lossStatus: d.lossStatus,   // 0=ปกติ, 1=Lost Mode (ดึง GPS ได้)
       }));
 
+      // Step 3b: ดึง GPS จาก browser (server ถูก Cloudflare block ที่ /devices/location)
+      const gpsTargets = devicePayload.filter(
+        (d) => d.lastType === 1 && d.lossStatus === 1 && d.mdmDeviceId != null,
+      );
+      const locations: Array<{
+        serialNo: string;
+        mdmDeviceId: number;
+        latitude: string;
+        longitude: string;
+        altitude: string | null;
+        speed: string | null;
+      }> = [];
+      if (gpsTargets.length > 0) {
+        toast.loading(`ดึง GPS ${gpsTargets.length} เครื่อง...`, { id: toastId });
+        for (const target of gpsTargets) {
+          try {
+            const locUrl = `https://mdm-th.com/api/mdm/devices/location?id=${target.mdmDeviceId}`;
+            const locRes = await fetch(locUrl, {
+              headers: { "X-API-Key": apiKey, Accept: "application/json, text/plain, */*" },
+              signal: AbortSignal.timeout(15_000),
+            });
+            const locRaw = await locRes.text();
+            if (locRes.ok && !locRaw.trimStart().startsWith("<")) {
+              const locJson = JSON.parse(locRaw) as {
+                code?: number;
+                latitude?: string | number;
+                longitude?: string | number;
+                altitude?: string | number | null;
+                speed?: string | number | null;
+              };
+              if (locJson.latitude != null && locJson.longitude != null && locJson.code !== 500) {
+                locations.push({
+                  serialNo: target.serialNo,
+                  mdmDeviceId: target.mdmDeviceId!,
+                  latitude: String(locJson.latitude),
+                  longitude: String(locJson.longitude),
+                  altitude: locJson.altitude != null ? String(locJson.altitude) : null,
+                  speed: locJson.speed != null ? String(locJson.speed) : null,
+                });
+              }
+            }
+          } catch {
+            // offline / no GPS — skip
+          }
+          await new Promise((r) => setTimeout(r, 200));
+        }
+      }
+
       // Step 4: ส่งผลกลับ server เพื่อบันทึกลง DB
       toast.loading(`บันทึกข้อมูล MDM ${devicePayload.length} devices (รวม deviceLock)...`, { id: toastId });
       await saveMdmDataMutation.mutateAsync({
         section: section as SectionKey,
         devices: devicePayload,
+        locations: locations.length > 0 ? locations : undefined,
       });
       toast.dismiss(toastId);
     } catch (err: any) {
