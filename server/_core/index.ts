@@ -16,6 +16,7 @@ import {
   handleNoticeExport,
   handleNoticeImport,
   handleNoticeImportPreview,
+  handleNoticeImportTemplate,
 } from "../notice/importExportHandler";
 
 import { handleSyncStream } from "../routers/syncStream";
@@ -73,6 +74,7 @@ async function startServer() {
   // Notice — generate PDF/DOCX + Excel จ่าหน้าซอง (ZIP) และนับรอบส่ง
   app.post("/api/notice/print", handleNoticePrint);
   app.get("/api/notice/export", handleNoticeExport);
+  app.get("/api/notice/import-template", handleNoticeImportTemplate);
   app.post("/api/notice/import-preview", handleNoticeImportPreview);
   app.post("/api/notice/import", handleNoticeImport);
   // Phase 33: Streaming debt data endpoints — bypass tRPC buffering to avoid proxy 503 timeout
