@@ -491,9 +491,11 @@ export default function DebtSummary() {
   // Auto-fetch when tab/section changes (only if not already loaded)
   useEffect(() => {
     if (!canView || !section) return;
-    if (tab === "target" && !streamData.target && !streamLoading.target) {
+    const hasTargetData = (streamData.target?.rows.length ?? 0) > 0;
+    const hasCollectedData = (streamData.collected?.rows.length ?? 0) > 0;
+    if (tab === "target" && !hasTargetData && !streamLoading.target) {
       fetchStream("target");
-    } else if (tab === "collected" && !streamData.collected && !streamLoading.collected) {
+    } else if (tab === "collected" && !hasCollectedData && !streamLoading.collected) {
       fetchStream("collected");
     }
   }, [tab, section, canView]); // eslint-disable-line react-hooks/exhaustive-deps

@@ -81,6 +81,11 @@ export function isCacheValid(entry: IdbCacheEntry): boolean {
   return entry.savedAt >= boundary;
 }
 
+/** Cache is usable only when both target and collected have at least one row. */
+export function isCachePopulated(entry: IdbCacheEntry): boolean {
+  return entry.targetRows.length > 0 && entry.collectedRows.length > 0;
+}
+
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 /** Read a cache entry for a section. Returns null if not found or expired. */
