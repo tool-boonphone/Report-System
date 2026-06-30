@@ -11,7 +11,7 @@ import type { Request, Response } from "express";
 import JSZip from "jszip";
 import { APP_SESSION_COOKIE, normalizeSectionKey, type SectionKey } from "../../shared/const";
 import { checkPermission, getUserFromSession } from "../authDb";
-import { getNoticePrintData, recordNoticePrint } from "../noticeDb";
+import { getNoticePrintData, recordNoticePrint, allocateDocumentNumbers, attachDocumentNumbers } from "../noticeDb";
 import { buildNoticeDocx } from "./noticeDocx";
 import { buildEnvelopeExcel } from "./envelopeExcel";
 import { convertDocxToPdf } from "./docxToPdf";
@@ -65,12 +65,19 @@ export async function handleNoticePrint(req: Request, res: Response) {
       return;
     }
 
+    // จัดสรรเลขที่เอกสารก่อนสร้างไฟล์
+    const docNos = await allocateDocumentNumbers({
+      section,
+      items: records.map((r) => ({ externalId: r.externalId, nextRound: r.sentCount + 1 })),
+    });
+    const printRecords = attachDocumentNumbers(records, docNos);
+
     // 1) สร้าง DOCX → แปลงเป็น PDF (ถ้ามี LibreOffice)
-    const docxBuf = await buildNoticeDocx(records, section);
+    const docxBuf = await buildNoticeDocx(printRecords, section);
     const pdfBuf = await convertDocxToPdf(docxBuf);
 
     // 2) สร้าง Excel จ่าหน้าซอง
-    const xlsxBuf = await buildEnvelopeExcel(records);
+    const xlsxBuf = await buildEnvelopeExcel(printRecords);
 
     // 3) bundle เป็น ZIP
     const stamp = new Date().toISOString().slice(0, 10);
@@ -88,8 +95,9 @@ export async function handleNoticePrint(req: Request, res: Response) {
     const operator = (appUser.fullName?.trim() || appUser.username || "ไม่ทราบชื่อ").slice(0, 128);
     const recorded = await recordNoticePrint({
       section,
-      externalIds: records.map((r) => r.externalId),
+      externalIds: printRecords.map((r) => r.externalId),
       operator,
+      documentNos: docNos,
     });
 
     const fileName = `notice_${section}_${stamp}_${records.length}.zip`;
