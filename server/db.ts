@@ -800,7 +800,7 @@ export async function runStartupMigrations(): Promise<void> {
       console.error(`[migration] ${section}: contracts.loss_status, mdm_device_id failed:`, err?.message ?? err);
     }
     try {
-      // Migration 0025: device_location_logs (GPS history)
+      // Migration 0025: device_location_logs (GPS history; used by Suspected Bad Debt map)
       await db.execute(sql.raw(`
         CREATE TABLE IF NOT EXISTS device_location_logs (
           id            INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -819,111 +819,6 @@ export async function runStartupMigrations(): Promise<void> {
       console.log(`[migration] ${section}: device_location_logs — OK`);
     } catch (err: any) {
       console.error(`[migration] ${section}: device_location_logs failed:`, err?.message ?? err);
-    }
-    try {
-      // Migration 0026: sync_logs.stage_updated_at — heartbeat for zombie sync detection
-      await db.execute(sql.raw(`
-        ALTER TABLE sync_logs
-        ADD COLUMN IF NOT EXISTS stage_updated_at TIMESTAMP NOT NULL DEFAULT NOW()
-      `));
-      console.log(`[migration] ${section}: sync_logs.stage_updated_at — OK`);
-    } catch (err: any) {
-      console.error(`[migration] ${section}: sync_logs.stage_updated_at failed:`, err?.message ?? err);
-    }
-    try {
-      // Migration 0027: contracts bad_debt columns (Drizzle INSERT references these)
-      await db.execute(sql.raw(`
-        ALTER TABLE contracts
-        ADD COLUMN IF NOT EXISTS bad_debt_amount DECIMAL(12,2),
-        ADD COLUMN IF NOT EXISTS bad_debt_date VARCHAR(20),
-        ADD COLUMN IF NOT EXISTS suspended_from_period INTEGER,
-        ADD COLUMN IF NOT EXISTS bad_debt_updated_by VARCHAR(128),
-        ADD COLUMN IF NOT EXISTS bad_debt_updated_at VARCHAR(32)
-      `));
-      console.log(`[migration] ${section}: contracts.bad_debt_* — OK`);
-    } catch (err: any) {
-      console.error(`[migration] ${section}: contracts.bad_debt_* failed:`, err?.message ?? err);
-    }
-    try {
-      // Migration 0028: dedupe + unique indexes for ON CONFLICT upserts (runs once at startup)
-      await db.execute(sql.raw(`
-        DELETE FROM contracts a
-        USING contracts b
-        WHERE a.id > b.id AND a.section = b.section AND a.external_id = b.external_id;
-
-        DELETE FROM cached_customers a
-        USING cached_customers b
-        WHERE a.id > b.id AND a.section = b.section AND a.customer_id = b.customer_id;
-
-        DELETE FROM installments a
-        USING installments b
-        WHERE a.id > b.id AND a.section = b.section AND a.external_id = b.external_id;
-
-        DELETE FROM payment_transactions a
-        USING payment_transactions b
-        WHERE a.id > b.id AND a.section = b.section AND a.external_id = b.external_id;
-
-        CREATE UNIQUE INDEX IF NOT EXISTS contracts_section_external_idx
-          ON contracts (section, external_id);
-        CREATE UNIQUE INDEX IF NOT EXISTS cached_customers_section_customer_idx
-          ON cached_customers (section, customer_id);
-        CREATE UNIQUE INDEX IF NOT EXISTS installments_section_external_idx
-          ON installments (section, external_id);
-        CREATE UNIQUE INDEX IF NOT EXISTS payment_transactions_section_external_idx
-          ON payment_transactions (section, external_id);
-        CREATE UNIQUE INDEX IF NOT EXISTS commissions_section_external_idx
-          ON commissions (section, external_id);
-      `));
-      console.log(`[migration] ${section}: upsert unique indexes — OK`);
-    } catch (err: any) {
-      console.error(`[migration] ${section}: upsert unique indexes failed:`, err?.message ?? err);
-    }
-    try {
-      // Migration 0029: debt cache columns required by populateDebtCache INSERT
-      await db.execute(sql.raw(`
-        ALTER TABLE debt_target_cache
-          ADD COLUMN IF NOT EXISTS partner_code VARCHAR(255),
-          ADD COLUMN IF NOT EXISTS partner_name VARCHAR(255),
-          ADD COLUMN IF NOT EXISTS device VARCHAR(64),
-          ADD COLUMN IF NOT EXISTS model VARCHAR(128),
-          ADD COLUMN IF NOT EXISTS serial_no VARCHAR(64),
-          ADD COLUMN IF NOT EXISTS finance_amount DECIMAL(12,2),
-          ADD COLUMN IF NOT EXISTS contract_status VARCHAR(32),
-          ADD COLUMN IF NOT EXISTS debt_range VARCHAR(32),
-          ADD COLUMN IF NOT EXISTS principal DECIMAL(12,2) NOT NULL DEFAULT 0,
-          ADD COLUMN IF NOT EXISTS interest DECIMAL(12,2) NOT NULL DEFAULT 0,
-          ADD COLUMN IF NOT EXISTS fee DECIMAL(12,2) NOT NULL DEFAULT 0,
-          ADD COLUMN IF NOT EXISTS penalty DECIMAL(12,2) NOT NULL DEFAULT 0,
-          ADD COLUMN IF NOT EXISTS unlock_fee DECIMAL(12,2) NOT NULL DEFAULT 0,
-          ADD COLUMN IF NOT EXISTS total_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
-          ADD COLUMN IF NOT EXISTS net_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
-          ADD COLUMN IF NOT EXISTS paid_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
-          ADD COLUMN IF NOT EXISTS baseline_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
-          ADD COLUMN IF NOT EXISTS overpaid_applied DECIMAL(12,2) NOT NULL DEFAULT 0,
-          ADD COLUMN IF NOT EXISTS is_paid BOOLEAN NOT NULL DEFAULT FALSE,
-          ADD COLUMN IF NOT EXISTS is_arrears BOOLEAN NOT NULL DEFAULT FALSE,
-          ADD COLUMN IF NOT EXISTS is_bad_debt BOOLEAN NOT NULL DEFAULT FALSE,
-          ADD COLUMN IF NOT EXISTS is_closed BOOLEAN NOT NULL DEFAULT FALSE,
-          ADD COLUMN IF NOT EXISTS is_suspended BOOLEAN NOT NULL DEFAULT FALSE,
-          ADD COLUMN IF NOT EXISTS is_current_period BOOLEAN NOT NULL DEFAULT FALSE,
-          ADD COLUMN IF NOT EXISTS is_future_period BOOLEAN NOT NULL DEFAULT FALSE,
-          ADD COLUMN IF NOT EXISTS is_partial_paid BOOLEAN NOT NULL DEFAULT FALSE;
-        ALTER TABLE debt_collected_cache
-          ADD COLUMN IF NOT EXISTS partner_code VARCHAR(255),
-          ADD COLUMN IF NOT EXISTS partner_name VARCHAR(255),
-          ADD COLUMN IF NOT EXISTS device VARCHAR(64),
-          ADD COLUMN IF NOT EXISTS model VARCHAR(128),
-          ADD COLUMN IF NOT EXISTS finance_amount DECIMAL(12,2),
-          ADD COLUMN IF NOT EXISTS installment_count INTEGER,
-          ADD COLUMN IF NOT EXISTS contract_status VARCHAR(32),
-          ADD COLUMN IF NOT EXISTS debt_range VARCHAR(32),
-          ADD COLUMN IF NOT EXISTS period INTEGER;
-        CREATE UNIQUE INDEX IF NOT EXISTS dtc_section_contract_period_idx
-          ON debt_target_cache (section, contract_external_id, period);
-      `));
-      console.log(`[migration] ${section}: debt_target_cache / debt_collected_cache cols — OK`);
-    } catch (err: any) {
-      console.error(`[migration] ${section}: debt cache cols failed:`, err?.message ?? err);
     }
   }
 }

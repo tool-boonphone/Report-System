@@ -2,7 +2,7 @@
 
 ระบบ Report System สำหรับจัดการข้อมูลสัญญาและรายงานหนี้ โดยดึงข้อมูลจาก API ของ
 **Boonphone** (`partner.boonphone.co.th`) และ **Fastfone365** (`partner.fastfone365.co.th`)
-พัฒนาด้วย **React 19 + TypeScript + tRPC 11 + Drizzle ORM + MySQL (TiDB)** ใช้ Tailwind 4 + shadcn/ui
+พัฒนาด้วย **React 19 + TypeScript + tRPC 11 + Drizzle ORM + PostgreSQL** ใช้ Tailwind 4 + shadcn/ui
 และออกแบบหน้าจอแบบ Mobile-First เพื่อดูรายงานผ่านสมาร์ทโฟนได้สะดวก
 
 > GitHub: https://github.com/tool-boonphone/Report-System
@@ -31,15 +31,15 @@ shared/        Constants shared between client and server (SECTIONS, CONTRACT_CO
 
 **สถานะการส่งมอบ** (จาก `todo.md`):
 
-| Phase | Feature | สถานะ |
-|------|---------|-------|
-| 1 | Design System + DB Schema + Seed Super Admin | ✅ |
-| 2 | Auth ภายใน + จัดการผู้ใช้ + จัดการกลุ่มสิทธิ์ + Logout | ✅ |
-| 3 | API Sync Engine (Boonphone) + Scheduler + Manual Sync + Toast | ✅ |
-| 3 | API Sync Engine (Fastfone365) | ⏸️ รอ credentials ที่ถูกต้อง (401) |
-| 4 | ตาราง 41 คอลัมน์ + Filter/Search/Sort/Pagination + Export Excel | ✅ |
-| 5 | รายงานหนี้ (เป้า vs เก็บ) + Top Overdue + Export Excel | ✅ |
-| 6 | GitHub + Tests + README + Delivery | ✅ |
+| Phase | Feature                                                         | สถานะ                              |
+| ----- | --------------------------------------------------------------- | ---------------------------------- |
+| 1     | Design System + DB Schema + Seed Super Admin                    | ✅                                 |
+| 2     | Auth ภายใน + จัดการผู้ใช้ + จัดการกลุ่มสิทธิ์ + Logout          | ✅                                 |
+| 3     | API Sync Engine (Boonphone) + Scheduler + Manual Sync + Toast   | ✅                                 |
+| 3     | API Sync Engine (Fastfone365)                                   | ⏸️ รอ credentials ที่ถูกต้อง (401) |
+| 4     | ตาราง 41 คอลัมน์ + Filter/Search/Sort/Pagination + Export Excel | ✅                                 |
+| 5     | รายงานหนี้ (เป้า vs เก็บ) + Top Overdue + Export Excel          | ✅                                 |
+| 6     | GitHub + Tests + README + Delivery                              | ✅                                 |
 
 ---
 
@@ -49,7 +49,9 @@ shared/        Constants shared between client and server (SECTIONS, CONTRACT_CO
 
 ```
 # Database
-DATABASE_URL            mysql://user:pass@host:port/db
+DATABASE_URL            postgresql://user:pass@host:port/db
+BOONPHONE_DATABASE_URL  PostgreSQL URL สำหรับ Boonphone DB
+FASTFONE_DATABASE_URL   PostgreSQL URL สำหรับ Fastfone365 DB
 
 # Auth
 JWT_SECRET              ใช้เซ็น session cookie
@@ -68,6 +70,27 @@ FASTFONE_API_PASSWORD   (รอ credentials ที่ถูกต้อง)
 เมื่อได้ credentials ที่ถูกต้องของ Fastfone365 ให้อัปเดตที่
 `Settings → Secrets` ในหน้าจัดการโปรเจค ระบบจะเริ่ม sync ให้อัตโนมัติใน cron รอบถัดไป
 
+### Staging database + ข้อมูลทดสอบ
+
+ให้สร้าง Render PostgreSQL แยกจาก live DB เช่น `boonphone_staging` และ
+`fastfone365_staging` แล้วตั้งค่า:
+
+```bash
+cp .env.staging.example .env.staging
+# แก้ BOONPHONE_DATABASE_URL และ FASTFONE_DATABASE_URL ให้เป็น staging DB
+pnpm db:staging:setup
+```
+
+คำสั่ง `db:staging:setup` จะ:
+
+1. push schema ปัจจุบันด้วย Drizzle ไปยัง DB staging ทั้งสองตัว
+2. seed Super Admin ลง Boonphone staging DB
+3. seed สัญญา/งวด/รายการชำระตัวอย่างของ Boonphone และ Fastfone365
+
+ระบบจะปฏิเสธ DB URL ที่ชื่อ host/database ไม่มีคำว่า `staging`, `stage`, `test`,
+หรือ `dev` เพื่อกันเผลอรันกับ live DB. หากต้อง override สำหรับ DB staging ที่ตั้งชื่อไม่ตรง
+ให้ตั้ง `ALLOW_NON_STAGING_DATABASE=true` หลังตรวจสอบแล้วว่าไม่ใช่ live DB.
+
 ---
 
 ## 3. Default Super Admin
@@ -81,6 +104,7 @@ Password : Aa123456+
 โปรด **เปลี่ยนรหัสผ่าน** ทันทีในหน้า "เปลี่ยนรหัสผ่าน" หลัง login ครั้งแรก
 
 ### สิทธิ์ (Permission Matrix)
+
 แต่ละกลุ่มสามารถเปิด/ปิดสิทธิ์ได้ 6 ด้าน × 4 เมนู (เมนูตั้งค่า, ข้อมูลสัญญา, รายงานหนี้, …):
 `view / add / edit / delete / approve / export`
 
@@ -109,6 +133,7 @@ Password : Aa123456+
 `shared/const.ts → CONTRACT_COLUMNS` ซึ่งทั้งหน้าเว็บและไฟล์ Excel ใช้แหล่งเดียวกัน
 
 ฟีเจอร์:
+
 - Search: เลขสัญญา / ลูกค้า / พาร์ทเนอร์ / โทร / IMEI / Serial / บัตร ปชช.
 - Filter: สถานะ / ประเภทหนี้ / รหัสพาร์ทเนอร์ / ช่วงวันที่ (ยื่น/อนุมัติ)
 - Sort: เลขสัญญา, วันยื่น, วันอนุมัติ, สถานะ, ลูกค้า, พาร์ทเนอร์
@@ -135,6 +160,7 @@ pnpm dev               # รัน dev server (Vite + tsx watch)
 pnpm check             # TypeScript strict check
 pnpm test              # รัน Vitest (20 passed, 1 skipped)
 pnpm drizzle-kit generate   # สร้าง migration หลังแก้ schema
+pnpm db:staging:setup  # push schema + seed ข้อมูลทดสอบลง staging DB
 ```
 
 ---
@@ -170,4 +196,5 @@ git pull origin main
 - [ ] บันทึกรายชื่อผู้ใช้ที่ trigger manual sync ลง `sync_logs.triggered_by_user`
 
 ---
+
 _สร้าง/อัปเดตครั้งล่าสุดโดย Manus Agent — ดูเวอร์ชันและรายละเอียดงานเพิ่มเติมที่ `todo.md`_
