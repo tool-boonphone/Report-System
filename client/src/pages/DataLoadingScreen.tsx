@@ -22,7 +22,7 @@ import { trpc } from "@/lib/trpc";
 import type { SectionKey } from "@shared/const";
 import { CheckCircle2, AlertCircle, Loader2, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { readIdbCache, writeIdbCache } from "@/lib/debtIdbCache";
+import { isCachePopulated, readIdbCache, writeIdbCache } from "@/lib/debtIdbCache";
 import { useLocation } from "wouter";
 
 type ItemStatus = "idle" | "loading" | "done" | "error";
@@ -663,7 +663,12 @@ export default function DataLoadingScreen() {
     
     // บันทึกลง IndexedDB หลังโหลดครบทั้งหมด
     const cache = debtCache.getCache(sec);
-    if (cache.target && cache.collected) {
+    if (
+      cache.target &&
+      cache.collected &&
+      cache.target.rows.length > 0 &&
+      cache.collected.rows.length > 0
+    ) {
       writeIdbCache({
         section: sec,
         savedAt: Date.now(),
@@ -703,7 +708,10 @@ export default function DataLoadingScreen() {
 
       // ตรวจสอบว่า memory cache มีข้อมูลอยู่แล้วหรือไม่
       const memCache = debtCache.getCache(section as SectionKey);
-      if (memCache.target && memCache.collected) {
+      const memHasData =
+        (memCache.target?.rows.length ?? 0) > 0 &&
+        (memCache.collected?.rows.length ?? 0) > 0;
+      if (memHasData) {
         if (needsMdm) {
           // มีข้อมูลใน cache แต่ MDM stale -> ให้ดึงแค่ MDM แล้วค่อย navigate
           startedRef.current = true;
@@ -731,7 +739,7 @@ export default function DataLoadingScreen() {
       // ตรวจสอบ IndexedDB cache ก่อนโหลดจาก API
       try {
         const idbEntry = await readIdbCache(section as SectionKey);
-        if (idbEntry) {
+        if (idbEntry && isCachePopulated(idbEntry)) {
           // มี IDB cache ที่ยังไม่หมดอายุ → restore เข้า memory
           debtCache.setTargetRows(section as SectionKey, idbEntry.targetRows);
           debtCache.setCollectedRows(section as SectionKey, idbEntry.collectedRows, idbEntry.hasPrincipalBreakdown);

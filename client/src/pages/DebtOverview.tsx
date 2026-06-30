@@ -698,8 +698,10 @@ export default function DebtOverview() {
   // Auto-fetch both streams on mount
   useEffect(() => {
     if (!canView || !section) return;
-    if (!streamData.target && !streamLoading.target) fetchStream("target");
-    if (!streamData.collected && !streamLoading.collected) fetchStream("collected");
+    const hasTargetData = (streamData.target?.rows.length ?? 0) > 0;
+    const hasCollectedData = (streamData.collected?.rows.length ?? 0) > 0;
+    if (!hasTargetData && !streamLoading.target) fetchStream("target");
+    if (!hasCollectedData && !streamLoading.collected) fetchStream("collected");
   }, [section, canView]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Reset local UI state when section changes
