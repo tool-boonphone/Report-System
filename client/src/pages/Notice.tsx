@@ -22,7 +22,7 @@ import { useSection } from "@/contexts/SectionContext";
 import { useAppAuth } from "@/hooks/useAppAuth";
 import { trpc } from "@/lib/trpc";
 import { Spinner } from "@/components/ui/spinner";
-import { BarChart3, Printer, RotateCcw, Search, X } from "lucide-react";
+import { BarChart3, Download, Printer, RotateCcw, Search, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 
 type SortField = "approveDate" | "overdueDays" | "sentCount";
@@ -66,6 +66,7 @@ export default function Notice() {
   const { can } = useAppAuth();
   const canView = can("notice", "view");
   const canEdit = can("notice", "edit");
+  const canExport = can("notice", "export");
   const utils = trpc.useUtils();
 
   // ── Filter state ──
@@ -89,6 +90,18 @@ export default function Notice() {
   // ── Restore modal ──
   const [pendingRestore, setPendingRestore] = useState<NoticeRow | null>(null);
   const [statsOpen, setStatsOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importPreview, setImportPreview] = useState<{
+    parsedRows: number;
+    toInsert: number;
+    skipNoContract: number;
+    skipDuplicate: number;
+    sample: Array<{ contractNo: string; round: number; documentNo: string }>;
+  } | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const importInputRef = useRef<HTMLInputElement>(null);
 
   // ── Debounce search ──
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -232,6 +245,112 @@ export default function Notice() {
     }
   };
   const handleStats = () => setStatsOpen(true);
+
+  const fileToBase64 = (file: File) =>
+    new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = reader.result as string;
+        resolve(dataUrl.split(",")[1] ?? "");
+      };
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(file);
+    });
+
+  const handleExportExcel = async () => {
+    if (!section || exporting) return;
+    setExporting(true);
+    const toastId = toast.loading("กำลังสร้างไฟล์ Excel...");
+    try {
+      const params = new URLSearchParams({
+        section: sectionKey,
+        filters: JSON.stringify(filters),
+        sort: JSON.stringify({ field: sortField, dir: sortDir }),
+      });
+      const resp = await fetch(`/api/notice/export?${params}`, { credentials: "include" });
+      if (!resp.ok) {
+        const { message } = await resp.json().catch(() => ({ message: "Export ไม่สำเร็จ" }));
+        toast.error(message, { id: toastId });
+        return;
+      }
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `notice_history_${sectionKey}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast.success("ดาวน์โหลด Excel สำเร็จ", { id: toastId });
+    } catch (e) {
+      toast.error((e as Error).message ?? "Export ไม่สำเร็จ", { id: toastId });
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const runImportPreview = async (file: File) => {
+    const toastId = toast.loading("กำลังตรวจสอบไฟล์...");
+    try {
+      const fileBase64 = await fileToBase64(file);
+      const resp = await fetch("/api/notice/import-preview", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ section: sectionKey, fileBase64 }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) {
+        toast.error(data.message ?? "ตรวจสอบไฟล์ไม่สำเร็จ", { id: toastId });
+        return;
+      }
+      setImportPreview(data);
+      toast.success(`พบ ${data.parsedRows} แถว — จะนำเข้า ${data.toInsert} รายการ`, { id: toastId });
+    } catch (e) {
+      toast.error((e as Error).message ?? "ตรวจสอบไฟล์ไม่สำเร็จ", { id: toastId });
+    }
+  };
+
+  const handleImportFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] ?? null;
+    setImportFile(file);
+    setImportPreview(null);
+    if (file) await runImportPreview(file);
+    e.target.value = "";
+  };
+
+  const handleImportConfirm = async () => {
+    if (!importFile || importing) return;
+    if (!window.confirm(`ยืนยันนำเข้าประวัติ Notice → ${sectionKey}?\n\nจะเพิ่ม ${importPreview?.toInsert ?? "?"} รายการ (ข้ามรายการซ้ำ)`)) return;
+    setImporting(true);
+    const toastId = toast.loading("กำลังนำเข้าข้อมูล...");
+    try {
+      const fileBase64 = await fileToBase64(importFile);
+      const resp = await fetch("/api/notice/import", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ section: sectionKey, fileBase64 }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) {
+        toast.error(data.message ?? "นำเข้าไม่สำเร็จ", { id: toastId });
+        return;
+      }
+      setImportOpen(false);
+      setImportFile(null);
+      setImportPreview(null);
+      refetchAll();
+      utils.notice.monthlyStats.invalidate();
+      toast.success(`นำเข้าสำเร็จ ${data.imported} รายการ (ข้าม ${data.skipped})`, { id: toastId });
+    } catch (e) {
+      toast.error((e as Error).message ?? "นำเข้าไม่สำเร็จ", { id: toastId });
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const confirmRestore = () => {
     if (!pendingRestore) return;
     restoreMut.mutate({ section: sectionKey, externalId: pendingRestore.externalId });
@@ -287,10 +406,24 @@ export default function Notice() {
               <div className="text-lg font-extrabold text-gray-900">รายการเข้าเงื่อนไขส่ง Notice</div>
               <div className="mt-1 text-gray-500 text-sm">แสดงเฉพาะลูกค้าค้างชำระตั้งแต่ 60 วันขึ้นไป</div>
             </div>
-            <button onClick={handleStats}
-              className="inline-flex items-center gap-2 rounded-xl px-3.5 py-2.5 text-sm font-bold bg-indigo-50 text-indigo-800 hover:bg-indigo-100 transition-colors">
-              <BarChart3 className="w-4 h-4" /> ดูสถิติรายเดือน
-            </button>
+            <div className="flex items-center gap-2 flex-wrap">
+              {canExport && (
+                <button onClick={handleExportExcel} disabled={exporting}
+                  className="inline-flex items-center gap-2 rounded-xl px-3.5 py-2.5 text-sm font-bold bg-emerald-50 text-emerald-800 hover:bg-emerald-100 transition-colors disabled:opacity-50">
+                  <Download className="w-4 h-4" /> {exporting ? "กำลัง Export..." : "Export Excel"}
+                </button>
+              )}
+              {canEdit && (
+                <button onClick={() => { setImportOpen(true); setImportFile(null); setImportPreview(null); }}
+                  className="inline-flex items-center gap-2 rounded-xl px-3.5 py-2.5 text-sm font-bold bg-amber-50 text-amber-900 hover:bg-amber-100 transition-colors">
+                  <Upload className="w-4 h-4" /> Import Excel
+                </button>
+              )}
+              <button onClick={handleStats}
+                className="inline-flex items-center gap-2 rounded-xl px-3.5 py-2.5 text-sm font-bold bg-indigo-50 text-indigo-800 hover:bg-indigo-100 transition-colors">
+                <BarChart3 className="w-4 h-4" /> ดูสถิติรายเดือน
+              </button>
+            </div>
           </div>
 
           {/* Filters */}
@@ -690,6 +823,56 @@ export default function Notice() {
                   )}
                 </>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Import Excel modal ── */}
+      {importOpen && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 sm:p-5 bg-black/45"
+          onClick={() => !importing && setImportOpen(false)}>
+          <div className="w-full max-w-[560px] bg-white rounded-[18px] shadow-2xl border border-gray-200 overflow-hidden"
+            onClick={(e) => e.stopPropagation()}>
+            <div className="px-5 py-4 border-b border-gray-200 flex items-start justify-between gap-3">
+              <div>
+                <div className="text-lg font-extrabold text-gray-900">นำเข้าประวัติ Notice จาก Excel</div>
+                <div className="mt-1 text-sm text-gray-500">Section: <strong>{sectionKey}</strong></div>
+              </div>
+              <button onClick={() => !importing && setImportOpen(false)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div className="text-[13px] text-gray-600 leading-relaxed">
+                รูปแบบคอลัมน์ตาม template: เลขที่เอกสาร, เลขที่สัญญา, ส่งครั้งที่ 1–3 (วันที่/เวลา/โดย)
+                — ข้ามรายการที่มี log รอบนั้นแล้ว
+              </div>
+              <input ref={importInputRef} type="file" accept=".xlsx,.xls" className="hidden"
+                onChange={handleImportFileChange} />
+              <button onClick={() => importInputRef.current?.click()} disabled={importing}
+                className="w-full rounded-xl border-2 border-dashed border-amber-200 bg-amber-50/50 px-4 py-8 text-sm font-bold text-amber-900 hover:bg-amber-50 transition-colors disabled:opacity-50">
+                {importFile ? importFile.name : "เลือกไฟล์ .xlsx"}
+              </button>
+              {importPreview && (
+                <div className="rounded-xl border border-gray-200 bg-gray-50 p-3.5 text-[13px] text-gray-700 grid gap-1">
+                  <div>แถวในไฟล์: <strong>{importPreview.parsedRows}</strong></div>
+                  <div>จะนำเข้า: <strong className="text-emerald-700">{importPreview.toInsert}</strong></div>
+                  <div>ข้าม (ไม่พบสัญญา): {importPreview.skipNoContract}</div>
+                  <div>ข้าม (มี log แล้ว): {importPreview.skipDuplicate}</div>
+                </div>
+              )}
+            </div>
+            <div className="px-5 pb-5 flex justify-end gap-2.5">
+              <button onClick={() => setImportOpen(false)} disabled={importing}
+                className="rounded-xl px-3.5 py-2.5 text-sm font-bold bg-gray-100 text-gray-900 hover:bg-gray-200 disabled:opacity-50">
+                ยกเลิก
+              </button>
+              <button onClick={handleImportConfirm}
+                disabled={importing || !importFile || !importPreview || importPreview.toInsert === 0}
+                className="rounded-xl px-3.5 py-2.5 text-sm font-bold bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50">
+                {importing ? "กำลังนำเข้า..." : "ยืนยันนำเข้า"}
+              </button>
             </div>
           </div>
         </div>

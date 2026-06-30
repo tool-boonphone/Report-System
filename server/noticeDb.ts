@@ -67,6 +67,8 @@ export type NoticeFilters = {
   approveDateTo?: string;
   overdueMin?: number;
   overdueMax?: number;
+  /** กรอง sentCount ขั้นต่ำ (ใช้ export — เฉพาะที่มีประวัติส่ง) */
+  minSentCount?: number;
 };
 
 export type NoticeSortField = "approveDate" | "overdueDays" | "sentCount";
@@ -123,6 +125,10 @@ function buildNoticeWhere(section: SectionKey, f: NoticeFilters): SQL {
   if (f.sent && f.sent !== "all") {
     const n = parseInt(f.sent, 10);
     clauses.push(sql`${sc} = ${n}`);
+  }
+
+  if (f.minSentCount != null && f.minSentCount > 0) {
+    clauses.push(sql`${sc} >= ${f.minSentCount}`);
   }
 
   if (f.admin && f.admin !== "all") {
@@ -269,6 +275,144 @@ export async function listNoticeContracts(params: {
   });
 
   return { rows, total, hasMore: offset + rows.length < total };
+}
+
+/** ดึงรายการสำหรับ export — เฉพาะที่มีประวัติส่ง (sentCount ≥ 1), ไม่จำกัด pagination มาก */
+export async function listNoticeForExport(params: {
+  section: SectionKey;
+  filters?: NoticeFilters;
+  sort?: NoticeSort;
+}): Promise<NoticeRow[]> {
+  const { rows } = await listNoticeContracts({
+    section: params.section,
+    filters: { ...params.filters, minSentCount: 1 },
+    sort: params.sort,
+    page: 1,
+    pageSize: 50000,
+  });
+  return rows;
+}
+
+export type NoticeImportPreview = {
+  parsedRows: number;
+  toInsert: number;
+  skipNoContract: number;
+  skipDuplicate: number;
+  sample: Array<{ contractNo: string; round: number; documentNo: string }>;
+};
+
+export type NoticeImportResult = NoticeImportPreview & { imported: number; skipped: number };
+
+/**
+ * นำเข้าประวัติ Notice จาก Excel (คอลัมน์ตาม import-sample)
+ * dryRun=true → คืน preview ไม่เขียน DB
+ */
+export async function importNoticeHistorical(params: {
+  section: SectionKey;
+  rows: Array<{
+    contractNo: string;
+    documentNo: string;
+    round: number;
+    printedAt: string;
+    printedBy: string;
+  }>;
+  dryRun?: boolean;
+}): Promise<NoticeImportResult> {
+  const { section, rows } = params;
+  await ensureNoticeSchema(section);
+  const db = await getDb(section);
+  if (!db) throw new Error("database unavailable");
+
+  let toInsert = 0;
+  let skipNoContract = 0;
+  let skipDuplicate = 0;
+  const sample: NoticeImportPreview["sample"] = [];
+
+  type Pending = (typeof rows)[0] & { externalId: string };
+  const pending: Pending[] = [];
+
+  for (const r of rows) {
+    const [contract] = (await db
+      .select({ externalId: contracts.externalId })
+      .from(contracts)
+      .where(and(eq(contracts.section, section), eq(contracts.contractNo, r.contractNo)))
+      .limit(1)) as Array<{ externalId: string }>;
+
+    if (!contract) {
+      skipNoContract++;
+      continue;
+    }
+
+    const [existing] = (await db
+      .select({ id: noticePrintLogs.id })
+      .from(noticePrintLogs)
+      .where(
+        and(
+          eq(noticePrintLogs.section, section),
+          eq(noticePrintLogs.contractExternalId, contract.externalId),
+          eq(noticePrintLogs.noticeRound, r.round),
+        ),
+      )
+      .limit(1)) as Array<{ id: number }>;
+
+    if (existing) {
+      skipDuplicate++;
+      continue;
+    }
+
+    toInsert++;
+    pending.push({ ...r, externalId: contract.externalId });
+    if (sample.length < 8) {
+      sample.push({ contractNo: r.contractNo, round: r.round, documentNo: r.documentNo });
+    }
+  }
+
+  const preview: NoticeImportResult = {
+    parsedRows: rows.length,
+    toInsert,
+    skipNoContract,
+    skipDuplicate,
+    sample,
+    imported: 0,
+    skipped: skipNoContract + skipDuplicate,
+  };
+
+  if (params.dryRun || pending.length === 0) return preview;
+
+  let maxDocNum = 0;
+  for (const r of pending) {
+    await db.insert(noticePrintLogs).values({
+      section,
+      contractExternalId: r.externalId,
+      contractNo: r.contractNo,
+      noticeRound: r.round,
+      documentNo: r.documentNo || null,
+      printedBy: r.printedBy,
+      printedAt: new Date(r.printedAt),
+    });
+
+    if (r.documentNo) {
+      const num = parseInt(r.documentNo.replace(/\D/g, ""), 10);
+      if (Number.isFinite(num)) maxDocNum = Math.max(maxDocNum, num);
+      await db
+        .insert(noticeContractDoc)
+        .values({ section, contractExternalId: r.externalId, documentNo: r.documentNo })
+        .onConflictDoNothing({
+          target: [noticeContractDoc.section, noticeContractDoc.contractExternalId],
+        });
+    }
+  }
+
+  if (maxDocNum > 0) {
+    await db.execute(sql`
+      INSERT INTO notice_document_counters (section, next_value)
+      VALUES (${section}, ${maxDocNum + 1})
+      ON CONFLICT (section) DO UPDATE
+      SET next_value = GREATEST(notice_document_counters.next_value, ${maxDocNum + 1})
+    `);
+  }
+
+  return { ...preview, imported: pending.length, skipped: skipNoContract + skipDuplicate };
 }
 
 /**
