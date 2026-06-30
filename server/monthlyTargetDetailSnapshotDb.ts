@@ -287,27 +287,15 @@ export async function populateTargetDetailSnapshot(
   const inserted = n(countRows[0]?.cnt ?? 0);
   console.log(`[targetDetailSnapshot] ${section}: ${snapshotMonth} (${snapshotMode}, cutoff=${cutoffDate}) inserted ${inserted} rows`);
 
-  // Freeze เป้าเก็บหนี้ — ตั้ง target_frozen_at และ lock target_amount ใน monthly_collection_snapshot
-  if (inserted > 0) {
-    const { markTargetFrozen } = await import("./monthlyCollectionSnapshotDb");
-    await markTargetFrozen(section, snapshotMonth);
-  }
-
-  // ถ้า client ส่ง targetAmount มาด้วย → upsert ลง monthly_collection_snapshot.target_amount โดยตรง
-  // (ยอดนี้ตรงกับ badge ยอดหนี้รวมที่เห็นบนหน้าจอก่อน snapshot)
-  // หมายเหตุ: ถ้า freeze แล้ว (target_frozen_at IS NOT NULL) จะไม่ overwrite
+  // ถ้า client ส่ง targetAmount มาด้วย → upsert ลง monthly_collection_snapshot (ไม่เกี่ยวกับ dropdown freeze)
   if (clientTargetAmount != null && clientTargetAmount > 0) {
     await db.execute(sql.raw(`
       INSERT INTO monthly_collection_snapshot (section, collection_month, target_amount, updated_at)
       VALUES ('${section}', '${snapshotMonth}', ${clientTargetAmount}, NOW())
       ON CONFLICT (section, collection_month)
       DO UPDATE SET
-        target_amount = CASE
-          WHEN monthly_collection_snapshot.target_frozen_at IS NOT NULL
-          THEN monthly_collection_snapshot.target_amount
-          ELSE EXCLUDED.target_amount
-        END,
-        updated_at = NOW()
+        target_amount = EXCLUDED.target_amount,
+        updated_at    = NOW()
     `));
     console.log(`[targetDetailSnapshot] ${section}: ${snapshotMonth} upserted target_amount = ${clientTargetAmount} into monthly_collection_snapshot`);
   }
