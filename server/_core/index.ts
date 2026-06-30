@@ -218,15 +218,21 @@ async function startServer() {
         principalOnly: true,         // toggle เฉพาะเงินต้น = ON
       });
       console.log(`[auto-snapshot] ${sec} ${month} (end_of_month, debtSetMode=true) — triggered via API`);
+      const runSnapshot = async () => {
+        const rows = await populateTargetDetailSnapshot(sec, month, "end_of_month", true, true, filterStateJson, undefined, true);
+        if (rows > 0) {
+          const { backfillFrozenBreakdown } = await import("../monthlyCollectionSnapshotDb");
+          await backfillFrozenBreakdown(sec, month);
+        }
+        return rows;
+      };
       if (isAsync) {
-        // Fire and forget — return immediately
-        populateTargetDetailSnapshot(sec, month, "end_of_month", true, true, filterStateJson)
+        runSnapshot()
           .then((rows) => console.log(`[auto-snapshot] ${sec} ${month} done — ${rows} rows inserted`))
           .catch((err: unknown) => console.error(`[auto-snapshot] ${sec} ${month} failed:`, (err as Error)?.message ?? err));
         return res.json({ ok: true, section: sec, snapshotMonth: month, snapshotMode: "end_of_month", filterDebtOnly: true, started: true, startedAt: new Date().toISOString() });
       } else {
-        // Synchronous — await and return result
-        const rows = await populateTargetDetailSnapshot(sec, month, "end_of_month", true, true, filterStateJson);
+        const rows = await runSnapshot();
         return res.json({ ok: true, section: sec, snapshotMonth: month, snapshotMode: "end_of_month", filterDebtOnly: true, rowsInserted: rows, completedAt: new Date().toISOString() });
       }
     } catch (err: any) {

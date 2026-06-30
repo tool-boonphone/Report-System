@@ -226,9 +226,10 @@ export const debtRouter = router({
       snapshotMode: z.enum(["today", "end_of_month"]).default("today"),
       filterDebtOnly: z.boolean().default(false),
       filterPrincipalOnly: z.boolean().default(true),
-      filterState: z.string().nullable().optional(), // JSON string ของ filter ที่ใช้ตอน Snapshot — ใช้ auto-restore ตอนเปิดดู Snapshot
-      // targetAmount: ยอดเป้าเก็บหนี้ที่ client คำนวณได้ (ตรงกับ badge ยอดหนี้รวม) — บันทึกลง monthly_collection_snapshot โดยตรง
+      filterState: z.string().nullable().optional(),
       targetAmount: z.number().optional(),
+      /** true = บังคับ overwrite snapshot ที่ freeze ไว้แล้ว (admin only) */
+      force: z.boolean().default(false),
     }))
     .mutation(async ({ input }) => {
       const count = await populateMonthlyTargetDetailSnapshot(
@@ -239,6 +240,7 @@ export const debtRouter = router({
         input.filterPrincipalOnly,
         input.filterState ?? null,
         input.targetAmount,
+        !input.force, // skipIfExists — freeze ไม่ให้ overwrite เว้นแต่ force=true
       );
       return { success: true, rowsInserted: count };
     }),

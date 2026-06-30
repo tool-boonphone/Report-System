@@ -20,8 +20,9 @@
  * Trigger: เรียกหลัง populateDebtCache() ใน runner.ts
  *
  * Freeze logic:
- *   - เดือนปัจจุบัน: อัพเดทได้เสมอ (live)
- *   - เดือนที่ผ่านมา: freeze หลังจาก sync ครั้งแรกของเดือนถัดไป
+ *   - เป้าเก็บหนี้ (target): freeze ครั้งเดียวหลัง populate monthly_target_detail_snapshot วันที่ 1
+ *     → target_frozen_at IS NOT NULL แล้วจะไม่ recalc target อีก
+ *   - ยอดเก็บหนี้ (collected): อัพเดท live ตลอดเดือน แล้ว freeze เมื่อ sync ครั้งแรกของเดือนถัดไป
  */
 import { sql } from "drizzle-orm";
 import { getDb } from "./db";
@@ -403,25 +404,66 @@ export async function populateMonthlyCollectionSnapshot(
     const existing = frozenMap.get(month);
     const collectedSale = saleMap.get(month) ?? 0;
 
-        // Freeze logic:
-    //   - เดือนปัจจุบัน: อัพเดทได้เสมอ (live)
-    //   - เดือนที่ผ่านมา: สะสมข้อมูลทุกวันจนถึงสิ้นเดือน
-    //     แล้ว freeze เมื่อ sync ครั้งแรกของเดือนถัดไป (isPastMonth && !existing?.isFrozen)
-    //   - เดือนที่ freeze แล้ว: ไม่อัพเดท collected อีก
+    // Freeze logic:
+    //   - target: freeze เมื่อ target_frozen_at IS NOT NULL (หลัง mtds populate วันที่ 1) → ไม่ recalc target
+    //   - collected: อัพเดท live ตลอดเดือน → freeze เมื่อ sync ครั้งแรกของเดือนถัดไป
     const isPastMonth = month < currentMonth;
-    // freeze เฉพาะเมื่อ existing record ถูก mark isFrozen=true แล้วเท่านั้น
-    // ไม่ freeze อัตโนมัติจาก isPastMonth เพื่อให้สะสมข้อมูลได้ตลอดเดือน
-    const isFrozen = existing?.isFrozen === true;
-    // freeze เมื่อเป็นเดือนที่ผ่านมาและยังไม่เคย freeze → ครั้งนี้คือครั้งสุดท้ายที่อัพเดท
-    const shouldFreezeNow = isPastMonth && !isFrozen;
-    const newIsFrozen = isFrozen || shouldFreezeNow;
+    const isCollectedFrozen = existing?.isFrozen === true;
+    const isTargetFrozen = existing?.targetFrozenAt != null;
+    const shouldFreezeCollectedNow = isPastMonth && !isCollectedFrozen;
+    const newIsFrozen = isCollectedFrozen || shouldFreezeCollectedNow;
     const targetFrozenAt = existing?.targetFrozenAt ?? (isPastMonth ? nowStr : null);
-    const collectedFrozenAt = existing?.collectedFrozenAt ?? (shouldFreezeNow ? nowStr : null);
-    // ถ้าเดือนนั้น freeze แล้ว ไม่อัพเดทยอด collected (แต่ยังอัพเดท target ได้)
-    const shouldUpdateCollected = !isFrozen;
+    const collectedFrozenAt = existing?.collectedFrozenAt ?? (shouldFreezeCollectedNow ? nowStr : null);
+    const shouldUpdateCollected = !isCollectedFrozen;
 
-    if (shouldUpdateCollected) {
-      // Upsert ทั้ง target และ collected
+    if (isTargetFrozen && isCollectedFrozen) {
+      // ทั้งเป้าและยอดเก็บ freeze แล้ว — ข้าม
+      upsertCount++;
+      if (onProgress) onProgress(i + 1, total);
+      continue;
+    }
+
+    if (isTargetFrozen && shouldUpdateCollected) {
+      // เป้า freeze แล้ว — อัพเดทเฉพาะ collected (live ตลอดเดือน)
+      await db.execute(sql`
+        INSERT INTO monthly_collection_snapshot (
+          section, collection_month,
+          target_amount, target_contract_count, target_frozen_at,
+          target_principal, target_interest, target_fee, target_penalty, target_unlock_fee,
+          collected_amount, collected_contract_count, collected_frozen_at, collected_is_frozen,
+          collected_principal, collected_interest, collected_fee, collected_penalty,
+          collected_unlock_fee, collected_discount, collected_overpaid, collected_bad_debt,
+          install_total, financed_total, overdue_total, collected_sale, updated_at
+        )
+        VALUES (
+          ${section}, ${month},
+          ${data.targetAmount}, ${data.targetContractCount}, ${targetFrozenAt},
+          ${data.targetPrincipal}, ${data.targetInterest}, ${data.targetFee},
+          ${data.targetPenalty}, ${data.targetUnlockFee},
+          ${data.collectedAmount}, ${data.collectedContractCount}, ${collectedFrozenAt}, ${newIsFrozen},
+          ${data.collectedPrincipal}, ${data.collectedInterest}, ${data.collectedFee},
+          ${data.collectedPenalty}, ${data.collectedUnlockFee},
+          ${data.collectedDiscount}, ${data.collectedOverpaid}, ${data.collectedBadDebt},
+          ${data.installTotal}, ${data.financedTotal}, ${data.overdueTotal}, ${collectedSale}, NOW()
+        )
+        ON CONFLICT (section, collection_month) DO UPDATE SET
+          collected_amount = EXCLUDED.collected_amount,
+          collected_contract_count = EXCLUDED.collected_contract_count,
+          collected_frozen_at = COALESCE(monthly_collection_snapshot.collected_frozen_at, EXCLUDED.collected_frozen_at),
+          collected_is_frozen = EXCLUDED.collected_is_frozen,
+          collected_principal = EXCLUDED.collected_principal,
+          collected_interest = EXCLUDED.collected_interest,
+          collected_fee = EXCLUDED.collected_fee,
+          collected_penalty = EXCLUDED.collected_penalty,
+          collected_unlock_fee = EXCLUDED.collected_unlock_fee,
+          collected_discount = EXCLUDED.collected_discount,
+          collected_overpaid = EXCLUDED.collected_overpaid,
+          collected_bad_debt = EXCLUDED.collected_bad_debt,
+          collected_sale = EXCLUDED.collected_sale,
+          updated_at = NOW()
+      `);
+    } else if (!isTargetFrozen && !isCollectedFrozen) {
+      // ยังไม่ freeze — upsert ทั้ง target และ collected
       await db.execute(sql`
         INSERT INTO monthly_collection_snapshot (
           section, collection_month,
@@ -455,7 +497,7 @@ export async function populateMonthlyCollectionSnapshot(
           collected_amount = EXCLUDED.collected_amount,
           collected_contract_count = EXCLUDED.collected_contract_count,
           collected_frozen_at = COALESCE(monthly_collection_snapshot.collected_frozen_at, EXCLUDED.collected_frozen_at),
-          collected_is_frozen = EXCLUDED.collected_is_frozen, -- freeze เมื่อ shouldFreezeNow=true
+          collected_is_frozen = EXCLUDED.collected_is_frozen,
           collected_principal = EXCLUDED.collected_principal,
           collected_interest = EXCLUDED.collected_interest,
           collected_fee = EXCLUDED.collected_fee,
@@ -470,8 +512,8 @@ export async function populateMonthlyCollectionSnapshot(
           collected_sale = EXCLUDED.collected_sale,
           updated_at = NOW()
       `);
-    } else {
-      // เดือน freeze แล้ว: อัพเดทเฉพาะ target (ไม่แตะ collected)
+    } else if (!isTargetFrozen && isCollectedFrozen) {
+      // collected freeze แล้วแต่ target ยังไม่ freeze (edge case) — อัพเดทเฉพาะ target
       await db.execute(sql`
         INSERT INTO monthly_collection_snapshot (
           section, collection_month,
@@ -487,7 +529,7 @@ export async function populateMonthlyCollectionSnapshot(
           ${data.targetAmount}, ${data.targetContractCount}, ${targetFrozenAt},
           ${data.targetPrincipal}, ${data.targetInterest}, ${data.targetFee},
           ${data.targetPenalty}, ${data.targetUnlockFee},
-          ${data.collectedAmount}, ${data.collectedContractCount}, ${collectedFrozenAt}, ${isFrozen},
+          ${data.collectedAmount}, ${data.collectedContractCount}, ${collectedFrozenAt}, ${isCollectedFrozen},
           ${data.collectedPrincipal}, ${data.collectedInterest}, ${data.collectedFee},
           ${data.collectedPenalty}, ${data.collectedUnlockFee},
           ${data.collectedDiscount}, ${data.collectedOverpaid}, ${data.collectedBadDebt},
@@ -504,6 +546,7 @@ export async function populateMonthlyCollectionSnapshot(
           target_unlock_fee = EXCLUDED.target_unlock_fee,
           install_total = EXCLUDED.install_total,
           financed_total = EXCLUDED.financed_total,
+          overdue_total = EXCLUDED.overdue_total,
           updated_at = NOW()
       `);
     }
@@ -1031,6 +1074,69 @@ export async function getMonthlyCollectionSnapshotsLive(
   });
 }
 
+// ─── Target freeze helpers ────────────────────────────────────────────────────
+
+/**
+ * ตรวจสอบว่า monthly_target_detail_snapshot มีข้อมูลสำหรับเดือนนี้แล้วหรือไม่
+ */
+export async function hasTargetDetailSnapshot(
+  section: SectionKey,
+  snapshotMonth: string,
+): Promise<boolean> {
+  const db = await getDb(section);
+  if (!db) return false;
+  const result = await db.execute(sql`
+    SELECT 1 FROM monthly_target_detail_snapshot
+    WHERE section = ${section} AND snapshot_month = ${snapshotMonth}
+    LIMIT 1
+  `);
+  return pgRows(result).length > 0;
+}
+
+/**
+ * Freeze เป้าเก็บหนี้ของเดือนที่ระบุ — เรียกหลัง populate monthly_target_detail_snapshot สำเร็จ
+ * ตั้ง target_frozen_at และ lock target_amount จาก mtds ลง monthly_collection_snapshot
+ */
+export async function markTargetFrozen(
+  section: SectionKey,
+  snapshotMonth: string,
+): Promise<boolean> {
+  const db = await getDb(section);
+  if (!db) return false;
+
+  const excludedStatuses = `'ระงับสัญญา','สิ้นสุดสัญญา','หนี้เสีย','ยกเลิกสัญญา'`;
+
+  const result = await db.execute(sql.raw(`
+    INSERT INTO monthly_collection_snapshot (
+      section, collection_month,
+      target_amount, target_contract_count,
+      target_frozen_at, updated_at
+    )
+    SELECT
+      '${section}',
+      '${snapshotMonth}',
+      COALESCE(SUM(GREATEST(COALESCE(t.principal::numeric, 0) - COALESCE(t.paid_amount::numeric, 0), 0)), 0),
+      COUNT(DISTINCT t.contract_external_id),
+      NOW(),
+      NOW()
+    FROM monthly_target_detail_snapshot t
+    WHERE t.section = '${section}'
+      AND t.snapshot_month = '${snapshotMonth}'
+      AND t.is_paid IS NOT TRUE
+      AND t.contract_status NOT IN (${excludedStatuses})
+      AND t.debt_range IN ('ปกติ','เกิน 1-7','เกิน 8-14','เกิน 15-30','เกิน 31-60','เกิน 61-90')
+    ON CONFLICT (section, collection_month) DO UPDATE SET
+      target_amount = EXCLUDED.target_amount,
+      target_contract_count = EXCLUDED.target_contract_count,
+      target_frozen_at = COALESCE(monthly_collection_snapshot.target_frozen_at, NOW()),
+      updated_at = NOW()
+  `));
+
+  const frozen = pgRows(result).length >= 0;
+  console.log(`[monthlySnapshot] ${section}: markTargetFrozen — ${snapshotMonth} target frozen`);
+  return frozen;
+}
+
 // ─── Backfill: คำนวณ target_by_range และ daily_breakdown แล้ว freeze ใน mcs ──────
 /**
  * backfillFrozenBreakdown
@@ -1325,6 +1431,7 @@ export async function backfillFrozenBreakdown(
         SET
           target_by_range = '${JSON.stringify(targetByRange)}'::jsonb,
           daily_breakdown  = '${JSON.stringify(dailyBreakdown)}'::jsonb,
+          target_frozen_at = COALESCE(target_frozen_at, NOW()),
           updated_at       = NOW()
         WHERE section = '${section}'
           AND collection_month = '${month}'
