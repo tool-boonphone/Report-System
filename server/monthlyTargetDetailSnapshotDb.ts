@@ -8,11 +8,11 @@
  * Logic การ populate (v3 — Freeze ทุก row เหมือน Live):
  *  - ดึงจาก debt_target_cache ทุก row ไม่กรองอะไรออกเลย (เหมือน Live query)
  *  - เก็บ cutoffDate เป็น metadata เพื่อให้ client ใช้คำนวณ isFuturePeriod ใน badge/filter
- *  - เก็บ filter metadata: filterDebtOnly, filterPrincipalOnly (ไม่กรองตอน populate)
+ *  - filter metadata: filterDebtOnly, filterPrincipalOnly (ไม่กรองตอน populate)
  *  - filter ทั้งหมด (debtSetMode, principalOnly, search) ทำที่ client
- *  - ถ้า snapshot_month + snapshot_mode นั้นมีข้อมูลอยู่แล้ว → ไม่ทำอะไร (freeze)
- *  - populate อัตโนมัติทุกวันที่ 1 ของเดือน 06:00 น. (ควบคุมโดย runner.ts)
- *    หรือ on-demand เมื่อผู้ใช้กดปุ่ม Snapshot
+ *  - แต่ละเดือน (snapshot_month) มี roll เดียว — สร้างวันที่ 1 ของเดือนนั้น แล้ว freeze
+ *  - skipIfExists=true → ไม่ overwrite roll ของเดือนที่มีอยู่แล้ว
+ *  - populate อัตโนมัติทุกวันที่ 1 ของเดือนใหม่ (ควบคุมโดย runner.ts)
  */
 import { sql } from "drizzle-orm";
 import { getDb, pgRows } from "./db";

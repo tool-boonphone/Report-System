@@ -513,10 +513,9 @@ async function doSync(
       console.warn(`[sync] ${section}: populateMonthlyCollectionSnapshot failed (non-fatal):`, snapshotErr?.message ?? snapshotErr);
     }
 
-    // ── Auto Snapshot: ตั้งหนี้เดือนนี้ (end_of_month mode) ──
-    // วันที่ 1: populate snapshot เดือนนี้ด้วย snapshotMode='end_of_month'
-    //   → cutoff = วันสุดท้ายของเดือน — ณ เดือนปัจจุบัน (นับทั้งเดือน รวมงวดที่ยังไม่ถึง due)
-    // วันอื่น: เรียก populate แต่ function จะ skip เองถ้ามีข้อมูลแล้ว (กรณี retry)
+    // ── Auto Snapshot: dropdown "ตั้งเป้ารายเดือน > ตั้งหนี้" ──
+    // วันที่ 1 ของเดือนใหม่: สร้าง roll ใหม่ของเดือนนั้น (populate ครั้งเดียว แล้ว freeze)
+    // วันที่ 2-31: ไม่ populate — ใช้ roll ที่สร้างวันที่ 1
     try {
       const bangkokDate = new Intl.DateTimeFormat("en-CA", {
         timeZone: "Asia/Bangkok",
@@ -540,10 +539,10 @@ async function doSync(
         principalOnly: true,      // toggle เฉพาะเงินต้น = ON
       });
       if (dayOfMonth === 1) {
-        // วันที่ 1: populate mtds สำหรับ dropdown "ตั้งเป้ารายเดือน > ตั้งหนี้" — freeze ครั้งเดียว
+        // วันที่ 1 เดือนใหม่: สร้าง roll ใหม่ของเดือนนี้ (ถ้ายังไม่มี)
         const mtdsExists = await hasTargetDetailSnapshot(section, currentMonth);
         if (mtdsExists) {
-          console.log(`[sync] ${section}: monthly_target_detail_snapshot already frozen for ${currentMonth} — skipped day 1 auto-populate`);
+          console.log(`[sync] ${section}: ${currentMonth} roll already exists — skipped day-1 populate (retry same day)`);
         } else {
           const detailRows = await populateMonthlyTargetDetailSnapshot(
             section,
@@ -553,31 +552,13 @@ async function doSync(
             true,
             autoSnapshotFilterState,
             undefined,
-            true, // skipIfExists — ป้องกัน race ถ้า sync ซ้ำวันเดียวกัน
+            false, // สร้าง roll ใหม่ของเดือนนี้ — ห้าม skip
           );
-          if (detailRows > 0) {
-            console.log(`[sync] ${section}: monthly_target_detail_snapshot AUTO populated — ${detailRows} rows for ${currentMonth} (dropdown ตั้งหนี้, day-1 freeze)`);
-          } else {
-            console.log(`[sync] ${section}: monthly_target_detail_snapshot day-1 populate skipped (already exists)`);
-          }
+          console.log(`[sync] ${section}: created new monthly roll — ${detailRows} rows for ${currentMonth} (dropdown ตั้งหนี้)`);
         }
       } else {
-        // วันอื่น: skip ถ้ามีข้อมูลเดือนนั้นอยู่แล้ว (skipIfExists=true — freeze ไม่ให้ overwrite)
-        const detailRows = await populateMonthlyTargetDetailSnapshot(
-          section,
-          currentMonth,
-          "end_of_month",
-          true,
-          true,
-          autoSnapshotFilterState,
-          undefined, // clientTargetAmount
-          true,      // skipIfExists = true → ถ้ามีข้อมูลแล้วจะ skip ทันที
-        );
-        if (detailRows > 0) {
-          console.log(`[sync] ${section}: monthly_target_detail_snapshot retry-populated — ${detailRows} rows for ${currentMonth} (end_of_month)`);
-        } else {
-          console.log(`[sync] ${section}: monthly_target_detail_snapshot already frozen for ${currentMonth} — skipped (skipIfExists)`);
-        }
+        // วันที่ 2-31: roll ของเดือนนี้ freeze แล้ว — ไม่ populate ทับ
+        console.log(`[sync] ${section}: ${currentMonth} roll frozen — skipped populate (day ${dayOfMonth})`);
       }
     } catch (detailErr: any) {
       console.warn(`[sync] ${section}: populateMonthlyTargetDetailSnapshot failed (non-fatal):`, detailErr?.message ?? detailErr);
