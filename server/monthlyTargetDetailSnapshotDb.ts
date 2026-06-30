@@ -1064,6 +1064,13 @@ export async function getMonthlyDebtSummary(
   const db = await getDb(section);
   if (!db) return [];
 
+  // ใช้เดือนปัจจุบัน Asia/Bangkok — สอดคล้องกับ sync runner (ไม่ใช้ NOW() UTC ที่ซ่อนเดือนใหม่ช่วง 00:00–06:59 น. วันที่ 1)
+  const bangkokMonthMax = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Bangkok",
+    year: "numeric",
+    month: "2-digit",
+  }).format(new Date()).slice(0, 7);
+
   // ── ดึง target_amount จาก monthly_target_detail_snapshot โดยตรง ─────────────────
   // SUM(principal - paid_amount) แยกตาม snapshot_month + debt_range
   // เพื่อให้ยอดตรงกับ Tb (Table เป้าเก็บหนี้รายงาน) ทุกกรณี
@@ -1100,7 +1107,7 @@ export async function getMonthlyDebtSummary(
     FROM monthly_target_detail_snapshot t
     WHERE t.section = '${section}'
       AND t.snapshot_month >= '2026-06'
-      AND t.snapshot_month <= TO_CHAR(NOW(), 'YYYY-MM')
+      AND t.snapshot_month <= '${bangkokMonthMax}'
       AND t.is_paid IS NOT TRUE
       AND t.contract_status NOT IN ('ระงับสัญญา','สิ้นสุดสัญญา','หนี้เสีย','ยกเลิกสัญญา')
       AND t.debt_range IN ('ปกติ','เกิน 1-7','เกิน 8-14','เกิน 15-30','เกิน 31-60','เกิน 61-90')
