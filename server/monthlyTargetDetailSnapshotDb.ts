@@ -1072,19 +1072,40 @@ export async function getMonthlyDebtSummary(
   }).format(new Date()).slice(0, 7);
 
   // ── ดึง target_amount จาก monthly_target_detail_snapshot โดยตรง ─────────────────
-  // SUM(principal - paid_amount) แยกตาม snapshot_month + debt_range
-  // เพื่อให้ยอดตรงกับ Tb (Table เป้าเก็บหนี้รายงาน) ทุกกรณี
+  // รายการเดือน: ทุกเดือนที่มี mtds roll (ไม่กรอง is_paid/status ที่ WHERE — กันเดือนใหม่หายจาก dropdown)
+  // ยอดเป้า: SUM เฉพาะแถวที่ผ่าน filter 6 สถานะ default (ตรงกับ Tb)
   const result = await db.execute(sql.raw(`
+    WITH months AS (
+      SELECT DISTINCT snapshot_month
+      FROM monthly_target_detail_snapshot
+      WHERE section = '${section}'
+        AND snapshot_month >= '2026-06'
+        AND snapshot_month <= '${bangkokMonthMax}'
+    )
     SELECT
-      t.snapshot_month,
-      -- target_amount = SUM(principal - paid_amount) ทุก debt_range (6 สถานะ default)
-      SUM(GREATEST(COALESCE(t.principal::numeric, 0) - COALESCE(t.paid_amount::numeric, 0), 0)) AS target_amount,
-      -- target_by_range แยกตาม debt_range
-      json_object_agg(
-        COALESCE(t.debt_range, 'ปกติ'),
-        GREATEST(COALESCE(t.principal::numeric, 0) - COALESCE(t.paid_amount::numeric, 0), 0)
+      m.snapshot_month,
+      COALESCE(SUM(
+        CASE
+          WHEN t.snapshot_month IS NOT NULL
+            AND t.is_paid IS NOT TRUE
+            AND t.contract_status NOT IN ('ระงับสัญญา','สิ้นสุดสัญญา','หนี้เสีย','ยกเลิกสัญญา')
+            AND t.debt_range IN ('ปกติ','เกิน 1-7','เกิน 8-14','เกิน 15-30','เกิน 31-60','เกิน 61-90')
+          THEN GREATEST(COALESCE(t.principal::numeric, 0) - COALESCE(t.paid_amount::numeric, 0), 0)
+          ELSE 0
+        END
+      ), 0) AS target_amount,
+      COALESCE(
+        json_object_agg(
+          COALESCE(t.debt_range, 'ปกติ'),
+          GREATEST(COALESCE(t.principal::numeric, 0) - COALESCE(t.paid_amount::numeric, 0), 0)
+        ) FILTER (
+          WHERE t.snapshot_month IS NOT NULL
+            AND t.is_paid IS NOT TRUE
+            AND t.contract_status NOT IN ('ระงับสัญญา','สิ้นสุดสัญญา','หนี้เสีย','ยกเลิกสัญญา')
+            AND t.debt_range IN ('ปกติ','เกิน 1-7','เกิน 8-14','เกิน 15-30','เกิน 31-60','เกิน 61-90')
+        ),
+        '{}'::json
       ) AS target_by_range,
-      -- ยอดเก็บหนี้: ถ้า snapshot เดือนนั้นยังไม่ freeze ให้ดึง live จาก debt_collected_cache
       COALESCE((
         SELECT
           CASE
@@ -1092,27 +1113,25 @@ export async function getMonthlyDebtSummary(
               SELECT SUM(dcc.total_amount::numeric)
               FROM debt_collected_cache dcc
               WHERE dcc.section = '${section}'
-                AND TO_CHAR(dcc.paid_at, 'YYYY-MM') = t.snapshot_month
+                AND TO_CHAR(dcc.paid_at, 'YYYY-MM') = m.snapshot_month
                 AND dcc.paid_at IS NOT NULL
                 AND dcc.is_bad_debt_row IS NOT TRUE
             ), 0)
             ELSE mcs.collected_amount
           END
         FROM monthly_collection_snapshot mcs
-        WHERE mcs.section = '${section}' AND mcs.collection_month = t.snapshot_month
+        WHERE mcs.section = '${section}' AND mcs.collection_month = m.snapshot_month
         LIMIT 1
-      ), 0)                                   AS collected_amount,
-      MAX(t.populated_at::text)               AS populated_at,
-      COUNT(*)                                AS row_count
-    FROM monthly_target_detail_snapshot t
-    WHERE t.section = '${section}'
-      AND t.snapshot_month >= '2026-06'
-      AND t.snapshot_month <= '${bangkokMonthMax}'
-      AND t.is_paid IS NOT TRUE
-      AND t.contract_status NOT IN ('ระงับสัญญา','สิ้นสุดสัญญา','หนี้เสีย','ยกเลิกสัญญา')
-      AND t.debt_range IN ('ปกติ','เกิน 1-7','เกิน 8-14','เกิน 15-30','เกิน 31-60','เกิน 61-90')
-    GROUP BY t.snapshot_month
-    ORDER BY t.snapshot_month DESC
+      ), 0) AS collected_amount,
+      (SELECT MAX(populated_at::text) FROM monthly_target_detail_snapshot
+        WHERE section = '${section}' AND snapshot_month = m.snapshot_month) AS populated_at,
+      (SELECT COUNT(*) FROM monthly_target_detail_snapshot
+        WHERE section = '${section}' AND snapshot_month = m.snapshot_month) AS row_count
+    FROM months m
+    LEFT JOIN monthly_target_detail_snapshot t
+      ON t.section = '${section}' AND t.snapshot_month = m.snapshot_month
+    GROUP BY m.snapshot_month
+    ORDER BY m.snapshot_month DESC
   `));
 
   const ALL_RANGES_MCS = ["ปกติ", "เกิน 1-7", "เกิน 8-14", "เกิน 15-30", "เกิน 31-60", "เกิน 61-90", "เกิน >90"];
