@@ -12,6 +12,11 @@ import { seedSuperAdmin } from "../authDb";
 import { runStartupMigrations } from "../db";
 import { handleContractsExport, handleContractsTrackingExport, handleDebtTargetExport, handleDebtCollectedExport, handleBadDebtExport, handleMonthlySummaryExport, handleYearlySummaryExport, handleBadDebtSummaryExport, handleIncomeExport, handleExpenseExport, handleMonthlyTargetDetailExport, handleMonthlyCollectedDetailExport, handleTargetSnapshotDetailExport } from "../routers/exportExcel";
 import { handleNoticePrint } from "../notice/printHandler";
+import {
+  handleNoticeExport,
+  handleNoticeImport,
+  handleNoticeImportPreview,
+} from "../notice/importExportHandler";
 
 import { handleSyncStream } from "../routers/syncStream";
 import { startScheduler } from "../sync/scheduler";
@@ -67,6 +72,9 @@ async function startServer() {
   app.get("/api/export/target-snapshot-detail", handleTargetSnapshotDetailExport);
   // Notice — generate PDF/DOCX + Excel จ่าหน้าซอง (ZIP) และนับรอบส่ง
   app.post("/api/notice/print", handleNoticePrint);
+  app.get("/api/notice/export", handleNoticeExport);
+  app.post("/api/notice/import-preview", handleNoticeImportPreview);
+  app.post("/api/notice/import", handleNoticeImport);
   // Phase 33: Streaming debt data endpoints — bypass tRPC buffering to avoid proxy 503 timeout
 
   // SSE sync stream — keeps Cloud Run connection alive during long sync
