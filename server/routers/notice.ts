@@ -11,8 +11,10 @@ import {
   listNoticeContracts,
   getNoticeSummary,
   getNoticeAdminOptions,
+  getNoticeMonthlyStats,
   recordNoticePrint,
   restoreLatestNoticeRound,
+  clearAllNoticeData,
   type NoticeFilters,
   type NoticeSort,
 } from "../noticeDb";
@@ -78,6 +80,10 @@ export const noticeRouter = router({
     .input(z.object({ section: sectionSchema }))
     .query(({ input }) => getNoticeAdminOptions(input.section)),
 
+  monthlyStats: requirePermission("notice", "view")
+    .input(z.object({ section: sectionSchema }))
+    .query(({ input }) => getNoticeMonthlyStats(input.section)),
+
   /**
    * บันทึกการพิมพ์ Notice (นับรอบ) ของรายการที่เลือก
    * NOTE (Phase 2): ยังไม่ได้ gate ด้วยการ generate PDF/Excel จริง — Phase 3 จะ
@@ -109,4 +115,9 @@ export const noticeRouter = router({
         reason: input.reason,
       }),
     ),
+
+  /** ล้างข้อมูล Notice ทั้งหมดของ section (ทดสอบ — ไม่แตะสัญญา) */
+  clearAll: requirePermission("notice", "edit")
+    .input(z.object({ section: sectionSchema }))
+    .mutation(({ input }) => clearAllNoticeData(input.section)),
 });
