@@ -8,11 +8,11 @@
  * Logic การ populate (v3 — Freeze ทุก row เหมือน Live):
  *  - ดึงจาก debt_target_cache ทุก row ไม่กรองอะไรออกเลย (เหมือน Live query)
  *  - เก็บ cutoffDate เป็น metadata เพื่อให้ client ใช้คำนวณ isFuturePeriod ใน badge/filter
- *  - เก็บ filter metadata: filterDebtOnly, filterPrincipalOnly (ไม่กรองตอน populate)
+ *  - filter metadata: filterDebtOnly, filterPrincipalOnly (ไม่กรองตอน populate)
  *  - filter ทั้งหมด (debtSetMode, principalOnly, search) ทำที่ client
- *  - ถ้า snapshot_month + snapshot_mode นั้นมีข้อมูลอยู่แล้ว → ไม่ทำอะไร (freeze)
- *  - populate อัตโนมัติทุกวันที่ 1 ของเดือน 06:00 น. (ควบคุมโดย runner.ts)
- *    หรือ on-demand เมื่อผู้ใช้กดปุ่ม Snapshot
+ *  - แต่ละเดือน (snapshot_month) มี roll เดียว — สร้างวันที่ 1 ของเดือนนั้น แล้ว freeze
+ *  - skipIfExists=true → ไม่ overwrite roll ของเดือนที่มีอยู่แล้ว
+ *  - populate อัตโนมัติทุกวันที่ 1 ของเดือนใหม่ (ควบคุมโดย runner.ts)
  */
 import { sql } from "drizzle-orm";
 import { getDb, pgRows } from "./db";
@@ -287,8 +287,7 @@ export async function populateTargetDetailSnapshot(
   const inserted = n(countRows[0]?.cnt ?? 0);
   console.log(`[targetDetailSnapshot] ${section}: ${snapshotMonth} (${snapshotMode}, cutoff=${cutoffDate}) inserted ${inserted} rows`);
 
-  // ถ้า client ส่ง targetAmount มาด้วย → upsert ลง monthly_collection_snapshot.target_amount โดยตรง
-  // (ยอดนี้ตรงกับ badge ยอดหนี้รวมที่เห็นบนหน้าจอก่อน snapshot)
+  // ถ้า client ส่ง targetAmount มาด้วย → upsert ลง monthly_collection_snapshot (ไม่เกี่ยวกับ dropdown freeze)
   if (clientTargetAmount != null && clientTargetAmount > 0) {
     await db.execute(sql.raw(`
       INSERT INTO monthly_collection_snapshot (section, collection_month, target_amount, updated_at)
@@ -742,12 +741,8 @@ export async function saveClientSnapshot(
   `));
   const existingCnt = n(pgRows(existingResult)[0]?.cnt ?? 0);
   if (existingCnt > 0) {
-    console.log(`[saveClientSnapshot] ${section}: ${snapshotMonth} has ${existingCnt} existing rows — deleting before re-insert`);
-    await db.execute(sql.raw(`
-      DELETE FROM monthly_target_detail_snapshot
-      WHERE section = '${section}'
-        AND snapshot_month = '${snapshotMonth}'
-    `));
+    console.log(`[saveClientSnapshot] ${section}: ${snapshotMonth} already frozen (${existingCnt} rows) — skipping overwrite`);
+    return 0;
   }
 
   // Flatten: 1 contract × N installments → N rows

@@ -12,6 +12,12 @@ import { seedSuperAdmin } from "../authDb";
 import { runStartupMigrations } from "../db";
 import { handleContractsExport, handleContractsTrackingExport, handleDebtTargetExport, handleDebtCollectedExport, handleBadDebtExport, handleMonthlySummaryExport, handleYearlySummaryExport, handleBadDebtSummaryExport, handleIncomeExport, handleExpenseExport, handleMonthlyTargetDetailExport, handleMonthlyCollectedDetailExport, handleTargetSnapshotDetailExport } from "../routers/exportExcel";
 import { handleNoticePrint } from "../notice/printHandler";
+import {
+  handleNoticeExport,
+  handleNoticeImport,
+  handleNoticeImportPreview,
+  handleNoticeImportTemplate,
+} from "../notice/importExportHandler";
 
 import { handleSyncStream } from "../routers/syncStream";
 import { startScheduler } from "../sync/scheduler";
@@ -67,6 +73,10 @@ async function startServer() {
   app.get("/api/export/target-snapshot-detail", handleTargetSnapshotDetailExport);
   // Notice — generate PDF/DOCX + Excel จ่าหน้าซอง (ZIP) และนับรอบส่ง
   app.post("/api/notice/print", handleNoticePrint);
+  app.get("/api/notice/export", handleNoticeExport);
+  app.get("/api/notice/import-template", handleNoticeImportTemplate);
+  app.post("/api/notice/import-preview", handleNoticeImportPreview);
+  app.post("/api/notice/import", handleNoticeImport);
   // Phase 33: Streaming debt data endpoints — bypass tRPC buffering to avoid proxy 503 timeout
 
   // SSE sync stream — keeps Cloud Run connection alive during long sync
@@ -208,15 +218,21 @@ async function startServer() {
         principalOnly: true,         // toggle เฉพาะเงินต้น = ON
       });
       console.log(`[auto-snapshot] ${sec} ${month} (end_of_month, debtSetMode=true) — triggered via API`);
+      const runSnapshot = async () => {
+        const rows = await populateTargetDetailSnapshot(sec, month, "end_of_month", true, true, filterStateJson, undefined, true);
+        if (rows > 0) {
+          const { backfillFrozenBreakdown } = await import("../monthlyCollectionSnapshotDb");
+          await backfillFrozenBreakdown(sec, month);
+        }
+        return rows;
+      };
       if (isAsync) {
-        // Fire and forget — return immediately
-        populateTargetDetailSnapshot(sec, month, "end_of_month", true, true, filterStateJson)
+        runSnapshot()
           .then((rows) => console.log(`[auto-snapshot] ${sec} ${month} done — ${rows} rows inserted`))
           .catch((err: unknown) => console.error(`[auto-snapshot] ${sec} ${month} failed:`, (err as Error)?.message ?? err));
         return res.json({ ok: true, section: sec, snapshotMonth: month, snapshotMode: "end_of_month", filterDebtOnly: true, started: true, startedAt: new Date().toISOString() });
       } else {
-        // Synchronous — await and return result
-        const rows = await populateTargetDetailSnapshot(sec, month, "end_of_month", true, true, filterStateJson);
+        const rows = await runSnapshot();
         return res.json({ ok: true, section: sec, snapshotMonth: month, snapshotMode: "end_of_month", filterDebtOnly: true, rowsInserted: rows, completedAt: new Date().toISOString() });
       }
     } catch (err: any) {
