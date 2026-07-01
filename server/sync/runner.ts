@@ -12,7 +12,7 @@
  *  1. partners    → in-memory map (ไม่ upsert ลง DB)
  *  2. customers   → upsert cached_customers
  *  3. contracts   → upsert contracts (list endpoint เท่านั้น)
- *  3b. enrich IMEI/Serial No → ดึง detail endpoint ทุกสัญญา (parallel 5 req)
+ *  3b. enrich IMEI/Serial/ที่อยู่ → ดึง detail endpoint ทุกสัญญา (ทุก section รวม FF365)
  *  4. installments → upsert installments
  *  5. payments    → upsert payment_transactions
  *  6. bad_debt    → compute & store bad-debt columns บน contracts
@@ -31,6 +31,7 @@ import {
   type CustomerListItem,
   type PartnerListItem,
 } from "../api/mappers";
+import { isLikelyAddressLine, mergeAddressFields, parseThaiAddressLine } from "../api/addressFields";
 
 import {
   upsertContracts,
@@ -341,18 +342,14 @@ async function doSync(
     overallRows += contractRows;
     console.log(`[sync] ${section}: contracts synced — ${contractRows} rows`);
 
-    // ── Stage 3b: Enrich IMEI / Serial No (best-effort) ──────────────────
+    // ── Stage 3b: Enrich IMEI / Serial / ที่อยู่เต็ม (contract detail API ทุกสัญญา) ──
     await checkCancel();
     setStage(section, 3); // imei_enrich
-    if (section === "Fastfone365") {
-      console.log(`[sync] ${section}: Skipping imei_enrich (performance optimization)`);
-    } else {
-      try {
-        await enrichContractDeviceIds(client, section);
-        console.log(`[sync] ${section}: IMEI/Serial No enrichment done`);
-      } catch (enrichErr: any) {
-        console.warn(`[sync] ${section}: IMEI enrichment failed (non-fatal):`, enrichErr?.message ?? enrichErr);
-      }
+    try {
+      await enrichContractDeviceIds(client, section);
+      console.log(`[sync] ${section}: IMEI/Serial/address enrichment done`);
+    } catch (enrichErr: any) {
+      console.warn(`[sync] ${section}: contract detail enrichment failed (non-fatal):`, enrichErr?.message ?? enrichErr);
     }
 
     // ── Stage 5: Installments (best-effort) ───────────────────────────────
@@ -885,11 +882,8 @@ export async function syncMdmOnlineDays(
 }
 
 /**
- * Stage 3b: Enrich IMEI / Serial No — ดึง detail endpoint ทุกสัญญา แบบ parallel 20 req
- * เพื่อให้ imei และ serialNo ใน contracts table ถูกต้องและ up-to-date ทุกรอบ sync
- *
- * Fix: เพิ่ม CONCURRENCY จาก 5 → 20 เพื่อให้เสร็จเร็วขึ้น
- * Fix: เพิ่ม keepalive query ทุก 500 รายการ เพื่อป้องกัน Render Postgres ตัด idle connection
+ * Stage 3b: Enrich IMEI / Serial / ที่อยู่เต็ม — ดึง detail endpoint ทุกสัญญา แบบ parallel
+ * เพื่อให้ imei, serialNo และฟิลด์ที่อยู่ใน contracts table ถูกต้องทุกรอบ sync
  */
 async function enrichContractDeviceIds(
   client: PartnerClient,
@@ -901,13 +895,13 @@ async function enrichContractDeviceIds(
   const db = await getDb(section);
   if (!db) return;
 
-  // ดึง externalId ทุกสัญญาใน section
   const rows = await db
-    .select({ externalId: contracts.externalId })
+    .select({ externalId: contracts.externalId, workplace: contracts.workplace })
     .from(contracts)
     .where(eq(contracts.section, section));
 
   const contractIds = rows.map((r: { externalId: string }) => r.externalId);
+  const workplaceById = new Map(rows.map((r: { externalId: string; workplace: string | null }) => [r.externalId, r.workplace]));
   const total = contractIds.length;
   console.log(`[enrichDeviceIds] ${section}: enriching ${total} contracts...`);
 
@@ -932,11 +926,9 @@ async function enrichContractDeviceIds(
         const product = data?.contract?.product ?? {};
         const imei = detail.imei ?? product.imei ?? null;
         const serialNo = detail.serialNo ?? product.serial_no ?? null;
-        await db
-          .update(contracts)
-          .set({
-            imei,
-            serialNo,
+        const workplace = workplaceById.get(contractId) ?? null;
+        const mailing = mergeAddressFields(
+          {
             addrHouseNo: detail.addrHouseNo ?? null,
             addrMoo: detail.addrMoo ?? null,
             addrVillage: detail.addrVillage ?? null,
@@ -946,6 +938,23 @@ async function enrichContractDeviceIds(
             addrDistrict: detail.addrDistrict ?? null,
             addrProvince: detail.addrProvince ?? null,
             addrPostalCode: detail.addrPostalCode ?? null,
+          },
+          isLikelyAddressLine(workplace) ? parseThaiAddressLine(workplace!) : {},
+        );
+        await db
+          .update(contracts)
+          .set({
+            imei,
+            serialNo,
+            addrHouseNo: mailing.addrHouseNo,
+            addrMoo: mailing.addrMoo,
+            addrVillage: mailing.addrVillage,
+            addrSoi: mailing.addrSoi,
+            addrStreet: mailing.addrStreet,
+            addrSubdistrict: mailing.addrSubdistrict,
+            addrDistrict: mailing.addrDistrict,
+            addrProvince: mailing.addrProvince,
+            addrPostalCode: mailing.addrPostalCode,
             syncedAt: sql`CURRENT_TIMESTAMP`,
           })
           .where(
