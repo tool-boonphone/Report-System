@@ -486,8 +486,15 @@ export type NoticePrintData = {
   contractNo: string;
   customerName: string | null;
   phone: string | null;
+  addrHouseNo: string | null;
+  addrMoo: string | null;
+  addrVillage: string | null;
+  addrSoi: string | null;
+  addrStreet: string | null;
+  addrSubdistrict: string | null;
   addrDistrict: string | null;
   addrProvince: string | null;
+  addrPostalCode: string | null;
   model: string | null;
   imei: string | null;
   serialNo: string | null;
@@ -522,8 +529,15 @@ export async function getNoticePrintData(params: {
       contractNo: contracts.contractNo,
       customerName: contracts.customerName,
       phone: contracts.phone,
+      addrHouseNo: contracts.addrHouseNo,
+      addrMoo: contracts.addrMoo,
+      addrVillage: contracts.addrVillage,
+      addrSoi: contracts.addrSoi,
+      addrStreet: contracts.addrStreet,
+      addrSubdistrict: contracts.addrSubdistrict,
       addrDistrict: contracts.addrDistrict,
       addrProvince: contracts.addrProvince,
+      addrPostalCode: contracts.addrPostalCode,
       model: contracts.model,
       imei: contracts.imei,
       serialNo: contracts.serialNo,
@@ -553,8 +567,15 @@ export async function getNoticePrintData(params: {
     contractNo: String(r.contractNo),
     customerName: (r.customerName as string) ?? null,
     phone: (r.phone as string) ?? null,
+    addrHouseNo: (r.addrHouseNo as string) ?? null,
+    addrMoo: (r.addrMoo as string) ?? null,
+    addrVillage: (r.addrVillage as string) ?? null,
+    addrSoi: (r.addrSoi as string) ?? null,
+    addrStreet: (r.addrStreet as string) ?? null,
+    addrSubdistrict: (r.addrSubdistrict as string) ?? null,
     addrDistrict: (r.addrDistrict as string) ?? null,
     addrProvince: (r.addrProvince as string) ?? null,
+    addrPostalCode: (r.addrPostalCode as string) ?? null,
     model: (r.model as string) ?? null,
     imei: (r.imei as string) ?? null,
     serialNo: (r.serialNo as string) ?? null,

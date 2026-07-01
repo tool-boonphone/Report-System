@@ -12,6 +12,7 @@ import JSZip from "jszip";
 import { APP_SESSION_COOKIE, normalizeSectionKey, type SectionKey } from "../../shared/const";
 import { checkPermission, getUserFromSession } from "../authDb";
 import { getNoticePrintData, recordNoticePrint, allocateDocumentNumbers, attachDocumentNumbers } from "../noticeDb";
+import { enrichContactAddressesForPrint } from "./enrichContactAddress";
 import { buildNoticeDocx } from "./noticeDocx";
 import { buildEnvelopeExcel } from "./envelopeExcel";
 import { convertDocxToPdf } from "./docxToPdf";
@@ -55,6 +56,9 @@ export async function handleNoticePrint(req: Request, res: Response) {
       res.status(400).json({ message: "กรุณาเลือกรายการก่อน" });
       return;
     }
+
+    // ดึงที่อยู่เต็มจาก contract detail API (ก่อนอ่านจาก DB)
+    await enrichContactAddressesForPrint(section, externalIds);
 
     // ดึงเฉพาะรายการที่พิมพ์ได้จริง
     const records = await getNoticePrintData({ section, externalIds });
