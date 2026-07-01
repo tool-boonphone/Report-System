@@ -1,4 +1,5 @@
 import { isLikelyAddressLine, mergeAddressFields, parseThaiAddressLine, type ContactAddressFields } from "../api/addressFields";
+import { inferSubdistrictFromMisplacedDistrict } from "../api/thaiGeography";
 
 /** ฟิลด์ที่อยู่สำหรับจ่าหน้าซองไปรษณีย์ / Notice */
 export type NoticeMailingAddress = ContactAddressFields & {
@@ -69,11 +70,23 @@ export function formatNoticeMailingAddress(r: NoticeMailingAddress): string {
  * รวมฟิลด์ที่อยู่จาก DB + parse workplace เติมส่วนที่ขาด (เช่น ต. จาก customer API)
  */
 export function resolveNoticeMailingFields(r: NoticeMailingAddress): NoticeMailingAddress {
+  let base: NoticeMailingAddress = r;
   const workplace = clean(r.workplace);
   if (isLikelyAddressLine(workplace)) {
-    return mergeMailingFields(r, parseThaiAddressLine(workplace));
+    base = mergeMailingFields(r, parseThaiAddressLine(workplace));
   }
-  return r;
+  const inferred = inferSubdistrictFromMisplacedDistrict(
+    base.addrDistrict,
+    base.addrProvince,
+    base.addrSubdistrict,
+  );
+  if (
+    inferred.addrSubdistrict !== (base.addrSubdistrict ?? null)
+    || inferred.addrDistrict !== (base.addrDistrict ?? null)
+  ) {
+    return { ...base, ...inferred };
+  }
+  return base;
 }
 
 /**

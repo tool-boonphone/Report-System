@@ -78,6 +78,26 @@ describe("resolveNoticeMailingAddress", () => {
     expect(s).toContain("ต.เสม็ดใต้");
     expect(s).toContain("อ.บางคล้า");
   });
+
+  it("CT0126-SRI001-22191-01: FF365 เก็บตำบลใน district field", () => {
+    const s = resolveNoticeMailingAddress({
+      workplace: "บริษัทไทยซิง",
+      addrDistrict: "ระโสม",
+      addrProvince: "พระนครศรีอยุธยา",
+    });
+    expect(s).toContain("ต.ระโสม");
+    expect(s).toContain("อ.ภาชี");
+    expect(s).toContain("จ.พระนครศรีอยุธยา");
+    expect(s).not.toMatch(/อ\.ระโสม/);
+  });
+
+  it("keeps amphoe names as อ. prefix (บางบัวทอง)", () => {
+    const s = resolveNoticeMailingAddress({
+      addrDistrict: "บางบัวทอง",
+      addrProvince: "นนทบุรี",
+    });
+    expect(s).toBe("อ.บางบัวทอง จ.นนทบุรี");
+  });
 });
 
 describe("mapContactAddressFields", () => {
