@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { mapContactAddressFields } from "../api/addressFields";
-import { formatNoticeMailingAddress } from "./addressFormat";
+import { isLikelyAddressLine, mapContactAddressFields, parseThaiAddressLine } from "../api/addressFields";
+import { formatNoticeMailingAddress, resolveNoticeMailingAddress } from "./addressFormat";
 
 describe("formatNoticeMailingAddress", () => {
   it("formats full Thai postal address", () => {
@@ -38,6 +38,37 @@ describe("formatNoticeMailingAddress", () => {
   });
 });
 
+describe("parseThaiAddressLine", () => {
+  it("parses full address line from customer workplace", () => {
+    const f = parseThaiAddressLine(
+      "บ้านเลขที่ 5/3 หมู่ 3 ตำบลเสม็ดใต้ อำเภอบางคล้า จังหวัดฉะเชิงเทรา 24110",
+    );
+    expect(f.addrHouseNo).toBe("5/3");
+    expect(f.addrMoo).toBe("3");
+    expect(f.addrSubdistrict).toBe("เสม็ดใต้");
+    expect(f.addrDistrict).toBe("บางคล้า");
+    expect(f.addrProvince).toBe("ฉะเชิงเทรา");
+    expect(f.addrPostalCode).toBe("24110");
+  });
+
+  it("rejects placeholder occupation text", () => {
+    expect(isLikelyAddressLine("ที่อยู่ปัจจุบัน")).toBe(false);
+  });
+});
+
+describe("resolveNoticeMailingAddress", () => {
+  it("uses workplace when structured addr fields are empty", () => {
+    const s = resolveNoticeMailingAddress({
+      addrDistrict: "บางคล้า",
+      addrProvince: "ฉะเชิงเทรา",
+      workplace: "บ้านเลขที่ 5/3 หมู่ 3 ตำบลเสม็ดใต้ อำเภอบางคล้า จังหวัดฉะเชิงเทรา 24110",
+    });
+    expect(s).toContain("5/3");
+    expect(s).toContain("หมู่ 3");
+    expect(s).toContain("ต.เสม็ดใต้");
+  });
+});
+
 describe("mapContactAddressFields", () => {
   it("maps partner contact_address keys", () => {
     const f = mapContactAddressFields({
@@ -54,5 +85,15 @@ describe("mapContactAddressFields", () => {
     expect(f.addrDistrict).toBe("บางใหญ่");
     expect(f.addrProvince).toBe("นนทบุรี");
     expect(f.addrPostalCode).toBe("11140");
+  });
+
+  it("parses full address string field when structured keys missing", () => {
+    const f = mapContactAddressFields({
+      address: "บ้านเลขที่ 136/9 ม.10",
+      amphure: "บางบัวทอง",
+      province: "นนทบุรี",
+    });
+    expect(f.addrHouseNo).toBe("136/9");
+    expect(f.addrMoo).toBe("10");
   });
 });

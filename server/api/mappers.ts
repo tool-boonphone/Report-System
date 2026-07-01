@@ -8,7 +8,7 @@
  */
 
 import type { SectionKey } from "../../shared/const";
-import { mapContactAddressFields } from "./addressFields";
+import { mapContactAddressFields, mergeAddressFields, parseThaiAddressLine, isLikelyAddressLine } from "./addressFields";
 
 /** Utility: take first day-of-YYYY-MM-DD from possibly timestamped string. */
 function toDate(v: unknown): string | null {
@@ -111,8 +111,12 @@ export function mapContractDetailOverrides(
   const member = c.member ?? {};
   const card = c.card_address ?? {};
   const contactAddr = c.contact_address ?? {};
-  const mailing = mapContactAddressFields(contactAddr);
   const occ = c.occupation ?? {};
+  const occPlace = typeof occ.place === "string" ? occ.place.trim() : "";
+  const mailing = mergeAddressFields(
+    mapContactAddressFields(contactAddr),
+    isLikelyAddressLine(occPlace) ? parseThaiAddressLine(occPlace) : {},
+  );
   const workAddr = occ.address ?? {};
   const product = c.product ?? {};
   const partner = c.partner ?? {};

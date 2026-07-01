@@ -56,7 +56,7 @@ function sentCountSql(section: SectionKey): SQL<number> {
 }
 
 export type NoticeReturnedFilter = "all" | "hide" | "only";
-export type NoticeSentFilter = "all" | "0" | "1" | "2" | "3";
+export type NoticeSentFilter = "all" | "0" | "ever" | "1" | "2" | "3";
 
 export type NoticeFilters = {
   search?: string;
@@ -122,7 +122,9 @@ function buildNoticeWhere(section: SectionKey, f: NoticeFilters): SQL {
   if (f.returned === "hide") clauses.push(sql`NOT ${IS_RETURNED_SQL}`);
   else if (f.returned === "only") clauses.push(sql`${IS_RETURNED_SQL}`);
 
-  if (f.sent && f.sent !== "all") {
+  if (f.sent === "ever") {
+    clauses.push(sql`${sc} >= 1`);
+  } else if (f.sent && f.sent !== "all") {
     const n = parseInt(f.sent, 10);
     clauses.push(sql`${sc} = ${n}`);
   }
@@ -486,6 +488,7 @@ export type NoticePrintData = {
   contractNo: string;
   customerName: string | null;
   phone: string | null;
+  workplace: string | null;
   addrHouseNo: string | null;
   addrMoo: string | null;
   addrVillage: string | null;
@@ -529,6 +532,7 @@ export async function getNoticePrintData(params: {
       contractNo: contracts.contractNo,
       customerName: contracts.customerName,
       phone: contracts.phone,
+      workplace: contracts.workplace,
       addrHouseNo: contracts.addrHouseNo,
       addrMoo: contracts.addrMoo,
       addrVillage: contracts.addrVillage,
@@ -567,6 +571,7 @@ export async function getNoticePrintData(params: {
     contractNo: String(r.contractNo),
     customerName: (r.customerName as string) ?? null,
     phone: (r.phone as string) ?? null,
+    workplace: (r.workplace as string) ?? null,
     addrHouseNo: (r.addrHouseNo as string) ?? null,
     addrMoo: (r.addrMoo as string) ?? null,
     addrVillage: (r.addrVillage as string) ?? null,

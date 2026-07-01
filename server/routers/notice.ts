@@ -25,7 +25,7 @@ const filtersInput = z
   .object({
     search: z.string().optional(),
     returned: z.enum(["all", "hide", "only"]).optional(),
-    sent: z.enum(["all", "0", "1", "2", "3"]).optional(),
+    sent: z.enum(["all", "0", "ever", "1", "2", "3"]).optional(),
     admin: z.string().optional(),
     approveDateFrom: z.string().optional(),
     approveDateTo: z.string().optional(),
