@@ -28,7 +28,7 @@ import { toast } from "sonner";
 type SortField = "approveDate" | "overdueDays" | "sentCount";
 type SortDir = "asc" | "desc";
 type ReturnedFilter = "all" | "hide" | "only";
-type SentFilter = "all" | "0" | "1" | "2" | "3";
+type SentFilter = "all" | "0" | "ever" | "1" | "2" | "3";
 
 type PrintLogEntry = { round: number; documentNo: string | null; printedAt: string; printedBy: string };
 type RestoreLogEntry = { round: number; restoredAt: string; restoredBy: string };
@@ -465,6 +465,7 @@ export default function Notice() {
               <select value={sentFilter} onChange={(e) => setSentFilter(e.target.value as SentFilter)} className={inputCls}>
                 <option value="all">ทั้งหมด</option>
                 <option value="0">ยังไม่เคยส่ง</option>
+                <option value="ever">เคยส่งแล้ว (ครั้งที่ 1–3)</option>
                 <option value="1">ส่งแล้ว 1 ครั้ง</option>
                 <option value="2">ส่งแล้ว 2 ครั้ง</option>
                 <option value="3">ส่งครบ 3 ครั้ง</option>

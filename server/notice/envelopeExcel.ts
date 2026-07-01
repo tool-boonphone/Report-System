@@ -8,7 +8,7 @@
  */
 import ExcelJS from "exceljs";
 import type { NoticePrintData } from "../noticeDb";
-import { formatNoticeMailingAddress } from "./addressFormat";
+import { resolveNoticeMailingAddress, resolveNoticeMailingFields } from "./addressFormat";
 
 const HEADER_FILL = { type: "pattern" as const, pattern: "solid" as const, fgColor: { argb: "FFE2EFDA" } };
 const THIN_BORDER = {
@@ -73,9 +73,10 @@ export async function buildEnvelopeExcel(records: NoticePrintData[]): Promise<Bu
     const phoneCell = row.getCell(7);
     phoneCell.value = r.phone ?? "";
     phoneCell.numFmt = "@";
-    row.getCell(8).value = formatNoticeMailingAddress(r);
+    row.getCell(8).value = resolveNoticeMailingAddress(r);
+    const resolved = resolveNoticeMailingFields(r);
     const zipCell = row.getCell(9);
-    zipCell.value = r.addrPostalCode ?? "";
+    zipCell.value = resolved.addrPostalCode ?? r.addrPostalCode ?? "";
     zipCell.numFmt = "@";
 
     for (let col = 1; col <= 9; col++) {

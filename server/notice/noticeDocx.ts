@@ -177,7 +177,7 @@ function buildContract(r: NoticePrintData, cfg: CompanyConfig, logo: ReturnType<
 
   const out: (Paragraph | Table)[] = [];
 
-  // ── หัวจดหมาย: โลโก้ (ซ้าย) + ชื่อเอกสาร (ขวา — ชิดซ้ายในคอลัมน์ขวา กันคำว่า "เช่าซื้อ" ตกบรรทัด) ──
+  // ── หัวจดหมาย: โลโก้ (ซ้าย) + ชื่อเอกสาร (ขวา — ชิดขวาในคอลัมน์ขวา) ──
   const logoChildren = logo
     ? [new Paragraph({ children: [new ImageRun({ type: "png", data: logo.data, transformation: { width: 132, height: Math.round((132 * logo.height) / logo.width) } })] })]
     : [new Paragraph({ children: [run(cfg.companyName, { bold: true, size: 28 })] })];
@@ -197,9 +197,8 @@ function buildContract(r: NoticePrintData, cfg: CompanyConfig, logo: ReturnType<
               verticalAlign: VerticalAlign.CENTER,
               children: [
                 new Paragraph({
-                  alignment: AlignmentType.LEFT,
+                  alignment: AlignmentType.RIGHT,
                   spacing: { after: 0, line: 276 },
-                  indent: { left: 0 },
                   children: [
                     run("หนังสือติดตามค่าเช่าซื้อ - บอกเลิกสัญญาและขอให้คืนทรัพย์สินที่เช่าซื้อ", { bold: true, size: 22 }),
                   ],
@@ -245,8 +244,11 @@ function buildContract(r: NoticePrintData, cfg: CompanyConfig, logo: ReturnType<
 
   out.push(para([run(`ตามที่ท่านได้เข้าทำสัญญาเช่าซื้อ กับทางบริษัท ${cfg.companyName} ดังมีรายละเอียดดังนี้`)], { spacingAfter: 180 }));
 
-  // ── ตาราง A: อุปกรณ์ — IMEI กว้างพอ 15 หลัก
-  const TABLE_A_WIDTHS = [4200, 2000, 3906];
+  // ── ตาราง A: อุปกรณ์ — IMEI = จ.น.งวด, Serial = ยอดที่ได้ชำระแล้ว ──
+  const COL_INSTALLMENT_COUNT = 2021;
+  const COL_PAID = 2022;
+  const COL_MODEL = 10106 - COL_INSTALLMENT_COUNT - COL_PAID;
+  const TABLE_A_WIDTHS = [COL_MODEL, COL_INSTALLMENT_COUNT, COL_PAID];
   out.push(
     new Table({
       width: { size: 10106, type: WidthType.DXA },
@@ -270,8 +272,8 @@ function buildContract(r: NoticePrintData, cfg: CompanyConfig, logo: ReturnType<
       ],
     }),
   );
-  // ── ตาราง B: ยอด — จ.น.งวด กว้างพอตัวเลข 15 หลัก
-  const TABLE_B_WIDTHS = [1700, 1700, 1700, 2000, 3006];
+  // ── ตาราง B: ยอด — 5 คอลัมน์กว้างเท่ากัน
+  const TABLE_B_WIDTHS = [2021, 2021, 2021, COL_INSTALLMENT_COUNT, COL_PAID];
   out.push(
     new Table({
       width: { size: 10106, type: WidthType.DXA },
@@ -385,6 +387,7 @@ function buildAutoFooter(cfg: CompanyConfig): Footer {
   return new Footer({
     children: [
       new Paragraph({
+        alignment: AlignmentType.CENTER,
         spacing: { after: 0, before: 0, line: 240 },
         children: [
           run(

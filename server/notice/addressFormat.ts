@@ -1,14 +1,8 @@
+import { isLikelyAddressLine, mergeAddressFields, parseThaiAddressLine, type ContactAddressFields } from "../api/addressFields";
+
 /** ฟิลด์ที่อยู่สำหรับจ่าหน้าซองไปรษณีย์ / Notice */
-export type NoticeMailingAddress = {
-  addrHouseNo?: string | null;
-  addrMoo?: string | null;
-  addrVillage?: string | null;
-  addrSoi?: string | null;
-  addrStreet?: string | null;
-  addrSubdistrict?: string | null;
-  addrDistrict?: string | null;
-  addrProvince?: string | null;
-  addrPostalCode?: string | null;
+export type NoticeMailingAddress = ContactAddressFields & {
+  workplace?: string | null;
 };
 
 function clean(s: string | null | undefined): string {
@@ -19,6 +13,25 @@ function withPrefix(value: string, prefix: string): string {
   if (!value) return "";
   if (value.startsWith(prefix)) return value;
   return `${prefix}${value}`;
+}
+
+function hasStructuredDetail(r: NoticeMailingAddress): boolean {
+  return Boolean(
+    clean(r.addrHouseNo) ||
+      clean(r.addrMoo) ||
+      clean(r.addrVillage) ||
+      clean(r.addrSoi) ||
+      clean(r.addrStreet) ||
+      clean(r.addrSubdistrict),
+  );
+}
+
+function mergeMailingFields(
+  base: NoticeMailingAddress,
+  extra: Partial<ContactAddressFields>,
+): NoticeMailingAddress {
+  const merged = mergeAddressFields(base, extra);
+  return { ...base, ...merged };
 }
 
 /**
@@ -61,4 +74,26 @@ export function formatNoticeMailingAddress(r: NoticeMailingAddress): string {
   if (district) legacy.push(withPrefix(district, "อ."));
   if (province) legacy.push(withPrefix(province, "จ."));
   return legacy.join(" ").trim();
+}
+
+/**
+ * รวมฟิลด์ที่อยู่จาก DB + parse workplace ถ้าฟิลด์แยกว่าง
+ */
+export function resolveNoticeMailingFields(r: NoticeMailingAddress): NoticeMailingAddress {
+  if (hasStructuredDetail(r)) return r;
+
+  const workplace = clean(r.workplace);
+  if (isLikelyAddressLine(workplace)) {
+    return mergeMailingFields(r, parseThaiAddressLine(workplace));
+  }
+
+  return r;
+}
+
+/**
+ * รวมที่อยู่จากฟิลด์แยก + parse จาก workplace / บรรทัดเต็ม
+ * (customer list เก็บที่อยู่ใน workplace_name → contracts.workplace)
+ */
+export function resolveNoticeMailingAddress(r: NoticeMailingAddress): string {
+  return formatNoticeMailingAddress(resolveNoticeMailingFields(r));
 }
