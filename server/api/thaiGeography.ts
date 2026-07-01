@@ -29,6 +29,18 @@ export function resolveAmphoeForTambon(tambon: string, province: string): string
 }
 
 /**
+ * ตำบลเมือง — ชื่อตำบลตรงกับชื่ออำเภอ (เช่น ต.ตาคลี อ.ตาคลี, ต.ปากท่อ อ.ปากท่อ)
+ * API มักใส่แค่ชื่ออำเภอโดยไม่แยกตำบล
+ */
+export function isAmphoeSeatTambon(name: string, province: string): boolean {
+  const n = name.trim();
+  const p = province.trim();
+  if (!n || !p) return false;
+  if (!isAmphoeInProvince(n, p)) return false;
+  return resolveAmphoeForTambon(n, p) === n;
+}
+
+/**
  * FF365 customer list มักเก็บชื่อตำบลใน current_district → addrDistrict
  * ถ้าไม่ใช่อำเภอ ให้ย้ายเป็น addrSubdistrict และเติมอำเภอจาก lookup
  */

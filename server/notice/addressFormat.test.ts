@@ -91,12 +91,12 @@ describe("resolveNoticeMailingAddress", () => {
     expect(s).not.toMatch(/อ\.ระโสม/);
   });
 
-  it("keeps amphoe names as อ. prefix (บางบัวทอง)", () => {
+  it("amphoe seat tambon repeats name (บางบัวทอง)", () => {
     const s = resolveNoticeMailingAddress({
       addrDistrict: "บางบัวทอง",
       addrProvince: "นนทบุรี",
     });
-    expect(s).toBe("อ.บางบัวทอง จ.นนทบุรี");
+    expect(s).toBe("ต.บางบัวทอง อ.บางบัวทอง จ.นนทบุรี");
   });
 
   it("fills ต. from idDistrict when detail has only amphoe", () => {
@@ -121,6 +121,30 @@ describe("resolveNoticeMailingAddress", () => {
     expect(s).toContain("ต.เชียงรากน้อย");
     expect(s).toContain("อ.บางปะอิน");
     expect(s).toContain("หมู่ 7");
+  });
+
+  it("amphoe seat: ต.ตาคลี อ.ตาคลี (ยอดขวัญ ราชวงษ์)", () => {
+    const s = resolveNoticeMailingAddress({
+      addrHouseNo: "99",
+      addrMoo: "1",
+      addrDistrict: "ตาคลี",
+      addrProvince: "นครสวรรค์",
+      idDistrict: "ตาคลี",
+      workplace: "99 ม.1 โลตัส ตาคลี",
+    });
+    expect(s).toBe("99 หมู่ 1 ต.ตาคลี อ.ตาคลี จ.นครสวรรค์");
+  });
+
+  it("amphoe seat: ต.ปากท่อ อ.ปากท่อ (จินตนาพร กลิ่นอำไพ)", () => {
+    const s = resolveNoticeMailingAddress({
+      addrHouseNo: "357/2",
+      addrMoo: "1",
+      addrDistrict: "ปากท่อ",
+      addrProvince: "ราชบุรี",
+      idDistrict: "ปากท่อ",
+      workplace: "โรงพยาบาลปากท่อ",
+    });
+    expect(s).toBe("357/2 หมู่ 1 ต.ปากท่อ อ.ปากท่อ จ.ราชบุรี");
   });
 });
 
