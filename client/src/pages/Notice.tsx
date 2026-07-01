@@ -872,7 +872,12 @@ export default function Notice() {
 
                   {/* Monthly table */}
                   {(monthlyStats?.months.length ?? 0) === 0 ? (
-                    <div className="py-10 text-center text-gray-400 text-sm">ยังไม่มีข้อมูลการส่ง Notice</div>
+                    <div className="py-10 text-center text-gray-400 text-sm">
+                      <div>ยังไม่มีข้อมูลการส่ง Notice</div>
+                      <div className="mt-2 text-xs text-gray-400 max-w-md mx-auto leading-relaxed">
+                        สถิตินับจาก log การพิมพ์ในระบบ (ปุ่มพิมพ์หรือนำเข้าประวัติ) — หากยังไม่เคยพิมพ์ผ่านระบบ จะยังไม่มีตัวเลขแสดง
+                      </div>
+                    </div>
                   ) : (
                     <div className="border border-gray-200 rounded-xl overflow-hidden">
                       <table className="w-full border-separate border-spacing-0">
