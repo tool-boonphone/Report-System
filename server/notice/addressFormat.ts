@@ -15,17 +15,6 @@ function withPrefix(value: string, prefix: string): string {
   return `${prefix}${value}`;
 }
 
-function hasStructuredDetail(r: NoticeMailingAddress): boolean {
-  return Boolean(
-    clean(r.addrHouseNo) ||
-      clean(r.addrMoo) ||
-      clean(r.addrVillage) ||
-      clean(r.addrSoi) ||
-      clean(r.addrStreet) ||
-      clean(r.addrSubdistrict),
-  );
-}
-
 function mergeMailingFields(
   base: NoticeMailingAddress,
   extra: Partial<ContactAddressFields>,
@@ -77,16 +66,13 @@ export function formatNoticeMailingAddress(r: NoticeMailingAddress): string {
 }
 
 /**
- * รวมฟิลด์ที่อยู่จาก DB + parse workplace ถ้าฟิลด์แยกว่าง
+ * รวมฟิลด์ที่อยู่จาก DB + parse workplace เติมส่วนที่ขาด (เช่น ต. จาก customer API)
  */
 export function resolveNoticeMailingFields(r: NoticeMailingAddress): NoticeMailingAddress {
-  if (hasStructuredDetail(r)) return r;
-
   const workplace = clean(r.workplace);
   if (isLikelyAddressLine(workplace)) {
     return mergeMailingFields(r, parseThaiAddressLine(workplace));
   }
-
   return r;
 }
 

@@ -11,7 +11,7 @@ import type { Request, Response } from "express";
 import JSZip from "jszip";
 import { APP_SESSION_COOKIE, normalizeSectionKey, type SectionKey } from "../../shared/const";
 import { checkPermission, getUserFromSession } from "../authDb";
-import { getNoticePrintData, recordNoticePrint, allocateDocumentNumbers, attachDocumentNumbers } from "../noticeDb";
+import { getNoticePrintData, recordNoticePrint, allocateDocumentNumbers, attachDocumentNumbers, MAX_NOTICE_ROUNDS } from "../noticeDb";
 import { enrichContactAddressesForPrint } from "./enrichContactAddress";
 import { buildNoticeDocx } from "./noticeDocx";
 import { buildEnvelopeExcel } from "./envelopeExcel";
@@ -52,6 +52,7 @@ export async function handleNoticePrint(req: Request, res: Response) {
     const externalIds: string[] = Array.isArray(req.body?.externalIds)
       ? req.body.externalIds.map((x: unknown) => String(x)).filter(Boolean)
       : [];
+    const includeMaxed = Boolean(req.body?.includeMaxed);
     if (externalIds.length === 0) {
       res.status(400).json({ message: "กรุณาเลือกรายการก่อน" });
       return;
@@ -60,14 +61,20 @@ export async function handleNoticePrint(req: Request, res: Response) {
     // ดึงที่อยู่เต็มจาก contract detail API (ก่อนอ่านจาก DB)
     await enrichContactAddressesForPrint(section, externalIds);
 
-    // ดึงเฉพาะรายการที่พิมพ์ได้จริง
-    const records = await getNoticePrintData({ section, externalIds });
+    // ดึงเฉพาะรายการที่พิมพ์ได้จริง (includeMaxed = รวมที่ส่งครบ 3 ครั้งแล้ว — พิมพ์ซ้ำไม่บันทึกรอบ)
+    const records = await getNoticePrintData({ section, externalIds, includeMaxed });
     if (records.length === 0) {
       res.status(400).json({
-        message: "ไม่มีรายการที่สามารถพิมพ์ได้ (อาจได้เครื่องคืนแล้ว หรือส่งครบ 3 ครั้งแล้ว)",
+        message: includeMaxed
+          ? "ไม่มีรายการที่สามารถพิมพ์ได้ (อาจได้เครื่องคืนแล้ว หรือไม่เข้าเงื่อนไขค้างชำระ ≥ 60 วัน)"
+          : "ไม่มีรายการที่สามารถพิมพ์ได้ (อาจได้เครื่องคืนแล้ว หรือส่งครบ 3 ครั้งแล้ว)",
       });
       return;
     }
+
+    const recordableIds = records
+      .filter((r) => r.sentCount < MAX_NOTICE_ROUNDS)
+      .map((r) => r.externalId);
 
     // จัดสรรเลขที่เอกสารก่อนสร้างไฟล์
     const docNos = await allocateDocumentNumbers({
@@ -99,7 +106,7 @@ export async function handleNoticePrint(req: Request, res: Response) {
     const operator = (appUser.fullName?.trim() || appUser.username || "ไม่ทราบชื่อ").slice(0, 128);
     const recorded = await recordNoticePrint({
       section,
-      externalIds: printRecords.map((r) => r.externalId),
+      externalIds: recordableIds,
       operator,
       documentNos: docNos,
     });
@@ -108,6 +115,7 @@ export async function handleNoticePrint(req: Request, res: Response) {
     res.setHeader("Content-Type", "application/zip");
     res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(fileName)}"`);
     res.setHeader("X-Notice-Printed-Count", String(recorded.printedCount));
+    res.setHeader("X-Notice-Generated-Count", String(records.length));
     res.setHeader("X-Notice-Pdf", pdfBuf ? "1" : "0");
     res.status(200).end(zipBuf);
   } catch (err) {

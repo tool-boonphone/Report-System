@@ -12,9 +12,12 @@ import {
   getNoticeSummary,
   getNoticeAdminOptions,
   getNoticeMonthlyStats,
+  lookupNoticeByContractNos,
   recordNoticePrint,
   restoreLatestNoticeRound,
   clearAllNoticeData,
+  lookupNoticeByContractNos,
+  parseContractNoInput,
   type NoticeFilters,
   type NoticeSort,
 } from "../noticeDb";
@@ -83,6 +86,15 @@ export const noticeRouter = router({
   monthlyStats: requirePermission("notice", "view")
     .input(z.object({ section: sectionSchema }))
     .query(({ input }) => getNoticeMonthlyStats(input.section)),
+
+  lookupByContractNos: requirePermission("notice", "view")
+    .input(z.object({ section: sectionSchema, contractNos: z.string().min(1) }))
+    .mutation(({ input }) =>
+      lookupNoticeByContractNos({
+        section: input.section,
+        contractNos: parseContractNoInput(input.contractNos),
+      }),
+    ),
 
   /**
    * บันทึกการพิมพ์ Notice (นับรอบ) ของรายการที่เลือก

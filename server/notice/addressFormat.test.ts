@@ -67,6 +67,16 @@ describe("resolveNoticeMailingAddress", () => {
     expect(s).toContain("หมู่ 3");
     expect(s).toContain("ต.เสม็ดใต้");
   });
+
+  it("fills missing subdistrict from workplace when DB has only district/province", () => {
+    const s = resolveNoticeMailingAddress({
+      addrDistrict: "บางคล้า",
+      addrProvince: "ฉะเชิงเทรา",
+      workplace: "บ้านเลขที่ 5/3 หมู่ 3 ตำบลเสม็ดใต้ อำเภอบางคล้า จังหวัดฉะเชิงเทรา 24110",
+    });
+    expect(s).toContain("ต.เสม็ดใต้");
+    expect(s).toContain("อ.บางคล้า");
+  });
 });
 
 describe("mapContactAddressFields", () => {

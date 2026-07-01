@@ -518,6 +518,8 @@ export type NoticePrintData = {
 export async function getNoticePrintData(params: {
   section: SectionKey;
   externalIds: string[];
+  /** รวมรายการที่ส่งครบ 3 ครั้งแล้ว (พิมพ์ซ้ำได้แต่ไม่บันทึกรอบ) */
+  includeMaxed?: boolean;
 }): Promise<NoticePrintData[]> {
   const { section } = params;
   const db = await getDb(section);
@@ -526,6 +528,18 @@ export async function getNoticePrintData(params: {
   if (ids.length === 0) return [];
 
   const sc = sentCountSql(section);
+  const printClauses: SQL[] = [
+    eq(contracts.section, section),
+    inArray(contracts.externalId, ids),
+    sql`COALESCE(contracts.status, '') NOT IN ('สิ้นสุดสัญญา', 'ยกเลิกสัญญา')`,
+    sql`COALESCE(contracts.debt_type, '') NOT IN ('สิ้นสุดสัญญา', 'ยกเลิกสัญญา')`,
+    sql`NOT ${IS_RETURNED_SQL}`,
+    sql`${NOTICE_OVERDUE_DAYS_SQL} >= ${NOTICE_MIN_OVERDUE_DAYS}`,
+  ];
+  if (!params.includeMaxed) {
+    printClauses.push(sql`${sc} < ${MAX_NOTICE_ROUNDS}`);
+  }
+
   const rows = (await db
     .select({
       externalId: contracts.externalId,
@@ -553,17 +567,7 @@ export async function getNoticePrintData(params: {
       sentCount: sc,
     })
     .from(contracts)
-    .where(
-      and(
-        eq(contracts.section, section),
-        inArray(contracts.externalId, ids),
-        sql`COALESCE(contracts.status, '') NOT IN ('สิ้นสุดสัญญา', 'ยกเลิกสัญญา')`,
-        sql`COALESCE(contracts.debt_type, '') NOT IN ('สิ้นสุดสัญญา', 'ยกเลิกสัญญา')`,
-        sql`NOT ${IS_RETURNED_SQL}`,
-        sql`${NOTICE_OVERDUE_DAYS_SQL} >= ${NOTICE_MIN_OVERDUE_DAYS}`,
-        sql`${sc} < ${MAX_NOTICE_ROUNDS}`,
-      ),
-    )
+    .where(and(...printClauses))
     .orderBy(asc(contracts.contractNo))) as Array<Record<string, unknown>>;
 
   return rows.map((r) => ({
@@ -592,6 +596,99 @@ export async function getNoticePrintData(params: {
     sentCount: Number(r.sentCount ?? 0),
     documentNo: "",
   }));
+}
+
+/** แยกเลขที่สัญญาจากข้อความ (บรรทัดใหม่หรือคอมม่า) */
+export function parseContractNoInput(raw: string): string[] {
+  return [...new Set(raw.split(/[\n,，]+/).map((s) => s.trim()).filter(Boolean))];
+}
+
+export type NoticeContractLookupRow = {
+  externalId: string;
+  contractNo: string;
+  customerName: string | null;
+  sentCount: number;
+  isReturned: boolean;
+  overdueDays: number | null;
+  canPrint: boolean;
+  canRecord: boolean;
+};
+
+/** ค้นหาเลขที่สัญญาในชุดข้อมูลที่เข้าเงื่อนไขหน้า Notice */
+export async function lookupNoticeByContractNos(params: {
+  section: SectionKey;
+  contractNos: string[];
+}): Promise<{ matched: NoticeContractLookupRow[]; notFound: string[] }> {
+  const requested = parseContractNoInput(params.contractNos.join("\n"));
+  if (requested.length === 0) return { matched: [], notFound: [] };
+
+  const db = await getDb(params.section);
+  if (!db) return { matched: [], notFound: requested };
+
+  const sc = sentCountSql(params.section);
+  const rows = (await db
+    .select({
+      externalId: contracts.externalId,
+      contractNo: contracts.contractNo,
+      customerName: contracts.customerName,
+      sentCount: sc,
+      isReturned: IS_RETURNED_SQL,
+      overdueDays: NOTICE_OVERDUE_DAYS_SQL,
+    })
+    .from(contracts)
+    .where(
+      and(
+        eq(contracts.section, params.section),
+        sql`COALESCE(contracts.status, '') NOT IN ('สิ้นสุดสัญญา', 'ยกเลิกสัญญา')`,
+        sql`COALESCE(contracts.debt_type, '') NOT IN ('สิ้นสุดสัญญา', 'ยกเลิกสัญญา')`,
+        sql`${NOTICE_OVERDUE_DAYS_SQL} >= ${NOTICE_MIN_OVERDUE_DAYS}`,
+        or(...requested.map((no) => sql`LOWER(${contracts.contractNo}) = LOWER(${no})`))!,
+      ),
+    )
+    .orderBy(asc(contracts.contractNo))) as Array<{
+    externalId: string;
+    contractNo: string;
+    customerName: string | null;
+    sentCount: number | string | null;
+    isReturned: boolean;
+    overdueDays: number | string | null;
+  }>;
+
+  const byLower = new Map(rows.map((r) => [r.contractNo.toLowerCase(), r]));
+  const matched: NoticeContractLookupRow[] = [];
+  const notFound: string[] = [];
+  const seenMatched = new Set<string>();
+  const seenNotFound = new Set<string>();
+
+  for (const no of requested) {
+    const row = byLower.get(no.toLowerCase());
+    if (!row) {
+      const key = no.toLowerCase();
+      if (!seenNotFound.has(key)) {
+        seenNotFound.add(key);
+        notFound.push(no);
+      }
+      continue;
+    }
+    if (seenMatched.has(row.externalId)) continue;
+    seenMatched.add(row.externalId);
+    const sentCount = Number(row.sentCount ?? 0);
+    const isReturned = Boolean(row.isReturned);
+    const overdueDays = row.overdueDays != null ? Number(row.overdueDays) : null;
+    const canPrint = !isReturned;
+    matched.push({
+      externalId: row.externalId,
+      contractNo: row.contractNo,
+      customerName: row.customerName,
+      sentCount,
+      isReturned,
+      overdueDays,
+      canPrint,
+      canRecord: canPrint && sentCount < MAX_NOTICE_ROUNDS,
+    });
+  }
+
+  return { matched, notFound };
 }
 
 /** จัดสรรเลขที่เอกสารก่อนสร้าง PDF/Excel (2B: หนึ่งเลขต่อสัญญา, 5B: reuse หลัง restore) */
@@ -817,6 +914,56 @@ function monthKeyToLabel(monthKey: string): string {
   return `${THAI_MONTH_SHORT[m - 1] ?? monthKey} ${String(be % 100).padStart(2, "0")}`;
 }
 
+/** คีย์เดือน YYYY-MM ตาม timezone กรุงเทพ */
+function bangkokMonthKey(d: Date | string | null | undefined): string | null {
+  if (!d) return null;
+  const date = d instanceof Date ? d : new Date(d);
+  if (isNaN(date.getTime())) return null;
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Bangkok",
+    year: "numeric",
+    month: "2-digit",
+  }).formatToParts(date);
+  const year = parts.find((p) => p.type === "year")?.value;
+  const month = parts.find((p) => p.type === "month")?.value;
+  if (!year || !month) return null;
+  return `${year}-${month}`;
+}
+
+async function fetchReturnedByMonth(
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+  section: SectionKey,
+): Promise<Map<string, number>> {
+  try {
+    const returnRows = pgRows(
+      await db.execute(sql`
+        SELECT
+          to_char(date_trunc('month', COALESCE(
+            CASE WHEN c.bad_debt_date ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+              THEN c.bad_debt_date::date
+              ELSE NULL
+            END,
+            c.synced_at::date
+          )), 'YYYY-MM') AS month_key,
+          COUNT(DISTINCT c.external_id)::int AS returned
+        FROM contracts c
+        INNER JOIN (
+          SELECT DISTINCT contract_external_id
+          FROM notice_print_logs
+          WHERE section = ${section}
+        ) npl ON npl.contract_external_id = c.external_id
+        WHERE c.section = ${section}
+          AND (c.status = ${RETURNED_STATUS} OR c.debt_type = ${RETURNED_STATUS})
+        GROUP BY 1
+      `),
+    ) as Array<{ month_key: string; returned: number }>;
+    return new Map(returnRows.map((r) => [r.month_key, Number(r.returned ?? 0)]));
+  } catch (err) {
+    console.warn(`[notice/monthlyStats] returned query failed for ${section}:`, (err as Error)?.message ?? err);
+    return new Map();
+  }
+}
+
 export type NoticeMonthlyStatsRow = {
   monthKey: string;
   monthLabel: string;
@@ -841,8 +988,6 @@ export type NoticeMonthlyStats = {
 
 /** สถิติการส่ง Notice รายเดือน (จาก notice_print_logs จริง) */
 export async function getNoticeMonthlyStats(section: SectionKey): Promise<NoticeMonthlyStats> {
-  await ensureNoticeSchema(section);
-  const db = await getDb(section);
   const empty: NoticeMonthlyStats = {
     subtitle: "ยังไม่มีข้อมูลการส่ง Notice",
     totalSent: 0,
@@ -853,56 +998,51 @@ export async function getNoticeMonthlyStats(section: SectionKey): Promise<Notice
     totalReturned: 0,
     months: [],
   };
+
+  const db = await getDb(section);
   if (!db) return empty;
 
-  const printRows = pgRows(
-    await db.execute(sql`
-      SELECT
-        to_char(date_trunc('month', printed_at AT TIME ZONE 'Asia/Bangkok'), 'YYYY-MM') AS month_key,
-        COUNT(*)::int AS total_sent,
-        COUNT(*) FILTER (WHERE notice_round = 1)::int AS round1,
-        COUNT(*) FILTER (WHERE notice_round = 2)::int AS round2,
-        COUNT(*) FILTER (WHERE notice_round = 3)::int AS round3
-      FROM notice_print_logs
-      WHERE section = ${section}
-      GROUP BY 1
-      ORDER BY 1
-    `),
-  ) as Array<{ month_key: string; total_sent: number; round1: number; round2: number; round3: number }>;
+  // ดึง log ตรง ๆ แล้วรวมในแอป — หลีกเลี่ยง SQL timezone ที่อาจ error และให้ผลตรงกับ sentCount ในตาราง
+  const logs = await db
+    .select({
+      noticeRound: noticePrintLogs.noticeRound,
+      printedAt: noticePrintLogs.printedAt,
+    })
+    .from(noticePrintLogs)
+    .where(eq(noticePrintLogs.section, section));
 
-  const returnRows = pgRows(
-    await db.execute(sql`
-      SELECT
-        to_char(date_trunc('month', COALESCE(
-          NULLIF(TRIM(c.bad_debt_date), '')::date,
-          c.synced_at::date
-        )), 'YYYY-MM') AS month_key,
-        COUNT(DISTINCT c.external_id)::int AS returned
-      FROM contracts c
-      WHERE c.section = ${section}
-        AND (c.status = ${RETURNED_STATUS} OR c.debt_type = ${RETURNED_STATUS})
-        AND EXISTS (
-          SELECT 1 FROM notice_print_logs npl
-          WHERE npl.section = c.section AND npl.contract_external_id = c.external_id
-        )
-      GROUP BY 1
-    `),
-  ) as Array<{ month_key: string; returned: number }>;
+  if (logs.length === 0) return empty;
 
-  const returnedByMonth = new Map(returnRows.map((r) => [r.month_key, Number(r.returned ?? 0)]));
-  const maxSent = printRows.reduce((m, r) => Math.max(m, Number(r.total_sent ?? 0)), 0);
+  const monthMap = new Map<string, { totalSent: number; round1: number; round2: number; round3: number }>();
+  for (const log of logs) {
+    const monthKey = bangkokMonthKey(log.printedAt);
+    if (!monthKey) continue;
+    const bucket = monthMap.get(monthKey) ?? { totalSent: 0, round1: 0, round2: 0, round3: 0 };
+    bucket.totalSent += 1;
+    const round = Number(log.noticeRound ?? 0);
+    if (round === 1) bucket.round1 += 1;
+    else if (round === 2) bucket.round2 += 1;
+    else if (round === 3) bucket.round3 += 1;
+    monthMap.set(monthKey, bucket);
+  }
 
-  const months: NoticeMonthlyStatsRow[] = printRows.map((r) => {
-    const totalSent = Number(r.total_sent ?? 0);
+  const sortedKeys = [...monthMap.keys()].sort();
+  if (sortedKeys.length === 0) return empty;
+
+  const returnedByMonth = await fetchReturnedByMonth(db, section);
+  const maxSent = sortedKeys.reduce((m, k) => Math.max(m, monthMap.get(k)!.totalSent), 0);
+
+  const months: NoticeMonthlyStatsRow[] = sortedKeys.map((monthKey) => {
+    const bucket = monthMap.get(monthKey)!;
     return {
-      monthKey: r.month_key,
-      monthLabel: monthKeyToLabel(r.month_key),
-      totalSent,
-      round1: Number(r.round1 ?? 0),
-      round2: Number(r.round2 ?? 0),
-      round3: Number(r.round3 ?? 0),
-      returned: returnedByMonth.get(r.month_key) ?? 0,
-      proportion: maxSent > 0 ? Math.round((totalSent / maxSent) * 100) : 0,
+      monthKey,
+      monthLabel: monthKeyToLabel(monthKey),
+      totalSent: bucket.totalSent,
+      round1: bucket.round1,
+      round2: bucket.round2,
+      round3: bucket.round3,
+      returned: returnedByMonth.get(monthKey) ?? 0,
+      proportion: maxSent > 0 ? Math.round((bucket.totalSent / maxSent) * 100) : 0,
     };
   });
 
