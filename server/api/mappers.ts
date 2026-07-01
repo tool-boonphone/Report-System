@@ -113,11 +113,21 @@ export function mapContractDetailOverrides(
   const contactAddr = c.contact_address ?? {};
   const occ = c.occupation ?? {};
   const occPlace = typeof occ.place === "string" ? occ.place.trim() : "";
+  const workAddr = occ.address ?? {};
+  const memberAddrRaw = member.address ?? member.current_address ?? null;
+  const memberAddr =
+    memberAddrRaw && typeof memberAddrRaw === "object" && !Array.isArray(memberAddrRaw)
+      ? (memberAddrRaw as Record<string, unknown>)
+      : {};
+  const memberAddrLine = typeof memberAddrRaw === "string" ? memberAddrRaw.trim() : "";
   const mailing = mergeAddressFields(
     mapContactAddressFields(contactAddr),
+    mapContactAddressFields(card),
+    mapContactAddressFields(workAddr),
+    mapContactAddressFields(memberAddr),
     isLikelyAddressLine(occPlace) ? parseThaiAddressLine(occPlace) : {},
+    isLikelyAddressLine(memberAddrLine) ? parseThaiAddressLine(memberAddrLine) : {},
   );
-  const workAddr = occ.address ?? {};
   const product = c.product ?? {};
   const partner = c.partner ?? {};
   const approved = c.approved ?? {};
