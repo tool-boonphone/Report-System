@@ -930,7 +930,7 @@ export default function Notice() {
         </div>
       )}
 
-      {/* ── Pick by contract no modal ── */}
+      {/* ── Print by contract no modal ── */}
       {contractPickOpen && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 sm:p-5 bg-black/45"
           onClick={() => !contractPickPrinting && !contractLookupMut.isPending && setContractPickOpen(false)}>
