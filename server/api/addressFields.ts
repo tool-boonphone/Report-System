@@ -28,6 +28,18 @@ const EMPTY_ADDRESS: ContactAddressFields = {
 
 const PLACEHOLDER_RE = /^(ที่อยู่ปัจจุบัน|ที่อยู่ตามบัตร(?:ประชาชน)?|ที่อยู่ทำงาน|ที่ทำงาน)$/;
 
+/** ชื่อจังหวัดย่อที่พบบ่อยในข้อมูลลูกค้า */
+const PROVINCE_ALIASES: Record<string, string> = {
+  อยุธยา: "พระนครศรีอยุธยา",
+  กทม: "กรุงเทพมหานคร",
+  กรุงเทพ: "กรุงเทพมหานคร",
+};
+
+function normalizeProvinceName(name: string): string {
+  const t = name.trim();
+  return PROVINCE_ALIASES[t] ?? t;
+}
+
 function pick(addr: Record<string, unknown>, keys: string[]): string | null {
   for (const k of keys) {
     const v = addr[k];
@@ -51,6 +63,9 @@ export function parseThaiAddressLine(line: string): ContactAddressFields {
   let text = line.trim();
   if (!text) return { ...EMPTY_ADDRESS };
 
+  // จ.อยุธยา13180 → แยกรหัสไปรษณีย์ที่ติดกับจังหวัด
+  text = text.replace(/(จ\.|จังหวัด)([^\s\d]+)(\d{5})\s*$/u, "$1$2 $3");
+
   const result: ContactAddressFields = { ...EMPTY_ADDRESS };
 
   const zipM = text.match(/\s(\d{5})\s*$/);
@@ -68,8 +83,10 @@ export function parseThaiAddressLine(line: string): ContactAddressFields {
     text = text.slice(0, m.index).trim();
   };
 
-  takeSuffix(/จังหวัด\s*(.+?)\s*$/u, (v) => { result.addrProvince = v; });
-  if (!result.addrProvince) takeSuffix(/จ\.(.+?)\s*$/u, (v) => { result.addrProvince = v; });
+  takeSuffix(/จังหวัด\s*(.+?)\s*$/u, (v) => { result.addrProvince = normalizeProvinceName(v); });
+  if (!result.addrProvince) {
+    takeSuffix(/จ\.(.+?)\s*$/u, (v) => { result.addrProvince = normalizeProvinceName(v); });
+  }
 
   takeSuffix(/อำเภอ\s*(.+?)\s*$/u, (v) => { result.addrDistrict = v; });
   if (!result.addrDistrict) takeSuffix(/อ\.(.+?)\s*$/u, (v) => { result.addrDistrict = v; });
@@ -95,7 +112,9 @@ export function parseThaiAddressLine(line: string): ContactAddressFields {
     }
   }
 
-  const mooM = text.match(/หมู่\s*(?:ที่\s*)?(\d+)/u) ?? text.match(/ม\.(\d+)/u);
+  const mooM = text.match(/หมู่\s*(?:ที่\s*)?(\d+)/u)
+    ?? text.match(/หทู่(?:ที่)?\s*(\d+)/u)
+    ?? text.match(/ม\.(\d+)/u);
   if (mooM) {
     result.addrMoo = mooM[1]!;
     text = text.replace(mooM[0], " ").replace(/\s+/g, " ").trim();
@@ -127,22 +146,35 @@ export function mapContactAddressFields(
   contactAddr: Record<string, unknown> | null | undefined,
 ): ContactAddressFields {
   const a = contactAddr ?? {};
+  const amphure = pick(a, ["amphure", "amphoe"]);
+  const tambon = pick(a, [
+    "tambon",
+    "subdistrict",
+    "sub_district",
+    "tumbol",
+    "tambon_name",
+    "subdistrict_name",
+    "ตำบล",
+  ]);
+  const districtField = pick(a, ["district", "district_name"]);
+
+  let addrDistrict = amphure;
+  let addrSubdistrict = tambon;
+  // Partner API มักใส่ตำบลใน district เมื่อมี amphure แยกอยู่แล้ว
+  if (!addrSubdistrict && amphure && districtField && districtField !== amphure) {
+    addrSubdistrict = districtField;
+  } else if (!addrDistrict && districtField) {
+    addrDistrict = districtField;
+  }
+
   const structured: ContactAddressFields = {
     addrHouseNo: pick(a, ["house_no", "house_number", "address_no", "no", "home_no", "addr_no"]),
     addrMoo: pick(a, ["moo", "village_no", "moo_no"]),
     addrVillage: pick(a, ["village", "village_name"]),
     addrSoi: pick(a, ["soi", "alley", "soi_name"]),
     addrStreet: pick(a, ["road", "street", "road_name"]),
-    addrSubdistrict: pick(a, [
-      "tambon",
-      "subdistrict",
-      "sub_district",
-      "tumbol",
-      "tambon_name",
-      "subdistrict_name",
-      "ตำบล",
-    ]),
-    addrDistrict: pick(a, ["amphure", "amphoe", "district"]),
+    addrSubdistrict,
+    addrDistrict,
     addrProvince: pick(a, ["province"]),
     addrPostalCode: pick(a, ["zipcode", "zip_code", "postal_code", "postcode", "zip"]),
   };

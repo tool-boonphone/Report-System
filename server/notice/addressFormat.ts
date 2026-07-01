@@ -1,9 +1,12 @@
 import { isLikelyAddressLine, mergeAddressFields, parseThaiAddressLine, type ContactAddressFields } from "../api/addressFields";
-import { inferSubdistrictFromMisplacedDistrict } from "../api/thaiGeography";
+import { inferSubdistrictFromMisplacedDistrict, isAmphoeInProvince } from "../api/thaiGeography";
 
 /** ฟิลด์ที่อยู่สำหรับจ่าหน้าซองไปรษณีย์ / Notice */
 export type NoticeMailingAddress = ContactAddressFields & {
   workplace?: string | null;
+  /** อำเภอ/ตำบลตามบัตร ปชช. — ใช้เติมตำบลเมื่อมีแค่อำเภอจาก detail API */
+  idDistrict?: string | null;
+  idProvince?: string | null;
 };
 
 function clean(s: string | null | undefined): string {
@@ -66,6 +69,47 @@ export function formatNoticeMailingAddress(r: NoticeMailingAddress): string {
   return legacy.join(" ").trim();
 }
 
+/** ดึงชื่อตำบลจาก customer list ที่เคยเก็บใน addrDistrict ก่อน enrich ทับ */
+export function extractListTambonFallback(
+  district: string | null | undefined,
+  province: string | null | undefined,
+  subdistrict: string | null | undefined,
+): string | null {
+  if (subdistrict) return subdistrict;
+  return inferSubdistrictFromMisplacedDistrict(district, province, null).addrSubdistrict;
+}
+
+/** รวมที่อยู่จาก detail API + workplace + ตำบลเดิมจาก customer list */
+export function mergeEnrichedMailingFields(
+  detail: ContactAddressFields,
+  existing: Partial<ContactAddressFields>,
+  workplace: string | null | undefined,
+): ContactAddressFields {
+  const workplaceFields = isLikelyAddressLine(workplace) ? parseThaiAddressLine(workplace!) : {};
+  const listTambon = extractListTambonFallback(
+    existing.addrDistrict,
+    existing.addrProvince,
+    existing.addrSubdistrict,
+  );
+  return mergeAddressFields(
+    detail,
+    workplaceFields,
+    listTambon ? { addrSubdistrict: listTambon } : {},
+  );
+}
+
+function fallbackSubdistrictFromIdCard(r: NoticeMailingAddress): string | null {
+  const idTambon = clean(r.idDistrict);
+  const prov = clean(r.addrProvince);
+  const idProv = clean(r.idProvince);
+  if (!idTambon || !prov) return null;
+  if (isAmphoeInProvince(idTambon, prov)) return null;
+  if (idProv && idProv !== prov) return null;
+  const dist = clean(r.addrDistrict);
+  if (dist && idTambon === dist) return null;
+  return idTambon;
+}
+
 /**
  * รวมฟิลด์ที่อยู่จาก DB + parse workplace เติมส่วนที่ขาด (เช่น ต. จาก customer API)
  */
@@ -73,7 +117,12 @@ export function resolveNoticeMailingFields(r: NoticeMailingAddress): NoticeMaili
   let base: NoticeMailingAddress = r;
   const workplace = clean(r.workplace);
   if (isLikelyAddressLine(workplace)) {
-    base = mergeMailingFields(r, parseThaiAddressLine(workplace));
+    const parsed = parseThaiAddressLine(workplace);
+    base = mergeMailingFields(r, parsed);
+    // workplace มักมี ต./อ./จ. ครบกว่า customer list
+    for (const key of ["addrHouseNo", "addrMoo", "addrVillage", "addrSoi", "addrStreet", "addrSubdistrict", "addrDistrict", "addrProvince", "addrPostalCode"] as const) {
+      if (parsed[key]) base = { ...base, [key]: parsed[key] };
+    }
   }
   const inferred = inferSubdistrictFromMisplacedDistrict(
     base.addrDistrict,
@@ -84,7 +133,11 @@ export function resolveNoticeMailingFields(r: NoticeMailingAddress): NoticeMaili
     inferred.addrSubdistrict !== (base.addrSubdistrict ?? null)
     || inferred.addrDistrict !== (base.addrDistrict ?? null)
   ) {
-    return { ...base, ...inferred };
+    base = { ...base, ...inferred };
+  }
+  if (!base.addrSubdistrict && base.addrDistrict && isAmphoeInProvince(base.addrDistrict, base.addrProvince ?? "")) {
+    const idSub = fallbackSubdistrictFromIdCard(base);
+    if (idSub) base = { ...base, addrSubdistrict: idSub };
   }
   return base;
 }
