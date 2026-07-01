@@ -165,7 +165,7 @@ export default function Notice() {
   );
   const adminOptions = adminOptionsData ?? [];
 
-  const { data: monthlyStats, isLoading: statsLoading } = trpc.notice.monthlyStats.useQuery(
+  const { data: monthlyStats, isLoading: statsLoading, error: statsError } = trpc.notice.monthlyStats.useQuery(
     { section: sectionKey },
     { enabled: !!section && canView && statsOpen },
   );
@@ -827,6 +827,11 @@ export default function Notice() {
                 <div className="flex items-center justify-center py-16">
                   <Spinner className="w-6 h-6 text-orange-500" />
                 </div>
+              ) : statsError ? (
+                <div className="py-10 text-center text-red-600 text-sm">
+                  <div className="font-bold">โหลดสถิติไม่สำเร็จ</div>
+                  <div className="mt-2 text-xs text-red-500">{statsError.message}</div>
+                </div>
               ) : (
                 <>
                   {/* Summary cards */}
@@ -873,9 +878,9 @@ export default function Notice() {
                   {/* Monthly table */}
                   {(monthlyStats?.months.length ?? 0) === 0 ? (
                     <div className="py-10 text-center text-gray-400 text-sm">
-                      <div>ยังไม่มีข้อมูลการส่ง Notice</div>
+                      <div>ยังไม่มีข้อมูลการส่ง Notice ในระบบ</div>
                       <div className="mt-2 text-xs text-gray-400 max-w-md mx-auto leading-relaxed">
-                        สถิตินับจาก log การพิมพ์ในระบบ (ปุ่มพิมพ์หรือนำเข้าประวัติ) — หากยังไม่เคยพิมพ์ผ่านระบบ จะยังไม่มีตัวเลขแสดง
+                        หากคอลัมน์ &quot;ส่งแล้ว&quot; ในตารางมีตัวเลข แต่หน้านี้ว่าง อาจเป็น section คนละชุดหรือข้อมูลถูก Clear Notice — ลอง refresh หลัง deploy ล่าสุด
                       </div>
                     </div>
                   ) : (

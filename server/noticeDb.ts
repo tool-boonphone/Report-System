@@ -914,6 +914,56 @@ function monthKeyToLabel(monthKey: string): string {
   return `${THAI_MONTH_SHORT[m - 1] ?? monthKey} ${String(be % 100).padStart(2, "0")}`;
 }
 
+/** คีย์เดือน YYYY-MM ตาม timezone กรุงเทพ */
+function bangkokMonthKey(d: Date | string | null | undefined): string | null {
+  if (!d) return null;
+  const date = d instanceof Date ? d : new Date(d);
+  if (isNaN(date.getTime())) return null;
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Bangkok",
+    year: "numeric",
+    month: "2-digit",
+  }).formatToParts(date);
+  const year = parts.find((p) => p.type === "year")?.value;
+  const month = parts.find((p) => p.type === "month")?.value;
+  if (!year || !month) return null;
+  return `${year}-${month}`;
+}
+
+async function fetchReturnedByMonth(
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+  section: SectionKey,
+): Promise<Map<string, number>> {
+  try {
+    const returnRows = pgRows(
+      await db.execute(sql`
+        SELECT
+          to_char(date_trunc('month', COALESCE(
+            CASE WHEN c.bad_debt_date ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+              THEN c.bad_debt_date::date
+              ELSE NULL
+            END,
+            c.synced_at::date
+          )), 'YYYY-MM') AS month_key,
+          COUNT(DISTINCT c.external_id)::int AS returned
+        FROM contracts c
+        INNER JOIN (
+          SELECT DISTINCT contract_external_id
+          FROM notice_print_logs
+          WHERE section = ${section}
+        ) npl ON npl.contract_external_id = c.external_id
+        WHERE c.section = ${section}
+          AND (c.status = ${RETURNED_STATUS} OR c.debt_type = ${RETURNED_STATUS})
+        GROUP BY 1
+      `),
+    ) as Array<{ month_key: string; returned: number }>;
+    return new Map(returnRows.map((r) => [r.month_key, Number(r.returned ?? 0)]));
+  } catch (err) {
+    console.warn(`[notice/monthlyStats] returned query failed for ${section}:`, (err as Error)?.message ?? err);
+    return new Map();
+  }
+}
+
 export type NoticeMonthlyStatsRow = {
   monthKey: string;
   monthLabel: string;
@@ -952,57 +1002,47 @@ export async function getNoticeMonthlyStats(section: SectionKey): Promise<Notice
   const db = await getDb(section);
   if (!db) return empty;
 
-  const printRows = pgRows(
-    await db.execute(sql`
-      SELECT
-        to_char(date_trunc('month', printed_at AT TIME ZONE 'Asia/Bangkok'), 'YYYY-MM') AS month_key,
-        COUNT(*)::int AS total_sent,
-        COUNT(*) FILTER (WHERE notice_round = 1)::int AS round1,
-        COUNT(*) FILTER (WHERE notice_round = 2)::int AS round2,
-        COUNT(*) FILTER (WHERE notice_round = 3)::int AS round3
-      FROM notice_print_logs
-      WHERE section = ${section}
-      GROUP BY 1
-      ORDER BY 1
-    `),
-  ) as Array<{ month_key: string; total_sent: number; round1: number; round2: number; round3: number }>;
+  // ดึง log ตรง ๆ แล้วรวมในแอป — หลีกเลี่ยง SQL timezone ที่อาจ error และให้ผลตรงกับ sentCount ในตาราง
+  const logs = await db
+    .select({
+      noticeRound: noticePrintLogs.noticeRound,
+      printedAt: noticePrintLogs.printedAt,
+    })
+    .from(noticePrintLogs)
+    .where(eq(noticePrintLogs.section, section));
 
-  if (printRows.length === 0) return empty;
+  if (logs.length === 0) return empty;
 
-  const returnRows = pgRows(
-    await db.execute(sql`
-      SELECT
-        to_char(date_trunc('month', COALESCE(
-          NULLIF(TRIM(c.bad_debt_date), '')::date,
-          c.synced_at::date
-        )), 'YYYY-MM') AS month_key,
-        COUNT(DISTINCT c.external_id)::int AS returned
-      FROM contracts c
-      INNER JOIN (
-        SELECT DISTINCT contract_external_id
-        FROM notice_print_logs
-        WHERE section = ${section}
-      ) npl ON npl.contract_external_id = c.external_id
-      WHERE c.section = ${section}
-        AND (c.status = ${RETURNED_STATUS} OR c.debt_type = ${RETURNED_STATUS})
-      GROUP BY 1
-    `),
-  ) as Array<{ month_key: string; returned: number }>;
+  const monthMap = new Map<string, { totalSent: number; round1: number; round2: number; round3: number }>();
+  for (const log of logs) {
+    const monthKey = bangkokMonthKey(log.printedAt);
+    if (!monthKey) continue;
+    const bucket = monthMap.get(monthKey) ?? { totalSent: 0, round1: 0, round2: 0, round3: 0 };
+    bucket.totalSent += 1;
+    const round = Number(log.noticeRound ?? 0);
+    if (round === 1) bucket.round1 += 1;
+    else if (round === 2) bucket.round2 += 1;
+    else if (round === 3) bucket.round3 += 1;
+    monthMap.set(monthKey, bucket);
+  }
 
-  const returnedByMonth = new Map(returnRows.map((r) => [r.month_key, Number(r.returned ?? 0)]));
-  const maxSent = printRows.reduce((m, r) => Math.max(m, Number(r.total_sent ?? 0)), 0);
+  const sortedKeys = [...monthMap.keys()].sort();
+  if (sortedKeys.length === 0) return empty;
 
-  const months: NoticeMonthlyStatsRow[] = printRows.map((r) => {
-    const totalSent = Number(r.total_sent ?? 0);
+  const returnedByMonth = await fetchReturnedByMonth(db, section);
+  const maxSent = sortedKeys.reduce((m, k) => Math.max(m, monthMap.get(k)!.totalSent), 0);
+
+  const months: NoticeMonthlyStatsRow[] = sortedKeys.map((monthKey) => {
+    const bucket = monthMap.get(monthKey)!;
     return {
-      monthKey: r.month_key,
-      monthLabel: monthKeyToLabel(r.month_key),
-      totalSent,
-      round1: Number(r.round1 ?? 0),
-      round2: Number(r.round2 ?? 0),
-      round3: Number(r.round3 ?? 0),
-      returned: returnedByMonth.get(r.month_key) ?? 0,
-      proportion: maxSent > 0 ? Math.round((totalSent / maxSent) * 100) : 0,
+      monthKey,
+      monthLabel: monthKeyToLabel(monthKey),
+      totalSent: bucket.totalSent,
+      round1: bucket.round1,
+      round2: bucket.round2,
+      round3: bucket.round3,
+      returned: returnedByMonth.get(monthKey) ?? 0,
+      proportion: maxSent > 0 ? Math.round((bucket.totalSent / maxSent) * 100) : 0,
     };
   });
 
