@@ -492,12 +492,6 @@ export default function Notice() {
               <div className="mt-1 text-gray-500 text-sm">แสดงเฉพาะลูกค้าค้างชำระตั้งแต่ 60 วันขึ้นไป</div>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
-              {canEdit && (
-                <button onClick={openContractPick}
-                  className="inline-flex items-center gap-2 rounded-xl px-3.5 py-2.5 text-sm font-bold bg-violet-50 text-violet-800 hover:bg-violet-100 transition-colors">
-                  <FileSearch className="w-4 h-4" /> เลือกโดยเลขที่สัญญา
-                </button>
-              )}
               {canExport && (
                 <button onClick={handleExportExcel} disabled={exporting}
                   className="inline-flex items-center gap-2 rounded-xl px-3.5 py-2.5 text-sm font-bold bg-emerald-50 text-emerald-800 hover:bg-emerald-100 transition-colors disabled:opacity-50">
@@ -584,6 +578,12 @@ export default function Notice() {
               className="inline-flex items-center gap-2 rounded-xl px-3.5 py-2.5 text-sm font-bold bg-gray-100 text-gray-900 hover:bg-gray-200 transition-colors">
               ล้างรายการที่เลือก
             </button>
+            {canEdit && (
+              <button onClick={openContractPick}
+                className="inline-flex items-center gap-2 rounded-xl px-3.5 py-2.5 text-sm font-bold bg-violet-50 text-violet-800 hover:bg-violet-100 transition-colors">
+                <FileSearch className="w-4 h-4" /> พิมพ์จากเลขที่สัญญา
+              </button>
+            )}
             <span className="ml-auto text-sm text-gray-500 bg-gray-50 border border-gray-200 rounded-full px-3 py-2">
               เลือก {selected.size} รายการ
             </span>
@@ -938,7 +938,7 @@ export default function Notice() {
             onClick={(e) => e.stopPropagation()}>
             <div className="px-5 py-4 border-b border-gray-200 flex items-start justify-between gap-3">
               <div>
-                <div className="text-lg font-extrabold text-gray-900">เลือกโดยเลขที่สัญญา</div>
+                <div className="text-lg font-extrabold text-gray-900">พิมพ์จากเลขที่สัญญา</div>
                 <div className="mt-1 text-sm text-gray-500">วางเลขที่สัญญา (ขึ้นบรรทัดใหม่หรือคั่นด้วยคอมม่า) แล้วกดตรวจสอบ</div>
               </div>
               <button onClick={() => !contractPickPrinting && setContractPickOpen(false)}
