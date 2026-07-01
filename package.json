@@ -14,7 +14,12 @@
     "db:push": "drizzle-kit generate && drizzle-kit migrate",
     "db:staging:push": "tsx scripts/push-staging-schema.ts",
     "db:staging:seed": "tsx scripts/seed-staging.ts",
-    "db:staging:setup": "pnpm db:staging:push && pnpm db:staging:seed"
+    "db:staging:setup": "pnpm db:staging:push && pnpm db:staging:seed",
+    "db:local:up": "docker compose up -d",
+    "db:local:down": "docker compose down",
+    "db:local:restore": "bash scripts/restore-local-dbs.sh",
+    "db:local:setup": "pnpm db:local:up && pnpm db:local:restore",
+    "db:local:reset-password": "node scripts/reset-local-sadmin-password.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.693.0",
