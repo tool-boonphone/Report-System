@@ -1,5 +1,5 @@
 import { isLikelyAddressLine, mergeAddressFields, parseThaiAddressLine, type ContactAddressFields } from "../api/addressFields";
-import { inferSubdistrictFromMisplacedDistrict, isAmphoeInProvince } from "../api/thaiGeography";
+import { inferSubdistrictFromMisplacedDistrict, isAmphoeInProvince, isAmphoeSeatTambon } from "../api/thaiGeography";
 
 /** ฟิลด์ที่อยู่สำหรับจ่าหน้าซองไปรษณีย์ / Notice */
 export type NoticeMailingAddress = ContactAddressFields & {
@@ -138,6 +138,14 @@ export function resolveNoticeMailingFields(r: NoticeMailingAddress): NoticeMaili
   if (!base.addrSubdistrict && base.addrDistrict && isAmphoeInProvince(base.addrDistrict, base.addrProvince ?? "")) {
     const idSub = fallbackSubdistrictFromIdCard(base);
     if (idSub) base = { ...base, addrSubdistrict: idSub };
+  }
+  if (
+    !base.addrSubdistrict
+    && base.addrDistrict
+    && base.addrProvince
+    && isAmphoeSeatTambon(base.addrDistrict, base.addrProvince)
+  ) {
+    base = { ...base, addrSubdistrict: base.addrDistrict };
   }
   return base;
 }
