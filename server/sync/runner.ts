@@ -23,6 +23,7 @@ import { buildClientFromEnv, PartnerClient, PartnerApiError } from "../api/partn
 
 import {
   mapContractListItem,
+  mapContractDetailOverrides,
   mapCustomerProfile,
   mapInstallment,
   mapPayment,
@@ -927,14 +928,24 @@ async function enrichContractDeviceIds(
           action: "detail",
           id: contractId,
         });
+        const detail = mapContractDetailOverrides(section, data);
         const product = data?.contract?.product ?? {};
-        const imei = product.imei ?? null;
-        const serialNo = product.serial_no ?? null;
+        const imei = detail.imei ?? product.imei ?? null;
+        const serialNo = detail.serialNo ?? product.serial_no ?? null;
         await db
           .update(contracts)
           .set({
             imei,
             serialNo,
+            addrHouseNo: detail.addrHouseNo ?? null,
+            addrMoo: detail.addrMoo ?? null,
+            addrVillage: detail.addrVillage ?? null,
+            addrSoi: detail.addrSoi ?? null,
+            addrStreet: detail.addrStreet ?? null,
+            addrSubdistrict: detail.addrSubdistrict ?? null,
+            addrDistrict: detail.addrDistrict ?? null,
+            addrProvince: detail.addrProvince ?? null,
+            addrPostalCode: detail.addrPostalCode ?? null,
             syncedAt: sql`CURRENT_TIMESTAMP`,
           })
           .where(

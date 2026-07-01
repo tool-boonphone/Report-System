@@ -177,7 +177,7 @@ function buildContract(r: NoticePrintData, cfg: CompanyConfig, logo: ReturnType<
 
   const out: (Paragraph | Table)[] = [];
 
-  // ── หัวจดหมาย: โลโก้ (ซ้าย) + ชื่อเอกสาร (ขวา) ──
+  // ── หัวจดหมาย: โลโก้ (ซ้าย) + ชื่อเอกสาร (ขวา — ชิดซ้ายในคอลัมน์ขวา กันคำว่า "เช่าซื้อ" ตกบรรทัด) ──
   const logoChildren = logo
     ? [new Paragraph({ children: [new ImageRun({ type: "png", data: logo.data, transformation: { width: 132, height: Math.round((132 * logo.height) / logo.width) } })] })]
     : [new Paragraph({ children: [run(cfg.companyName, { bold: true, size: 28 })] })];
@@ -185,22 +185,23 @@ function buildContract(r: NoticePrintData, cfg: CompanyConfig, logo: ReturnType<
   out.push(
     new Table({
       width: { size: 100, type: WidthType.PERCENTAGE },
-      columnWidths: [3400, 6706],
+      columnWidths: [2800, 7306],
       borders: NO_BORDERS,
       rows: [
         new TableRow({
           children: [
-            new TableCell({ width: { size: 3400, type: WidthType.DXA }, borders: NO_BORDERS, verticalAlign: VerticalAlign.CENTER, children: logoChildren }),
+            new TableCell({ width: { size: 2800, type: WidthType.DXA }, borders: NO_BORDERS, verticalAlign: VerticalAlign.CENTER, children: logoChildren }),
             new TableCell({
-              width: { size: 6706, type: WidthType.DXA },
+              width: { size: 7306, type: WidthType.DXA },
               borders: NO_BORDERS,
               verticalAlign: VerticalAlign.CENTER,
               children: [
                 new Paragraph({
-                  alignment: AlignmentType.RIGHT,
-                  spacing: { after: 0, line: 288 },
+                  alignment: AlignmentType.LEFT,
+                  spacing: { after: 0, line: 276 },
+                  indent: { left: 0 },
                   children: [
-                    run("หนังสือติดตามค่าเช่าซื้อ - บอกเลิกสัญญาและขอให้คืนทรัพย์สินที่เช่าซื้อ", { bold: true, size: 24 }),
+                    run("หนังสือติดตามค่าเช่าซื้อ - บอกเลิกสัญญาและขอให้คืนทรัพย์สินที่เช่าซื้อ", { bold: true, size: 22 }),
                   ],
                 }),
               ],
@@ -244,8 +245,8 @@ function buildContract(r: NoticePrintData, cfg: CompanyConfig, logo: ReturnType<
 
   out.push(para([run(`ตามที่ท่านได้เข้าทำสัญญาเช่าซื้อ กับทางบริษัท ${cfg.companyName} ดังมีรายละเอียดดังนี้`)], { spacingAfter: 180 }));
 
-  // ── ตาราง A: อุปกรณ์ — คอล1 = รวม 3 คอลแรกของตาราง B, คอล2 = จ.น.งวด, คอล3 = ยอดชำระแล้ว
-  const TABLE_A_WIDTHS = [5457, 910, 3739];
+  // ── ตาราง A: อุปกรณ์ — IMEI กว้างพอ 15 หลัก
+  const TABLE_A_WIDTHS = [4200, 2000, 3906];
   out.push(
     new Table({
       width: { size: 10106, type: WidthType.DXA },
@@ -269,8 +270,8 @@ function buildContract(r: NoticePrintData, cfg: CompanyConfig, logo: ReturnType<
       ],
     }),
   );
-  // ── ตาราง B: ยอด — 18% + 18% + 18% + 9% + 37%
-  const TABLE_B_WIDTHS = [1819, 1819, 1819, 910, 3739];
+  // ── ตาราง B: ยอด — จ.น.งวด กว้างพอตัวเลข 15 หลัก
+  const TABLE_B_WIDTHS = [1700, 1700, 1700, 2000, 3006];
   out.push(
     new Table({
       width: { size: 10106, type: WidthType.DXA },
@@ -388,7 +389,7 @@ function buildAutoFooter(cfg: CompanyConfig): Footer {
         children: [
           run(
             `หนังสือฉบับนี้เป็นจดหมายอัตโนมัติ จากทาง ${cfg.companyName} ทางบริษัทขออภัยหากท่านได้ชำระมาก่อนหน้านี้`,
-            { italics: true, size: 24, color: "777777" },
+            { italics: true, size: 20, color: "777777" },
           ),
         ],
       }),

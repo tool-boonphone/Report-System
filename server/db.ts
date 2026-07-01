@@ -820,5 +820,18 @@ export async function runStartupMigrations(): Promise<void> {
     } catch (err: any) {
       console.error(`[migration] ${section}: device_location_logs failed:`, err?.message ?? err);
     }
+    try {
+      // Migration 0026: contracts — ที่อยู่เต็มสำหรับ Notice จ่าหน้าซอง (จาก contract detail contact_address)
+      await db.execute(sql.raw(`ALTER TABLE contracts ADD COLUMN IF NOT EXISTS addr_house_no VARCHAR(64)`));
+      await db.execute(sql.raw(`ALTER TABLE contracts ADD COLUMN IF NOT EXISTS addr_moo VARCHAR(32)`));
+      await db.execute(sql.raw(`ALTER TABLE contracts ADD COLUMN IF NOT EXISTS addr_village VARCHAR(128)`));
+      await db.execute(sql.raw(`ALTER TABLE contracts ADD COLUMN IF NOT EXISTS addr_soi VARCHAR(128)`));
+      await db.execute(sql.raw(`ALTER TABLE contracts ADD COLUMN IF NOT EXISTS addr_street VARCHAR(128)`));
+      await db.execute(sql.raw(`ALTER TABLE contracts ADD COLUMN IF NOT EXISTS addr_subdistrict VARCHAR(128)`));
+      await db.execute(sql.raw(`ALTER TABLE contracts ADD COLUMN IF NOT EXISTS addr_postal_code VARCHAR(16)`));
+      console.log(`[migration] ${section}: contracts mailing address columns — OK`);
+    } catch (err: any) {
+      console.error(`[migration] ${section}: contracts mailing address columns failed:`, err?.message ?? err);
+    }
   }
 }

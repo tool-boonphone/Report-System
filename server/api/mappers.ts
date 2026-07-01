@@ -8,6 +8,7 @@
  */
 
 import type { SectionKey } from "../../shared/const";
+import { mapContactAddressFields } from "./addressFields";
 
 /** Utility: take first day-of-YYYY-MM-DD from possibly timestamped string. */
 function toDate(v: unknown): string | null {
@@ -99,9 +100,6 @@ export function mapContractListItem(section: SectionKey, it: ContractListItem) {
   };
 }
 
-/* -------------------------------------------------------------------------- */
-/* Contracts — detail endpoint (enriches customer/partner/product columns).   */
-/* -------------------------------------------------------------------------- */
 
 type ContractDetail = any; // deeply nested; see docs/contract-columns.md
 
@@ -113,6 +111,7 @@ export function mapContractDetailOverrides(
   const member = c.member ?? {};
   const card = c.card_address ?? {};
   const contactAddr = c.contact_address ?? {};
+  const mailing = mapContactAddressFields(contactAddr);
   const occ = c.occupation ?? {};
   const workAddr = occ.address ?? {};
   const product = c.product ?? {};
@@ -144,8 +143,15 @@ export function mapContractDetailOverrides(
     phone: trunc(member.tel, 32),
     idDistrict: trunc(card.amphure, 128),
     idProvince: trunc(card.province, 128),
-    addrDistrict: trunc(contactAddr.amphure, 128),
-    addrProvince: trunc(contactAddr.province, 128),
+    addrDistrict: trunc(mailing.addrDistrict ?? contactAddr.amphure, 128),
+    addrProvince: trunc(mailing.addrProvince ?? contactAddr.province, 128),
+    addrHouseNo: trunc(mailing.addrHouseNo, 64),
+    addrMoo: trunc(mailing.addrMoo, 32),
+    addrVillage: trunc(mailing.addrVillage, 128),
+    addrSoi: trunc(mailing.addrSoi, 128),
+    addrStreet: trunc(mailing.addrStreet, 128),
+    addrSubdistrict: trunc(mailing.addrSubdistrict, 128),
+    addrPostalCode: trunc(mailing.addrPostalCode, 16),
     workDistrict: trunc(workAddr.amphure, 128),
     workProvince: trunc(workAddr.province, 128),
 
