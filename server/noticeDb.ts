@@ -489,6 +489,8 @@ export type NoticePrintData = {
   customerName: string | null;
   phone: string | null;
   workplace: string | null;
+  idDistrict: string | null;
+  idProvince: string | null;
   addrHouseNo: string | null;
   addrMoo: string | null;
   addrVillage: string | null;
@@ -547,6 +549,8 @@ export async function getNoticePrintData(params: {
       customerName: contracts.customerName,
       phone: contracts.phone,
       workplace: contracts.workplace,
+      idDistrict: contracts.idDistrict,
+      idProvince: contracts.idProvince,
       addrHouseNo: contracts.addrHouseNo,
       addrMoo: contracts.addrMoo,
       addrVillage: contracts.addrVillage,
@@ -576,6 +580,8 @@ export async function getNoticePrintData(params: {
     customerName: (r.customerName as string) ?? null,
     phone: (r.phone as string) ?? null,
     workplace: (r.workplace as string) ?? null,
+    idDistrict: (r.idDistrict as string) ?? null,
+    idProvince: (r.idProvince as string) ?? null,
     addrHouseNo: (r.addrHouseNo as string) ?? null,
     addrMoo: (r.addrMoo as string) ?? null,
     addrVillage: (r.addrVillage as string) ?? null,

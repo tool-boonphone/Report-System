@@ -4,8 +4,8 @@
  */
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { buildClientFromEnv } from "../api/partnerClient";
-import { isLikelyAddressLine, mergeAddressFields, parseThaiAddressLine } from "../api/addressFields";
 import { mapContractDetailOverrides } from "../api/mappers";
+import { mergeEnrichedMailingFields } from "./addressFormat";
 import { getDb } from "../db";
 import { contracts } from "../../drizzle/schema";
 import type { SectionKey } from "../../shared/const";
@@ -25,11 +25,23 @@ export async function enrichContactAddressesForPrint(
 
   const ids = Array.from(new Set(externalIds)).filter(Boolean);
   const workplaceRows = await db
-    .select({ externalId: contracts.externalId, workplace: contracts.workplace })
+    .select({
+      externalId: contracts.externalId,
+      workplace: contracts.workplace,
+      addrHouseNo: contracts.addrHouseNo,
+      addrMoo: contracts.addrMoo,
+      addrVillage: contracts.addrVillage,
+      addrSoi: contracts.addrSoi,
+      addrStreet: contracts.addrStreet,
+      addrSubdistrict: contracts.addrSubdistrict,
+      addrDistrict: contracts.addrDistrict,
+      addrProvince: contracts.addrProvince,
+      addrPostalCode: contracts.addrPostalCode,
+    })
     .from(contracts)
     .where(and(eq(contracts.section, section), inArray(contracts.externalId, ids)));
-  const workplaceById = new Map(
-    workplaceRows.map((r: { externalId: string; workplace: string | null }) => [r.externalId, r.workplace]),
+  const rowById = new Map(
+    workplaceRows.map((r) => [r.externalId, r]),
   );
 
   let idx = 0;
@@ -44,8 +56,8 @@ export async function enrichContactAddressesForPrint(
           id: contractId,
         });
         const detail = mapContractDetailOverrides(section, data) as Record<string, unknown>;
-        const workplace = workplaceById.get(contractId) ?? null;
-        const mailing = mergeAddressFields(
+        const existing = rowById.get(contractId);
+        const mailing = mergeEnrichedMailingFields(
           {
             addrHouseNo: (detail.addrHouseNo as string) ?? null,
             addrMoo: (detail.addrMoo as string) ?? null,
@@ -57,7 +69,8 @@ export async function enrichContactAddressesForPrint(
             addrProvince: (detail.addrProvince as string) ?? null,
             addrPostalCode: (detail.addrPostalCode as string) ?? null,
           },
-          isLikelyAddressLine(workplace) ? parseThaiAddressLine(workplace!) : {},
+          existing ?? {},
+          existing?.workplace ?? null,
         );
         await db
           .update(contracts)

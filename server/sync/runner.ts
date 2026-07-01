@@ -31,7 +31,7 @@ import {
   type CustomerListItem,
   type PartnerListItem,
 } from "../api/mappers";
-import { isLikelyAddressLine, mergeAddressFields, parseThaiAddressLine } from "../api/addressFields";
+import { mergeEnrichedMailingFields } from "../notice/addressFormat";
 
 import {
   upsertContracts,
@@ -896,12 +896,24 @@ async function enrichContractDeviceIds(
   if (!db) return;
 
   const rows = await db
-    .select({ externalId: contracts.externalId, workplace: contracts.workplace })
+    .select({
+      externalId: contracts.externalId,
+      workplace: contracts.workplace,
+      addrHouseNo: contracts.addrHouseNo,
+      addrMoo: contracts.addrMoo,
+      addrVillage: contracts.addrVillage,
+      addrSoi: contracts.addrSoi,
+      addrStreet: contracts.addrStreet,
+      addrSubdistrict: contracts.addrSubdistrict,
+      addrDistrict: contracts.addrDistrict,
+      addrProvince: contracts.addrProvince,
+      addrPostalCode: contracts.addrPostalCode,
+    })
     .from(contracts)
     .where(eq(contracts.section, section));
 
   const contractIds = rows.map((r: { externalId: string }) => r.externalId);
-  const workplaceById = new Map(rows.map((r: { externalId: string; workplace: string | null }) => [r.externalId, r.workplace]));
+  const existingById = new Map(rows.map((r: { externalId: string }) => [r.externalId, r]));
   const total = contractIds.length;
   console.log(`[enrichDeviceIds] ${section}: enriching ${total} contracts...`);
 
@@ -926,8 +938,8 @@ async function enrichContractDeviceIds(
         const product = data?.contract?.product ?? {};
         const imei = detail.imei ?? product.imei ?? null;
         const serialNo = detail.serialNo ?? product.serial_no ?? null;
-        const workplace = workplaceById.get(contractId) ?? null;
-        const mailing = mergeAddressFields(
+        const existing = existingById.get(contractId);
+        const mailing = mergeEnrichedMailingFields(
           {
             addrHouseNo: detail.addrHouseNo ?? null,
             addrMoo: detail.addrMoo ?? null,
@@ -939,7 +951,8 @@ async function enrichContractDeviceIds(
             addrProvince: detail.addrProvince ?? null,
             addrPostalCode: detail.addrPostalCode ?? null,
           },
-          isLikelyAddressLine(workplace) ? parseThaiAddressLine(workplace!) : {},
+          existing ?? {},
+          existing?.workplace ?? null,
         );
         await db
           .update(contracts)

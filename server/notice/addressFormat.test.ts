@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { isLikelyAddressLine, mapContactAddressFields, parseThaiAddressLine } from "../api/addressFields";
 import { mapContractDetailOverrides } from "../api/mappers";
-import { formatNoticeMailingAddress, resolveNoticeMailingAddress } from "./addressFormat";
+import { formatNoticeMailingAddress, mergeEnrichedMailingFields, resolveNoticeMailingAddress } from "./addressFormat";
 
 describe("formatNoticeMailingAddress", () => {
   it("formats full Thai postal address", () => {
@@ -98,6 +98,53 @@ describe("resolveNoticeMailingAddress", () => {
     });
     expect(s).toBe("อ.บางบัวทอง จ.นนทบุรี");
   });
+
+  it("fills ต. from idDistrict when detail has only amphoe", () => {
+    const s = resolveNoticeMailingAddress({
+      addrHouseNo: "88/1",
+      addrDistrict: "บางบัวทอง",
+      addrProvince: "นนทบุรี",
+      idDistrict: "บางรักใหญ่",
+      idProvince: "นนทบุรี",
+    });
+    expect(s).toContain("88/1");
+    expect(s).toContain("ต.บางรักใหญ่");
+    expect(s).toContain("อ.บางบัวทอง");
+  });
+
+  it("parses abbreviated workplace address", () => {
+    const s = resolveNoticeMailingAddress({
+      workplace: "ม.7 ต.เชียงรากน้อย อ.บางปะอิน จ.อยุธยา13180",
+      addrDistrict: "ทับน้ำ",
+      addrProvince: "พระนครศรีอยุธยา",
+    });
+    expect(s).toContain("ต.เชียงรากน้อย");
+    expect(s).toContain("อ.บางปะอิน");
+    expect(s).toContain("หมู่ 7");
+  });
+});
+
+describe("mergeEnrichedMailingFields", () => {
+  it("preserves customer-list tambon when detail overwrites district with amphoe", () => {
+    const merged = mergeEnrichedMailingFields(
+      {
+        addrHouseNo: "5/6",
+        addrMoo: null,
+        addrVillage: null,
+        addrSoi: null,
+        addrStreet: null,
+        addrSubdistrict: null,
+        addrDistrict: "คลองหลวง",
+        addrProvince: "ปทุมธานี",
+        addrPostalCode: null,
+      },
+      { addrDistrict: "คลองหนึ่ง", addrProvince: "ปทุมธานี" },
+      null,
+    );
+    expect(merged.addrSubdistrict).toBe("คลองหนึ่ง");
+    expect(merged.addrDistrict).toBe("คลองหลวง");
+    expect(merged.addrHouseNo).toBe("5/6");
+  });
 });
 
 describe("mapContactAddressFields", () => {
@@ -140,6 +187,17 @@ describe("mapContactAddressFields", () => {
     expect(f.addrMoo).toBe("10");
     expect(f.addrSubdistrict).toBe("บางบัวทอง");
     expect(f.addrPostalCode).toBe("11110");
+  });
+
+  it("maps district as tambon when amphure is also present", () => {
+    const f = mapContactAddressFields({
+      house_no: "88/1",
+      amphure: "บางบัวทอง",
+      district: "บางรักใหญ่",
+      province: "นนทบุรี",
+    });
+    expect(f.addrDistrict).toBe("บางบัวทอง");
+    expect(f.addrSubdistrict).toBe("บางรักใหญ่");
   });
 });
 
