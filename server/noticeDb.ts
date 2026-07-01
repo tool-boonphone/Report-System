@@ -518,6 +518,8 @@ export type NoticePrintData = {
 export async function getNoticePrintData(params: {
   section: SectionKey;
   externalIds: string[];
+  /** รวมรายการที่ส่งครบ 3 ครั้งแล้ว (พิมพ์ซ้ำได้แต่ไม่บันทึกรอบ) */
+  includeMaxed?: boolean;
 }): Promise<NoticePrintData[]> {
   const { section } = params;
   const db = await getDb(section);
@@ -526,6 +528,18 @@ export async function getNoticePrintData(params: {
   if (ids.length === 0) return [];
 
   const sc = sentCountSql(section);
+  const printClauses: SQL[] = [
+    eq(contracts.section, section),
+    inArray(contracts.externalId, ids),
+    sql`COALESCE(contracts.status, '') NOT IN ('สิ้นสุดสัญญา', 'ยกเลิกสัญญา')`,
+    sql`COALESCE(contracts.debt_type, '') NOT IN ('สิ้นสุดสัญญา', 'ยกเลิกสัญญา')`,
+    sql`NOT ${IS_RETURNED_SQL}`,
+    sql`${NOTICE_OVERDUE_DAYS_SQL} >= ${NOTICE_MIN_OVERDUE_DAYS}`,
+  ];
+  if (!params.includeMaxed) {
+    printClauses.push(sql`${sc} < ${MAX_NOTICE_ROUNDS}`);
+  }
+
   const rows = (await db
     .select({
       externalId: contracts.externalId,
@@ -553,17 +567,7 @@ export async function getNoticePrintData(params: {
       sentCount: sc,
     })
     .from(contracts)
-    .where(
-      and(
-        eq(contracts.section, section),
-        inArray(contracts.externalId, ids),
-        sql`COALESCE(contracts.status, '') NOT IN ('สิ้นสุดสัญญา', 'ยกเลิกสัญญา')`,
-        sql`COALESCE(contracts.debt_type, '') NOT IN ('สิ้นสุดสัญญา', 'ยกเลิกสัญญา')`,
-        sql`NOT ${IS_RETURNED_SQL}`,
-        sql`${NOTICE_OVERDUE_DAYS_SQL} >= ${NOTICE_MIN_OVERDUE_DAYS}`,
-        sql`${sc} < ${MAX_NOTICE_ROUNDS}`,
-      ),
-    )
+    .where(and(...printClauses))
     .orderBy(asc(contracts.contractNo))) as Array<Record<string, unknown>>;
 
   return rows.map((r) => ({
@@ -592,6 +596,99 @@ export async function getNoticePrintData(params: {
     sentCount: Number(r.sentCount ?? 0),
     documentNo: "",
   }));
+}
+
+/** แยกเลขที่สัญญาจากข้อความ (บรรทัดใหม่หรือคอมม่า) */
+export function parseContractNoInput(raw: string): string[] {
+  return [...new Set(raw.split(/[\n,，]+/).map((s) => s.trim()).filter(Boolean))];
+}
+
+export type NoticeContractLookupRow = {
+  externalId: string;
+  contractNo: string;
+  customerName: string | null;
+  sentCount: number;
+  isReturned: boolean;
+  overdueDays: number | null;
+  canPrint: boolean;
+  canRecord: boolean;
+};
+
+/** ค้นหาเลขที่สัญญาในชุดข้อมูลที่เข้าเงื่อนไขหน้า Notice */
+export async function lookupNoticeByContractNos(params: {
+  section: SectionKey;
+  contractNos: string[];
+}): Promise<{ matched: NoticeContractLookupRow[]; notFound: string[] }> {
+  const requested = parseContractNoInput(params.contractNos.join("\n"));
+  if (requested.length === 0) return { matched: [], notFound: [] };
+
+  const db = await getDb(params.section);
+  if (!db) return { matched: [], notFound: requested };
+
+  const sc = sentCountSql(params.section);
+  const rows = (await db
+    .select({
+      externalId: contracts.externalId,
+      contractNo: contracts.contractNo,
+      customerName: contracts.customerName,
+      sentCount: sc,
+      isReturned: IS_RETURNED_SQL,
+      overdueDays: NOTICE_OVERDUE_DAYS_SQL,
+    })
+    .from(contracts)
+    .where(
+      and(
+        eq(contracts.section, params.section),
+        sql`COALESCE(contracts.status, '') NOT IN ('สิ้นสุดสัญญา', 'ยกเลิกสัญญา')`,
+        sql`COALESCE(contracts.debt_type, '') NOT IN ('สิ้นสุดสัญญา', 'ยกเลิกสัญญา')`,
+        sql`${NOTICE_OVERDUE_DAYS_SQL} >= ${NOTICE_MIN_OVERDUE_DAYS}`,
+        or(...requested.map((no) => sql`LOWER(${contracts.contractNo}) = LOWER(${no})`))!,
+      ),
+    )
+    .orderBy(asc(contracts.contractNo))) as Array<{
+    externalId: string;
+    contractNo: string;
+    customerName: string | null;
+    sentCount: number | string | null;
+    isReturned: boolean;
+    overdueDays: number | string | null;
+  }>;
+
+  const byLower = new Map(rows.map((r) => [r.contractNo.toLowerCase(), r]));
+  const matched: NoticeContractLookupRow[] = [];
+  const notFound: string[] = [];
+  const seenMatched = new Set<string>();
+  const seenNotFound = new Set<string>();
+
+  for (const no of requested) {
+    const row = byLower.get(no.toLowerCase());
+    if (!row) {
+      const key = no.toLowerCase();
+      if (!seenNotFound.has(key)) {
+        seenNotFound.add(key);
+        notFound.push(no);
+      }
+      continue;
+    }
+    if (seenMatched.has(row.externalId)) continue;
+    seenMatched.add(row.externalId);
+    const sentCount = Number(row.sentCount ?? 0);
+    const isReturned = Boolean(row.isReturned);
+    const overdueDays = row.overdueDays != null ? Number(row.overdueDays) : null;
+    const canPrint = !isReturned;
+    matched.push({
+      externalId: row.externalId,
+      contractNo: row.contractNo,
+      customerName: row.customerName,
+      sentCount,
+      isReturned,
+      overdueDays,
+      canPrint,
+      canRecord: canPrint && sentCount < MAX_NOTICE_ROUNDS,
+    });
+  }
+
+  return { matched, notFound };
 }
 
 /** จัดสรรเลขที่เอกสารก่อนสร้าง PDF/Excel (2B: หนึ่งเลขต่อสัญญา, 5B: reuse หลัง restore) */
@@ -841,8 +938,6 @@ export type NoticeMonthlyStats = {
 
 /** สถิติการส่ง Notice รายเดือน (จาก notice_print_logs จริง) */
 export async function getNoticeMonthlyStats(section: SectionKey): Promise<NoticeMonthlyStats> {
-  await ensureNoticeSchema(section);
-  const db = await getDb(section);
   const empty: NoticeMonthlyStats = {
     subtitle: "ยังไม่มีข้อมูลการส่ง Notice",
     totalSent: 0,
@@ -853,6 +948,8 @@ export async function getNoticeMonthlyStats(section: SectionKey): Promise<Notice
     totalReturned: 0,
     months: [],
   };
+
+  const db = await getDb(section);
   if (!db) return empty;
 
   const printRows = pgRows(
@@ -870,6 +967,8 @@ export async function getNoticeMonthlyStats(section: SectionKey): Promise<Notice
     `),
   ) as Array<{ month_key: string; total_sent: number; round1: number; round2: number; round3: number }>;
 
+  if (printRows.length === 0) return empty;
+
   const returnRows = pgRows(
     await db.execute(sql`
       SELECT
@@ -879,12 +978,13 @@ export async function getNoticeMonthlyStats(section: SectionKey): Promise<Notice
         )), 'YYYY-MM') AS month_key,
         COUNT(DISTINCT c.external_id)::int AS returned
       FROM contracts c
+      INNER JOIN (
+        SELECT DISTINCT contract_external_id
+        FROM notice_print_logs
+        WHERE section = ${section}
+      ) npl ON npl.contract_external_id = c.external_id
       WHERE c.section = ${section}
         AND (c.status = ${RETURNED_STATUS} OR c.debt_type = ${RETURNED_STATUS})
-        AND EXISTS (
-          SELECT 1 FROM notice_print_logs npl
-          WHERE npl.section = c.section AND npl.contract_external_id = c.external_id
-        )
       GROUP BY 1
     `),
   ) as Array<{ month_key: string; returned: number }>;

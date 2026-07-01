@@ -22,7 +22,7 @@ import { useSection } from "@/contexts/SectionContext";
 import { useAppAuth } from "@/hooks/useAppAuth";
 import { trpc } from "@/lib/trpc";
 import { Spinner } from "@/components/ui/spinner";
-import { BarChart3, Download, Printer, RotateCcw, Search, Upload, X } from "lucide-react";
+import { BarChart3, Download, FileSearch, Printer, RotateCcw, Search, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 
 type SortField = "approveDate" | "overdueDays" | "sentCount";
@@ -32,6 +32,16 @@ type SentFilter = "all" | "0" | "ever" | "1" | "2" | "3";
 
 type PrintLogEntry = { round: number; documentNo: string | null; printedAt: string; printedBy: string };
 type RestoreLogEntry = { round: number; restoredAt: string; restoredBy: string };
+type ContractLookupRow = {
+  externalId: string;
+  contractNo: string;
+  customerName: string | null;
+  sentCount: number;
+  isReturned: boolean;
+  overdueDays: number | null;
+  canPrint: boolean;
+  canRecord: boolean;
+};
 type NoticeRow = {
   externalId: string;
   contractNo: string;
@@ -101,6 +111,13 @@ export default function Notice() {
   } | null>(null);
   const [importing, setImporting] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [contractPickOpen, setContractPickOpen] = useState(false);
+  const [contractPickInput, setContractPickInput] = useState("");
+  const [contractPickPreview, setContractPickPreview] = useState<{
+    matched: ContractLookupRow[];
+    notFound: string[];
+  } | null>(null);
+  const [contractPickPrinting, setContractPickPrinting] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
 
   // ── Debounce search ──
@@ -165,6 +182,11 @@ export default function Notice() {
 
   const [printing, setPrinting] = useState(false);
 
+  const contractLookupMut = trpc.notice.lookupByContractNos.useMutation({
+    onSuccess: (data) => setContractPickPreview(data),
+    onError: (e) => toast.error(e.message),
+  });
+
   const restoreMut = trpc.notice.restoreLatest.useMutation({
     onSuccess: (res) => {
       setPendingRestore(null);
@@ -205,17 +227,20 @@ export default function Notice() {
   };
   const clearSelection = () => setSelected(new Set());
 
-  const handlePrint = async () => {
+  const handlePrint = async (opts?: { externalIds: string[]; includeMaxed?: boolean }) => {
     if (!canEdit) { toast.error("คุณไม่มีสิทธิ์พิมพ์ Notice"); return; }
-    if (selected.size === 0) { toast.error("กรุณาเลือกรายการก่อน"); return; }
-    setPrinting(true);
+    const ids = opts?.externalIds ?? Array.from(selected);
+    if (ids.length === 0) { toast.error("กรุณาเลือกรายการก่อน"); return; }
+    const includeMaxed = opts?.includeMaxed ?? false;
+    const setBusy = opts ? setContractPickPrinting : setPrinting;
+    setBusy(true);
     const toastId = toast.loading("กำลังสร้างเอกสาร PDF + Excel จ่าหน้าซอง...");
     try {
       const resp = await fetch("/api/notice/print", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ section: sectionKey, externalIds: Array.from(selected) }),
+        body: JSON.stringify({ section: sectionKey, externalIds: ids, includeMaxed }),
       });
       if (!resp.ok) {
         const { message } = await resp.json().catch(() => ({ message: "สร้างเอกสารไม่สำเร็จ" }));
@@ -223,6 +248,7 @@ export default function Notice() {
         return;
       }
       const printedCount = Number(resp.headers.get("X-Notice-Printed-Count") ?? "0");
+      const generatedCount = Number(resp.headers.get("X-Notice-Generated-Count") ?? String(ids.length));
       const hasPdf = resp.headers.get("X-Notice-Pdf") === "1";
       const blob = await resp.blob();
       const url = URL.createObjectURL(blob);
@@ -231,20 +257,55 @@ export default function Notice() {
       a.download = `notice_${sectionKey}_${new Date().toISOString().slice(0, 10)}.zip`;
       document.body.appendChild(a); a.click(); a.remove();
       URL.revokeObjectURL(url);
-      clearSelection();
+      if (!opts) clearSelection();
       refetchAll();
+      const reprintOnly = generatedCount - printedCount;
+      let msg = `สร้างเอกสาร ${generatedCount} รายการ`;
+      if (printedCount > 0) msg += ` และบันทึกการส่ง ${printedCount} รายการ`;
+      if (reprintOnly > 0) msg += ` (พิมพ์ซ้ำไม่บันทึก ${reprintOnly} รายการ)`;
       toast.success(
-        `สร้างเอกสาร ${printedCount} รายการและบันทึกการส่งแล้ว` +
-          (hasPdf ? "" : " (ระบบสร้างเป็น DOCX เพราะเซิร์ฟเวอร์ยังไม่มี LibreOffice)"),
+        msg + (hasPdf ? "" : " (ระบบสร้างเป็น DOCX เพราะเซิร์ฟเวอร์ยังไม่มี LibreOffice)"),
         { id: toastId },
       );
+      if (opts) {
+        setContractPickOpen(false);
+        setContractPickInput("");
+        setContractPickPreview(null);
+      }
     } catch (e) {
       toast.error((e as Error).message ?? "สร้างเอกสารไม่สำเร็จ", { id: toastId });
     } finally {
-      setPrinting(false);
+      setBusy(false);
     }
   };
   const handleStats = () => setStatsOpen(true);
+
+  const openContractPick = () => {
+    setContractPickOpen(true);
+    setContractPickInput("");
+    setContractPickPreview(null);
+  };
+
+  const handleContractPickLookup = () => {
+    const text = contractPickInput.trim();
+    if (!text) {
+      toast.error("กรุณาวางเลขที่สัญญา");
+      return;
+    }
+    contractLookupMut.mutate({ section: sectionKey, contractNos: text });
+  };
+
+  const handleContractPickPrint = () => {
+    const printable = contractPickPreview?.matched.filter((m) => m.canPrint) ?? [];
+    if (printable.length === 0) {
+      toast.error("ไม่มีรายการที่พิมพ์ได้ (อาจได้เครื่องคืนแล้ว หรือไม่พบในหน้า Notice)");
+      return;
+    }
+    void handlePrint({
+      externalIds: printable.map((m) => m.externalId),
+      includeMaxed: true,
+    });
+  };
 
   const fileToBase64 = (file: File) =>
     new Promise<string>((resolve, reject) => {
@@ -431,6 +492,12 @@ export default function Notice() {
               <div className="mt-1 text-gray-500 text-sm">แสดงเฉพาะลูกค้าค้างชำระตั้งแต่ 60 วันขึ้นไป</div>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
+              {canEdit && (
+                <button onClick={openContractPick}
+                  className="inline-flex items-center gap-2 rounded-xl px-3.5 py-2.5 text-sm font-bold bg-violet-50 text-violet-800 hover:bg-violet-100 transition-colors">
+                  <FileSearch className="w-4 h-4" /> เลือกโดยเลขที่สัญญา
+                </button>
+              )}
               {canExport && (
                 <button onClick={handleExportExcel} disabled={exporting}
                   className="inline-flex items-center gap-2 rounded-xl px-3.5 py-2.5 text-sm font-bold bg-emerald-50 text-emerald-800 hover:bg-emerald-100 transition-colors disabled:opacity-50">
@@ -509,7 +576,7 @@ export default function Notice() {
 
           {/* Actions */}
           <div className="px-4 sm:px-[18px] py-3.5 border-b border-gray-200 flex items-center gap-2.5 flex-wrap">
-            <button onClick={handlePrint} disabled={!canEdit || printing}
+            <button onClick={() => handlePrint()} disabled={!canEdit || printing}
               className="inline-flex items-center gap-2 rounded-xl px-3.5 py-2.5 text-sm font-bold bg-orange-500 text-white hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
               <Printer className="w-4 h-4" /> {printing ? "กำลังสร้างเอกสาร..." : "พิมพ์รายการที่เลือก"}
             </button>
@@ -848,6 +915,106 @@ export default function Notice() {
                   )}
                 </>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Pick by contract no modal ── */}
+      {contractPickOpen && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 sm:p-5 bg-black/45"
+          onClick={() => !contractPickPrinting && !contractLookupMut.isPending && setContractPickOpen(false)}>
+          <div className="w-full max-w-[720px] max-h-[90vh] overflow-y-auto bg-white rounded-[18px] shadow-2xl border border-gray-200"
+            onClick={(e) => e.stopPropagation()}>
+            <div className="px-5 py-4 border-b border-gray-200 flex items-start justify-between gap-3">
+              <div>
+                <div className="text-lg font-extrabold text-gray-900">เลือกโดยเลขที่สัญญา</div>
+                <div className="mt-1 text-sm text-gray-500">วางเลขที่สัญญา (ขึ้นบรรทัดใหม่หรือคั่นด้วยคอมม่า) แล้วกดตรวจสอบ</div>
+              </div>
+              <button onClick={() => !contractPickPrinting && setContractPickOpen(false)}
+                className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              <textarea
+                value={contractPickInput}
+                onChange={(e) => { setContractPickInput(e.target.value); setContractPickPreview(null); }}
+                rows={6}
+                placeholder={"CT0626-XXX-0001-01\nCT0626-YYY-0002-01"}
+                className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm font-mono resize-y focus:outline-none focus:ring-2 focus:ring-violet-200"
+              />
+              <button onClick={handleContractPickLookup}
+                disabled={contractLookupMut.isPending || !contractPickInput.trim()}
+                className="rounded-xl px-4 py-2.5 text-sm font-bold bg-violet-500 text-white hover:bg-violet-600 disabled:opacity-50">
+                {contractLookupMut.isPending ? "กำลังตรวจสอบ..." : "ตรวจสอบรายการ"}
+              </button>
+
+              {contractPickPreview && (
+                <div className="space-y-4">
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3.5">
+                    <div className="text-sm font-bold text-emerald-900 mb-2">
+                      พบในหน้า Notice ({contractPickPreview.matched.length} รายการ)
+                    </div>
+                    {contractPickPreview.matched.length === 0 ? (
+                      <div className="text-sm text-gray-500">ไม่พบรายการที่ตรงกัน</div>
+                    ) : (
+                      <div className="border border-emerald-100 rounded-lg overflow-hidden bg-white">
+                        <table className="w-full text-[13px]">
+                          <thead>
+                            <tr className="bg-gray-50 text-left [&>th]:px-3 [&>th]:py-2 [&>th]:font-bold [&>th]:text-gray-700">
+                              <th>เลขที่สัญญา</th>
+                              <th>ชื่อ-นามสกุล</th>
+                              <th>ส่งแล้ว</th>
+                              <th>สถานะ</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {contractPickPreview.matched.map((m) => (
+                              <tr key={m.externalId} className="border-t border-gray-100 [&>td]:px-3 [&>td]:py-2">
+                                <td className="font-semibold">{m.contractNo}</td>
+                                <td>{m.customerName ?? "-"}</td>
+                                <td>{m.sentCount}/3</td>
+                                <td>
+                                  {!m.canPrint ? (
+                                    <span className="text-red-600">ได้เครื่องคืน — พิมพ์ไม่ได้</span>
+                                  ) : !m.canRecord ? (
+                                    <span className="text-amber-700">ส่งครบ 3 ครั้ง — พิมพ์ได้แต่ไม่บันทึก</span>
+                                  ) : (
+                                    <span className="text-emerald-700">พิมพ์และบันทึกได้</span>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+
+                  {contractPickPreview.notFound.length > 0 && (
+                    <div className="rounded-xl border border-red-200 bg-red-50/60 p-3.5">
+                      <div className="text-sm font-bold text-red-900 mb-2">
+                        ไม่พบในหน้า Notice ({contractPickPreview.notFound.length} รายการ)
+                      </div>
+                      <div className="text-[13px] text-red-800 font-mono leading-relaxed break-all">
+                        {contractPickPreview.notFound.join(", ")}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="px-5 pb-5 flex justify-end gap-2.5">
+              <button onClick={() => setContractPickOpen(false)} disabled={contractPickPrinting}
+                className="rounded-xl px-3.5 py-2.5 text-sm font-bold bg-gray-100 text-gray-900 hover:bg-gray-200 disabled:opacity-50">
+                ยกเลิก
+              </button>
+              <button onClick={handleContractPickPrint}
+                disabled={contractPickPrinting || !contractPickPreview || contractPickPreview.matched.every((m) => !m.canPrint)}
+                className="rounded-xl px-3.5 py-2.5 text-sm font-bold bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-50">
+                {contractPickPrinting ? "กำลังพิมพ์..." : "ยืนยันการพิมพ์"}
+              </button>
             </div>
           </div>
         </div>
