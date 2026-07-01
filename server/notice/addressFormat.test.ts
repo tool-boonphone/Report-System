@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { isLikelyAddressLine, mapContactAddressFields, parseThaiAddressLine } from "../api/addressFields";
+import { mapContractDetailOverrides } from "../api/mappers";
 import { formatNoticeMailingAddress, resolveNoticeMailingAddress } from "./addressFormat";
 
 describe("formatNoticeMailingAddress", () => {
@@ -105,5 +106,58 @@ describe("mapContactAddressFields", () => {
     });
     expect(f.addrHouseNo).toBe("136/9");
     expect(f.addrMoo).toBe("10");
+  });
+
+  it("parses tambon from address line even when house_no is already set", () => {
+    const f = mapContactAddressFields({
+      house_no: "136/9",
+      moo: "10",
+      amphure: "บางบัวทอง",
+      province: "นนทบุรี",
+      address: "บ้านเลขที่ 136/9 หมู่ 10 ตำบลบางบัวทอง อำเภอบางบัวทอง จังหวัดนนทบุรี 11110",
+    });
+    expect(f.addrHouseNo).toBe("136/9");
+    expect(f.addrMoo).toBe("10");
+    expect(f.addrSubdistrict).toBe("บางบัวทอง");
+    expect(f.addrPostalCode).toBe("11110");
+  });
+});
+
+describe("mapContractDetailOverrides — mailing address", () => {
+  it("fills subdistrict from contact_address.address when tambon key is missing", () => {
+    const row = mapContractDetailOverrides("Fastfone365", {
+      contract: {
+        id: 99,
+        code: "CT-TEST",
+        contact_address: {
+          house_no: "12/3",
+          amphure: "บางใหญ่",
+          province: "นนทบุรี",
+          address: "บ้านเลขที่ 12/3 หมู่ 5 ตำบลบางแม่นาง อำเภอบางใหญ่ จังหวัดนนทบุรี 11140",
+        },
+      },
+    });
+    expect(row.addrSubdistrict).toBe("บางแม่นาง");
+    expect(row.addrPostalCode).toBe("11140");
+  });
+
+  it("fills subdistrict from card_address when contact_address lacks tambon", () => {
+    const row = mapContractDetailOverrides("Fastfone365", {
+      contract: {
+        id: 100,
+        code: "CT-TEST-2",
+        contact_address: {
+          house_no: "7",
+          amphure: "บางคล้า",
+          province: "ฉะเชิงเทรา",
+        },
+        card_address: {
+          tambon: "เสม็ดใต้",
+          amphure: "บางคล้า",
+          province: "ฉะเชิงเทรา",
+        },
+      },
+    });
+    expect(row.addrSubdistrict).toBe("เสม็ดใต้");
   });
 });

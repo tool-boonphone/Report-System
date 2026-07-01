@@ -133,13 +133,19 @@ export function mapContactAddressFields(
     addrVillage: pick(a, ["village", "village_name"]),
     addrSoi: pick(a, ["soi", "alley", "soi_name"]),
     addrStreet: pick(a, ["road", "street", "road_name"]),
-    addrSubdistrict: pick(a, ["tambon", "subdistrict", "sub_district", "district_name"]),
+    addrSubdistrict: pick(a, [
+      "tambon",
+      "subdistrict",
+      "sub_district",
+      "tumbol",
+      "tambon_name",
+      "subdistrict_name",
+      "ตำบล",
+    ]),
     addrDistrict: pick(a, ["amphure", "amphoe", "district"]),
     addrProvince: pick(a, ["province"]),
     addrPostalCode: pick(a, ["zipcode", "zip_code", "postal_code", "postcode", "zip"]),
   };
-
-  if (structured.addrHouseNo) return structured;
 
   const fullLine = pick(a, [
     "address",
@@ -147,8 +153,12 @@ export function mapContactAddressFields(
     "full_address",
     "detail",
     "line1",
+    "line2",
     "current_address",
     "contact_address",
+    "addr",
+    "address_detail",
+    "description",
   ]);
   if (fullLine && isLikelyAddressLine(fullLine)) {
     return mergeAddressFields(structured, parseThaiAddressLine(fullLine));
